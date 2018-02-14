@@ -1,0 +1,12 @@
+language: rust
+
+rust:
+  - nightly
+  - beta
+  - stable
+
+cache: cargo
+
+script:
+  - cargo build --all
+  - cargo test --all
