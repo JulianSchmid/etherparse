@@ -1,5 +1,5 @@
 [package]
-name = "etherparse"
+name = "ether"
 version = "0.1.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 
