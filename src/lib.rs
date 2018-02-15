@@ -53,7 +53,6 @@ pub struct Ethernet2Header {
 ///IPv4 header without options.
 #[derive(Debug, PartialEq)]
 pub struct Ipv4Header {
-    pub version: u8,
     pub header_length: u8,
     pub differentiated_services_code_point: u8,
     pub explicit_congestion_notification: u8,
@@ -72,7 +71,6 @@ pub struct Ipv4Header {
 ///IPv6 header according to rfc8200.
 #[derive(Debug, PartialEq)]
 pub struct Ipv6Header {
-    pub version: u8,
     pub traffic_class: u8,
     pub flow_label: u32,
     pub payload_length: u16,
@@ -80,6 +78,20 @@ pub struct Ipv6Header {
     pub hop_limit: u8,
     pub source: [u8;16],
     pub destination: [u8;16]
+}
+
+///Errors that can occur when reading.
+#[derive(Debug)]
+pub enum ReadError {
+    IoError(io::Error),
+    Ipv4UnexpectedVersion(u8),
+    Ipv6UnexpectedVersion(u8)
+}
+
+impl From<io::Error> for ReadError {
+    fn from(err: io::Error) -> ReadError {
+        ReadError::IoError(err)
+    }
 }
 
 ///Errors that can occur when writing.
@@ -100,14 +112,11 @@ impl From<io::Error> for WriteError {
 ///Fields that can produce errors when serialized.
 #[derive(Debug)]
 pub enum ErrorField {
-    Ipv4Version,
     Ipv4HeaderLength,
     Ipv4Dscp,
     Ipv4Ecn,
     Ipv4FragmentsOffset,
 
-    Ipv6Version,
-    Ipv6TrafficClass,
     Ipv6FlowLabel
 }
 
@@ -139,9 +148,8 @@ pub trait WriteEtherExt: io::Write {
             }
         };
         //version & header_length
-        max_check_u8(value.version, 0xf, Ipv4Version)?;
         max_check_u8(value.header_length, 0xf, Ipv4HeaderLength)?;
-        self.write_u8(value.version | (value.header_length << 4))?;
+        self.write_u8(4 | (value.header_length << 4))?;
 
         //dscp & ecn
         max_check_u8(value.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
@@ -189,13 +197,6 @@ pub trait WriteEtherExt: io::Write {
     fn write_ipv6_header(&mut self, value: &Ipv6Header) -> Result<(), WriteError> {
         use WriteError::*;
         use ErrorField::*;
-        fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), WriteError> {
-            if value <= max {
-                Ok(())
-            } else {
-                Err(ValueU8TooLarge{ value: value, max: max, field: field })
-            }
-        };
         fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), WriteError> {
             if value <= max {
                 Ok(())
@@ -204,17 +205,17 @@ pub trait WriteEtherExt: io::Write {
             }
         };
 
-        //version & traffic class
-        max_check_u8(value.version, 0xf, Ipv6Version)?;
-        max_check_u8(value.traffic_class, 0xf, Ipv6TrafficClass)?;
-        self.write_u8(value.version | (value.traffic_class << 4))?;
+        //version & traffic class p0
+        self.write_u8(6 | (value.traffic_class << 4))?;
 
         //flow label
-        max_check_u32(value.flow_label, 0xffffff, Ipv6FlowLabel)?;
+        max_check_u32(value.flow_label, 0xfffff, Ipv6FlowLabel)?;
         {
             //write as a u32 to a buffer and write only the "lower bytes"
-            let mut buffer: [u8; 4] = [0;4]; 
+            let mut buffer: [u8; 4] = [0;4];
             byteorder::BigEndian::write_u32(&mut buffer, value.flow_label);
+            //add the traffic_class
+            buffer[1] = (buffer[1] << 4) | (value.traffic_class >> 4);
             //skip "highest" byte of big endian
             self.write_all(&buffer[1..])?;
         }
@@ -241,10 +242,14 @@ pub trait ReadEtherExt: io::Read {
         })
     }
 
-    fn read_ipv4_header(&mut self) -> Result<Ipv4Header, io::Error> {
-        let (version, ihl) = {
+    fn read_ipv4_header(&mut self) -> Result<Ipv4Header, ReadError> {
+        let ihl= {
             let value = self.read_u8()?;
-            (value & 0xf, (value >> 4))
+            let version = value & 0xf;
+            if version != 4 {
+                return Err(ReadError::Ipv4UnexpectedVersion(version));
+            }
+            (value >> 4)
         };
         let (dscp, ecn) = {
             let value = self.read_u8()?;
@@ -265,7 +270,6 @@ pub trait ReadEtherExt: io::Read {
              })
         };
         Ok(Ipv4Header{
-            version: version,
             differentiated_services_code_point: dscp,
             explicit_congestion_notification: ecn,
             total_length: total_length,
@@ -290,19 +294,29 @@ pub trait ReadEtherExt: io::Read {
         })
     }
 
-    fn read_ipv6_header(&mut self) -> Result<Ipv6Header, io::Error> {
-        let (version, traffic_class) = {
-            let value = self.read_u8()?;
-            (value & 0xf, (value >> 4))
-        };
-        let flow_label = {
-            //read 3 bytes and add 1 byte to convert endianess
+    fn read_ipv6_header(&mut self) -> Result<Ipv6Header, ReadError> {
+        let (traffic_class, flow_label) = {
+            let traffic_class_p0 = {
+                let value = self.read_u8()?;
+                let version = value & 0xf;
+                if 6 != version {
+                    return Err(ReadError::Ipv6UnexpectedVersion(version));
+                }
+                (value >> 4)
+            };
+            //read 4 bytes
             let mut buffer: [u8; 4] = [0;4];
             self.read_exact(&mut buffer[1..])?;
-            byteorder::BigEndian::read_u32(&buffer)
+
+            //extract class
+            let traffic_class = traffic_class_p0 | (buffer[1] << 4);
+
+            //remove traffic class from buffer & read flow_label
+            buffer[1] = buffer[1] >> 4;
+            (traffic_class, byteorder::BigEndian::read_u32(&buffer))
         };
+        
         Ok(Ipv6Header{
-            version: version,
             traffic_class: traffic_class,
             flow_label: flow_label,
             payload_length: self.read_u16::<BigEndian>()?,
@@ -375,7 +389,6 @@ mod tests {
         use std::io::Cursor;
 
         let input = Ipv4Header {
-            version: 4,
             header_length: 10,
             differentiated_services_code_point: 42,
             explicit_congestion_notification: 3,
@@ -408,7 +421,6 @@ mod tests {
         use super::ErrorField::*;
         fn base() -> Ipv4Header {
             Ipv4Header{
-                version: 4,
                 header_length: 10,
                 differentiated_services_code_point: 42,
                 explicit_congestion_notification: 3,
@@ -429,15 +441,6 @@ mod tests {
             let mut buffer: Vec<u8> = Vec::with_capacity(20);
             buffer.write_ipv4_header(input)
         };
-        //version
-        match test_write(&{
-            let mut value = base();
-            value.version = 0x1f;
-            value
-        }) {
-            Err(ValueU8TooLarge{value: 0x1f, max: 0xf, field: Ipv4Version}) => {}, //all good
-            value => assert!(false, format!("Expected a range error but received {:?}", value))
-        }
         //header_length
         match test_write(&{
             let mut value = base();
@@ -476,14 +479,24 @@ mod tests {
         }
     }
     #[test]
+    fn read_ipv4_error_header() {
+        use super::*;
+        let buffer: [u8;20] = [0;20];
+        let mut cursor = io::Cursor::new(&buffer);
+        let result = cursor.read_ipv4_header();
+        match result {
+            Err(ReadError::Ipv4UnexpectedVersion(0)) => {},
+            _ => assert!(false, format!("Expected ipv 4 version error but received {:?}", result))
+        }
+    } 
+    #[test]
     fn readwrite_ipv6_header() {
         use super::*;
         use std::io::Cursor;
 
         let input = Ipv6Header {
-            version: 6,
             traffic_class: 1,
-            flow_label: 0x201806,
+            flow_label: 0x81806,
             payload_length: 0x8021,
             next_header: 30,
             hop_limit: 40,
@@ -503,4 +516,48 @@ mod tests {
         //check equivalence
         assert_eq!(input, result);
     }
+    #[test]
+    fn write_ipv6_header_errors() {
+        use super::*;
+        use super::WriteError::*;
+        use super::ErrorField::*;
+        fn base() -> Ipv6Header {
+            Ipv6Header {
+                traffic_class: 1,
+                flow_label: 0x201806,
+                payload_length: 0x8021,
+                next_header: 30,
+                hop_limit: 40,
+                source: [1, 2, 3, 4, 5, 6, 7, 8,
+                         9,10,11,12,13,14,15,16],
+                destination: [21,22,23,24,25,26,27,28,
+                              29,30,31,32,33,34,35,36]
+            }
+        };
+
+        fn test_write(input: &Ipv6Header) -> Result<(), WriteError> {
+            let mut buffer: Vec<u8> = Vec::with_capacity(20);
+            buffer.write_ipv6_header(input)
+        };
+        //flow label
+        match test_write(&{
+            let mut value = base();
+            value.flow_label = 0x100000;
+            value
+        }) {
+            Err(ValueU32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel}) => {}, //all good
+            value => assert!(false, format!("Expected a range error but received {:?}", value))
+        }
+    }
+    #[test]
+    fn read_ipv6_error_header() {
+        use super::*;
+        let buffer: [u8;20] = [0;20];
+        let mut cursor = io::Cursor::new(&buffer);
+        let result = cursor.read_ipv6_header();
+        match result {
+            Err(ReadError::Ipv6UnexpectedVersion(0)) => {},
+            _ => assert!(false, format!("Expected ipv 6 version error but received {:?}", result))
+        }
+    } 
 }
