@@ -1,5 +1,5 @@
 # etherparse
-[![Build Status](https://travis-ci.org/JulianSchmid/ether.svg?branch=master)](https://travis-ci.org/JulianSchmid/ether)
+[![Build Status](https://travis-ci.org/JulianSchmid/etherparse.svg?branch=master)](https://travis-ci.org/JulianSchmid/etherparse)
 
 A library for parsing ethernet & ethernet using protocols.
 
