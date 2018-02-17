@@ -1,5 +1,5 @@
 [package]
-name = "ether"
+name = "etherparse"
 version = "0.1.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 description = "A library for parsing ethernet & ethernet using protocols."
