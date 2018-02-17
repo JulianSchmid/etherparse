@@ -80,10 +80,18 @@ pub struct Ipv6Header {
     pub destination: [u8;16]
 }
 
+///Internet protocol headers
+#[derive(Debug, PartialEq)]
+pub enum IpHeader {
+    Version4(Ipv4Header),
+    Version6(Ipv6Header)
+}
+
 ///Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
     IoError(io::Error),
+    IpUnsupportedVersion(u8),
     Ipv4UnexpectedVersion(u8),
     Ipv6UnexpectedVersion(u8)
 }
@@ -233,7 +241,7 @@ pub trait WriteEtherExt: io::Write {
 
 impl<W: io::Write + ?Sized> WriteEtherExt for W {}
 
-pub trait ReadEtherExt: io::Read {
+pub trait ReadEtherExt: io::Read + io::Seek {
     fn read_ethernet2_header(&mut self) -> Result<Ethernet2Header, io::Error> {
         Ok(Ethernet2Header {
             destination: self.read_mac_address()?,
@@ -242,15 +250,26 @@ pub trait ReadEtherExt: io::Read {
         })
     }
 
+    fn read_ip_header(&mut self) -> Result<IpHeader, ReadError> {
+        let value = self.read_u8()?;
+        match value & 0xf {
+            4 => Ok(IpHeader::Version4(self.read_ipv4_header_without_version(value >> 4)?)),
+            6 => Ok(IpHeader::Version6(self.read_ipv6_header_without_version(value >> 4)?)),
+            version => Err(ReadError::IpUnsupportedVersion(version))
+        }
+    }
+
     fn read_ipv4_header(&mut self) -> Result<Ipv4Header, ReadError> {
-        let ihl= {
-            let value = self.read_u8()?;
-            let version = value & 0xf;
-            if version != 4 {
-                return Err(ReadError::Ipv4UnexpectedVersion(version));
-            }
-            (value >> 4)
-        };
+        let value = self.read_u8()?;
+        let version = value & 0xf;
+        if 4 != version {
+            return Err(ReadError::Ipv4UnexpectedVersion(version));
+        }
+        self.read_ipv4_header_without_version(value >> 4)
+    }
+
+    fn read_ipv4_header_without_version(&mut self, version_rest: u8) -> Result<Ipv4Header, ReadError> {
+        let ihl = version_rest;
         let (dscp, ecn) = {
             let value = self.read_u8()?;
             (value & 0x3f, (value >> 6))
@@ -295,21 +314,22 @@ pub trait ReadEtherExt: io::Read {
     }
 
     fn read_ipv6_header(&mut self) -> Result<Ipv6Header, ReadError> {
+        let value = self.read_u8()?;
+        let version = value & 0xf;
+        if 6 != version {
+            return Err(ReadError::Ipv6UnexpectedVersion(version));
+        }
+        self.read_ipv6_header_without_version(value >> 4)
+    }
+
+    fn read_ipv6_header_without_version(&mut self, version_rest: u8) -> Result<Ipv6Header, ReadError> {
         let (traffic_class, flow_label) = {
-            let traffic_class_p0 = {
-                let value = self.read_u8()?;
-                let version = value & 0xf;
-                if 6 != version {
-                    return Err(ReadError::Ipv6UnexpectedVersion(version));
-                }
-                (value >> 4)
-            };
             //read 4 bytes
             let mut buffer: [u8; 4] = [0;4];
             self.read_exact(&mut buffer[1..])?;
 
             //extract class
-            let traffic_class = traffic_class_p0 | (buffer[1] << 4);
+            let traffic_class = version_rest | (buffer[1] << 4);
 
             //remove traffic class from buffer & read flow_label
             buffer[1] = buffer[1] >> 4;
@@ -335,6 +355,16 @@ pub trait ReadEtherExt: io::Read {
         })
     }
 
+    ///Skips the ipv6 header extension "next header" identification
+    fn skip_ipv6_header_extension(&mut self) -> Result<u8, ReadError> {
+        let next_header = self.read_u8()?;
+        //read the length
+        //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
+        let rest_length = ((self.read_u8()? as i64)*8) + 8 - 2;
+        self.seek(io::SeekFrom::Current(rest_length))?;
+        Ok(next_header)
+    }
+
     fn read_mac_address(&mut self) -> Result<[u8;6], io::Error> {
         let mut result: [u8;6] = [0;6];
         self.read_exact(&mut result)?;
@@ -342,7 +372,7 @@ pub trait ReadEtherExt: io::Read {
     }
 }
 
-impl<W: io::Read + ?Sized> ReadEtherExt for W {}
+impl<W: io::Read + io::Seek + ?Sized> ReadEtherExt for W {}
 
 #[cfg(test)]
 mod tests {
@@ -382,6 +412,66 @@ mod tests {
         };
         //check equivalence
         assert_eq!(input, result);
+    }
+    
+    #[test]
+    fn read_ip_header_ipv4() {
+        use super::*;
+        use std::io::Cursor;
+
+        let input = Ipv4Header {
+            header_length: 10,
+            differentiated_services_code_point: 42,
+            explicit_congestion_notification: 3,
+            total_length: 1234,
+            identification: 4321,
+            dont_fragment: true,
+            more_fragments: false,
+            fragments_offset: 4367,
+            time_to_live: 8,
+            protocol: 1,
+            header_checksum: 2345,
+            source: [192, 168, 1, 1],
+            destination: [212, 10, 11, 123]
+        };
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        buffer.write_ipv4_header(&input).unwrap();
+        //deserialize
+        match {
+            let mut cursor = Cursor::new(&buffer);
+            cursor.read_ip_header().unwrap()
+        } {
+            IpHeader::Version4(result) => assert_eq!(input, result),
+            value => assert!(false, format!("Expected IpHeaderV4 but received {:?}", value))
+        }
+    }
+    #[test]
+    fn read_ip_header_ipv6() {
+        use super::*;
+        use std::io::Cursor;
+        let input = Ipv6Header {
+            traffic_class: 1,
+            flow_label: 0x81806,
+            payload_length: 0x8021,
+            next_header: 30,
+            hop_limit: 40,
+            source: [1, 2, 3, 4, 5, 6, 7, 8,
+                     9,10,11,12,13,14,15,16],
+            destination: [21,22,23,24,25,26,27,28,
+                          29,30,31,32,33,34,35,36]
+        };
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        buffer.write_ipv6_header(&input).unwrap();
+        //deserialize
+        match {
+            let mut cursor = Cursor::new(&buffer);
+            cursor.read_ip_header().unwrap()
+        } {
+            IpHeader::Version6(result) => assert_eq!(input, result),
+            value => assert!(false, format!("Expected IpHeaderV6 but received {:?}", value))
+        }
     }
     #[test]
     fn readwrite_ipv4_header() {
@@ -559,5 +649,32 @@ mod tests {
             Err(ReadError::Ipv6UnexpectedVersion(0)) => {},
             _ => assert!(false, format!("Expected ipv 6 version error but received {:?}", result))
         }
-    } 
+    }
+    #[test]
+    fn skip_ipv6_header_extension() {
+        use super::*;
+        use std::io::Cursor;
+        {
+            let buffer: [u8; 8] = [0;8];
+            let mut cursor = Cursor::new(&buffer);
+            match cursor.skip_ipv6_header_extension() {
+                Ok(0) => {},
+                value => assert!(false, format!("Expected Ok(0) but received {:?}", value))
+            }
+            assert_eq!(8, cursor.position());
+        }
+        {
+            let buffer: [u8; 8*3] = [
+                4,2,0,0, 0,0,0,0,
+                0,0,0,0, 0,0,0,0,
+                0,0,0,0, 0,0,0,0,
+            ];
+            let mut cursor = Cursor::new(&buffer);
+            match cursor.skip_ipv6_header_extension() {
+                Ok(4) => {},
+                value => assert!(false, format!("Expected Ok(4) but received {:?}", value))
+            }
+            assert_eq!(8*3, cursor.position());
+        }
+    }
 }
