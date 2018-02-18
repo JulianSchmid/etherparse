@@ -10,3 +10,4 @@ cache: cargo
 script:
   - cargo build --all
   - cargo test --all
+  - cargo doc --no-deps
