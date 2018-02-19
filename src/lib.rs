@@ -1,3 +1,5 @@
+#![feature(inclusive_range_syntax)]
+
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -80,9 +82,14 @@ pub struct Ipv6Header {
 #[derive(Debug)]
 pub enum ReadError {
     IoError(io::Error),
+    ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
+    ///Error when the ip header version field is not equal 4. The value is the version that was received.
     Ipv4UnexpectedVersion(u8),
-    Ipv6UnexpectedVersion(u8)
+    ///Error when then ip header version field is not equal 6. The value is the version that was received.
+    Ipv6UnexpectedVersion(u8),
+    ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
+    Ipv6TooManyHeaderExtensions
 }
 
 impl From<io::Error> for ReadError {
@@ -365,6 +372,31 @@ pub trait ReadEtherExt: io::Read + io::Seek {
         Ok(next_header)
     }
 
+    ///Skips all ipv6 header extensions and returns the last traffic_class
+    fn skip_all_ipv6_header_extensions(&mut self, traffic_class: u8) -> Result<u8, ReadError> {
+        use IpTrafficClass::*;
+        const HOP_BY_HOP: u8 = Ipv6HeaderHopByHop as u8;
+        const ROUTE: u8 = IPv6RouteHeader as u8;
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const OPTIONS: u8 = IPv6DestinationOptions as u8;
+        const AUTH: u8 = IPv6AuthenticationHeader as u8;
+        const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8;
+
+        let mut next_traffic_class = traffic_class;
+        for _i in 0..7 {
+            match next_traffic_class {
+                HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => {
+                    next_traffic_class = self.skip_ipv6_header_extension()?;
+                },
+                _ => return Ok(next_traffic_class)
+            }
+        }
+        match next_traffic_class {
+            HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => Err(ReadError::Ipv6TooManyHeaderExtensions),
+            value => Ok(value)
+        }
+    }
+
     fn read_mac_address(&mut self) -> Result<[u8;6], io::Error> {
         let mut result: [u8;6] = [0;6];
         self.read_exact(&mut result)?;
@@ -477,9 +509,9 @@ pub enum IpTrafficClass {
     ///BNA [Gary Salamon]
     Bna = 49,
     ///Encap Security Payload [RFC4303]
-    Esp = 50,
+    IPv6EncapSecurityPayload = 50,
     ///Authentication Header [RFC4302]
-    Ah = 51,
+    IPv6AuthenticationHeader = 51,
     ///Integrated Net Layer Security  TUBA [K_Robert_Glenn]
     Inlsp = 52,
     ///IP with Encryption (deprecated) [John_Ioannidis]
@@ -497,7 +529,7 @@ pub enum IpTrafficClass {
     ///No Next Header for IPv6 [RFC8200]
     IPv6NoNextHeader = 59,
     ///Destination Options for IPv6 [RFC8200]
-    IPv6Options = 60,
+    IPv6DestinationOptions = 60,
     ///any host internal protocol [Internet_Assigned_Numbers_Authority]
     AnyHostInternalProtocol = 61,
     ///CFTP [Forsdick, H., "CFTP", Network Message, Bolt Beranek and Newman, January 1982.][Harry_Forsdick]
@@ -966,6 +998,102 @@ mod tests {
                 value => assert!(false, format!("Expected Ok(4) but received {:?}", value))
             }
             assert_eq!(8*3, cursor.position());
+        }
+    }
+    #[test]
+    fn skip_all_ipv6_header_extensions() {
+        use super::*;
+        use io::Cursor;
+        //extension header values
+        use IpTrafficClass::*;
+        //based on RFC 8200 4.1. Extension Header Order
+        const EXTENSION_IDS: [u8;7] = [
+            Ipv6HeaderHopByHop as u8,
+            IPv6DestinationOptions as u8,
+            IPv6RouteHeader as u8,
+            IPv6FragmentationHeader as u8,
+            IPv6AuthenticationHeader as u8,
+            IPv6EncapSecurityPayload as u8,
+            IPv6DestinationOptions as u8
+        ];
+        const UDP: u8 = Udp as u8;
+
+        //no & single skipping
+        {
+            
+            let buffer: [u8; 8*3] = [
+                UDP,2,0,0, 0,0,0,0, //set next to udp
+                0,0,0,0,   0,0,0,0,
+                0,0,0,0,   0,0,0,0,
+            ];
+
+            for i in 0..=u8::max_value() {
+                let mut cursor = Cursor::new(&buffer);
+                let result = cursor.skip_all_ipv6_header_extensions(i);
+
+                match EXTENSION_IDS.iter().find(|&&x| x == i) {
+                    Some(_) => {
+                        //ipv6 header extension -> expect skip
+                        match result {
+                            Ok(UDP) => {},
+                            _ => assert!(false, format!("exepected udp as next traffic_class but received {:?}", result))
+                        }
+                        assert_eq!(buffer.len(), cursor.position() as usize);
+                    },
+                    None => {
+                        //non ipv6 header expect no read movement and direct return
+                        match result {
+                            Ok(next) => assert_eq!(i, next),
+                            _ => assert!(false, format!("exepected {} as next traffic_class but received {:?}", i, result))
+                        }
+                        assert_eq!(0, cursor.position());
+                    }
+                }
+            }
+
+        }
+        //skip 7 (max)
+        {
+            let buffer = vec![
+                EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[2],1,0,0, 0,0,0,0,
+                0,0,0,0,                0,0,0,0,
+                EXTENSION_IDS[3],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[4],1,0,0, 0,0,0,0,
+
+                0,0,0,0,                0,0,0,0,
+                EXTENSION_IDS[5],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[6],0,0,0, 0,0,0,0,
+                UDP,2,0,0, 0,0,0,0,
+
+                0,0,0,0,   0,0,0,0,
+                0,0,0,0,   0,0,0,0,
+            ];
+            let mut cursor = Cursor::new(&buffer);
+            let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
+            match result {
+                Ok(UDP) => {},
+                result => assert!(false, format!("exepected udp as next traffic_class but received {:?}", result)) 
+            }
+            assert_eq!(buffer.len(), cursor.position() as usize);
+        }
+        //trigger "too many" error
+        {
+            let buffer = vec![
+                EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[2],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[3],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[4],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[5],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[6],0,0,0, 0,0,0,0,
+                EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+            ];
+            let mut cursor = Cursor::new(&buffer);
+            let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
+            match result {
+                Err(ReadError::Ipv6TooManyHeaderExtensions) => {},
+                result => assert!(false, format!("exepected error Ipv6TooManyHeaderExtensions but received {:?}", result)) 
+            }
         }
     }
 }
