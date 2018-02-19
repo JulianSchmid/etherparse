@@ -6,3 +6,4 @@ A library for parsing ethernet & ethernet using protocols.
 Currently supported are:
 * Ethernet II
 * IPv4
+* IPv6 (missing extension headers, but supporting skipping them)
