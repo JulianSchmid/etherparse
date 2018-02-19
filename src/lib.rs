@@ -1,5 +1,3 @@
-#![feature(inclusive_range_syntax)]
-
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -1027,7 +1025,8 @@ mod tests {
                 0,0,0,0,   0,0,0,0,
             ];
 
-            for i in 0..=u8::max_value() {
+            for i_as16 in 0..((u8::max_value() as u16) + 1) {
+                let i = i_as16 as u8; //note: I would prefer to use the inclusive range ..= but this feature is not yet marked as stable -> replace when stable
                 let mut cursor = Cursor::new(&buffer);
                 let result = cursor.skip_all_ipv6_header_extensions(i);
 
