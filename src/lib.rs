@@ -373,7 +373,7 @@ pub trait ReadEtherExt: io::Read + io::Seek {
     ///Skips all ipv6 header extensions and returns the last traffic_class
     fn skip_all_ipv6_header_extensions(&mut self, traffic_class: u8) -> Result<u8, ReadError> {
         use IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = Ipv6HeaderHopByHop as u8;
+        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
         const ROUTE: u8 = IPv6RouteHeader as u8;
         const FRAG: u8 = IPv6FragmentationHeader as u8;
         const OPTIONS: u8 = IPv6DestinationOptions as u8;
@@ -407,7 +407,7 @@ impl<W: io::Read + io::Seek + ?Sized> ReadEtherExt for W {}
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
 pub enum IpTrafficClass {
     ///IPv6 Hop-by-Hop Option [RFC8200]
-    Ipv6HeaderHopByHop = 0,
+    IPv6HeaderHopByHop = 0,
     ///Internet Control Message [RFC792]
     Icmp = 1,
     ///Internet Group Management [RFC1112]
@@ -1006,7 +1006,7 @@ mod tests {
         use IpTrafficClass::*;
         //based on RFC 8200 4.1. Extension Header Order
         const EXTENSION_IDS: [u8;7] = [
-            Ipv6HeaderHopByHop as u8,
+            IPv6HeaderHopByHop as u8,
             IPv6DestinationOptions as u8,
             IPv6RouteHeader as u8,
             IPv6FragmentationHeader as u8,
