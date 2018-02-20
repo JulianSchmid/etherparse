@@ -1,10 +1,19 @@
 [package]
 name = "etherparse"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Julian Schmid <info@julianschmid.name>"]
+repository = "https://github.com/JulianSchmid/etherparse"
 description = "A library for parsing ethernet & ethernet using protocols."
 keywords = ["EthernetII", "IPv4", "IPv6"]
 license = "BSD-3-Clause"
+readme = "README.md"
+exclude = [
+    ".gitignore",
+    ".travis.yml",
+]
 
 [dependencies]
 byteorder = "1.2.1"
+
+[badges]
+travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }

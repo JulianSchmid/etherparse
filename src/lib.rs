@@ -154,12 +154,12 @@ pub trait WriteEtherExt: io::Write {
         };
         //version & header_length
         max_check_u8(value.header_length, 0xf, Ipv4HeaderLength)?;
-        self.write_u8(4 | (value.header_length << 4))?;
+        self.write_u8((4 << 4) | value.header_length)?;
 
         //dscp & ecn
         max_check_u8(value.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
         max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
-        self.write_u8(value.differentiated_services_code_point | (value.explicit_congestion_notification << 6))?;
+        self.write_u8((value.differentiated_services_code_point << 2) | value.explicit_congestion_notification)?;
 
         //total length & id 
         self.write_u16::<BigEndian>(value.total_length)?;
@@ -173,20 +173,20 @@ pub trait WriteEtherExt: io::Write {
             let flags = {
                 let mut result = 0;
                 if value.dont_fragment {
-                    result = result | 2;
+                    result = result | 64;
                 }
                 if value.more_fragments {
-                    result = result | 4;
+                    result = result | 32;
                 }
                 result
             };
+            println!("buf: {:?}", buf);
             self.write_u8(
-                (flags & 0x7) |
-                (buf[0] << 3),
+                flags |
+                (buf[0] & 0x1f),
             )?;
             self.write_u8(
-                (buf[0] >> 5) |
-                (buf[1] << 3)
+                buf[1]
             )?;
         }
 
@@ -213,7 +213,7 @@ pub trait WriteEtherExt: io::Write {
         };
 
         //version & traffic class p0
-        self.write_u8(6 | (value.traffic_class << 4))?;
+        self.write_u8((6 << 4) | value.traffic_class)?;
 
         //flow label
         max_check_u32(value.flow_label, 0xfffff, Ipv6FlowLabel)?;
@@ -253,9 +253,9 @@ pub trait ReadEtherExt: io::Read + io::Seek {
     ///Reads an IP (v4 or v6) header from the current position.
     fn read_ip_header(&mut self) -> Result<IpHeader, ReadError> {
         let value = self.read_u8()?;
-        match value & 0xf {
-            4 => Ok(IpHeader::Version4(self.read_ipv4_header_without_version(value >> 4)?)),
-            6 => Ok(IpHeader::Version6(self.read_ipv6_header_without_version(value >> 4)?)),
+        match value >> 4 {
+            4 => Ok(IpHeader::Version4(self.read_ipv4_header_without_version(value & 0xf)?)),
+            6 => Ok(IpHeader::Version6(self.read_ipv6_header_without_version(value & 0xf)?)),
             version => Err(ReadError::IpUnsupportedVersion(version))
         }
     }
@@ -263,11 +263,11 @@ pub trait ReadEtherExt: io::Read + io::Seek {
     ///Reads an IPv4 header from the current position.
     fn read_ipv4_header(&mut self) -> Result<Ipv4Header, ReadError> {
         let value = self.read_u8()?;
-        let version = value & 0xf;
+        let version = value >> 4;
         if 4 != version {
             return Err(ReadError::Ipv4UnexpectedVersion(version));
         }
-        self.read_ipv4_header_without_version(value >> 4)
+        self.read_ipv4_header_without_version(value & 0xf)
     }
 
     ///Reads an IPv4 header assuming the version & ihl field have already been read.
@@ -275,19 +275,18 @@ pub trait ReadEtherExt: io::Read + io::Seek {
         let ihl = version_rest;
         let (dscp, ecn) = {
             let value = self.read_u8()?;
-            (value & 0x3f, (value >> 6))
+            (value >> 2, value & 0x3)
         };
         let total_length = self.read_u16::<BigEndian>()?;
         let identification = self.read_u16::<BigEndian>()?;
         let (dont_fragment, more_fragments, fragments_offset) = {
             let mut values: [u8; 2] = [0;2];
             self.read_exact(&mut values)?;
-            (0 != (values[0] & 0x2),
-             0 != (values[0] & 0x4),
+            (0 != (values[0] & 0x40),
+             0 != (values[0] & 0x20),
              {
-                let shifted = [(values[0] >> 3) | ((values[1] << 5) & 0xE0),
-                               (values[1] >> 3)];
-                let mut cursor = io::Cursor::new(&shifted);
+                let buf = [values[0] & 0x1f, values[1]];
+                let mut cursor = io::Cursor::new(&buf);
                 cursor.read_u16::<BigEndian>()?
              })
         };
@@ -319,11 +318,11 @@ pub trait ReadEtherExt: io::Read + io::Seek {
     ///Reads an IPv6 header from the current position.
     fn read_ipv6_header(&mut self) -> Result<Ipv6Header, ReadError> {
         let value = self.read_u8()?;
-        let version = value & 0xf;
+        let version = value >> 4;
         if 6 != version {
             return Err(ReadError::Ipv6UnexpectedVersion(version));
         }
-        self.read_ipv6_header_without_version(value >> 4)
+        self.read_ipv6_header_without_version(value & 0xf)
     }
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
