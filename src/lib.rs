@@ -180,7 +180,6 @@ pub trait WriteEtherExt: io::Write {
                 }
                 result
             };
-            println!("buf: {:?}", buf);
             self.write_u8(
                 flags |
                 (buf[0] & 0x1f),
@@ -213,7 +212,7 @@ pub trait WriteEtherExt: io::Write {
         };
 
         //version & traffic class p0
-        self.write_u8((6 << 4) | value.traffic_class)?;
+        self.write_u8((6 << 4) | (value.traffic_class >> 4))?;
 
         //flow label
         max_check_u32(value.flow_label, 0xfffff, Ipv6FlowLabel)?;
@@ -222,7 +221,7 @@ pub trait WriteEtherExt: io::Write {
             let mut buffer: [u8; 4] = [0;4];
             byteorder::BigEndian::write_u32(&mut buffer, value.flow_label);
             //add the traffic_class
-            buffer[1] = (buffer[1] << 4) | (value.traffic_class >> 4);
+            buffer[1] = buffer[1] | (value.traffic_class << 4);
             //skip "highest" byte of big endian
             self.write_all(&buffer[1..])?;
         }
@@ -333,10 +332,10 @@ pub trait ReadEtherExt: io::Read + io::Seek {
             self.read_exact(&mut buffer[1..])?;
 
             //extract class
-            let traffic_class = version_rest | (buffer[1] << 4);
+            let traffic_class = (version_rest << 4) | (buffer[1] >> 4);
 
             //remove traffic class from buffer & read flow_label
-            buffer[1] = buffer[1] >> 4;
+            buffer[1] = buffer[1] & 0xf;
             (traffic_class, byteorder::BigEndian::read_u32(&buffer))
         };
         
