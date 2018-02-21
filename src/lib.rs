@@ -408,7 +408,7 @@ pub trait ReadEtherExt: io::Read + io::Seek {
         })
     }
 
-    ///Skips the ipv6 header extension "next header" identification
+    ///Skips the ipv6 header extension and returns the traffic_class
     fn skip_ipv6_header_extension(&mut self) -> Result<u8, ReadError> {
         let next_header = self.read_u8()?;
         //read the length
