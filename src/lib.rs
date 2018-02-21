@@ -15,7 +15,6 @@ pub enum EtherType {
 }
 
 impl EtherType {
-
     ///Tries to convert a raw ether type value to the enum. Returns None if the value does not exist in the enum.
     pub fn from_u16(value: u16) -> Option<EtherType> {
         use EtherType::*;
@@ -37,6 +36,18 @@ pub struct Ethernet2Header {
     pub destination: [u8;6],
     pub source: [u8;6],
     pub ether_type: u16
+}
+///IEEE 802.1Q VLAN Tagging Header
+#[derive(Debug, PartialEq)]
+pub struct VlanTaggingHeader {
+    ///A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
+    pub priority_code_point: u8,
+    ///Indicate that the frame may be dropped under the presence of congestion.
+    pub drop_eligible_indicator: bool,
+    ///12 bits vland identifier.
+    pub vlan_identifier: u16,
+    ///"Tag protocol identifier": Type id of content after this header. Refer to the "EtherType" for a list of possible supported values.
+    pub ether_type: u16,
 }
 
 ///Internet protocol headers
@@ -72,7 +83,9 @@ pub struct Ipv6Header {
     pub payload_length: u16,
     pub next_header: u8,
     pub hop_limit: u8,
+    ///IPv6 source address
     pub source: [u8;16],
+    ///IPv6 destination address
     pub destination: [u8;16]
 }
 
@@ -100,8 +113,11 @@ impl From<io::Error> for ReadError {
 #[derive(Debug)]
 pub enum WriteError {
     IoError(io::Error),
+    ///Error when a u8 field in a header has a larger value then supported.
     ValueU8TooLarge{value: u8, max: u8, field: ErrorField},
+    ///Error when a u16 field in a header has a larger value then supported.
     ValueU16TooLarge{value: u16, max: u16, field: ErrorField},
+    ///Error when a u32 field in a header has a larger value then supported.
     ValueU32TooLarge{value: u32, max: u32, field: ErrorField}
 }
 
@@ -119,7 +135,12 @@ pub enum ErrorField {
     Ipv4Ecn,
     Ipv4FragmentsOffset,
 
-    Ipv6FlowLabel
+    Ipv6FlowLabel,
+
+    ///VlanTaggingHeader.priority_code_point
+    VlanTagPriorityCodePoint,
+    ///VlanTaggingHeader.vlan_identifier
+    VlanTagVlanId
 }
 
 ///Helper for writing headers.
@@ -134,31 +155,39 @@ pub trait WriteEtherExt: io::Write {
         Ok(())
     }
 
+    ///Write a IEEE 802.1Q VLAN tagging header
+    fn write_vlan_tagging_header(&mut self, value: &VlanTaggingHeader) -> Result<(), WriteError> {
+        use ErrorField::*;
+        //check value ranges
+        max_check_u8(value.priority_code_point, 0x3, VlanTagPriorityCodePoint)?;
+        max_check_u16(value.vlan_identifier, 0xfff, VlanTagVlanId)?;
+        {
+            let mut buffer: [u8;2] = [0;2];
+            BigEndian::write_u16(&mut buffer, value.vlan_identifier);
+            if value.drop_eligible_indicator {
+                buffer[0] = buffer[0] | 0x10;
+            }
+            buffer[0] = buffer[0] | (value.priority_code_point << 5);
+            self.write_all(&buffer)?;
+        }
+        self.write_u16::<BigEndian>(value.ether_type)?;
+        Ok(())
+    }
+
     ///Writes a given IPv4 header to the current position.
     fn write_ipv4_header(&mut self, value: &Ipv4Header) -> Result<(), WriteError> {
-        use WriteError::*;
         use ErrorField::*;
-        fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), WriteError> {
-            if value <= max {
-                Ok(())
-            } else {
-                Err(ValueU8TooLarge{ value: value, max: max, field: field })
-            }
-        };
-        fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), WriteError> {
-            if value <= max {
-                Ok(())
-            } else {
-                Err(ValueU16TooLarge{ value: value, max: max, field: field })
-            }
-        };
-        //version & header_length
+        
+        //check ranges
         max_check_u8(value.header_length, 0xf, Ipv4HeaderLength)?;
-        self.write_u8((4 << 4) | value.header_length)?;
-
-        //dscp & ecn
         max_check_u8(value.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
         max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
+        max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
+
+        //version & header_length
+        self.write_u8((4 << 4) | value.header_length)?;
+
+        //dscp & ecn        
         self.write_u8((value.differentiated_services_code_point << 2) | value.explicit_congestion_notification)?;
 
         //total length & id 
@@ -166,7 +195,6 @@ pub trait WriteEtherExt: io::Write {
         self.write_u16::<BigEndian>(value.identification)?;
 
         //flags & fragmentation offset
-        max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
         {
             let mut buf: [u8;2] = [0;2];
             BigEndian::write_u16(&mut buf, value.fragments_offset);
@@ -239,12 +267,34 @@ pub trait WriteEtherExt: io::Write {
 
 impl<W: io::Write + ?Sized> WriteEtherExt for W {}
 
+///Helper for reading headers.
+///Import this for adding read functions to every struct that implements the trait Read.
 pub trait ReadEtherExt: io::Read + io::Seek {
     ///Reads an Ethernet-II header from the current position.
     fn read_ethernet2_header(&mut self) -> Result<Ethernet2Header, io::Error> {
         Ok(Ethernet2Header {
             destination: self.read_mac_address()?,
             source: self.read_mac_address()?,
+            ether_type: self.read_u16::<BigEndian>()?
+        })
+    }
+
+    ///Read a IEEE 802.1Q VLAN tagging header
+    fn read_vlan_tagging_header(&mut self) -> Result<VlanTaggingHeader, WriteError> {
+        let (priority_code_point, drop_eligible_indicator, vlan_identifier) = {
+            let mut buffer: [u8;2] = [0;2];
+            self.read_exact(&mut buffer)?;
+            let drop_eligible_indicator = 0 != (buffer[0] & 0x10);
+            let priority_code_point = buffer[0] >> 5;
+            //mask and read the vlan id
+            buffer[0] = buffer[0] & 0xf;
+            (priority_code_point, drop_eligible_indicator, BigEndian::read_u16(&buffer))
+        };
+
+        Ok(VlanTaggingHeader{
+            priority_code_point: priority_code_point,
+            drop_eligible_indicator: drop_eligible_indicator,
+            vlan_identifier: vlan_identifier,
             ether_type: self.read_u16::<BigEndian>()?
         })
     }
@@ -690,6 +740,21 @@ pub enum IpTrafficClass {
     Rohc = 142
 }
 
+fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), WriteError> {
+    if value <= max {
+        Ok(())
+    } else {
+        Err(WriteError::ValueU8TooLarge{ value: value, max: max, field: field })
+    }
+}
+fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), WriteError> {
+    if value <= max {
+        Ok(())
+    } else {
+        Err(WriteError::ValueU16TooLarge{ value: value, max: max, field: field })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -724,6 +789,7 @@ mod tests {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(14);
         buffer.write_ethernet2_header(&input).unwrap();
+        assert_eq!(14, buffer.len());
         //deserialize
         let result = {
             let mut cursor = Cursor::new(&buffer);
@@ -732,7 +798,72 @@ mod tests {
         //check equivalence
         assert_eq!(input, result);
     }
-    
+    #[test]
+    fn readwrite_vlan_tagging_header() {
+        use super::*;
+        use std::io::Cursor;
+        
+        let input = VlanTaggingHeader {
+            ether_type: EtherType::Ipv4 as u16,
+            priority_code_point: 2,
+            drop_eligible_indicator: true,
+            vlan_identifier: 1234,
+        };
+
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(4);
+        buffer.write_vlan_tagging_header(&input).unwrap();
+        assert_eq!(4, buffer.len());
+
+        //deserialize
+        let mut cursor = Cursor::new(&buffer);
+        let result = cursor.read_vlan_tagging_header().unwrap();
+        assert_eq!(4, cursor.position());
+
+        //check equivalence
+        assert_eq!(input, result);
+    }
+    #[test]
+    fn write_vlan_tagging_header_errors() {
+        use super::*;
+        use super::WriteError::*;
+        use super::ErrorField::*;
+        fn base() -> VlanTaggingHeader {
+            VlanTaggingHeader {
+                ether_type: EtherType::Ipv4 as u16,
+                priority_code_point: 2,
+                drop_eligible_indicator: true,
+                vlan_identifier: 1234,
+            }
+        };
+
+        fn test_write(input: &VlanTaggingHeader) -> Result<(), WriteError> {
+            let mut buffer: Vec<u8> = Vec::new();
+            let result = buffer.write_vlan_tagging_header(input);
+            assert_eq!(0, buffer.len());
+            result
+        };
+
+        //priority_code_point
+        match test_write(&{
+            let mut value = base();
+            value.priority_code_point = 4;
+            value
+        }) {
+            Err(ValueU8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint}) => {}, //all good
+            value => assert!(false, format!("Expected a range error but received {:?}", value))
+        }
+
+        //vlan_identifier
+        match test_write(&{
+            let mut value = base();
+            value.vlan_identifier = 0x1000;
+            value
+        }) {
+            Err(ValueU16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId}) => {}, //all good
+            value => assert!(false, format!("Expected a range error but received {:?}", value))
+        }
+    }
     #[test]
     fn read_ip_header_ipv4() {
         use super::*;
@@ -756,11 +887,14 @@ mod tests {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
         buffer.write_ipv4_header(&input).unwrap();
+        assert_eq!(20, buffer.len());
+
         //deserialize
-        match {
-            let mut cursor = Cursor::new(&buffer);
-            cursor.read_ip_header().unwrap()
-        } {
+        let mut cursor = Cursor::new(&buffer);
+        let result = cursor.read_ip_header().unwrap();
+        assert_eq!(20, cursor.position());
+
+        match result {
             IpHeader::Version4(result) => assert_eq!(input, result),
             value => assert!(false, format!("Expected IpHeaderV4 but received {:?}", value))
         }
@@ -783,11 +917,14 @@ mod tests {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
         buffer.write_ipv6_header(&input).unwrap();
+        assert_eq!(40, buffer.len());
+
         //deserialize
-        match {
-            let mut cursor = Cursor::new(&buffer);
-            cursor.read_ip_header().unwrap()
-        } {
+        let mut cursor = Cursor::new(&buffer);
+        let result = cursor.read_ip_header().unwrap();
+        assert_eq!(40, cursor.position());
+
+        match result {
             IpHeader::Version6(result) => assert_eq!(input, result),
             value => assert!(false, format!("Expected IpHeaderV6 but received {:?}", value))
         }
@@ -815,11 +952,13 @@ mod tests {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
         buffer.write_ipv4_header(&input).unwrap();
+        assert_eq!(20, buffer.len());
+
         //deserialize
-        let result = {
-            let mut cursor = Cursor::new(&buffer);
-            cursor.read_ipv4_header().unwrap()
-        };
+        let mut cursor = Cursor::new(&buffer);
+        let result = cursor.read_ipv4_header().unwrap();
+        assert_eq!(20, cursor.position());
+
         //check equivalence
         assert_eq!(input, result);
     }
@@ -847,8 +986,10 @@ mod tests {
         };
 
         fn test_write(input: &Ipv4Header) -> Result<(), WriteError> {
-            let mut buffer: Vec<u8> = Vec::with_capacity(20);
-            buffer.write_ipv4_header(input)
+            let mut buffer: Vec<u8> = Vec::new();
+            let result = buffer.write_ipv4_header(input);
+            assert_eq!(0, buffer.len());
+            result
         };
         //header_length
         match test_write(&{
