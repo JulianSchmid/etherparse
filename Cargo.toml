@@ -1,6 +1,6 @@
 [package]
 name = "etherparse"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 repository = "https://github.com/JulianSchmid/etherparse"
 description = "A library for parsing ethernet & ethernet using protocols."
