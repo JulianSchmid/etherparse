@@ -37,6 +37,7 @@ pub struct Ethernet2Header {
     pub source: [u8;6],
     pub ether_type: u16
 }
+
 ///IEEE 802.1Q VLAN Tagging Header
 #[derive(Debug, PartialEq)]
 pub struct VlanTaggingHeader {
@@ -73,6 +74,83 @@ pub struct Ipv4Header {
     pub header_checksum: u16,
     pub source: [u8;4],
     pub destination: [u8;4]
+}
+
+impl Ipv4Header {
+    ///Constructs an Ipv4Header given an header and options length 
+    pub fn new(payload_and_options_length: u16, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4], ) -> Ipv4Header {
+        Ipv4Header {
+            header_length: 0,
+            differentiated_services_code_point: 0,
+            explicit_congestion_notification: 0,
+            total_length: payload_and_options_length + 20,
+            identification: 0,
+            dont_fragment: true,
+            more_fragments: false,
+            fragments_offset: 0,
+            time_to_live: time_to_live,
+            protocol: protocol as u8,
+            header_checksum: 0,
+            source: source,
+            destination: destination
+        }
+    }
+
+    ///Calculate header checksum of the current ipv4 header.
+    pub fn calc_header_checksum(&self, options: &[u8]) -> Result<u16, WriteError> {
+        use ErrorField::*;
+
+        //check ranges
+        max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
+        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
+        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
+        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
+        if options.len() > 10*4 || options.len() % 4 != 0 {
+            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
+        }
+
+        //calculate the checksum
+        Ok(self.calc_header_checksum_unchecked(self.header_length, options))
+    }
+
+    ///Calculate the header checksum under the assumtion that all value ranges in the header are correct
+    fn calc_header_checksum_unchecked(&self, header_length: u8, options: &[u8]) -> u16 {
+        //version & header_length
+        let mut sum = [
+            BigEndian::read_u16(&[ (4 << 4) | header_length,
+                                (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification ]),
+            self.total_length,
+            self.identification,
+            //flags & fragmentation offset
+            {
+                let mut buf: [u8;2] = [0;2];
+                BigEndian::write_u16(&mut buf, self.fragments_offset);
+                let flags = {
+                    let mut result = 0;
+                    if self.dont_fragment {
+                        result = result | 64;
+                    }
+                    if self.more_fragments {
+                        result = result | 32;
+                    }
+                    result
+                };
+                BigEndian::read_u16(&[flags | (buf[0] & 0x1f), buf[1]])
+            },
+            BigEndian::read_u16(&[self.time_to_live, self.protocol]),
+            //skip checksum (for obvious reasons)
+            BigEndian::read_u16(&self.source[0..2]),
+            BigEndian::read_u16(&self.source[2..4]),
+            BigEndian::read_u16(&self.destination[0..2]),
+            BigEndian::read_u16(&self.destination[2..4])
+        ].iter().fold(0, |a: u32, x: &u16| a + (*x as u32));
+        for i in 0..(options.len()/2) {
+            sum += BigEndian::read_u16(&options[i*2..i*2 + 2]) as u32;
+        }
+
+        let carry_add = (sum & 0xffff) + (sum >> 16);
+        !(((carry_add & 0xffff) + (carry_add >> 16)) as u16)
+    }
 }
 
 ///IPv6 header according to rfc8200.
@@ -118,7 +196,9 @@ pub enum WriteError {
     ///Error when a u16 field in a header has a larger value then supported.
     ValueU16TooLarge{value: u16, max: u16, field: ErrorField},
     ///Error when a u32 field in a header has a larger value then supported.
-    ValueU32TooLarge{value: u32, max: u32, field: ErrorField}
+    ValueU32TooLarge{value: u32, max: u32, field: ErrorField},
+    ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
+    Ipv4OptionsLengthBad(usize)
 }
 
 impl From<io::Error> for WriteError {
@@ -136,7 +216,6 @@ pub enum ErrorField {
     Ipv4FragmentsOffset,
 
     Ipv6FlowLabel,
-
     ///VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,
     ///VlanTaggingHeader.vlan_identifier
@@ -145,7 +224,7 @@ pub enum ErrorField {
 
 ///Helper for writing headers.
 ///Import this for adding write functions to every struct that implements the trait Read.
-pub trait WriteEtherExt: io::Write {
+pub trait WriteEtherExt: io::Write + Sized {
 
     ///Writes a given Ethernet-II header to the current position.
     fn write_ethernet2_header(&mut self, value: &Ethernet2Header) -> Result<(), io::Error> {
@@ -174,8 +253,8 @@ pub trait WriteEtherExt: io::Write {
         Ok(())
     }
 
-    ///Writes a given IPv4 header to the current position.
-    fn write_ipv4_header(&mut self, value: &Ipv4Header) -> Result<(), WriteError> {
+    ///Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
+    fn write_ipv4_header(&mut self, value: &Ipv4Header, options: &[u8]) -> Result<(), WriteError> {
         use ErrorField::*;
         
         //check ranges
@@ -183,48 +262,30 @@ pub trait WriteEtherExt: io::Write {
         max_check_u8(value.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
         max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
         max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
-
-        //version & header_length
-        self.write_u8((4 << 4) | value.header_length)?;
-
-        //dscp & ecn        
-        self.write_u8((value.differentiated_services_code_point << 2) | value.explicit_congestion_notification)?;
-
-        //total length & id 
-        self.write_u16::<BigEndian>(value.total_length)?;
-        self.write_u16::<BigEndian>(value.identification)?;
-
-        //flags & fragmentation offset
-        {
-            let mut buf: [u8;2] = [0;2];
-            BigEndian::write_u16(&mut buf, value.fragments_offset);
-            let flags = {
-                let mut result = 0;
-                if value.dont_fragment {
-                    result = result | 64;
-                }
-                if value.more_fragments {
-                    result = result | 32;
-                }
-                result
-            };
-            self.write_u8(
-                flags |
-                (buf[0] & 0x1f),
-            )?;
-            self.write_u8(
-                buf[1]
-            )?;
+        if options.len() > 10*4 || options.len() % 4 != 0 {
+            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
         }
 
-        //rest
-        self.write_u8(value.time_to_live)?;
-        self.write_u8(value.protocol)?;
-        self.write_u16::<BigEndian>(value.header_checksum)?;
-        self.write_all(&value.source)?;
-        self.write_all(&value.destination)?;
+        //write with recalculations
+        let header_legnth = 5 + (options.len()/4) as u8;
+        write_ipv4_header_internal(self, value, options, header_legnth, value.calc_header_checksum_unchecked(header_legnth, options))
+    }
 
-        Ok(())
+    ///Writes a given IPv4 header to the current position (this method just writes the specified checksum and header_length and does note compute it).
+    fn write_ipv4_header_raw(&mut self, value: &Ipv4Header, options: &[u8]) -> Result<(), WriteError> {
+        use ErrorField::*;
+        
+        //check ranges
+        max_check_u8(value.header_length, 0xf, Ipv4HeaderLength)?;
+        max_check_u8(value.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
+        max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
+        max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
+        if options.len() > 10*4 || options.len() % 4 != 0 {
+            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
+        }
+
+        //write
+        write_ipv4_header_internal(self, value, options, value.header_length, value.header_checksum)
     }
 
     ///Writes a given IPv6 header to the current position.
@@ -265,7 +326,53 @@ pub trait WriteEtherExt: io::Write {
     }
 }
 
-impl<W: io::Write + ?Sized> WriteEtherExt for W {}
+impl<W: io::Write + Sized> WriteEtherExt for W {}
+
+///Write the given header with the  checksum and header length specified in the seperate arguments
+fn write_ipv4_header_internal<T: io::Write>(write: &mut T, value: &Ipv4Header, options: &[u8], header_length: u8, header_checksum: u16) -> Result<(), WriteError> {
+    //version & header_length
+    write.write_u8((4 << 4) | header_length)?;
+
+    //dscp & ecn        
+    write.write_u8((value.differentiated_services_code_point << 2) | value.explicit_congestion_notification)?;
+
+    //total length & id 
+    write.write_u16::<BigEndian>(value.total_length)?;
+    write.write_u16::<BigEndian>(value.identification)?;
+
+    //flags & fragmentation offset
+    {
+        let mut buf: [u8;2] = [0;2];
+        BigEndian::write_u16(&mut buf, value.fragments_offset);
+        let flags = {
+            let mut result = 0;
+            if value.dont_fragment {
+                result = result | 64;
+            }
+            if value.more_fragments {
+                result = result | 32;
+            }
+            result
+        };
+        write.write_u8(
+            flags |
+            (buf[0] & 0x1f),
+        )?;
+        write.write_u8(
+            buf[1]
+        )?;
+    }
+
+    //rest
+    write.write_u8(value.time_to_live)?;
+    write.write_u8(value.protocol)?;
+    write.write_u16::<BigEndian>(header_checksum)?;
+    write.write_all(&value.source)?;
+    write.write_all(&value.destination)?;
+    //options
+    write.write_all(&options)?;
+    Ok(())
+}
 
 ///Helper for reading headers.
 ///Import this for adding read functions to every struct that implements the trait Read.
@@ -453,6 +560,7 @@ pub trait ReadEtherExt: io::Read + io::Seek {
 impl<W: io::Read + io::Seek + ?Sized> ReadEtherExt for W {}
 
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
+#[derive(Debug, PartialEq)]
 pub enum IpTrafficClass {
     ///IPv6 Hop-by-Hop Option [RFC8200]
     IPv6HeaderHopByHop = 0,
@@ -777,6 +885,127 @@ mod tests {
         assert_eq!(EtherType::from_u16(0x9100), Some(VlanDoubleTaggedFrame));
     }
     #[test]
+    fn ipv4_new() {
+        use super::*;
+        let result = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+        assert_eq!(Ipv4Header {
+            header_length: 0,
+            differentiated_services_code_point: 0,
+            explicit_congestion_notification: 0,
+            total_length: 15 + 20,
+            identification: 0,
+            dont_fragment: true,
+            more_fragments: false,
+            fragments_offset: 0,
+            time_to_live: 4,
+            protocol: IpTrafficClass::Udp as u8,
+            header_checksum: 0,
+            source: [1,2,3,4],
+            destination: [5,6,7,8]
+        }, result);
+    }
+    #[test]
+    fn ipv4_calc_header_checksum() {
+        use super::*;
+        use super::WriteError::*;
+        use super::ErrorField::*;
+        //without options
+        {
+            let header = Ipv4Header {
+                header_length: 5,
+                differentiated_services_code_point: 0,
+                explicit_congestion_notification: 0,
+                total_length: 40 + 20,
+                identification: 0,
+                dont_fragment: true,
+                more_fragments: false,
+                fragments_offset: 0,
+                time_to_live: 4,
+                protocol: IpTrafficClass::Udp as u8,
+                header_checksum: 0,
+                source: [192, 168, 1, 1],
+                destination: [212, 10, 11, 123]
+            };
+            assert_eq!(0xd582, header.calc_header_checksum(&[]).unwrap());
+        }
+        //with options
+        {
+            let header = Ipv4Header {
+                header_length: 7,
+                differentiated_services_code_point: 0,
+                explicit_congestion_notification: 0,
+                total_length: 40 + 20,
+                identification: 0,
+                dont_fragment: true,
+                more_fragments: false,
+                fragments_offset: 0,
+                time_to_live: 4,
+                protocol: IpTrafficClass::Udp as u8,
+                header_checksum: 0,
+                source: [192, 168, 1, 1],
+                destination: [212, 10, 11, 123]
+            };
+            assert_eq!(0xc36e, header.calc_header_checksum(&[1,2,3,4,5,6,7,8]).unwrap());
+        }
+        //check errors
+        {
+            //max value check header length
+            {
+                let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                header.header_length = 0x10;
+                match header.calc_header_checksum(&[]) {
+                    Err(ValueU8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
+                    value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
+                }
+            }
+            //max check differentiated_services_code_point
+            {
+                let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                header.differentiated_services_code_point = 0x40;
+                match header.calc_header_checksum(&[]) {
+                    Err(ValueU8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
+                    value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
+                }
+            }
+            //max check explicit_congestion_notification
+            {
+                let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                header.explicit_congestion_notification = 0x4;
+                match header.calc_header_checksum(&[]) {
+                    Err(ValueU8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
+                    value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
+                }
+            }
+            //max check fragments_offset
+            {
+                let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                header.fragments_offset = 0x2000;
+                match header.calc_header_checksum(&[]) {
+                    Err(ValueU16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}) => {}, //all good
+                    value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
+                }
+            }
+            //non 4 byte aligned options check
+            {
+                let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                let options = vec![0;9]; //9 is non 4 byte aligned
+                match header.calc_header_checksum(&options) {
+                    Err(Ipv4OptionsLengthBad(9)) => {}, //all good
+                    value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
+                }
+            }
+            //options too large test
+            {
+                let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+                let options = vec![0;11*4]; //11 is a too big number to store in the ipv4 header
+                match header.calc_header_checksum(&options) {
+                    Err(Ipv4OptionsLengthBad(44)) => {}, //all good
+                    value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
+                }
+            }
+        }
+    }
+    #[test]
     fn readwrite_ethernet2_header() {
         use super::*;
         use std::io::Cursor;
@@ -886,7 +1115,7 @@ mod tests {
         };
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
-        buffer.write_ipv4_header(&input).unwrap();
+        buffer.write_ipv4_header_raw(&input, &[]).unwrap();
         assert_eq!(20, buffer.len());
 
         //deserialize
@@ -930,7 +1159,7 @@ mod tests {
         }
     }
     #[test]
-    fn readwrite_ipv4_header() {
+    fn readwrite_ipv4_header_raw() {
         use super::*;
         use std::io::Cursor;
 
@@ -951,7 +1180,7 @@ mod tests {
         };
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
-        buffer.write_ipv4_header(&input).unwrap();
+        buffer.write_ipv4_header_raw(&input, &[]).unwrap();
         assert_eq!(20, buffer.len());
 
         //deserialize
@@ -963,7 +1192,7 @@ mod tests {
         assert_eq!(input, result);
     }
     #[test]
-    fn write_ipv4_header_errors() {
+    fn write_ipv4_raw_header_errors() {
         use super::*;
         use super::WriteError::*;
         use super::ErrorField::*;
@@ -987,17 +1216,17 @@ mod tests {
 
         fn test_write(input: &Ipv4Header) -> Result<(), WriteError> {
             let mut buffer: Vec<u8> = Vec::new();
-            let result = buffer.write_ipv4_header(input);
+            let result = buffer.write_ipv4_header_raw(input, &[]);
             assert_eq!(0, buffer.len());
             result
         };
         //header_length
         match test_write(&{
             let mut value = base();
-            value.header_length = 0x1f;
+            value.header_length = 0x10;
             value
         }) {
-            Err(ValueU8TooLarge{value: 0x1f, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
+            Err(ValueU8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
         //dscp
@@ -1027,6 +1256,61 @@ mod tests {
             Err(ValueU16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset}) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
+        //options header length (non 4 modulo)
+        {
+            let mut buffer: Vec<u8> = Vec::new();
+            let result = buffer.write_ipv4_header_raw(&base(), &[1,2]);
+            assert_eq!(0, buffer.len());
+            match result {
+                Err(Ipv4OptionsLengthBad(2)) => {}, //all good
+                value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
+            }
+        }
+        //options header length (non 4 modulo)
+        {
+            let mut buffer: Vec<u8> = Vec::new();
+            let result = buffer.write_ipv4_header_raw(&base(), &vec![0;44]);
+            assert_eq!(0, buffer.len());
+            match result {
+                Err(Ipv4OptionsLengthBad(44)) => {}, //all good
+                value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
+            }
+        }
+    }
+    #[test]
+    fn write_ipv4_header() {
+        use super::*;
+        use std::io::Cursor;
+
+        let mut input = Ipv4Header {
+            header_length: 0,
+            differentiated_services_code_point: 42,
+            explicit_congestion_notification: 3,
+            total_length: 1234,
+            identification: 4321,
+            dont_fragment: true,
+            more_fragments: false,
+            fragments_offset: 4367,
+            time_to_live: 8,
+            protocol: 1,
+            header_checksum: 0,
+            source: [192, 168, 1, 1],
+            destination: [212, 10, 11, 123]
+        };
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        buffer.write_ipv4_header(&input, &[]).unwrap();
+        assert_eq!(20, buffer.len());
+
+        //deserialize
+        let mut cursor = Cursor::new(&buffer);
+        let result = cursor.read_ipv4_header().unwrap();
+        assert_eq!(20, cursor.position());
+
+        //check equivalence (with calculated checksum & header_length)
+        input.header_length = 5;
+        input.header_checksum = input.calc_header_checksum(&[]).unwrap();
+        assert_eq!(input, result);
     }
     #[test]
     fn read_ipv4_error_header() {
@@ -1038,7 +1322,7 @@ mod tests {
             Err(ReadError::Ipv4UnexpectedVersion(0)) => {},
             _ => assert!(false, format!("Expected ipv 4 version error but received {:?}", result))
         }
-    } 
+    }
     #[test]
     fn readwrite_ipv6_header() {
         use super::*;
@@ -1157,7 +1441,6 @@ mod tests {
 
         //no & single skipping
         {
-            
             let buffer: [u8; 8*3] = [
                 UDP,2,0,0, 0,0,0,0, //set next to udp
                 0,0,0,0,   0,0,0,0,
