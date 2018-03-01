@@ -157,14 +157,31 @@ impl Ipv4Header {
 #[derive(Debug, PartialEq)]
 pub struct Ipv6Header {
     pub traffic_class: u8,
+    ///If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
     pub flow_label: u32,
+    ///The length of the payload and extension headers in 
     pub payload_length: u16,
+    ///Specifies what the next header or transport layer protocol is (see IpTrafficClass for a definitions of ids).
     pub next_header: u8,
+    ///The number of hops the packet can take before it is discarded.
     pub hop_limit: u8,
     ///IPv6 source address
     pub source: [u8;16],
     ///IPv6 destination address
     pub destination: [u8;16]
+}
+
+//Udp header according to rfc768.
+#[derive(Debug, PartialEq)]
+pub struct UdpHeader {
+    ///Source port of the packet (optional).
+    pub source_port: u16,
+    ///Destination port of the packet.
+    pub destination_port: u16,
+    ///Length of the packet (includes the udp header length of 8 bytes).
+    pub length: u16,
+    ///The checksum of the packet. The checksum is calculated from a pseudo header, the udp header and the payload. The pseudo header is composed of source and destination address, protocol number 
+    pub checksum: u16
 }
 
 ///Errors that can occur when reading.
@@ -324,6 +341,15 @@ pub trait WriteEtherExt: io::Write + Sized {
 
         Ok(())
     }
+
+    ///Write the udp header without recalculating the checksum or length.
+    fn write_udp_header_raw(&mut self, value: &UdpHeader) -> Result<(), WriteError> {
+        self.write_u16::<BigEndian>(value.source_port)?;
+        self.write_u16::<BigEndian>(value.destination_port)?;
+        self.write_u16::<BigEndian>(value.length)?;
+        self.write_u16::<BigEndian>(value.checksum)?;
+        Ok(())
+    }
 }
 
 impl<W: io::Write + Sized> WriteEtherExt for W {}
@@ -376,12 +402,18 @@ fn write_ipv4_header_internal<T: io::Write>(write: &mut T, value: &Ipv4Header, o
 
 ///Helper for reading headers.
 ///Import this for adding read functions to every struct that implements the trait Read.
-pub trait ReadEtherExt: io::Read + io::Seek {
+pub trait ReadEtherExt: io::Read + io::Seek + Sized {
     ///Reads an Ethernet-II header from the current position.
     fn read_ethernet2_header(&mut self) -> Result<Ethernet2Header, io::Error> {
+        fn read_mac_address<T: io::Read>(read: &mut T) -> Result<[u8;6], io::Error> {
+            let mut result: [u8;6] = [0;6];
+            read.read_exact(&mut result)?;
+            Ok(result)
+        }
+
         Ok(Ethernet2Header {
-            destination: self.read_mac_address()?,
-            source: self.read_mac_address()?,
+            destination: read_mac_address(self)?,
+            source: read_mac_address(self)?,
             ether_type: self.read_u16::<BigEndian>()?
         })
     }
@@ -550,14 +582,18 @@ pub trait ReadEtherExt: io::Read + io::Seek {
         }
     }
 
-    fn read_mac_address(&mut self) -> Result<[u8;6], io::Error> {
-        let mut result: [u8;6] = [0;6];
-        self.read_exact(&mut result)?;
-        Ok(result)
+    ///Tries to read an udp header from the current position.
+    fn read_udp_header(&mut self) -> Result<UdpHeader, io::Error> {
+        Ok(UdpHeader{
+            source_port: self.read_u16::<BigEndian>()?,
+            destination_port: self.read_u16::<BigEndian>()?,
+            length: self.read_u16::<BigEndian>()?,
+            checksum: self.read_u16::<BigEndian>()?
+        })
     }
 }
 
-impl<W: io::Read + io::Seek + ?Sized> ReadEtherExt for W {}
+impl<W: io::Read + io::Seek + Sized> ReadEtherExt for W {}
 
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
 #[derive(Debug, PartialEq)]
@@ -1516,5 +1552,27 @@ mod tests {
                 result => assert!(false, format!("exepected error Ipv6TooManyHeaderExtensions but received {:?}", result)) 
             }
         }
+    }
+    #[test]
+    fn readwrite_udp_header_raw() {
+        use super::*;
+        use std::io::Cursor;
+
+        let input = UdpHeader {
+            source_port: 1234,
+            destination_port: 5678,
+            length: 1356,
+            checksum: 2467
+        };
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        buffer.write_udp_header_raw(&input).unwrap();
+        //deserialize
+        let result = {
+            let mut cursor = Cursor::new(&buffer);
+            cursor.read_udp_header().unwrap()
+        };
+        //check equivalence
+        assert_eq!(input, result);
     }
 }
