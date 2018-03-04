@@ -1,13 +1,14 @@
 # etherparse
 [![Build Status](https://travis-ci.org/JulianSchmid/etherparse.svg?branch=master)](https://travis-ci.org/JulianSchmid/etherparse)
 
-A library for parsing ethernet & ethernet using protocols.
+A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP ...).
 
 Currently supported are:
 * Ethernet II
 * IEEE 802.1Q VLAN Tagging Header
 * IPv4
 * IPv6 (missing extension headers, but supporting skipping them)
+* UDP (missing checksum calculation)
 
 # References
 * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
