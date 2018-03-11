@@ -184,6 +184,59 @@ pub struct UdpHeader {
     pub checksum: u16
 }
 
+impl UdpHeader {
+
+    ///Calculate an udp header given an ipv4 header and the payload
+    pub fn new_ipv4_udp_header(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ReadError> {
+        //TODO check that the payload length is not too big
+        let mut result = UdpHeader{
+            source_port: source_port,
+            destination_port: destination_port,
+            length: 8 + payload.len() as u16, //payload plus udp header
+            checksum: 0
+        };
+        result.checksum = result.calc_checksum_ipv4(ip_header, payload)?;
+        Ok(result)
+    }
+
+    ///Calculates the upd header checksum based on a ipv4 header.
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ReadError> {
+        self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, payload)
+    }
+    
+    ///Calculates the upd header checksum based on a ipv4 header.
+    pub fn calc_checksum_ipv4_raw(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ReadError> {
+
+        //TODO check that the payload length is not too big
+
+        let mut sum = BigEndian::read_u16(&source[0..2]) as u32 + //pseudo header
+                      BigEndian::read_u16(&source[2..4]) as u32 +
+                      BigEndian::read_u16(&destination[0..2]) as u32 +
+                      BigEndian::read_u16(&destination[2..4]) as u32 +
+                      protocol as u32 +
+                      self.length as u32 +
+                      //udp header start
+                      self.source_port as u32 + //udp header start
+                      self.destination_port as u32 +
+                      self.length as u32;
+
+        for i in 0..(payload.len()/2) {
+            sum += BigEndian::read_u16(&payload[i*2..i*2 + 2]) as u32;
+        }
+        //pad the last byte with 0
+        if payload.len() % 2 == 1 {
+            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u32;
+        }
+        let carry_add = (sum & 0xffff) + (sum >> 16);
+        let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
+        if result == 0xffff {
+            Ok(result) //avoid the transmition of an all 0 checksum as this value is reserved by "checksum disabled" (see rfc)
+        } else {
+            Ok(!result)
+        }
+    }
+}
+
 ///Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
