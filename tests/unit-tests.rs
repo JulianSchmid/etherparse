@@ -46,7 +46,7 @@ mod tests {
     #[test]
     fn ipv4_calc_header_checksum() {
         use super::*;
-        use super::WriteError::*;
+        use super::ValueError::*;
         use super::ErrorField::*;
         //without options
         {
@@ -93,7 +93,7 @@ mod tests {
                 let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
                 header.header_length = 0x10;
                 match header.calc_header_checksum(&[]) {
-                    Err(ValueU8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
+                    Err(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
                     value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
                 }
             }
@@ -102,7 +102,7 @@ mod tests {
                 let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
                 header.differentiated_services_code_point = 0x40;
                 match header.calc_header_checksum(&[]) {
-                    Err(ValueU8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
+                    Err(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
                     value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
                 }
             }
@@ -111,7 +111,7 @@ mod tests {
                 let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
                 header.explicit_congestion_notification = 0x4;
                 match header.calc_header_checksum(&[]) {
-                    Err(ValueU8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
+                    Err(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
                     value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
                 }
             }
@@ -120,7 +120,7 @@ mod tests {
                 let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
                 header.fragments_offset = 0x2000;
                 match header.calc_header_checksum(&[]) {
-                    Err(ValueU16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}) => {}, //all good
+                    Err(U16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}) => {}, //all good
                     value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
                 }
             }
@@ -194,7 +194,8 @@ mod tests {
     #[test]
     fn write_vlan_tagging_header_errors() {
         use super::*;
-        use super::WriteError::*;
+        use super::WriteError::ValueError;
+        use super::ValueError::*;
         use super::ErrorField::*;
         fn base() -> VlanTaggingHeader {
             VlanTaggingHeader {
@@ -218,7 +219,7 @@ mod tests {
             value.priority_code_point = 4;
             value
         }) {
-            Err(ValueU8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint}) => {}, //all good
+            Err(ValueError(U8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
 
@@ -228,7 +229,7 @@ mod tests {
             value.vlan_identifier = 0x1000;
             value
         }) {
-            Err(ValueU16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId}) => {}, //all good
+            Err(ValueError(U16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
     }
@@ -333,7 +334,8 @@ mod tests {
     #[test]
     fn write_ipv4_raw_header_errors() {
         use super::*;
-        use super::WriteError::*;
+        use super::WriteError::ValueError;
+        use super::ValueError::*;
         use super::ErrorField::*;
         fn base() -> Ipv4Header {
             Ipv4Header{
@@ -365,7 +367,7 @@ mod tests {
             value.header_length = 0x10;
             value
         }) {
-            Err(ValueU8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
+            Err(ValueError(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
         //dscp
@@ -374,7 +376,7 @@ mod tests {
             value.differentiated_services_code_point = 0x40;
             value
         }) {
-            Err(ValueU8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
+            Err(ValueError(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
         //ecn
@@ -383,7 +385,7 @@ mod tests {
             value.explicit_congestion_notification = 0x4;
             value
         }) {
-            Err(ValueU8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
+            Err(ValueError(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
         //fragmentation offset
@@ -392,7 +394,7 @@ mod tests {
             value.fragments_offset = 0x2000;
             value
         }) {
-            Err(ValueU16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset}) => {}, //all good
+            Err(ValueError(U16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
         //options header length (non 4 modulo)
@@ -401,7 +403,7 @@ mod tests {
             let result = buffer.write_ipv4_header_raw(&base(), &[1,2]);
             assert_eq!(0, buffer.len());
             match result {
-                Err(Ipv4OptionsLengthBad(2)) => {}, //all good
+                Err(ValueError(Ipv4OptionsLengthBad(2))) => {}, //all good
                 value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
             }
         }
@@ -411,7 +413,7 @@ mod tests {
             let result = buffer.write_ipv4_header_raw(&base(), &vec![0;44]);
             assert_eq!(0, buffer.len());
             match result {
-                Err(Ipv4OptionsLengthBad(44)) => {}, //all good
+                Err(ValueError(Ipv4OptionsLengthBad(44))) => {}, //all good
                 value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
             }
         }
@@ -492,7 +494,8 @@ mod tests {
     #[test]
     fn write_ipv6_header_errors() {
         use super::*;
-        use super::WriteError::*;
+        use super::WriteError::ValueError;
+        use super::ValueError::*;
         use super::ErrorField::*;
         fn base() -> Ipv6Header {
             Ipv6Header {
@@ -518,7 +521,7 @@ mod tests {
             value.flow_label = 0x100000;
             value
         }) {
-            Err(ValueU32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel}) => {}, //all good
+            Err(ValueError(U32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel})) => {}, //all good
             value => assert!(false, format!("Expected a range error but received {:?}", value))
         }
     }

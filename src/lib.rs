@@ -97,8 +97,9 @@ impl Ipv4Header {
     }
 
     ///Calculate header checksum of the current ipv4 header.
-    pub fn calc_header_checksum(&self, options: &[u8]) -> Result<u16, WriteError> {
+    pub fn calc_header_checksum(&self, options: &[u8]) -> Result<u16, ValueError> {
         use ErrorField::*;
+        use ValueError::Ipv4OptionsLengthBad;
 
         //check ranges
         max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
@@ -106,7 +107,7 @@ impl Ipv4Header {
         max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
         max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
         if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
+            return Err(Ipv4OptionsLengthBad(options.len()));
         }
 
         //calculate the checksum
@@ -187,7 +188,7 @@ pub struct UdpHeader {
 impl UdpHeader {
 
     ///Calculate an udp header given an ipv4 header and the payload
-    pub fn new_ipv4_udp_header(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ReadError> {
+    pub fn new_ipv4_udp_header(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
         //TODO check that the payload length is not too big
         let mut result = UdpHeader{
             source_port: source_port,
@@ -200,12 +201,12 @@ impl UdpHeader {
     }
 
     ///Calculates the upd header checksum based on a ipv4 header.
-    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ReadError> {
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, payload)
     }
     
     ///Calculates the upd header checksum based on a ipv4 header.
-    pub fn calc_checksum_ipv4_raw(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ReadError> {
+    pub fn calc_checksum_ipv4_raw(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
 
         //TODO check that the payload length is not too big
 
@@ -261,14 +262,27 @@ impl From<io::Error> for ReadError {
 #[derive(Debug)]
 pub enum WriteError {
     IoError(io::Error),
-    ///Error when a u8 field in a header has a larger value then supported.
-    ValueU8TooLarge{value: u8, max: u8, field: ErrorField},
-    ///Error when a u16 field in a header has a larger value then supported.
-    ValueU16TooLarge{value: u16, max: u16, field: ErrorField},
-    ///Error when a u32 field in a header has a larger value then supported.
-    ValueU32TooLarge{value: u32, max: u32, field: ErrorField},
+    ///Error in the data that was given to write
+    ValueError(ValueError)
+}
+
+impl From<ValueError> for WriteError {
+    fn from(err: ValueError) -> WriteError {
+        WriteError::ValueError(err)
+    }
+}
+
+///Errors in the given data
+#[derive(Debug)]
+pub enum ValueError {
     ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
-    Ipv4OptionsLengthBad(usize)
+    Ipv4OptionsLengthBad(usize),
+    ///Error when a u8 field in a header has a larger value then supported.
+    U8TooLarge{value: u8, max: u8, field: ErrorField},
+    ///Error when a u16 field in a header has a larger value then supported.
+    U16TooLarge{value: u16, max: u16, field: ErrorField},
+    ///Error when a u32 field in a header has a larger value then supported.
+    U32TooLarge{value: u32, max: u32, field: ErrorField}
 }
 
 impl From<io::Error> for WriteError {
@@ -333,7 +347,10 @@ pub trait WriteEtherExt: io::Write + Sized {
         max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
         max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
         if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
+            return Err(
+                WriteError::ValueError(
+                    ValueError::Ipv4OptionsLengthBad(
+                        options.len())));
         }
 
         //write with recalculations
@@ -351,7 +368,10 @@ pub trait WriteEtherExt: io::Write + Sized {
         max_check_u8(value.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
         max_check_u16(value.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
         if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(WriteError::Ipv4OptionsLengthBad(options.len()));
+            return Err(
+                WriteError::ValueError(
+                    ValueError::Ipv4OptionsLengthBad(
+                        options.len())));
         }
 
         //write
@@ -360,13 +380,17 @@ pub trait WriteEtherExt: io::Write + Sized {
 
     ///Writes a given IPv6 header to the current position.
     fn write_ipv6_header(&mut self, value: &Ipv6Header) -> Result<(), WriteError> {
-        use WriteError::*;
         use ErrorField::*;
         fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), WriteError> {
             if value <= max {
                 Ok(())
             } else {
-                Err(ValueU32TooLarge{ value: value, max: max, field: field })
+                Err(
+                    WriteError::ValueError(
+                        ValueError::U32TooLarge{
+                            value: value, 
+                            max: max, 
+                            field: field }))
             }
         };
 
@@ -472,7 +496,7 @@ pub trait ReadEtherExt: io::Read + io::Seek + Sized {
     }
 
     ///Read a IEEE 802.1Q VLAN tagging header
-    fn read_vlan_tagging_header(&mut self) -> Result<VlanTaggingHeader, WriteError> {
+    fn read_vlan_tagging_header(&mut self) -> Result<VlanTaggingHeader, io::Error> {
         let (priority_code_point, drop_eligible_indicator, vlan_identifier) = {
             let mut buffer: [u8;2] = [0;2];
             self.read_exact(&mut buffer)?;
@@ -508,11 +532,14 @@ pub trait ReadEtherExt: io::Read + io::Seek + Sized {
         if 4 != version {
             return Err(ReadError::Ipv4UnexpectedVersion(version));
         }
-        self.read_ipv4_header_without_version(value & 0xf)
+        match self.read_ipv4_header_without_version(value & 0xf) {
+            Ok(value) => Ok(value),
+            Err(err) => Err(ReadError::IoError(err))
+        }
     }
 
     ///Reads an IPv4 header assuming the version & ihl field have already been read.
-    fn read_ipv4_header_without_version(&mut self, version_rest: u8) -> Result<Ipv4Header, ReadError> {
+    fn read_ipv4_header_without_version(&mut self, version_rest: u8) -> Result<Ipv4Header, io::Error> {
         let ihl = version_rest;
         let (dscp, ecn) = {
             let value = self.read_u8()?;
@@ -563,11 +590,14 @@ pub trait ReadEtherExt: io::Read + io::Seek + Sized {
         if 6 != version {
             return Err(ReadError::Ipv6UnexpectedVersion(version));
         }
-        self.read_ipv6_header_without_version(value & 0xf)
+        match self.read_ipv6_header_without_version(value & 0xf) {
+            Ok(value) => Ok(value),
+            Err(err) => Err(ReadError::IoError(err))
+        }
     }
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
-    fn read_ipv6_header_without_version(&mut self, version_rest: u8) -> Result<Ipv6Header, ReadError> {
+    fn read_ipv6_header_without_version(&mut self, version_rest: u8) -> Result<Ipv6Header, io::Error> {
         let (traffic_class, flow_label) = {
             //read 4 bytes
             let mut buffer: [u8; 4] = [0;4];
@@ -601,7 +631,7 @@ pub trait ReadEtherExt: io::Read + io::Seek + Sized {
     }
 
     ///Skips the ipv6 header extension and returns the traffic_class
-    fn skip_ipv6_header_extension(&mut self) -> Result<u8, ReadError> {
+    fn skip_ipv6_header_extension(&mut self) -> Result<u8, io::Error> {
         let next_header = self.read_u8()?;
         //read the length
         //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
@@ -937,17 +967,28 @@ pub enum IpTrafficClass {
     Rohc = 142
 }
 
-fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), WriteError> {
+fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError> {
+    use ValueError::U8TooLarge;
     if value <= max {
         Ok(())
     } else {
-        Err(WriteError::ValueU8TooLarge{ value: value, max: max, field: field })
+        Err(U8TooLarge { 
+            value: value, 
+            max: max,
+            field: field
+        })
     }
 }
-fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), WriteError> {
+
+fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueError> {
+    use ValueError::U16TooLarge;
     if value <= max {
         Ok(())
     } else {
-        Err(WriteError::ValueU16TooLarge{ value: value, max: max, field: field })
+        Err(U16TooLarge{ 
+            value: value, 
+            max: max, 
+            field: field
+        })
     }
 }
