@@ -1,3 +1,5 @@
+use super::super::*;
+
 extern crate byteorder;
 use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -36,6 +38,11 @@ pub struct Ethernet2Header {
     pub destination: [u8;6],
     pub source: [u8;6],
     pub ether_type: u16
+}
+
+impl SerializedSize for Ethernet2Header {
+    ///Serialized size of the header in bytes.
+    const SERIALIZED_SIZE: usize = 14;
 }
 
 impl Ethernet2Header {

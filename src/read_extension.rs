@@ -3,7 +3,7 @@ use std::io;
 
 ///Helper for reading headers.
 ///Import this for adding read functions to every struct that implements the trait Read.
-pub trait ReadEtherExt2: io::Read + io::Seek + Sized {
+pub trait ReadEtherExt: io::Read + io::Seek + Sized {
     fn read_ethernet2_header(&mut self) -> Result<Ethernet2Header, io::Error> {
         Ethernet2Header::read(self)
     }
@@ -54,4 +54,4 @@ pub trait ReadEtherExt2: io::Read + io::Seek + Sized {
     }
 }
 
-impl<W: io::Read + io::Seek + Sized> ReadEtherExt2 for W {}
+impl<W: io::Read + io::Seek + Sized> ReadEtherExt for W {}

@@ -41,14 +41,24 @@ pub struct Ipv4Header {
     pub destination: [u8;4]
 }
 
+
+impl SerializedSize for Ipv4Header {
+    ///Size of the header itself (without options) in bytes.
+    const SERIALIZED_SIZE:usize = 20;
+}
+
 impl Ipv4Header {
-    ///Constructs an Ipv4Header given an header and options length 
-    pub fn new(payload_and_options_length: u16, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
+    ///Constructs an Ipv4Header with standard values for non specified values.
+    ///Note: This header calculates the checksum assuming that there are no ipv4 options. In case there are calculate the checksum using the "calc_header_checksum" method.
+    pub fn new(payload_and_options_length: usize, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
+        
+        //TODO check that the total length fits into the field
+
         Ipv4Header {
             header_length: 0,
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
-            total_length: payload_and_options_length + 20,
+            total_length: (payload_and_options_length + 20) as u16,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
@@ -280,6 +290,11 @@ pub struct Ipv6Header {
     pub source: [u8;16],
     ///IPv6 destination address
     pub destination: [u8;16]
+}
+
+impl SerializedSize for Ipv6Header {
+    ///Size of the header itself in bytes.
+    const SERIALIZED_SIZE:usize = 40;
 }
 
 impl Ipv6Header {

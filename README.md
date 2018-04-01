@@ -8,7 +8,7 @@ Currently supported are:
 * IEEE 802.1Q VLAN Tagging Header
 * IPv4
 * IPv6 (missing extension headers, but supporting skipping them)
-* UDP (missing checksum calculation)
+* UDP (missing checksum calculation for ipv6)
 
 # References
 * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)

@@ -19,13 +19,13 @@ pub struct UdpHeader {
 impl UdpHeader {
 
     ///Returns an udp header for the given parameters
-    pub fn without_checksum(source_port: u16, destination_port: u16, payload_length: u16) -> Result<UdpHeader, ValueError> {
+    pub fn without_checksum(source_port: u16, destination_port: u16, payload_length: usize) -> Result<UdpHeader, ValueError> {
         //TODO check payload size
 
         Ok(UdpHeader{
             source_port: source_port,
             destination_port: destination_port,
-            length: 8 + payload_length, //payload plus udp header
+            length: (8 + payload_length) as u16, //payload plus udp header
             checksum: 0
         })
     }
@@ -98,4 +98,9 @@ impl UdpHeader {
         writer.write_u16::<BigEndian>(self.checksum)?;
         Ok(())
     }
+}
+
+impl SerializedSize for UdpHeader {
+    ///Size of the header itself
+    const SERIALIZED_SIZE: usize = 8;
 }

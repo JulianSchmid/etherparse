@@ -3,7 +3,7 @@ use std::io;
 
 ///Helper for writing headers.
 ///Import this for adding write functions to every struct that implements the trait Read.
-pub trait WriteEtherExt2: io::Write + Sized {
+pub trait WriteEtherExt: io::Write + Sized {
     ///Writes a given Ethernet-II header to the current position.
     fn write_ethernet2_header(&mut self, value: &Ethernet2Header) -> Result<(), io::Error> {
         value.write(self)
@@ -40,9 +40,9 @@ pub trait WriteEtherExt2: io::Write + Sized {
     }
 
     ///Write an udp header with checksum 0 (= checksum disabled).
-    fn write_udp_header(&mut self, source_port: u16, destination_port: u16, payload_length: u16) -> Result<(), WriteError> {
+    fn write_udp_header(&mut self, source_port: u16, destination_port: u16, payload_length: usize) -> Result<(), WriteError> {
         UdpHeader::without_checksum(source_port, destination_port, payload_length)?.write(self)
     }
 }
 
-impl<W: io::Write + Sized> WriteEtherExt2 for W {}
+impl<W: io::Write + Sized> WriteEtherExt for W {}

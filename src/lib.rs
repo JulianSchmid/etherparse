@@ -1,24 +1,24 @@
 use std::io;
 
-pub mod link;
+mod link;
 pub use link::ethernet::*;
 pub use link::vlan_tagging::*;
 
-pub mod internet;
+mod internet;
 pub use internet::ip::*;
 
-pub mod transport;
+mod transport;
 pub use transport::udp::*;
 
 mod write_extension;
-pub use write_extension::WriteEtherExt2;
+pub use write_extension::WriteEtherExt;
 
 mod read_extension;
-pub use read_extension::ReadEtherExt2;
+pub use read_extension::ReadEtherExt;
 
 ///Contains the size when serialized.
 pub trait SerializedSize {
-    const SERIALIZED_SIZE: u16;
+    const SERIALIZED_SIZE: usize;
 }
 
 ///Errors that can occur when reading.
@@ -60,6 +60,9 @@ impl From<ValueError> for WriteError {
 pub enum ValueError {
     ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
+    ///Error when a given payload is bigger then what fits inside an udp packet
+    ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
+    UdpPayloadLengthTooLarge(usize),
     ///Error when a u8 field in a header has a larger value then supported.
     U8TooLarge{value: u8, max: u8, field: ErrorField},
     ///Error when a u16 field in a header has a larger value then supported.
