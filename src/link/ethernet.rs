@@ -46,6 +46,7 @@ impl SerializedSize for Ethernet2Header {
 }
 
 impl Ethernet2Header {
+    ///Reads an Ethernet-II header from the current position of the read argument.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ethernet2Header, io::Error> {
         fn read_mac_address<T: io::Read>(read: &mut T) -> Result<[u8;6], io::Error> {
             let mut result: [u8;6] = [0;6];
@@ -59,6 +60,7 @@ impl Ethernet2Header {
             ether_type: reader.read_u16::<BigEndian>()?
         })
     }
+    ///Writes a given Ethernet-II header to the current position of the write argument.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), io::Error> {
         writer.write_all(&self.destination)?;
         writer.write_all(&self.source)?;

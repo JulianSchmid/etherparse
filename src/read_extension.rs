@@ -4,6 +4,7 @@ use std::io;
 ///Helper for reading headers.
 ///Import this for adding read functions to every struct that implements the trait Read.
 pub trait ReadEtherExt: io::Read + io::Seek + Sized {
+    ///Reads an Ethernet-II header from the current position of the read argument.
     fn read_ethernet2_header(&mut self) -> Result<Ethernet2Header, io::Error> {
         Ethernet2Header::read(self)
     }
