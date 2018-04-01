@@ -50,11 +50,15 @@ impl SerializedSize for Ipv4Header {
 impl Ipv4Header {
     ///Constructs an Ipv4Header with standard values for non specified values.
     ///Note: This header calculates the checksum assuming that there are no ipv4 options. In case there are calculate the checksum using the "calc_header_checksum" method.
-    pub fn new(payload_and_options_length: usize, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
+    pub fn new(payload_and_options_length: usize, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Result<Ipv4Header, ValueError> {
         
-        //TODO check that the total length fits into the field
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_AND_OPTIONS_LENGTH: usize = (std::u16::MAX as usize) - Ipv4Header::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_AND_OPTIONS_LENGTH < payload_and_options_length {
+            return Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(payload_and_options_length));
+        }
 
-        Ipv4Header {
+        Ok(Ipv4Header {
             header_length: 0,
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
@@ -68,7 +72,7 @@ impl Ipv4Header {
             header_checksum: 0,
             source: source,
             destination: destination
-        }
+        })
     }
 
     ///Reads an IPv4 header from the current position.

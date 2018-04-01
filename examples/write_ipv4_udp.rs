@@ -38,7 +38,7 @@ fn main() {
         [192,168,1,42],
         //destination ip address
         [192,168,1,1]
-    );
+    ).unwrap();
 
     //write the ipv4 header.
     //The second argument are the ipv4 options which are not used in this example.

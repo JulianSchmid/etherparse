@@ -25,7 +25,7 @@ fn readwrite_udp_header_raw() {
 #[test]
 fn udp_calc_checksum_ipv4() {
     //zero checksum should be inverted
-    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
     let udp = UdpHeader {
         source_port: 1234,
         destination_port: 5678,

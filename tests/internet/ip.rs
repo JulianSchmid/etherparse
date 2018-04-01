@@ -1,4 +1,5 @@
 use etherparse::*;
+use std;
 use std::io;
 
 #[test]
@@ -18,7 +19,34 @@ fn ipv4_new() {
         header_checksum: 0,
         source: [1,2,3,4],
         destination: [5,6,7,8]
-    }, result);
+    }, result.unwrap());
+}
+
+#[test]
+fn ipv4_new_error() {
+    //border case check (no error)
+    match Ipv4Header::new(
+        (std::u16::MAX as usize) - 20,
+        4,
+        IpTrafficClass::Udp,
+        [1,2,3,4],
+        [5,6,7,8]
+    ) {
+        Ok(_) => {}, //all good
+        value => assert!(false, format!("Expected an Ipv4Header but received {:?}", value))
+    }
+    //check that a too large payload generates an error
+    const TOO_LARGE_PAYLOAD: usize = (std::u16::MAX as usize) - 19;
+    match Ipv4Header::new(
+        (std::u16::MAX as usize) - 19,
+        4,
+        IpTrafficClass::Udp,
+        [1,2,3,4],
+        [5,6,7,8]
+    ) {
+        Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(TOO_LARGE_PAYLOAD)) => {}, //all good
+        value => assert!(false, format!("Expected an Ipv4PayloadAndOptionsLengthTooLarge error but received {:?}", value))
+    }
 }
 
 #[test]
@@ -67,7 +95,7 @@ fn ipv4_calc_header_checksum() {
     {
         //max value check header length
         {
-            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.header_length = 0x10;
             match header.calc_header_checksum(&[]) {
                 Err(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
@@ -76,7 +104,7 @@ fn ipv4_calc_header_checksum() {
         }
         //max check differentiated_services_code_point
         {
-            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.differentiated_services_code_point = 0x40;
             match header.calc_header_checksum(&[]) {
                 Err(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
@@ -85,7 +113,7 @@ fn ipv4_calc_header_checksum() {
         }
         //max check explicit_congestion_notification
         {
-            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.explicit_congestion_notification = 0x4;
             match header.calc_header_checksum(&[]) {
                 Err(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
@@ -94,7 +122,7 @@ fn ipv4_calc_header_checksum() {
         }
         //max check fragments_offset
         {
-            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.fragments_offset = 0x2000;
             match header.calc_header_checksum(&[]) {
                 Err(U16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}) => {}, //all good
@@ -103,7 +131,7 @@ fn ipv4_calc_header_checksum() {
         }
         //non 4 byte aligned options check
         {
-            let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             let options = vec![0;9]; //9 is non 4 byte aligned
             match header.calc_header_checksum(&options) {
                 Err(Ipv4OptionsLengthBad(9)) => {}, //all good
@@ -112,7 +140,7 @@ fn ipv4_calc_header_checksum() {
         }
         //options too large test
         {
-            let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+            let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             let options = vec![0;11*4]; //11 is a too big number to store in the ipv4 header
             match header.calc_header_checksum(&options) {
                 Err(Ipv4OptionsLengthBad(44)) => {}, //all good

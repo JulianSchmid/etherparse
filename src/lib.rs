@@ -60,6 +60,8 @@ impl From<ValueError> for WriteError {
 pub enum ValueError {
     ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
+    ///Error when a given payload & ipv4 options block is bigger then what fits inside an ipv4 total_length field.
+    Ipv4PayloadAndOptionsLengthTooLarge(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
