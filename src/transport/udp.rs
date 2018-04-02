@@ -19,27 +19,37 @@ pub struct UdpHeader {
 impl UdpHeader {
 
     ///Returns an udp header for the given parameters
-    pub fn without_checksum(source_port: u16, destination_port: u16, payload_length: usize) -> Result<UdpHeader, ValueError> {
-        //TODO check payload size
+    pub fn without_ipv4_checksum(source_port: u16, destination_port: u16, payload_length: usize) -> Result<UdpHeader, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload_length {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload_length));
+        }
 
         Ok(UdpHeader{
             source_port: source_port,
             destination_port: destination_port,
-            length: (8 + payload_length) as u16, //payload plus udp header
+            length: (UdpHeader::SERIALIZED_SIZE + payload_length) as u16, //payload plus udp header
             checksum: 0
         })
     }
 
     ///Calculate an udp header given an ipv4 header and the payload
     pub fn with_ipv4_checksum(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
-        //TODO check that the payload length is not too big
+
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
+
         let mut result = UdpHeader{
             source_port: source_port,
             destination_port: destination_port,
-            length: 8 + payload.len() as u16, //payload plus udp header
+            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
             checksum: 0
         };
-        result.checksum = result.calc_checksum_ipv4(ip_header, payload)?;
+        result.checksum = result.calc_checksum_ipv4_internal(&ip_header.source, &ip_header.destination, ip_header.protocol, payload);
         Ok(result)
     }
 
@@ -47,12 +57,20 @@ impl UdpHeader {
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, payload)
     }
-    
+
     ///Calculates the upd header checksum based on a ipv4 header.
     pub fn calc_checksum_ipv4_raw(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
 
-        //TODO check that the payload length is not too big
-
+        Ok(self.calc_checksum_ipv4_internal(source, destination, protocol, payload))
+    }
+    
+    ///Calculates the upd header checksum based on a ipv4 header.
+    fn calc_checksum_ipv4_internal(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> u16 {
         let mut sum = BigEndian::read_u16(&source[0..2]) as u32 + //pseudo header
                       BigEndian::read_u16(&source[2..4]) as u32 +
                       BigEndian::read_u16(&destination[0..2]) as u32 +
@@ -73,10 +91,10 @@ impl UdpHeader {
         }
         let carry_add = (sum & 0xffff) + (sum >> 16);
         let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
-        if result == 0xffff {
-            Ok(result) //avoid the transmition of an all 0 checksum as this value is reserved by "checksum disabled" (see rfc)
+        if 0xffff == result {
+            result //avoid the transmition of an all 0 checksum as this value is reserved by "checksum disabled" (see rfc)
         } else {
-            Ok(!result)
+            !result
         }
     }
 

@@ -62,7 +62,7 @@ fn main() {
         ).unwrap().write(&mut out).unwrap();
     } else {
         //write the header with the checksum disabled
-        UdpHeader::without_checksum(
+        UdpHeader::without_ipv4_checksum(
             //source port
             0,
             //destination port

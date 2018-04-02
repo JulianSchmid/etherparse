@@ -3,7 +3,7 @@ use super::super::*;
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
-///Internet protocol headers
+///Internet protocol headers version 4 & 6
 #[derive(Debug, PartialEq)]
 pub enum IpHeader {
     Version4(Ipv4Header),
@@ -11,7 +11,6 @@ pub enum IpHeader {
 }
 
 impl IpHeader {
-
     ///Reads an IP (v4 or v6) header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpHeader, ReadError> {
         let value = reader .read_u8()?;

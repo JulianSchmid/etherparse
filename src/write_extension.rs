@@ -41,7 +41,7 @@ pub trait WriteEtherExt: io::Write + Sized {
 
     ///Write an udp header with checksum 0 (= checksum disabled).
     fn write_udp_header(&mut self, source_port: u16, destination_port: u16, payload_length: usize) -> Result<(), WriteError> {
-        UdpHeader::without_checksum(source_port, destination_port, payload_length)?.write(self)
+        UdpHeader::without_ipv4_checksum(source_port, destination_port, payload_length)?.write(self)
     }
 }
 

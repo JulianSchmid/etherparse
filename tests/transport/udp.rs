@@ -1,7 +1,7 @@
 use etherparse::*;
 
 #[test]
-fn readwrite_udp_header_raw() {
+fn read_write() {
     use std::io::Cursor;
 
     let input = UdpHeader {
@@ -23,23 +23,117 @@ fn readwrite_udp_header_raw() {
 }
 
 #[test]
+fn with_ipv4_checksum() {
+    let payload = [9,10,11,12, 13,14,15,16];
+    let ip_header = Ipv4Header::new(
+        UdpHeader::SERIALIZED_SIZE + payload.len(), 
+        5, 
+        IpTrafficClass::Udp, 
+        [1,2,3,4], 
+        [5,6,7,8]).unwrap();
+
+    let result = UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload).unwrap();
+    assert_eq!(UdpHeader {
+        source_port: 1234,
+        destination_port: 5678,
+        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+        checksum: 42118
+    }, result);
+}
+
+#[test]
+fn with_ipv4_payload_size_check() {
+    use std;
+    //check that an error is produced when the payload size is too large
+    let mut payload = Vec::with_capacity(std::u16::MAX as usize);
+    //first try out the maximum size uint16 - udp header size
+    payload.resize(std::u16::MAX as usize - UdpHeader::SERIALIZED_SIZE, 0);
+    let ip_header = Ipv4Header::new(
+        1234, //set the size here to something different, as otherwise the ip header size check will trigger 
+        5, 
+        IpTrafficClass::Udp, 
+        [1,2,3,4], 
+        [5,6,7,8]).unwrap();
+
+    //with checksum
+    match UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload) {
+        Ok(_) => {} //all good
+        value => assert!(false, format!("Expected an UdpHeader but received {:?}", value))
+    }
+
+    //without checksum
+    match UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()) {
+        Ok(_) => {} //all good
+        value => assert!(false, format!("Expected an UdpHeader but received {:?}", value))
+    }
+    //check sum calculation methods
+    {
+        let header = UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()).unwrap();
+        //checksum calculation
+        match header.calc_checksum_ipv4(&ip_header, &payload) {
+            Ok(_) => {} //all good
+            value => assert!(false, format!("Expected a checksum but received {:?}", value))
+        }
+        //checksum calculation raw
+        match header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload) {
+            Ok(_) => {} //all good
+            value => assert!(false, format!("Expected a checksum but received {:?}", value))
+        }
+    }
+    //now check with a too large payload
+    const TOO_LARGE: usize = std::u16::MAX as usize - UdpHeader::SERIALIZED_SIZE + 1;
+    payload.resize(TOO_LARGE, 0);
+    //with checksum
+    match UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload) {
+        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
+        value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
+    }
+
+    //without checksum
+    match UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()) {
+        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
+        value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
+    }
+    //check sum calculation methods
+    {
+        let header = UdpHeader::without_ipv4_checksum(1234, 5678, 1234).unwrap();
+        //checksum calculation
+        match header.calc_checksum_ipv4(&ip_header, &payload) {
+            Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
+            value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
+        }
+        //checksum calculation raw
+        match header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload) {
+            Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
+            value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
+        }
+    }
+}
+
+#[test]
 fn udp_calc_checksum_ipv4() {
-    //zero checksum should be inverted
+    //even sized payload
     let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
+    let payload = [9,10,11,12, 13,14,15,16];
     let udp = UdpHeader {
         source_port: 1234,
         destination_port: 5678,
-        length: 8,
+        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         checksum: 0
     };
-    let payload = [9,10,11,12, 13,14,15,16];
 
-    assert_eq!(42134, udp.calc_checksum_ipv4(&ipheader, &payload).unwrap());
+    assert_eq!(42118, udp.calc_checksum_ipv4(&ipheader, &payload).unwrap());
+
+    //uneven sized payload
+    //TODO
+
+    //check that zero checksum is converted to 0xffff
+    //TODO
 }
 
 #[test]
 fn udp_calc_checksum_ipv4_raw() {
-    //zero checksum should be inverted
+    //even sized payload
     let udp = UdpHeader {
         source_port: 1234,
         destination_port: 5678,
@@ -49,4 +143,10 @@ fn udp_calc_checksum_ipv4_raw() {
     let payload = [9,10,11,12, 13,14,15,16];
 
     assert_eq!(42134, udp.calc_checksum_ipv4_raw(&[1,2,3,4], &[5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
+
+    //uneven sized payload
+    //TODO
+
+    //check that zero checksum is converted to 0xffff
+    //TODO
 }
