@@ -3,11 +3,9 @@ language: rust
 sudo: required
 
 rust:
-  - nightly
-  - beta
   - stable
-
-cache: cargo
+  - beta
+  - nightly
 
 matrix:
   allow_failures:
