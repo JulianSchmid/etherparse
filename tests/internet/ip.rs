@@ -25,28 +25,25 @@ fn ipv4_new() {
 #[test]
 fn ipv4_new_error() {
     //border case check (no error)
-    match Ipv4Header::new(
-        (std::u16::MAX as usize) - 20,
-        4,
-        IpTrafficClass::Udp,
-        [1,2,3,4],
-        [5,6,7,8]
-    ) {
-        Ok(_) => {}, //all good
-        value => assert!(false, format!("Expected an Ipv4Header but received {:?}", value))
-    }
+    assert_matches!(Ipv4Header::new(
+                        (std::u16::MAX as usize) - 20,
+                        4,
+                        IpTrafficClass::Udp,
+                        [1,2,3,4],
+                        [5,6,7,8]
+                    ),
+                    Ok(_));
+
     //check that a too large payload generates an error
     const TOO_LARGE_PAYLOAD: usize = (std::u16::MAX as usize) - 19;
-    match Ipv4Header::new(
-        (std::u16::MAX as usize) - 19,
-        4,
-        IpTrafficClass::Udp,
-        [1,2,3,4],
-        [5,6,7,8]
-    ) {
-        Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(TOO_LARGE_PAYLOAD)) => {}, //all good
-        value => assert!(false, format!("Expected an Ipv4PayloadAndOptionsLengthTooLarge error but received {:?}", value))
-    }
+    assert_matches!(Ipv4Header::new(
+                        (std::u16::MAX as usize) - 19,
+                        4,
+                        IpTrafficClass::Udp,
+                        [1,2,3,4],
+                        [5,6,7,8]
+                    ), 
+                    Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(TOO_LARGE_PAYLOAD)));
 }
 
 #[test]
@@ -55,6 +52,7 @@ fn ipv4_calc_header_checksum() {
     use ErrorField::*;
     //without options
     {
+        //dont_fragment && !more_fragments
         let header = Ipv4Header {
             header_length: 5,
             differentiated_services_code_point: 0,
@@ -71,6 +69,23 @@ fn ipv4_calc_header_checksum() {
             destination: [212, 10, 11, 123]
         };
         assert_eq!(0xd582, header.calc_header_checksum(&[]).unwrap());
+        // !dont_fragment && more_fragments
+        let header = Ipv4Header {
+            header_length: 5,
+            differentiated_services_code_point: 0,
+            explicit_congestion_notification: 0,
+            total_length: 40 + 20,
+            identification: 0,
+            dont_fragment: false,
+            more_fragments: true,
+            fragments_offset: 0,
+            time_to_live: 4,
+            protocol: IpTrafficClass::Udp as u8,
+            header_checksum: 0,
+            source: [192, 168, 1, 1],
+            destination: [212, 10, 11, 123]
+        };
+        assert_eq!(0xf582, header.calc_header_checksum(&[]).unwrap());
     }
     //with options
     {
@@ -97,55 +112,43 @@ fn ipv4_calc_header_checksum() {
         {
             let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.header_length = 0x10;
-            match header.calc_header_checksum(&[]) {
-                Err(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}) => {}, //all good
-                value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&[]),
+                            Err(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength}));
         }
         //max check differentiated_services_code_point
         {
             let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.differentiated_services_code_point = 0x40;
-            match header.calc_header_checksum(&[]) {
-                Err(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}) => {}, //all good
-                value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&[]),
+                            Err(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}));
         }
         //max check explicit_congestion_notification
         {
             let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.explicit_congestion_notification = 0x4;
-            match header.calc_header_checksum(&[]) {
-                Err(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}) => {}, //all good
-                value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&[]),
+                            Err(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}));
         }
         //max check fragments_offset
         {
             let mut header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             header.fragments_offset = 0x2000;
-            match header.calc_header_checksum(&[]) {
-                Err(U16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}) => {}, //all good
-                value => assert!(false, format!("Expected a ValueU8TooLarge error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&[]),
+                            Err(U16TooLarge{value: 0x2000, max: 0x1fff, field: Ipv4FragmentsOffset}));
         }
         //non 4 byte aligned options check
         {
             let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             let options = vec![0;9]; //9 is non 4 byte aligned
-            match header.calc_header_checksum(&options) {
-                Err(Ipv4OptionsLengthBad(9)) => {}, //all good
-                value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&options),
+                            Err(Ipv4OptionsLengthBad(9)));
         }
         //options too large test
         {
             let header = Ipv4Header::new(15, 4, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
             let options = vec![0;11*4]; //11 is a too big number to store in the ipv4 header
-            match header.calc_header_checksum(&options) {
-                Err(Ipv4OptionsLengthBad(44)) => {}, //all good
-                value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
-            }
+            assert_matches!(header.calc_header_checksum(&options),
+                            Err(Ipv4OptionsLengthBad(44)));
         }
     }
 }
@@ -197,10 +200,7 @@ fn read_ip_header_ipv4() {
         let result = cursor.read_ip_header().unwrap();
         assert_eq!(20, cursor.position());
 
-        match result {
-            IpHeader::Version4(result) => assert_eq!(*input, result),
-            value => assert!(false, format!("Expected IpHeaderV4 but received {:?}", value))
-        }
+        assert_matches!(result, IpHeader::Version4(result) => assert_eq!(*input, result));
     }
 }
 
@@ -402,10 +402,18 @@ fn write_ipv4_header() {
 
 #[test]
 fn read_ipv4_error_header() {
-    let buffer: [u8;20] = [0;20];
-    let mut cursor = io::Cursor::new(&buffer);
-    let result = cursor.read_ipv4_header();
-    assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
+    //version error
+    {
+        let buffer: [u8;20] = [0;20];
+        let result = io::Cursor::new(&buffer).read_ipv4_header();
+        assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
+    }
+    //io error
+    {
+        let buffer: [u8;1] = [0x40];
+        let result = io::Cursor::new(&buffer).read_ipv4_header();
+        assert_matches!(result, Err(ReadError::IoError(_)));
+    }
 }
 
 #[test]
@@ -507,10 +515,18 @@ fn write_ipv6_header_errors() {
 
 #[test]
 fn read_ipv6_error_header() {
-    let buffer: [u8;20] = [0;20];
-    let mut cursor = io::Cursor::new(&buffer);
-    let result = cursor.read_ipv6_header();
-    assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
+    //wrong ip version
+    {
+        let buffer: [u8;20] = [0;20];
+        let result = io::Cursor::new(&buffer).read_ipv6_header();
+        assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
+    }
+    //io error
+    {
+        let buffer: [u8;1] = [0x60];
+        let result = io::Cursor::new(&buffer).read_ipv6_header();
+        assert_matches!(result, Err(ReadError::IoError(_)));
+    }
 }
 
 #[test]
