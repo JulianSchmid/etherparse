@@ -200,7 +200,7 @@ fn read_ip_header_ipv4() {
         let result = cursor.read_ip_header().unwrap();
         assert_eq!(20, cursor.position());
 
-        assert_matches!(result, IpHeader::Version4(result) => assert_eq!(*input, result));
+        assert_eq!(result, IpHeader::Version4(input.clone()));
     }
 }
 

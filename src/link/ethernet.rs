@@ -6,7 +6,7 @@ use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 
 ///Ether type enum present in ethernet II header.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EtherType {
     Ipv4 = 0x0800,
     Ipv6 = 0x86dd,
@@ -33,7 +33,7 @@ impl EtherType {
 }
 
 ///Ethernet II header.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ethernet2Header {
     pub destination: [u8;6],
     pub source: [u8;6],
