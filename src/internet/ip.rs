@@ -4,7 +4,7 @@ extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///Internet protocol headers version 4 & 6
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IpHeader {
     Version4(Ipv4Header),
     Version6(Ipv6Header)
@@ -23,7 +23,7 @@ impl IpHeader {
 }
 
 ///IPv4 header without options.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Ipv4Header {
     pub header_length: u8,
     pub differentiated_services_code_point: u8,
@@ -278,7 +278,7 @@ impl Ipv4Header {
 }
 
 ///IPv6 header according to rfc8200.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Ipv6Header {
     pub traffic_class: u8,
     ///If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
@@ -427,7 +427,7 @@ impl Ipv6Header {
 }
 
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum IpTrafficClass {
     ///IPv6 Hop-by-Hop Option [RFC8200]
     IPv6HeaderHopByHop = 0,

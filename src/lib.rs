@@ -56,7 +56,7 @@ impl From<ValueError> for WriteError {
 }
 
 ///Errors in the given data
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ValueError {
     ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
@@ -80,7 +80,7 @@ impl From<io::Error> for WriteError {
 }
 
 ///Fields that can produce errors when serialized.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ErrorField {
     Ipv4HeaderLength,
     Ipv4Dscp,

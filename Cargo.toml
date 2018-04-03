@@ -15,6 +15,9 @@ exclude = [
 [dependencies]
 byteorder = "1.2.1"
 
+[dev-dependencies]
+assert_matches = "1.2"
+
 [badges]
 travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }
 codecov = { repository = "JulianSchmid/etherparse", branch = "master", service = "github" }

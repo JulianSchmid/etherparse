@@ -6,7 +6,7 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 
 ///IEEE 802.1Q VLAN Tagging Header
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct VlanTaggingHeader {
     ///A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     pub priority_code_point: u8,

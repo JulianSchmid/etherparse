@@ -207,7 +207,7 @@ fn read_ip_header_ipv4() {
 #[test]
 fn read_ip_header_ipv6() {
     use std::io::Cursor;
-    let input = Ipv6Header {
+    const INPUT: Ipv6Header = Ipv6Header {
         traffic_class: 1,
         flow_label: 0x81806,
         payload_length: 0x8021,
@@ -220,7 +220,7 @@ fn read_ip_header_ipv6() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv6_header(&input).unwrap();
+    buffer.write_ipv6_header(&INPUT).unwrap();
     assert_eq!(40, buffer.len());
 
     //deserialize
@@ -228,10 +228,7 @@ fn read_ip_header_ipv6() {
     let result = cursor.read_ip_header().unwrap();
     assert_eq!(40, cursor.position());
 
-    match result {
-        IpHeader::Version6(result) => assert_eq!(input, result),
-        value => assert!(false, format!("Expected IpHeaderV6 but received {:?}", value))
-    }
+    assert_matches!(result, IpHeader::Version6(INPUT));
 }
 
 #[test]
@@ -258,10 +255,7 @@ fn read_ip_header_error() {
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    match cursor.read_ip_header() {
-        Err(ReadError::IpUnsupportedVersion(0xf)) => {}, //all good
-        value => assert!(false, format!("Expected a IpUnsupportedVersion error but received {:?}", value))
-    }
+    assert_matches!(cursor.read_ip_header(), Err(ReadError::IpUnsupportedVersion(0xf)));
 }
 
 #[test]
@@ -327,60 +321,47 @@ fn write_ipv4_raw_header_errors() {
         result
     };
     //header_length
-    match test_write(&{
-        let mut value = base();
-        value.header_length = 0x10;
-        value
-    }) {
-        Err(ValueError(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
+    {
+        let result = test_write(&{
+            let mut value = base();
+            value.header_length = 0x10;
+            value
+        });
+        assert_matches!(result, Err(ValueError(U8TooLarge{value: 0x10, max: 0xf, field: Ipv4HeaderLength})));
     }
     //dscp
-    match test_write(&{
-        let mut value = base();
-        value.differentiated_services_code_point = 0x40;
-        value
-    }) {
-        Err(ValueError(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
+    {
+        let result = test_write(&{
+            let mut value = base();
+            value.differentiated_services_code_point = 0x40;
+            value
+        });
+        assert_matches!(result, Err(ValueError(U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp})));
     }
     //ecn
-    match test_write(&{
-        let mut value = base();
-        value.explicit_congestion_notification = 0x4;
-        value
-    }) {
-        Err(ValueError(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
+    {
+        let result = test_write(&{
+            let mut value = base();
+            value.explicit_congestion_notification = 0x4;
+            value
+        });
+        assert_matches!(result, Err(ValueError(U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn})));
     }
     //fragmentation offset
-    match test_write(&{
-        let mut value = base();
-        value.fragments_offset = 0x2000;
-        value
-    }) {
-        Err(ValueError(U16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
-    }
-    //options header length (non 4 modulo)
     {
-        let mut buffer: Vec<u8> = Vec::new();
-        let result = buffer.write_ipv4_header_raw(&base(), &[1,2]);
-        assert_eq!(0, buffer.len());
-        match result {
-            Err(ValueError(Ipv4OptionsLengthBad(2))) => {}, //all good
-            value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
-        }
+        let result = test_write(&{
+            let mut value = base();
+            value.fragments_offset = 0x2000;
+            value
+        });
+        assert_matches!(result, Err(ValueError(U16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset})));
     }
     //options header length (non 4 modulo)
     {
         let mut buffer: Vec<u8> = Vec::new();
         let result = buffer.write_ipv4_header_raw(&base(), &vec![0;44]);
         assert_eq!(0, buffer.len());
-        match result {
-            Err(ValueError(Ipv4OptionsLengthBad(44))) => {}, //all good
-            value => assert!(false, format!("Expected a Ipv4OptionsLengthBad error but received {:?}", value))
-        }
+        assert_matches!(result, Err(ValueError(Ipv4OptionsLengthBad(44))));
     }
 }
 
@@ -424,9 +405,43 @@ fn read_ipv4_error_header() {
     let buffer: [u8;20] = [0;20];
     let mut cursor = io::Cursor::new(&buffer);
     let result = cursor.read_ipv4_header();
-    match result {
-        Err(ReadError::Ipv4UnexpectedVersion(0)) => {},
-        _ => assert!(false, format!("Expected ipv 4 version error but received {:?}", result))
+    assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
+}
+
+#[test]
+fn write_ipv4_error_header() {
+    let input = Ipv4Header {
+        header_length: 0,
+        differentiated_services_code_point: 42,
+        explicit_congestion_notification: 3,
+        total_length: 1234,
+        identification: 4321,
+        dont_fragment: true,
+        more_fragments: false,
+        fragments_offset: 4367,
+        time_to_live: 8,
+        protocol: 1,
+        header_checksum: 0,
+        source: [192, 168, 1, 1],
+        destination: [212, 10, 11, 123]
+    };
+    //serialize with non mod 4 length options
+    {
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let result = buffer.write_ipv4_header(&input, &[1,2,3,4,5,6,7]);
+        assert_eq!(0, buffer.len());
+
+        use ValueError::Ipv4OptionsLengthBad;
+        assert_matches!(result, Err(WriteError::ValueError(Ipv4OptionsLengthBad(7))));
+    }
+    //serialize with too large options length
+    {
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let result = buffer.write_ipv4_header(&input, &[0;44]);
+        assert_eq!(0, buffer.len());
+
+        use ValueError::Ipv4OptionsLengthBad;
+        assert_matches!(result, Err(WriteError::ValueError(Ipv4OptionsLengthBad(44))));
     }
 }
 
@@ -481,14 +496,13 @@ fn write_ipv6_header_errors() {
         buffer.write_ipv6_header(input)
     };
     //flow label
-    match test_write(&{
-        let mut value = base();
-        value.flow_label = 0x100000;
-        value
-    }) {
-        Err(ValueError(U32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
-    }
+    assert_matches!(
+        test_write(&{
+            let mut value = base();
+            value.flow_label = 0x100000;
+            value
+        }), 
+        Err(ValueError(U32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel})));
 }
 
 #[test]
@@ -496,10 +510,7 @@ fn read_ipv6_error_header() {
     let buffer: [u8;20] = [0;20];
     let mut cursor = io::Cursor::new(&buffer);
     let result = cursor.read_ipv6_header();
-    match result {
-        Err(ReadError::Ipv6UnexpectedVersion(0)) => {},
-        _ => assert!(false, format!("Expected ipv 6 version error but received {:?}", result))
-    }
+    assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
 }
 
 #[test]
@@ -508,10 +519,7 @@ fn skip_ipv6_header_extension() {
     {
         let buffer: [u8; 8] = [0;8];
         let mut cursor = Cursor::new(&buffer);
-        match cursor.skip_ipv6_header_extension() {
-            Ok(0) => {},
-            value => assert!(false, format!("Expected Ok(0) but received {:?}", value))
-        }
+        assert_matches!(cursor.skip_ipv6_header_extension(), Ok(0));
         assert_eq!(8, cursor.position());
     }
     {
@@ -521,10 +529,7 @@ fn skip_ipv6_header_extension() {
             0,0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        match cursor.skip_ipv6_header_extension() {
-            Ok(4) => {},
-            value => assert!(false, format!("Expected Ok(4) but received {:?}", value))
-        }
+        assert_matches!(cursor.skip_ipv6_header_extension(), Ok(4));
         assert_eq!(8*3, cursor.position());
     }
 }
@@ -599,10 +604,7 @@ fn skip_all_ipv6_header_extensions() {
         ];
         let mut cursor = Cursor::new(&buffer);
         let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
-        match result {
-            Ok(UDP) => {},
-            result => assert!(false, format!("exepected udp as next traffic_class but received {:?}", result)) 
-        }
+        assert_matches!(result, Ok(UDP));
         assert_eq!(buffer.len(), cursor.position() as usize);
     }
     //trigger "too many" error
@@ -618,9 +620,6 @@ fn skip_all_ipv6_header_extensions() {
         ];
         let mut cursor = Cursor::new(&buffer);
         let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
-        match result {
-            Err(ReadError::Ipv6TooManyHeaderExtensions) => {},
-            result => assert!(false, format!("exepected error Ipv6TooManyHeaderExtensions but received {:?}", result)) 
-        }
+        assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
 }
