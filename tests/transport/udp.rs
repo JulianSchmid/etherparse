@@ -56,57 +56,47 @@ fn with_ipv4_payload_size_check() {
         [5,6,7,8]).unwrap();
 
     //with checksum
-    match UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload) {
-        Ok(_) => {} //all good
-        value => assert!(false, format!("Expected an UdpHeader but received {:?}", value))
-    }
+    assert_matches!(UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload),
+                    Ok(_));
 
     //without checksum
-    match UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()) {
-        Ok(_) => {} //all good
-        value => assert!(false, format!("Expected an UdpHeader but received {:?}", value))
-    }
+    assert_matches!(UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()),
+                    Ok(_));
+
     //check sum calculation methods
     {
         let header = UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()).unwrap();
         //checksum calculation
-        match header.calc_checksum_ipv4(&ip_header, &payload) {
-            Ok(_) => {} //all good
-            value => assert!(false, format!("Expected a checksum but received {:?}", value))
-        }
+        assert_matches!(header.calc_checksum_ipv4(&ip_header, &payload),
+                        Ok(_));
+
         //checksum calculation raw
-        match header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload) {
-            Ok(_) => {} //all good
-            value => assert!(false, format!("Expected a checksum but received {:?}", value))
-        }
+        assert_matches!(header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload),
+                        Ok(_));
     }
+
     //now check with a too large payload
     const TOO_LARGE: usize = std::u16::MAX as usize - UdpHeader::SERIALIZED_SIZE + 1;
     payload.resize(TOO_LARGE, 0);
+
     //with checksum
-    match UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload) {
-        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
-        value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
-    }
+    assert_matches!(UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload),
+                    Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
 
     //without checksum
-    match UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()) {
-        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
-        value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
-    }
+    assert_matches!(UdpHeader::without_ipv4_checksum(1234, 5678, payload.len()),
+                    Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
+
     //check sum calculation methods
     {
         let header = UdpHeader::without_ipv4_checksum(1234, 5678, 1234).unwrap();
         //checksum calculation
-        match header.calc_checksum_ipv4(&ip_header, &payload) {
-            Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
-            value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
-        }
+        assert_matches!(header.calc_checksum_ipv4(&ip_header, &payload),
+                        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
+
         //checksum calculation raw
-        match header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload) {
-            Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)) => {} //all good
-            value => assert!(false, format!("Expected an UdpPayloadLengthTooLarge error but received {:?}", value))
-        }
+        assert_matches!(header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload),
+                        Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
     }
 }
 
