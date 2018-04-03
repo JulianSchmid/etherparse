@@ -17,6 +17,7 @@ fn ether_type_convert() {
     assert_eq!(EtherType::from_u16(0x0842), Some(WakeOnLan));
     assert_eq!(EtherType::from_u16(0x8100), Some(VlanTaggedFrame));
     assert_eq!(EtherType::from_u16(0x9100), Some(VlanDoubleTaggedFrame));
+    assert_eq!(EtherType::from_u16(0x1234), None);
 }
 
 #[test]
