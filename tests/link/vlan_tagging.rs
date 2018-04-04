@@ -47,22 +47,18 @@ fn write_errors() {
     };
 
     //priority_code_point
-    match test_write(&{
-        let mut value = base();
-        value.priority_code_point = 4;
-        value
-    }) {
-        Err(ValueError(U8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
-    }
+    assert_matches!(test_write(&{
+                        let mut value = base();
+                        value.priority_code_point = 4;
+                        value
+                    }),
+                    Err(ValueError(U8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint})));
 
     //vlan_identifier
-    match test_write(&{
-        let mut value = base();
-        value.vlan_identifier = 0x1000;
-        value
-    }) {
-        Err(ValueError(U16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId})) => {}, //all good
-        value => assert!(false, format!("Expected a range error but received {:?}", value))
-    }
+    assert_matches!(test_write(&{
+                        let mut value = base();
+                        value.vlan_identifier = 0x1000;
+                        value
+                    }),
+                    Err(ValueError(U16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId})));
 }

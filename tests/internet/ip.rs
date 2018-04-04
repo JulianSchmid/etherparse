@@ -601,18 +601,12 @@ fn skip_all_ipv6_header_extensions() {
             match EXTENSION_IDS.iter().find(|&&x| x == i) {
                 Some(_) => {
                     //ipv6 header extension -> expect skip
-                    match result {
-                        Ok(UDP) => {},
-                        _ => assert!(false, format!("exepected udp as next traffic_class but received {:?}", result))
-                    }
+                    assert_matches!(result, Ok(UDP));
                     assert_eq!(buffer.len(), cursor.position() as usize);
                 },
                 None => {
                     //non ipv6 header expect no read movement and direct return
-                    match result {
-                        Ok(next) => assert_eq!(i, next),
-                        _ => assert!(false, format!("exepected {} as next traffic_class but received {:?}", i, result))
-                    }
+                    assert_matches!(result, Ok(next) => assert_eq!(i, next));
                     assert_eq!(0, cursor.position());
                 }
             }
