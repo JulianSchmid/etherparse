@@ -20,6 +20,14 @@ impl IpHeader {
             version => Err(ReadError::IpUnsupportedVersion(version))
         }
     }
+    ///Writes an IP (v4 or v6) header to the current position
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        use IpHeader::*;
+        match *self {
+            Version4(ref value) => value.write(writer, &[]),
+            Version6(ref value) => value.write(writer)
+        }
+    }
 }
 
 ///IPv4 header without options.
