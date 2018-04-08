@@ -422,14 +422,17 @@ fn write_ipv4_header() {
 fn read_ipv4_error_header() {
     //version error
     {
-        let buffer: [u8;20] = [0;20];
-        let result = io::Cursor::new(&buffer).read_ipv4_header();
+        let result = io::Cursor::new(&[0;20]).read_ipv4_header();
         assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
     }
     //io error
     {
-        let buffer: [u8;1] = [0x40];
-        let result = io::Cursor::new(&buffer).read_ipv4_header();
+        let result = io::Cursor::new(&[0x40]).read_ipv4_header();
+        assert_matches!(result, Err(ReadError::IoError(_)));
+    }
+    //io error
+    {
+        let result = io::Cursor::new(&[0x40;19]).read_ipv4_header();
         assert_matches!(result, Err(ReadError::IoError(_)));
     }
 }

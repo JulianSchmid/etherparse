@@ -50,13 +50,12 @@ fn with_ipv4_checksum_flip() {
     let sum: u16 = IpTrafficClass::Udp as u16 +
                     (2*(UdpHeader::SERIALIZED_SIZE as u16 + 
                         payload.len() as u16));
-    println!("whatever = {:?}", sum);
     BigEndian::write_u16(&mut payload, 0xffff - sum);
     let ip_header = Ipv4Header::new(
         UdpHeader::SERIALIZED_SIZE + payload.len(), 
         5, 
         IpTrafficClass::Udp, 
-        [0,0,0,0], 
+        [0,0,0,0],
         [0,0,0,0]).unwrap();
 
     let result = UdpHeader::with_ipv4_checksum(0, 0, &ip_header, &payload).unwrap();
@@ -140,12 +139,6 @@ fn udp_calc_checksum_ipv4() {
     };
 
     assert_eq!(42118, udp.calc_checksum_ipv4(&ipheader, &payload).unwrap());
-
-    //uneven sized payload
-    //TODO
-
-    //check that zero checksum is converted to 0xffff
-    //TODO
 }
 
 #[test]
@@ -160,10 +153,4 @@ fn udp_calc_checksum_ipv4_raw() {
     let payload = [9,10,11,12, 13,14,15,16];
 
     assert_eq!(42134, udp.calc_checksum_ipv4_raw(&[1,2,3,4], &[5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
-
-    //uneven sized payload
-    //TODO
-
-    //check that zero checksum is converted to 0xffff
-    //TODO
 }
