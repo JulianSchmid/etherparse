@@ -66,3 +66,15 @@ fn test_debug_write() {
         }
     }
 }
+
+#[test]
+fn test_io_error_to_write_error() {
+    assert_matches!(WriteError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+                    WriteError::IoError(_));
+}
+
+#[test]
+fn test_io_error_to_read_error() {
+    assert_matches!(ReadError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+                    ReadError::IoError(_));
+}
