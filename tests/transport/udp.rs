@@ -1,5 +1,8 @@
 use etherparse::*;
 
+extern crate byteorder;
+use self::byteorder::{ByteOrder, BigEndian};
+
 #[test]
 fn read_write() {
     use std::io::Cursor;
@@ -38,6 +41,30 @@ fn with_ipv4_checksum() {
         destination_port: 5678,
         length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         checksum: 42118
+    }, result);
+}
+
+#[test]
+fn with_ipv4_checksum_flip() {
+    let mut payload = [0,0,0,0];
+    let sum: u16 = IpTrafficClass::Udp as u16 +
+                    (2*(UdpHeader::SERIALIZED_SIZE as u16 + 
+                        payload.len() as u16));
+    println!("whatever = {:?}", sum);
+    BigEndian::write_u16(&mut payload, 0xffff - sum);
+    let ip_header = Ipv4Header::new(
+        UdpHeader::SERIALIZED_SIZE + payload.len(), 
+        5, 
+        IpTrafficClass::Udp, 
+        [0,0,0,0], 
+        [0,0,0,0]).unwrap();
+
+    let result = UdpHeader::with_ipv4_checksum(0, 0, &ip_header, &payload).unwrap();
+    assert_eq!(UdpHeader {
+        source_port: 0,
+        destination_port: 0,
+        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+        checksum: 0xffff
     }, result);
 }
 
