@@ -286,36 +286,6 @@ fn udp_with_ipv6_checksum() {
 }
 
 #[test]
-fn udp_calc_checksum_ipv6() {
-    let udp_payload = [39,40,41,42];
-    let ip_header = Ipv6Header {
-        traffic_class: 1,
-        flow_label: 0x81806,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
-        next_header: IpTrafficClass::Udp as u8,
-        hop_limit: 40,
-        source: [1, 2, 3, 4, 5, 6, 7, 8,
-                 9,10,11,12,13,14,15,16],
-        destination: [21,22,23,24,25,26,27,28,
-                      29,30,31,32,33,34,35,36]
-    };
-    let udp_header = UdpHeader{
-        source_port: 37,
-        destination_port: 38,
-        length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
-        checksum: 0
-    };
-
-    assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
-                                                  &udp_payload),
-                    Ok(0x8e08));
-    assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
-                                                      &ip_header.destination,
-                                                      &udp_payload),
-                    Ok(0x8e08));
-}
-
-#[test]
 fn udp_ipv6_errors() {
     use std;
 
