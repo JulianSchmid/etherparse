@@ -71,25 +71,84 @@ impl UdpHeader {
     
     ///Calculates the upd header checksum based on a ipv4 header.
     fn calc_checksum_ipv4_internal(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> u16 {
-        let mut sum = BigEndian::read_u16(&source[0..2]) as u32 + //pseudo header
-                      BigEndian::read_u16(&source[2..4]) as u32 +
-                      BigEndian::read_u16(&destination[0..2]) as u32 +
-                      BigEndian::read_u16(&destination[2..4]) as u32 +
-                      protocol as u32 +
-                      self.length as u32 +
-                      //udp header start
-                      self.source_port as u32 + //udp header start
-                      self.destination_port as u32 +
-                      self.length as u32;
+        self.calc_checksum_post_ip(BigEndian::read_u16(&source[0..2]) as u64 + //pseudo header
+                                   BigEndian::read_u16(&source[2..4]) as u64 +
+                                   BigEndian::read_u16(&destination[0..2]) as u64 +
+                                   BigEndian::read_u16(&destination[2..4]) as u64 +
+                                   protocol as u64 +
+                                   self.length as u64, 
+                                   payload)
+    }
+
+    ///Calculate an udp header given an ipv6 header and the payload
+    pub fn with_ipv6_checksum(source_port: u16, destination_port: u16, ip_header: &Ipv6Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
+
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
+
+        let mut result = UdpHeader{
+            source_port: source_port,
+            destination_port: destination_port,
+            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
+            checksum: 0
+        };
+        result.checksum = result.calc_checksum_ipv6_internal(&ip_header.source, &ip_header.destination, payload);
+        Ok(result)
+    }
+
+    ///Calculates the checksum of the current udp header given an ipv6 header and the payload.
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, payload)
+    }
+
+    ///Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
+    pub fn calc_checksum_ipv6_raw(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
+
+        Ok(self.calc_checksum_ipv6_internal(source, destination, payload))
+    }
+
+    fn calc_checksum_ipv6_internal(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> u16 {
+        fn calc_sum(value: &[u8;16]) -> u64 {
+            let mut result = 0;
+            for i in 0..8 {
+                let index = i*2;
+                result += BigEndian::read_u16(&value[index..(index + 2)]) as u64;
+            }
+            result
+        }
+        self.calc_checksum_post_ip(calc_sum(source) +
+                                   calc_sum(destination) +
+                                   IpTrafficClass::Udp as u64 +
+                                   self.length as u64,
+                                   payload)
+    }
+
+    ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
+        let mut sum = ip_pseudo_header_sum +
+                      self.source_port as u64 + //udp header start
+                      self.destination_port as u64 +
+                      self.length as u64;
 
         for i in 0..(payload.len()/2) {
-            sum += BigEndian::read_u16(&payload[i*2..i*2 + 2]) as u32;
+            sum += BigEndian::read_u16(&payload[i*2..i*2 + 2]) as u64;
         }
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u32;
+            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u64;
         }
-        let carry_add = (sum & 0xffff) + (sum >> 16);
+        let carry_add = (sum & 0xffff) + 
+                        ((sum >> 16) & 0xffff) +
+                        ((sum >> 32) & 0xffff) +
+                        ((sum >> 48) & 0xffff);
         let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
         if 0xffff == result {
             result //avoid the transmition of an all 0 checksum as this value is reserved by "checksum disabled" (see rfc)

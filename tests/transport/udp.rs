@@ -154,3 +154,216 @@ fn udp_calc_checksum_ipv4_raw() {
 
     assert_eq!(42134, udp.calc_checksum_ipv4_raw(&[1,2,3,4], &[5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
 }
+
+#[test]
+fn udp_with_ipv6_checksum() {
+
+    //simple packet (even payload)
+    {
+        let udp_payload = [39,40,41,42];
+
+        let ip_header = Ipv6Header {
+            traffic_class: 1,
+            flow_label: 0x81806,
+            payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            next_header: IpTrafficClass::Udp as u8,
+            hop_limit: 40,
+            source: [1, 2, 3, 4, 5, 6, 7, 8,
+                     9,10,11,12,13,14,15,16],
+            destination: [21,22,23,24,25,26,27,28,
+                          29,30,31,32,33,34,35,36]
+        };
+
+        let result = UdpHeader::with_ipv6_checksum(37, 38, &ip_header, &udp_payload).unwrap();
+        
+        assert_eq!(37, result.source_port);
+        assert_eq!(38, result.destination_port);
+        assert_eq!((UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16, result.length);
+        const EXPECTED_CHECKSUM: u16 = 0x8e08;
+        assert_eq!(EXPECTED_CHECKSUM, result.checksum);
+
+        //check seperate checksum calculation
+        let udp_header = UdpHeader{
+            source_port: 37,
+            destination_port: 38,
+            length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            checksum: 0
+        };
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
+                                                      &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
+                                                          &ip_header.destination,
+                                                          &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+    }
+
+    //simple packet (uneven payload)
+    {
+        let udp_payload = [39,40,41,42,43];
+
+        let ip_header = Ipv6Header {
+            traffic_class: 1,
+            flow_label: 0x81806,
+            payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            next_header: IpTrafficClass::Udp as u8,
+            hop_limit: 40,
+            source: [1, 2, 3, 4, 5, 6, 7, 8,
+                     9,10,11,12,13,14,15,16],
+            destination: [21,22,23,24,25,26,27,28,
+                          29,30,31,32,33,34,35,36]
+        };
+
+        let result = UdpHeader::with_ipv6_checksum(37, 38, &ip_header, &udp_payload).unwrap();
+        
+        assert_eq!(37, result.source_port);
+        assert_eq!(38, result.destination_port);
+        assert_eq!((UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16, result.length);
+        const EXPECTED_CHECKSUM: u16 = 0x6306;
+        assert_eq!(EXPECTED_CHECKSUM, result.checksum);
+
+        //check separate checksum calculation methods
+        let udp_header = UdpHeader{
+            source_port: 37,
+            destination_port: 38,
+            length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            checksum: 0
+        };
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
+                                                      &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
+                                                          &ip_header.destination,
+                                                          &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+    }
+
+    //maximum filled packet (does require a uint64 to calculate the checksum)
+    {
+        let udp_payload_len = 0xffff
+                              - (Ipv4Header::SERIALIZED_SIZE as usize)
+                              - (UdpHeader::SERIALIZED_SIZE as usize);
+        let mut udp_payload = Vec::with_capacity(udp_payload_len);
+        udp_payload.resize(udp_payload_len, 0xff);
+
+        let ip_header = Ipv6Header {
+            traffic_class: 1,
+            flow_label: 0x81806,
+            payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            next_header: IpTrafficClass::Udp as u8,
+            hop_limit: 40,
+            source: [0xff;16],
+            destination: [0xff;16]
+        };
+
+        //check constructor
+        let result = UdpHeader::with_ipv6_checksum(0xffff, 
+                                                   0xffff, 
+                                                   &ip_header,
+                                                   &udp_payload).unwrap();
+
+        assert_eq!(0xffff, result.source_port);
+        assert_eq!(0xffff, result.destination_port);
+        assert_eq!((UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16, result.length);
+        const EXPECTED_CHECKSUM: u16 = 0x0116;
+        assert_eq!(EXPECTED_CHECKSUM, result.checksum);
+
+        //check separate checksum calculation methods
+        let udp_header = UdpHeader{
+            source_port: 0xffff,
+            destination_port: 0xffff,
+            length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+            checksum: 0
+        };
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
+                                                      &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
+                                                          &ip_header.destination,
+                                                          &udp_payload),
+                        Ok(EXPECTED_CHECKSUM));
+    }
+}
+
+#[test]
+fn udp_calc_checksum_ipv6() {
+    let udp_payload = [39,40,41,42];
+    let ip_header = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+        next_header: IpTrafficClass::Udp as u8,
+        hop_limit: 40,
+        source: [1, 2, 3, 4, 5, 6, 7, 8,
+                 9,10,11,12,13,14,15,16],
+        destination: [21,22,23,24,25,26,27,28,
+                      29,30,31,32,33,34,35,36]
+    };
+    let udp_header = UdpHeader{
+        source_port: 37,
+        destination_port: 38,
+        length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+        checksum: 0
+    };
+
+    assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
+                                                  &udp_payload),
+                    Ok(0x8e08));
+    assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
+                                                      &ip_header.destination,
+                                                      &udp_payload),
+                    Ok(0x8e08));
+}
+
+#[test]
+fn udp_ipv6_errors() {
+    use std;
+
+    let ip_header = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: 1234,
+        next_header: IpTrafficClass::Udp as u8,
+        hop_limit: 40,
+        source: [0xff;16],
+        destination: [0xff;16]
+    };
+
+    //border still small enough
+    const MAX: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+    {
+        let mut payload = Vec::with_capacity(MAX);
+        payload.resize(MAX, 0);
+
+        let udp_header = UdpHeader{
+            source_port: 37,
+            destination_port: 38,
+            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+            checksum: 0
+        };
+        assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &payload), 
+                        Ok(_));
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
+                        Ok(_));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &payload), 
+                        Ok(_));
+    }
+    //border still small enough
+    {
+        const OVER_MAX: usize = MAX + 1;
+        let mut payload = Vec::with_capacity(OVER_MAX);
+        payload.resize(OVER_MAX, 0);
+        let udp_header = UdpHeader{
+            source_port: 37,
+            destination_port: 38,
+            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+            checksum: 0
+        };
+        assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &payload), 
+                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
+                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &payload), 
+                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
+    }
+}
