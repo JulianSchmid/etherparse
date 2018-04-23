@@ -35,8 +35,8 @@ impl EtherType {
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ethernet2Header {
-    pub destination: [u8;6],
     pub source: [u8;6],
+    pub destination: [u8;6],
     pub ether_type: u16
 }
 

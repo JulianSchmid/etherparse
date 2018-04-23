@@ -62,6 +62,8 @@ pub enum ValueError {
     Ipv4OptionsLengthBad(usize),
     ///Error when a given payload & ipv4 options block is bigger then what fits inside an ipv4 total_length field.
     Ipv4PayloadAndOptionsLengthTooLarge(usize),
+    ///Error when a given payload & ipv6 header existsns block is bigger then what fits inside an ipv6 payload_length field.
+    Ipv6PayloadLengthTooLarge(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
