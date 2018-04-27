@@ -243,6 +243,24 @@ impl UdpPacketBuilderStep<Ethernet2Header> {
             _marker: marker::PhantomData::<IpHeader>{}
         }
     }
+    ///Add a ip v6 header
+    pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> UdpPacketBuilderStep<IpHeader> {
+        self.state.ip_header = Some(IpHeader::Version6(Ipv6Header{
+            traffic_class: 0,
+            flow_label: 0,
+            payload_length: 0, //filled in on write
+            next_header: 0, //filled in on write
+            hop_limit: hop_limit,
+            source: source,
+            destination: destination
+        }));
+        
+        //return for next step
+        UdpPacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<IpHeader>{}
+        }
+    }
 }
 
 impl UdpPacketBuilderStep<IpHeader> {

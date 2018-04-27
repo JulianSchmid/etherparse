@@ -404,3 +404,66 @@ fn udp_builder_eth_ipv4_udp() {
     cursor.read_exact(&mut actual_payload).unwrap();
     assert_eq!(actual_payload, in_payload);
 }
+
+#[test]
+fn udp_builder_eth_ipv6_udp() {
+    //generate
+    let in_payload = [50,51,52,53];
+    let mut serialized = Vec::new();
+    UdpPacketBuilder::ethernet2([1,2,3,4,5,6], [7,8,9,10,11,12])
+                     .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+                           [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
+                           47)
+                     .udp(48,49)
+                     .write(&mut serialized, &in_payload)
+                     .unwrap();
+
+    //check the deserialized size
+    assert_eq!(Ethernet2Header::SERIALIZED_SIZE + 
+               Ipv6Header::SERIALIZED_SIZE + 
+               UdpHeader::SERIALIZED_SIZE + 
+               in_payload.len(),
+
+               serialized.len());
+
+    //deserialize and check that everything is as expected
+    use std::io::Cursor;
+    use std::io::Read;
+    //deserialize each part of the message and check it
+    let mut cursor = Cursor::new(&serialized);
+
+    //ethernet 2 header
+    {
+        assert_eq!(Ethernet2Header::read(&mut cursor).unwrap(), 
+                   Ethernet2Header{
+                        source: [1,2,3,4,5,6],
+                        destination: [7,8,9,10,11,12],
+                        ether_type: EtherType::Ipv6 as u16
+                   });
+    }
+
+    //ipv4 header
+    let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
+    let ip_expected = Ipv6Header{
+        traffic_class: 0,
+        flow_label: 0,
+        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        next_header: IpTrafficClass::Udp as u8,
+        hop_limit: 47,
+        source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+        destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
+    };
+    assert_eq!(ip_actual,
+               ip_expected);
+
+    //udp header
+    let udp_actual = UdpHeader::read(&mut cursor).unwrap();
+    let udp_expected = UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+    assert_eq!(udp_actual,
+               udp_expected);
+
+    //payload
+    let mut actual_payload: [u8;4] = [0;4];
+    cursor.read_exact(&mut actual_payload).unwrap();
+    assert_eq!(actual_payload, in_payload);
+}
