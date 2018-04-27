@@ -299,7 +299,7 @@ impl UdpPacketBuilderStep<UdpHeader> {
                 ip.protocol = IpTrafficClass::Udp as u8;
 
                 //calculate the udp checksum
-                udp.calc_checksum_ipv4(&ip, payload)?;
+                udp.checksum = udp.calc_checksum_ipv4(&ip, payload)?;
 
                 //write (will automatically calculate the checksum)
                 ip.write(writer, &[])?
@@ -314,7 +314,7 @@ impl UdpPacketBuilderStep<UdpHeader> {
                 ip.next_header = IpTrafficClass::Udp as u8;
 
                 //calculate the udp checksum
-                udp.calc_checksum_ipv6(&ip, payload)?;
+                udp.checksum = udp.calc_checksum_ipv6(&ip, payload)?;
 
                 //write (will automatically calculate the checksum)
                 ip.write(writer)?
@@ -324,10 +324,8 @@ impl UdpPacketBuilderStep<UdpHeader> {
 
         //finaly write the udp header & payload
         udp.write(writer)?;
-        match writer.write_all(payload) {
-            Err(value) => Err(WriteError::IoError(value)),
-            Ok(_) => Ok(())
-        }
+        writer.write_all(payload)?;
+        Ok(())
     }
 
     ///Returns the size of the packet when it is serialized
