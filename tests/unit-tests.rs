@@ -42,6 +42,7 @@ fn test_debug_write() {
         for value in [
             Ipv4OptionsLengthBad(0),
             Ipv4PayloadAndOptionsLengthTooLarge(0),
+            Ipv6PayloadLengthTooLarge(0),
             UdpPayloadLengthTooLarge(0),
             U8TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
             U16TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
