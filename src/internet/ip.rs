@@ -292,7 +292,7 @@ impl Ipv4Header {
             return Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(size));
         }
 
-        self.total_length = (size + 20) as u16;
+        self.total_length = (size + Ipv4Header::SERIALIZED_SIZE) as u16;
         Ok(())
     }
 }

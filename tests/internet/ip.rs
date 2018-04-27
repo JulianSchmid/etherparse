@@ -654,3 +654,42 @@ fn skip_all_ipv6_header_extensions() {
         assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
 }
+
+#[test]
+fn ipv4_set_payload_and_options_length() {
+    let mut header = Ipv4Header::new(0, 0, IpTrafficClass::Udp, [0;4], [0;4]).unwrap();
+
+    assert_matches!(header.set_payload_and_options_length(0), Ok(()));
+    assert_eq!(header.total_length, 20);
+
+    const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::SERIALIZED_SIZE;
+    assert_matches!(header.set_payload_and_options_length(MAX), Ok(()));
+    assert_eq!(header.total_length, std::u16::MAX);
+
+    const OVER_MAX: usize = MAX + 1;
+    assert_matches!(header.set_payload_and_options_length(OVER_MAX), 
+                    Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(OVER_MAX)));
+}
+
+#[test]
+fn ipv6_set_payload_lengt() {
+    let mut header = Ipv6Header {
+        traffic_class: 0,
+        flow_label:  0,
+        payload_length: 0,
+        next_header: 0,
+        hop_limit: 0,
+        source: [0;16],
+        destination: [0;16]
+    };
+    assert_matches!(header.set_payload_length(0), Ok(()));
+    assert_eq!(header.payload_length, 0);
+
+    const MAX: usize = std::u16::MAX as usize;
+    assert_matches!(header.set_payload_length(MAX), Ok(()));
+    assert_eq!(header.payload_length, MAX as u16);
+    
+    const OVER_MAX: usize = MAX + 1;
+    assert_matches!(header.set_payload_length(OVER_MAX), 
+                    Err(ValueError::Ipv6PayloadLengthTooLarge(OVER_MAX)));
+}
