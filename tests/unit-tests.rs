@@ -17,6 +17,7 @@ fn test_debug_write() {
         use ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+            VlanDoubleTaggingUnexpectedOuterTpid(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
             Ipv6UnexpectedVersion(0),

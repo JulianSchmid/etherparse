@@ -25,6 +25,8 @@ pub trait SerializedSize {
 #[derive(Debug)]
 pub enum ReadError {
     IoError(io::Error),
+    ///Error when a double vlan tag was expected but the tpid of the outer vlan does not contain the expected id of 0x8100.
+    VlanDoubleTaggingUnexpectedOuterTpid(u16),
     ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
     ///Error when the ip header version field is not equal 4. The value is the version that was received.

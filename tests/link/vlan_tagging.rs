@@ -1,7 +1,7 @@
 use etherparse::*;
 
 #[test]
-fn read_write() {
+fn vlan_header_read() {
     use std::io::Cursor;
     
     let input = VlanTaggingHeader {
@@ -26,7 +26,7 @@ fn read_write() {
 }
 
 #[test]
-fn write_errors() {
+fn vlan_header_write() {
     use WriteError::ValueError;
     use ValueError::*;
     use ErrorField::*;
@@ -61,4 +61,61 @@ fn write_errors() {
                         value
                     }),
                     Err(ValueError(U16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId})));
+}
+
+#[test]
+fn double_vlan_header_read_write() {
+    //normal package
+    {
+        const IN: DoubleVlanTaggingHeader = DoubleVlanTaggingHeader {
+            outer: VlanTaggingHeader {
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x321,
+                ether_type: EtherType::VlanTaggedFrame as u16
+            },
+            inner: VlanTaggingHeader {
+                priority_code_point: 1,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x456,
+                ether_type: EtherType::Ipv4 as u16
+            }
+        };
+
+        //write it
+        let mut buffer = Vec::<u8>::new();
+        IN.write(&mut buffer).unwrap();
+
+        //read it
+        use std::io::Cursor;
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(DoubleVlanTaggingHeader::read(&mut cursor), Ok(IN));
+    }
+    //check that an error is thrown if the 
+    {
+        const IN: DoubleVlanTaggingHeader = DoubleVlanTaggingHeader {
+            outer: VlanTaggingHeader {
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x321,
+                ether_type: 1 //invalid
+            },
+            inner: VlanTaggingHeader {
+                priority_code_point: 1,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x456,
+                ether_type: EtherType::Ipv4 as u16
+            }
+        };
+
+        //write it
+        let mut buffer = Vec::<u8>::new();
+        IN.write(&mut buffer).unwrap();
+
+        //read it
+        use std::io::Cursor;
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(DoubleVlanTaggingHeader::read(&mut cursor), 
+                        Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
+    }
 }

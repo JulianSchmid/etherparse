@@ -39,7 +39,7 @@ impl VlanTaggingHeader {
         })
     }
 
-    ///Write a IEEE 802.1Q VLAN tagging header
+    ///Write the IEEE 802.1Q VLAN tagging header
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use ErrorField::*;
         //check value ranges
@@ -56,5 +56,37 @@ impl VlanTaggingHeader {
         }
         writer.write_u16::<BigEndian>(self.ether_type)?;
         Ok(())
+    }
+}
+
+///IEEE 802.1Q double VLAN Tagging Header
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DoubleVlanTaggingHeader {
+    ///The outer vlan tagging header
+    pub outer: VlanTaggingHeader,
+    ///The inner vlan tagging header
+    pub inner: VlanTaggingHeader
+}
+
+impl DoubleVlanTaggingHeader {
+    ///Read a double tagging header from the given source
+    pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanTaggingHeader, ReadError> {
+        let outer = VlanTaggingHeader::read(reader)?;
+        //check that the tagging protocol identifier is correct
+        if (EtherType::VlanTaggedFrame as u16) != outer.ether_type {
+            use ReadError::*;
+            Err(VlanDoubleTaggingUnexpectedOuterTpid(outer.ether_type))
+        } else {
+            Ok(DoubleVlanTaggingHeader{
+                outer: outer,
+                inner: VlanTaggingHeader::read(reader)?
+            })
+        }
+    }
+
+    ///Write the double IEEE 802.1Q VLAN tagging header
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        self.outer.write(writer)?;
+        self.inner.write(writer)
     }
 }
