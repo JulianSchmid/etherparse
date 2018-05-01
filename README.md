@@ -67,13 +67,13 @@ Alternativly it is possible to manually build a packet ([example](examples/write
 
 Check out the documentations of the different elements for a more detailed documentation:
 
-* (Ethernet2Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ethernet2Header.html#method.write]
-* (SingleVlanHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.SingleVlanHeader.html#method.write]
-* (DoubleVlanHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.DoubleVlanHeader.html#method.write]
-* (Ipv4Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write]
-* (Ipv4Header.write_raw)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write_raw]
-* (Ipv6Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv6Header.html#method.write]
-* (UdpHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.UdpHeader.html#method.write]
+* [Ethernet2Header.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.Ethernet2Header.html#method.write)
+* [SingleVlanHeader.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.SingleVlanHeader.html#method.write)
+* [DoubleVlanHeader.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.DoubleVlanHeader.html#method.write)
+* [Ipv4Header.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write)
+* [Ipv4Header.write_raw](https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write_raw)
+* [Ipv6Header.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv6Header.html#method.write)
+* [UdpHeader.write](https://docs.rs/etherparse/0.3.0/etherparse/struct.UdpHeader.html#method.write)
 
 ## Roadmap
 * Generic packet parser (automaticly parsing of a packet based on its content)
