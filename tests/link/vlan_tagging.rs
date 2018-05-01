@@ -89,7 +89,7 @@ fn double_vlan_header_read_write() {
         //read it
         use std::io::Cursor;
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(DoubleVlanHeader::read(&mut cursor), Ok(IN));
+        assert_eq!(DoubleVlanHeader::read(&mut cursor).unwrap(), IN);
     }
     //check that an error is thrown if the 
     {
