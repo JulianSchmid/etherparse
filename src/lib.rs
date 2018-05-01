@@ -90,7 +90,6 @@ pub enum ErrorField {
     Ipv4Dscp,
     Ipv4Ecn,
     Ipv4FragmentsOffset,
-
     Ipv6FlowLabel,
     ///VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,

@@ -21,6 +21,7 @@ fn main() {
                     builder.size(payload.len()));
     
     //serialize
+    //this will automatically set all length fields, checksums and identifiers (ethertype & protocol)
     builder.write(&mut result, &payload).unwrap();
     println!("{:?}", result);
 }

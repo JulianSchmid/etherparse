@@ -5,9 +5,17 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 use std::io;
 
+///IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
+pub enum VlanHeader {
+    ///IEEE 802.1Q VLAN Tagging Header
+    Single(SingleVlanHeader),
+    ///IEEE 802.1Q double VLAN Tagging Header
+    Double(DoubleVlanHeader)
+}
+
 ///IEEE 802.1Q VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VlanTaggingHeader {
+pub struct SingleVlanHeader {
     ///A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     pub priority_code_point: u8,
     ///Indicate that the frame may be dropped under the presence of congestion.
@@ -18,9 +26,9 @@ pub struct VlanTaggingHeader {
     pub ether_type: u16,
 }
 
-impl VlanTaggingHeader {
+impl SingleVlanHeader {
     ///Read a IEEE 802.1Q VLAN tagging header
-    pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<VlanTaggingHeader, io::Error> {
+    pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<SingleVlanHeader, io::Error> {
         let (priority_code_point, drop_eligible_indicator, vlan_identifier) = {
             let mut buffer: [u8;2] = [0;2];
             reader.read_exact(&mut buffer)?;
@@ -31,7 +39,7 @@ impl VlanTaggingHeader {
             (priority_code_point, drop_eligible_indicator, BigEndian::read_u16(&buffer))
         };
 
-        Ok(VlanTaggingHeader{
+        Ok(SingleVlanHeader{
             priority_code_point: priority_code_point,
             drop_eligible_indicator: drop_eligible_indicator,
             vlan_identifier: vlan_identifier,
@@ -61,25 +69,25 @@ impl VlanTaggingHeader {
 
 ///IEEE 802.1Q double VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct DoubleVlanTaggingHeader {
+pub struct DoubleVlanHeader {
     ///The outer vlan tagging header
-    pub outer: VlanTaggingHeader,
+    pub outer: SingleVlanHeader,
     ///The inner vlan tagging header
-    pub inner: VlanTaggingHeader
+    pub inner: SingleVlanHeader
 }
 
-impl DoubleVlanTaggingHeader {
+impl DoubleVlanHeader {
     ///Read a double tagging header from the given source
-    pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanTaggingHeader, ReadError> {
-        let outer = VlanTaggingHeader::read(reader)?;
+    pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanHeader, ReadError> {
+        let outer = SingleVlanHeader::read(reader)?;
         //check that the tagging protocol identifier is correct
         if (EtherType::VlanTaggedFrame as u16) != outer.ether_type {
             use ReadError::*;
             Err(VlanDoubleTaggingUnexpectedOuterTpid(outer.ether_type))
         } else {
-            Ok(DoubleVlanTaggingHeader{
+            Ok(DoubleVlanHeader{
                 outer: outer,
-                inner: VlanTaggingHeader::read(reader)?
+                inner: SingleVlanHeader::read(reader)?
             })
         }
     }

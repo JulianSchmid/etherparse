@@ -183,8 +183,38 @@ impl SerializedSize for UdpHeader {
     const SERIALIZED_SIZE: usize = 8;
 }
 
-///Helper for building udp packets.
-///This automatically calculates checksums for ip & udp and set type identifiers for ethernetII and ip.
+/// Helper for building udp packets.
+///
+/// The upd packet builder allows the easy construction of a packet from the 
+/// ethernet II layer downwards including ipv6, ipv4, the udp header and the 
+/// actual payload. The packet builder automatically calculates lengths & checksums 
+/// for ip & udp and set type identifiers for ethernetII and ip. This makes it 
+/// easy and less error prone to construct custom packets.
+///
+/// # Example
+/// ```
+/// # use etherparse::UdpPacketBuilder;
+/// #
+/// let builder = UdpPacketBuilder::
+///     ethernet2([1,2,3,4,5,6],     //source mac
+///               [7,8,9,10,11,12]) //destionation mac
+///    .ipv4([192,168,1,1], //source ip
+///          [192,168,1,2], //desitionation ip
+///          20)            //time to life
+///    .udp(21,    //source port 
+///         1234); //desitnation port
+///
+/// //payload of the udp packet
+/// let payload = [1,2,3,4,5,6,7,8];
+///     
+/// //get some memory to store the result
+/// let mut result = Vec::<u8>::with_capacity(
+///                     builder.size(payload.len()));
+///     
+/// //serialize
+/// builder.write(&mut result, &payload).unwrap();
+/// println!("{:?}", result);
+/// ```
 pub struct UdpPacketBuilder {}
 
 impl UdpPacketBuilder {
@@ -197,6 +227,8 @@ impl UdpPacketBuilder {
                     destination: destination,
                     ether_type: 0 //the type identifier 
                 }),
+                vlan_tagging_header: None,
+                vlan_double_tagging_header: None,
                 ip_header: None,
                 udp_header: None
             },
@@ -208,6 +240,8 @@ impl UdpPacketBuilder {
 struct UdpPacketImpl {
     ethernet2_header: Option<Ethernet2Header>,
     ip_header: Option<IpHeader>,
+    vlan_tagging_header: Option<SingleVlanHeader>,
+    vlan_double_tagging_header: Option<DoubleVlanHeader>,
     //TODO vlan
     udp_header: Option<UdpHeader>
 }
@@ -243,6 +277,7 @@ impl UdpPacketBuilderStep<Ethernet2Header> {
             _marker: marker::PhantomData::<IpHeader>{}
         }
     }
+
     ///Add a ip v6 header
     pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> UdpPacketBuilderStep<IpHeader> {
         self.state.ip_header = Some(IpHeader::Version6(Ipv6Header{
@@ -260,6 +295,35 @@ impl UdpPacketBuilderStep<Ethernet2Header> {
             state: self.state,
             _marker: marker::PhantomData::<IpHeader>{}
         }
+    }
+
+    pub fn vlan(mut self, header: SingleVlanHeader) -> UdpPacketBuilderStep<VlanHeader> {
+        self.state.vlan_tagging_header = Some(header);
+        //return for next step
+        UdpPacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<VlanHeader>{}
+        }
+    }
+}
+
+impl UdpPacketBuilderStep<VlanHeader> {
+    ///Add a ip v6 header
+    pub fn ipv6(self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> UdpPacketBuilderStep<IpHeader> {
+        //use the method from the Ethernet2Header implementation
+        UdpPacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ipv6(source, destination, hop_limit)
+    }
+
+    ///Add a ip v4 header
+    pub fn ipv4(self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> UdpPacketBuilderStep<IpHeader> {
+        //use the method from the Ethernet2Header implementation
+        UdpPacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ipv4(source, destination, time_to_live)
     }
 }
 

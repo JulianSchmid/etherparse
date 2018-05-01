@@ -10,7 +10,7 @@ pub trait WriteEtherExt: io::Write + Sized {
     }
 
     ///Write a IEEE 802.1Q VLAN tagging header
-    fn write_vlan_tagging_header(&mut self, value: &VlanTaggingHeader) -> Result<(), WriteError> {
+    fn write_vlan_tagging_header(&mut self, value: &SingleVlanHeader) -> Result<(), WriteError> {
         value.write(self)
     }
 

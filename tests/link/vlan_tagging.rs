@@ -4,7 +4,7 @@ use etherparse::*;
 fn vlan_header_read() {
     use std::io::Cursor;
     
-    let input = VlanTaggingHeader {
+    let input = SingleVlanHeader {
         ether_type: EtherType::Ipv4 as u16,
         priority_code_point: 2,
         drop_eligible_indicator: true,
@@ -30,8 +30,8 @@ fn vlan_header_write() {
     use WriteError::ValueError;
     use ValueError::*;
     use ErrorField::*;
-    fn base() -> VlanTaggingHeader {
-        VlanTaggingHeader {
+    fn base() -> SingleVlanHeader {
+        SingleVlanHeader {
             ether_type: EtherType::Ipv4 as u16,
             priority_code_point: 2,
             drop_eligible_indicator: true,
@@ -39,7 +39,7 @@ fn vlan_header_write() {
         }
     };
 
-    fn test_write(input: &VlanTaggingHeader) -> Result<(), WriteError> {
+    fn test_write(input: &SingleVlanHeader) -> Result<(), WriteError> {
         let mut buffer: Vec<u8> = Vec::new();
         let result = buffer.write_vlan_tagging_header(input);
         assert_eq!(0, buffer.len());
@@ -67,14 +67,14 @@ fn vlan_header_write() {
 fn double_vlan_header_read_write() {
     //normal package
     {
-        const IN: DoubleVlanTaggingHeader = DoubleVlanTaggingHeader {
-            outer: VlanTaggingHeader {
+        const IN: DoubleVlanHeader = DoubleVlanHeader {
+            outer: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
                 vlan_identifier: 0x321,
                 ether_type: EtherType::VlanTaggedFrame as u16
             },
-            inner: VlanTaggingHeader {
+            inner: SingleVlanHeader {
                 priority_code_point: 1,
                 drop_eligible_indicator: false,
                 vlan_identifier: 0x456,
@@ -89,18 +89,18 @@ fn double_vlan_header_read_write() {
         //read it
         use std::io::Cursor;
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(DoubleVlanTaggingHeader::read(&mut cursor), Ok(IN));
+        assert_matches!(DoubleVlanHeader::read(&mut cursor), Ok(IN));
     }
     //check that an error is thrown if the 
     {
-        const IN: DoubleVlanTaggingHeader = DoubleVlanTaggingHeader {
-            outer: VlanTaggingHeader {
+        const IN: DoubleVlanHeader = DoubleVlanHeader {
+            outer: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
                 vlan_identifier: 0x321,
                 ether_type: 1 //invalid
             },
-            inner: VlanTaggingHeader {
+            inner: SingleVlanHeader {
                 priority_code_point: 1,
                 drop_eligible_indicator: false,
                 vlan_identifier: 0x456,
@@ -115,7 +115,7 @@ fn double_vlan_header_read_write() {
         //read it
         use std::io::Cursor;
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(DoubleVlanTaggingHeader::read(&mut cursor), 
+        assert_matches!(DoubleVlanHeader::read(&mut cursor), 
                         Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
     }
 }

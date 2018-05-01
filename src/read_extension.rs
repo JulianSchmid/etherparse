@@ -10,8 +10,8 @@ pub trait ReadEtherExt: io::Read + io::Seek + Sized {
     }
 
     ///Read a IEEE 802.1Q VLAN tagging header
-    fn read_vlan_tagging_header(&mut self) -> Result<VlanTaggingHeader, io::Error> {
-        VlanTaggingHeader::read(self)
+    fn read_vlan_tagging_header(&mut self) -> Result<SingleVlanHeader, io::Error> {
+        SingleVlanHeader::read(self)
     }
 
     ///Reads an IP (v4 or v6) header from the current position.

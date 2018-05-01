@@ -11,7 +11,58 @@ Currently supported are:
 * IPv6 (missing extension headers, but supporting skipping them)
 * UDP
 
-# References
+## Usage
+
+First, add the following to your `Cargo.toml`:
+
+```toml
+[dependencies]
+etherparse = "0.2.0"
+```
+
+Next, add this to your crate root:
+
+```rust
+extern crate etherparse;
+```
+
+## What is etherparse?
+Etherparse is intended to provide the basic network parsing functions that allows for easy analysis, transformation or generation of recorded network data. It is completly written in Rust and thoroughly tested. The package can & will still change, as it is still in active development. The current focus of development is on the most popular protocols in the internet & transport layer.
+
+Special attention has been paid to avoid allocations or other syscalls whenever possible.
+
+## How to generate packets?
+### UDP Packet Builder
+There is the option to use the UdpPacketBuilder, which provides a high level interface to create UDP network packets. The UdpPacketBuilder will take care of setting all the fields which can be deduced from the content and compositions of the packet (checksums, lengths, ethertype, ip protocol number).
+[Example:](examples/write_udp.rs)
+```rust
+let builder = UdpPacketBuilder::
+    ethernet2([1,2,3,4,5,6],     //source mac
+               [7,8,9,10,11,12]) //destionation mac
+    .ipv4([192,168,1,1], //source ip
+          [192,168,1,2], //desitionation ip
+          20)            //time to life
+    .udp(21,    //source port 
+         1234); //desitnation port
+
+//payload of the udp packet
+let payload = [1,2,3,4,5,6,7,8];
+
+//serialize
+//this will automatically set all length fields, checksums and identifiers (ethertype & protocol)
+//before writing the packet out to "result"
+builder.write(&mut result, &payload).unwrap();
+```
+
+### Manually serialising each header
+Alternativly it is possible to manually build a packet ([example](examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
+
+## Roadmap
+* Generic packet parser (automaticly parsing of a packet based on its content)
+* TCP
+* IEEE 802.3
+
+## References
 * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
 * Internet Protocol, Version 6 (IPv6) Specification [RFC 8200](https://tools.ietf.org/html/rfc8200)
 * [IANA Protocol Numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml)
