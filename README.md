@@ -27,13 +27,19 @@ extern crate etherparse;
 ```
 
 ## What is etherparse?
-Etherparse is intended to provide the basic network parsing functions that allows for easy analysis, transformation or generation of recorded network data. It is completly written in Rust and thoroughly tested. The package can & will still change, as it is still in active development. The current focus of development is on the most popular protocols in the internet & transport layer.
+Etherparse is intended to provide the basic network parsing functions that allows for easy analysis, transformation or generation of recorded network data. 
 
-Special attention has been paid to avoid allocations or other syscalls whenever possible.
+Some key points are:
+
+* It is completly written in Rust and thoroughly tested.
+* Special attention has been paid to avoid allocations or other syscalls whenever possible.
+* The package is still in development and can & will still change. 
+* The current focus of development is on the most popular protocols in the internet & transport layer.
 
 ## How to generate packets?
 ### UDP Packet Builder
 There is the option to use the UdpPacketBuilder, which provides a high level interface to create UDP network packets. The UdpPacketBuilder will take care of setting all the fields which can be deduced from the content and compositions of the packet (checksums, lengths, ethertype, ip protocol number).
+
 [Example:](examples/write_udp.rs)
 ```rust
 let builder = UdpPacketBuilder::
@@ -54,8 +60,20 @@ let payload = [1,2,3,4,5,6,7,8];
 builder.write(&mut result, &payload).unwrap();
 ```
 
+Check out the [UdpPacketBuilder documentation](https://docs.rs/etherparse/struct.UdpPacketBuilder.html) for more informations.
+
 ### Manually serialising each header
 Alternativly it is possible to manually build a packet ([example](examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
+
+Check out the documentations of the different elements for a more detailed documentation:
+
+* (Ethernet2Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ethernet2Header.html#method.write]
+* (SingleVlanHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.SingleVlanHeader.html#method.write]
+* (DoubleVlanHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.DoubleVlanHeader.html#method.write]
+* (Ipv4Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write]
+* (Ipv4Header.write_raw)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv4Header.html#method.write_raw]
+* (Ipv6Header.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.Ipv6Header.html#method.write]
+* (UdpHeader.write)[https://docs.rs/etherparse/0.3.0/etherparse/struct.UdpHeader.html#method.write]
 
 ## Roadmap
 * Generic packet parser (automaticly parsing of a packet based on its content)
