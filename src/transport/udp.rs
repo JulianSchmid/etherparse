@@ -227,8 +227,7 @@ impl UdpPacketBuilder {
                     destination: destination,
                     ether_type: 0 //the type identifier 
                 }),
-                vlan_tagging_header: None,
-                vlan_double_tagging_header: None,
+                vlan_header: None,
                 ip_header: None,
                 udp_header: None
             },
@@ -240,9 +239,7 @@ impl UdpPacketBuilder {
 struct UdpPacketImpl {
     ethernet2_header: Option<Ethernet2Header>,
     ip_header: Option<IpHeader>,
-    vlan_tagging_header: Option<SingleVlanHeader>,
-    vlan_double_tagging_header: Option<DoubleVlanHeader>,
-    //TODO vlan
+    vlan_header: Option<VlanHeader>,
     udp_header: Option<UdpHeader>
 }
 
@@ -297,8 +294,37 @@ impl UdpPacketBuilderStep<Ethernet2Header> {
         }
     }
 
-    pub fn vlan(mut self, header: SingleVlanHeader) -> UdpPacketBuilderStep<VlanHeader> {
-        self.state.vlan_tagging_header = Some(header);
+    ///Adds a vlan tagging header with the given vlan identifier
+    pub fn single_vlan(mut self, vlan_identifier: u16) -> UdpPacketBuilderStep<VlanHeader> {
+        self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
+            priority_code_point: 0,
+            drop_eligible_indicator: false,
+            vlan_identifier: vlan_identifier,
+            ether_type: 0, //will be set automatically during write
+        }));
+        //return for next step
+        UdpPacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<VlanHeader>{}
+        }
+    }
+
+    ///Adds two vlan tagging header with the given vlan identifiers (also known as double vlan tagging).
+    pub fn double_vlan(mut self, outer_vlan_identifier: u16, inner_vlan_identifier: u16) -> UdpPacketBuilderStep<VlanHeader> {
+        self.state.vlan_header = Some(VlanHeader::Double(DoubleVlanHeader {
+            outer: SingleVlanHeader {
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: outer_vlan_identifier,
+                ether_type: 0, //will be set automatically during write
+            },
+            inner: SingleVlanHeader {
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: inner_vlan_identifier,
+                ether_type: 0, //will be set automatically during write
+            }
+        }));
         //return for next step
         UdpPacketBuilderStep {
             state: self.state,
@@ -347,19 +373,49 @@ impl UdpPacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
         
+        let ip_ether_type = {
+            use IpHeader::*;
+            match self.state.ip_header {
+                Some(Version4(_)) => EtherType::Ipv4 as u16,
+                Some(Version6(_)) => EtherType::Ipv6 as u16,
+                None => panic!("Missing ip header")
+            }
+        };
+
         //ethernetII header
         match self.state.ethernet2_header {
             Some(mut eth) => {
                 eth.ether_type = {
-                    use IpHeader::*;
-                    //TODO change type when a vlan our double tagged vlan packet exists
-                    match self.state.ip_header {
-                        Some(Version4(_)) => EtherType::Ipv4 as u16,
-                        Some(Version6(_)) => EtherType::Ipv6 as u16,
-                        None => panic!("Missing ip header")
-                    } 
+                    
+                    use VlanHeader::*;
+                    //determine the ether type depending on if there is a vlan tagging header
+                    match self.state.vlan_header {
+                        Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
+                        Some(Double(_)) => EtherType::ProviderBridging as u16,
+                        //if no vlan header exists, the id is purely defined by the ip type
+                        None => ip_ether_type
+                    }
                 };
                 eth.write(writer)?;
+            },
+            None => {}
+        }
+
+        //write the vlan header if it exists
+        use VlanHeader::*;
+        match self.state.vlan_header {
+            Some(Single(mut value)) => {
+                //set ether types
+                value.ether_type = ip_ether_type;
+                //serialize
+                value.write(writer)?;
+            },
+            Some(Double(mut value)) => {
+                //set ether types
+                value.outer.ether_type = EtherType::VlanTaggedFrame as u16;
+                value.inner.ether_type = ip_ether_type;
+                //serialize
+                value.write(writer)?;
             },
             None => {}
         }

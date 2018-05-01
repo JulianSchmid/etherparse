@@ -26,6 +26,11 @@ pub struct SingleVlanHeader {
     pub ether_type: u16,
 }
 
+impl SerializedSize for SingleVlanHeader {
+    ///Serialized size of the header in bytes.
+    const SERIALIZED_SIZE: usize = 4;
+}
+
 impl SingleVlanHeader {
     ///Read a IEEE 802.1Q VLAN tagging header
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<SingleVlanHeader, io::Error> {
@@ -74,6 +79,11 @@ pub struct DoubleVlanHeader {
     pub outer: SingleVlanHeader,
     ///The inner vlan tagging header
     pub inner: SingleVlanHeader
+}
+
+impl SerializedSize for DoubleVlanHeader {
+    ///Serialized size of the header in bytes.
+    const SERIALIZED_SIZE: usize = 8;
 }
 
 impl DoubleVlanHeader {

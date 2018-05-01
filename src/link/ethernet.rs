@@ -13,6 +13,7 @@ pub enum EtherType {
     Arp = 0x0806,
     WakeOnLan = 0x0842,
     VlanTaggedFrame = 0x8100,
+    ProviderBridging = 0x88A8,
     VlanDoubleTaggedFrame = 0x9100
 }
 
@@ -25,6 +26,7 @@ impl EtherType {
             0x86dd => Some(Ipv6),
             0x0806 => Some(Arp),
             0x0842 => Some(WakeOnLan),
+            0x88A8 => Some(ProviderBridging),
             0x8100 => Some(VlanTaggedFrame),
             0x9100 => Some(VlanDoubleTaggedFrame),
             _ => None

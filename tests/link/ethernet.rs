@@ -9,6 +9,7 @@ fn ether_type_convert() {
     assert_eq!(0x0806, Arp as u16);
     assert_eq!(0x0842, WakeOnLan as u16);
     assert_eq!(0x8100, VlanTaggedFrame as u16);
+    assert_eq!(0x88A8, ProviderBridging as u16);
     assert_eq!(0x9100, VlanDoubleTaggedFrame as u16);
 
     assert_eq!(EtherType::from_u16(0x0800), Some(Ipv4));
@@ -16,6 +17,7 @@ fn ether_type_convert() {
     assert_eq!(EtherType::from_u16(0x0806), Some(Arp));
     assert_eq!(EtherType::from_u16(0x0842), Some(WakeOnLan));
     assert_eq!(EtherType::from_u16(0x8100), Some(VlanTaggedFrame));
+    assert_eq!(EtherType::from_u16(0x88A8), Some(ProviderBridging));
     assert_eq!(EtherType::from_u16(0x9100), Some(VlanDoubleTaggedFrame));
     assert_eq!(EtherType::from_u16(0x1234), None);
 }
