@@ -70,7 +70,7 @@ pub struct PacketBuilderStep<LastStep> {
 }
 
 impl PacketBuilderStep<Ethernet2Header> {
-    ///Add a ip v4 header
+    ///Add an ip v4 header
     pub fn ipv4(mut self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
         //add ip header
         self.state.ip_header = Some(IpHeader::Version4(Ipv4Header{
@@ -95,7 +95,61 @@ impl PacketBuilderStep<Ethernet2Header> {
         }
     }
 
-    ///Add a ip v6 header
+    ///Add an ip header (length, protocol/next_header will be overwritten based on the rest of the packet).
+    ///
+    /// # Example IPv4
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],
+    ///               [7,8,9,10,11,12])
+    ///    .ip(IpHeader::Version4(Ipv4Header{
+    ///         header_length: 0, //will be replaced during write
+    ///         differentiated_services_code_point: 0,
+    ///         explicit_congestion_notification: 0,
+    ///         total_length: 0, //will be replaced during write
+    ///         identification: 0,
+    ///         dont_fragment: true,
+    ///         more_fragments: false,
+    ///         fragments_offset: 0,
+    ///         time_to_live: 12,
+    ///         protocol: 0, //will be replaced during write
+    ///         header_checksum: 0, //will be replaced during write
+    ///         source: [0,1,2,3],
+    ///         destination: [4,5,6,7]
+    ///     }));
+    
+    /// ```
+    ///
+    /// # Example IPv6
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],
+    ///               [7,8,9,10,11,12])
+    ///    .ip(IpHeader::Version6(Ipv6Header{
+    ///         traffic_class: 0,
+    ///         flow_label: 0,
+    ///         payload_length: 0, //will be replaced during write
+    ///         next_header: 0, //will be replaced during write
+    ///         hop_limit: 4,
+    ///         source: [0;16],
+    ///         destination: [0;16]
+    ///     }));
+    /// ```
+    pub fn ip(mut self, ip_header: IpHeader) -> PacketBuilderStep<IpHeader> {
+        //add ip header
+        self.state.ip_header = Some(ip_header);
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<IpHeader>{}
+        }
+    }
+
+    ///Add an ip v6 header
     pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
         self.state.ip_header = Some(IpHeader::Version6(Ipv6Header{
             traffic_class: 0,

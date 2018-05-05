@@ -145,7 +145,6 @@ impl Ipv4Header {
         use ErrorField::*;
         
         //check ranges
-        max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
         max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
         max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
         max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
