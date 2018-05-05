@@ -119,7 +119,6 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///         source: [0,1,2,3],
     ///         destination: [4,5,6,7]
     ///     }));
-    
     /// ```
     ///
     /// # Example IPv6
@@ -169,6 +168,16 @@ impl PacketBuilderStep<Ethernet2Header> {
     }
 
     ///Adds a vlan tagging header with the given vlan identifier
+    pub fn vlan(mut self, vlan: VlanHeader) -> PacketBuilderStep<VlanHeader> {
+        self.state.vlan_header = Some(vlan);
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<VlanHeader>{}
+        }
+    }
+
+    ///Adds a vlan tagging header with the given vlan identifier
     pub fn single_vlan(mut self, vlan_identifier: u16) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
             priority_code_point: 0,
@@ -208,6 +217,58 @@ impl PacketBuilderStep<Ethernet2Header> {
 }
 
 impl PacketBuilderStep<VlanHeader> {
+
+    ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
+    ///
+    /// # Example IPv4
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],
+    ///               [7,8,9,10,11,12])
+    ///    .ip(IpHeader::Version4(Ipv4Header{
+    ///         header_length: 0, //will be replaced during write
+    ///         differentiated_services_code_point: 0,
+    ///         explicit_congestion_notification: 0,
+    ///         total_length: 0, //will be replaced during write
+    ///         identification: 0,
+    ///         dont_fragment: true,
+    ///         more_fragments: false,
+    ///         fragments_offset: 0,
+    ///         time_to_live: 12,
+    ///         protocol: 0, //will be replaced during write
+    ///         header_checksum: 0, //will be replaced during write
+    ///         source: [0,1,2,3],
+    ///         destination: [4,5,6,7]
+    ///     }));
+    /// ```
+    ///
+    /// # Example IPv6
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],
+    ///               [7,8,9,10,11,12])
+    ///    .ip(IpHeader::Version6(Ipv6Header{
+    ///         traffic_class: 0,
+    ///         flow_label: 0,
+    ///         payload_length: 0, //will be replaced during write
+    ///         next_header: 0, //will be replaced during write
+    ///         hop_limit: 4,
+    ///         source: [0;16],
+    ///         destination: [0;16]
+    ///     }));
+    /// ```
+    pub fn ip(self, ip_header: IpHeader) -> PacketBuilderStep<IpHeader> {
+        //use the method from the Ethernet2Header implementation
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ip(ip_header)
+    }
+
     ///Add a ip v6 header
     pub fn ipv6(self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
