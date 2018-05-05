@@ -10,6 +10,9 @@ pub use internet::ip::*;
 mod transport;
 pub use transport::udp::*;
 
+mod packet_builder;
+pub use packet_builder::*;
+
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
