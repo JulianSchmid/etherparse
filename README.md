@@ -42,7 +42,7 @@ There is the option to use the UdpPacketBuilder, which provides a high level int
 
 [Example:](examples/write_udp.rs)
 ```rust
-let builder = UdpPacketBuilder::
+let builder = PacketBuilder::
     ethernet2([1,2,3,4,5,6],     //source mac
                [7,8,9,10,11,12]) //destionation mac
     .ipv4([192,168,1,1], //source ip
@@ -60,7 +60,7 @@ let payload = [1,2,3,4,5,6,7,8];
 builder.write(&mut result, &payload).unwrap();
 ```
 
-Check out the [UdpPacketBuilder documentation](https://docs.rs/etherparse/~0/etherparse/struct.UdpPacketBuilder.html) for more informations.
+Check out the [UdpPacketBuilder documentation](https://docs.rs/etherparse/~0/etherparse/struct.PacketBuilder.html) for more informations.
 
 ### Manually serialising each header
 Alternativly it is possible to manually build a packet ([example](examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.

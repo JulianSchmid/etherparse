@@ -4,7 +4,7 @@ use etherparse::*;
 fn main() {
 
     //setup the packet headers
-    let builder = UdpPacketBuilder::
+    let builder = PacketBuilder::
     ethernet2([1,2,3,4,5,6],     //source mac
                [7,8,9,10,11,12]) //destionation mac
     .ipv4([192,168,1,1], //source ip
