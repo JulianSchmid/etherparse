@@ -27,7 +27,7 @@ extern crate etherparse;
 ```
 
 ## What is etherparse?
-Etherparse is intended to provide the basic network parsing functions that allows for easy analysis, transformation or generation of recorded network data. 
+Etherparse is intended to provide the basic network parsing functions that allow for easy analysis, transformation or generation of recorded network data. 
 
 Some key points are:
 

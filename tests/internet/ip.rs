@@ -212,7 +212,7 @@ fn readwrite_ip_header() {
         
         //deserialize
         let mut cursor = Cursor::new(&buffer);
-        let result = cursor.read_ip_header().unwrap();
+        let result = IpHeader::read(&mut cursor).unwrap();
         match *input {
             IpHeader::Version4(_) => assert_eq!(20, cursor.position()),
             IpHeader::Version6(_) => assert_eq!(40, cursor.position())
@@ -238,12 +238,12 @@ fn read_ip_header_ipv6() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv6_header(&INPUT).unwrap();
+    INPUT.write(&mut buffer).unwrap();
     assert_eq!(40, buffer.len());
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    let result = cursor.read_ip_header().unwrap();
+    let result = IpHeader::read(&mut cursor).unwrap();
     assert_eq!(40, cursor.position());
 
     assert_matches!(result, IpHeader::Version6(INPUT));
@@ -265,7 +265,7 @@ fn read_ip_header_error() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv6_header(&input).unwrap();
+    input.write(&mut buffer).unwrap();
     assert_eq!(40, buffer.len());
 
     //corrupt the version
@@ -273,7 +273,7 @@ fn read_ip_header_error() {
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    assert_matches!(cursor.read_ip_header(), Err(ReadError::IpUnsupportedVersion(0xf)));
+    assert_matches!(IpHeader::read(&mut cursor), Err(ReadError::IpUnsupportedVersion(0xf)));
 }
 
 #[test]
@@ -297,12 +297,12 @@ fn readwrite_ipv4_header_raw() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv4_header_raw(&input, &[]).unwrap();
+    input.write_raw(&mut buffer, &[]).unwrap();
     assert_eq!(20, buffer.len());
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    let result = cursor.read_ipv4_header().unwrap();
+    let result = Ipv4Header::read(&mut cursor).unwrap();
     assert_eq!(20, cursor.position());
 
     //check equivalence
@@ -334,7 +334,7 @@ fn write_ipv4_raw_header_errors() {
 
     fn test_write(input: &Ipv4Header) -> Result<(), WriteError> {
         let mut buffer: Vec<u8> = Vec::new();
-        let result = buffer.write_ipv4_header_raw(input, &[]);
+        let result = input.write_raw(&mut buffer, &[]);
         assert_eq!(0, buffer.len());
         result
     };
@@ -377,7 +377,7 @@ fn write_ipv4_raw_header_errors() {
     //options header length (non 4 modulo)
     {
         let mut buffer: Vec<u8> = Vec::new();
-        let result = buffer.write_ipv4_header_raw(&base(), &vec![0;44]);
+        let result = base().write_raw(&mut buffer, &vec![0;44]);
         assert_eq!(0, buffer.len());
         assert_matches!(result, Err(ValueError(Ipv4OptionsLengthBad(44))));
     }
@@ -404,12 +404,12 @@ fn write_ipv4_header() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv4_header(&input, &[]).unwrap();
+    input.write(&mut buffer, &[]).unwrap();
     assert_eq!(20, buffer.len());
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    let result = cursor.read_ipv4_header().unwrap();
+    let result = Ipv4Header::read(&mut cursor).unwrap();
     assert_eq!(20, cursor.position());
 
     //check equivalence (with calculated checksum & header_length)
@@ -422,17 +422,17 @@ fn write_ipv4_header() {
 fn read_ipv4_error_header() {
     //version error
     {
-        let result = io::Cursor::new(&[0;20]).read_ipv4_header();
+        let result = Ipv4Header::read(&mut io::Cursor::new(&[0;20]));
         assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
     }
     //io error
     {
-        let result = io::Cursor::new(&[0x40]).read_ipv4_header();
+        let result = Ipv4Header::read(&mut io::Cursor::new(&[0x40]));
         assert_matches!(result, Err(ReadError::IoError(_)));
     }
     //io error
     {
-        let result = io::Cursor::new(&[0x40;19]).read_ipv4_header();
+        let result = Ipv4Header::read(&mut io::Cursor::new(&[0x40;19]));
         assert_matches!(result, Err(ReadError::IoError(_)));
     }
 }
@@ -457,7 +457,7 @@ fn write_ipv4_error_header() {
     //serialize with non mod 4 length options
     {
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
-        let result = buffer.write_ipv4_header(&input, &[1,2,3,4,5,6,7]);
+        let result = input.write(&mut buffer, &[1,2,3,4,5,6,7]);
         assert_eq!(0, buffer.len());
 
         use ValueError::Ipv4OptionsLengthBad;
@@ -466,7 +466,7 @@ fn write_ipv4_error_header() {
     //serialize with too large options length
     {
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
-        let result = buffer.write_ipv4_header(&input, &[0;44]);
+        let result = input.write(&mut buffer, &[0;44]);
         assert_eq!(0, buffer.len());
 
         use ValueError::Ipv4OptionsLengthBad;
@@ -491,12 +491,9 @@ fn readwrite_ipv6_header() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_ipv6_header(&input).unwrap();
+    input.write(&mut buffer).unwrap();
     //deserialize
-    let result = {
-        let mut cursor = Cursor::new(&buffer);
-        cursor.read_ipv6_header().unwrap()
-    };
+    let result = Ipv6Header::read(&mut Cursor::new(&buffer)).unwrap();
     //check equivalence
     assert_eq!(input, result);
 }
@@ -522,7 +519,7 @@ fn write_ipv6_header_errors() {
 
     fn test_write(input: &Ipv6Header) -> Result<(), WriteError> {
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
-        buffer.write_ipv6_header(input)
+        input.write(&mut buffer)
     };
     //flow label
     assert_matches!(
@@ -539,13 +536,13 @@ fn read_ipv6_error_header() {
     //wrong ip version
     {
         let buffer: [u8;20] = [0;20];
-        let result = io::Cursor::new(&buffer).read_ipv6_header();
+        let result = Ipv6Header::read(&mut io::Cursor::new(&buffer));
         assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
     }
     //io error
     {
         let buffer: [u8;1] = [0x60];
-        let result = io::Cursor::new(&buffer).read_ipv6_header();
+        let result = Ipv6Header::read(&mut io::Cursor::new(&buffer));
         assert_matches!(result, Err(ReadError::IoError(_)));
     }
 }
@@ -556,7 +553,7 @@ fn skip_ipv6_header_extension() {
     {
         let buffer: [u8; 8] = [0;8];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(cursor.skip_ipv6_header_extension(), Ok(0));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor), Ok(0));
         assert_eq!(8, cursor.position());
     }
     {
@@ -566,7 +563,7 @@ fn skip_ipv6_header_extension() {
             0,0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(cursor.skip_ipv6_header_extension(), Ok(4));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor), Ok(4));
         assert_eq!(8*3, cursor.position());
     }
 }
@@ -599,7 +596,7 @@ fn skip_all_ipv6_header_extensions() {
         for i_as16 in 0..((u8::max_value() as u16) + 1) {
             let i = i_as16 as u8; //note: I would prefer to use the inclusive range ..= but this feature is not yet marked as stable -> replace when stable
             let mut cursor = Cursor::new(&buffer);
-            let result = cursor.skip_all_ipv6_header_extensions(i);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, i);
 
             match EXTENSION_IDS.iter().find(|&&x| x == i) {
                 Some(_) => {
@@ -634,7 +631,8 @@ fn skip_all_ipv6_header_extensions() {
             0,0,0,0,   0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
+
+        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
         assert_matches!(result, Ok(UDP));
         assert_eq!(buffer.len(), cursor.position() as usize);
     }
@@ -650,7 +648,7 @@ fn skip_all_ipv6_header_extensions() {
             EXTENSION_IDS[1],0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        let result = cursor.skip_all_ipv6_header_extensions(EXTENSION_IDS[0]);
+        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
         assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
 }

@@ -33,13 +33,10 @@ fn read_write() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(14);
-    buffer.write_ethernet2_header(&input).unwrap();
+    input.write(&mut buffer).unwrap();
     assert_eq!(14, buffer.len());
     //deserialize
-    let result = {
-        let mut cursor = Cursor::new(&buffer);
-        cursor.read_ethernet2_header().unwrap()
-    };
+    let result = Ethernet2Header::read(&mut Cursor::new(&buffer)).unwrap();
     //check equivalence
     assert_eq!(input, result);
 }

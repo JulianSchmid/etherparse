@@ -13,12 +13,12 @@ fn vlan_header_read() {
 
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(4);
-    buffer.write_vlan_tagging_header(&input).unwrap();
+    input.write(&mut buffer).unwrap();
     assert_eq!(4, buffer.len());
 
     //deserialize
     let mut cursor = Cursor::new(&buffer);
-    let result = cursor.read_vlan_tagging_header().unwrap();
+    let result = SingleVlanHeader::read(&mut cursor).unwrap();
     assert_eq!(4, cursor.position());
 
     //check equivalence
@@ -41,7 +41,7 @@ fn vlan_header_write() {
 
     fn test_write(input: &SingleVlanHeader) -> Result<(), WriteError> {
         let mut buffer: Vec<u8> = Vec::new();
-        let result = buffer.write_vlan_tagging_header(input);
+        let result = input.write(&mut buffer);
         assert_eq!(0, buffer.len());
         result
     };

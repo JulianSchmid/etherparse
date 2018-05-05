@@ -10,12 +10,6 @@ pub use internet::ip::*;
 mod transport;
 pub use transport::udp::*;
 
-mod write_extension;
-pub use write_extension::WriteEtherExt;
-
-mod read_extension;
-pub use read_extension::ReadEtherExt;
-
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;

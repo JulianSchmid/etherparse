@@ -15,12 +15,9 @@ fn read_write() {
     };
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    buffer.write_udp_header_raw(&input).unwrap();
+    input.write(&mut buffer).unwrap();
     //deserialize
-    let result = {
-        let mut cursor = Cursor::new(&buffer);
-        cursor.read_udp_header().unwrap()
-    };
+    let result = UdpHeader::read(&mut Cursor::new(&buffer)).unwrap();
     //check equivalence
     assert_eq!(input, result);
 }
