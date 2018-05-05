@@ -95,7 +95,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         }
     }
 
-    ///Add an ip header (length, protocol/next_header will be overwritten based on the rest of the packet).
+    ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
     /// # Example IPv4
     /// ```

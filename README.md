@@ -17,7 +17,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.2.0"
+etherparse = "0.3.0"
 ```
 
 Next, add this to your crate root:
@@ -36,9 +36,9 @@ Some key points are:
 * The package is still in development and can & will still change. 
 * The current focus of development is on the most popular protocols in the internet & transport layer.
 
-## How to generate packets?
-### UDP Packet Builder
-There is the option to use the UdpPacketBuilder, which provides a high level interface to create UDP network packets. The UdpPacketBuilder will take care of setting all the fields which can be deduced from the content and compositions of the packet (checksums, lengths, ethertype, ip protocol number).
+## How to generate fake packet data?
+### Packet Builder
+There is the option to use the PacketBuilder, which provides a high level interface to create UDP network packets. The PacketBuilder will take care of setting all the fields which can be deduced from the content and compositions of the packet (checksums, lengths, ethertype, ip protocol number).
 
 [Example:](examples/write_udp.rs)
 ```rust
