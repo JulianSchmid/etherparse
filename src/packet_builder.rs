@@ -404,9 +404,14 @@ impl PacketBuilderStep<UdpHeader> {
     ///Returns the size of the packet when it is serialized
     pub fn size(&self, payload_size: usize) -> usize {
         use IpHeader::*;
+        use VlanHeader::*;
         let result = match self.state.ethernet2_header {
             Some(_) => Ethernet2Header::SERIALIZED_SIZE,
             None => 0
+        } + match self.state.vlan_header {
+            Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
+            Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
+            None => 0 
         } + match self.state.ip_header {
             Some(Version4(_)) => Ipv4Header::SERIALIZED_SIZE,
             Some(Version6(_)) => Ipv6Header::SERIALIZED_SIZE,
