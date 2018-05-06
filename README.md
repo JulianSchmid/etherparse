@@ -78,6 +78,7 @@ Read the documentations of the different methods for a more details:
 ## Roadmap
 * Generic packet parser (automaticly parsing of a packet based on its content)
 * TCP
+* Lazy header parsers (holds slice, only parse fields if requested)
 * IEEE 802.3
 
 ## References

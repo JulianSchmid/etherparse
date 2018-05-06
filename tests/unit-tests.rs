@@ -22,6 +22,7 @@ fn test_debug_write() {
             VlanDoubleTaggingUnexpectedOuterTpid(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
+            Ipv4HeaderLengthBad(0),
             Ipv6UnexpectedVersion(0),
             Ipv6TooManyHeaderExtensions
         ].iter() {
