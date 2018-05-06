@@ -140,6 +140,29 @@ impl Ipv4Header {
         })
     }
 
+    ///Skips the ipv4 header options based on the header length.
+    pub fn skip_options<T: io::Read + io::Seek + Sized>(&self, reader: &mut T) -> Result<(), ReadError> {
+        //return an error if the provided header length is too small (smaller then the header itself)
+        if self.header_length < 5 {
+            use ReadError::*;
+            return Err(Ipv4HeaderLengthBad(self.header_length));
+        }
+
+        let skip = ((self.header_length - 5) as i64)*4;
+        if skip > 0 {
+            //seek does not return an error, when the end is reached
+            //to ensure this still happens an read_exact is added at the end
+            //that throws an error
+            if skip > 4 {
+                use std::io::SeekFrom;
+                reader.seek(SeekFrom::Current(skip - 4))?;
+            }
+            let mut buffer: [u8;4] = [0;4];
+            reader.read_exact(&mut buffer)?;
+        }
+        Ok(())
+    }
+
     ///Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T, options: &[u8]) -> Result<(), WriteError> {
         use ErrorField::*;

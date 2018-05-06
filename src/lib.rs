@@ -13,6 +13,9 @@ pub use transport::udp::*;
 mod packet_builder;
 pub use packet_builder::*;
 
+mod packet_decoder;
+pub use packet_decoder::*;
+
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
@@ -28,6 +31,8 @@ pub enum ReadError {
     IpUnsupportedVersion(u8),
     ///Error when the ip header version field is not equal 4. The value is the version that was received.
     Ipv4UnexpectedVersion(u8),
+    ///Error when the ipv4 header length is smaller then the header itself (5).
+    Ipv4HeaderLengthBad(u8),
     ///Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).

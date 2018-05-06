@@ -6,6 +6,7 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::io;
 
 ///IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VlanHeader {
     ///IEEE 802.1Q VLAN Tagging Header
     Single(SingleVlanHeader),

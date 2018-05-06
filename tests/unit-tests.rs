@@ -10,6 +10,7 @@ mod link;
 mod internet;
 mod transport;
 mod packet_builder;
+mod packet_decoder;
 
 #[test]
 fn test_debug_write() {
@@ -53,7 +54,7 @@ fn test_debug_write() {
             println!("{:?}", value);
         }
     }
-    //
+    //error field
     {
         use ErrorField::*;
         for value in [

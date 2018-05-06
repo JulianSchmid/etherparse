@@ -438,6 +438,65 @@ fn read_ipv4_error_header() {
 }
 
 #[test]
+fn skip_options() {
+    let header_with_length = |header_length: u8| {
+        Ipv4Header {
+            header_length: header_length,
+            differentiated_services_code_point: 42,
+            explicit_congestion_notification: 3,
+            total_length: 1234,
+            identification: 4321,
+            dont_fragment: true,
+            more_fragments: false,
+            fragments_offset: 4367,
+            time_to_live: 8,
+            protocol: 1,
+            header_checksum: 0,
+            source: [192, 168, 1, 1],
+            destination: [212, 10, 11, 123]
+        }
+    };
+
+    //error: header length too small
+    use std::io::Cursor;
+    use ReadError::*;
+    {
+        let mut cursor = Cursor::new(Vec::new());
+        assert_matches!(header_with_length(0).skip_options(&mut cursor), 
+                        Err(Ipv4HeaderLengthBad(0)));
+    }
+    {
+        let mut cursor = Cursor::new(Vec::new());
+        assert_matches!(header_with_length(4).skip_options(&mut cursor), 
+                        Err(Ipv4HeaderLengthBad(4)));
+    }
+    //no options
+    {
+        let mut cursor = Cursor::new(Vec::new());
+        assert_matches!(header_with_length(5).skip_options(&mut cursor), 
+                        Ok(()));
+    }
+    //out of bounds exception (no data)
+    {
+        let mut cursor = Cursor::new(Vec::new());
+        assert_matches!(header_with_length(6).skip_options(&mut cursor), 
+                        Err(IoError(_)));
+    }
+    //out of bounds exception (1 byte)
+    {
+        let mut cursor = Cursor::new(&[0;11]);
+        assert_matches!(header_with_length(8).skip_options(&mut cursor), 
+                        Err(IoError(_)));
+    }
+    //ok with 12 bytes
+    {
+        let mut cursor = Cursor::new(&[0;12]);
+        assert_matches!(header_with_length(8).skip_options(&mut cursor), 
+                        Ok(()));
+    }
+}
+
+#[test]
 fn write_ipv4_error_header() {
     let input = Ipv4Header {
         header_length: 0,
