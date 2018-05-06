@@ -9,6 +9,7 @@ use std::io;
 mod link;
 mod internet;
 mod transport;
+mod packet_builder;
 
 #[test]
 fn test_debug_write() {
