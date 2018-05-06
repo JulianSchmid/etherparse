@@ -1,6 +1,33 @@
 use etherparse::*;
 
 #[test]
+fn vlan_print() {
+    use VlanHeader::*;
+    println!("{:?}", 
+         Single(SingleVlanHeader{
+            priority_code_point: 0,
+            drop_eligible_indicator: false,
+            vlan_identifier: 0x123,
+            ether_type: 0x12
+        }));
+    println!("{:?}",
+        Double(DoubleVlanHeader{
+            outer: SingleVlanHeader{
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x123,
+                ether_type: 0x12
+            },
+            inner: SingleVlanHeader{
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0x123,
+                ether_type: 0x12
+            }
+    }));
+}
+
+#[test]
 fn vlan_header_read() {
     use std::io::Cursor;
     
