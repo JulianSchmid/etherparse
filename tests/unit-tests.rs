@@ -1,4 +1,3 @@
-#[cfg(test)]
 extern crate etherparse;
 use etherparse::*;
 
