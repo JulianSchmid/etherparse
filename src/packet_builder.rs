@@ -423,3 +423,24 @@ impl PacketBuilderStep<UdpHeader> {
         result
     }
 }
+
+#[cfg(test)]
+mod whitebox_tests {
+    //whitebox tests that need internal access
+    #[test]
+    fn size() {
+        use super::*;
+
+        assert_eq!(0,
+        PacketBuilderStep::<UdpHeader> {
+            state: PacketImpl {
+                ethernet2_header: None,
+                ip_header: None,
+                vlan_header: None,
+                udp_header: None
+            },
+            _marker: marker::PhantomData::<UdpHeader>{}
+        }.size(0));
+    }
+}
+
