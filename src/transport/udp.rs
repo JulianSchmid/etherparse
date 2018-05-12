@@ -181,3 +181,43 @@ impl SerializedSize for UdpHeader {
     ///Size of the header itself
     const SERIALIZED_SIZE: usize = 8;
 }
+
+impl<'a> Slice<'a, UdpHeader> {
+
+    ///Creates a slice containing an udp header.
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, UdpHeader>, ReadError> {
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < UdpHeader::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //done
+        Ok(Slice{
+            slice: &slice[..UdpHeader::SERIALIZED_SIZE],
+            phantom: std::marker::PhantomData{}
+        })
+    }
+
+    ///Reads the "udp source port" from the slice.
+    pub fn source_port(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[..2])
+    }
+
+    ///Reads the "udp source port" from the slice.
+    pub fn destination_port(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[2..4])
+    }
+
+    ///Reads the "udp source port" from the slice.
+    pub fn length(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[4..6])
+    }
+
+    ///Reads the "udp source port" from the slice.
+    pub fn checksum(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[6..8])
+    }
+}

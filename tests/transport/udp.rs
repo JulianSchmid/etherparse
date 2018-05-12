@@ -334,3 +334,27 @@ fn udp_ipv6_errors() {
                         Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
     }
 }
+
+#[test]
+fn from_slice() {
+    let input = UdpHeader {
+        source_port: 1234,
+        destination_port: 5678,
+        length: 1356,
+        checksum: 2467
+    };
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(8);
+    input.write(&mut buffer).unwrap();
+
+    //check that a too small slices generates an error
+    use ReadError::*;
+    assert_matches!(Slice::<UdpHeader>::from_slice(&buffer[..7]), Err(IoError(_)));
+
+    //get the slice
+    let slice = Slice::<UdpHeader>::from_slice(&buffer).unwrap();
+    assert_eq!(slice.source_port(), input.source_port);
+    assert_eq!(slice.destination_port(), input.destination_port);
+    assert_eq!(slice.length(), input.length);
+    assert_eq!(slice.checksum(), input.checksum);
+}

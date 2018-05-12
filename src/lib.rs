@@ -9,6 +9,7 @@ pub use internet::ip::*;
 
 mod transport;
 pub use transport::udp::*;
+pub use transport::tcp::*;
 
 mod packet_builder;
 pub use packet_builder::*;
@@ -19,6 +20,13 @@ pub use packet_decoder::*;
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
+}
+
+///A "slice" of a network packet that allows lazy reads from a packet component (does not parse everything). The type T specifies what is beeing sliced and what kind of fields can be read from the slice.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Slice<'a, T> {
+    pub slice: &'a [u8],
+    phantom: std::marker::PhantomData<T>
 }
 
 ///Errors that can occur when reading.

@@ -281,7 +281,7 @@ fn readwrite_ipv4_header_raw() {
     use std::io::Cursor;
 
     let input = Ipv4Header {
-        header_length: 10,
+        header_length: 5,
         differentiated_services_code_point: 42,
         explicit_congestion_notification: 3,
         total_length: 1234,
@@ -307,6 +307,77 @@ fn readwrite_ipv4_header_raw() {
 
     //check equivalence
     assert_eq!(input, result);
+
+    //check that the slice implementation also reads the correct values
+    let slice = Slice::<Ipv4Header>::from_slice(&buffer[..]).unwrap();
+    assert_eq!(slice.version(), 4);
+    assert_eq!(slice.ihl(), input.header_length);
+    assert_eq!(slice.dcp(), input.differentiated_services_code_point);
+    assert_eq!(slice.ecn(), input.explicit_congestion_notification);
+    assert_eq!(slice.total_length(), input.total_length);
+    assert_eq!(slice.identification(), input.identification);
+    assert_eq!(slice.dont_fragment(), input.dont_fragment);
+    assert_eq!(slice.more_fragments(), input.more_fragments);
+    assert_eq!(slice.fragments_offset(), input.fragments_offset);
+    assert_eq!(slice.ttl(), input.time_to_live);
+    assert_eq!(slice.protocol(), input.protocol);
+    assert_eq!(slice.header_checksum(), input.header_checksum);
+    assert_eq!(slice.source(), input.source);
+    assert_eq!(slice.destination(), input.destination);
+}
+
+#[test]
+fn slice_from_slice() {
+    let input = Ipv4Header {
+        header_length: 7,
+        differentiated_services_code_point: 42,
+        explicit_congestion_notification: 3,
+        total_length: 1234,
+        identification: 4321,
+        dont_fragment: true,
+        more_fragments: false,
+        fragments_offset: 4367,
+        time_to_live: 8,
+        protocol: 1,
+        header_checksum: 2345,
+        source: [192, 168, 1, 1],
+        destination: [212, 10, 11, 123]
+    };
+    
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(20);
+    input.write_raw(&mut buffer, &[]).unwrap();
+    let ip_options = [1,2,3,4,5,6,7,8];
+
+    use std::io::Write;
+    buffer.write(&ip_options).unwrap();
+    
+    //normal read with options (fields checked in readwrite_ipv4_header_raw test)
+    {
+        let slice = Slice::<Ipv4Header>::from_slice(&buffer).unwrap();
+        assert_eq!(slice.version(), 4);
+        assert_eq!(slice.ihl(), input.header_length);
+        assert_eq!(slice.dcp(), input.differentiated_services_code_point);
+        assert_eq!(slice.ecn(), input.explicit_congestion_notification);
+        assert_eq!(slice.total_length(), input.total_length);
+        assert_eq!(slice.identification(), input.identification);
+        assert_eq!(slice.dont_fragment(), input.dont_fragment);
+        assert_eq!(slice.more_fragments(), input.more_fragments);
+        assert_eq!(slice.fragments_offset(), input.fragments_offset);
+        assert_eq!(slice.ttl(), input.time_to_live);
+        assert_eq!(slice.protocol(), input.protocol);
+        assert_eq!(slice.header_checksum(), input.header_checksum);
+        assert_eq!(slice.source(), input.source);
+        assert_eq!(slice.destination(), input.destination);
+        assert_eq!(slice.options(), &buffer[20..28]);
+    }
+
+    //not enough space for the header options
+    assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..27]), Err(ReadError::IoError(_)));
+
+
+    //empty slice
+    assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..0]), Err(ReadError::IoError(_)));
 }
 
 #[test]

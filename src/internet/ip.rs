@@ -480,6 +480,126 @@ impl Ipv6Header {
     }
 }
 
+impl<'a> Slice<'a, Ipv4Header> {
+
+    ///Creates a slice containing an ipv4 header (including header options).
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ipv4Header>, ReadError> {
+
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < Ipv4Header::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //read version & ihl
+        let (version, ihl) = {
+            let value = slice[0];
+            (value >> 4, value & 0xf)
+        };
+
+        //check version
+        if 4 != version {
+            return Err(Ipv4UnexpectedVersion(version));
+        }
+
+        //check that the ihl is correct
+        if ihl < 5 {
+            use ReadError::*;
+            return Err(Ipv4HeaderLengthBad(ihl));
+        }
+
+        //check that the slice contains enough data for the entire header + options
+        let total_length = (ihl as usize)*4;
+        if slice.len() < total_length {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //all good
+        Ok(Slice {
+            slice: &slice[..total_length],
+            phantom: std::marker::PhantomData{}
+        })
+    }
+
+    ///Read the "version" field of the IPv4 header (should be 4).
+    pub fn version(&self) -> u8 {
+        self.slice[0] >> 4
+    }
+
+    ///Read the "ip header length" (length of the ipv4 header + options in multiples of 4 bytes).
+    pub fn ihl(&self) -> u8 {
+        self.slice[0] & 0xf
+    }
+
+    ///Read the "differentiated_services_code_point" from the slice.
+    pub fn dcp(&self) -> u8 {
+        self.slice[1] >> 2
+    }
+
+    ///Read the "explicit_congestion_notification" from the slice.
+    pub fn ecn(&self) -> u8 {
+        self.slice[1] & 0x3
+    }
+
+    ///Read the "total length" from the slice (total length of ip header + payload).
+    pub fn total_length(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[2..4])
+    }
+
+    ///Read the "identification" field from the slice.
+    pub fn identification(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[4..6])
+    }
+
+    ///Read the "dont fragment" flag from the slice.
+    pub fn dont_fragment(&self) -> bool {
+        0 != (self.slice[6] & 0x40)
+    }
+
+    ///Read the "more fragments" flag from the slice.
+    pub fn more_fragments(&self) -> bool {
+        0 != (self.slice[6] & 0x20)
+    }
+
+    ///Read the "fragment_offset" field from the slice.
+    pub fn fragments_offset(&self) -> u16 {
+        let buf = [self.slice[6] & 0x1f, self.slice[7]];
+        BigEndian::read_u16(&buf[..])
+    }
+
+    ///Read the "time_to_live" field from the slice.
+    pub fn ttl(&self) -> u8 {
+        self.slice[8]
+    }
+
+    ///Read the "protocol" field from the slice.
+    pub fn protocol(&self) -> u8 {
+        self.slice[9]
+    }
+
+    ///Read the "header checksum" field from the slice.
+    pub fn header_checksum(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[10..12])
+    }
+    
+    ///Returns a slice containing the ipv4 source address.
+    pub fn source(&self) -> &'a [u8] {
+        &self.slice[12..16]
+    }
+
+    ///Returns a slice containing the ipv4 source address.
+    pub fn destination(&self) -> &'a [u8] {
+        &self.slice[16..20]
+    }
+
+    ///Returns a slice containing the ipv4 header options (empty when there are no options).
+    pub fn options(&self) -> &'a [u8] {
+        &self.slice[20..]
+    }
+}
+
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
 #[derive(Debug, PartialEq, Eq)]
 pub enum IpTrafficClass {
@@ -768,4 +888,3 @@ pub enum IpTrafficClass {
     ///Robust Header Compression [RFC5858]
     Rohc = 142
 }
-

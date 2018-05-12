@@ -31,12 +31,41 @@ fn read_write() {
         source: [10,11,12,13,14,15],
         ether_type: 0x0800
     };
+
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(14);
     input.write(&mut buffer).unwrap();
     assert_eq!(14, buffer.len());
+
     //deserialize
     let result = Ethernet2Header::read(&mut Cursor::new(&buffer)).unwrap();
+    
     //check equivalence
     assert_eq!(input, result);
+
+    
+}
+
+#[test]
+fn from_slice() {
+    let input = Ethernet2Header{
+        destination: [1,2,3,4,5,6],
+        source: [10,11,12,13,14,15],
+        ether_type: 0x0800
+    };
+
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(14);
+    input.write(&mut buffer).unwrap();
+    assert_eq!(14, buffer.len());
+
+    //check that a too small slice results in an error
+    use ReadError::*;
+    assert_matches!(Slice::<Ethernet2Header>::from_slice(&buffer[..13]), Err(IoError(_)));
+
+    //check if the header slice is reading the correct values
+    let slice = Slice::<Ethernet2Header>::from_slice(&buffer).unwrap();
+    assert_eq!(input.destination, slice.destination());
+    assert_eq!(input.source, slice.source());
+    assert_eq!(input.ether_type, slice.ether_type());
 }

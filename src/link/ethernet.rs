@@ -70,3 +70,41 @@ impl Ethernet2Header {
         Ok(())
     }
 }
+
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ethernet2HeaderSlice<'a> {
+    pub section: &'a[u8]
+}
+
+impl<'a> Slice<'a, Ethernet2Header> {
+    ///Creates a ethernet slice from an other slice.
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ethernet2Header>, ReadError>{
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //all done
+        Ok(Slice::<'a, Ethernet2Header> {
+            slice: &slice[..14],
+            phantom: std::marker::PhantomData::<Ethernet2Header>{}
+        })
+    }
+    ///Read the destination mac address
+    pub fn destination(&self) -> &'a [u8] {
+        &self.slice[..6]
+    }
+    ///Read the source mac address
+    pub fn source(&self) -> &'a [u8] {
+        &self.slice[6..12]
+    }
+    ///Read the ether_type field of the header (in system native byte order).
+    pub fn ether_type(&self) -> u16 {
+        use self::byteorder::ByteOrder;
+        BigEndian::read_u16(&self.slice[12..14])
+    }
+}

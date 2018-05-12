@@ -44,9 +44,9 @@ There is the option to use the PacketBuilder, which provides a high level interf
 ```rust
 let builder = PacketBuilder::
     ethernet2([1,2,3,4,5,6],     //source mac
-               [7,8,9,10,11,12]) //destionation mac
+               [7,8,9,10,11,12]) //destination mac
     .ipv4([192,168,1,1], //source ip
-          [192,168,1,2], //desitionation ip
+          [192,168,1,2], //desitination ip
           20)            //time to life
     .udp(21,    //source port 
          1234); //desitnation port
