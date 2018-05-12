@@ -14,6 +14,19 @@ mod packet_decoder;
 
 #[test]
 fn test_debug_write() {
+    //slice
+    {
+        let input = Ethernet2Header{
+            destination: [1,2,3,4,5,6],
+            source: [10,11,12,13,14,15],
+            ether_type: 0x0800
+        };
+
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(14);
+        input.write(&mut buffer).unwrap();
+        println!("{:?}", Slice::<Ethernet2Header>::from_slice(&buffer));
+    }
     //read error
     {
         use ReadError::*;

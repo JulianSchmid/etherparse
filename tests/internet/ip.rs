@@ -375,9 +375,35 @@ fn slice_from_slice() {
     //not enough space for the header options
     assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..27]), Err(ReadError::IoError(_)));
 
-
     //empty slice
     assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..0]), Err(ReadError::IoError(_)));
+}
+
+#[test]
+fn slice_bad_ihl() {
+        let input = Ipv4Header {
+        header_length:4,
+        differentiated_services_code_point: 42,
+        explicit_congestion_notification: 3,
+        total_length: 1234,
+        identification: 4321,
+        dont_fragment: true,
+        more_fragments: false,
+        fragments_offset: 4367,
+        time_to_live: 8,
+        protocol: 1,
+        header_checksum: 2345,
+        source: [192, 168, 1, 1],
+        destination: [212, 10, 11, 123]
+    };
+    
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(20);
+    input.write_raw(&mut buffer, &[]).unwrap();
+    
+    //check that the bad ihl results in an error
+    use ReadError::*;
+    assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
 }
 
 #[test]
