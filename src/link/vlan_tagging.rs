@@ -109,3 +109,78 @@ impl DoubleVlanHeader {
         self.inner.write(writer)
     }
 }
+
+impl<'a> Slice<'a, SingleVlanHeader> {
+    ///Creates a vlan header slice from a slice.
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, SingleVlanHeader>, ReadError>{
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //all done
+        Ok(Slice::<'a, SingleVlanHeader> {
+            slice: &slice[..SingleVlanHeader::SERIALIZED_SIZE],
+            phantom: std::marker::PhantomData::<SingleVlanHeader>{}
+        })
+    }
+
+    ///Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
+    pub fn priority_code_point(&self) -> u8 {
+        self.slice[0] >> 5
+    }
+
+    ///Read the "drop_eligible_indicator" flag from the slice. Indicates that the frame may be dropped under the presence of congestion.
+    pub fn drop_eligible_indicator(&self) -> bool {
+        0 != (self.slice[0] & 0x10)
+    }
+
+    ///Reads the 12 bits "vland identifier" field from the slice.
+    pub fn vlan_identifier(&self) -> u16 {
+        let buffer = [self.slice[0] & 0xf, self.slice[1]];
+        BigEndian::read_u16(&buffer)
+    }
+
+    ///Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
+    pub fn ether_type(&self) -> u16 {
+        BigEndian::read_u16(&self.slice[2..4])
+    }
+}
+
+impl<'a> Slice<'a, DoubleVlanHeader> {
+    ///Creates a double header slice from a slice.
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, DoubleVlanHeader>, ReadError>{
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //all done
+        Ok(Slice::<'a, DoubleVlanHeader> {
+            slice: &slice[..DoubleVlanHeader::SERIALIZED_SIZE],
+            phantom: std::marker::PhantomData{}
+        })
+    }
+
+    ///Returns a slice with the outer vlan header
+    pub fn outer(&self) -> Slice<'a, SingleVlanHeader> {
+        Slice::<'a, SingleVlanHeader> {
+            slice: &self.slice[..SingleVlanHeader::SERIALIZED_SIZE],
+            phantom: std::marker::PhantomData{}
+        }
+    }
+
+    ///Returns a slice with the inner vlan header.
+    pub fn inner(&self) -> Slice<'a, SingleVlanHeader> {
+        Slice::<'a, SingleVlanHeader> {
+            slice: &self.slice[SingleVlanHeader::SERIALIZED_SIZE..SingleVlanHeader::SERIALIZED_SIZE*2],
+            phantom: std::marker::PhantomData{}
+        }
+    }
+}

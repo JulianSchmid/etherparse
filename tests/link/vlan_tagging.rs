@@ -146,3 +146,63 @@ fn double_vlan_header_read_write() {
                         Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
     }
 }
+
+#[test]
+fn single_from_slice() {
+    let input = SingleVlanHeader {
+        ether_type: EtherType::Ipv4 as u16,
+        priority_code_point: 2,
+        drop_eligible_indicator: true,
+        vlan_identifier: 1234,
+    };
+
+    //write it
+    let mut buffer = Vec::<u8>::new();
+    input.write(&mut buffer).unwrap();
+
+    //check that a too small slice results in an error
+    assert_matches!(Slice::<SingleVlanHeader>::from_slice(&buffer[..3]), Err(ReadError::IoError(_)));
+
+    //check that all fields are read correctly
+    let slice = Slice::<SingleVlanHeader>::from_slice(&buffer).unwrap();
+    assert_eq!(slice.priority_code_point(), input.priority_code_point);
+    assert_eq!(slice.drop_eligible_indicator(), input.drop_eligible_indicator);
+    assert_eq!(slice.vlan_identifier(), input.vlan_identifier);
+    assert_eq!(slice.ether_type(), input.ether_type);
+}
+
+#[test]
+fn double_from_slice() {
+    let input = DoubleVlanHeader {
+        outer: SingleVlanHeader {
+            ether_type: EtherType::ProviderBridging as u16,
+            priority_code_point: 2,
+            drop_eligible_indicator: true,
+            vlan_identifier: 1234,
+        },
+        inner: SingleVlanHeader {
+            ether_type: EtherType::Ipv6 as u16,
+            priority_code_point: 3,
+            drop_eligible_indicator: false,
+            vlan_identifier: 4095,
+        }
+    };
+
+    //write it
+    let mut buffer = Vec::<u8>::new();
+    input.write(&mut buffer).unwrap();
+
+    //check that a too small slice results in an error
+    assert_matches!(Slice::<DoubleVlanHeader>::from_slice(&buffer[..7]), Err(ReadError::IoError(_)));
+
+    let slice = Slice::<DoubleVlanHeader>::from_slice(&buffer).unwrap();
+    assert_eq!(slice.outer().priority_code_point(), input.outer.priority_code_point);
+    assert_eq!(slice.outer().drop_eligible_indicator(), input.outer.drop_eligible_indicator);
+    assert_eq!(slice.outer().vlan_identifier(), input.outer.vlan_identifier);
+    assert_eq!(slice.outer().ether_type(), input.outer.ether_type);
+
+    assert_eq!(slice.inner().priority_code_point(), input.inner.priority_code_point);
+    assert_eq!(slice.inner().drop_eligible_indicator(), input.inner.drop_eligible_indicator);
+    assert_eq!(slice.inner().vlan_identifier(), input.inner.vlan_identifier);
+    assert_eq!(slice.inner().ether_type(), input.inner.ether_type);
+}
