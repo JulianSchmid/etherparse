@@ -932,5 +932,3 @@ fn ipv6_from_slice_bad_version() {
     use ReadError::*;
     assert_matches!(Slice::<Ipv6Header>::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
 }
-
-// TODO test case for bad version number
