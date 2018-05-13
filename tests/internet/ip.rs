@@ -327,7 +327,7 @@ fn readwrite_ipv4_header_raw() {
 }
 
 #[test]
-fn slice_from_slice() {
+fn ipv4_from_slice() {
     let input = Ipv4Header {
         header_length: 7,
         differentiated_services_code_point: 42,
@@ -380,8 +380,8 @@ fn slice_from_slice() {
 }
 
 #[test]
-fn slice_bad_ihl() {
-        let input = Ipv4Header {
+fn ipv4_slice_bad_ihl() {
+    let input = Ipv4Header {
         header_length:4,
         differentiated_services_code_point: 42,
         explicit_congestion_notification: 3,
@@ -404,6 +404,30 @@ fn slice_bad_ihl() {
     //check that the bad ihl results in an error
     use ReadError::*;
     assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
+}
+
+#[test]
+fn ipv4_slice_bad_version() {
+    //write an ipv6 header to ensure that the version field is checked
+    let input = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: 0x8021,
+        next_header: 30,
+        hop_limit: 40,
+        source: [1, 2, 3, 4, 5, 6, 7, 8,
+                 9,10,11,12,13,14,15,16],
+        destination: [21,22,23,24,25,26,27,28,
+                      29,30,31,32,33,34,35,36]
+    };
+
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(20);
+    input.write(&mut buffer).unwrap();
+    
+    //check that the bad ihl results in an error
+    use ReadError::*;
+    assert_matches!(Slice::<Ipv4Header>::from_slice(&buffer[..]), Err(Ipv4UnexpectedVersion(6)));
 }
 
 #[test]
@@ -847,3 +871,66 @@ fn ipv6_set_payload_lengt() {
     assert_matches!(header.set_payload_length(OVER_MAX), 
                     Err(ValueError::Ipv6PayloadLengthTooLarge(OVER_MAX)));
 }
+
+#[test]
+fn ipv6_from_slice() {
+    let input = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: 0x8021,
+        next_header: 30,
+        hop_limit: 40,
+        source: [1, 2, 3, 4, 5, 6, 7, 8,
+                 9,10,11,12,13,14,15,16],
+        destination: [21,22,23,24,25,26,27,28,
+                      29,30,31,32,33,34,35,36]
+    };
+    
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(20);
+    input.write(&mut buffer).unwrap();
+
+    //check that a too small slice triggers an error
+    assert_matches!(Slice::<Ipv6Header>::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
+
+    //check that all the values are read correctly
+    let slice = Slice::<Ipv6Header>::from_slice(&buffer).unwrap();
+    assert_eq!(slice.version(), 6);
+    assert_eq!(slice.traffic_class(), input.traffic_class);
+    assert_eq!(slice.flow_label(), input.flow_label);
+    assert_eq!(slice.payload_length(), input.payload_length);
+    assert_eq!(slice.next_header(), input.next_header);
+    assert_eq!(slice.hop_limit(), input.hop_limit);
+    assert_eq!(slice.source(), input.source);
+    assert_eq!(slice.destination(), input.destination);
+}
+
+#[test]
+fn ipv6_from_slice_bad_version() {
+    //write an ipv4 header and check that the bad version number is detected
+    let input = Ipv4Header {
+        header_length:4,
+        differentiated_services_code_point: 42,
+        explicit_congestion_notification: 3,
+        total_length: 1234,
+        identification: 4321,
+        dont_fragment: true,
+        more_fragments: false,
+        fragments_offset: 4367,
+        time_to_live: 8,
+        protocol: 1,
+        header_checksum: 2345,
+        source: [192, 168, 1, 1],
+        destination: [212, 10, 11, 123]
+    };
+    
+    //serialize
+    let mut buffer: Vec<u8> = Vec::with_capacity(20);
+    input.write_raw(&mut buffer, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]).unwrap();
+
+    //check that the unexpected version id is detected
+    use ReadError::*;
+    assert_matches!(Slice::<Ipv6Header>::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
+}
+
+// TODO test case for bad version number

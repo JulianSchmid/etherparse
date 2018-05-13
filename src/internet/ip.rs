@@ -600,6 +600,75 @@ impl<'a> Slice<'a, Ipv4Header> {
     }
 }
 
+impl<'a> Slice<'a, Ipv6Header> {
+
+    ///Creates a slice containing an ipv6 header (without header extensions).
+    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ipv6Header>, ReadError> {
+
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < Ipv6Header::SERIALIZED_SIZE {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //read version & ihl
+        let version = slice[0] >> 4;
+
+        //check version
+        if 6 != version {
+            return Err(Ipv6UnexpectedVersion(version));
+        }
+
+        //all good
+        Ok(Slice {
+            slice: &slice[..Ipv6Header::SERIALIZED_SIZE],
+            phantom: std::marker::PhantomData{}
+        })
+    }
+
+    ///Read the "version" field from the slice (should be 6).
+    pub fn version(&self) -> u8 {
+        self.slice[0] >> 4
+    }
+
+    ///Read the "traffic class" field from the slice.
+    pub fn traffic_class(&self) -> u8 {
+        (self.slice[0] << 4) | (self.slice[1] >> 4)
+    }
+
+    ///Read the "flow label" field from the slice.
+    pub fn flow_label(&self) -> u32 {
+        byteorder::BigEndian::read_u32(&[0, self.slice[1] & 0xf, self.slice[2], self.slice[3]])
+    }
+
+    ///Read the "payload length" field from  the slice. The length should contain the length of all extension headers and payload.
+    pub fn payload_length(&self) -> u16 {
+        byteorder::BigEndian::read_u16(&self.slice[4..6])
+    }
+
+    ///Read the "next header" field from the slice. The next header value specifies what the next header or transport layer protocol is (see IpTrafficClass for a definitions of ids).
+    pub fn next_header(&self) -> u8 {
+        self.slice[6]
+    }
+
+    ///Read the "hop limit" field from the slice. The hop limit specifies the number of hops the packet can take before it is discarded.
+    pub fn hop_limit(&self) -> u8 {
+        self.slice[7]
+    }
+
+    ///Returns a slice containing the IPv6 source address.
+    pub fn source(&self) -> &'a[u8] {
+        &self.slice[8..8+16]
+    }
+
+    ///Returns a slice containing the IPv6 destination address.
+    pub fn destination(&self) -> &'a[u8] {
+        &self.slice[24..24+16]
+    }
+}
+
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
 #[derive(Debug, PartialEq, Eq)]
 pub enum IpTrafficClass {
