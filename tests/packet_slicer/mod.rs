@@ -342,21 +342,27 @@ fn ipv6_ip_payload() {
     use std::io::Write;
     buffer.write(&[1,2,3,4,5,6,7,8]).unwrap();
 
+    let expected = [
+        PacketSliceType::Ethernet2Header(
+            Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+        ),
+        PacketSliceType::Ipv6Header(
+            Slice::<Ipv6Header>::from_slice(
+                &buffer[Ethernet2Header::SERIALIZED_SIZE..]
+            ).unwrap()
+        ),
+        PacketSliceType::IpPayload(
+            IpTrafficClass::SccSp as u8,
+            &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
+        )
+    ];
+
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
 
-    assert_eq!(it.next().unwrap().unwrap(), 
-               PacketSliceType::Ethernet2Header(
-                    Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
-                ));
-    assert_eq!(it.next().unwrap().unwrap(), 
-               PacketSliceType::Ipv6Header(
-                    Slice::<Ipv6Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
-               ));
-    assert_eq!(it.next().unwrap().unwrap(), 
-               PacketSliceType::IpPayload(
-                    IpTrafficClass::SccSp as u8,
-                    &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
-               ));
+    for e in expected.iter() {
+        assert_eq!(it.next().unwrap().unwrap(), 
+                   *e);
+    }
     assert_matches!(it.next(), None);
 }
 
@@ -402,6 +408,143 @@ fn ipv6_error() {
     assert_matches!(it.next(),
                     Some(Err(_)));
     assert_matches!(it.next(), None);
+}
+
+#[test]
+fn ipv6_extension_headers() {
+    use IpTrafficClass::*;
+    use std::io::Write;
+    const EXTENSION_IDS: [u8;7] = [
+        IPv6HeaderHopByHop as u8,
+        IPv6DestinationOptions as u8,
+        IPv6RouteHeader as u8,
+        IPv6FragmentationHeader as u8, //3
+        IPv6AuthenticationHeader as u8,
+        IPv6EncapSecurityPayload as u8,
+        IPv6DestinationOptions as u8
+    ];
+    const SCCSP: u8 = IpTrafficClass::SccSp as u8;
+
+    let setup = |buffer: &mut Vec<u8>, extensions: &[u8]| {
+        Ethernet2Header{
+            source: [0;6],
+            destination: [0;6],
+            ether_type: EtherType::Ipv6 as u16
+        }.write(buffer).unwrap();
+
+        Ipv6Header {
+            traffic_class: 0,
+            flow_label: 0,
+            payload_length: 0,
+            next_header: EXTENSION_IDS[0],
+            hop_limit: 1,
+            source: [0;16],
+            destination: [0;16]
+        }.write(buffer).unwrap();
+
+        buffer.write(extensions).unwrap();
+    };
+
+    let assert_setup = |it: &mut PacketSlicer, buffer: &Vec<u8>| -> usize {
+
+        assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ethernet2Header(
+                    Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+                ));
+
+        assert_eq!(it.next().unwrap().unwrap(), 
+                   PacketSliceType::Ipv6Header(
+                        Slice::<Ipv6Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
+                   ));
+
+        Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE
+    };
+
+    //7 extensions (max)
+    {
+        let mut buffer = Vec::new();
+        setup(&mut buffer, &[
+            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[2],1,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            //fragmentation header (fixed size 8 bytes)
+            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
+            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
+            SCCSP,2,0,0, 0,0,0,0,
+
+            0,0,0,0,   0,0,0,0,
+            0,0,0,0,   0,0,0,0,
+        ]);
+
+        let mut it = PacketSlicer::ethernet2(&buffer[..]);
+        let mut start = assert_setup(&mut it, &buffer);
+        
+        for id in EXTENSION_IDS.iter() {
+            let expected = Slice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer[start..]).unwrap();
+            start += expected.slice.len();
+
+            assert_eq!(it.next().unwrap().unwrap(),
+                       PacketSliceType::Ipv6ExtensionHeader(*id, expected));
+        }
+
+        assert_eq!(it.next().unwrap().unwrap(), 
+                   PacketSliceType::IpPayload(
+                        IpTrafficClass::SccSp as u8,
+                        &buffer[start..]
+                   ));
+        assert_matches!(it.next(), None);
+    }
+
+    //check the too many extension header error
+    {
+        let mut buffer = Vec::new();
+        setup(&mut buffer, &[
+            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[2],1,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            //fragmentation header (fixed size 8 bytes)
+            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
+            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[1],2,0,0, 0,0,0,0,
+
+            0,0,0,0,   0,0,0,0,
+            0,0,0,0,   0,0,0,0,
+        ]);
+
+        let mut it = PacketSlicer::ethernet2(&buffer[..]);
+        let mut start = assert_setup(&mut it, &buffer);
+
+        for id in EXTENSION_IDS.iter() {
+            let expected = Slice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer[start..]).unwrap();
+            start += expected.slice.len();
+
+            assert_eq!(it.next().unwrap().unwrap(),
+                       PacketSliceType::Ipv6ExtensionHeader(*id, expected));
+        }
+
+        //generate should generate a error
+        assert_matches!(it.next(), Some(Err(ReadError::Ipv6TooManyHeaderExtensions)));
+    }
+
+    //check that errors are forwarded correctly
+    {
+        let mut buffer = Vec::new();
+        setup(&mut buffer, &[
+            EXTENSION_IDS[1],0,0,0, 0,0,0,
+        ]);
+
+        let mut it = PacketSlicer::ethernet2(&buffer[..]);
+        assert_setup(&mut it, &buffer);
+        assert_matches!(it.next(), Some(Err(_)));
+    }
 }
 
 #[test]
