@@ -136,6 +136,30 @@ fn eth_double_vlan_ipv4_udp() {
 }
 
 #[test]
+fn eth_payload() {
+    let mut buffer = Vec::new();
+    Ethernet2Header{
+        source: [0;6],
+        destination: [0;6],
+        ether_type: EtherType::WakeOnLan as u16
+    }.write(&mut buffer).unwrap();
+
+
+    let mut it = PacketSlicer::ethernet2(&buffer[..]);
+
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ethernet2Header(
+                    Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+                ));
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ethernet2Payload(
+                    EtherType::WakeOnLan as u16,
+                    &buffer[Ethernet2Header::SERIALIZED_SIZE..]
+               ));
+    assert_matches!(it.next(), None);
+}
+
+#[test]
 fn eth_error() {
     //check that an unexpected eof error is passed through
     let buffer = [1]; //too small for an ethernet II header
@@ -185,6 +209,7 @@ fn vlan() {
                                 EtherType::WakeOnLan as u16,
                                 &buffer[Ethernet2Header::SERIALIZED_SIZE + SingleVlanHeader::SERIALIZED_SIZE..]
                            ));
+                assert_matches!(it.next(), None);
             }
             //length error
             {
@@ -238,6 +263,7 @@ fn vlan() {
                                 *id,
                                 &buffer[Ethernet2Header::SERIALIZED_SIZE + DoubleVlanHeader::SERIALIZED_SIZE..]
                            ));
+                assert_matches!(it.next(), None);
             }
             //length error
             {
@@ -252,6 +278,86 @@ fn vlan() {
             }
         }
     }
+}
+
+#[test]
+fn ipv4_ip_payload() {
+    let mut buffer = Vec::new();
+
+    Ethernet2Header{
+        source: [0;6],
+        destination: [0;6],
+        ether_type: EtherType::Ipv4 as u16
+    }.write(&mut buffer).unwrap();
+
+    Ipv4Header::new(
+        8, 
+        1, 
+        IpTrafficClass::SccSp,
+        [0;4], 
+        [0;4]
+    ).unwrap().write(&mut buffer, &[]).unwrap();
+
+    use std::io::Write;
+    buffer.write(&[1,2,3,4,5,6,7,8]).unwrap();
+
+    let mut it = PacketSlicer::ethernet2(&buffer[..]);
+
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ethernet2Header(
+                    Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+                ));
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ipv4Header(
+                    Slice::<Ipv4Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
+               ));
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::IpPayload(
+                    IpTrafficClass::SccSp as u8,
+                    &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE..]
+               ));
+    assert_matches!(it.next(), None);
+}
+
+#[test]
+fn ipv6_ip_payload() {
+    let mut buffer = Vec::new();
+
+    Ethernet2Header{
+        source: [0;6],
+        destination: [0;6],
+        ether_type: EtherType::Ipv6 as u16
+    }.write(&mut buffer).unwrap();
+
+    Ipv6Header {
+        traffic_class: 0,
+        flow_label: 0,
+        payload_length: 0,
+        next_header: IpTrafficClass::SccSp as u8,
+        hop_limit: 1,
+        source: [0;16],
+        destination: [0;16]
+    }.write(&mut buffer).unwrap();
+
+    use std::io::Write;
+    buffer.write(&[1,2,3,4,5,6,7,8]).unwrap();
+
+    let mut it = PacketSlicer::ethernet2(&buffer[..]);
+
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ethernet2Header(
+                    Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+                ));
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::Ipv6Header(
+                    Slice::<Ipv6Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
+               ));
+    assert_eq!(it.next().unwrap().unwrap(), 
+               PacketSliceType::IpPayload(
+                    IpTrafficClass::SccSp as u8,
+                    &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
+               ));
+    assert_matches!(it.next(), None);
 }
 
 #[test]
