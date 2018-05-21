@@ -270,9 +270,9 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Ipv6(IPV6_OPTIONS, count) | 
             LastParsed::Ipv6(IPV6_AUTH, count) | 
             LastParsed::Ipv6(IPV6_ENCAP_SEC, count) => 
-            //max path is: ipv6 + ipv6 header extensions (max of 7) + udp + payload
+            //max path is: ipv6 header extensions (max of 7) + udp + payload
             //TODO: use the number of already parsed header extensions
-                (1, Some(1 + (IPV6_MAX_NUM_HEADER_EXTENSIONS - count) + 2)),
+                (1, Some((IPV6_MAX_NUM_HEADER_EXTENSIONS - count) + 2)),
 
             //unknown ether_type payload
             LastParsed::Ethernet2(_) | 

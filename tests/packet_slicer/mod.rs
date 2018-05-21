@@ -9,23 +9,32 @@ fn eth_ipv4_udp() {
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(3)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ipv4Header(
                     Slice::<Ipv4Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpHeader(
                     Slice::<UdpHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE..]).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpPayload(
                     &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE + UdpHeader::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -39,23 +48,32 @@ fn eth_ipv6_udp() {
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(1 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ipv6Header(
                     Slice::<Ipv6Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpHeader(
                     Slice::<UdpHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpPayload(
                     &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE + UdpHeader::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -69,31 +87,42 @@ fn eth_single_vlan_ipv6_udp() {
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(2 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::SingleVlanHeader(
                     Slice::<SingleVlanHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(1 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ipv6Header(
                     Slice::<Ipv6Header>::from_slice(
                         &buffer[Ethernet2Header::SERIALIZED_SIZE + SingleVlanHeader::SERIALIZED_SIZE..]
                     ).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpHeader(
                     Slice::<UdpHeader>::from_slice(
                         &buffer[Ethernet2Header::SERIALIZED_SIZE + SingleVlanHeader::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
                     ).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpPayload(
                     &buffer[Ethernet2Header::SERIALIZED_SIZE + SingleVlanHeader::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE + UdpHeader::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -107,31 +136,42 @@ fn eth_double_vlan_ipv4_udp() {
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(2 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::DoubleVlanHeader(
                     Slice::<DoubleVlanHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(1 + 2)));
+    
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ipv4Header(
                     Slice::<Ipv4Header>::from_slice(
                         &buffer[Ethernet2Header::SERIALIZED_SIZE + DoubleVlanHeader::SERIALIZED_SIZE..]
                     ).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpHeader(
                     Slice::<UdpHeader>::from_slice(
                         &buffer[Ethernet2Header::SERIALIZED_SIZE + DoubleVlanHeader::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE..]
                     ).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::UdpPayload(
                     &buffer[Ethernet2Header::SERIALIZED_SIZE + DoubleVlanHeader::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE + UdpHeader::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -146,16 +186,21 @@ fn eth_payload() {
 
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Payload(
                     EtherType::WakeOnLan as u16,
                     &buffer[Ethernet2Header::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -193,33 +238,47 @@ fn vlan() {
                 ether_type: EtherType::WakeOnLan as u16
             }.write(&mut buffer).unwrap();
 
-            let mut it = PacketSlicer::ethernet2(&buffer[..]);
             //normal parsing
             {
+                let mut it = PacketSlicer::ethernet2(&buffer[..]);
+                assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::Ethernet2Header(
                                 Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                             ));
+                assert_eq!(it.size_hint(), (1, Some(2 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::SingleVlanHeader(
                                 Slice::<SingleVlanHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                            ));
+                assert_eq!(it.size_hint(), (1, Some(1)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::Ethernet2Payload(
                                 EtherType::WakeOnLan as u16,
                                 &buffer[Ethernet2Header::SERIALIZED_SIZE + SingleVlanHeader::SERIALIZED_SIZE..]
                            ));
+                assert_eq!(it.size_hint(), (0, Some(0)));
+
                 assert_matches!(it.next(), None);
             }
             //length error
             {
                 let mut it = PacketSlicer::ethernet2(&buffer[..buffer.len()-1]);
+                assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::Ethernet2Header(
                                 Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                             ));
+                assert_eq!(it.size_hint(), (1, Some(2 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
                 assert_matches!(it.next(),
                                 Some(Err(_)));
+                assert_eq!(it.size_hint(), (0, Some(0)));
+
                 assert_matches!(it.next(), None);
             }
         }
@@ -249,20 +308,27 @@ fn vlan() {
             //normal parsing
             {
                 let mut it = PacketSlicer::ethernet2(&buffer[..]);
+                assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::Ethernet2Header(
                                 Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                             ));
+                assert_eq!(it.size_hint(), (1, Some(2 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::DoubleVlanHeader(
                                 Slice::<DoubleVlanHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                            ));
+                assert_eq!(it.size_hint(), (1, Some(1)));
+
                 assert_eq!(it.next().unwrap().unwrap(), 
                            PacketSliceType::Ethernet2Payload(
                                 *id,
                                 &buffer[Ethernet2Header::SERIALIZED_SIZE + DoubleVlanHeader::SERIALIZED_SIZE..]
                            ));
+                assert_eq!(it.size_hint(), (0, Some(0)));
+
                 assert_matches!(it.next(), None);
             }
             //length error
@@ -302,20 +368,27 @@ fn ipv4_ip_payload() {
     buffer.write(&[1,2,3,4,5,6,7,8]).unwrap();
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
+    assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+    assert_eq!(it.size_hint(), (1, Some(1 + 2)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ipv4Header(
                     Slice::<Ipv4Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                ));
+    assert_eq!(it.size_hint(), (1, Some(1)));
+
     assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::IpPayload(
                     IpTrafficClass::SccSp as u8,
                     &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE..]
                ));
+    assert_eq!(it.size_hint(), (0, Some(0)));
+
     assert_matches!(it.next(), None);
 }
 
@@ -343,25 +416,35 @@ fn ipv6_ip_payload() {
     buffer.write(&[1,2,3,4,5,6,7,8]).unwrap();
 
     let expected = [
-        PacketSliceType::Ethernet2Header(
-            Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+        (
+            PacketSliceType::Ethernet2Header(
+                Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
+            ),
+            (1, Some(1 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2))
         ),
-        PacketSliceType::Ipv6Header(
-            Slice::<Ipv6Header>::from_slice(
-                &buffer[Ethernet2Header::SERIALIZED_SIZE..]
-            ).unwrap()
+        (
+            PacketSliceType::Ipv6Header(
+                Slice::<Ipv6Header>::from_slice(
+                    &buffer[Ethernet2Header::SERIALIZED_SIZE..]
+                ).unwrap()
+            ),
+            (1, Some(1))
         ),
-        PacketSliceType::IpPayload(
-            IpTrafficClass::SccSp as u8,
-            &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
+        (
+            PacketSliceType::IpPayload(
+                IpTrafficClass::SccSp as u8,
+                &buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE..]
+            ),
+            (0, Some(0))
         )
     ];
 
     let mut it = PacketSlicer::ethernet2(&buffer[..]);
 
-    for e in expected.iter() {
+    for (e, size_hint) in expected.iter() {
         assert_eq!(it.next().unwrap().unwrap(), 
                    *e);
+        assert_eq!(it.size_hint(), *size_hint);
     }
     assert_matches!(it.next(), None);
 }
@@ -446,16 +529,19 @@ fn ipv6_extension_headers() {
     };
 
     let assert_setup = |it: &mut PacketSlicer, buffer: &Vec<u8>| -> usize {
+        assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
         assert_eq!(it.next().unwrap().unwrap(), 
                PacketSliceType::Ethernet2Header(
                     Slice::<Ethernet2Header>::from_slice(&buffer).unwrap()
                 ));
+        assert_eq!(it.size_hint(), (1, Some(1 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
         assert_eq!(it.next().unwrap().unwrap(), 
                    PacketSliceType::Ipv6Header(
                         Slice::<Ipv6Header>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE..]).unwrap()
                    ));
+        assert_eq!(it.size_hint(), (1, Some(IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));
 
         Ethernet2Header::SERIALIZED_SIZE + Ipv6Header::SERIALIZED_SIZE
     };
@@ -483,12 +569,18 @@ fn ipv6_extension_headers() {
         let mut it = PacketSlicer::ethernet2(&buffer[..]);
         let mut start = assert_setup(&mut it, &buffer);
         
-        for id in EXTENSION_IDS.iter() {
+        for (i, id) in EXTENSION_IDS.iter().enumerate() {
             let expected = Slice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer[start..]).unwrap();
             start += expected.slice.len();
 
             assert_eq!(it.next().unwrap().unwrap(),
                        PacketSliceType::Ipv6ExtensionHeader(*id, expected));
+            if i < IPV6_MAX_NUM_HEADER_EXTENSIONS - 1 {
+                assert_eq!(it.size_hint(), (1, Some(IPV6_MAX_NUM_HEADER_EXTENSIONS - i - 1 + 2 )));
+            } else {
+                //at the last header the rest size becomes clear
+                assert_eq!(it.size_hint(), (1, Some(1)));
+            }
         }
 
         assert_eq!(it.next().unwrap().unwrap(), 
@@ -496,6 +588,8 @@ fn ipv6_extension_headers() {
                         IpTrafficClass::SccSp as u8,
                         &buffer[start..]
                    ));
+        assert_eq!(it.size_hint(), (0, Some(0)));
+
         assert_matches!(it.next(), None);
     }
 
