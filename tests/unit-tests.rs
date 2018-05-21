@@ -11,6 +11,7 @@ mod internet;
 mod transport;
 mod packet_builder;
 mod packet_decoder;
+mod packet_slicer;
 
 #[test]
 fn test_debug_write() {

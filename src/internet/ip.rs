@@ -392,11 +392,17 @@ impl Ipv6Header {
     }
 
     ///Skips the ipv6 header extension and returns the traffic_class
-    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<u8, io::Error> {
+    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, io::Error> {
         let next_header = reader.read_u8()?;
-        //read the length
-        //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
-        let rest_length = ((reader.read_u8()? as i64)*8) + 8 - 2;
+        //determine the length (fragmentation header has a fixed length & the rest a length field)
+        const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
+        let rest_length = if traffic_class == FRAG {
+            //fragmentation header has the fixed length of 64bits (one already read)
+            7
+        } else {
+            //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
+            (((reader.read_u8()? as i64) + 1)*8) - 2
+        };
         reader.seek(io::SeekFrom::Current(rest_length))?;
         Ok(next_header)
     }
@@ -412,10 +418,10 @@ impl Ipv6Header {
         const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8;
 
         let mut next_traffic_class = traffic_class;
-        for _i in 0..7 {
+        for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
             match next_traffic_class {
                 HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => {
-                    next_traffic_class = Ipv6Header::skip_header_extension(reader)?;
+                    next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
                 },
                 _ => return Ok(next_traffic_class)
             }
@@ -666,6 +672,51 @@ impl<'a> Slice<'a, Ipv6Header> {
     ///Returns a slice containing the IPv6 destination address.
     pub fn destination(&self) -> &'a[u8] {
         &self.slice[24..24+16]
+    }
+}
+
+///Maximum number of header extensions allowed (according to the ipv6 rfc8200).
+pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 7;
+
+///Dummy struct for ipv6 header extensions.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ipv6ExtensionHeader {}
+
+impl<'a> Slice<'a, Ipv6ExtensionHeader> {
+    ///Creates a slice containing an ipv6 header extension.
+    pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<Slice<'a, Ipv6ExtensionHeader>, ReadError> {
+
+        //check length
+        use std::io::ErrorKind::UnexpectedEof;
+        use std::io::Error;
+        use ReadError::*;
+        if slice.len() < 8 {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //check length
+        const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
+        let len = if FRAG == header_type {
+            8
+        } else {
+            ((slice[1] as usize) + 1)*8
+        };
+
+        //check the length again now that the expected length is known
+        if slice.len() < len {
+            return Err(IoError(Error::from(UnexpectedEof)));
+        }
+
+        //all good
+        Ok(Slice {
+            slice: &slice[..len],
+            phantom: std::marker::PhantomData{}
+        })
+    }
+
+    ///Returns the id of the next header (see IpTrafficClass for a definition of all ids).
+    pub fn next_header(&self) -> u8 {
+        self.slice[0]
     }
 }
 

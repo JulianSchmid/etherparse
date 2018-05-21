@@ -729,11 +729,16 @@ fn read_ipv6_error_header() {
 
 #[test]
 fn skip_ipv6_header_extension() {
+
+    const HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
+    const ROUTE: u8 = IpTrafficClass::IPv6RouteHeader as u8;
+    const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
+
     use std::io::Cursor;
     {
         let buffer: [u8; 8] = [0;8];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor), Ok(0));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, HOP_BY_HOP), Ok(0));
         assert_eq!(8, cursor.position());
     }
     {
@@ -743,8 +748,19 @@ fn skip_ipv6_header_extension() {
             0,0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor), Ok(4));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, ROUTE), Ok(4));
         assert_eq!(8*3, cursor.position());
+    }
+    {
+        //fragmentation header has a fixed size -> the 2 should be ignored
+        let buffer: [u8; 8*3] = [
+            4,2,0,0, 0,0,0,0,
+            0,0,0,0, 0,0,0,0,
+            0,0,0,0, 0,0,0,0,
+        ];
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, FRAG), Ok(4));
+        assert_eq!(8, cursor.position());
     }
 }
 
@@ -758,7 +774,7 @@ fn skip_all_ipv6_header_extensions() {
         IPv6HeaderHopByHop as u8,
         IPv6DestinationOptions as u8,
         IPv6RouteHeader as u8,
-        IPv6FragmentationHeader as u8,
+        IPv6FragmentationHeader as u8, //3
         IPv6AuthenticationHeader as u8,
         IPv6EncapSecurityPayload as u8,
         IPv6DestinationOptions as u8
@@ -782,7 +798,12 @@ fn skip_all_ipv6_header_extensions() {
                 Some(_) => {
                     //ipv6 header extension -> expect skip
                     assert_matches!(result, Ok(UDP));
-                    assert_eq!(buffer.len(), cursor.position() as usize);
+                    if i == IPv6FragmentationHeader as u8 {
+                        //fragmentation header has a fixed size
+                        assert_eq!(8, cursor.position() as usize);
+                    } else {
+                        assert_eq!(buffer.len(), cursor.position() as usize);
+                    }
                 },
                 None => {
                     //non ipv6 header expect no read movement and direct return
@@ -799,10 +820,11 @@ fn skip_all_ipv6_header_extensions() {
             EXTENSION_IDS[1],0,0,0, 0,0,0,0,
             EXTENSION_IDS[2],1,0,0, 0,0,0,0,
             0,0,0,0,                0,0,0,0,
-            EXTENSION_IDS[3],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[4],1,0,0, 0,0,0,0,
-
+            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
             0,0,0,0,                0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            //fragmentation header (fixed size 8 bytes)
+            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
             EXTENSION_IDS[5],0,0,0, 0,0,0,0,
             EXTENSION_IDS[6],0,0,0, 0,0,0,0,
             UDP,2,0,0, 0,0,0,0,
@@ -811,7 +833,6 @@ fn skip_all_ipv6_header_extensions() {
             0,0,0,0,   0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-
         let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
         assert_matches!(result, Ok(UDP));
         assert_eq!(buffer.len(), cursor.position() as usize);
@@ -822,7 +843,8 @@ fn skip_all_ipv6_header_extensions() {
             EXTENSION_IDS[1],0,0,0, 0,0,0,0,
             EXTENSION_IDS[2],0,0,0, 0,0,0,0,
             EXTENSION_IDS[3],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[4],0,0,0, 0,0,0,0,
+            //fragmentation header (fixed size 8 bytes)
+            EXTENSION_IDS[4],4,0,0, 0,0,0,0,
             EXTENSION_IDS[5],0,0,0, 0,0,0,0,
             EXTENSION_IDS[6],0,0,0, 0,0,0,0,
             EXTENSION_IDS[1],0,0,0, 0,0,0,0,
@@ -931,4 +953,81 @@ fn ipv6_from_slice_bad_version() {
     //check that the unexpected version id is detected
     use ReadError::*;
     assert_matches!(Slice::<Ipv6Header>::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
+}
+
+#[test]
+fn ipv6_extension_from_slice() {
+    //extension header values
+    use IpTrafficClass::*;
+    const FRAG: u8 = IPv6FragmentationHeader as u8;
+    const UDP: u8 = Udp as u8;
+    let buffer: [u8; 8*3] = [
+        UDP,2,0,0, 0,0,0,0, //set next to udp
+        0,0,0,0,   0,0,0,0,
+        0,0,0,0,   0,0,0,0,
+    ];
+    //fragmentation header
+    {
+        let slice = Slice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer).unwrap();
+        assert_eq!(slice.next_header(), UDP);
+        assert_eq!(slice.slice, &buffer[..8])
+    }
+    //other headers (using length field)
+    {
+        const EXTENSION_IDS_WITH_LENGTH: [u8;5] = [
+            IPv6HeaderHopByHop as u8,
+            IPv6DestinationOptions as u8,
+            IPv6RouteHeader as u8,
+            IPv6AuthenticationHeader as u8,
+            IPv6EncapSecurityPayload as u8
+        ];
+        for id in EXTENSION_IDS_WITH_LENGTH.iter() {
+            let slice = Slice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer).unwrap();
+            assert_eq!(slice.next_header(), UDP);
+            assert_eq!(slice.slice, &buffer[..])
+        }
+    }
+}
+
+#[test]
+fn ipv6_extension_from_slice_bad_length() {
+    //extension header values
+    use IpTrafficClass::*;
+    const FRAG: u8 = IPv6FragmentationHeader as u8;
+    const UDP: u8 = Udp as u8;
+    //all extension headers that use the length field
+    const EXTENSION_IDS_WITH_LENGTH: [u8;5] = [
+        IPv6HeaderHopByHop as u8,
+        IPv6DestinationOptions as u8,
+        IPv6RouteHeader as u8,
+        IPv6AuthenticationHeader as u8,
+        IPv6EncapSecurityPayload as u8
+    ];
+
+    //smaller then minimum extension header size (8 bytes)
+    {
+        let buffer: [u8; 7] = [
+            UDP,2,0,0, 0,0,0
+        ];
+        assert_matches!(Slice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer), Err(_));
+    }
+    //smaller then specified size by length field
+    {
+        let buffer: [u8; 8*3-1] = [
+            UDP,2,0,0, 0,0,0,0,
+            0,0,0,0,   0,0,0,0,
+            0,0,0,0,   0,0,0,
+        ];
+        //fragmentation header (should not trigger an error, as the length field is not used)
+        {
+            let slice = Slice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer).unwrap();
+            assert_eq!(slice.next_header(), UDP);
+            assert_eq!(slice.slice, &buffer[..8])
+        }
+        //all others should generate a range error
+        for id in EXTENSION_IDS_WITH_LENGTH.iter() {
+            let slice = Slice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer);
+            assert_matches!(slice, Err(_));
+        }
+    }
 }

@@ -17,6 +17,9 @@ pub use packet_builder::*;
 mod packet_decoder;
 pub use packet_decoder::*;
 
+mod packet_slicer;
+pub use packet_slicer::*;
+
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
