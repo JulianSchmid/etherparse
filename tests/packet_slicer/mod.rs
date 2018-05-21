@@ -45,6 +45,26 @@ fn assert_udp(buffer: &[u8], expected: &[(usize, PacketSliceType)]) {
 }
 
 #[test]
+#[should_panic]
+fn assert_udp_panic() {
+    let mut buffer = Vec::new();
+    PacketBuilder::ethernet2([0;6], [0;6])
+                  .ipv4([1,2,3,4], [5,6,7,8], 1)
+                  .udp(1,2)
+                  .write(&mut buffer, &[4,3,2,1]).unwrap();
+    assert_udp(
+        &buffer,
+        &[
+            (   
+                3,
+                PacketSliceType::UdpHeader(
+                    Slice::<UdpHeader>::from_slice(&buffer).unwrap()
+                ),
+            ),
+        ]);
+}
+
+#[test]
 fn eth_ipv4_udp() {
     let mut buffer = Vec::new();
     PacketBuilder::ethernet2([0;6], [0;6])

@@ -66,8 +66,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        return match self.last {
-
+        match self.last {
             //ethernet header
             LastParsed::Start =>
             {
@@ -232,11 +231,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Payload | LastParsed::Error => {
                 None //done
             }
-        };
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        return match self.last {
+
+        match self.last {
             //ethernet header
             LastParsed::Start =>
                 //max path is: ethernet + vlan + ipv6 + ipv6 header extensions (max of 7) + udp + payload
@@ -301,7 +301,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Error =>
                 //done
                 (0, Some(0)),
-        };
+        }
     }
 
     //TODO add foreach implementation to avoid complex state handeling
