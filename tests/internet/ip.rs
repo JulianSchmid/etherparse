@@ -354,6 +354,7 @@ fn ipv4_from_slice() {
     
     //normal read with options (fields checked in readwrite_ipv4_header_raw test)
     {
+        use std::net::Ipv4Addr;
         let slice = Slice::<Ipv4Header>::from_slice(&buffer).unwrap();
         assert_eq!(slice.version(), 4);
         assert_eq!(slice.ihl(), input.header_length);
@@ -368,7 +369,9 @@ fn ipv4_from_slice() {
         assert_eq!(slice.protocol(), input.protocol);
         assert_eq!(slice.header_checksum(), input.header_checksum);
         assert_eq!(slice.source(), input.source);
+        assert_eq!(slice.source_addr(), Ipv4Addr::from(input.source));
         assert_eq!(slice.destination(), input.destination);
+        assert_eq!(slice.destination_addr(), Ipv4Addr::from(input.destination));
         assert_eq!(slice.options(), &buffer[20..28]);
     }
 
@@ -916,6 +919,7 @@ fn ipv6_from_slice() {
     assert_matches!(Slice::<Ipv6Header>::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
 
     //check that all the values are read correctly
+    use std::net::Ipv6Addr;
     let slice = Slice::<Ipv6Header>::from_slice(&buffer).unwrap();
     assert_eq!(slice.version(), 6);
     assert_eq!(slice.traffic_class(), input.traffic_class);
@@ -924,7 +928,9 @@ fn ipv6_from_slice() {
     assert_eq!(slice.next_header(), input.next_header);
     assert_eq!(slice.hop_limit(), input.hop_limit);
     assert_eq!(slice.source(), input.source);
+    assert_eq!(slice.source_addr(), Ipv6Addr::from(input.source));
     assert_eq!(slice.destination(), input.destination);
+    assert_eq!(slice.destination_addr(), Ipv6Addr::from(input.destination));
 }
 
 #[test]

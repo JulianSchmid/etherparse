@@ -1,5 +1,7 @@
 use super::super::*;
 
+use std::net::{Ipv4Addr, Ipv6Addr};
+
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -591,17 +593,27 @@ impl<'a> Slice<'a, Ipv4Header> {
     }
     
     ///Returns a slice containing the ipv4 source address.
-    pub fn source(&self) -> [u8;4] {
+    pub fn source(&self) -> &'a [u8] {
+        &self.slice[12..16]
+    }
+
+    ///Return the ipv4 source address as an std::net::Ipv4Addr
+    pub fn source_addr(&self) -> Ipv4Addr {
         let mut result: [u8; 4] = Default::default();
-        result.copy_from_slice(&self.slice[12..16]);
-        result
+        result.copy_from_slice(self.source());
+        Ipv4Addr::from(result)
     }
 
     ///Returns a slice containing the ipv4 source address.
-    pub fn destination(&self) -> [u8;4] {
+    pub fn destination(&self) -> &'a [u8] {
+        &self.slice[16..20]
+    }
+
+    ///Return the ipv4 destination address as an std::net::Ipv4Addr
+    pub fn destination_addr(&self) -> Ipv4Addr {
         let mut result: [u8; 4] = Default::default();
-        result.copy_from_slice(&self.slice[16..20]);
-        result
+        result.copy_from_slice(self.destination());
+        Ipv4Addr::from(result)
     }
 
     ///Returns a slice containing the ipv4 header options (empty when there are no options).
@@ -673,9 +685,23 @@ impl<'a> Slice<'a, Ipv6Header> {
         &self.slice[8..8+16]
     }
 
+    ///Return the ipv6 source address as an std::net::Ipv6Addr
+    pub fn source_addr(&self) -> Ipv6Addr {
+        let mut result: [u8; 16] = Default::default();
+        result.copy_from_slice(self.source());
+        Ipv6Addr::from(result)
+    }
+
     ///Returns a slice containing the IPv6 destination address.
     pub fn destination(&self) -> &'a[u8] {
         &self.slice[24..24+16]
+    }
+
+    ///Return the ipv6 destination address as an std::net::Ipv6Addr
+    pub fn destination_addr(&self) -> Ipv6Addr {
+        let mut result: [u8; 16] = Default::default();
+        result.copy_from_slice(self.destination());
+        Ipv6Addr::from(result)
     }
 }
 
