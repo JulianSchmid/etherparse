@@ -66,7 +66,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        match self.last {
+        let result = match self.last {
             //ethernet header
             LastParsed::Start =>
             {
@@ -231,7 +231,8 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Payload | LastParsed::Error => {
                 None //done
             }
-        }
+        };
+        result
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -300,7 +301,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Payload | 
             LastParsed::Error =>
                 //done
-                (0, Some(0)),
+                (0, Some(0))
         }
     }
 
