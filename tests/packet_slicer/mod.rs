@@ -70,7 +70,7 @@ fn assert_udp_panic() {
             (   
                 1,
                 PacketSliceType::UdpHeader(
-                    Slice::<UdpHeader>::from_slice(&buffer).unwrap()
+                    Slice::<UdpHeader>::from_slice(&buffer[Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::SERIALIZED_SIZE..]).unwrap()
                 ),
             ),
         ]);

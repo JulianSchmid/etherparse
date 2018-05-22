@@ -591,13 +591,17 @@ impl<'a> Slice<'a, Ipv4Header> {
     }
     
     ///Returns a slice containing the ipv4 source address.
-    pub fn source(&self) -> &'a [u8] {
-        &self.slice[12..16]
+    pub fn source(&self) -> [u8;4] {
+        let mut result: [u8; 4] = Default::default();
+        result.copy_from_slice(&self.slice[12..16]);
+        result
     }
 
     ///Returns a slice containing the ipv4 source address.
-    pub fn destination(&self) -> &'a [u8] {
-        &self.slice[16..20]
+    pub fn destination(&self) -> [u8;4] {
+        let mut result: [u8; 4] = Default::default();
+        result.copy_from_slice(&self.slice[16..20]);
+        result
     }
 
     ///Returns a slice containing the ipv4 header options (empty when there are no options).
