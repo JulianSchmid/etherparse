@@ -110,9 +110,9 @@ impl DoubleVlanHeader {
     }
 }
 
-impl<'a> Slice<'a, SingleVlanHeader> {
+impl<'a> PacketSlice<'a, SingleVlanHeader> {
     ///Creates a vlan header slice from a slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, SingleVlanHeader>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, SingleVlanHeader>, ReadError>{
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -122,7 +122,7 @@ impl<'a> Slice<'a, SingleVlanHeader> {
         }
 
         //all done
-        Ok(Slice::<'a, SingleVlanHeader> {
+        Ok(PacketSlice::<'a, SingleVlanHeader> {
             slice: &slice[..SingleVlanHeader::SERIALIZED_SIZE],
             phantom: std::marker::PhantomData::<SingleVlanHeader>{}
         })
@@ -150,9 +150,9 @@ impl<'a> Slice<'a, SingleVlanHeader> {
     }
 }
 
-impl<'a> Slice<'a, DoubleVlanHeader> {
+impl<'a> PacketSlice<'a, DoubleVlanHeader> {
     ///Creates a double header slice from a slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, DoubleVlanHeader>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, DoubleVlanHeader>, ReadError>{
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -162,23 +162,23 @@ impl<'a> Slice<'a, DoubleVlanHeader> {
         }
 
         //all done
-        Ok(Slice::<'a, DoubleVlanHeader> {
+        Ok(PacketSlice::<'a, DoubleVlanHeader> {
             slice: &slice[..DoubleVlanHeader::SERIALIZED_SIZE],
             phantom: std::marker::PhantomData{}
         })
     }
 
     ///Returns a slice with the outer vlan header
-    pub fn outer(&self) -> Slice<'a, SingleVlanHeader> {
-        Slice::<'a, SingleVlanHeader> {
+    pub fn outer(&self) -> PacketSlice<'a, SingleVlanHeader> {
+        PacketSlice::<'a, SingleVlanHeader> {
             slice: &self.slice[..SingleVlanHeader::SERIALIZED_SIZE],
             phantom: std::marker::PhantomData{}
         }
     }
 
     ///Returns a slice with the inner vlan header.
-    pub fn inner(&self) -> Slice<'a, SingleVlanHeader> {
-        Slice::<'a, SingleVlanHeader> {
+    pub fn inner(&self) -> PacketSlice<'a, SingleVlanHeader> {
+        PacketSlice::<'a, SingleVlanHeader> {
             slice: &self.slice[SingleVlanHeader::SERIALIZED_SIZE..SingleVlanHeader::SERIALIZED_SIZE*2],
             phantom: std::marker::PhantomData{}
         }

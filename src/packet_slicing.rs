@@ -1,20 +1,52 @@
 use super::*;
 
+///All possible types of packet slices.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum PacketSliceType<'a> {
-    Ethernet2Header(Slice<'a, Ethernet2Header>),
-    SingleVlanHeader(Slice<'a, SingleVlanHeader>),
-    DoubleVlanHeader(Slice<'a, DoubleVlanHeader>),
+pub enum PacketSlices<'a> {
+    Ethernet2Header(PacketSlice<'a, Ethernet2Header>),
+    SingleVlanHeader(PacketSlice<'a, SingleVlanHeader>),
+    DoubleVlanHeader(PacketSlice<'a, DoubleVlanHeader>),
     ///Payload after an ethernet II header if the ether_type is unknown to the slicer. The enum value contains unknown ether_type value & the slice containing the payload.
     Ethernet2Payload(u16, &'a [u8]),
-    Ipv4Header(Slice<'a, Ipv4Header>),
-    Ipv6Header(Slice<'a, Ipv6Header>),
+    Ipv4Header(PacketSlice<'a, Ipv4Header>),
+    Ipv6Header(PacketSlice<'a, Ipv6Header>),
     ///Ipv6 extension header. The first value is the type identifier of the header (see IpTrafficClass for a list of ids).
-    Ipv6ExtensionHeader(u8, Slice<'a, Ipv6ExtensionHeader>),
+    Ipv6ExtensionHeader(u8, PacketSlice<'a, Ipv6ExtensionHeader>),
     ///Payload after an ip header (and options or header extension if present) with an unknown protocol/next_header identifier. The enum value contains the unknown protocol/next_header value & the slice containing the payload.
     IpPayload(u8, &'a [u8]),
-    UdpHeader(Slice<'a, UdpHeader>),
+    UdpHeader(PacketSlice<'a, UdpHeader>),
     UdpPayload(&'a [u8])
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum LinkSlice<'a> {
+    Ethernet2(PacketSlice<'a, Ethernet2Header>)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VlanSlice<'a> {
+    SingleVlan(PacketSlice<'a, SingleVlanHeader>),
+    DoubleVlan(PacketSlice<'a, DoubleVlanHeader>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InternetSlice<'a> {
+    Ipv4(PacketSlice<'a, Ipv4Header>),
+    Ipv6(PacketSlice<'a, Ipv6Header>),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TransportSlice<'a> {
+    Udp(PacketSlice<'a, UdpHeader>)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SlicedPacket<'a> {
+    pub link: Option<LinkSlice<'a>>,
+    pub vlan: Option<VlanSlice<'a>>,
+    pub ip: Option<InternetSlice<'a>>,
+    pub transport: Option<TransportSlice<'a>>,
+    pub payload: &'a [u8]
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -32,14 +64,14 @@ enum LastParsed {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PacketSlicer<'a> {
+pub struct PacketSliceIterator<'a> {
     last: LastParsed,
     rest: &'a [u8]
 }
 
-impl<'a> PacketSlicer<'a> {
-    pub fn ethernet2(slice: &'a[u8]) -> PacketSlicer<'a>{
-        PacketSlicer {
+impl<'a> PacketSliceIterator<'a> {
+    pub fn from_ethernet(slice: &'a[u8]) -> PacketSliceIterator<'a>{
+        PacketSliceIterator {
             last: LastParsed::Start,
             rest: slice,
         }   
@@ -61,8 +93,96 @@ const IPV6_OPTIONS: u8 = IpTrafficClass::IPv6DestinationOptions as u8;
 const IPV6_AUTH: u8 = IpTrafficClass::IPv6AuthenticationHeader as u8;
 const IPV6_ENCAP_SEC: u8 = IpTrafficClass::IPv6EncapSecurityPayload as u8;
 
-impl<'a> Iterator for PacketSlicer<'a> {
-    type Item = Result<PacketSliceType<'a>, ReadError>;
+impl<'a> SlicedPacket<'a> {
+    pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
+
+        //read link header
+        let (rest, ether_type, link) = {
+            use LinkSlice::*;
+
+            let value = PacketSlice::<Ethernet2Header>::from_slice(data)?;
+            (&data[value.slice.len()..], 
+             value.ether_type(), 
+             Some(Ethernet2(value)))
+        };
+
+        //read vlan header(s) if they exist
+        let (rest, ether_type, vlan) = match ether_type {
+            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
+                use VlanSlice::*;
+
+                //slice the first vlan header
+                let single = PacketSlice::<SingleVlanHeader>::from_slice(rest)?;
+                let ether_type = single.ether_type();
+                match ether_type {
+
+                    //check if it is a double vlan tagged packet based on the ether_type
+                    ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
+                        let double = PacketSlice::<DoubleVlanHeader>::from_slice(rest)?;
+                        (&rest[double.slice.len()..], 
+                         double.inner().ether_type(), 
+                         Some(DoubleVlan(double)))
+                    },
+
+                    //otherwise it is single tagged
+                    _ => (&rest[single.slice.len()..], 
+                          ether_type, 
+                          Some(SingleVlan(single)))
+                }
+                
+            },
+
+            //no vlan header found
+            _ => (rest, ether_type, None)
+        };
+
+        //read ip & transport
+        let (rest, protocol, ip) = match ether_type {
+            ETH_IPV4 => {
+                use InternetSlice::*;
+
+                let value = PacketSlice::<Ipv4Header>::from_slice(rest)?;
+                (&rest[value.slice.len()..],
+                 value.protocol(),
+                 Some(Ipv4(value)))
+            },
+            //
+            ETH_IPV6 => {
+                //TODO
+                //let value = ;
+                (rest, 0, None)
+            },
+            _ => (rest, 0, None)
+        };
+
+        //read transport
+        let (rest, transport) = if ip.is_some() {
+            match protocol {
+                IP_UDP => {
+                    use TransportSlice::*;
+
+                    let value = PacketSlice::<UdpHeader>::from_slice(rest)?;
+                    (&rest[value.slice.len()..],
+                     Some(Udp(value)))
+                },
+                _ => (rest, None)
+            }
+        } else {
+            (rest, None)
+        };
+
+        Ok(SlicedPacket{
+            link: link,
+            vlan: vlan,
+            ip: ip,
+            transport: transport,
+            payload: rest
+        })
+    }
+}
+
+impl<'a> Iterator for PacketSliceIterator<'a> {
+    type Item = Result<PacketSlices<'a>, ReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
 
@@ -70,12 +190,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             //ethernet header
             LastParsed::Start =>
             {
-                let slice = Slice::<Ethernet2Header>::from_slice(self.rest);
+                let slice = PacketSlice::<Ethernet2Header>::from_slice(self.rest);
                 match slice {
                     Ok(value) => {
                         self.last = LastParsed::Ethernet2(value.ether_type());
                         self.rest = &self.rest[value.slice.len()..];
-                        Some(Ok(PacketSliceType::Ethernet2Header(value)))
+                        Some(Ok(PacketSlices::Ethernet2Header(value)))
                     },
                     Err(value) => {
                         self.last = LastParsed::Error;
@@ -90,17 +210,17 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Ethernet2(ETH_VLAN_DOUBLE) =>
             {
                 //check if there is a double vlan header
-                let single = Slice::<SingleVlanHeader>::from_slice(self.rest);
+                let single = PacketSlice::<SingleVlanHeader>::from_slice(self.rest);
                 match single {
                     Ok(value) => {
                         match value.ether_type() {
                             ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
                                 //read a double
-                                match Slice::<DoubleVlanHeader>::from_slice(self.rest) {
+                                match PacketSlice::<DoubleVlanHeader>::from_slice(self.rest) {
                                     Ok(value) => {
                                         self.last = LastParsed::DoubleVlan(value.inner().ether_type());
                                         self.rest = &self.rest[value.slice.len()..];
-                                        Some(Ok(PacketSliceType::DoubleVlanHeader(value)))
+                                        Some(Ok(PacketSlices::DoubleVlanHeader(value)))
                                     },
                                     Err(value) => {
                                         self.last = LastParsed::Error;
@@ -111,7 +231,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
                             _ => {
                                 self.last = LastParsed::SingleVlan(value.ether_type());
                                 self.rest = &self.rest[value.slice.len()..];
-                                Some(Ok(PacketSliceType::SingleVlanHeader(value)))
+                                Some(Ok(PacketSlices::SingleVlanHeader(value)))
                             }
                         }
                     },
@@ -127,12 +247,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::SingleVlan(ETH_IPV4) | 
             LastParsed::DoubleVlan(ETH_IPV4) => 
             {
-                let slice = Slice::<Ipv4Header>::from_slice(self.rest);
+                let slice = PacketSlice::<Ipv4Header>::from_slice(self.rest);
                 match slice {
                     Ok(value) => {
                         self.last = LastParsed::Ipv4(value.protocol());
                         self.rest = &self.rest[value.slice.len()..];
-                        Some(Ok(PacketSliceType::Ipv4Header(value)))
+                        Some(Ok(PacketSlices::Ipv4Header(value)))
                     },
                     Err(value) => {
                         self.last = LastParsed::Error;
@@ -146,12 +266,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::SingleVlan(ETH_IPV6) | 
             LastParsed::DoubleVlan(ETH_IPV6) => 
             {
-                let slice = Slice::<Ipv6Header>::from_slice(self.rest);
+                let slice = PacketSlice::<Ipv6Header>::from_slice(self.rest);
                 match slice {
                     Ok(value) => {
                         self.last = LastParsed::Ipv6(value.next_header(), 0);
                         self.rest = &self.rest[value.slice.len()..];
-                        Some(Ok(PacketSliceType::Ipv6Header(value)))
+                        Some(Ok(PacketSlices::Ipv6Header(value)))
                     },
                     Err(value) => {
                         self.last = LastParsed::Error;
@@ -166,7 +286,7 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::DoubleVlan(ether_type) =>
             {
                 self.last = LastParsed::Payload;
-                Some(Ok(PacketSliceType::Ethernet2Payload(ether_type, &self.rest[..])))
+                Some(Ok(PacketSlices::Ethernet2Payload(ether_type, &self.rest[..])))
             },
 
             //ipv6 extension headers
@@ -182,12 +302,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
                     self.last = LastParsed::Error;
                     Some(Err(ReadError::Ipv6TooManyHeaderExtensions))
                 } else  {
-                    let slice = Slice::<Ipv6ExtensionHeader>::from_slice(header_type, self.rest);
+                    let slice = PacketSlice::<Ipv6ExtensionHeader>::from_slice(header_type, self.rest);
                     match slice {
                         Ok(value) => {
                             self.last = LastParsed::Ipv6(value.next_header(), extension_header_count + 1);
                             self.rest = &self.rest[value.slice.len()..];
-                            Some(Ok(PacketSliceType::Ipv6ExtensionHeader(header_type, value)))
+                            Some(Ok(PacketSlices::Ipv6ExtensionHeader(header_type, value)))
                         },
                         Err(value) => {
                             self.last = LastParsed::Error;
@@ -201,12 +321,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Ipv4(IP_UDP) | 
             LastParsed::Ipv6(IP_UDP, _) =>
             {
-                let slice = Slice::<UdpHeader>::from_slice(self.rest);
+                let slice = PacketSlice::<UdpHeader>::from_slice(self.rest);
                 match slice {
                     Ok(value) => {
                         self.last = LastParsed::Udp;
                         self.rest = &self.rest[value.slice.len()..];
-                        Some(Ok(PacketSliceType::UdpHeader(value)))
+                        Some(Ok(PacketSlices::UdpHeader(value)))
                     },
                     Err(value) => {
                         self.last = LastParsed::Error;
@@ -220,12 +340,12 @@ impl<'a> Iterator for PacketSlicer<'a> {
             LastParsed::Ipv6(protocol, _) =>
             {
                 self.last = LastParsed::Payload;
-                Some(Ok(PacketSliceType::IpPayload(protocol, &self.rest[..])))
+                Some(Ok(PacketSlices::IpPayload(protocol, &self.rest[..])))
             },
 
             LastParsed::Udp => {
                 self.last = LastParsed::Payload;
-                Some(Ok(PacketSliceType::UdpPayload(&self.rest[..])))
+                Some(Ok(PacketSlices::UdpPayload(&self.rest[..])))
             },
 
             LastParsed::Payload | LastParsed::Error => {

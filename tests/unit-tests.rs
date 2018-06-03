@@ -26,7 +26,7 @@ fn test_debug_write() {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(14);
         input.write(&mut buffer).unwrap();
-        println!("{:?}", Slice::<Ethernet2Header>::from_slice(&buffer));
+        println!("{:?}", PacketSlice::<Ethernet2Header>::from_slice(&buffer));
     }
     //read error
     {

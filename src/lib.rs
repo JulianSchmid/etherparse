@@ -17,17 +17,19 @@ pub use packet_builder::*;
 mod packet_decoder;
 pub use packet_decoder::*;
 
-mod packet_slicer;
-pub use packet_slicer::*;
+mod packet_slicing;
+pub use packet_slicing::*;
 
 ///Contains the size when serialized.
 pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
 }
 
-///A "slice" of a network packet that allows lazy reads from a packet component (does not parse everything). The type T specifies what is beeing sliced and what kind of fields can be read from the slice.
+///A "slice" of a network packet containing a header. In contrast to the actual header structs this struct does only parse fields when they are queried. 
+///
+///The type T specifies what is beeing sliced and what kind of fields can be read from the slice.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Slice<'a, T> {
+pub struct PacketSlice<'a, T> {
     pub slice: &'a [u8],
     phantom: std::marker::PhantomData<T>
 }

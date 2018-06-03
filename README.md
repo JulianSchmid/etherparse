@@ -17,7 +17,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.3.1"
+etherparse = "0.4.0"
 ```
 
 Next, add this to your crate root:
@@ -35,6 +35,34 @@ Some key points are:
 * Special attention has been paid to avoid allocations or other syscalls whenever possible.
 * The package is still in development and can & will still change. 
 * The current focus of development is on the most popular protocols in the internet & transport layer.
+
+## How to parse network packages?
+Etherparse gives you two options for parsing network packages:
+
+* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields
+* Reading all headers and transfering their contents to header structs
+
+Seperating headers into slices is faster if your code is not interessted in all fields of a header. But sometimes you already know, that you will access all or most fields of a header it can make sense to parse everything from beginning.
+
+### Slicing a packet into different elements
+TODO
+
+#### Slice the complete packet
+TODO
+
+#### Iterate over each slicing point
+TODO
+
+#### Manually slicing packets
+
+### Decoding packets (by slicing them into different parts)
+TODO
+
+### Using PacketHeaders::decode to decode all elements of a package at once
+TODO
+
+### Parsing headers manually
+TODO
 
 ## How to generate fake packet data?
 ### Packet Builder
@@ -76,9 +104,14 @@ Read the documentations of the different methods for a more details:
 * [UdpHeader.write](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.write)
 
 ## Roadmap
+* Documentation
+** Packet Builder
+** Packet Slicing
+** Packet Decoder
+* Add IPv6 header extension support (generic header extensions & )
 * Generic packet parser (automaticly parsing of a packet based on its content)
 * TCP
-* Lazy header parsers (holds slice, only parse fields if requested)
+* Creating & parsing packet from lower layers then ethernet (e.g. ip, vlan...)
 * IEEE 802.3
 
 ## References

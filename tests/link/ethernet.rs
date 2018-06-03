@@ -42,8 +42,6 @@ fn read_write() {
     
     //check equivalence
     assert_eq!(input, result);
-
-    
 }
 
 #[test]
@@ -61,10 +59,10 @@ fn from_slice() {
 
     //check that a too small slice results in an error
     use ReadError::*;
-    assert_matches!(Slice::<Ethernet2Header>::from_slice(&buffer[..13]), Err(IoError(_)));
+    assert_matches!(PacketSlice::<Ethernet2Header>::from_slice(&buffer[..13]), Err(IoError(_)));
 
     //check if the header slice is reading the correct values
-    let slice = Slice::<Ethernet2Header>::from_slice(&buffer).unwrap();
+    let slice = PacketSlice::<Ethernet2Header>::from_slice(&buffer).unwrap();
     assert_eq!(input.destination, slice.destination());
     assert_eq!(input.source, slice.source());
     assert_eq!(input.ether_type, slice.ether_type());

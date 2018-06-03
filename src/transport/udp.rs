@@ -182,10 +182,10 @@ impl SerializedSize for UdpHeader {
     const SERIALIZED_SIZE: usize = 8;
 }
 
-impl<'a> Slice<'a, UdpHeader> {
+impl<'a> PacketSlice<'a, UdpHeader> {
 
     ///Creates a slice containing an udp header.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, UdpHeader>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, UdpHeader>, ReadError> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -195,7 +195,7 @@ impl<'a> Slice<'a, UdpHeader> {
         }
 
         //done
-        Ok(Slice{
+        Ok(PacketSlice{
             slice: &slice[..UdpHeader::SERIALIZED_SIZE],
             phantom: std::marker::PhantomData{}
         })

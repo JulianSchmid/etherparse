@@ -77,9 +77,9 @@ pub struct Ethernet2HeaderSlice<'a> {
     pub section: &'a[u8]
 }
 
-impl<'a> Slice<'a, Ethernet2Header> {
+impl<'a> PacketSlice<'a, Ethernet2Header> {
     ///Creates a ethernet slice from an other slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ethernet2Header>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ethernet2Header>, ReadError>{
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -89,7 +89,7 @@ impl<'a> Slice<'a, Ethernet2Header> {
         }
 
         //all done
-        Ok(Slice::<'a, Ethernet2Header> {
+        Ok(PacketSlice::<'a, Ethernet2Header> {
             slice: &slice[..14],
             phantom: std::marker::PhantomData::<Ethernet2Header>{}
         })

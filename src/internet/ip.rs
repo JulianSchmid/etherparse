@@ -488,10 +488,10 @@ impl Ipv6Header {
     }
 }
 
-impl<'a> Slice<'a, Ipv4Header> {
+impl<'a> PacketSlice<'a, Ipv4Header> {
 
     ///Creates a slice containing an ipv4 header (including header options).
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ipv4Header>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv4Header>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -525,7 +525,7 @@ impl<'a> Slice<'a, Ipv4Header> {
         }
 
         //all good
-        Ok(Slice {
+        Ok(PacketSlice {
             slice: &slice[..total_length],
             phantom: std::marker::PhantomData{}
         })
@@ -622,10 +622,10 @@ impl<'a> Slice<'a, Ipv4Header> {
     }
 }
 
-impl<'a> Slice<'a, Ipv6Header> {
+impl<'a> PacketSlice<'a, Ipv6Header> {
 
     ///Creates a slice containing an ipv6 header (without header extensions).
-    pub fn from_slice(slice: &'a[u8]) -> Result<Slice<'a, Ipv6Header>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv6Header>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -644,7 +644,7 @@ impl<'a> Slice<'a, Ipv6Header> {
         }
 
         //all good
-        Ok(Slice {
+        Ok(PacketSlice {
             slice: &slice[..Ipv6Header::SERIALIZED_SIZE],
             phantom: std::marker::PhantomData{}
         })
@@ -712,9 +712,9 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 7;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6ExtensionHeader {}
 
-impl<'a> Slice<'a, Ipv6ExtensionHeader> {
+impl<'a> PacketSlice<'a, Ipv6ExtensionHeader> {
     ///Creates a slice containing an ipv6 header extension.
-    pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<Slice<'a, Ipv6ExtensionHeader>, ReadError> {
+    pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv6ExtensionHeader>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -738,7 +738,7 @@ impl<'a> Slice<'a, Ipv6ExtensionHeader> {
         }
 
         //all good
-        Ok(Slice {
+        Ok(PacketSlice {
             slice: &slice[..len],
             phantom: std::marker::PhantomData{}
         })
