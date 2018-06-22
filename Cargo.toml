@@ -17,6 +17,7 @@ byteorder = "1.2.1"
 
 [dev-dependencies]
 assert_matches = "1.2"
+proptest = "0.7.1"
 
 [badges]
 travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }

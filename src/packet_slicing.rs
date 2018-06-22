@@ -45,7 +45,17 @@ pub struct SlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
     pub vlan: Option<VlanSlice<'a>>,
     pub ip: Option<InternetSlice<'a>>,
+    ///Ipv6 extensions headers filled in order from 0 to the length of the array.
+    pub ip_extensions: [Option<PacketSlice<'a, Ipv6ExtensionHeader>>; IPV6_MAX_NUM_HEADER_EXTENSIONS],
     pub transport: Option<TransportSlice<'a>>,
+    /// The payload field points to the rest of the packet that could not be parsed by etherparse.
+    ///
+    /// Depending on what other fields contain a "Some" values the payload contains the corresponding 
+    /// payload.
+    ///
+    /// For example if transport field contains Some(Udp(_)) then the payload field points to the udp payload.
+    /// On the other hand if the transport field contains None then the payload contains the payload of
+    /// next field containing a Some value (in order of transport, ip, vlan, link).
     pub payload: &'a [u8]
 }
 
@@ -105,7 +115,7 @@ impl<'a> SlicedPacket<'a> {
              value.ether_type(), 
              Some(Ethernet2(value)))
         };
-
+        
         //read vlan header(s) if they exist
         let (rest, ether_type, vlan) = match ether_type {
             ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
@@ -129,7 +139,6 @@ impl<'a> SlicedPacket<'a> {
                           ether_type, 
                           Some(SingleVlan(single)))
                 }
-                
             },
 
             //no vlan header found
@@ -137,6 +146,7 @@ impl<'a> SlicedPacket<'a> {
         };
 
         //read ip & transport
+        let mut ip_extensions = [None, None, None, None, None, None, None];
         let (rest, protocol, ip) = match ether_type {
             ETH_IPV4 => {
                 use InternetSlice::*;
@@ -144,13 +154,52 @@ impl<'a> SlicedPacket<'a> {
                 let value = PacketSlice::<Ipv4Header>::from_slice(rest)?;
                 (&rest[value.slice.len()..],
                  value.protocol(),
-                 Some(Ipv4(value)))
+                 Some(Ipv4(value, )))
             },
             //
             ETH_IPV6 => {
-                //TODO
-                //let value = ;
-                (rest, 0, None)
+                use InternetSlice::*;
+
+                let value = PacketSlice::<Ipv6Header>::from_slice(rest)?;
+
+                let mut rest = &rest[value.slice.len()..];
+
+                //extension headers
+                let mut next_header = value.next_header();
+                for i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
+                    match next_header {
+                        IPV6_HOP_BY_HOP | 
+                        IPV6_ROUTE | 
+                        IPV6_FRAG | 
+                        IPV6_OPTIONS | 
+                        IPV6_AUTH | 
+                        IPV6_ENCAP_SEC => {
+                            let value = PacketSlice::<Ipv6ExtensionHeader>::from_slice(next_header, rest)?;
+                            next_header = value.next_header();
+                            rest = &rest[value.slice.len()..];
+                            ip_extensions[i] = Some(value);
+                        },
+                        _ => break
+                    }
+                }
+
+                //check that the next header is not an extension header
+                match next_header {
+                    IPV6_HOP_BY_HOP | 
+                    IPV6_ROUTE | 
+                    IPV6_FRAG | 
+                    IPV6_OPTIONS | 
+                    IPV6_AUTH | 
+                    IPV6_ENCAP_SEC => {
+                        return Err(ReadError::Ipv6TooManyHeaderExtensions)
+                    },
+                    _ => {}
+                }
+
+                //return ip header result
+                (rest,
+                 next_header,
+                 Some(Ipv6(value)))
             },
             _ => (rest, 0, None)
         };
@@ -175,6 +224,7 @@ impl<'a> SlicedPacket<'a> {
             link: link,
             vlan: vlan,
             ip: ip,
+            ip_extensions: ip_extensions,
             transport: transport,
             payload: rest
         })

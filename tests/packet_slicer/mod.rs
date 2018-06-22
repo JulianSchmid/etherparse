@@ -1,5 +1,7 @@
 use etherparse::*;
 
+pub mod sliced_packet;
+
 fn assert_udp(buffer: &[u8], expected: &[(usize, PacketSlices)]) {
     let mut it = PacketSliceIterator::from_ethernet(&buffer[..]);
     assert_eq!(it.size_hint(), (1, Some(3 + IPV6_MAX_NUM_HEADER_EXTENSIONS + 2)));

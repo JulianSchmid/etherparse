@@ -107,4 +107,20 @@ impl<'a> PacketSlice<'a, Ethernet2Header> {
         use self::byteorder::ByteOrder;
         BigEndian::read_u16(&self.slice[12..14])
     }
+    ///Decode all the fields and copy the results to a Ipv4Header struct
+    pub fn to_header(&self) -> Ethernet2Header {
+        Ethernet2Header {
+            source: {
+                let mut result: [u8;6] = Default::default();
+                result.copy_from_slice(self.source());
+                result
+            },
+            destination: {
+                let mut result: [u8;6] = Default::default();
+                result.copy_from_slice(self.destination());
+                result
+            },
+            ether_type: self.ether_type()
+        }
+    }
 }

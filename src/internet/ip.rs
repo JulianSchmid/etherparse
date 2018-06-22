@@ -620,6 +620,33 @@ impl<'a> PacketSlice<'a, Ipv4Header> {
     pub fn options(&self) -> &'a [u8] {
         &self.slice[20..]
     }
+
+    ///Decode all the fields and copy the results to a Ipv4Header struct
+    pub fn to_header(&self) -> Ipv4Header {
+        Ipv4Header {
+            header_length: self.ihl(),
+            differentiated_services_code_point: self.dcp(),
+            explicit_congestion_notification: self.ecn(),
+            total_length: self.total_length(),
+            identification: self.identification(),
+            dont_fragment: self.dont_fragment(),
+            more_fragments: self.more_fragments(),
+            fragments_offset: self.fragments_offset(),
+            time_to_live: self.ttl(),
+            protocol: self.protocol(),
+            header_checksum: self.header_checksum(),
+            source: {
+                let mut result: [u8; 4] = Default::default();
+                result.copy_from_slice(self.source());
+                result
+            },
+            destination: {
+                let mut result: [u8; 4] = Default::default();
+                result.copy_from_slice(self.destination());
+                result
+            }
+        }
+    }
 }
 
 impl<'a> PacketSlice<'a, Ipv6Header> {
@@ -702,6 +729,27 @@ impl<'a> PacketSlice<'a, Ipv6Header> {
         let mut result: [u8; 16] = Default::default();
         result.copy_from_slice(self.destination());
         Ipv6Addr::from(result)
+    }
+
+    ///Decode all the fields and copy the results to a Ipv6Header struct
+    pub fn to_header(&self) -> Ipv6Header {
+        Ipv6Header {
+            traffic_class: self.traffic_class(),
+            flow_label: self.flow_label(),
+            payload_length: self.payload_length(),
+            next_header: self.next_header(),
+            hop_limit: self.hop_limit(),
+            source: {
+                let mut result: [u8; 16] = Default::default();
+                result.copy_from_slice(self.source());
+                result
+            },
+            destination: {
+                let mut result: [u8; 16] = Default::default();
+                result.copy_from_slice(self.destination());
+                result
+            }
+        }
     }
 }
 

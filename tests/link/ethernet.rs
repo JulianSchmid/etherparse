@@ -66,4 +66,7 @@ fn from_slice() {
     assert_eq!(input.destination, slice.destination());
     assert_eq!(input.source, slice.source());
     assert_eq!(input.ether_type, slice.ether_type());
+
+    //check that the to header method also returns the original struct
+    assert_eq!(input, slice.to_header());
 }
