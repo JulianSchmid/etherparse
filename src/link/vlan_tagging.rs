@@ -57,7 +57,7 @@ impl SingleVlanHeader {
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use ErrorField::*;
         //check value ranges
-        max_check_u8(self.priority_code_point, 0x3, VlanTagPriorityCodePoint)?;
+        max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
         max_check_u16(self.vlan_identifier, 0xfff, VlanTagVlanId)?;
         {
             let mut buffer: [u8;2] = [0;2];
@@ -147,6 +147,16 @@ impl<'a> PacketSlice<'a, SingleVlanHeader> {
     ///Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
     pub fn ether_type(&self) -> u16 {
         BigEndian::read_u16(&self.slice[2..4])
+    }
+
+    ///Decode all the fields and copy the results to a SingleVlanHeader struct
+    pub fn to_header(&self) -> SingleVlanHeader {
+        SingleVlanHeader {
+            priority_code_point: self.priority_code_point(),
+            drop_eligible_indicator: self.drop_eligible_indicator(),
+            vlan_identifier: self.vlan_identifier(),
+            ether_type: self.ether_type(),
+        }
     }
 }
 

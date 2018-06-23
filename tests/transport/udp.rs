@@ -357,4 +357,7 @@ fn from_slice() {
     assert_eq!(slice.destination_port(), input.destination_port);
     assert_eq!(slice.length(), input.length);
     assert_eq!(slice.checksum(), input.checksum);
+
+    //check that the to_header method also results in the same header
+    assert_eq!(slice.to_header(), input);
 }

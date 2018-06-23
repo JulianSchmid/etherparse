@@ -758,7 +758,10 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 7;
 
 ///Dummy struct for ipv6 header extensions.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Ipv6ExtensionHeader {}
+pub struct Ipv6ExtensionHeader {
+    next_header: u8,
+    length: u8
+}
 
 impl<'a> PacketSlice<'a, Ipv6ExtensionHeader> {
     ///Creates a slice containing an ipv6 header extension.
@@ -799,7 +802,7 @@ impl<'a> PacketSlice<'a, Ipv6ExtensionHeader> {
 }
 
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IpTrafficClass {
     ///IPv6 Hop-by-Hop Option [RFC8200]
     IPv6HeaderHopByHop = 0,

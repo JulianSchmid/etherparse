@@ -32,7 +32,8 @@ pub enum VlanSlice<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
     Ipv4(PacketSlice<'a, Ipv4Header>),
-    Ipv6(PacketSlice<'a, Ipv6Header>),
+    ///First element is the Ipv6 header slice and second one are the Ipv6 extensions headers filled in order from 0 to the length of the array.
+    Ipv6(PacketSlice<'a, Ipv6Header>, [Option<PacketSlice<'a, Ipv6ExtensionHeader>>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -45,8 +46,6 @@ pub struct SlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
     pub vlan: Option<VlanSlice<'a>>,
     pub ip: Option<InternetSlice<'a>>,
-    ///Ipv6 extensions headers filled in order from 0 to the length of the array.
-    pub ip_extensions: [Option<PacketSlice<'a, Ipv6ExtensionHeader>>; IPV6_MAX_NUM_HEADER_EXTENSIONS],
     pub transport: Option<TransportSlice<'a>>,
     /// The payload field points to the rest of the packet that could not be parsed by etherparse.
     ///
@@ -146,7 +145,6 @@ impl<'a> SlicedPacket<'a> {
         };
 
         //read ip & transport
-        let mut ip_extensions = [None, None, None, None, None, None, None];
         let (rest, protocol, ip) = match ether_type {
             ETH_IPV4 => {
                 use InternetSlice::*;
@@ -154,7 +152,7 @@ impl<'a> SlicedPacket<'a> {
                 let value = PacketSlice::<Ipv4Header>::from_slice(rest)?;
                 (&rest[value.slice.len()..],
                  value.protocol(),
-                 Some(Ipv4(value, )))
+                 Some(Ipv4(value)))
             },
             //
             ETH_IPV6 => {
@@ -165,6 +163,7 @@ impl<'a> SlicedPacket<'a> {
                 let mut rest = &rest[value.slice.len()..];
 
                 //extension headers
+                let mut ip_extensions = [None, None, None, None, None, None, None];
                 let mut next_header = value.next_header();
                 for i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
                     match next_header {
@@ -199,7 +198,7 @@ impl<'a> SlicedPacket<'a> {
                 //return ip header result
                 (rest,
                  next_header,
-                 Some(Ipv6(value)))
+                 Some(Ipv6(value, ip_extensions)))
             },
             _ => (rest, 0, None)
         };
@@ -224,7 +223,6 @@ impl<'a> SlicedPacket<'a> {
             link: link,
             vlan: vlan,
             ip: ip,
-            ip_extensions: ip_extensions,
             transport: transport,
             payload: rest
         })

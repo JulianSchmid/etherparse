@@ -220,4 +220,14 @@ impl<'a> PacketSlice<'a, UdpHeader> {
     pub fn checksum(&self) -> u16 {
         BigEndian::read_u16(&self.slice[6..8])
     }
+
+    ///Decode all the fields and copy the results to a UdpHeader struct
+    pub fn to_header(&self) -> UdpHeader {
+        UdpHeader {
+            source_port: self.source_port(),
+            destination_port: self.destination_port(),
+            length: self.length(),
+            checksum: self.checksum()
+        }
+    }
 }

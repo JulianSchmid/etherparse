@@ -7,6 +7,7 @@ extern crate assert_matches;
 #[macro_use]
 extern crate proptest;
 use proptest::prelude::*;
+use proptest::collection::SizeRange;
 
 use std::io;
 
@@ -116,11 +117,19 @@ prop_compose! {
     }
 }
 
+static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
+    EtherType::Ipv4 as u16,
+    EtherType::Ipv6 as u16,
+    EtherType::VlanTaggedFrame as u16,
+    EtherType::ProviderBridging as u16,
+    EtherType::VlanDoubleTaggedFrame as u16
+];
+
 prop_compose! {
     fn ethernet_2_unknown()(source in prop::array::uniform6(any::<u8>()),
                            dest in prop::array::uniform6(any::<u8>()),
                            ether_type in any::<u16>().prop_filter("ether_type must be unknown",
-                               |v| (EtherType::Ipv4 as u16 != *v)))
+                               |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
                            -> Ethernet2Header
     {
         Ethernet2Header {
@@ -132,9 +141,28 @@ prop_compose! {
 }
 
 prop_compose! {
-    fn ipv4_with(protocol: u8)(source in prop::array::uniform4(any::<u8>()),
+    fn vlan_single_unknown()(priority_code_point in prop::bits::u8::between(0,3),
+                             drop_eligible_indicator in any::<bool>(),
+                             vlan_identifier in prop::bits::u16::between(0,12),
+                             ether_type in any::<u16>().prop_filter("ether_type must be unknown",
+                               |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+                           -> SingleVlanHeader
+    {
+        SingleVlanHeader {
+            priority_code_point: priority_code_point,
+            drop_eligible_indicator: drop_eligible_indicator,
+            vlan_identifier: vlan_identifier,
+            ether_type: ether_type
+        }
+    }
+}
+
+prop_compose! {
+    fn ipv4_with(protocol: IpTrafficClass)
+                (ihl in 5u8..16,
+                 protocol in proptest::strategy::Just(protocol))
+                (source in prop::array::uniform4(any::<u8>()),
                   dest in prop::array::uniform4(any::<u8>()),
-                  ihl in 5u8..16,
                   dscp in prop::bits::u8::between(0,6),
                   ecn in prop::bits::u8::between(0,2),
                   identification in any::<u16>(),
@@ -144,10 +172,51 @@ prop_compose! {
                   fragments_offset in prop::bits::u16::between(0, 13),
                   header_checksum in any::<u16>(),
                   total_length in any::<u16>(),
-                  protocol in proptest::strategy::Just(protocol))
-                  -> Ipv4Header
+                  protocol in proptest::strategy::Just(protocol),
+                  ihl in proptest::strategy::Just(ihl),
+                  options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4))
+                  -> (Ipv4Header, Vec<u8>)
     {
-        Ipv4Header {
+        (Ipv4Header {
+            header_length: ihl,
+            differentiated_services_code_point: dscp,
+            explicit_congestion_notification: ecn,
+            total_length: total_length,
+            identification: identification,
+            dont_fragment: dont_fragment,
+            more_fragments: more_fragments,
+            fragments_offset: fragments_offset,
+            time_to_live: ttl,
+            protocol: protocol as u8,
+            header_checksum: header_checksum,
+            source: source,
+            destination: dest
+        },
+        options)
+    }
+}
+
+prop_compose! {
+    fn ipv4_unknown()
+                   (ihl in 5u8..16)
+                   (source in prop::array::uniform4(any::<u8>()),
+                    dest in prop::array::uniform4(any::<u8>()),
+                    dscp in prop::bits::u8::between(0,6),
+                    ecn in prop::bits::u8::between(0,2),
+                    identification in any::<u16>(),
+                    ttl in any::<u8>(),
+                    dont_fragment in any::<bool>(),
+                    more_fragments in any::<bool>(),
+                    fragments_offset in prop::bits::u16::between(0, 13),
+                    header_checksum in any::<u16>(),
+                    total_length in any::<u16>(),
+                    protocol in any::<u8>().prop_filter("protocol must be unknown",
+                               |v| (IpTrafficClass::Udp as u8 != *v)),
+                    options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4),
+                    ihl in proptest::strategy::Just(ihl))
+                  -> (Ipv4Header, Vec<u8>)
+    {
+        (Ipv4Header {
             header_length: ihl,
             differentiated_services_code_point: dscp,
             explicit_congestion_notification: ecn,
@@ -161,43 +230,30 @@ prop_compose! {
             header_checksum: header_checksum,
             source: source,
             destination: dest
-        }
+        }, options)
     }
 }
 
 prop_compose! {
-    fn ipv4_unknown()(ihl in 5u8..16)
-                     (source in prop::array::uniform4(any::<u8>()),
-                      dest in prop::array::uniform4(any::<u8>()),
-                      dscp in prop::bits::u8::between(0,6),
-                      ecn in prop::bits::u8::between(0,2),
-                      identification in any::<u16>(),
-                      ttl in any::<u8>(),
-                      dont_fragment in any::<bool>(),
-                      more_fragments in any::<bool>(),
-                      fragments_offset in prop::bits::u16::between(0, 13),
-                      header_checksum in any::<u16>(),
-                      total_length in any::<u16>(),
-                      protocol in any::<u8>().prop_filter("protocol must be unknown",
-                               |v| (IpTrafficClass::Udp as u8 != *v)),
-                      options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4))
-                  -> (Ipv4Header, Vec<u8>)
+    fn ipv6_with(next_header: IpTrafficClass)
+                (source in prop::array::uniform16(any::<u8>()),
+                 dest in prop::array::uniform16(any::<u8>()),
+                 traffic_class in any::<u8>(),
+                 flow_label in prop::bits::u32::between(0,20),
+                 payload_length in any::<u16>(),
+                 hop_limit in any::<u8>(),
+                 next_header in proptest::strategy::Just(next_header))
+                -> Ipv6Header
     {
-        (Ipv4Header {
-            header_length: ((options.len() / 4) + 5) as u8,
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
-            time_to_live: ttl,
-            protocol: protocol,
-            header_checksum: header_checksum,
+        Ipv6Header {
+            traffic_class: traffic_class,
+            flow_label: flow_label,
+            payload_length: payload_length,
+            next_header: next_header as u8,
+            hop_limit: hop_limit,
             source: source,
             destination: dest
-        }, options)
+        }
     }
 }
 
@@ -230,6 +286,22 @@ prop_compose! {
             hop_limit: hop_limit,
             source: source,
             destination: dest
+        }
+    }
+}
+
+prop_compose! {
+    fn udp_any()(source_port in any::<u16>(),
+                   destination_port in any::<u16>(),
+                   length in any::<u16>(),
+                   checksum in any::<u16>())
+                  -> UdpHeader
+    {
+        UdpHeader {
+            source_port: source_port,
+            destination_port: destination_port,
+            length: length,
+            checksum: checksum
         }
     }
 }

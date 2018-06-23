@@ -76,10 +76,10 @@ fn vlan_header_write() {
     //priority_code_point
     assert_matches!(test_write(&{
                         let mut value = base();
-                        value.priority_code_point = 4;
+                        value.priority_code_point = 8;
                         value
                     }),
-                    Err(ValueError(U8TooLarge{value: 4, max: 3, field: VlanTagPriorityCodePoint})));
+                    Err(ValueError(U8TooLarge{value: 8, max: 7, field: VlanTagPriorityCodePoint})));
 
     //vlan_identifier
     assert_matches!(test_write(&{
@@ -169,6 +169,9 @@ fn single_from_slice() {
     assert_eq!(slice.drop_eligible_indicator(), input.drop_eligible_indicator);
     assert_eq!(slice.vlan_identifier(), input.vlan_identifier);
     assert_eq!(slice.ether_type(), input.ether_type);
+
+    //check that the to_header results in the same as the input
+    assert_eq!(slice.to_header(), input);
 }
 
 #[test]
@@ -182,7 +185,7 @@ fn double_from_slice() {
         },
         inner: SingleVlanHeader {
             ether_type: EtherType::Ipv6 as u16,
-            priority_code_point: 3,
+            priority_code_point: 7,
             drop_eligible_indicator: false,
             vlan_identifier: 4095,
         }
