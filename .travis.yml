@@ -25,7 +25,7 @@ addons:
 after_success: |
   wget https://github.com/SimonKagstrom/kcov/archive/v35.tar.gz &&
   tar xzf v35.tar.gz &&
-  cd kcov-v35 &&
+  cd kcov-35 &&
   mkdir build &&
   cd build &&
   cmake .. &&
