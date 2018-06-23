@@ -21,11 +21,9 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
-before_install:
-  - sudo apt-get install -y build-essential
 
 after_success: |
-  wget https://github.com/SimonKagstrom/kcov/archive/master.tar.gz &&
+  wget https://github.com/SimonKagstrom/kcov/archive/v35.tar.gz &&
   tar xzf master.tar.gz &&
   cd kcov-master &&
   mkdir build &&
