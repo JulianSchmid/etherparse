@@ -63,59 +63,53 @@ impl ComponentTest {
         let result = SlicedPacket::from_ethernet(&buffer).unwrap();
 
         //test the result
+        self.assert_sliced_packet(result);
+    }
+
+    fn assert_sliced_packet(&self, result: SlicedPacket) {
+        //ethernet
         match &result.link {
             Some(LinkSlice::Ethernet2(actual)) => assert_eq!(self.eth, actual.to_header()),
             _ => panic!("missing or unexpected link")
         }
-        match &self.vlan {
-            Some(VlanTest::Single(expected_header)) => {
-                match result.vlan {
-                    Some(VlanSlice::SingleVlan(actual)) => assert_eq!(expected_header, &actual.to_header()),
-                    value => panic!("expected an single vlan header but found {:?}", value)
-                }
-            },
-            Some(VlanTest::Double(expected_outer, expected_inner)) => {
-                match result.vlan {
-                    Some(VlanSlice::DoubleVlan(actual)) => {
-                        assert_eq!(expected_outer, &actual.outer().to_header());
-                        assert_eq!(expected_inner, &actual.inner().to_header());
-                    },
-                    value => panic!("expected an double vlan header but found {:?}", value)
-                }
-            },
-            None => assert_eq!(None, result.vlan)
-        }
-        match &self.ip {
-            Some(IpTest::Version4(expected_header, expect_options)) => {
-                match &result.ip {
-                    Some(InternetSlice::Ipv4(actual)) => {
-                        assert_eq!(expected_header, &actual.to_header());
-                        assert_eq!(&expect_options[..], actual.options());
-                    },
-                    value => panic!("expected an ipv4 header but found {:?}", value)
-                }
-            },
-            Some(IpTest::Version6(expected)) => {
-                match &result.ip {
-                    Some(InternetSlice::Ipv6(actual_header, _actual_extensions)) => {
-                        assert_eq!(expected, &actual_header.to_header());
-                        // TODO ipv6 header extensions
-                    },
-                    value => panic!("expected an ipv6 header but found {:?}", value)
-                }
-            },
-            None => assert_eq!(None, result.ip)
-        }
-        match &self.transport {
-            Some(TransportTest::Udp(expected)) => {
-                match &result.transport {
-                    Some(TransportSlice::Udp(actual)) => assert_eq!(expected, &actual.to_header()),
-                    value => panic!("expected an udp header but found {:?}", value)
 
+        //vlan
+        assert_eq!(self.vlan,
+            {
+                use VlanSlice::*;
+                use self::VlanTest::*;
+                match result.vlan {
+                    Some(SingleVlan(actual)) => Some(Single(actual.to_header())),
+                    Some(DoubleVlan(actual)) => Some(Double(actual.outer().to_header(),
+                                                            actual.inner().to_header())),
+                    None => None
                 }
-            },
-            None => assert_eq!(None, result.transport)
-        }
+            }
+        );
+
+        //ip
+        assert_eq!(self.ip,
+            {
+                use InternetSlice::*;
+                use self::IpTest::*;
+                match result.ip {
+                    Some(Ipv4(actual)) => Some(Version4(actual.to_header(), 
+                                                        actual.options().to_vec())),
+                    Some(Ipv6(actual_header, _actual_extensions)) => Some(Version6(actual_header.to_header())),
+                    None => None
+                }
+            }
+        );
+        
+        //transport
+        assert_eq!(self.transport,
+            match result.transport {
+                Some(TransportSlice::Udp(actual)) => Some(TransportTest::Udp(actual.to_header())),
+                None => None
+            }
+        );
+
+        //payload
         assert_eq!(self.payload[..], result.payload[..]);
     }
 
@@ -141,6 +135,19 @@ impl ComponentTest {
 
     fn run_ipv6(&self, ip: &Ipv6Header, udp: &UdpHeader) {
         // TODO header extensions
+        let setup = | next_header: u8| -> ComponentTest {
+            let mut result = self.clone();
+            result.ip = Some(IpTest::Version6({
+                let mut v = ip.clone();
+                v.next_header = next_header;
+                v
+            }));
+            result
+        };
+
+        //standalone & udp
+        setup(ip.next_header).run();
+        setup(IpTrafficClass::Udp as u8).run_udp(udp);
     }
 
     fn run_vlan(&self, outer_vlan: &SingleVlanHeader, inner_vlan: &SingleVlanHeader, ipv4: &(Ipv4Header, Vec<u8>), ipv6: &Ipv6Header, udp: &UdpHeader) {
@@ -189,6 +196,7 @@ impl ComponentTest {
 }
 
 proptest! {
+    ///Test that all known packet compositions are parsed correctly.
     #[test]
     fn test_packet_slicing(ref eth in ethernet_2_unknown(),
                            ref vlan_outer in vlan_single_unknown(),
@@ -199,7 +207,7 @@ proptest! {
                            ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
         let setup_eth = | ether_type: u16 | -> ComponentTest {
-            ComponentTest {
+            let result = ComponentTest {
                 eth: {
                     let mut result = eth.clone();
                     result.ether_type = ether_type;
@@ -209,7 +217,8 @@ proptest! {
                 ip: None,
                 transport: None,
                 payload: payload.clone()
-            }
+            };
+            result
         };
 
         //ethernet 2: standalone, ipv4, ipv6
@@ -222,4 +231,29 @@ proptest! {
             setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv6, udp);
         }
     }
+}
+
+///Test that the packet composition is 
+#[test]
+#[should_panic]
+fn test_packet_slicing_panics() {
+    let v = Vec::new();
+    let s = SlicedPacket {
+        link: None,
+        vlan: None,
+        ip: None,
+        transport: None,
+        payload: &v[..]
+    };
+    ComponentTest {
+        eth: Ethernet2Header {
+            source: [0;6],
+            destination: [0;6],
+            ether_type: 0
+        },
+        vlan: None,
+        ip: None,
+        transport: None,
+        payload: vec![]
+    }.assert_sliced_packet(s);
 }
