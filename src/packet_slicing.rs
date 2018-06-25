@@ -33,7 +33,7 @@ pub enum VlanSlice<'a> {
 pub enum InternetSlice<'a> {
     Ipv4(PacketSlice<'a, Ipv4Header>),
     ///First element is the Ipv6 header slice and second one are the Ipv6 extensions headers filled in order from 0 to the length of the array.
-    Ipv6(PacketSlice<'a, Ipv6Header>, [Option<PacketSlice<'a, Ipv6ExtensionHeader>>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
+    Ipv6(PacketSlice<'a, Ipv6Header>, [Option<(u8, PacketSlice<'a, Ipv6ExtensionHeader>)>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -174,9 +174,10 @@ impl<'a> SlicedPacket<'a> {
                         IPV6_AUTH | 
                         IPV6_ENCAP_SEC => {
                             let value = PacketSlice::<Ipv6ExtensionHeader>::from_slice(next_header, rest)?;
+                            let this_header = next_header;
                             next_header = value.next_header();
                             rest = &rest[value.slice.len()..];
-                            ip_extensions[i] = Some(value);
+                            ip_extensions[i] = Some((this_header, value));
                         },
                         _ => break
                     }

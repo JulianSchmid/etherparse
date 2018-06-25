@@ -1,7 +1,9 @@
 use etherparse::*;
 use std;
 use std::io;
+use std::io::Write;
 use proptest::prelude::*;
+use super::super::*;
 
 proptest! {
     #[test]
@@ -293,43 +295,18 @@ fn read_ip_header_error() {
 
 proptest! {
     #[test]
-    fn readwrite_ipv4_header_raw(source_ip in prop::array::uniform4(any::<u8>()),
-                                 dest_ip in prop::array::uniform4(any::<u8>()),
-                                 ihl in 5u8..16,
-                                 dscp in prop::bits::u8::between(0,6),
-                                 ecn in prop::bits::u8::between(0,2),
-                                 identification in any::<u16>(),
-                                 ttl in any::<u8>(),
-                                 dont_fragment in any::<bool>(),
-                                 more_fragments in any::<bool>(),
-                                 fragments_offset in prop::bits::u16::between(0, 13),
-                                 protocol in any::<u8>(),
-                                 header_checksum in any::<u16>(),
-                                 total_length in any::<u16>())
+    fn readwrite_ipv4_header_raw(ref input in ipv4_any())
     {
         use std::io::Cursor;
 
-        let input = Ipv4Header {
-            header_length: ihl,
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
-            time_to_live: ttl,
-            protocol: protocol,
-            header_checksum: header_checksum,
-            source: source_ip,
-            destination: dest_ip
-        };
         //serialize
-        let size = 20 + (ihl as usize)*4;
-        let mut buffer: Vec<u8> = Vec::with_capacity(size);
-        input.write_raw(&mut buffer, &[]).unwrap();
-        buffer.resize(size, 0);
-        assert_eq!(size, buffer.len());
+        let expected_size = Ipv4Header::SERIALIZED_SIZE + input.1.len();
+        let mut buffer: Vec<u8> = Vec::with_capacity(expected_size);
+
+        input.0.write_raw(&mut buffer, &[]).unwrap();
+        buffer.write(&input.1).unwrap();
+
+        assert_eq!(expected_size, buffer.len());
 
         //deserialize
         let mut cursor = Cursor::new(&buffer);
@@ -337,105 +314,29 @@ proptest! {
         assert_eq!(20, cursor.position());
 
         //check equivalence
-        assert_eq!(input, result);
+        assert_eq!(input.0, result);
 
         //check that the slice implementation also reads the correct values
         let slice = PacketSlice::<Ipv4Header>::from_slice(&buffer[..]).unwrap();
         assert_eq!(slice.version(), 4);
-        assert_eq!(slice.ihl(), input.header_length);
-        assert_eq!(slice.dcp(), input.differentiated_services_code_point);
-        assert_eq!(slice.ecn(), input.explicit_congestion_notification);
-        assert_eq!(slice.total_length(), input.total_length);
-        assert_eq!(slice.identification(), input.identification);
-        assert_eq!(slice.dont_fragment(), input.dont_fragment);
-        assert_eq!(slice.more_fragments(), input.more_fragments);
-        assert_eq!(slice.fragments_offset(), input.fragments_offset);
-        assert_eq!(slice.ttl(), input.time_to_live);
-        assert_eq!(slice.protocol(), input.protocol);
-        assert_eq!(slice.header_checksum(), input.header_checksum);
-        assert_eq!(slice.source(), input.source);
-        assert_eq!(slice.destination(), input.destination);
+        assert_eq!(slice.ihl(), input.0.header_length);
+        assert_eq!(slice.dcp(), input.0.differentiated_services_code_point);
+        assert_eq!(slice.ecn(), input.0.explicit_congestion_notification);
+        assert_eq!(slice.total_length(), input.0.total_length);
+        assert_eq!(slice.identification(), input.0.identification);
+        assert_eq!(slice.dont_fragment(), input.0.dont_fragment);
+        assert_eq!(slice.more_fragments(), input.0.more_fragments);
+        assert_eq!(slice.fragments_offset(), input.0.fragments_offset);
+        assert_eq!(slice.ttl(), input.0.time_to_live);
+        assert_eq!(slice.protocol(), input.0.protocol);
+        assert_eq!(slice.header_checksum(), input.0.header_checksum);
+        assert_eq!(slice.source(), input.0.source);
+        assert_eq!(slice.destination(), input.0.destination);
 
         //check that a convertion back to a header yields the same result as the original write
-        assert_eq!(slice.to_header(), input);
+        assert_eq!(slice.to_header(), input.0);
+        assert_eq!(slice.options(), &input.1[..]);
     }
-
-    #[test]
-    fn ipv4_from_slice(ihl in 5u8..16,
-                       dscp in prop::bits::u8::between(0,6),
-                       ecn in prop::bits::u8::between(0,2),
-                       total_length in any::<u16>(),
-                       identification in any::<u16>(),
-                       dont_fragment in any::<bool>(),
-                       more_fragments in any::<bool>(),
-                       ttl in any::<u8>(),
-                       fragments_offset in prop::bits::u16::between(0, 13),
-                       protocol in any::<u8>(),
-                       header_checksum in any::<u16>(),
-                       source in prop::array::uniform4(any::<u8>()),
-                       dest in prop::array::uniform4(any::<u8>()))
-    {
-        let input = Ipv4Header {
-            header_length: ihl,
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
-            time_to_live: ttl,
-            protocol: protocol,
-            header_checksum: header_checksum,
-            source: source,
-            destination: dest
-        };
-        
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(ihl as usize * 4);
-        input.write_raw(&mut buffer, &[]).unwrap();
-        let ip_options = {
-            let mut result = Vec::<u8>::with_capacity((ihl as usize - 5) * 4);
-            for i in 0..((ihl-5)*4 as u8) {
-                result.push(i);
-            }
-            result
-        };
-
-        use std::io::Write;
-        buffer.write(&ip_options).unwrap();
-        
-        //normal read with options (fields checked in readwrite_ipv4_header_raw test)
-        {
-            use std::net::Ipv4Addr;
-            let slice = PacketSlice::<Ipv4Header>::from_slice(&buffer).unwrap();
-            assert_eq!(slice.version(), 4);
-            assert_eq!(slice.ihl(), input.header_length);
-            assert_eq!(slice.dcp(), input.differentiated_services_code_point);
-            assert_eq!(slice.ecn(), input.explicit_congestion_notification);
-            assert_eq!(slice.total_length(), input.total_length);
-            assert_eq!(slice.identification(), input.identification);
-            assert_eq!(slice.dont_fragment(), input.dont_fragment);
-            assert_eq!(slice.more_fragments(), input.more_fragments);
-            assert_eq!(slice.fragments_offset(), input.fragments_offset);
-            assert_eq!(slice.ttl(), input.time_to_live);
-            assert_eq!(slice.protocol(), input.protocol);
-            assert_eq!(slice.header_checksum(), input.header_checksum);
-            assert_eq!(slice.source(), input.source);
-            assert_eq!(slice.source_addr(), Ipv4Addr::from(input.source));
-            assert_eq!(slice.destination(), input.destination);
-            assert_eq!(slice.destination_addr(), Ipv4Addr::from(input.destination));
-            assert_eq!(slice.options(), &buffer[20..(ihl as usize *4)]);
-        }
-
-        //not enough space for the header options
-        if ihl > 5 {
-            assert_matches!(PacketSlice::<Ipv4Header>::from_slice(&buffer[..(ihl as usize *4) - 1]), Err(ReadError::IoError(_)));
-        }
-        //empty slice
-        assert_matches!(PacketSlice::<Ipv4Header>::from_slice(&buffer[..0]), Err(ReadError::IoError(_)));
-    }
-
 }
 
 #[test]
@@ -953,43 +854,33 @@ fn ipv6_set_payload_lengt() {
                     Err(ValueError::Ipv6PayloadLengthTooLarge(OVER_MAX)));
 }
 
-#[test]
-fn ipv6_from_slice() {
-    let input = Ipv6Header {
-        traffic_class: 1,
-        flow_label: 0x81806,
-        payload_length: 0x8021,
-        next_header: 30,
-        hop_limit: 40,
-        source: [1, 2, 3, 4, 5, 6, 7, 8,
-                 9,10,11,12,13,14,15,16],
-        destination: [21,22,23,24,25,26,27,28,
-                      29,30,31,32,33,34,35,36]
-    };
-    
-    //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write(&mut buffer).unwrap();
+proptest! {
+    #[test]
+    fn ipv6_from_slice(ref input in ipv6_any()) {
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        input.write(&mut buffer).unwrap();
 
-    //check that a too small slice triggers an error
-    assert_matches!(PacketSlice::<Ipv6Header>::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
+        //check that a too small slice triggers an error
+        assert_matches!(PacketSlice::<Ipv6Header>::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
 
-    //check that all the values are read correctly
-    use std::net::Ipv6Addr;
-    let slice = PacketSlice::<Ipv6Header>::from_slice(&buffer).unwrap();
-    assert_eq!(slice.version(), 6);
-    assert_eq!(slice.traffic_class(), input.traffic_class);
-    assert_eq!(slice.flow_label(), input.flow_label);
-    assert_eq!(slice.payload_length(), input.payload_length);
-    assert_eq!(slice.next_header(), input.next_header);
-    assert_eq!(slice.hop_limit(), input.hop_limit);
-    assert_eq!(slice.source(), input.source);
-    assert_eq!(slice.source_addr(), Ipv6Addr::from(input.source));
-    assert_eq!(slice.destination(), input.destination);
-    assert_eq!(slice.destination_addr(), Ipv6Addr::from(input.destination));
+        //check that all the values are read correctly
+        use std::net::Ipv6Addr;
+        let slice = PacketSlice::<Ipv6Header>::from_slice(&buffer).unwrap();
+        assert_eq!(slice.version(), 6);
+        assert_eq!(slice.traffic_class(), input.traffic_class);
+        assert_eq!(slice.flow_label(), input.flow_label);
+        assert_eq!(slice.payload_length(), input.payload_length);
+        assert_eq!(slice.next_header(), input.next_header);
+        assert_eq!(slice.hop_limit(), input.hop_limit);
+        assert_eq!(slice.source(), input.source);
+        assert_eq!(slice.source_addr(), Ipv6Addr::from(input.source));
+        assert_eq!(slice.destination(), input.destination);
+        assert_eq!(slice.destination_addr(), Ipv6Addr::from(input.destination));
 
-    //check that the convertion back to a header struct results in the same struct
-    assert_eq!(slice.to_header(), input);
+        //check that the convertion back to a header struct results in the same struct
+        assert_eq!(&slice.to_header(), input);
+    }
 }
 
 #[test]

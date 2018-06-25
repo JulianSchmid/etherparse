@@ -10,7 +10,7 @@ enum VlanTest {
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IpTest {
     Version4(Ipv4Header, Vec<u8>),
-    Version6(Ipv6Header)
+    Version6(Ipv6Header, Vec<(u8, Vec<u8>)>)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -49,7 +49,12 @@ impl ComponentTest {
         }
         match &self.ip {
             Some(IpTest::Version4(header, options)) => header.write_raw(&mut buffer, options).unwrap(),
-            Some(IpTest::Version6(header)) => header.write(&mut buffer).unwrap(),
+            Some(IpTest::Version6(header, exts)) => {
+                header.write(&mut buffer).unwrap();
+                for ref ext in exts {
+                    buffer.write(&ext.1).unwrap();
+                }
+            },
             None => {}
         }
         match &self.transport {
@@ -59,11 +64,12 @@ impl ComponentTest {
         use std::io::Write;
         buffer.write(&self.payload[..]).unwrap();
 
-        //slice the packet
-        let result = SlicedPacket::from_ethernet(&buffer).unwrap();
+        //slice the packet & test the result
+        self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
 
-        //test the result
-        self.assert_sliced_packet(result);
+        //test that an error is generated when the data is too small
+        assert_matches!(SlicedPacket::from_ethernet(&buffer[..buffer.len() - 1 - self.payload.len()]), 
+                        Err(ReadError::IoError(_)));
     }
 
     fn assert_sliced_packet(&self, result: SlicedPacket) {
@@ -95,7 +101,16 @@ impl ComponentTest {
                 match result.ip {
                     Some(Ipv4(actual)) => Some(Version4(actual.to_header(), 
                                                         actual.options().to_vec())),
-                    Some(Ipv6(actual_header, _actual_extensions)) => Some(Version6(actual_header.to_header())),
+                    Some(Ipv6(actual_header, actual_extensions)) => 
+                        Some(Version6(actual_header.to_header(),
+                                      actual_extensions.iter()
+                                                       .filter(|x| x.is_some() )
+                                                       .map(|x| {
+                                                            let r = x.as_ref().unwrap();
+                                                            (r.0, r.1.slice.to_vec())
+                                                       })
+                                                       .collect()
+                        )),
                     None => None
                 }
             }
@@ -133,25 +148,47 @@ impl ComponentTest {
         }
     }
 
-    fn run_ipv6(&self, ip: &Ipv6Header, udp: &UdpHeader) {
-        // TODO header extensions
-        let setup = | next_header: u8| -> ComponentTest {
+    fn run_ipv6(&self, ip: &Ipv6Header, ipv6_ext: &Vec<(u8, Vec<u8>)>, udp: &UdpHeader) {
+        
+        let setup = | next_header: u8, exts: &Vec<(u8, Vec<u8>)>| -> ComponentTest {
             let mut result = self.clone();
             result.ip = Some(IpTest::Version6({
                 let mut v = ip.clone();
-                v.next_header = next_header;
+                v.next_header = if exts.len() > 0 {
+                    //set the next header of the ipv6 header to the first extension header
+                    exts[0].0
+                } else {
+                    // no extension headers, straight up point to the next extension header
+                    next_header
+                };
                 v
+            }, {
+                let mut ext_result = exts.clone();
+                if ext_result.len() > 0 {
+                    //set the last next_header to the given one
+                    let last_index = ext_result.len()-1;
+                    ext_result[last_index].1[0] = next_header;
+                }
+                ext_result
             }));
             result
         };
 
-        //standalone & udp
-        setup(ip.next_header).run();
-        setup(IpTrafficClass::Udp as u8).run_udp(udp);
+        //standalone & udp (without extension headers)
+        setup(ip.next_header, &Vec::new()).run();
+        setup(ip.next_header, ipv6_ext).run();
+        setup(IpTrafficClass::Udp as u8, &Vec::new()).run_udp(udp);
+        setup(IpTrafficClass::Udp as u8, ipv6_ext).run_udp(udp);
     }
 
-    fn run_vlan(&self, outer_vlan: &SingleVlanHeader, inner_vlan: &SingleVlanHeader, ipv4: &(Ipv4Header, Vec<u8>), ipv6: &Ipv6Header, udp: &UdpHeader) {
-
+    fn run_vlan(&self, 
+                outer_vlan: &SingleVlanHeader, 
+                inner_vlan: &SingleVlanHeader, 
+                ipv4: &(Ipv4Header, Vec<u8>), 
+                ipv6: &Ipv6Header, 
+                ipv6_ext: &Vec<(u8, Vec<u8>)>, 
+                udp: &UdpHeader)
+    {
         let setup_single = | ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
             result.vlan = Some(VlanTest::Single({
@@ -178,13 +215,13 @@ impl ComponentTest {
         //single
         setup_single(outer_vlan.ether_type).run();
         setup_single(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-        setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, udp);
+        setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp);
 
         //double 
         for ether_type in VLAN_ETHER_TYPES {
             setup_double(*ether_type, inner_vlan.ether_type).run();
             setup_double(*ether_type, EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-            setup_double(*ether_type, EtherType::Ipv6 as u16).run_ipv6(ipv6, udp);
+            setup_double(*ether_type, EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp);
         }
     }
 
@@ -203,11 +240,13 @@ proptest! {
                            ref vlan_inner in vlan_single_unknown(),
                            ref ipv4 in ipv4_unknown(),
                            ref ipv6 in ipv6_unknown(),
+                           ref ip6_ext in ipv6_extensions_unknown(),
                            ref udp in udp_any(),
                            ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
         let setup_eth = | ether_type: u16 | -> ComponentTest {
             let result = ComponentTest {
+                payload: payload.clone(),
                 eth: {
                     let mut result = eth.clone();
                     result.ether_type = ether_type;
@@ -215,8 +254,7 @@ proptest! {
                 },
                 vlan: None,
                 ip: None,
-                transport: None,
-                payload: payload.clone()
+                transport: None
             };
             result
         };
@@ -224,16 +262,16 @@ proptest! {
         //ethernet 2: standalone, ipv4, ipv6
         setup_eth(eth.ether_type).run();
         setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, udp);
+        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ip6_ext, udp);
 
         //vlans
         for ether_type in VLAN_ETHER_TYPES {
-            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv6, udp);
+            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv6, ip6_ext, udp);
         }
     }
 }
 
-///Test that the packet composition is 
+///Test that assert_sliced_packet is panicing when the ethernet header is missing 
 #[test]
 #[should_panic]
 fn test_packet_slicing_panics() {
