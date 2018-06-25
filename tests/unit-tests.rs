@@ -326,9 +326,6 @@ prop_compose! {
                            payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 8))
                           -> Vec<u8>
     {
-        if next_header == IpTrafficClass::IPv6FragmentationHeader as u8 {
-            //fragmantation header
-        }
         let mut result = payload.clone();
         //insert next header & length
         result[0] = next_header;
