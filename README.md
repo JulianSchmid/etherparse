@@ -42,7 +42,7 @@ Etherparse gives you two options for parsing network packages:
 * Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields
 * Reading all headers and transfering their contents to header structs
 
-Seperating headers into slices is faster if your code is not interessted in all fields of a header. But sometimes you already know, that you will access all or most fields of a header it can make sense to parse everything from beginning.
+Seperating headers into slices is faster if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields. The alternative of deserialize all headers and their fields into  their corresponding structs is useful if you are interested in most fields anyways or want to modify them.
 
 ### Slicing a packet into different elements
 TODO
@@ -55,7 +55,7 @@ TODO
 
 #### Manually slicing packets
 
-### Decoding packets (by slicing them into different parts)
+### Decoding packets (deserializing the different headers into structs)
 TODO
 
 ### Using PacketHeaders::decode to decode all elements of a package at once
