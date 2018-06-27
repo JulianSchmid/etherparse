@@ -34,7 +34,8 @@ static VLAN_ETHER_TYPES: &'static [u16] = &[
 ];
 
 impl ComponentTest {
-    fn run(&self) {
+
+    fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::<u8>::new();
 
         //fill all the elements
@@ -63,6 +64,12 @@ impl ComponentTest {
         }
         use std::io::Write;
         buffer.write(&self.payload[..]).unwrap();
+        buffer
+    }
+
+    fn run(&self) {
+        //serialize to buffer
+        let buffer = self.serialize();
 
         //slice the packet & test the result
         self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
@@ -70,6 +77,15 @@ impl ComponentTest {
         //test that an error is generated when the data is too small
         assert_matches!(SlicedPacket::from_ethernet(&buffer[..buffer.len() - 1 - self.payload.len()]), 
                         Err(ReadError::IoError(_)));
+    }
+
+    fn run_ipv6_ext_failure(&self) {
+        //serialize to buffer
+        let buffer = self.serialize();
+
+        //slice & expect the error
+        assert_matches!(SlicedPacket::from_ethernet(&buffer),
+                        Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
 
     fn assert_sliced_packet(&self, result: SlicedPacket) {
@@ -182,6 +198,35 @@ impl ComponentTest {
         setup(ip.next_header, ipv6_ext).run();
         setup(IpTrafficClass::Udp as u8, &Vec::new()).run_udp(udp);
         setup(IpTrafficClass::Udp as u8, ipv6_ext).run_udp(udp);
+
+        //extensions
+        const IPV6_EXT_IDS: [u8;6] = [
+            IpTrafficClass::IPv6HeaderHopByHop as u8,
+            IpTrafficClass::IPv6RouteHeader as u8,
+            IpTrafficClass::IPv6FragmentationHeader as u8,
+            IpTrafficClass::IPv6DestinationOptions as u8,
+            IpTrafficClass::IPv6AuthenticationHeader as u8,
+            IpTrafficClass::IPv6EncapSecurityPayload as u8
+        ];
+
+        //generate a too many ipv6 extensions error
+        for id in IPV6_EXT_IDS.iter() {
+            let mut exts = ipv6_ext.clone();
+
+            //set the last entry of the extension header to the id
+            if exts.len() > 0 {
+                let len = exts.len();
+                exts[len - 1].1[0] = *id;
+            }
+
+            //extend the vector to the maximum size
+            exts.resize(IPV6_MAX_NUM_HEADER_EXTENSIONS, {
+                (*id, vec![*id,0,0,0,  0,0,0,0])
+            });
+
+            //expect the failure
+            setup(*id, &exts).run_ipv6_ext_failure();
+        }
     }
 
     fn run_vlan(&self, 
