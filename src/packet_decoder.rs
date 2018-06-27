@@ -1,17 +1,19 @@
 use super::*;
 
+///Decoded packet headers. You can use PacketHeaders::decode_from_ethernet2 to decode packets and get this struct as a result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PacketHeaders<'a> {
     pub ethernet: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
     pub ip: Option<IpHeader>,
     pub transport: Option<UdpHeader>,
+    ///Rest of the packet that could not be decoded as a header (usually the payload).
     pub rest: &'a [u8]
 }
 
 impl<'a> PacketHeaders<'a> {
     ///Tries to decode as much as possible of a packet.
-    pub fn decode<'b>(packet: &'b [u8]) -> Result<PacketHeaders<'b>, ReadError> {
+    pub fn from_ethernet_slice<'b>(packet: &'b [u8]) -> Result<PacketHeaders<'b>, ReadError> {
         
         use std::io::Cursor;
         let mut cursor = Cursor::new(&packet);

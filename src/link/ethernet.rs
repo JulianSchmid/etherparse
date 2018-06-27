@@ -71,12 +71,6 @@ impl Ethernet2Header {
     }
 }
 
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Ethernet2HeaderSlice<'a> {
-    pub section: &'a[u8]
-}
-
 impl<'a> PacketSlice<'a, Ethernet2Header> {
     ///Creates a ethernet slice from an other slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ethernet2Header>, ReadError>{

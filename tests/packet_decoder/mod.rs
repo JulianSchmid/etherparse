@@ -8,7 +8,7 @@ fn ipv4_udp() {
                   .udp(1,2)
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
-    let headers = PacketHeaders::decode(&mut buffer).unwrap();
+    let headers = PacketHeaders::from_ethernet_slice(&mut buffer).unwrap();
 
     assert_matches!(headers.ethernet, Some(_));
     assert_matches!(headers.vlan, None);
@@ -25,7 +25,7 @@ fn ipv6_udp() {
                   .udp(1,2)
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
-    let headers = PacketHeaders::decode(&mut buffer).unwrap();
+    let headers = PacketHeaders::from_ethernet_slice(&mut buffer).unwrap();
 
     assert_matches!(headers.ethernet, Some(_));
     assert_matches!(headers.vlan, None);
@@ -43,7 +43,7 @@ fn ipv4_single_vlan_udp() {
                   .udp(1,2)
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
-    let headers = PacketHeaders::decode(&mut buffer).unwrap();
+    let headers = PacketHeaders::from_ethernet_slice(&mut buffer).unwrap();
 
     assert_matches!(headers.ethernet, Some(_));
     assert_matches!(headers.vlan, Some(VlanHeader::Single(_)));
@@ -61,7 +61,7 @@ fn ipv4_double_vlan_udp() {
                   .udp(1,2)
                   .write(&mut buffer, &[4,3,2,1]).unwrap();
 
-    let headers = PacketHeaders::decode(&mut buffer).unwrap();
+    let headers = PacketHeaders::from_ethernet_slice(&mut buffer).unwrap();
 
     assert_matches!(headers.ethernet, Some(_));
     assert_matches!(headers.vlan, Some(VlanHeader::Double(_)));
@@ -87,7 +87,7 @@ fn ipv4_unknown() {
 
     buffer[protocol_index] = 122; //Simple Multicast Protocol (deprecated)
 
-    let headers = PacketHeaders::decode(&mut buffer).unwrap();
+    let headers = PacketHeaders::from_ethernet_slice(&mut buffer).unwrap();
 
     assert_matches!(headers.ethernet, Some(_));
     assert_matches!(headers.vlan, None);
