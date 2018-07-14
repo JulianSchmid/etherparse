@@ -88,9 +88,9 @@ impl<'a> PacketHeaders<'a> {
             IPV6 => {
                 let ip = Ipv6Header::read(&mut cursor)?;
                 //skip the header extensions
-                Ipv6Header::skip_all_header_extensions(&mut cursor, ip.next_header)?;
+                let next_header = Ipv6Header::skip_all_header_extensions(&mut cursor, ip.next_header)?;
                 //parse the transport layer
-                result.transport = read_transport(ip.next_header, &mut cursor)?;
+                result.transport = read_transport(next_header, &mut cursor)?;
                 //done
                 result.ip = Some(IpHeader::Version6(ip));
             },

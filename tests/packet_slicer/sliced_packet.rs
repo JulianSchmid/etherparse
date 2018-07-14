@@ -71,12 +71,18 @@ impl ComponentTest {
         //serialize to buffer
         let buffer = self.serialize();
 
-        //slice the packet & test the result
+        //test the slicing & decoding of the packet
         self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
+        self.assert_decoded_packet(&buffer);
 
         //test that an error is generated when the data is too small
-        assert_matches!(SlicedPacket::from_ethernet(&buffer[..buffer.len() - 1 - self.payload.len()]), 
-                        Err(ReadError::IoError(_)));
+        {
+            let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
+            assert_matches!(SlicedPacket::from_ethernet(too_short_slice), 
+                            Err(ReadError::IoError(_)));
+            assert_matches!(PacketHeaders::from_ethernet_slice(too_short_slice), 
+                            Err(ReadError::IoError(_)));
+        }
     }
 
     fn run_ipv6_ext_failure(&self) {
@@ -147,6 +153,16 @@ impl ComponentTest {
         assert_eq!(self.payload[..], result.payload[..]);
     }
 
+    fn assert_decoded_packet(&self, buffer: &Vec<u8>) {
+        //decode
+        let actual = PacketHeaders::from_ethernet_slice(&buffer[..]).unwrap();
+
+        //ethernet
+        assert_eq!(self.eth, actual.ethernet.unwrap());
+
+        //TODO the rest
+    }
+
     fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader) {
         //ipv4 only
         {
@@ -193,7 +209,7 @@ impl ComponentTest {
             result
         };
 
-        //standalone & udp (without extension headers)
+        //standalone & udp & extension headers
         setup(ip.next_header, &Vec::new()).run();
         setup(ip.next_header, ipv6_ext).run();
         setup(IpTrafficClass::Udp as u8, &Vec::new()).run_udp(udp);

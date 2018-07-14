@@ -405,7 +405,16 @@ impl Ipv6Header {
             //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
             (((reader.read_u8()? as i64) + 1)*8) - 2
         };
-        reader.seek(io::SeekFrom::Current(rest_length))?;
+        //Sadly seek does not return an error if the seek could not be fullfilled.
+        //Some implementations do not even truncate the returned position to the
+        //last valid one. std::io::Cursor for example just moves the position
+        //over the border of the given slice (e.g. returns position 15 even when
+        //the given slice contains only 1 element).
+        //The only option, to detect that we are in an invalid state, is to move the
+        //seek offset to one byte before the end and then execute a normal read to
+        //trigger an error.
+        reader.seek(io::SeekFrom::Current(rest_length - 1))?;
+        reader.read_u8()?;
         Ok(next_header)
     }
 

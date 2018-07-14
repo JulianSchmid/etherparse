@@ -813,6 +813,29 @@ fn skip_all_ipv6_header_extensions() {
         let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
         assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
+    //trigger missing unexpected eof
+    {
+        let buffer = vec![
+            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[2],1,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            0,0,0,0,                0,0,0,0,
+            //fragmentation header (fixed size 8 bytes)
+            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
+            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
+            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
+            UDP,2,0,0, 0,0,0,0,
+
+            0,0,0,0,   0,0,0,0,
+            0,0,0,0,   0,0,0
+        ];
+        println!("buffer.len(). {}", buffer.len());
+        let mut cursor = Cursor::new(&buffer);
+        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+        assert_matches!(result, Err(ReadError::IoError(_)));
+    }
 }
 
 #[test]
