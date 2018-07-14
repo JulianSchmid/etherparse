@@ -1,3 +1,12 @@
+#[cfg(feature = "proptest")]
+#[macro_use]
+extern crate proptest;
+
+#[cfg(feature = "proptest")]
+mod proptest_generators;
+#[cfg(feature = "proptest")]
+pub use proptest_generators::gens::*;
+
 use std::io;
 
 mod link;
@@ -8,9 +17,9 @@ mod internet;
 pub use internet::ip::*;
 
 mod transport;
-pub use transport::*;
 pub use transport::udp::*;
 pub use transport::tcp::*;
+pub use transport::TransportHeader;
 
 mod packet_builder;
 pub use packet_builder::*;
@@ -26,7 +35,7 @@ pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
 }
 
-///A "slice" of a network packet containing a header. In contrast to the actual header structs this struct does only parse fields when they are queried. 
+///A "slice" of a network packet containing a header. In contrast to the actual header structs this struct does only parse fields when the method for returning the field value is called. 
 ///
 ///The type T specifies what is beeing sliced and what kind of fields can be read from the slice.
 #[derive(Clone, Debug, Eq, PartialEq)]

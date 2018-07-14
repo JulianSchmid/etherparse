@@ -3,7 +3,6 @@ use std;
 use std::io;
 use std::io::Write;
 use proptest::prelude::*;
-use super::super::*;
 
 proptest! {
     #[test]

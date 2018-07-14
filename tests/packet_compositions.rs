@@ -1,5 +1,13 @@
+extern crate etherparse;
+#[cfg(test)]
 use etherparse::*;
-use super::super::*;
+
+#[cfg(test)] #[macro_use]
+extern crate assert_matches;
+
+#[macro_use]
+extern crate proptest;
+use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IpTest {
@@ -307,14 +315,14 @@ impl ComponentTest {
 proptest! {
     ///Test that all known packet compositions are parsed correctly.
     #[test]
-    fn test_packet_slicing(ref eth in ethernet_2_unknown(),
-                           ref vlan_outer in vlan_single_unknown(),
-                           ref vlan_inner in vlan_single_unknown(),
-                           ref ipv4 in ipv4_unknown(),
-                           ref ipv6 in ipv6_unknown(),
-                           ref ip6_ext in ipv6_extensions_unknown(),
-                           ref udp in udp_any(),
-                           ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
+    fn test_compositions(ref eth in ethernet_2_unknown(),
+                         ref vlan_outer in vlan_single_unknown(),
+                         ref vlan_inner in vlan_single_unknown(),
+                         ref ipv4 in ipv4_unknown(),
+                         ref ipv6 in ipv6_unknown(),
+                         ref ip6_ext in ipv6_extensions_unknown(),
+                         ref udp in udp_any(),
+                         ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
         let setup_eth = | ether_type: u16 | -> ComponentTest {
             ComponentTest {

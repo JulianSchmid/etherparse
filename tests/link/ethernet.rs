@@ -1,7 +1,5 @@
 use etherparse::*;
 
-use super::super::*;
-
 #[test]
 fn ether_type_convert() {
     use EtherType::*;
