@@ -6,7 +6,7 @@ pub struct PacketHeaders<'a> {
     pub ethernet: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
     pub ip: Option<IpHeader>,
-    pub transport: Option<UdpHeader>,
+    pub transport: Option<TransportHeader>,
     ///Rest of the packet that could not be decoded as a header (usually the payload).
     pub rest: &'a [u8]
 }
@@ -67,11 +67,11 @@ impl<'a> PacketHeaders<'a> {
         const IPV4: u16 = Ipv4 as u16;
         const IPV6: u16 = Ipv6 as u16;
 
-        let read_transport = |protocol: u8, cursor: &mut Cursor<&&[u8]>| -> Result<Option<UdpHeader>, ReadError> {
+        let read_transport = |protocol: u8, cursor: &mut Cursor<&&[u8]>| -> Result<Option<TransportHeader>, ReadError> {
             use IpTrafficClass::*;
             const UDP: u8 = Udp as u8;
             match protocol {
-                UDP => Ok(Some(UdpHeader::read(cursor)?)),
+                UDP => Ok(Some(TransportHeader::Udp(UdpHeader::read(cursor)?))),
                 _ => Ok(None)
             }
         };

@@ -2,28 +2,17 @@ use etherparse::*;
 use super::super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum VlanTest {
-    Single(SingleVlanHeader),
-    Double(SingleVlanHeader, SingleVlanHeader),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 enum IpTest {
     Version4(Ipv4Header, Vec<u8>),
     Version6(Ipv6Header, Vec<(u8, Vec<u8>)>)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum TransportTest {
-    Udp(UdpHeader)
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 struct ComponentTest {
     eth: Ethernet2Header,
-    vlan: Option<VlanTest>,
+    vlan: Option<VlanHeader>,
     ip: Option<IpTest>,
-    transport: Option<TransportTest>,
+    transport: Option<TransportHeader>,
     payload: Vec<u8>
 }
 
@@ -40,11 +29,11 @@ impl ComponentTest {
 
         //fill all the elements
         self.eth.write(&mut buffer).unwrap();
+        use VlanHeader::*;
         match &self.vlan {
-            Some(VlanTest::Single(header)) => header.write(&mut buffer).unwrap(),
-            Some(VlanTest::Double(outer, inner)) => {
-                outer.write(&mut buffer).unwrap();
-                inner.write(&mut buffer).unwrap();
+            Some(Single(header)) => header.write(&mut buffer).unwrap(),
+            Some(Double(header)) => {
+                header.write(&mut buffer).unwrap();
             },
             None => {}
         }
@@ -59,7 +48,7 @@ impl ComponentTest {
             None => {}
         }
         match &self.transport {
-            Some(TransportTest::Udp(header)) => header.write(&mut buffer).unwrap(),
+            Some(TransportHeader::Udp(header)) => header.write(&mut buffer).unwrap(),
             None => {}
         }
         use std::io::Write;
@@ -92,6 +81,10 @@ impl ComponentTest {
         //slice & expect the error
         assert_matches!(SlicedPacket::from_ethernet(&buffer),
                         Err(ReadError::Ipv6TooManyHeaderExtensions));
+
+        //same should happen for decoding
+        assert_matches!(PacketHeaders::from_ethernet_slice(&buffer),
+                        Err(ReadError::Ipv6TooManyHeaderExtensions));
     }
 
     fn assert_sliced_packet(&self, result: SlicedPacket) {
@@ -106,15 +99,9 @@ impl ComponentTest {
 
         //vlan
         assert_eq!(self.vlan,
-            {
-                use VlanSlice::*;
-                use self::VlanTest::*;
-                match result.vlan {
-                    Some(SingleVlan(actual)) => Some(Single(actual.to_header())),
-                    Some(DoubleVlan(actual)) => Some(Double(actual.outer().to_header(),
-                                                            actual.inner().to_header())),
-                    None => None
-                }
+            match result.vlan {
+                Some(value) => Some(value.to_header()),
+                None => None
             }
         );
 
@@ -144,7 +131,7 @@ impl ComponentTest {
         //transport
         assert_eq!(self.transport,
             match result.transport {
-                Some(TransportSlice::Udp(actual)) => Some(TransportTest::Udp(actual.to_header())),
+                Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
                 None => None
             }
         );
@@ -160,7 +147,26 @@ impl ComponentTest {
         //ethernet
         assert_eq!(self.eth, actual.ethernet.unwrap());
 
-        //TODO the rest
+        //vlan
+        assert_eq!(self.vlan, actual.vlan);
+
+        //ip
+        assert_eq!(actual.ip,
+            {
+                use self::IpTest::*;
+                match &self.ip {
+                    Some(Version4(value, _)) => Some(IpHeader::Version4(value.clone())),
+                    Some(Version6(value, _)) => Some(IpHeader::Version6(value.clone())),
+                    None => None
+                }
+            }
+        );
+
+        //transport
+        assert_eq!(self.transport, actual.transport);
+
+        //payload
+        assert_eq!(self.payload[..], actual.rest[..]);
     }
 
     fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader) {
@@ -255,7 +261,7 @@ impl ComponentTest {
     {
         let setup_single = | ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
-            result.vlan = Some(VlanTest::Single({
+            result.vlan = Some(VlanHeader::Single({
                 let mut v = outer_vlan.clone();
                 v.ether_type = ether_type;
                 v
@@ -264,15 +270,17 @@ impl ComponentTest {
         };
         let setup_double = |outer_ether_type: u16, inner_ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
-            result.vlan = Some(VlanTest::Double({
-                let mut v = outer_vlan.clone();
-                v.ether_type = outer_ether_type;
-                v
-            },{
-                let mut v = inner_vlan.clone();
-                v.ether_type = inner_ether_type;
-                v
-            }));
+            result.vlan = Some(VlanHeader::Double(DoubleVlanHeader{
+                outer: {
+                    let mut v = outer_vlan.clone();
+                    v.ether_type = outer_ether_type;
+                    v
+                },
+                inner: {
+                    let mut v = inner_vlan.clone();
+                    v.ether_type = inner_ether_type;
+                    v
+                }}));
             result
         };
 
@@ -291,7 +299,7 @@ impl ComponentTest {
 
     fn run_udp(&self, udp: &UdpHeader) {
         let mut test = self.clone();
-        test.transport = Some(TransportTest::Udp(udp.clone()));
+        test.transport = Some(TransportHeader::Udp(udp.clone()));
         test.run()
     }
 }

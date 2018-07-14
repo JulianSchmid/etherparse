@@ -29,6 +29,18 @@ pub enum VlanSlice<'a> {
     DoubleVlan(PacketSlice<'a, DoubleVlanHeader>),
 }
 
+impl<'a> VlanSlice<'a> {
+    ///Decode all the fields and copy the results to a VlanHeader struct
+    pub fn to_header(&self) -> VlanHeader {
+        use VlanHeader::*;
+        use VlanSlice::*;
+        match self {
+            SingleVlan(value) => Single(value.to_header()),
+            DoubleVlan(value) => Double(value.to_header())
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
     Ipv4(PacketSlice<'a, Ipv4Header>),

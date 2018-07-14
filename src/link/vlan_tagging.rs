@@ -193,4 +193,12 @@ impl<'a> PacketSlice<'a, DoubleVlanHeader> {
             phantom: std::marker::PhantomData{}
         }
     }
+
+    ///Decode all the fields and copy the results to a DoubleVlanHeader struct
+    pub fn to_header(&self) -> DoubleVlanHeader {
+        DoubleVlanHeader {
+            outer: self.outer().to_header(),
+            inner: self.inner().to_header()
+        }
+    }
 }

@@ -208,4 +208,7 @@ fn double_from_slice() {
     assert_eq!(slice.inner().drop_eligible_indicator(), input.inner.drop_eligible_indicator);
     assert_eq!(slice.inner().vlan_identifier(), input.inner.vlan_identifier);
     assert_eq!(slice.inner().ether_type(), input.inner.ether_type);
+
+    //check that the to_header results in the same as the input
+    assert_eq!(slice.to_header(), input);
 }
