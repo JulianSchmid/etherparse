@@ -133,13 +133,9 @@ Read the documentations of the different methods for a more details:
 
 ## Roadmap
 * Documentation
-** Packet Builder
-** Packet Slicing
-** Packet Decoder
-* Add IPv6 header extension support (generic header extensions & )
-* Generic packet parser (automaticly parsing of a packet based on its content)
+* * Packet Builder
 * TCP
-* Creating & parsing packet from lower layers then ethernet (e.g. ip, vlan...)
+* Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)
 * IEEE 802.3
 
 ## References
