@@ -1,12 +1,4 @@
-extern crate etherparse;
-#[cfg(test)]
-use etherparse::*;
-
-#[cfg(test)] #[macro_use]
-extern crate assert_matches;
-
-#[macro_use]
-extern crate proptest;
+use super::*;
 use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]

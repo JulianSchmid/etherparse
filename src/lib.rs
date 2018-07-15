@@ -1,12 +1,3 @@
-#[cfg(feature = "proptest")]
-#[macro_use]
-extern crate proptest;
-
-#[cfg(feature = "proptest")]
-mod proptest_generators;
-#[cfg(feature = "proptest")]
-pub use proptest_generators::gens::*;
-
 use std::io;
 
 mod link;

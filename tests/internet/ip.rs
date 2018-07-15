@@ -1,4 +1,4 @@
-use etherparse::*;
+use super::super::*;
 use std;
 use std::io;
 use std::io::Write;
