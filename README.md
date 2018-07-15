@@ -39,7 +39,7 @@ Some key points are:
 ## How to parse network packages?
 Etherparse gives you two options for parsing network packages:
 
-* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields 
+* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields (faster)
 ```rust
 match SlicedPacket::from_ethernet(&packet) {
     Err(value) => println!("Err {:?}", value),
@@ -63,16 +63,9 @@ match PacketHeaders::from_ethernet_slice(&packet) {
     }
 }
 ```
-Seperating headers into slices is faster if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields. The alternative of deserialize all headers and their fields into  their corresponding structs is useful if you are interested in most fields anyways or want to modify them.
+Seperating headers into slices is faster if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields.
 
-### Slicing a packet into different elements
-TODO
-
-#### Slice the complete packet
-TODO
-
-#### Iterate over each slicing point
-TODO
+The alternative is to deserialie all headers and their fields into their corresponding structs. This is useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
 
 #### Manually slicing packets
 
