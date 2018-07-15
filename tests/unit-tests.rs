@@ -85,6 +85,18 @@ fn test_debug_write() {
             println!("{:?}", value);
         }
     }
+    //PacketHeaders
+    {
+        let dummy = vec![1,2,3,4];
+        let value = PacketHeaders{
+            ethernet: None,
+            vlan: None,
+            ip: None,
+            transport: None,
+            rest: &dummy[..]
+        };
+        println!("{:?}", value);
+    }
 }
 
 #[test]
