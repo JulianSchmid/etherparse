@@ -133,7 +133,7 @@ Read the documentations of the different methods for a more details:
 
 ## Roadmap
 * Documentation
-* * Packet Builder
+  * Packet Builder
 * TCP
 * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)
 * IEEE 802.3
