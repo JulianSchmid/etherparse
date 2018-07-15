@@ -174,7 +174,7 @@ impl ComponentTest {
         assert_eq!(self.transport, actual.transport);
 
         //payload
-        assert_eq!(self.payload[..], actual.rest[..]);
+        assert_eq!(self.payload[..], actual.payload[..]);
     }
 
     fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader) {

@@ -8,7 +8,7 @@ pub struct PacketHeaders<'a> {
     pub ip: Option<IpHeader>,
     pub transport: Option<TransportHeader>,
     ///Rest of the packet that could not be decoded as a header (usually the payload).
-    pub rest: &'a [u8]
+    pub payload: &'a [u8]
 }
 
 impl<'a> PacketHeaders<'a> {
@@ -26,7 +26,7 @@ impl<'a> PacketHeaders<'a> {
             vlan: None,
             ip: None,
             transport: None,
-            rest: &[]
+            payload: &[]
         };
 
         //parse vlan header(s)
@@ -98,7 +98,7 @@ impl<'a> PacketHeaders<'a> {
         }
 
         //finally update the rest slice based on the cursor position
-        result.rest = &packet[(cursor.position() as usize)..];
+        result.payload = &packet[(cursor.position() as usize)..];
 
         Ok(result)
     }

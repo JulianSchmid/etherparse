@@ -93,7 +93,7 @@ fn test_debug_write() {
             vlan: None,
             ip: None,
             transport: None,
-            rest: &dummy[..]
+            payload: &dummy[..]
         };
         println!("{:?}", value);
     }
