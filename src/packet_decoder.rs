@@ -3,7 +3,7 @@ use super::*;
 ///Decoded packet headers. You can use PacketHeaders::decode_from_ethernet2 to decode packets and get this struct as a result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PacketHeaders<'a> {
-    pub ethernet: Option<Ethernet2Header>,
+    pub link: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
     pub ip: Option<IpHeader>,
     pub transport: Option<TransportHeader>,
@@ -22,7 +22,7 @@ impl<'a> PacketHeaders<'a> {
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders{
-            ethernet: Some(ethernet),
+            link: Some(ethernet),
             vlan: None,
             ip: None,
             transport: None,

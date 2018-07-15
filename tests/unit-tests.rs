@@ -89,7 +89,7 @@ fn test_debug_write() {
     {
         let dummy = vec![1,2,3,4];
         let value = PacketHeaders{
-            ethernet: None,
+            link: None,
             vlan: None,
             ip: None,
             transport: None,

@@ -153,7 +153,7 @@ impl ComponentTest {
         let actual = PacketHeaders::from_ethernet_slice(&buffer[..]).unwrap();
 
         //ethernet
-        assert_eq!(self.eth, actual.ethernet.unwrap());
+        assert_eq!(self.eth, actual.link.unwrap());
 
         //vlan
         assert_eq!(self.vlan, actual.vlan);
