@@ -37,7 +37,7 @@ Some key points are:
 * The current focus of development is on the most popular protocols in the internet & transport layer.
 
 ## How to parse network packages?
-Etherparse gives you two options for parsing network packages:
+Etherparse gives you two options for parsing network packages automatically:
 
 ### Slicing the packet
 Here the different components in a packet are seperated without parsing all their fields. For each header a slice is generated that allows access to the fields of a header.
@@ -52,10 +52,10 @@ match SlicedPacket::from_ethernet(&packet) {
     }
 }
 ```
-This is the faster option if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields.
+This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packages based on a subset of the headers and/or their fields.
 
 ### Deserializing all headers into structs
-This option deserializes all known headers and transfering their contents to header structs.
+This option deserializes all known headers and transferes their contents to header structs.
 ```rust
 match PacketHeaders::from_ethernet_slice(&packet) {
     Err(value) => println!("Err {:?}", value),
@@ -69,15 +69,32 @@ match PacketHeaders::from_ethernet_slice(&packet) {
 ```
 This option is slower then slicing when only few fields are accessed. But it can be the faster option or useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
 
-### Manually slicing packets
-TODO
+### Manually slicing & parsing packets
+It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice. 
 
-### Parsing headers manually
-TODO
+Have a look at the documentation for the PacketSlice<T>.from_slice methods, if you want to create your own slices:
+
+* [PacketSlice<Ethernet2Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice)
+* [PacketSlice<SingleVlanHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-1)
+* [PacketSlice<DoubleVlanHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-2)
+* [PacketSlice<Ipv4Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-3)
+* [PacketSlice<Ipv6Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-4)
+* [PacketSlice<Ipv6ExtensionHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-5)
+* [PacketSlice<UdpHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-6)
+
+And for deserialization into the corresponding header structs have a look at:
+
+* [Ethernet2Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read)
+* [SingleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read)
+* [DoubleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read)
+* [IpHeader.read](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read)
+* [Ipv4Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read)
+* [Ipv6Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read)
+* [UdpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read)
 
 ## How to generate fake packet data?
 ### Packet Builder
-There is the option to use the PacketBuilder, which provides a high level interface to create UDP network packets. The PacketBuilder will take care of setting all the fields which can be deduced from the content and compositions of the packet (checksums, lengths, ethertype, ip protocol number).
+The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 
 [Example:](examples/write_udp.rs)
 ```rust
