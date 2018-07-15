@@ -39,9 +39,30 @@ Some key points are:
 ## How to parse network packages?
 Etherparse gives you two options for parsing network packages:
 
-* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields
+* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields 
+```rust
+match SlicedPacket::from_ethernet(&packet) {
+    Err(value) => println!("Err {:?}", value),
+    Ok(value) => {
+        println!("link: {:?}", value.link);
+        println!("vlan: {:?}", value.vlan);
+        println!("ip: {:?}", value.ip);
+        println!("transport: {:?}", value.transport);
+    }
+}
+```
 * Reading all headers and transfering their contents to header structs
-
+```rust
+match PacketHeaders::from_ethernet_slice(&packet) {
+    Err(value) => println!("Err {:?}", value),
+    Ok(value) => {
+        println!("link: {:?}", value.link);
+        println!("vlan: {:?}", value.vlan);
+        println!("ip: {:?}", value.ip);
+        println!("transport: {:?}", value.transport);
+    }
+}
+```
 Seperating headers into slices is faster if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields. The alternative of deserialize all headers and their fields into  their corresponding structs is useful if you are interested in most fields anyways or want to modify them.
 
 ### Slicing a packet into different elements
