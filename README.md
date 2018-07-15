@@ -39,7 +39,8 @@ Some key points are:
 ## How to parse network packages?
 Etherparse gives you two options for parsing network packages:
 
-* Seperating the packet into seperate slices containing headers & payloads without parsing all of the header fields (faster)
+### Slicing the packet
+Here the different components in a packet are seperated without parsing all their fields. For each header a slice is generated that allows access to the fields of a header.
 ```rust
 match SlicedPacket::from_ethernet(&packet) {
     Err(value) => println!("Err {:?}", value),
@@ -51,7 +52,10 @@ match SlicedPacket::from_ethernet(&packet) {
     }
 }
 ```
-* Reading all headers and transfering their contents to header structs
+This is the faster option if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields.
+
+### Deserializing all headers into structs
+This option deserializes all known headers and transfering their contents to header structs.
 ```rust
 match PacketHeaders::from_ethernet_slice(&packet) {
     Err(value) => println!("Err {:?}", value),
@@ -63,16 +67,9 @@ match PacketHeaders::from_ethernet_slice(&packet) {
     }
 }
 ```
-Seperating headers into slices is faster if your code is not interested in all fields of all the headers in a network package. This is a good choice if you want filter or find packages based on a subset of the headers and/or their fields.
+This option is slower then slicing when only few fields are accessed. But it can be the faster option or useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
 
-The alternative is to deserialie all headers and their fields into their corresponding structs. This is useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
-
-#### Manually slicing packets
-
-### Decoding packets (deserializing the different headers into structs)
-TODO
-
-### Using PacketHeaders::decode to decode all elements of a package at once
+### Manually slicing packets
 TODO
 
 ### Parsing headers manually
