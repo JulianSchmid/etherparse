@@ -74,13 +74,13 @@ It is also possible to manually slice & parse a packet. For each header type the
 
 Have a look at the documentation for the PacketSlice<T>.from_slice methods, if you want to create your own slices:
 
-* [PacketSlice<Ethernet2Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice)
-* [PacketSlice<SingleVlanHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-1)
-* [PacketSlice<DoubleVlanHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-2)
-* [PacketSlice<Ipv4Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-3)
-* [PacketSlice<Ipv6Header>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-4)
-* [PacketSlice<Ipv6ExtensionHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-5)
-* [PacketSlice<UdpHeader>.from_slice](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-6)
+* [`PacketSlice<Ethernet2Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice)
+* [`PacketSlice<SingleVlanHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-1)
+* [`PacketSlice<DoubleVlanHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-2)
+* [`PacketSlice<Ipv4Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-3)
+* [`PacketSlice<Ipv6Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-4)
+* [`PacketSlice<Ipv6ExtensionHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-5)
+* [`PacketSlice<UdpHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-6)
 
 And for deserialization into the corresponding header structs have a look at:
 
