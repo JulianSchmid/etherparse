@@ -44,7 +44,8 @@ fn test_debug_write() {
             Ipv4UnexpectedVersion(0),
             Ipv4HeaderLengthBad(0),
             Ipv6UnexpectedVersion(0),
-            Ipv6TooManyHeaderExtensions
+            Ipv6TooManyHeaderExtensions,
+            TcpDataOffsetTooSmall(0)
         ].iter() {
             println!("{:?}", value);
         }
@@ -68,6 +69,7 @@ fn test_debug_write() {
             Ipv4PayloadAndOptionsLengthTooLarge(0),
             Ipv6PayloadLengthTooLarge(0),
             UdpPayloadLengthTooLarge(0),
+            U8TooSmall{value: 0, min: 0, field: ErrorField::TcpDataOffset},
             U8TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
             U16TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
             U32TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn}
@@ -85,7 +87,8 @@ fn test_debug_write() {
             Ipv4FragmentsOffset,
             Ipv6FlowLabel,
             VlanTagPriorityCodePoint,
-            VlanTagVlanId
+            VlanTagVlanId,
+            TcpDataOffset
         ].iter() {
             println!("{:?}", value);
         }
