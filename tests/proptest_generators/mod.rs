@@ -299,9 +299,9 @@ prop_compose! {
 
 prop_compose! {
     [pub] fn udp_any()(source_port in any::<u16>(),
-                   destination_port in any::<u16>(),
-                   length in any::<u16>(),
-                   checksum in any::<u16>())
+                       destination_port in any::<u16>(),
+                       length in any::<u16>(),
+                       checksum in any::<u16>())
                   -> UdpHeader
     {
         UdpHeader {
@@ -309,6 +309,55 @@ prop_compose! {
             destination_port: destination_port,
             length: length,
             checksum: checksum
+        }
+    }
+}
+
+prop_compose! {
+    [pub] fn tcp_any()(data_offset in TCP_MINIMUM_DATA_OFFSET..(TCP_MAXIMUM_DATA_OFFSET + 1))
+                      (source_port in any::<u16>(),
+                       destination_port in any::<u16>(),
+                       sequence_number in any::<u32>(),
+                       acknowledgment_number in any::<u32>(),
+                       data_offset in proptest::strategy::Just(data_offset),
+                       ns in any::<bool>(),
+                       fin in any::<bool>(),
+                       syn in any::<bool>(),
+                       rst in any::<bool>(),
+                       psh in any::<bool>(),
+                       ack in any::<bool>(),
+                       ece in any::<bool>(),
+                       urg in any::<bool>(),
+                       cwr  in any::<bool>(),
+                       window_size in any::<u16>(),
+                       checksum in any::<u16>(),
+                       urgent_pointer in any::<u16>(),
+                       options in proptest::collection::vec(any::<u8>(), ((data_offset - 5) as usize)*4))
+                  -> TcpHeader
+    {
+        TcpHeader {
+            source_port: source_port,
+            destination_port: destination_port,
+            sequence_number: sequence_number,
+            acknowledgment_number: acknowledgment_number,
+            data_offset: data_offset,
+            ns: ns,
+            fin: fin,
+            syn: syn,
+            rst: rst,
+            psh: psh,
+            ack: ack,
+            ece: ece,
+            urg: urg,
+            cwr: cwr,
+            window_size: window_size,
+            checksum: checksum,
+            urgent_pointer: urgent_pointer,
+            options: {
+                let mut value: [u8;40] = [0;40];
+                value[..options.len()].copy_from_slice(&options[..]);
+                value
+            }
         }
     }
 }

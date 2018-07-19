@@ -50,7 +50,9 @@ pub enum ReadError {
     ///Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
-    Ipv6TooManyHeaderExtensions
+    Ipv6TooManyHeaderExtensions,
+    ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
+    TcpDataOffsetTooSmall(u8),
 }
 
 impl From<io::Error> for ReadError {
@@ -85,6 +87,8 @@ pub enum ValueError {
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
+    ///Error when a u8 field in a header has a smaller value then supported.
+    U8TooSmall{value: u8, min: u8, field: ErrorField},
     ///Error when a u8 field in a header has a larger value then supported.
     U8TooLarge{value: u8, max: u8, field: ErrorField},
     ///Error when a u16 field in a header has a larger value then supported.
@@ -110,7 +114,9 @@ pub enum ErrorField {
     ///VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,
     ///VlanTaggingHeader.vlan_identifier
-    VlanTagVlanId
+    VlanTagVlanId,
+    ///The data offset field in a tcp header
+    TcpDataOffset
 }
 
 fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError> {

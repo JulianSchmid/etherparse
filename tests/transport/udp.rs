@@ -1,7 +1,6 @@
 use etherparse::*;
 
-extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, BigEndian};
 
 #[test]
 fn read_write() {

@@ -135,6 +135,8 @@ Read the documentations of the different methods for a more details:
 * Documentation
   * Packet Builder
 * TCP
+* MutPacketSlice -> modifaction of fields in slices directly?
+* Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
 * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)
 * IEEE 802.3
 
@@ -144,6 +146,9 @@ Read the documentations of the different methods for a more details:
 * [IANA Protocol Numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml)
 * [Wikipedia IEEE_802.1Q](https://en.wikipedia.org/w/index.php?title=IEEE_802.1Q&oldid=820983900)
 * User Datagram Protocol (UDP) [RFC 768](https://tools.ietf.org/html/rfc768)
+* Transmission Control Protocol [RFC 793](https://tools.ietf.org/html/rfc793)
+* The Addition of Explicit Congestion Notification (ECN) to IP [RFC 3168](https://tools.ietf.org/html/rfc3168)
+* Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
 
 [build_badge]: https://travis-ci.org/JulianSchmid/etherparse.svg?branch=master
 [build_status]: https://travis-ci.org/JulianSchmid/etherparse
