@@ -187,6 +187,7 @@ prop_compose! {
 
 static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
     IpTrafficClass::Udp as u8,
+    IpTrafficClass::Tcp as u8,
     IpTrafficClass::IPv6HeaderHopByHop as u8,
     IpTrafficClass::IPv6RouteHeader as u8,
     IpTrafficClass::IPv6FragmentationHeader as u8,
