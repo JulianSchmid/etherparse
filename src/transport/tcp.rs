@@ -4,6 +4,9 @@ extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 
+//TODO checksum calculation
+//TODO options setting & interpretation
+
 ///The minimum size of the tcp header in bytes
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;
 ///The minimum data offset size (size of the tcp header itself).
@@ -193,12 +196,12 @@ impl TcpHeader {
         Ok(())
     }
 
-    ///Returns the options size in bytes based on the currently set data_offset. Returns 0 if the data_offset is smaller then the minimum size.
-    pub fn options_size(&self) -> usize {
-        if self.data_offset < TCP_MINIMUM_DATA_OFFSET {
-            0
+    ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
+    pub fn options_size(&self) -> Option<usize> {
+        if self.data_offset < TCP_MINIMUM_DATA_OFFSET || self.data_offset > TCP_MAXIMUM_DATA_OFFSET {
+            None
         } else {
-            (self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4
+            Some((self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4)
         }
     }
 }
@@ -269,8 +272,6 @@ impl std::cmp::PartialEq for TcpHeader {
 }
 
 impl std::cmp::Eq for TcpHeader {}
-
-//TODO checksum calculation
 
 impl<'a> PacketSlice<'a, TcpHeader> {
 

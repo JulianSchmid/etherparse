@@ -2,6 +2,42 @@ use super::super::*;
 
 use std::io::Cursor;
 
+#[test]
+fn options_size() {
+    let base = TcpHeader {
+        source_port: 0,
+        destination_port: 0,
+        sequence_number: 0,
+        acknowledgment_number: 0,
+        data_offset: 0,
+        ns: false, fin: false, syn: false, rst: false,
+        psh: false, ack: false, urg: false, ece: false,
+        cwr: false,
+        window_size: 0,
+        checksum: 0,
+        urgent_pointer: 0,
+        options: [0;40]
+    };
+    //too small -> expect None
+    for i in 0..TCP_MINIMUM_DATA_OFFSET {
+        let mut header = base.clone();
+        header.data_offset = i;
+        assert_eq!(None, header.options_size());
+    }
+    //ok size -> expect output based on options size
+    for i in TCP_MINIMUM_DATA_OFFSET..TCP_MAXIMUM_DATA_OFFSET + 1 {
+        let mut header = base.clone();
+        header.data_offset = i;
+        assert_eq!(Some((i - TCP_MINIMUM_DATA_OFFSET) as usize *4), header.options_size());
+    }
+    //too big -> expect None
+    for i in TCP_MAXIMUM_DATA_OFFSET + 1..std::u8::MAX {
+        let mut header = base.clone();
+        header.data_offset = i;
+        assert_eq!(None, header.options_size());
+    }
+}
+
 proptest! {
     #[test]
     fn read_write(ref input in tcp_any())
@@ -103,7 +139,7 @@ proptest! {
         assert_eq!(input.window_size, slice.window_size());
         assert_eq!(input.checksum, slice.checksum());
         assert_eq!(input.urgent_pointer, slice.urgent_pointer());
-        assert_eq!(&input.options[..input.options_size()], slice.options());
+        assert_eq!(&input.options[..input.options_size().unwrap()], slice.options());
 
         //check the to_header result
         assert_eq!(input, &slice.to_header());
