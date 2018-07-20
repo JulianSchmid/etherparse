@@ -114,6 +114,11 @@ prop_compose! {
     }
 }
 
+static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
+    IpTrafficClass::Udp as u8,
+    IpTrafficClass::Tcp as u8
+];
+
 prop_compose! {
     [pub] fn ipv4_unknown()
                    (ihl in 5u8..16)
@@ -129,7 +134,7 @@ prop_compose! {
                     header_checksum in any::<u16>(),
                     total_length in any::<u16>(),
                     protocol in any::<u8>().prop_filter("protocol must be unknown",
-                               |v| (IpTrafficClass::Udp as u8 != *v)),
+                               |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x)),
                     options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4),
                     ihl in proptest::strategy::Just(ihl))
                   -> (Ipv4Header, Vec<u8>)
