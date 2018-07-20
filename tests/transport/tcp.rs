@@ -98,15 +98,31 @@ proptest! {
         assert_eq!(input.psh, slice.psh());
         assert_eq!(input.ack, slice.ack());
         assert_eq!(input.ece, slice.ece());
-        /*assert_eq!(input.urg, slice.urg());
+        assert_eq!(input.urg, slice.urg());
         assert_eq!(input.cwr, slice.cwr());
         assert_eq!(input.window_size, slice.window_size());
         assert_eq!(input.checksum, slice.checksum());
-        assert_eq!(input.urgent_pointer, slice.urgent_pointer());*/
-        //assert_eq!(&input.options[..input.options_size()], slice.options());
+        assert_eq!(input.urgent_pointer, slice.urgent_pointer());
+        assert_eq!(&input.options[..input.options_size()], slice.options());
 
         //check the to_header result
-        //assert_eq!(input, &slice.to_header());
+        assert_eq!(input, &slice.to_header());
+    }
+}
+
+proptest! {
+    #[test]
+    fn packet_slice_from_slice_data_offset_too_small(ref input in tcp_any(),
+                  data_offset in 0..TCP_MINIMUM_DATA_OFFSET)
+    {
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
+        input.write(&mut buffer).unwrap();
+        //insert the too small data offset into the raw stream
+        buffer[12] = (buffer[12] & 0xf) | ((data_offset << 4) & 0xf0);
+        //deserialize
+        assert_matches!(PacketSlice::<TcpHeader>::from_slice(&buffer),
+                        Err(ReadError::TcpDataOffsetTooSmall(_)));
     }
 }
 
