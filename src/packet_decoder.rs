@@ -70,8 +70,10 @@ impl<'a> PacketHeaders<'a> {
         let read_transport = |protocol: u8, cursor: &mut Cursor<&&[u8]>| -> Result<Option<TransportHeader>, ReadError> {
             use IpTrafficClass::*;
             const UDP: u8 = Udp as u8;
+            const TCP: u8 = Tcp as u8;
             match protocol {
                 UDP => Ok(Some(TransportHeader::Udp(UdpHeader::read(cursor)?))),
+                TCP => Ok(Some(TransportHeader::Tcp(TcpHeader::read(cursor)?))),
                 _ => Ok(None)
             }
         };

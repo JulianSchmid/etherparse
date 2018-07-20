@@ -32,7 +32,8 @@ pub enum InternetSlice<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
-    Udp(PacketSlice<'a, UdpHeader>)
+    Udp(PacketSlice<'a, UdpHeader>),
+    Tcp(PacketSlice<'a, TcpHeader>)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -59,6 +60,7 @@ const ETH_BRIDGE: u16 = EtherType::ProviderBridging as u16;
 const ETH_VLAN_DOUBLE: u16 = EtherType::VlanDoubleTaggedFrame as u16;
 
 const IP_UDP: u8 = IpTrafficClass::Udp as u8;
+const IP_TCP: u8 = IpTrafficClass::Tcp as u8;
 
 const IPV6_HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
 const IPV6_ROUTE: u8 = IpTrafficClass::IPv6RouteHeader as u8;
@@ -178,6 +180,13 @@ impl<'a> SlicedPacket<'a> {
                     let value = PacketSlice::<UdpHeader>::from_slice(rest)?;
                     (&rest[value.slice.len()..],
                      Some(Udp(value)))
+                },
+                IP_TCP => {
+                    use TransportSlice::*;
+
+                    let value = PacketSlice::<TcpHeader>::from_slice(rest)?;
+                    (&rest[value.slice.len()..],
+                     Some(Tcp(value)))
                 },
                 _ => (rest, None)
             }

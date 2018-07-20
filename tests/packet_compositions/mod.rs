@@ -49,6 +49,7 @@ impl ComponentTest {
         }
         match &self.transport {
             Some(TransportHeader::Udp(header)) => header.write(&mut buffer).unwrap(),
+            Some(TransportHeader::Tcp(header)) => header.write(&mut buffer).unwrap(),
             None => {}
         }
         use std::io::Write;
@@ -132,6 +133,7 @@ impl ComponentTest {
         assert_eq!(self.transport,
             match result.transport {
                 Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
+                Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),
                 None => None
             }
         );
@@ -169,7 +171,7 @@ impl ComponentTest {
         assert_eq!(self.payload[..], actual.payload[..]);
     }
 
-    fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader) {
+    fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader, tcp: &TcpHeader) {
         //ipv4 only
         {
             let mut test = self.clone();
@@ -187,9 +189,19 @@ impl ComponentTest {
             }, ip.1.clone()));
             test.run_udp(udp);
         }
+        //tcp
+        {
+            let mut test = self.clone();
+            test.ip = Some(IpTest::Version4({
+                let mut header = ip.0.clone();
+                header.protocol = IpTrafficClass::Tcp as u8;
+                header
+            }, ip.1.clone()));
+            test.run_tcp(tcp);
+        }
     }
 
-    fn run_ipv6(&self, ip: &Ipv6Header, ipv6_ext: &Vec<(u8, Vec<u8>)>, udp: &UdpHeader) {
+    fn run_ipv6(&self, ip: &Ipv6Header, ipv6_ext: &Vec<(u8, Vec<u8>)>, udp: &UdpHeader, tcp: &TcpHeader) {
         
         let setup = | next_header: u8, exts: &Vec<(u8, Vec<u8>)>| -> ComponentTest {
             let mut result = self.clone();
@@ -220,6 +232,8 @@ impl ComponentTest {
         setup(ip.next_header, ipv6_ext).run();
         setup(IpTrafficClass::Udp as u8, &Vec::new()).run_udp(udp);
         setup(IpTrafficClass::Udp as u8, ipv6_ext).run_udp(udp);
+        setup(IpTrafficClass::Tcp as u8, &Vec::new()).run_tcp(tcp);
+        setup(IpTrafficClass::Tcp as u8, ipv6_ext).run_tcp(tcp);
 
         //extensions
         const IPV6_EXT_IDS: [u8;6] = [
@@ -257,7 +271,8 @@ impl ComponentTest {
                 ipv4: &(Ipv4Header, Vec<u8>), 
                 ipv6: &Ipv6Header, 
                 ipv6_ext: &Vec<(u8, Vec<u8>)>, 
-                udp: &UdpHeader)
+                udp: &UdpHeader,
+                tcp: &TcpHeader)
     {
         let setup_single = | ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
@@ -286,20 +301,26 @@ impl ComponentTest {
 
         //single
         setup_single(outer_vlan.ether_type).run();
-        setup_single(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-        setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp);
+        setup_single(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp, tcp);
+        setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp, tcp);
 
         //double 
         for ether_type in VLAN_ETHER_TYPES {
             setup_double(*ether_type, inner_vlan.ether_type).run();
-            setup_double(*ether_type, EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-            setup_double(*ether_type, EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp);
+            setup_double(*ether_type, EtherType::Ipv4 as u16).run_ipv4(ipv4, udp, tcp);
+            setup_double(*ether_type, EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp, tcp);
         }
     }
 
     fn run_udp(&self, udp: &UdpHeader) {
         let mut test = self.clone();
         test.transport = Some(TransportHeader::Udp(udp.clone()));
+        test.run()
+    }
+
+    fn run_tcp(&self, tcp: &TcpHeader) {
+        let mut test = self.clone();
+        test.transport = Some(TransportHeader::Tcp(tcp.clone()));
         test.run()
     }
 }
@@ -314,6 +335,7 @@ proptest! {
                          ref ipv6 in ipv6_unknown(),
                          ref ip6_ext in ipv6_extensions_unknown(),
                          ref udp in udp_any(),
+                         ref tcp in tcp_any(),
                          ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
         let setup_eth = | ether_type: u16 | -> ComponentTest {
@@ -332,12 +354,12 @@ proptest! {
 
         //ethernet 2: standalone, ipv4, ipv6
         setup_eth(eth.ether_type).run();
-        setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp);
-        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ip6_ext, udp);
+        setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp, tcp);
+        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ip6_ext, udp, tcp);
 
         //vlans
         for ether_type in VLAN_ETHER_TYPES {
-            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv6, ip6_ext, udp);
+            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv6, ip6_ext, udp, tcp);
         }
     }
 }

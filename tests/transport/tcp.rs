@@ -7,7 +7,7 @@ proptest! {
     fn read_write(ref input in tcp_any())
     {
         //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
         input.write(&mut buffer).unwrap();
         //check length
         assert_eq!(input.data_offset as usize * 4, buffer.len());
@@ -26,7 +26,7 @@ proptest! {
         let mut input = base.clone();
         input.data_offset = data_offset;
         //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
         assert_matches!(input.write(&mut buffer), Err(
               WriteError::ValueError(_)));
         assert_eq!(0, buffer.len());
@@ -41,7 +41,7 @@ proptest! {
         let mut input = base.clone();
         input.data_offset = data_offset;
         //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
         assert_matches!(input.write(&mut buffer), Err(
               WriteError::ValueError(_)));
     }
@@ -53,13 +53,60 @@ proptest! {
                   data_offset in 0..TCP_MINIMUM_DATA_OFFSET)
     {
         //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(20);
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
         input.write(&mut buffer).unwrap();
         //insert the too small data offset into the raw stream
         buffer[12] = (buffer[12] & 0xf) | ((data_offset << 4) & 0xf0);
         //deserialize
         assert_matches!(TcpHeader::read(&mut Cursor::new(&buffer)),
                         Err(ReadError::TcpDataOffsetTooSmall(_)));
+    }
+}
+
+proptest! {
+    #[test]
+    fn read_unexpected_eof(ref input in tcp_any())
+    {
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
+        input.write(&mut buffer).unwrap();
+        //deserialize
+        let len = buffer.len() - 1;
+        assert_matches!(TcpHeader::read(&mut Cursor::new(&buffer[..len])),
+                        Err(ReadError::IoError(_)));
+    }
+}
+
+proptest! {
+    #[test]
+    fn packet_slice_from_slice(ref input in tcp_any()) {
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(60);
+        input.write(&mut buffer).unwrap();
+        //create slice
+        let slice = PacketSlice::<TcpHeader>::from_slice(&buffer).unwrap();
+        //check all fields
+        assert_eq!(input.source_port, slice.source_port());
+        assert_eq!(input.destination_port, slice.destination_port());
+        assert_eq!(input.sequence_number, slice.sequence_number());
+        assert_eq!(input.acknowledgment_number, slice.acknowledgment_number());
+        assert_eq!(input.data_offset, slice.data_offset());
+        assert_eq!(input.ns, slice.ns());
+        assert_eq!(input.fin, slice.fin());
+        assert_eq!(input.syn, slice.syn());
+        assert_eq!(input.rst, slice.rst());
+        assert_eq!(input.psh, slice.psh());
+        assert_eq!(input.ack, slice.ack());
+        assert_eq!(input.ece, slice.ece());
+        /*assert_eq!(input.urg, slice.urg());
+        assert_eq!(input.cwr, slice.cwr());
+        assert_eq!(input.window_size, slice.window_size());
+        assert_eq!(input.checksum, slice.checksum());
+        assert_eq!(input.urgent_pointer, slice.urgent_pointer());*/
+        //assert_eq!(&input.options[..input.options_size()], slice.options());
+
+        //check the to_header result
+        //assert_eq!(input, &slice.to_header());
     }
 }
 
@@ -212,7 +259,7 @@ proptest! {
     #[test]
     fn debug_fmt(ref input in tcp_any())
     {
-        assert_eq!(&format!("TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, ece: {}, urg: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {} }}",
+        assert_eq!(&format!("TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {} }}",
                 input.source_port,
                 input.destination_port,
                 input.sequence_number,
@@ -224,8 +271,8 @@ proptest! {
                 input.rst,
                 input.psh,
                 input.ack,
-                input.ece,
                 input.urg,
+                input.ece,
                 input.cwr,
                 input.window_size,
                 input.checksum,
