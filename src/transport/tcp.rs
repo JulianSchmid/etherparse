@@ -204,18 +204,16 @@ impl TcpHeader {
             Some((self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4)
         }
     }
-}
 
-///Different kinds of options that can be present in the options part of a tcp header.
-pub enum TcpOptionElement<'a> {
-    Nop,
-    End,
-    MaximumSegmentSize(u16),
-    WindowScale(u8),
-    SelectiveAcknowledgementPermitted,
-    SelectiveAcknowledgement(&'a[u8]),
-    ///Timestamp & echo (first number is the sender timestamp, the second the echo timestamp)
-    Timestamp(u32, u32)
+    ///Returns an iterator that allows to iterate through all known TCP header options.
+    pub fn options_iterator<'a>(&'a self) -> Option<TcpOptionsIterator<'a>> {
+        match self.options_size() {
+            None => None,
+            Some(size) => Some(TcpOptionsIterator {
+                options: &self.options[..size]
+            })
+        }
+    }
 }
 
 //NOTE: I would have prefered to NOT write my own Debug & PartialEq implementation but there are no
@@ -414,6 +412,13 @@ impl<'a> PacketSlice<'a, TcpHeader> {
         &self.slice[TCP_MINIMUM_HEADER_SIZE..self.data_offset() as usize*4]
     }
 
+    ///Returns an iterator that allows to iterate through all known TCP header options.
+    pub fn options_iterator<'b>(&'b self) -> TcpOptionsIterator<'b> {
+        TcpOptionsIterator {
+            options: self.options()
+        }
+    }
+
     ///Decode all the fields and copy the results to a TcpHeader struct
     pub fn to_header(&self) -> TcpHeader {
         TcpHeader {
@@ -443,5 +448,345 @@ impl<'a> PacketSlice<'a, TcpHeader> {
                 result
             }
         }
+    }
+}
+
+///Different kinds of options that can be present in the options part of a tcp header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionElement {
+    Nop,
+    MaximumSegmentSize(u16),
+    WindowScale(u8),
+    SelectiveAcknowledgementPermitted,
+    SelectiveAcknowledgement([Option<(u32,u32)>;4]),
+    ///Timestamp & echo (first number is the sender timestamp, the second the echo timestamp)
+    Timestamp(u32, u32),
+}
+
+///Errors that can occour while reading the options of a TCP header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionError {
+    ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
+    UnexpectedEndOfSlice(u8),
+
+    ///Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
+    UnexpectedSize{option_id: u8, size: u8 },
+
+    ///Returned if an unknown tcp header option is encountered.
+    ///
+    ///The first element is the identifier and the slice contains the rest of data left in the options.
+    UnknownId(u8),
+}
+
+///Allows iterating over the options after a TCP header.
+pub struct TcpOptionsIterator<'a> {
+    options: &'a [u8]
+}
+
+pub const TCP_OPTION_ID_END: u8 = 0;
+pub const TCP_OPTION_ID_NOP: u8 = 1;
+pub const TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
+pub const TCP_OPTION_ID_WINDOW_SCALE: u8 = 3;
+pub const TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
+pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
+pub const TCP_OPTION_ID_TIMESTAMP: u8 = 8;
+
+impl<'a> Iterator for TcpOptionsIterator<'a> {
+    type Item = Result<TcpOptionElement, TcpOptionError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+
+        use TcpOptionError::*;
+        use TcpOptionElement::*;
+
+        let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionError> {
+            let id = slice[0];
+            if slice.len() < expected_size as usize {
+                Err(UnexpectedEndOfSlice(id))
+            } else if slice[1] != expected_size {
+                Err(UnexpectedSize{
+                    option_id: slice[0],
+                    size: slice[1] 
+                })
+            } else {
+                Ok(())
+            }
+        };
+
+        if self.options.len() == 0 {
+            None
+        } else {
+            //first determine the result
+            let result = match self.options[0] {
+                //end
+                TCP_OPTION_ID_END => {
+                    None
+                },
+                TCP_OPTION_ID_NOP => {
+                    self.options = &self.options[1..];
+                    Some(Ok(Nop))
+                },
+                TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE => {
+                    match expect_specific_size(4, self.options) {
+                        Err(value) => {
+                            Some(Err(value))
+                        },
+                        _ => {
+                            let value = BigEndian::read_u16(&self.options[2..4]);
+                            self.options = &self.options[4..];
+                            Some(Ok(MaximumSegmentSize(value)))
+                        }
+                    }
+                },
+                TCP_OPTION_ID_WINDOW_SCALE => {
+                    match expect_specific_size(3, self.options) {
+                        Err(value) => Some(Err(value)),
+                        _ => {
+                            let value = self.options[2];
+                            self.options = &self.options[3..];
+                            Some(Ok(WindowScale(value)))
+                        }
+                    }
+                },
+                TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED => {
+                    match expect_specific_size(2, self.options) {
+                        Err(value) => Some(Err(value)),
+                        _ => {
+                            self.options = &self.options[2..];
+                            Some(Ok(SelectiveAcknowledgementPermitted))
+                        }
+                    }
+                },
+                TCP_OPTION_ID_SELECTIVE_ACK => {
+                    //check that the length field can be read
+                    if self.options.len() < 2 {
+                        Some(Err(UnexpectedEndOfSlice(self.options[0])))
+                    } else {
+                        //check that the length is an allowed one for this option
+                        let len = self.options[1];
+                        if len != 10 && len != 18 && len != 26 && len != 34 {
+                            Some(Err(UnexpectedSize{
+                                option_id: self.options[0],
+                                size: len 
+                            }))
+                        } else if self.options.len() < (len as usize) {
+                            Some(Err(UnexpectedEndOfSlice(self.options[0])))
+                        } else {
+                            let mut acks: [Option<(u32,u32)>;4] = [None;4];
+                            for i in 0usize..4 {
+                                let offset = 2 + (i*8);
+                                if offset < (len as usize) {
+                                    acks[i] = Some((
+                                        BigEndian::read_u32(&self.options[offset..offset + 4]),
+                                        BigEndian::read_u32(&self.options[offset + 4..offset + 8]))
+                                    );
+                                }
+                            }
+                            //iterate the options
+                            self.options = &self.options[len as usize..];
+                            Some(Ok(SelectiveAcknowledgement(acks)))
+                        }
+                    }
+                },
+                TCP_OPTION_ID_TIMESTAMP => {
+                    match expect_specific_size(10, self.options) {
+                        Err(value) => Some(Err(value)),
+                        _ => {
+                            let t = Timestamp(
+                                BigEndian::read_u32(&self.options[2..6]),
+                                BigEndian::read_u32(&self.options[6..10])
+                            );
+                            self.options = &self.options[10..];
+                            Some(Ok(t))
+                        }
+                    }
+                },
+
+                //unknown id
+                _ => {
+                    Some(Err(UnknownId(self.options[0])))
+                },
+            };
+
+            //in case the result was an error or the end move the slice to an end position
+            match result {
+                None | Some(Err(_)) => {
+                    let len = self.options.len();
+                    self.options = &self.options[len..len];
+                },
+                _ => {}
+            }
+
+            //finally return the result
+            result
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn options_iterator() {
+        fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
+            let mut it = TcpOptionsIterator{ options: buffer };
+            for element in expected.iter() {
+                assert_eq!(element, &it.next().unwrap().unwrap());
+            }
+            //expect no more elements
+            assert_eq!(None, it.next());
+            assert_eq!(0, it.options.len());
+        }
+
+        use TcpOptionElement::*;
+
+        //nop & max segment size
+        expect_elements(&[
+                TCP_OPTION_ID_NOP, 
+                TCP_OPTION_ID_NOP,
+                TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 
+                0, 1,
+                TCP_OPTION_ID_WINDOW_SCALE, 3, 2,
+                TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2,
+                TCP_OPTION_ID_SELECTIVE_ACK, 10,
+                0, 0, 0, 10,
+                0, 0, 0, 11,
+                TCP_OPTION_ID_SELECTIVE_ACK, 18, 
+                0, 0, 0, 12,
+                0, 0, 0, 13,
+                0, 0, 0, 14,
+                0, 0, 0, 15,
+                TCP_OPTION_ID_SELECTIVE_ACK, 26, 
+                0, 0, 0, 16,
+                0, 0, 0, 17,
+                0, 0, 0, 18,
+                0, 0, 0, 19,
+                0, 0, 0, 20,
+                0, 0, 0, 21,
+                TCP_OPTION_ID_SELECTIVE_ACK, 34, 
+                0, 0, 0, 22,
+                0, 0, 0, 23,
+                0, 0, 0, 24,
+                0, 0, 0, 25,
+                0, 0, 0, 26,
+                0, 0, 0, 27,
+                0, 0, 0, 28,
+                0, 0, 0, 29,
+                TCP_OPTION_ID_TIMESTAMP, 10, 
+                0, 0, 0, 30, 
+                0, 0, 0, 31,
+                TCP_OPTION_ID_END, 0, 0, 0, 0
+            ],
+            &[
+                Nop,
+                Nop,
+                MaximumSegmentSize(1),
+                WindowScale(2),
+                SelectiveAcknowledgementPermitted,
+                SelectiveAcknowledgement([Some((10,11)),None, None, None]),
+                SelectiveAcknowledgement([Some((12,13)),Some((14,15)), None, None]),
+                SelectiveAcknowledgement([Some((16,17)),Some((18,19)), Some((20,21)), None]),
+                SelectiveAcknowledgement([Some((22,23)),Some((24,25)), Some((26,27)), Some((28,29))]),
+                Timestamp(30,31)
+            ]);
+    }
+
+    #[test]
+    fn options_iterator_unexpected_eos() {
+        fn expect_unexpected_eos(slice: &[u8]) {
+            for i in 1..slice.len()-1 {
+                let mut it = TcpOptionsIterator{ options: &slice[..i] };
+                assert_eq!(Some(Err(TcpOptionError::UnexpectedEndOfSlice(slice[0]))), it.next());
+                //expect the iterator slice to be moved to the end
+                assert_eq!(0, it.options.len());
+                assert_eq!(None, it.next());
+            }
+        }
+        expect_unexpected_eos(&[TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_WINDOW_SCALE, 3, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 10, 0, 0, 0,
+                                0, 0, 0, 0, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 18, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0, 0, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 26, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0,
+                                0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 34, 0, 0, 0,
+                                0, 0, 0, 0, 0, //10
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, //20
+                                0, 0, 0, 0, 0,
+                                0, 0, 0, 0, 0, //30
+                                0, 0, 0, 0]);
+        expect_unexpected_eos(&[TCP_OPTION_ID_TIMESTAMP, 10, 0, 0, 0,
+                                0, 0, 0, 0, 0]);
+    }
+    #[test]
+    fn options_iterator_unexpected_length() {
+        fn expect_unexpected_size(id: u8, size: u8) {
+            let data = [id, size, 0, 0, 0,
+                        0, 0, 0, 0, 0, //10
+                        0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, //20
+                        0, 0, 0, 0, 0,
+                        0, 0, 0, 0, 0, //30
+                        0, 0, 0, 0];
+            let mut it = TcpOptionsIterator{ options: &data };
+            assert_eq!(Some(Err(TcpOptionError::UnexpectedSize {option_id: data[0], size: data[1] })), it.next());
+            //expect the iterator slice to be moved to the end
+            assert_eq!(0, it.options.len());
+            assert_eq!(None, it.next());
+            assert_eq!(0, it.options.len());
+        }
+        expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 3);
+        expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 5);
+
+        expect_unexpected_size(TCP_OPTION_ID_WINDOW_SCALE, 2);
+        expect_unexpected_size(TCP_OPTION_ID_WINDOW_SCALE, 4);
+
+        expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 3);
+        expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 5);
+
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 1);
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 3);
+
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 9);
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 11);
+
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 17);
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 19);
+
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 25);
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 27);
+
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 33);
+        expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 35);
+
+        expect_unexpected_size(TCP_OPTION_ID_TIMESTAMP, 9);
+        expect_unexpected_size(TCP_OPTION_ID_TIMESTAMP, 11);
+    }
+
+    #[test]
+    fn options_iterator_unexpected_id() {
+        let data = [255, 2, 0, 0, 0,
+                    0, 0, 0, 0, 0, //10
+                    0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, //20
+                    0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, //30
+                    0, 0, 0, 0];
+        let mut it = TcpOptionsIterator{ options: &data };
+        assert_eq!(Some(Err(TcpOptionError::UnknownId(255))), it.next());
+        //expect the iterator slice to be moved to the end
+        assert_eq!(0, it.options.len());
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.options.len());
     }
 }
