@@ -2,7 +2,7 @@
 [![Build Status][build_badge]][build_status]
 [![Code Coverage][coverage_badge]][coverage_report]
 
-A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP ...).
+A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
 Currently supported are:
 * Ethernet II
@@ -10,6 +10,7 @@ Currently supported are:
 * IPv4
 * IPv6 (missing extension headers, but supporting skipping them)
 * UDP
+* TCP
 
 ## Usage
 
@@ -134,7 +135,7 @@ Read the documentations of the different methods for a more details:
 ## Roadmap
 * Documentation
   * Packet Builder
-* TCP
+* Packet Builder TCP support
 * MutPacketSlice -> modifaction of fields in slices directly?
 * Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
 * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)

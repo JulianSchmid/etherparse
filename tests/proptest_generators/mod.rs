@@ -359,7 +359,7 @@ prop_compose! {
             window_size: window_size,
             checksum: checksum,
             urgent_pointer: urgent_pointer,
-            options: {
+            options_buffer: {
                 let mut value: [u8;40] = [0;40];
                 value[..options.len()].copy_from_slice(&options[..]);
                 value

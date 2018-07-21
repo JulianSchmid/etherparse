@@ -16,7 +16,7 @@ pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 
 ///TCP header according to rfc 793.
 ///
-///Field descriptions copied from RFC 793 page 15-
+///Field descriptions copied from RFC 793 page 15++
 #[derive(Clone)]
 pub struct TcpHeader {
     ///The source port number.
@@ -73,8 +73,8 @@ pub struct TcpHeader {
     ///the urgent data.  This field is only be interpreted in segments with
     ///the URG control bit set.
     pub urgent_pointer: u16,
-    ///Options of the header
-    pub options: [u8;40]
+    ///Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
+    pub options_buffer: [u8;40]
 }
 
 impl TcpHeader {
@@ -107,7 +107,7 @@ impl TcpHeader {
             window_size: reader.read_u16::<BigEndian>()?,
             checksum: reader.read_u16::<BigEndian>()?,
             urgent_pointer: reader.read_u16::<BigEndian>()?,
-            options: {
+            options_buffer: {
                 if data_offset < TCP_MINIMUM_DATA_OFFSET {
                     return Err(ReadError::TcpDataOffsetTooSmall(data_offset));
                 } else {
@@ -191,7 +191,7 @@ impl TcpHeader {
         //write options if the data_offset is large enough
         if self.data_offset > TCP_MINIMUM_DATA_OFFSET {
             let len = ((self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
-            writer.write(&self.options[..len])?;
+            writer.write(&self.options_buffer[..len])?;
         }
         Ok(())
     }
@@ -205,12 +205,19 @@ impl TcpHeader {
         }
     }
 
+    pub fn options<'a>(&'a self) -> Option<&'a[u8]> {
+        match self.options_size() {
+            None => None,
+            Some(size) => Some(&self.options_buffer[..size])
+        }
+    }
+
     ///Returns an iterator that allows to iterate through all known TCP header options.
     pub fn options_iterator<'a>(&'a self) -> Option<TcpOptionsIterator<'a>> {
         match self.options_size() {
             None => None,
             Some(size) => Some(TcpOptionsIterator {
-                options: &self.options[..size]
+                options: &self.options_buffer[..size]
             })
         }
     }
@@ -265,7 +272,7 @@ impl std::cmp::PartialEq for TcpHeader {
         self.window_size == other.window_size &&
         self.checksum == other.checksum &&
         self.urgent_pointer  == other.urgent_pointer &&
-        self.options[..] == other.options[..]
+        self.options_buffer[..] == other.options_buffer[..]
     }
 }
 
@@ -439,7 +446,7 @@ impl<'a> PacketSlice<'a, TcpHeader> {
             window_size: self.window_size(),
             checksum: self.checksum(),
             urgent_pointer: self.urgent_pointer(),
-            options: {
+            options_buffer: {
                 let options = self.options();
                 let mut result: [u8;40] = [0;40];
                 if options.len() > 0 {

@@ -3,7 +3,7 @@ use super::super::*;
 use std::io::Cursor;
 
 #[test]
-fn options_size() {
+fn options() {
     let base = TcpHeader {
         source_port: 0,
         destination_port: 0,
@@ -16,25 +16,28 @@ fn options_size() {
         window_size: 0,
         checksum: 0,
         urgent_pointer: 0,
-        options: [0;40]
+        options_buffer: [0;40]
     };
     //too small -> expect None
     for i in 0..TCP_MINIMUM_DATA_OFFSET {
         let mut header = base.clone();
         header.data_offset = i;
         assert_eq!(None, header.options_size());
+        assert_eq!(None, header.options());
     }
     //ok size -> expect output based on options size
     for i in TCP_MINIMUM_DATA_OFFSET..TCP_MAXIMUM_DATA_OFFSET + 1 {
         let mut header = base.clone();
         header.data_offset = i;
         assert_eq!(Some((i - TCP_MINIMUM_DATA_OFFSET) as usize *4), header.options_size());
+        assert_eq!(Some(&header.options_buffer[..(i-TCP_MINIMUM_DATA_OFFSET) as usize *4]), header.options());
     }
     //too big -> expect None
     for i in TCP_MAXIMUM_DATA_OFFSET + 1..std::u8::MAX {
         let mut header = base.clone();
         header.data_offset = i;
         assert_eq!(None, header.options_size());
+        assert_eq!(None, header.options());
     }
 }
 
@@ -139,7 +142,7 @@ proptest! {
         assert_eq!(input.window_size, slice.window_size());
         assert_eq!(input.checksum, slice.checksum());
         assert_eq!(input.urgent_pointer, slice.urgent_pointer());
-        assert_eq!(&input.options[..input.options_size().unwrap()], slice.options());
+        assert_eq!(&input.options_buffer[..input.options_size().unwrap()], slice.options());
 
         //check the to_header result
         assert_eq!(input, &slice.to_header());
@@ -183,7 +186,7 @@ fn eq()
         window_size: 6,
         checksum: 7,
         urgent_pointer: 8,
-        options: [0;40]
+        options_buffer: [0;40]
     };
     //equal
     {
@@ -296,13 +299,13 @@ fn eq()
     //options (first element)
     {
         let mut other = base.clone();
-        other.options[0] = 10;
+        other.options_buffer[0] = 10;
         assert_ne!(other, base);
     }
     //options (last element)
     {
         let mut other = base.clone();
-        other.options[39] = 10;
+        other.options_buffer[39] = 10;
         assert_ne!(other, base);
     }
 }
