@@ -1,45 +1,256 @@
 use super::super::*;
 
 use std::io::Cursor;
+use proptest::prelude::*;
+use self::byteorder::{ByteOrder, BigEndian};
 
 #[test]
 fn options() {
-    let base = TcpHeader {
-        source_port: 0,
-        destination_port: 0,
-        sequence_number: 0,
-        acknowledgment_number: 0,
-        data_offset: 0,
-        ns: false, fin: false, syn: false, rst: false,
-        psh: false, ack: false, urg: false, ece: false,
-        cwr: false,
-        window_size: 0,
-        checksum: 0,
-        urgent_pointer: 0,
-        options_buffer: [0;40]
-    };
-    //too small -> expect None
-    for i in 0..TCP_MINIMUM_DATA_OFFSET {
-        let mut header = base.clone();
-        header.data_offset = i;
-        assert_eq!(None, header.options_size());
-        assert_eq!(None, header.options());
-    }
+    let base : TcpHeader = Default::default();
+
+    let dummy = [ 1, 2, 3, 4, 5,
+                  6, 7, 8, 9,10,
+                 11,12,13,14,15,
+                 16,17,18,19,20,
+                 21,22,23,24,25,
+                 26,27,28,29,30,
+                 31,32,33,34,35,
+                 36,37,38,39,40,
+                 41 ];
+
     //ok size -> expect output based on options size
-    for i in TCP_MINIMUM_DATA_OFFSET..TCP_MAXIMUM_DATA_OFFSET + 1 {
+    for i in 0..40 {
         let mut header = base.clone();
-        header.data_offset = i;
-        assert_eq!(Some((i - TCP_MINIMUM_DATA_OFFSET) as usize *4), header.options_size());
-        assert_eq!(Some(&header.options_buffer[..(i-TCP_MINIMUM_DATA_OFFSET) as usize *4]), header.options());
+        println!("{}",i);
+        //set the options
+        header.set_options_raw(&dummy[..i]).unwrap();
+
+        //determine the expected options length
+        let mut options_length = i / 4;
+        if i % 4 != 0 {
+            options_length += 1;
+        }
+        options_length = options_length * 4;
+
+        //expecetd data
+        let mut expected_options = [0;40];
+        expected_options[..i].copy_from_slice(&dummy[..i]);
+
+        assert_eq!(options_length, header.options_len());
+        assert_eq!((options_length / 4) as u8 + TCP_MINIMUM_DATA_OFFSET, header.data_offset());
+        assert_eq!(&expected_options[..options_length], header.options());
     }
-    //too big -> expect None
-    for i in TCP_MAXIMUM_DATA_OFFSET + 1..std::u8::MAX {
-        let mut header = base.clone();
-        header.data_offset = i;
-        assert_eq!(None, header.options_size());
-        assert_eq!(None, header.options());
+
+    //too big -> expect error
+    let mut header = base.clone();
+    use TcpOptionWriteError::*;
+    assert_eq!(Err(NotEnoughSpace(dummy.len())), header.set_options_raw(&dummy[..]));
+}
+
+fn write_options(elements: &[TcpOptionElement]) -> TcpHeader {
+    let mut result : TcpHeader = Default::default();
+    result.set_options(elements).unwrap();
+    result
+}
+
+proptest! {
+    #[test]
+    fn set_options_maximum_segment_size(arg in any::<u16>()) {
+        use TcpOptionElement::*;
+        assert_eq!(write_options(&[Nop, Nop, MaximumSegmentSize(arg), Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4,
+                    0, 0, TCP_OPTION_ID_NOP, TCP_OPTION_ID_END
+                ];
+                BigEndian::write_u16(&mut options[4..6], arg);
+                options
+            }
+        );
     }
 }
+
+proptest! {
+    #[test]
+    fn set_options_window_scale(arg in any::<u8>()) {
+        use TcpOptionElement::*;
+        assert_eq!(write_options(&[Nop, Nop, WindowScale(arg), Nop]).options(), 
+           &[
+                TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_WINDOW_SCALE, 3,
+                arg, TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0
+            ]
+        );
+    }
+}
+
+#[test]
+fn set_options_selective_ack_perm() {
+    use TcpOptionElement::*;
+    assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgementPermitted, Nop]).options(), 
+       &[
+            TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2,
+            TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+        ]
+    );
+}
+
+proptest! {
+    #[test]
+    fn set_options_selective_ack(args in proptest::collection::vec(any::<u32>(), 4*2)) {
+        use TcpOptionElement::*;
+        //1
+        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK, 10,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+                ];
+                BigEndian::write_u32(&mut options[4..8], args[0]);
+                BigEndian::write_u32(&mut options[8..12], args[1]);
+                options
+            }
+        );
+
+        //2
+        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+                                                                      [Some((args[2], args[3])), 
+                                                                       None, None]), 
+                                   Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK, 18,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+                ];
+                BigEndian::write_u32(&mut options[4..8], args[0]);
+                BigEndian::write_u32(&mut options[8..12], args[1]);
+                BigEndian::write_u32(&mut options[12..16], args[2]);
+                BigEndian::write_u32(&mut options[16..20], args[3]);
+                options
+            }
+        );
+
+        //3
+        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+                                                                      [Some((args[2], args[3])), 
+                                                                       Some((args[4], args[5])), 
+                                                                       None]), 
+                                   Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK, 26,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+                ];
+                BigEndian::write_u32(&mut options[4..8], args[0]);
+                BigEndian::write_u32(&mut options[8..12], args[1]);
+                BigEndian::write_u32(&mut options[12..16], args[2]);
+                BigEndian::write_u32(&mut options[16..20], args[3]);
+                BigEndian::write_u32(&mut options[20..24], args[4]);
+                BigEndian::write_u32(&mut options[24..28], args[5]);
+                options
+            }
+        );
+
+        //4
+        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+                                                                      [Some((args[2], args[3])), 
+                                                                       Some((args[4], args[5])), 
+                                                                       Some((args[6], args[7]))]), 
+                                   Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK, 34,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+                ];
+                BigEndian::write_u32(&mut options[4..8], args[0]);
+                BigEndian::write_u32(&mut options[8..12], args[1]);
+                BigEndian::write_u32(&mut options[12..16], args[2]);
+                BigEndian::write_u32(&mut options[16..20], args[3]);
+                BigEndian::write_u32(&mut options[20..24], args[4]);
+                BigEndian::write_u32(&mut options[24..28], args[5]);
+                BigEndian::write_u32(&mut options[28..32], args[6]);
+                BigEndian::write_u32(&mut options[32..36], args[7]);
+                options
+            }[..]
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn set_options_timestamp(arg0 in any::<u32>(),
+                                        arg1 in any::<u32>()) {
+        use TcpOptionElement::*;
+        assert_eq!(write_options(&[Nop, Nop, Timestamp(arg0, arg1), Nop]).options(), 
+           &{
+                let mut options = [
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_TIMESTAMP, 10,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    TCP_OPTION_ID_NOP, TCP_OPTION_ID_END, 0, 0
+                ];
+                BigEndian::write_u32(&mut options[4..8], arg0);
+                BigEndian::write_u32(&mut options[8..12], arg1);
+                options
+            }
+        );
+    }
+}
+
+// TODO test too large
+
+#[test]
+fn set_options_not_enough_memory_error() {
+    use TcpOptionElement::*;
+    assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
+               TcpHeader::default().set_options(
+                    &[MaximumSegmentSize(1), //4
+                      WindowScale(2), //+3 = 7
+                      SelectiveAcknowledgementPermitted, //+2 = 9
+                      SelectiveAcknowledgement((3,4), [Some((5,6)), None, None]), // + 18 = 27
+                      Timestamp(5, 6), // + 10 = 37
+                      Nop, Nop, Nop  // + 3 + 1 (for end)
+                    ]));
+    //test with all fields filled of the selective ack
+    assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
+           TcpHeader::default().set_options(
+                &[Nop, // 1
+                  SelectiveAcknowledgement((3,4), [Some((5,6)), Some((5,6)), Some((5,6))]), // + 34 = 35
+                  MaximumSegmentSize(1), // + 4 = 39 
+                  Nop // + 1 + 1 (for end) = 41
+                ]));
+
+    //test with all fields filled of the selective ack
+    assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
+           TcpHeader::default().set_options(
+                &[Nop, // 1
+                  SelectiveAcknowledgement((3,4), [None, None, None]), // + 10 = 11
+                  Timestamp(1,2), // + 10 = 21
+                  Timestamp(1,2), // + 10 = 31
+                  MaximumSegmentSize(1), // + 4 = 35
+                  Nop, Nop, Nop, Nop, Nop // + 5 + 1 (for end) = 41
+                ]));
+}
+
 
 proptest! {
     #[test]
@@ -49,40 +260,11 @@ proptest! {
         let mut buffer: Vec<u8> = Vec::with_capacity(60);
         input.write(&mut buffer).unwrap();
         //check length
-        assert_eq!(input.data_offset as usize * 4, buffer.len());
+        assert_eq!(input.data_offset() as usize * 4, buffer.len());
         //deserialize
         let result = TcpHeader::read(&mut Cursor::new(&buffer)).unwrap();
         //check equivalence
         assert_eq!(input, &result);
-    }
-}
-
-proptest! {
-    #[test]
-    fn write_data_offset_too_small(ref base in tcp_any(),
-                                   data_offset in 0..TCP_MINIMUM_DATA_OFFSET)
-    {
-        let mut input = base.clone();
-        input.data_offset = data_offset;
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(60);
-        assert_matches!(input.write(&mut buffer), Err(
-              WriteError::ValueError(_)));
-        assert_eq!(0, buffer.len());
-    }
-}
-
-proptest! {
-    #[test]
-    fn write_data_offset_too_large(ref base in tcp_any(),
-                                   data_offset in (TCP_MAXIMUM_DATA_OFFSET + 1)..255)
-    {
-        let mut input = base.clone();
-        input.data_offset = data_offset;
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(60);
-        assert_matches!(input.write(&mut buffer), Err(
-              WriteError::ValueError(_)));
     }
 }
 
@@ -129,7 +311,7 @@ proptest! {
         assert_eq!(input.destination_port, slice.destination_port());
         assert_eq!(input.sequence_number, slice.sequence_number());
         assert_eq!(input.acknowledgment_number, slice.acknowledgment_number());
-        assert_eq!(input.data_offset, slice.data_offset());
+        assert_eq!(input.data_offset(), slice.data_offset());
         assert_eq!(input.ns, slice.ns());
         assert_eq!(input.fin, slice.fin());
         assert_eq!(input.syn, slice.syn());
@@ -142,7 +324,7 @@ proptest! {
         assert_eq!(input.window_size, slice.window_size());
         assert_eq!(input.checksum, slice.checksum());
         assert_eq!(input.urgent_pointer, slice.urgent_pointer());
-        assert_eq!(&input.options_buffer[..input.options_size().unwrap()], slice.options());
+        assert_eq!(input.options(), slice.options());
 
         //check the to_header result
         assert_eq!(input, &slice.to_header());
@@ -165,151 +347,6 @@ proptest! {
     }
 }
 
-#[test]
-fn eq()
-{
-    let base = TcpHeader {
-        source_port: 1,
-        destination_port: 2,
-        sequence_number: 3,
-        acknowledgment_number: 4,
-        data_offset: 5,
-        ns: false,
-        fin: false,
-        syn: false,
-        rst: false,
-        psh: false,
-        ack: false,
-        ece: false,
-        urg: false,
-        cwr: false,
-        window_size: 6,
-        checksum: 7,
-        urgent_pointer: 8,
-        options_buffer: [0;40]
-    };
-    //equal
-    {
-        let other = base.clone();
-        assert_eq!(other, base);
-    }
-    //change every field anc check for neq
-    //source_port
-    {
-        let mut other = base.clone();
-        other.source_port = 10;
-        assert_ne!(other, base);
-    }
-    //destination_port
-    {
-        let mut other = base.clone();
-        other.destination_port = 10;
-        assert_ne!(other, base);
-    }
-    //sequence_number
-    {
-        let mut other = base.clone();
-        other.sequence_number = 10;
-        assert_ne!(other, base);
-    }
-    //acknowledgment_number
-    {
-        let mut other = base.clone();
-        other.acknowledgment_number = 10;
-        assert_ne!(other, base);
-    }
-    //data_offset
-    {
-        let mut other = base.clone();
-        other.data_offset = 10;
-        assert_ne!(other, base);
-    }
-    //ns
-    {
-        let mut other = base.clone();
-        other.ns = true;
-        assert_ne!(other, base);
-    }
-    //fin
-    {
-        let mut other = base.clone();
-        other.fin = true;
-        assert_ne!(other, base);
-    }
-    //syn
-    {
-        let mut other = base.clone();
-        other.syn = true;
-        assert_ne!(other, base);
-    }
-    //rst
-    {
-        let mut other = base.clone();
-        other.rst = true;
-        assert_ne!(other, base);
-    }
-    //psh
-    {
-        let mut other = base.clone();
-        other.psh = true;
-        assert_ne!(other, base);
-    }
-    //ack
-    {
-        let mut other = base.clone();
-        other.ack = true;
-        assert_ne!(other, base);
-    }
-    //ece
-    {
-        let mut other = base.clone();
-        other.ece = true;
-        assert_ne!(other, base);
-    }
-    //urg
-    {
-        let mut other = base.clone();
-        other.urg = true;
-        assert_ne!(other, base);
-    }
-    //cwr
-    {
-        let mut other = base.clone();
-        other.cwr = true;
-        assert_ne!(other, base);
-    }
-    //window_size
-    {
-        let mut other = base.clone();
-        other.window_size = 10;
-        assert_ne!(other, base);
-    }
-    //checksum
-    {
-        let mut other = base.clone();
-        other.checksum = 10;
-        assert_ne!(other, base);
-    }
-    //urgent_pointer
-    {
-        let mut other = base.clone();
-        other.urgent_pointer = 10;
-        assert_ne!(other, base);
-    }
-    //options (first element)
-    {
-        let mut other = base.clone();
-        other.options_buffer[0] = 10;
-        assert_ne!(other, base);
-    }
-    //options (last element)
-    {
-        let mut other = base.clone();
-        other.options_buffer[39] = 10;
-        assert_ne!(other, base);
-    }
-}
-
 proptest! {
     #[test]
     fn debug_fmt(ref input in tcp_any())
@@ -319,7 +356,7 @@ proptest! {
                 input.destination_port,
                 input.sequence_number,
                 input.acknowledgment_number,
-                input.data_offset,
+                input.data_offset(),
                 input.ns,
                 input.fin,
                 input.syn,

@@ -5,7 +5,6 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 
 //TODO checksum calculation
-//TODO options setting & interpretation
 
 ///The minimum size of the tcp header in bytes
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;
@@ -39,7 +38,7 @@ pub struct TcpHeader {
     ///
     ///This indicates where the data begins.  The TCP header (even one including options) is an
     ///integral number of 32 bits long.
-    pub data_offset: u8,
+    _data_offset: u8,
     ///ECN-nonce - concealment protection (experimental: see RFC 3540)
     pub ns: bool,
     ///No more data from sender
@@ -74,10 +73,203 @@ pub struct TcpHeader {
     ///the URG control bit set.
     pub urgent_pointer: u16,
     ///Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
-    pub options_buffer: [u8;40]
+    options_buffer: [u8;40]
 }
 
 impl TcpHeader {
+
+    ///Creates a TcpHeader with the given values and the rest initialized with default values.
+    pub fn new(source_port: u16, destination_port: u16, sequence_number: u32, window_size: u16) -> TcpHeader {
+        TcpHeader {
+            source_port: source_port,
+            destination_port: destination_port,
+            sequence_number: sequence_number,
+            acknowledgment_number: 0,
+            _data_offset: 5,
+            ns: false,
+            fin: false,
+            syn: false,
+            rst: false,
+            psh: false,
+            ack: false,
+            ece: false,
+            urg: false,
+            cwr: false,
+            window_size: window_size,
+            checksum: 0,
+            urgent_pointer: 0,
+            options_buffer: [0;40]
+        }
+    }
+
+    ///The number of 32 bit words in the TCP Header.
+    ///
+    ///This indicates where the data begins.  The TCP header (even one including options) is an
+    ///integral number of 32 bits long.
+    pub fn data_offset(&self) -> u8 {
+        self._data_offset
+    }
+
+    ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
+    pub fn options_len(&self) -> usize {
+        debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
+        debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
+        (self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4
+    }
+
+    ///Returns a slice containing the options of the header (size is determined via the data_offset field.
+    pub fn options<'a>(&'a self) -> &'a[u8] {
+        &self.options_buffer[..self.options_len()]
+    }
+
+    ///Sets the options (overwrites the current options) or returns an error when there is not enough space.
+    pub fn set_options(&mut self, options: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
+
+        //calculate the required size of the options
+        use TcpOptionElement::*;
+        let required_length = options.iter().fold(0, |acc, ref x| {
+            acc + match x {
+                Nop => 1,
+                MaximumSegmentSize(_) => 4,
+                WindowScale(_) => 3,
+                SelectiveAcknowledgementPermitted => 2,
+                SelectiveAcknowledgement(_, rest) => {
+                    rest.iter().fold(10, |acc2, ref y| {
+                        match y {
+                            None => acc2,
+                            Some(_) => acc2 + 8
+                        }
+                    })
+                },
+                Timestamp(_, _) => 10,
+            }
+        }) + 1; //+1 for end option
+
+        if self.options_buffer.len() < required_length {
+            Err(TcpOptionWriteError::NotEnoughSpace(required_length))
+        } else {
+
+            //reset the options to null
+            self.options_buffer = [0;40];
+            self._data_offset = TCP_MINIMUM_DATA_OFFSET;
+
+            //write the options to the buffer
+            //note to whoever: I would have prefered to use std::io::Cursor as it would be less error 
+            //                 prone. But just in case that "no std" support is added later lets
+            //                 not not rewrite it just yet with cursor.
+            let mut i = 0;
+            for element in options {
+                match element {
+                    Nop => {
+                        self.options_buffer[i] = TCP_OPTION_ID_NOP;
+                        i += 1;
+                    },
+                    MaximumSegmentSize(value) => {
+                        self.options_buffer[i] = TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE;
+                        i += 1;
+                        self.options_buffer[i] = 4;
+                        i += 1;
+                        BigEndian::write_u16(&mut self.options_buffer[i..i + 2], *value);
+                        i += 2;
+                    },
+                    WindowScale(value) => {
+                        self.options_buffer[i] = TCP_OPTION_ID_WINDOW_SCALE;
+                        i += 1;
+                        self.options_buffer[i] = 3;
+                        i += 1;
+                        self.options_buffer[i] = *value;
+                        i += 1;
+                    },
+                    SelectiveAcknowledgementPermitted => {
+                        self.options_buffer[i] = TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED;
+                        i += 1;
+                        self.options_buffer[i] = 2;
+                        i += 1;
+                    },
+                    SelectiveAcknowledgement(first, rest) => {
+                        self.options_buffer[i] = TCP_OPTION_ID_SELECTIVE_ACK;
+                        i += 1;
+
+                        //write the length
+                        self.options_buffer[i] = rest.iter().fold(10, |acc, ref y| {
+                            match y {
+                                None => acc,
+                                Some(_) => acc + 8
+                            }
+                        });
+                        i += 1;
+
+                        //write first
+                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], first.0);
+                        i += 4;
+                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], first.1);
+                        i += 4;
+
+                        //write the rest
+                        for v in rest {
+                            match v {
+                                None => {},
+                                Some((a,b)) => {
+                                    BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *a);
+                                    i += 4;
+                                    BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *b);
+                                    i += 4;
+                                }
+                            }
+                        }
+                    },
+                    Timestamp(a, b) =>  {
+                        self.options_buffer[i] = TCP_OPTION_ID_TIMESTAMP;
+                        i += 1;
+                        self.options_buffer[i] = 10;
+                        i += 1;
+                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *a);
+                        i += 4;
+                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *b);
+                        i += 4;
+                    }
+                }
+            }
+            //write the end & set the new data offset
+            if i > 0 {
+                self.options_buffer[i] = TCP_OPTION_ID_END;
+                i += 1;
+                self._data_offset = (i / 4) as u8 + TCP_MINIMUM_DATA_OFFSET;
+                if i % 4 != 0 {
+                    self._data_offset += 1;
+                }
+            }
+            //done
+            Ok(())
+        }
+    }
+
+    ///Sets the options to the data given.
+    pub fn set_options_raw(&mut self, data: &[u8]) -> Result<(), TcpOptionWriteError> {
+        //check length
+        if self.options_buffer.len() < data.len() {
+            Err(TcpOptionWriteError::NotEnoughSpace(data.len()))
+        } else {
+            //reset all to zero to ensure padding
+            self.options_buffer = [0;40];
+
+            //set data & data_offset
+            self.options_buffer[..data.len()].copy_from_slice(data);
+            self._data_offset = (data.len() / 4) as u8 + TCP_MINIMUM_DATA_OFFSET;
+            if data.len() % 4 != 0 {
+                self._data_offset += 1;
+            }
+            Ok(())
+        }
+    }
+
+    ///Returns an iterator that allows to iterate through all known TCP header options.
+    pub fn options_iterator<'a>(&'a self) -> TcpOptionsIterator<'a> {
+        TcpOptionsIterator {
+            options: &self.options_buffer[..self.options_len()]
+        }
+    }
+
     ///Read a tcp header from the current position
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
         let source_port = reader.read_u16::<BigEndian>()?;
@@ -120,36 +312,23 @@ impl TcpHeader {
                     buffer
                 }
             },
-            data_offset: data_offset,
+            _data_offset: data_offset,
         })
     }
 
     ///Write the tcp header to a stream (does NOT calculate the checksum).
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
 
         //check that the data offset is within range
-        use ValueError::*;
-        use WriteError::ValueError;
-        if self.data_offset < TCP_MINIMUM_DATA_OFFSET {
-            return Err(ValueError(U8TooSmall{
-                value: self.data_offset, 
-                min: TCP_MINIMUM_DATA_OFFSET, 
-                field: ErrorField::TcpDataOffset
-            }));
-        } else if self.data_offset > TCP_MAXIMUM_DATA_OFFSET {
-            return Err(ValueError(U8TooLarge{
-                value: self.data_offset, 
-                max: TCP_MAXIMUM_DATA_OFFSET, 
-                field: ErrorField::TcpDataOffset
-            }));
-        } 
+        debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
+        debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
 
         writer.write_u16::<BigEndian>(self.source_port)?;
         writer.write_u16::<BigEndian>(self.destination_port)?;
         writer.write_u32::<BigEndian>(self.sequence_number)?;
         writer.write_u32::<BigEndian>(self.acknowledgment_number)?;
         writer.write_u8({
-            let value = (self.data_offset << 4) & 0xF0;
+            let value = (self._data_offset << 4) & 0xF0;
             if self.ns {
                 value | 1
             } else {
@@ -189,36 +368,29 @@ impl TcpHeader {
         writer.write_u16::<BigEndian>(self.urgent_pointer)?;
 
         //write options if the data_offset is large enough
-        if self.data_offset > TCP_MINIMUM_DATA_OFFSET {
-            let len = ((self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
+        if self._data_offset > TCP_MINIMUM_DATA_OFFSET {
+            let len = ((self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
             writer.write(&self.options_buffer[..len])?;
         }
         Ok(())
     }
+}
 
-    ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
-    pub fn options_size(&self) -> Option<usize> {
-        if self.data_offset < TCP_MINIMUM_DATA_OFFSET || self.data_offset > TCP_MAXIMUM_DATA_OFFSET {
-            None
-        } else {
-            Some((self.data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4)
-        }
-    }
-
-    pub fn options<'a>(&'a self) -> Option<&'a[u8]> {
-        match self.options_size() {
-            None => None,
-            Some(size) => Some(&self.options_buffer[..size])
-        }
-    }
-
-    ///Returns an iterator that allows to iterate through all known TCP header options.
-    pub fn options_iterator<'a>(&'a self) -> Option<TcpOptionsIterator<'a>> {
-        match self.options_size() {
-            None => None,
-            Some(size) => Some(TcpOptionsIterator {
-                options: &self.options_buffer[..size]
-            })
+impl Default for TcpHeader {
+    fn default() -> TcpHeader {
+        TcpHeader {
+            source_port: 0,
+            destination_port: 0,
+            sequence_number: 0,
+            acknowledgment_number: 0,
+            _data_offset: 5,
+            ns: false, fin: false, syn: false, rst: false,
+            psh: false, ack: false, urg: false, ece: false,
+            cwr: false,
+            window_size: 0,
+            checksum: 0,
+            urgent_pointer: 0,
+            options_buffer: [0;40]
         }
     }
 }
@@ -237,7 +409,7 @@ impl Debug for TcpHeader {
             self.destination_port,
             self.sequence_number,
             self.acknowledgment_number,
-            self.data_offset,
+            self._data_offset,
             self.ns,
             self.fin,
             self.syn,
@@ -259,7 +431,7 @@ impl std::cmp::PartialEq for TcpHeader {
         self.destination_port == other.destination_port &&
         self.sequence_number == other.sequence_number &&
         self.acknowledgment_number == other.acknowledgment_number &&
-        self.data_offset == other.data_offset &&
+        self._data_offset == other._data_offset &&
         self.ns == other.ns &&
         self.fin == other.fin &&
         self.syn == other.syn &&
@@ -433,7 +605,7 @@ impl<'a> PacketSlice<'a, TcpHeader> {
             destination_port: self.destination_port(),
             sequence_number: self.sequence_number(),
             acknowledgment_number: self.acknowledgment_number(),
-            data_offset: self.data_offset(),
+            _data_offset: self.data_offset(),
             ns: self.ns(),
             fin: self.fin(),
             syn: self.syn(),
@@ -465,14 +637,14 @@ pub enum TcpOptionElement {
     MaximumSegmentSize(u16),
     WindowScale(u8),
     SelectiveAcknowledgementPermitted,
-    SelectiveAcknowledgement([Option<(u32,u32)>;4]),
+    SelectiveAcknowledgement((u32,u32), [Option<(u32,u32)>;3]),
     ///Timestamp & echo (first number is the sender timestamp, the second the echo timestamp)
     Timestamp(u32, u32),
 }
 
 ///Errors that can occour while reading the options of a TCP header.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum TcpOptionError {
+pub enum TcpOptionReadError {
     ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
     UnexpectedEndOfSlice(u8),
 
@@ -483,6 +655,17 @@ pub enum TcpOptionError {
     ///
     ///The first element is the identifier and the slice contains the rest of data left in the options.
     UnknownId(u8),
+}
+
+///Errors that can occour when setting the options of a tcp header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionWriteError {
+    ///There is not enough memory to store all options in the options section of the header (maximum 40 bytes).
+    ///
+    ///The options size is limited by the 4 bit data_offset field in the header which describes
+    ///the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
+    ///part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself). 
+    NotEnoughSpace(usize)
 }
 
 ///Allows iterating over the options after a TCP header.
@@ -499,14 +682,14 @@ pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
 pub const TCP_OPTION_ID_TIMESTAMP: u8 = 8;
 
 impl<'a> Iterator for TcpOptionsIterator<'a> {
-    type Item = Result<TcpOptionElement, TcpOptionError>;
+    type Item = Result<TcpOptionElement, TcpOptionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        use TcpOptionError::*;
+        use TcpOptionReadError::*;
         use TcpOptionElement::*;
 
-        let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionError> {
+        let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionReadError> {
             let id = slice[0];
             if slice.len() < expected_size as usize {
                 Err(UnexpectedEndOfSlice(id))
@@ -579,9 +762,11 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         } else if self.options.len() < (len as usize) {
                             Some(Err(UnexpectedEndOfSlice(self.options[0])))
                         } else {
-                            let mut acks: [Option<(u32,u32)>;4] = [None;4];
-                            for i in 0usize..4 {
-                                let offset = 2 + (i*8);
+                            let mut acks: [Option<(u32,u32)>;3] = [None;3];
+                            let first = (BigEndian::read_u32(&self.options[2..2 + 4]),
+                                         BigEndian::read_u32(&self.options[2 + 4..2 + 8]));;
+                            for i in 0usize..3 {
+                                let offset = 2 + 8 + (i*8);
                                 if offset < (len as usize) {
                                     acks[i] = Some((
                                         BigEndian::read_u32(&self.options[offset..offset + 4]),
@@ -591,7 +776,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             }
                             //iterate the options
                             self.options = &self.options[len as usize..];
-                            Some(Ok(SelectiveAcknowledgement(acks)))
+                            Some(Ok(SelectiveAcknowledgement(first, acks)))
                         }
                     }
                 },
@@ -690,10 +875,10 @@ mod tests {
                 MaximumSegmentSize(1),
                 WindowScale(2),
                 SelectiveAcknowledgementPermitted,
-                SelectiveAcknowledgement([Some((10,11)),None, None, None]),
-                SelectiveAcknowledgement([Some((12,13)),Some((14,15)), None, None]),
-                SelectiveAcknowledgement([Some((16,17)),Some((18,19)), Some((20,21)), None]),
-                SelectiveAcknowledgement([Some((22,23)),Some((24,25)), Some((26,27)), Some((28,29))]),
+                SelectiveAcknowledgement((10,11), [None, None, None]),
+                SelectiveAcknowledgement((12,13), [Some((14,15)), None, None]),
+                SelectiveAcknowledgement((16,17), [Some((18,19)), Some((20,21)), None]),
+                SelectiveAcknowledgement((22,23), [Some((24,25)), Some((26,27)), Some((28,29))]),
                 Timestamp(30,31)
             ]);
     }
@@ -703,7 +888,7 @@ mod tests {
         fn expect_unexpected_eos(slice: &[u8]) {
             for i in 1..slice.len()-1 {
                 let mut it = TcpOptionsIterator{ options: &slice[..i] };
-                assert_eq!(Some(Err(TcpOptionError::UnexpectedEndOfSlice(slice[0]))), it.next());
+                assert_eq!(Some(Err(TcpOptionReadError::UnexpectedEndOfSlice(slice[0]))), it.next());
                 //expect the iterator slice to be moved to the end
                 assert_eq!(0, it.options.len());
                 assert_eq!(None, it.next());
@@ -746,7 +931,7 @@ mod tests {
                         0, 0, 0, 0, 0, //30
                         0, 0, 0, 0];
             let mut it = TcpOptionsIterator{ options: &data };
-            assert_eq!(Some(Err(TcpOptionError::UnexpectedSize {option_id: data[0], size: data[1] })), it.next());
+            assert_eq!(Some(Err(TcpOptionReadError::UnexpectedSize {option_id: data[0], size: data[1] })), it.next());
             //expect the iterator slice to be moved to the end
             assert_eq!(0, it.options.len());
             assert_eq!(None, it.next());
@@ -790,10 +975,179 @@ mod tests {
                     0, 0, 0, 0, 0, //30
                     0, 0, 0, 0];
         let mut it = TcpOptionsIterator{ options: &data };
-        assert_eq!(Some(Err(TcpOptionError::UnknownId(255))), it.next());
+        assert_eq!(Some(Err(TcpOptionReadError::UnknownId(255))), it.next());
         //expect the iterator slice to be moved to the end
         assert_eq!(0, it.options.len());
         assert_eq!(None, it.next());
         assert_eq!(0, it.options.len());
+    }
+
+    #[test]
+    fn eq()
+    {
+        let base = TcpHeader {
+            source_port: 1,
+            destination_port: 2,
+            sequence_number: 3,
+            acknowledgment_number: 4,
+            _data_offset: 5,
+            ns: false,
+            fin: false,
+            syn: false,
+            rst: false,
+            psh: false,
+            ack: false,
+            ece: false,
+            urg: false,
+            cwr: false,
+            window_size: 6,
+            checksum: 7,
+            urgent_pointer: 8,
+            options_buffer: [0;40]
+        };
+        //equal
+        {
+            let other = base.clone();
+            assert_eq!(other, base);
+        }
+        //change every field anc check for neq
+        //source_port
+        {
+            let mut other = base.clone();
+            other.source_port = 10;
+            assert_ne!(other, base);
+        }
+        //destination_port
+        {
+            let mut other = base.clone();
+            other.destination_port = 10;
+            assert_ne!(other, base);
+        }
+        //sequence_number
+        {
+            let mut other = base.clone();
+            other.sequence_number = 10;
+            assert_ne!(other, base);
+        }
+        //acknowledgment_number
+        {
+            let mut other = base.clone();
+            other.acknowledgment_number = 10;
+            assert_ne!(other, base);
+        }
+        //data_offset
+        {
+            let mut other = base.clone();
+            other._data_offset = 10;
+            assert_ne!(other, base);
+        }
+        //ns
+        {
+            let mut other = base.clone();
+            other.ns = true;
+            assert_ne!(other, base);
+        }
+        //fin
+        {
+            let mut other = base.clone();
+            other.fin = true;
+            assert_ne!(other, base);
+        }
+        //syn
+        {
+            let mut other = base.clone();
+            other.syn = true;
+            assert_ne!(other, base);
+        }
+        //rst
+        {
+            let mut other = base.clone();
+            other.rst = true;
+            assert_ne!(other, base);
+        }
+        //psh
+        {
+            let mut other = base.clone();
+            other.psh = true;
+            assert_ne!(other, base);
+        }
+        //ack
+        {
+            let mut other = base.clone();
+            other.ack = true;
+            assert_ne!(other, base);
+        }
+        //ece
+        {
+            let mut other = base.clone();
+            other.ece = true;
+            assert_ne!(other, base);
+        }
+        //urg
+        {
+            let mut other = base.clone();
+            other.urg = true;
+            assert_ne!(other, base);
+        }
+        //cwr
+        {
+            let mut other = base.clone();
+            other.cwr = true;
+            assert_ne!(other, base);
+        }
+        //window_size
+        {
+            let mut other = base.clone();
+            other.window_size = 10;
+            assert_ne!(other, base);
+        }
+        //checksum
+        {
+            let mut other = base.clone();
+            other.checksum = 10;
+            assert_ne!(other, base);
+        }
+        //urgent_pointer
+        {
+            let mut other = base.clone();
+            other.urgent_pointer = 10;
+            assert_ne!(other, base);
+        }
+        //options (first element)
+        {
+            let mut other = base.clone();
+            other.options_buffer[0] = 10;
+            assert_ne!(other, base);
+        }
+        //options (last element)
+        {
+            let mut other = base.clone();
+            other.options_buffer[39] = 10;
+            assert_ne!(other, base);
+        }
+    }
+
+    #[test]
+    fn default() {
+        let default : TcpHeader = Default::default();
+
+        assert_eq!(0, default.source_port);
+        assert_eq!(0, default.destination_port);
+        assert_eq!(0, default.sequence_number);
+        assert_eq!(0, default.acknowledgment_number);
+        assert_eq!(5, default._data_offset);
+        assert_eq!(false, default.ns);
+        assert_eq!(false, default.fin);
+        assert_eq!(false, default.syn);
+        assert_eq!(false, default.rst);
+        assert_eq!(false, default.psh);
+        assert_eq!(false, default.ack);
+        assert_eq!(false, default.ece);
+        assert_eq!(false, default.urg);
+        assert_eq!(false, default.cwr);
+        assert_eq!(0, default.window_size);
+        assert_eq!(0, default.checksum);
+        assert_eq!(0, default.urgent_pointer);
+        assert_eq!(&[0;40][..], &default.options_buffer[..]);
     }
 }

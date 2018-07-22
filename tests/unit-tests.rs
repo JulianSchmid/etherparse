@@ -69,7 +69,6 @@ fn test_debug_write() {
             Ipv4PayloadAndOptionsLengthTooLarge(0),
             Ipv6PayloadLengthTooLarge(0),
             UdpPayloadLengthTooLarge(0),
-            U8TooSmall{value: 0, min: 0, field: ErrorField::TcpDataOffset},
             U8TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
             U16TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
             U32TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn}

@@ -87,8 +87,6 @@ pub enum ValueError {
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
-    ///Error when a u8 field in a header has a smaller value then supported.
-    U8TooSmall{value: u8, min: u8, field: ErrorField},
     ///Error when a u8 field in a header has a larger value then supported.
     U8TooLarge{value: u8, max: u8, field: ErrorField},
     ///Error when a u16 field in a header has a larger value then supported.
