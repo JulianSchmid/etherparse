@@ -85,7 +85,7 @@ impl TcpHeader {
             destination_port: destination_port,
             sequence_number: sequence_number,
             acknowledgment_number: 0,
-            _data_offset: 5,
+            _data_offset: TCP_MINIMUM_DATA_OFFSET,
             ns: false,
             fin: false,
             syn: false,
@@ -108,6 +108,11 @@ impl TcpHeader {
     ///integral number of 32 bits long.
     pub fn data_offset(&self) -> u8 {
         self._data_offset
+    }
+
+    ///Returns the length of the header including the options.
+    pub fn header_len(&self) -> u16 {
+        self._data_offset as u16 * 4
     }
 
     ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
@@ -373,6 +378,107 @@ impl TcpHeader {
             writer.write(&self.options_buffer[..len])?;
         }
         Ok(())
+    }
+
+    ///Calculates the upd header checksum based on a ipv4 header.
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, payload)
+    }
+
+    ///Calculates the checksum for the current header in ipv4 mode. This does NOT set the checksum.
+    pub fn calc_checksum_ipv4_raw(&self, source_ip: &[u8;4], destination_ip: &[u8;4], payload: &[u8]) -> Result<u16, ValueError> {
+        
+        //check that the total length fits into the field
+        let tcp_length = (self._data_offset as usize)*4 + payload.len();
+        if (std::u16::MAX as usize) < tcp_length {
+            return Err(ValueError::TcpLengthTooLarge(tcp_length));
+        }
+
+        //calculate the checksum
+        Ok(self.calc_checksum_post_ip(BigEndian::read_u16(&source_ip[0..2]) as u64 + //pseudo header
+                                      BigEndian::read_u16(&source_ip[2..4]) as u64 +
+                                      BigEndian::read_u16(&destination_ip[0..2]) as u64 +
+                                      BigEndian::read_u16(&destination_ip[2..4]) as u64 +
+                                      IpTrafficClass::Tcp as u64 +
+                                      tcp_length as u64,
+                                      payload))
+    }
+
+    ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
+        fn calc_u32_checksum(value: u32) -> u64 {
+            let mut buffer: [u8;4] = [0;4];
+            BigEndian::write_u32(&mut buffer, value);
+            (BigEndian::read_u16(&buffer[..2]) as u64) + 
+            (BigEndian::read_u16(&buffer[2..]) as u64)
+        }
+        let mut sum = 
+            ip_pseudo_header_sum +
+            self.source_port as u64 + //udp header start
+            self.destination_port as u64 +
+            calc_u32_checksum(self.sequence_number) +
+            calc_u32_checksum(self.acknowledgment_number) +
+            BigEndian::read_u16(&[
+                {
+                    let value = (self._data_offset << 4) & 0xF0;
+                    if self.ns {
+                        value | 1
+                    } else {
+                        value
+                    }
+                },
+                {
+                    let mut value = 0;
+                    if self.fin {
+                        value = value | 1;
+                    }
+                    if self.syn {
+                        value = value | 2;
+                    }
+                    if self.rst {
+                        value = value | 4;
+                    }
+                    if self.psh {
+                        value = value | 8;
+                    }
+                    if self.ack {
+                        value = value | 16;
+                    }
+                    if self.urg {
+                        value = value | 32;
+                    }
+                    if self.ece {
+                        value = value | 64;
+                    }
+                    if self.cwr {
+                        value = value | 128;
+                    }
+                    value
+                }
+            ]) as u64 +
+            self.window_size as u64 +
+            self.urgent_pointer as u64;
+
+        //add the options
+        let options_len = self.options_len();
+        for i in 0..(options_len/2) {
+            sum += BigEndian::read_u16(&self.options_buffer[i*2..i*2 + 2]) as u64;
+        }
+
+        //payload
+        for i in 0..(payload.len()/2) {
+            sum += BigEndian::read_u16(&payload[i*2..i*2 + 2]) as u64;
+        }
+        //pad the last byte with 0
+        if payload.len() % 2 == 1 {
+            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u64;
+        }
+        let carry_add = (sum & 0xffff) + 
+                        ((sum >> 16) & 0xffff) +
+                        ((sum >> 32) & 0xffff) +
+                        ((sum >> 48) & 0xffff);
+        let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
+        !result
     }
 }
 

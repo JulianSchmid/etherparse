@@ -149,6 +149,7 @@ Read the documentations of the different methods for a more details:
 * [Wikipedia IEEE_802.1Q](https://en.wikipedia.org/w/index.php?title=IEEE_802.1Q&oldid=820983900)
 * User Datagram Protocol (UDP) [RFC 768](https://tools.ietf.org/html/rfc768)
 * Transmission Control Protocol [RFC 793](https://tools.ietf.org/html/rfc793)
+* TCP Extensions for High Performance [RFC 7323](https://tools.ietf.org/html/rfc7323)
 * The Addition of Explicit Congestion Notification (ECN) to IP [RFC 3168](https://tools.ietf.org/html/rfc3168)
 * Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
 

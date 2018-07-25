@@ -216,8 +216,6 @@ proptest! {
     }
 }
 
-// TODO test too large
-
 #[test]
 fn set_options_not_enough_memory_error() {
     use TcpOptionElement::*;
@@ -251,7 +249,6 @@ fn set_options_not_enough_memory_error() {
                 ]));
 }
 
-
 proptest! {
     #[test]
     fn read_write(ref input in tcp_any())
@@ -261,6 +258,7 @@ proptest! {
         input.write(&mut buffer).unwrap();
         //check length
         assert_eq!(input.data_offset() as usize * 4, buffer.len());
+        assert_eq!(input.header_len() as usize, buffer.len());
         //deserialize
         let result = TcpHeader::read(&mut Cursor::new(&buffer)).unwrap();
         //check equivalence
@@ -372,5 +370,80 @@ proptest! {
             ),
             &format!("{:?}", input)
         );
+    }
+}
+
+#[test]
+fn calc_header_checksum_ipv4() {
+    use TcpOptionElement::*;
+    //checksum == 0xf (no carries) (aka sum == 0xffff)
+    {
+        let tcp_payload = [1,2,3,4,5,6,7,8];
+        //write the udp header
+        let tcp = TcpHeader::new(
+            //source port
+            0,
+            //destination port
+            0,
+            40905,
+            0
+        );
+        let ip_header = Ipv4Header::new(
+            //size of the payload
+            tcp.header_len() as usize + tcp_payload.len(),
+            //time to live
+            0,
+            //contained protocol is udp
+            IpTrafficClass::Tcp,
+            //source ip address
+            [0;4],
+            //destination ip address
+            [0;4]
+        ).unwrap();
+        assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+        assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+    }
+    //a header with options
+    {
+        let tcp_payload = [1,2,3,4,5,6,7,8];
+
+        let mut tcp = TcpHeader::new(
+            //source port
+            69,
+            //destination port
+            42,
+            0x24900448,
+            0x3653
+        );
+        tcp.urgent_pointer = 0xE26E;
+        tcp.ns = true;
+        tcp.fin = true;
+        tcp.syn = true;
+        tcp.rst = true;
+        tcp.psh = true;
+        tcp.ack = true;
+        tcp.ece = true;
+        tcp.urg = true;
+        tcp.cwr = true;
+
+        tcp.set_options(&[
+            Nop, Nop, Nop, Nop,
+            Timestamp(0x4161008, 0x84161708)
+        ]).unwrap();
+
+        let ip_header = Ipv4Header::new(
+            //size of the payload
+            tcp.header_len() as usize + tcp_payload.len(),
+            //time to live
+            20,
+            //contained protocol is udp
+            IpTrafficClass::Tcp,
+            //source ip address
+            [192,168,1,42],
+            //destination ip address
+            [192,168,1,1]
+        ).unwrap();
+                assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+        assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
     }
 }
