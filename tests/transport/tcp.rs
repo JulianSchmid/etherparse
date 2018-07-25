@@ -443,7 +443,117 @@ fn calc_header_checksum_ipv4() {
             //destination ip address
             [192,168,1,1]
         ).unwrap();
-                assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+
+        //check checksum
+        assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
         assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
     }
+
+    //a header with an uneven number of options
+    {
+        let tcp_payload = [1,2,3,4,5,6,7,8,9];
+
+        let mut tcp = TcpHeader::new(
+            //source port
+            69,
+            //destination port
+            42,
+            0x24900448,
+            0x3653
+        );
+        tcp.urgent_pointer = 0xE26E;
+        tcp.ns = true;
+        tcp.fin = true;
+        tcp.syn = true;
+        tcp.rst = true;
+        tcp.psh = true;
+        tcp.ack = true;
+        tcp.ece = true;
+        tcp.urg = true;
+        tcp.cwr = true;
+
+        tcp.set_options(&[
+            Nop, Nop, Nop, Nop,
+            Timestamp(0x4161008, 0x84161708)
+        ]).unwrap();
+
+        let ip_header = Ipv4Header::new(
+            //size of the payload
+            tcp.header_len() as usize + tcp_payload.len(),
+            //time to live
+            20,
+            //contained protocol is udp
+            IpTrafficClass::Tcp,
+            //source ip address
+            [192,168,1,42],
+            //destination ip address
+            [192,168,1,1]
+        ).unwrap();
+
+        //check checksum
+        assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+        assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+    }
 }
+
+#[test]
+fn calc_header_checksum_ipv6() {
+   let tcp_payload = [51,52,53,54,55,56,57,58];
+
+    //write the tcp header
+    let mut tcp = TcpHeader::new(
+        //source port
+        69,
+        //destination port
+        42,
+        0x24900448,
+        0x3653
+    );
+    tcp.urgent_pointer = 0xE26E;
+
+    tcp.ns = true;
+    tcp.fin = true;
+    tcp.syn = true;
+    tcp.rst = true;
+    tcp.psh = true;
+    tcp.ack = true;
+    tcp.ece = true;
+    tcp.urg = true;
+    tcp.cwr = true;
+
+    use TcpOptionElement::*;
+    tcp.set_options(&[
+        Nop, Nop, Nop, Nop,
+        Timestamp(0x4161008, 0x84161708)
+    ]).unwrap();
+
+    let ip_header = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: tcp_payload.len() as u16 + tcp.header_len(),
+        next_header: IpTrafficClass::Tcp as u8,
+        hop_limit: 40,
+        source: [1,2,3,4,5,6,7,8,
+                 9,10,11,12,13,14,15,16],
+        destination: [21,22,23,24,25,26,27,28,
+                      29,30,31,32,33,34,35,36]
+    };
+    //check checksum
+    assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
+    assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+}
+
+#[test]
+fn calc_header_checksum_ipv4_error() {
+    //write the udp header
+    let tcp: TcpHeader = Default::default();
+    let len = (std::u16::MAX - tcp.header_len()) as usize +
+            1;
+    let mut tcp_payload = Vec::with_capacity(len);
+    tcp_payload.resize(len, 0); 
+    let ip_header = Ipv4Header::new(20, 0, IpTrafficClass::Tcp, [0;4], [0;4]).unwrap();
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+}
+
+//TODO ipv6 too big error

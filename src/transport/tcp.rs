@@ -380,12 +380,12 @@ impl TcpHeader {
         Ok(())
     }
 
-    ///Calculates the upd header checksum based on a ipv4 header.
+    ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, payload)
     }
 
-    ///Calculates the checksum for the current header in ipv4 mode. This does NOT set the checksum.
+    ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4_raw(&self, source_ip: &[u8;4], destination_ip: &[u8;4], payload: &[u8]) -> Result<u16, ValueError> {
         
         //check that the total length fits into the field
@@ -402,6 +402,41 @@ impl TcpHeader {
                                       IpTrafficClass::Tcp as u64 +
                                       tcp_length as u64,
                                       payload))
+    }
+
+    ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, payload)
+    }
+
+    ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
+    pub fn calc_checksum_ipv6_raw(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> Result<u16, ValueError> {
+
+        //check that the total length fits into the field
+        let tcp_length = (self._data_offset as usize)*4 + payload.len();
+        if (std::u32::MAX as usize) < tcp_length {
+            return Err(ValueError::TcpLengthTooLarge(tcp_length));
+        }
+
+        fn calc_sum(value: &[u8;16]) -> u64 {
+            let mut result = 0;
+            for i in 0..8 {
+                let index = i*2;
+                result += BigEndian::read_u16(&value[index..(index + 2)]) as u64;
+            }
+            result
+        }
+        Ok(self.calc_checksum_post_ip(
+            calc_sum(source) +
+            calc_sum(destination) +
+            IpTrafficClass::Tcp as u64 +
+            {
+                let mut buffer: [u8;4] = Default::default();
+                BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
+                BigEndian::read_u16(&buffer[0..2]) as u64 +
+                BigEndian::read_u16(&buffer[2..4]) as u64
+            },
+            payload))
     }
 
     ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
