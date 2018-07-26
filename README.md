@@ -1,7 +1,7 @@
 # etherparse
 [![Build Status][build_badge]][build_status]
 [![Code Coverage][coverage_badge]][coverage_report]
-[![Crates.io](https://img.shields.io/crates/v/etherparse.svg)](https://crates.io/crates/etherparse)
+[![crates.io](https://img.shields.io/crates/d/etherparse.svg)](https://crates.io/crates/etherparse)
 
 A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
