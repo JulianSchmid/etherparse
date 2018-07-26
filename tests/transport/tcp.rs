@@ -3,6 +3,7 @@ use super::super::*;
 use std::io::Cursor;
 use proptest::prelude::*;
 use self::byteorder::{ByteOrder, BigEndian};
+use std::slice;
 
 #[test]
 fn options() {
@@ -556,4 +557,32 @@ fn calc_header_checksum_ipv4_error() {
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
 }
 
-//TODO ipv6 too big error
+//this test can only run on 64bit systems as we can not represent slices that are too big on 32 bit and bellow
+#[test]
+#[cfg(target_pointer_width = "64")] 
+fn calc_header_checksum_ipv6_error() {
+    //write the udp header
+    let tcp: TcpHeader = Default::default();
+    let len = (std::u32::MAX - tcp.header_len() as u32) as usize +
+            1;
+    
+    //lets create a slice of that size that points to zero 
+    //(as most systems can not allocate blocks of the size of u32::MAX)
+    let ptr = 0x0 as *const u8;
+    let tcp_payload = unsafe {
+        slice::from_raw_parts(ptr, len)
+    };
+    let ip_header = Ipv6Header {
+        traffic_class: 1,
+        flow_label: 0x81806,
+        payload_length: 0, //lets assume jumbograms behavior (set to 0, as bigger then u16)
+        next_header: IpTrafficClass::Tcp as u8,
+        hop_limit: 40,
+        source: [1,2,3,4,5,6,7,8,
+                 9,10,11,12,13,14,15,16],
+        destination: [21,22,23,24,25,26,27,28,
+                      29,30,31,32,33,34,35,36]
+    };
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+}
