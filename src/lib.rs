@@ -145,3 +145,34 @@ fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueErr
         })
     }
 }
+
+struct RangeStep {
+    start: usize,
+    end: usize,
+    step: usize 
+}
+
+impl RangeStep {
+    fn new(start: usize, end: usize, step: usize) -> RangeStep {
+        RangeStep {
+            start: start,
+            end: end,
+            step: step 
+        }
+    }
+}
+
+impl Iterator for RangeStep {
+    type Item = usize;
+
+    #[inline]
+    fn next(&mut self) -> Option<usize> {
+        if self.start < self.end {
+            let result = self.start;
+            self.start = result + self.step;
+            Some(result)
+        } else {
+            None
+        }
+    }
+}

@@ -448,6 +448,18 @@ fn calc_header_checksum_ipv4() {
         //check checksum
         assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
         assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+
+        //test PacketSlice version
+        let mut ip_buffer = Vec::new();
+        ip_header.write(&mut ip_buffer, &[]).unwrap();
+        let ip_slice = PacketSlice::<Ipv4Header>::from_slice(&ip_buffer[..]).unwrap();
+
+        let mut tcp_buffer = Vec::new();
+        tcp.write(&mut tcp_buffer).unwrap();
+        let tcp_slice = PacketSlice::<TcpHeader>::from_slice(&tcp_buffer[..]).unwrap();
+
+        assert_eq!(Ok(0xdeeb), tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload));
+        assert_eq!(Ok(0xdeeb), tcp_slice.calc_checksum_ipv4_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
     }
 
     //a header with an uneven number of options
@@ -494,6 +506,18 @@ fn calc_header_checksum_ipv4() {
         //check checksum
         assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
         assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+
+        //test PacketSlice version
+        let mut ip_buffer = Vec::new();
+        ip_header.write(&mut ip_buffer, &[]).unwrap();
+        let ip_slice = PacketSlice::<Ipv4Header>::from_slice(&ip_buffer[..]).unwrap();
+
+        let mut tcp_buffer = Vec::new();
+        tcp.write(&mut tcp_buffer).unwrap();
+        let tcp_slice = PacketSlice::<TcpHeader>::from_slice(&tcp_buffer[..]).unwrap();
+
+        assert_eq!(Ok(0xd5ea), tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload));
+        assert_eq!(Ok(0xd5ea), tcp_slice.calc_checksum_ipv4_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
     }
 }
 
@@ -542,6 +566,18 @@ fn calc_header_checksum_ipv6() {
     //check checksum
     assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
     assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+
+    //test PacketSlice version
+    let mut ip_buffer = Vec::new();
+    ip_header.write(&mut ip_buffer).unwrap();
+    let ip_slice = PacketSlice::<Ipv6Header>::from_slice(&ip_buffer[..]).unwrap();
+
+    let mut tcp_buffer = Vec::new();
+    tcp.write(&mut tcp_buffer).unwrap();
+    let tcp_slice = PacketSlice::<TcpHeader>::from_slice(&tcp_buffer[..]).unwrap();
+
+    assert_eq!(Ok(0x786e), tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload));
+    assert_eq!(Ok(0x786e), tcp_slice.calc_checksum_ipv6_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
 }
 
 #[test]
@@ -555,6 +591,18 @@ fn calc_header_checksum_ipv4_error() {
     let ip_header = Ipv4Header::new(20, 0, IpTrafficClass::Tcp, [0;4], [0;4]).unwrap();
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+
+    //test PacketSlice version
+    let mut ip_buffer = Vec::new();
+    ip_header.write(&mut ip_buffer, &[]).unwrap();
+    let ip_slice = PacketSlice::<Ipv4Header>::from_slice(&ip_buffer[..]).unwrap();
+
+    let mut tcp_buffer = Vec::new();
+    tcp.write(&mut tcp_buffer).unwrap();
+    let tcp_slice = PacketSlice::<TcpHeader>::from_slice(&tcp_buffer[..]).unwrap();
+
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp_slice.calc_checksum_ipv4_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
 }
 
 //this test can only run on 64bit systems as we can not represent slices that are too big on 32 bit and bellow
@@ -585,4 +633,16 @@ fn calc_header_checksum_ipv6_error() {
     };
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+
+    //test PacketSlice version
+    let mut ip_buffer = Vec::new();
+    ip_header.write(&mut ip_buffer).unwrap();
+    let ip_slice = PacketSlice::<Ipv6Header>::from_slice(&ip_buffer[..]).unwrap();
+
+    let mut tcp_buffer = Vec::new();
+    tcp.write(&mut tcp_buffer).unwrap();
+    let tcp_slice = PacketSlice::<TcpHeader>::from_slice(&tcp_buffer[..]).unwrap();
+
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp_slice.calc_checksum_ipv6_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
 }
