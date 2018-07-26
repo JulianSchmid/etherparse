@@ -146,6 +146,7 @@ fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueErr
     }
 }
 
+//NOTE: Replace this with std::Iterator::step_by as soon as it is in stable (see https://github.com/rust-lang/rust/issues/27741)
 struct RangeStep {
     start: usize,
     end: usize,
