@@ -497,10 +497,16 @@ impl Ipv6Header {
     }
 }
 
-impl<'a> PacketSlice<'a, Ipv4Header> {
+///A slice containing an ipv4 header of a network package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ipv4HeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> Ipv4HeaderSlice<'a> {
 
     ///Creates a slice containing an ipv4 header (including header options).
-    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv4Header>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -534,10 +540,15 @@ impl<'a> PacketSlice<'a, Ipv4Header> {
         }
 
         //all good
-        Ok(PacketSlice {
-            slice: &slice[..total_length],
-            phantom: std::marker::PhantomData{}
+        Ok(Ipv4HeaderSlice {
+            slice: &slice[..total_length]
         })
+    }
+
+    ///Returns the slice containing the ipv4 header
+    #[inline]
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 
     ///Read the "version" field of the IPv4 header (should be 4).
@@ -658,10 +669,16 @@ impl<'a> PacketSlice<'a, Ipv4Header> {
     }
 }
 
-impl<'a> PacketSlice<'a, Ipv6Header> {
+///A slice containing an ipv6 header of a network package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ipv6HeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> Ipv6HeaderSlice<'a, > {
 
     ///Creates a slice containing an ipv6 header (without header extensions).
-    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv6Header>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6HeaderSlice<'a>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -680,10 +697,15 @@ impl<'a> PacketSlice<'a, Ipv6Header> {
         }
 
         //all good
-        Ok(PacketSlice {
-            slice: &slice[..Ipv6Header::SERIALIZED_SIZE],
-            phantom: std::marker::PhantomData{}
+        Ok(Ipv6HeaderSlice {
+            slice: &slice[..Ipv6Header::SERIALIZED_SIZE]
         })
+    }
+
+    ///Returns the slice containing the ipv6 header
+    #[inline]
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 
     ///Read the "version" field from the slice (should be 6).
@@ -772,9 +794,15 @@ pub struct Ipv6ExtensionHeader {
     length: u8
 }
 
-impl<'a> PacketSlice<'a, Ipv6ExtensionHeader> {
+///A slice containing an ipv6 extension header of a network package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ipv6ExtensionHeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> Ipv6ExtensionHeaderSlice<'a> {
     ///Creates a slice containing an ipv6 header extension.
-    pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<PacketSlice<'a, Ipv6ExtensionHeader>, ReadError> {
+    pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<Ipv6ExtensionHeaderSlice<'a>, ReadError> {
 
         //check length
         use std::io::ErrorKind::UnexpectedEof;
@@ -798,10 +826,15 @@ impl<'a> PacketSlice<'a, Ipv6ExtensionHeader> {
         }
 
         //all good
-        Ok(PacketSlice {
-            slice: &slice[..len],
-            phantom: std::marker::PhantomData{}
+        Ok(Ipv6ExtensionHeaderSlice {
+            slice: &slice[..len]
         })
+    }
+
+    ///Returns the slice containing the ipv6 extension header
+    #[inline]
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 
     ///Returns the id of the next header (see IpTrafficClass for a definition of all ids).

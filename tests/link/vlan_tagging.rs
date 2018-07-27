@@ -161,10 +161,10 @@ fn single_from_slice() {
     input.write(&mut buffer).unwrap();
 
     //check that a too small slice results in an error
-    assert_matches!(PacketSlice::<SingleVlanHeader>::from_slice(&buffer[..3]), Err(ReadError::IoError(_)));
+    assert_matches!(SingleVlanHeaderSlice::from_slice(&buffer[..3]), Err(ReadError::IoError(_)));
 
     //check that all fields are read correctly
-    let slice = PacketSlice::<SingleVlanHeader>::from_slice(&buffer).unwrap();
+    let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
     assert_eq!(slice.priority_code_point(), input.priority_code_point);
     assert_eq!(slice.drop_eligible_indicator(), input.drop_eligible_indicator);
     assert_eq!(slice.vlan_identifier(), input.vlan_identifier);
@@ -196,9 +196,9 @@ fn double_from_slice() {
     input.write(&mut buffer).unwrap();
 
     //check that a too small slice results in an error
-    assert_matches!(PacketSlice::<DoubleVlanHeader>::from_slice(&buffer[..7]), Err(ReadError::IoError(_)));
+    assert_matches!(DoubleVlanHeaderSlice::from_slice(&buffer[..7]), Err(ReadError::IoError(_)));
 
-    let slice = PacketSlice::<DoubleVlanHeader>::from_slice(&buffer).unwrap();
+    let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
     assert_eq!(slice.outer().priority_code_point(), input.outer.priority_code_point);
     assert_eq!(slice.outer().drop_eligible_indicator(), input.outer.drop_eligible_indicator);
     assert_eq!(slice.outer().vlan_identifier(), input.outer.vlan_identifier);

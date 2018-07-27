@@ -316,7 +316,7 @@ proptest! {
         assert_eq!(input.0, result);
 
         //check that the slice implementation also reads the correct values
-        let slice = PacketSlice::<Ipv4Header>::from_slice(&buffer[..]).unwrap();
+        let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
         assert_eq!(slice.version(), 4);
         assert_eq!(slice.ihl(), input.0.header_length);
         assert_eq!(slice.dcp(), input.0.differentiated_services_code_point);
@@ -362,7 +362,7 @@ fn ipv4_slice_bad_ihl() {
     
     //check that the bad ihl results in an error
     use ReadError::*;
-    assert_matches!(PacketSlice::<Ipv4Header>::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
+    assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
 }
 
 #[test]
@@ -386,7 +386,7 @@ fn ipv4_slice_bad_version() {
     
     //check that the bad ihl results in an error
     use ReadError::*;
-    assert_matches!(PacketSlice::<Ipv4Header>::from_slice(&buffer[..]), Err(Ipv4UnexpectedVersion(6)));
+    assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4UnexpectedVersion(6)));
 }
 
 #[test]
@@ -884,11 +884,11 @@ proptest! {
         input.write(&mut buffer).unwrap();
 
         //check that a too small slice triggers an error
-        assert_matches!(PacketSlice::<Ipv6Header>::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
+        assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
 
         //check that all the values are read correctly
         use std::net::Ipv6Addr;
-        let slice = PacketSlice::<Ipv6Header>::from_slice(&buffer).unwrap();
+        let slice = Ipv6HeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(slice.version(), 6);
         assert_eq!(slice.traffic_class(), input.traffic_class);
         assert_eq!(slice.flow_label(), input.flow_label);
@@ -930,7 +930,7 @@ fn ipv6_from_slice_bad_version() {
 
     //check that the unexpected version id is detected
     use ReadError::*;
-    assert_matches!(PacketSlice::<Ipv6Header>::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
+    assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
 }
 
 #[test]
@@ -946,9 +946,9 @@ fn ipv6_extension_from_slice() {
     ];
     //fragmentation header
     {
-        let slice = PacketSlice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer).unwrap();
+        let slice = Ipv6ExtensionHeaderSlice::from_slice(FRAG, &buffer).unwrap();
         assert_eq!(slice.next_header(), UDP);
-        assert_eq!(slice.slice, &buffer[..8])
+        assert_eq!(slice.slice(), &buffer[..8])
     }
     //other headers (using length field)
     {
@@ -960,9 +960,9 @@ fn ipv6_extension_from_slice() {
             IPv6EncapSecurityPayload as u8
         ];
         for id in EXTENSION_IDS_WITH_LENGTH.iter() {
-            let slice = PacketSlice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer).unwrap();
+            let slice = Ipv6ExtensionHeaderSlice::from_slice(*id, &buffer).unwrap();
             assert_eq!(slice.next_header(), UDP);
-            assert_eq!(slice.slice, &buffer[..])
+            assert_eq!(slice.slice(), &buffer[..])
         }
     }
 }
@@ -987,7 +987,7 @@ fn ipv6_extension_from_slice_bad_length() {
         let buffer: [u8; 7] = [
             UDP,2,0,0, 0,0,0
         ];
-        assert_matches!(PacketSlice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer), Err(_));
+        assert_matches!(Ipv6ExtensionHeaderSlice::from_slice(FRAG, &buffer), Err(_));
     }
     //smaller then specified size by length field
     {
@@ -998,13 +998,13 @@ fn ipv6_extension_from_slice_bad_length() {
         ];
         //fragmentation header (should not trigger an error, as the length field is not used)
         {
-            let slice = PacketSlice::<Ipv6ExtensionHeader>::from_slice(FRAG, &buffer).unwrap();
+            let slice = Ipv6ExtensionHeaderSlice::from_slice(FRAG, &buffer).unwrap();
             assert_eq!(slice.next_header(), UDP);
-            assert_eq!(slice.slice, &buffer[..8])
+            assert_eq!(slice.slice(), &buffer[..8])
         }
         //all others should generate a range error
         for id in EXTENSION_IDS_WITH_LENGTH.iter() {
-            let slice = PacketSlice::<Ipv6ExtensionHeader>::from_slice(*id, &buffer);
+            let slice = Ipv6ExtensionHeaderSlice::from_slice(*id, &buffer);
             assert_matches!(slice, Err(_));
         }
     }

@@ -2,13 +2,13 @@ use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkSlice<'a> {
-    Ethernet2(PacketSlice<'a, Ethernet2Header>)
+    Ethernet2(Ethernet2HeaderSlice<'a>)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VlanSlice<'a> {
-    SingleVlan(PacketSlice<'a, SingleVlanHeader>),
-    DoubleVlan(PacketSlice<'a, DoubleVlanHeader>),
+    SingleVlan(SingleVlanHeaderSlice<'a>),
+    DoubleVlan(DoubleVlanHeaderSlice<'a>),
 }
 
 impl<'a> VlanSlice<'a> {
@@ -25,15 +25,15 @@ impl<'a> VlanSlice<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
-    Ipv4(PacketSlice<'a, Ipv4Header>),
+    Ipv4(Ipv4HeaderSlice<'a>),
     ///First element is the Ipv6 header slice and second one are the Ipv6 extensions headers filled in order from 0 to the length of the array.
-    Ipv6(PacketSlice<'a, Ipv6Header>, [Option<(u8, PacketSlice<'a, Ipv6ExtensionHeader>)>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
+    Ipv6(Ipv6HeaderSlice<'a>, [Option<(u8, Ipv6ExtensionHeaderSlice<'a>)>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
-    Udp(PacketSlice<'a, UdpHeader>),
-    Tcp(PacketSlice<'a, TcpHeader>)
+    Udp(UdpHeaderSlice<'a>),
+    Tcp(TcpHeaderSlice<'a>)
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -76,8 +76,8 @@ impl<'a> SlicedPacket<'a> {
         let (rest, ether_type, link) = {
             use LinkSlice::*;
 
-            let value = PacketSlice::<Ethernet2Header>::from_slice(data)?;
-            (&data[value.slice.len()..], 
+            let value = Ethernet2HeaderSlice::from_slice(data)?;
+            (&data[value.slice().len()..], 
              value.ether_type(), 
              Some(Ethernet2(value)))
         };
@@ -88,20 +88,20 @@ impl<'a> SlicedPacket<'a> {
                 use VlanSlice::*;
 
                 //slice the first vlan header
-                let single = PacketSlice::<SingleVlanHeader>::from_slice(rest)?;
+                let single = SingleVlanHeaderSlice::from_slice(rest)?;
                 let ether_type = single.ether_type();
                 match ether_type {
 
                     //check if it is a double vlan tagged packet based on the ether_type
                     ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
-                        let double = PacketSlice::<DoubleVlanHeader>::from_slice(rest)?;
-                        (&rest[double.slice.len()..], 
+                        let double = DoubleVlanHeaderSlice::from_slice(rest)?;
+                        (&rest[double.slice().len()..], 
                          double.inner().ether_type(), 
                          Some(DoubleVlan(double)))
                     },
 
                     //otherwise it is single tagged
-                    _ => (&rest[single.slice.len()..], 
+                    _ => (&rest[single.slice().len()..], 
                           ether_type, 
                           Some(SingleVlan(single)))
                 }
@@ -116,8 +116,8 @@ impl<'a> SlicedPacket<'a> {
             ETH_IPV4 => {
                 use InternetSlice::*;
 
-                let value = PacketSlice::<Ipv4Header>::from_slice(rest)?;
-                (&rest[value.slice.len()..],
+                let value = Ipv4HeaderSlice::from_slice(rest)?;
+                (&rest[value.slice().len()..],
                  value.protocol(),
                  Some(Ipv4(value)))
             },
@@ -125,9 +125,9 @@ impl<'a> SlicedPacket<'a> {
             ETH_IPV6 => {
                 use InternetSlice::*;
 
-                let value = PacketSlice::<Ipv6Header>::from_slice(rest)?;
+                let value = Ipv6HeaderSlice::from_slice(rest)?;
 
-                let mut rest = &rest[value.slice.len()..];
+                let mut rest = &rest[value.slice().len()..];
 
                 //extension headers
                 let mut ip_extensions = [None, None, None, None, None, None, None];
@@ -140,10 +140,10 @@ impl<'a> SlicedPacket<'a> {
                         IPV6_OPTIONS | 
                         IPV6_AUTH | 
                         IPV6_ENCAP_SEC => {
-                            let value = PacketSlice::<Ipv6ExtensionHeader>::from_slice(next_header, rest)?;
+                            let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)?;
                             let this_header = next_header;
                             next_header = value.next_header();
-                            rest = &rest[value.slice.len()..];
+                            rest = &rest[value.slice().len()..];
                             ip_extensions[i] = Some((this_header, value));
                         },
                         _ => break
@@ -177,15 +177,15 @@ impl<'a> SlicedPacket<'a> {
                 IP_UDP => {
                     use TransportSlice::*;
 
-                    let value = PacketSlice::<UdpHeader>::from_slice(rest)?;
-                    (&rest[value.slice.len()..],
+                    let value = UdpHeaderSlice::from_slice(rest)?;
+                    (&rest[value.slice().len()..],
                      Some(Udp(value)))
                 },
                 IP_TCP => {
                     use TransportSlice::*;
 
-                    let value = PacketSlice::<TcpHeader>::from_slice(rest)?;
-                    (&rest[value.slice.len()..],
+                    let value = TcpHeaderSlice::from_slice(rest)?;
+                    (&rest[value.slice().len()..],
                      Some(Tcp(value)))
                 },
                 _ => (rest, None)

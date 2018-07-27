@@ -71,9 +71,15 @@ impl Ethernet2Header {
     }
 }
 
-impl<'a> PacketSlice<'a, Ethernet2Header> {
+///A slice containing an ethernet 2 header of a network package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Ethernet2HeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> Ethernet2HeaderSlice<'a> {
     ///Creates a ethernet slice from an other slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, Ethernet2Header>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError>{
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -83,10 +89,13 @@ impl<'a> PacketSlice<'a, Ethernet2Header> {
         }
 
         //all done
-        Ok(PacketSlice::<'a, Ethernet2Header> {
-            slice: &slice[..14],
-            phantom: std::marker::PhantomData::<Ethernet2Header>{}
+        Ok(Ethernet2HeaderSlice {
+            slice: &slice[..14]
         })
+    }
+    ///Returns the slice containing the ethernet 2 header
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
     ///Read the destination mac address
     pub fn destination(&self) -> &'a [u8] {

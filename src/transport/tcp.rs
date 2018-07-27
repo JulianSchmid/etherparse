@@ -591,10 +591,16 @@ impl std::cmp::PartialEq for TcpHeader {
 
 impl std::cmp::Eq for TcpHeader {}
 
-impl<'a> PacketSlice<'a, TcpHeader> {
+///A slice containing an tcp header of a network package.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TcpHeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> TcpHeaderSlice<'a> {
 
     ///Creates a slice containing an tcp header.
-    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, TcpHeader>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -613,11 +619,14 @@ impl<'a> PacketSlice<'a, TcpHeader> {
             Err(IoError(Error::from(UnexpectedEof)))
         } else {
             //done
-            Ok(PacketSlice{
+            Ok(TcpHeaderSlice::<'a>{
                 slice: &slice[..len],
-                phantom: std::marker::PhantomData{}
             })
         }
+    }
+    ///Returns the slice containing the tcp header
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 
     ///Read the destination port number.
@@ -772,7 +781,7 @@ impl<'a> PacketSlice<'a, TcpHeader> {
 
 
     ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4(&self, ip_header: &PacketSlice<Ipv4Header>, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(&ip_header.source(), &ip_header.destination(), payload)
     }
 
@@ -796,7 +805,7 @@ impl<'a> PacketSlice<'a, TcpHeader> {
     }
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
-    pub fn calc_checksum_ipv6(&self, ip_header: &PacketSlice<Ipv6Header>, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv6_raw(&ip_header.source(), &ip_header.destination(), payload)
     }
 

@@ -348,10 +348,10 @@ fn from_slice() {
 
     //check that a too small slices generates an error
     use ReadError::*;
-    assert_matches!(PacketSlice::<UdpHeader>::from_slice(&buffer[..7]), Err(IoError(_)));
+    assert_matches!(UdpHeaderSlice::from_slice(&buffer[..7]), Err(IoError(_)));
 
     //get the slice
-    let slice = PacketSlice::<UdpHeader>::from_slice(&buffer).unwrap();
+    let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();
     assert_eq!(slice.source_port(), input.source_port);
     assert_eq!(slice.destination_port(), input.destination_port);
     assert_eq!(slice.length(), input.length);

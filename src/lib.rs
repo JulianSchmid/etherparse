@@ -26,15 +26,6 @@ pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
 }
 
-///A "slice" of a network packet containing a header. In contrast to the actual header structs this struct does only parse fields when the method for returning the field value is called. 
-///
-///The type T specifies what is beeing sliced and what kind of fields can be read from the slice.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PacketSlice<'a, T> {
-    pub slice: &'a [u8],
-    phantom: std::marker::PhantomData<T>
-}
-
 ///Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {

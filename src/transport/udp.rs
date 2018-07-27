@@ -182,10 +182,16 @@ impl SerializedSize for UdpHeader {
     const SERIALIZED_SIZE: usize = 8;
 }
 
-impl<'a> PacketSlice<'a, UdpHeader> {
+///A slice containing an udp header of a network package. Struct allows the selective read of fields in the header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UdpHeaderSlice<'a> {
+    slice: &'a [u8]
+}
+
+impl<'a> UdpHeaderSlice<'a> {
 
     ///Creates a slice containing an udp header.
-    pub fn from_slice(slice: &'a[u8]) -> Result<PacketSlice<'a, UdpHeader>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<UdpHeaderSlice<'a>, ReadError> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
@@ -195,10 +201,14 @@ impl<'a> PacketSlice<'a, UdpHeader> {
         }
 
         //done
-        Ok(PacketSlice{
-            slice: &slice[..UdpHeader::SERIALIZED_SIZE],
-            phantom: std::marker::PhantomData{}
+        Ok(UdpHeaderSlice{
+            slice: &slice[..UdpHeader::SERIALIZED_SIZE]
         })
+    }
+
+    ///Returns the slice containing the udp header
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
     }
 
     ///Reads the "udp source port" from the slice.

@@ -51,10 +51,10 @@ proptest! {
 
         //check that a too small slice results in an error
         use ReadError::*;
-        assert_matches!(PacketSlice::<Ethernet2Header>::from_slice(&buffer[..13]), Err(IoError(_)));
+        assert_matches!(Ethernet2HeaderSlice::from_slice(&buffer[..13]), Err(IoError(_)));
 
         //check if the header slice is reading the correct values
-        let slice = PacketSlice::<Ethernet2Header>::from_slice(&buffer).unwrap();
+        let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(input.destination, slice.destination());
         assert_eq!(input.source, slice.source());
         assert_eq!(input.ether_type, slice.ether_type());

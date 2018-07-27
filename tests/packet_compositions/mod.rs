@@ -120,7 +120,7 @@ impl ComponentTest {
                                                        .filter(|x| x.is_some() )
                                                        .map(|x| {
                                                             let r = x.as_ref().unwrap();
-                                                            (r.0, r.1.slice.to_vec())
+                                                            (r.0, r.1.slice().to_vec())
                                                        })
                                                        .collect()
                         )),
