@@ -1,7 +1,8 @@
 # etherparse
 [![Build Status][build_badge]][build_status]
 [![Code Coverage][coverage_badge]][coverage_report]
-[![Crates.io](https://img.shields.io/crates/v/etherparse.svg)](https://crates.io/crates/etherparse)
+[![pipeline status][gitlab_badge]][gitlab_link]
+[![crates.io][crate_badge]][crate_link]
 
 A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
@@ -157,3 +158,7 @@ Read the documentations of the different methods for a more details:
 [build_status]: https://travis-ci.org/JulianSchmid/etherparse
 [coverage_badge]: https://codecov.io/gh/JulianSchmid/etherparse/branch/master/graph/badge.svg
 [coverage_report]: https://codecov.io/gh/JulianSchmid/etherparse/branch/master
+[gitlab_badge]: https://gitlab.com/julian.schmid/etherparse/badges/master/pipeline.svg
+[gitlab_link]: https://gitlab.com/julian.schmid/etherparse/commits/master
+[crate_badge]: https://img.shields.io/crates/v/etherparse.svg
+[crate_link]: https://crates.io/crates/etherparse
