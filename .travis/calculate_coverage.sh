@@ -2,6 +2,7 @@
 
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     # Don't calculate the coverage on os x
+    echo "Skipping code coverage calculation on OS X."
 else
     # On Linux build instrumented for coverage and run the tests
     wget https://github.com/SimonKagstrom/kcov/archive/v35.tar.gz &&
