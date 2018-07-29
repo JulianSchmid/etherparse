@@ -7,6 +7,11 @@ rust:
   - beta
   - nightly
 
+os:
+  - linux
+  - osx
+
+
 matrix:
   allow_failures:
     - rust: nightly
@@ -22,17 +27,5 @@ addons:
       - binutils-dev
       - libiberty-dev
 
-after_success: |
-  wget https://github.com/SimonKagstrom/kcov/archive/v35.tar.gz &&
-  tar xzf v35.tar.gz &&
-  cd kcov-35 &&
-  mkdir build &&
-  cd build &&
-  cmake .. &&
-  make &&
-  make install DESTDIR=../../kcov-build &&
-  cd ../.. &&
-  rm -rf kcov-master &&
-  for file in target/debug/{unit_tests,etherparse}-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; done &&
-  bash <(curl -s https://codecov.io/bash) &&
-  echo "Uploaded code coverage"
+after_success:
+  - ./.travis/calculate_coverage.sh
