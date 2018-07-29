@@ -11,6 +11,7 @@ readme = "README.md"
 exclude = [
     ".gitignore",
     ".travis.yml",
+    ".gitlab-ci.yml",
 ]
 
 [dependencies]
@@ -23,3 +24,4 @@ proptest = "0.8.3"
 [badges]
 travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }
 codecov = { repository = "JulianSchmid/etherparse", branch = "master", service = "github" }
+gitlab = { repository = "julian.schmid/etherparse", branch = "master" }
