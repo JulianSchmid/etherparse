@@ -75,15 +75,16 @@ This option is slower then slicing when only few fields are accessed. But it can
 ### Manually slicing & parsing packets
 It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice. 
 
-Have a look at the documentation for the PacketSlice<T>.from_slice methods, if you want to create your own slices:
+Have a look at the documentation for the <NAME>Slice.from_slice methods, if you want to create your own slices:
 
-* [`PacketSlice<Ethernet2Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice)
-* [`PacketSlice<SingleVlanHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-1)
-* [`PacketSlice<DoubleVlanHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-2)
-* [`PacketSlice<Ipv4Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-3)
-* [`PacketSlice<Ipv6Header>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-4)
-* [`PacketSlice<Ipv6ExtensionHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-5)
-* [`PacketSlice<UdpHeader>.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.PacketSlice.html#method.from_slice-6)
+* [`Ethernet2HeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2HeaderSlice.html#method.from_slice)
+* [`SingleVlanHeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeaderSlice.html#method.from_slice)
+* [`DoubleVlanHeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeaderSlice.html#method.from_slice)
+* [`Ipv4HeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4HeaderSlice.html#method.from_slice)
+* [`Ipv6HeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6HeaderSlice.html#method.from_slice)
+* [`Ipv6ExtensionHeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6ExtensionHeaderSlice.html)
+* [`UdpHeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeaderSlice.html#method.from_slice)
+* [`TcpHeaderSlice.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeaderSlice.html#method.from_slice)
 
 And for deserialization into the corresponding header structs have a look at:
 
@@ -94,6 +95,7 @@ And for deserialization into the corresponding header structs have a look at:
 * [Ipv4Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read)
 * [Ipv6Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read)
 * [UdpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read)
+* [TcpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read)
 
 ## How to generate fake packet data?
 ### Packet Builder
@@ -133,6 +135,7 @@ Read the documentations of the different methods for a more details:
 * [Ipv4Header.write_raw](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write_raw)
 * [Ipv6Header.write](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.write)
 * [UdpHeader.write](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.write)
+* [TcpHeader.write](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.write)
 
 ## Roadmap
 * Documentation
