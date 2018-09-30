@@ -316,6 +316,7 @@ proptest! {
         assert_eq!(input.0, result);
 
         //check that the slice implementation also reads the correct values
+        use std::net::Ipv4Addr;
         let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
         assert_eq!(slice.version(), 4);
         assert_eq!(slice.ihl(), input.0.header_length);
@@ -330,7 +331,9 @@ proptest! {
         assert_eq!(slice.protocol(), input.0.protocol);
         assert_eq!(slice.header_checksum(), input.0.header_checksum);
         assert_eq!(slice.source(), input.0.source);
+        assert_eq!(slice.source_addr(), Ipv4Addr::from(input.0.source));
         assert_eq!(slice.destination(), input.0.destination);
+        assert_eq!(slice.destination_addr(), Ipv4Addr::from(input.0.destination));
 
         //check that a convertion back to a header yields the same result as the original write
         assert_eq!(slice.to_header(), input.0);

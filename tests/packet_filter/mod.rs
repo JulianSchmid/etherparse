@@ -408,8 +408,7 @@ mod link_filter {
             let eth_data = {
                 let mut eth_data = Vec::new();
                 eth.write(&mut eth_data).unwrap();
-                eth_data
-            };
+                eth_data };
             let eth_slice = LinkSlice::Ethernet2(
                 Ethernet2HeaderSlice::from_slice(&eth_data[..]).unwrap()
             );
@@ -461,8 +460,7 @@ mod vlan_filter {
             let single_data = {
                 let mut single_data = Vec::new();
                 vlan_outer.write(&mut single_data).unwrap();
-                single_data
-            };
+                single_data };
             let single_slice = VlanSlice::SingleVlan(
                 SingleVlanHeaderSlice::from_slice(&single_data[..]).unwrap()
             );
@@ -472,8 +470,7 @@ mod vlan_filter {
                     outer: vlan_outer.clone(),
                     inner: vlan_inner.clone()
                 }.write(&mut double_data).unwrap();
-                double_data
-            };
+                double_data };
             let double_slice = VlanSlice::DoubleVlan(
                 DoubleVlanHeaderSlice::from_slice(&double_data[..]).unwrap()
             );
@@ -533,16 +530,14 @@ mod ip_filter {
             let ipv4_data = {
                 let mut ipv4_data = Vec::new();
                 ipv4.0.write(&mut ipv4_data, &[]).unwrap();
-                ipv4_data
-            };
+                ipv4_data };
             let ipv4_slice = InternetSlice::Ipv4(
                 Ipv4HeaderSlice::from_slice(&ipv4_data[..]).unwrap()
             );
             let ipv6_data = {
                 let mut ipv6_data = Vec::new();
                 ipv6.write(&mut ipv6_data).unwrap();
-                ipv6_data
-            };
+                ipv6_data };
             let ipv6_slice = InternetSlice::Ipv6(
                 Ipv6HeaderSlice::from_slice(&ipv6_data[..]).unwrap(),
                 [None,None,None,None,None,None,None]
@@ -599,8 +594,7 @@ mod ip_filter {
                 source: Some({
                     let mut value = ipv6.source;
                     value[0] = !value[0];
-                    value
-                }),
+                    value }),
                 destination: Some(ipv6.destination)
             }.applies_to_slice(&ipv6_slice));
             assert_eq!(false, Ipv6 {
@@ -608,8 +602,7 @@ mod ip_filter {
                 destination: Some({
                     let mut value = ipv6.destination;
                     value[0] = !value[0];
-                    value
-                })
+                    value })
             }.applies_to_slice(&ipv6_slice));
         }
     }
@@ -628,16 +621,14 @@ mod transport_filter {
             let udp_data = {
                 let mut udp_data = Vec::new();
                 udp.write(&mut udp_data).unwrap();
-                udp_data
-            };
+                udp_data };
             let udp_slice = TransportSlice::Udp(
                 UdpHeaderSlice::from_slice(&udp_data[..]).unwrap()
             );
             let tcp_data = {
                 let mut tcp_data = Vec::new();
                 tcp.write(&mut tcp_data).unwrap();
-                tcp_data
-            };
+                tcp_data };
             let tcp_slice = TransportSlice::Tcp(
                 TcpHeaderSlice::from_slice(&tcp_data[..]).unwrap()
             );
@@ -691,4 +682,16 @@ mod transport_filter {
             }.applies_to_slice(&tcp_slice));
         }
     }
+}
+
+#[test]
+fn type_derives() {
+    println!("{:?}", TransportFilter::Udp{
+        source_port: None,
+        destination_port: None
+    });
+    println!("{:?}", TransportFilter::Tcp{
+        source_port: None,
+        destination_port: None
+    });
 }
