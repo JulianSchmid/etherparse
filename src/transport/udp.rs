@@ -4,7 +4,7 @@ extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///Udp header according to rfc768.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct UdpHeader {
     ///Source port of the packet (optional).
     pub source_port: u16,

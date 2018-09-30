@@ -15,7 +15,7 @@ pub enum VlanHeader {
 }
 
 ///IEEE 802.1Q VLAN Tagging Header
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SingleVlanHeader {
     ///A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     pub priority_code_point: u8,

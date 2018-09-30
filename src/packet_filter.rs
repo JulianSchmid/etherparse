@@ -8,6 +8,23 @@ pub enum ElementFilter<T> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
+pub enum LinkFilter {
+    Ethernet2 {
+        source: Option<[u8;6]>,
+        destination: Option<[u8;6]>
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum VlanFilter {
+    Single(Option<u16>),
+    Double {
+        outer_identifier: Option<u16>,
+        inner_identifier: Option<u16>
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IpFilter {
     Ipv4 {
         source: Option<[u8;4]>,
@@ -33,8 +50,8 @@ pub enum TransportFilter {
 
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
 pub struct Filter {
-    //pub link: ElementFilter<>,
-    //pub vlan: ElementFilter<>,
+    pub link: ElementFilter<LinkFilter>,
+    pub vlan: ElementFilter<VlanFilter>,
     pub ip: ElementFilter<IpFilter>,
     pub transport: ElementFilter<TransportFilter>,
 }
@@ -42,6 +59,59 @@ pub struct Filter {
 impl<T> Default for ElementFilter<T> {
     fn default() -> ElementFilter<T> {
         ElementFilter::Any
+    }
+}
+
+impl LinkFilter {
+    pub fn applies_to_slice(&self, slice: &LinkSlice) -> bool {
+        use LinkSlice::*;
+        match self {
+            LinkFilter::Ethernet2{
+                source: expected_source,
+                destination: expected_destination
+            } =>  match slice {
+                Ethernet2(header) => (match expected_source {
+                    Some(e) => header.source() == *e,
+                    None => true
+                }) && (match expected_destination {
+                    Some(e) => header.destination() == *e,
+                    None => true
+                })
+            }
+        }
+    }
+}
+
+impl VlanFilter {
+    pub fn applies_to_slice(&self, slice: &VlanSlice) -> bool {
+        use VlanSlice::*;
+        match self {
+            VlanFilter::Single(expected_id) => {
+                match slice {
+                    SingleVlan(header) => {
+                        match expected_id {
+                            Some(e) => header.vlan_identifier() == *e,
+                            None => true
+                        }
+                    },
+                    _ => false //not a single vlan header
+                }
+            },
+            VlanFilter::Double { inner_identifier: expected_inner_id, outer_identifier: expecetd_outer_id } => {
+                match slice {
+                    DoubleVlan(header) => {
+                        (match expecetd_outer_id {
+                            Some(e) => header.outer().vlan_identifier() == *e,
+                            None => true
+                        }) && (match expected_inner_id {
+                            Some(e) => header.inner().vlan_identifier() == *e,
+                            None => true
+                        })
+                    },
+                    _ => false
+                }
+            }
+        }
     }
 }
 
@@ -126,8 +196,26 @@ impl TransportFilter {
 impl Filter {
     ///Returns true if a given sliced network package fullfills all conditions of this filter.
     pub fn applies_to_slice(&self, slice: &SlicedPacket) -> bool {
-        //TODO
-        (match &self.ip {
+        //TODO link
+         (match &self.link {
+            ElementFilter::Any => true,
+            ElementFilter::No => slice.link.is_none(),
+            ElementFilter::Some(filter) => {
+                match &slice.link {
+                    Some(value) => filter.applies_to_slice(value),
+                    None => false
+                }
+            }
+         }) && (match &self.vlan {
+            ElementFilter::Any => true,
+            ElementFilter::No => slice.vlan.is_none(),
+            ElementFilter::Some(filter) => {
+                match &slice.vlan {
+                    Some(value) => filter.applies_to_slice(value),
+                    None => false
+                }
+            }
+        }) && (match &self.ip {
             ElementFilter::Any => true,
             ElementFilter::No => slice.ip.is_none(),
             ElementFilter::Some(filter) => {
