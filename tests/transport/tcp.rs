@@ -216,6 +216,19 @@ proptest! {
         );
     }
 }
+#[test]
+fn set_option_padding() {
+    use TcpOptionElement::*;
+    let mut tcp_header = TcpHeader::default();
+    tcp_header.set_options(&[MaximumSegmentSize(1400), // 4
+                            SelectiveAcknowledgementPermitted, // 2
+                            Timestamp(2661445915, 0), // 10
+                            Nop, // 1
+                            WindowScale(7)]).unwrap(); // 3 
+                            // total 20
+                            // + header 20 = 40 byte
+    assert_eq!(40, tcp_header.header_len());
+}
 
 #[test]
 fn set_options_not_enough_memory_error() {

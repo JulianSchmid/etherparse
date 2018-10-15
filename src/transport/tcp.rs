@@ -235,10 +235,8 @@ impl TcpHeader {
                     }
                 }
             }
-            //write the end & set the new data offset
+            //set the new data offset
             if i > 0 {
-                self.options_buffer[i] = TCP_OPTION_ID_END;
-                i += 1;
                 self._data_offset = (i / 4) as u8 + TCP_MINIMUM_DATA_OFFSET;
                 if i % 4 != 0 {
                     self._data_offset += 1;
