@@ -21,8 +21,7 @@ pub use packet_decoder::*;
 mod packet_slicing;
 pub use packet_slicing::*;
 
-mod packet_filter;
-pub use packet_filter::*;
+pub mod packet_filter;
 
 ///Contains the size when serialized.
 pub trait SerializedSize {

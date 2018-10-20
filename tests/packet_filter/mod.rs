@@ -1,4 +1,5 @@
 use super::*;
+use etherparse::packet_filter::*;
 use proptest::*;
 
 
@@ -403,7 +404,7 @@ mod link_filter {
         #[test]
         fn applies_to_slice(ref eth in ethernet_2_unknown())
         {
-            use LinkFilter::*;
+            use self::LinkFilter::*;
             //create the slice the filter can be checked against
             let eth_data = {
                 let mut eth_data = Vec::new();
@@ -455,7 +456,7 @@ mod vlan_filter {
         fn applies_to_slice(ref vlan_outer in vlan_single_unknown(),
                             ref vlan_inner in vlan_single_unknown())
         {
-            use VlanFilter::*;
+            use self::VlanFilter::*;
             //create the slices the filters can be checked against
             let single_data = {
                 let mut single_data = Vec::new();
@@ -525,7 +526,7 @@ mod ip_filter {
         fn applies_to_slice(ref ipv4 in ipv4_unknown(),
                             ref ipv6 in ipv6_unknown())
         {
-            use IpFilter::*;
+            use self::IpFilter::*;
             //create the slices the filters can be checked against
             let ipv4_data = {
                 let mut ipv4_data = Vec::new();
@@ -616,7 +617,7 @@ mod transport_filter {
         fn applies_to_slice(ref udp in udp_any(),
                             ref tcp in tcp_any())
         {
-            use TransportFilter::*;
+            use self::TransportFilter::*;
             //create the slices the filters can be checked against
             let udp_data = {
                 let mut udp_data = Vec::new();
