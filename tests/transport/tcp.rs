@@ -597,8 +597,7 @@ fn calc_header_checksum_ipv6() {
 fn calc_header_checksum_ipv4_error() {
     //write the udp header
     let tcp: TcpHeader = Default::default();
-    let len = (std::u16::MAX - tcp.header_len()) as usize +
-            1;
+    let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
     let mut tcp_payload = Vec::with_capacity(len);
     tcp_payload.resize(len, 0); 
     let ip_header = Ipv4Header::new(20, 0, IpTrafficClass::Tcp, [0;4], [0;4]).unwrap();
