@@ -4,6 +4,7 @@ pub mod tcp;
 mod transport_header {
     use super::super::*;
     use std::slice;
+    use std::io::Cursor;
 
     #[test]
     fn udp() {
@@ -11,14 +12,12 @@ mod transport_header {
         assert_eq!(Some(udp.clone()), TransportHeader::Udp(udp).udp());
         assert_eq!(None, TransportHeader::Tcp(Default::default()).udp());
     }
-
     #[test]
     fn tcp() {
         let tcp: TcpHeader = Default::default();
         assert_eq!(Some(tcp.clone()), TransportHeader::Tcp(tcp).tcp());
         assert_eq!(None, TransportHeader::Udp(Default::default()).tcp());
     }
-
     proptest! {
         #[test]
         fn header_size_tcp(ref input in tcp_any()) {
@@ -129,6 +128,56 @@ mod transport_header {
                     slice::from_raw_parts(0x0 as *const u8, len)
                 };
                 assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ip_header, &tcp_payload));
+            }
+        }
+    }
+    proptest! {
+        #[test]
+        fn write_udp(ref input in udp_any()) {
+            //write
+            {
+                let result_input = {
+                    let mut buffer = Vec::new();
+                    input.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let result_transport = {
+                    let mut buffer = Vec::new();
+                    TransportHeader::Udp(input.clone()).write(&mut buffer).unwrap();
+                    buffer
+                };
+                assert_eq!(result_input, result_transport);
+            }
+            //trigger an error
+            {
+                let mut a: [u8;0] = [];
+                assert_matches!(TransportHeader::Udp(input.clone()).write(&mut Cursor::new(&mut a[..])),
+                                Err(WriteError::IoError(_)));
+            }
+        }
+    }
+    proptest! {
+        #[test]
+        fn write_tcp(ref input in tcp_any()) {
+            //write
+            {
+                let result_input = {
+                    let mut buffer = Vec::new();
+                    input.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let result_transport = {
+                    let mut buffer = Vec::new();
+                    TransportHeader::Tcp(input.clone()).write(&mut buffer).unwrap();
+                    buffer
+                };
+                assert_eq!(result_input, result_transport);
+            }
+            //trigger an error
+            {
+                let mut a: [u8;0] = [];
+                assert_matches!(TransportHeader::Tcp(input.clone()).write(&mut Cursor::new(&mut a[..])),
+                                Err(WriteError::IoError(_)));
             }
         }
     }
