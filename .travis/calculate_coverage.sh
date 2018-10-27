@@ -15,7 +15,7 @@ else
     make install DESTDIR=../../kcov-build &&
     cd ../.. &&
     rm -rf kcov-36 &&
-    for file in target/debug/unit_tests-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; bash <(curl -s https://codecov.io/bash) -cF unittests; done &&
+#    for file in target/debug/unit_tests-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; bash <(curl -s https://codecov.io/bash) -cF unittests; done &&
     for file in target/debug/etherparse-*[^\.d]; do mkdir -p "target/cov/$(basename $file)"; ./kcov-build/usr/local/bin/kcov --exclude-pattern=/.cargo,/usr/lib --verify "target/cov/$(basename $file)" "$file"; bash <(curl -s https://codecov.io/bash) -cF whitebox_unitttests; done &&
     echo "Uploaded code coverage"
 fi
