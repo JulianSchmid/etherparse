@@ -49,7 +49,7 @@ impl PacketBuilder {
                 }),
                 vlan_header: None,
                 ip_header: None,
-                udp_header: None
+                transport_header: None
             },
             _marker: marker::PhantomData::<Ethernet2Header>{}
         }
@@ -60,7 +60,7 @@ struct PacketImpl {
     ethernet2_header: Option<Ethernet2Header>,
     ip_header: Option<IpHeader>,
     vlan_header: Option<VlanHeader>,
-    udp_header: Option<UdpHeader>
+    transport_header: Option<TransportHeader>
 }
 
 ///An unfinished packet that is build with the packet builder
@@ -290,16 +290,27 @@ impl PacketBuilderStep<VlanHeader> {
 
 impl PacketBuilderStep<IpHeader> {
     pub fn udp(mut self, source_port: u16, destination_port: u16) -> PacketBuilderStep<UdpHeader> {
-        self.state.udp_header = Some(UdpHeader{
+        self.state.transport_header = Some(TransportHeader::Udp(UdpHeader{
             source_port: source_port,
             destination_port: destination_port,
             length: 0, //calculated later
             checksum: 0 //calculated later
-        });
+        }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
             _marker: marker::PhantomData::<UdpHeader>{}
+        }
+    }
+
+    pub fn tcp(mut self, source_port: u16, destination_port: u16, sequence_number: u32, window_size: u16) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header = Some(TransportHeader::Tcp(
+            TcpHeader::new(source_port, destination_port, sequence_number, window_size)
+        ));
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<TcpHeader>{}
         }
     }
 }
@@ -307,121 +318,232 @@ impl PacketBuilderStep<IpHeader> {
 impl PacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
-        
-        let ip_ether_type = {
-            use IpHeader::*;
-            match self.state.ip_header {
-                Some(Version4(_)) => EtherType::Ipv4 as u16,
-                Some(Version6(_)) => EtherType::Ipv6 as u16,
-                None => panic!("Missing ip header")
-            }
-        };
-
-        //ethernetII header
-        match self.state.ethernet2_header {
-            Some(mut eth) => {
-                eth.ether_type = {
-                    
-                    use VlanHeader::*;
-                    //determine the ether type depending on if there is a vlan tagging header
-                    match self.state.vlan_header {
-                        Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
-                        Some(Double(_)) => EtherType::ProviderBridging as u16,
-                        //if no vlan header exists, the id is purely defined by the ip type
-                        None => ip_ether_type
-                    }
-                };
-                eth.write(writer)?;
-            },
-            None => {}
-        }
-
-        //write the vlan header if it exists
-        use VlanHeader::*;
-        match self.state.vlan_header {
-            Some(Single(mut value)) => {
-                //set ether types
-                value.ether_type = ip_ether_type;
-                //serialize
-                value.write(writer)?;
-            },
-            Some(Double(mut value)) => {
-                //set ether types
-                value.outer.ether_type = EtherType::VlanTaggedFrame as u16;
-                value.inner.ether_type = ip_ether_type;
-                //serialize
-                value.write(writer)?;
-            },
-            None => {}
-        }
-
-        //unpack the udp header
-        let mut udp = self.state.udp_header.unwrap();
-
-        //ip header
-        use IpHeader::*;
-        let ip_header = self.state.ip_header.unwrap();
-        match ip_header {
-            Version4(mut ip) => {
-                //set total length & udp payload length (ip checks that the payload length is ok)
-                let size = UdpHeader::SERIALIZED_SIZE + payload.len();
-                ip.set_payload_and_options_length(size)?;
-                udp.length = size as u16;
-
-                //traffic class
-                ip.protocol = IpTrafficClass::Udp as u8;
-
-                //calculate the udp checksum
-                udp.checksum = udp.calc_checksum_ipv4(&ip, payload)?;
-
-                //write (will automatically calculate the checksum)
-                ip.write(writer, &[])?
-            },
-            Version6(mut ip) => {
-                //set total length
-                let size = UdpHeader::SERIALIZED_SIZE + payload.len();
-                ip.set_payload_length(size)?;
-                udp.length = size as u16;
-
-                //set the protocol
-                ip.next_header = IpTrafficClass::Udp as u8;
-
-                //calculate the udp checksum
-                udp.checksum = udp.calc_checksum_ipv6(&ip, payload)?;
-
-                //write (will automatically calculate the checksum)
-                ip.write(writer)?
-
-            }
-        }
-
-        //finaly write the udp header & payload
-        udp.write(writer)?;
-        writer.write_all(payload)?;
-        Ok(())
+        final_write(self, writer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
     pub fn size(&self, payload_size: usize) -> usize {
-        use IpHeader::*;
-        use VlanHeader::*;
-        let result = match self.state.ethernet2_header {
-            Some(_) => Ethernet2Header::SERIALIZED_SIZE,
-            None => 0
-        } + match self.state.vlan_header {
-            Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
-            Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
-            None => 0 
-        } + match self.state.ip_header {
-            Some(Version4(_)) => Ipv4Header::SERIALIZED_SIZE,
-            Some(Version6(_)) => Ipv6Header::SERIALIZED_SIZE,
-            None => 0
-        } + match self.state.udp_header {
-            Some(_) => UdpHeader::SERIALIZED_SIZE,
-            None => 0
-        } + payload_size;
-        result
+        final_size(&self, payload_size)
     }
+}
+
+impl PacketBuilderStep<TcpHeader> {
+
+    ///Set ns flag (ECN-nonce - concealment protection; experimental: see RFC 3540)
+    pub fn ns(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().ns = true;
+        self
+    }
+    ///Set fin flag (No more data from sender)
+    pub fn fin(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().fin = true;
+        self
+    }
+    ///Set the syn flag (synchronize sequence numbers)
+    pub fn syn(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().syn = true;
+        self
+    }
+    ///Sets the rst flag (reset the connection)
+    pub fn rst(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().rst = true;
+        self
+    }
+    ///Sets the psh flag (push function)
+    pub fn psh(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().psh = true;
+        self
+    }
+    ///Sets the ack flag and the acknowledgment_number.
+    pub fn ack(mut self, acknowledgment_number: u32) -> PacketBuilderStep<TcpHeader> {
+        {
+            let header = self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap();
+            header.ack = true;
+            header.acknowledgment_number = acknowledgment_number;
+        }
+        self
+    }
+    ///Set the urg flag & the urgent pointer field.
+    ///
+    ///The urgent pointer points to the sequence number of the octet following
+    ///the urgent data.
+    pub fn urg(mut self, urgent_pointer: u16) -> PacketBuilderStep<TcpHeader> {
+        {
+            let header = self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap();
+            header.urg = true;
+            header.urgent_pointer = urgent_pointer;
+        }
+        self
+    }
+    ///Sets ece flag (ECN-Echo, RFC 3168)
+    pub fn ece(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().ece = true;
+        self
+    }
+
+    ///Set cwr flag (Congestion Window Reduced)
+    ///
+    ///This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
+    pub fn cwr(mut self) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().cwr = true;
+        self
+    }
+
+    ///Set the tcp options of the header.
+    pub fn options(mut self, options: &[TcpOptionElement]) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().set_options(options)?;
+        Ok(self)
+    }
+
+    ///Set the tcp options of the header (setting the bytes directly).
+    pub fn options_raw(mut self, options: &[u8]) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
+        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().set_options_raw(options)?;
+        Ok(self)
+    }
+
+    ///Write all the headers and the payload.
+    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+        final_write(self, writer, payload)
+    }
+
+    ///Returns the size of the packet when it is serialized
+    pub fn size(&self, payload_size: usize) -> usize {
+        final_size(&self, payload_size)
+    }
+}
+
+///Write all the headers and the payload.
+fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    
+    let ip_ether_type = {
+        use IpHeader::*;
+        match builder.state.ip_header {
+            Some(Version4(_)) => EtherType::Ipv4 as u16,
+            Some(Version6(_)) => EtherType::Ipv6 as u16,
+            None => panic!("Missing ip header")
+        }
+    };
+
+    //ethernetII header
+    match builder.state.ethernet2_header {
+        Some(mut eth) => {
+            eth.ether_type = {
+                
+                use VlanHeader::*;
+                //determine the ether type depending on if there is a vlan tagging header
+                match builder.state.vlan_header {
+                    Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
+                    Some(Double(_)) => EtherType::ProviderBridging as u16,
+                    //if no vlan header exists, the id is purely defined by the ip type
+                    None => ip_ether_type
+                }
+            };
+            eth.write(writer)?;
+        },
+        None => {}
+    }
+
+    //write the vlan header if it exists
+    use VlanHeader::*;
+    match builder.state.vlan_header {
+        Some(Single(mut value)) => {
+            //set ether types
+            value.ether_type = ip_ether_type;
+            //serialize
+            value.write(writer)?;
+        },
+        Some(Double(mut value)) => {
+            //set ether types
+            value.outer.ether_type = EtherType::VlanTaggedFrame as u16;
+            value.inner.ether_type = ip_ether_type;
+            //serialize
+            value.write(writer)?;
+        },
+        None => {}
+    }
+
+    //unpack the transport header
+    let mut transport = builder.state.transport_header.unwrap();
+
+    //ip header
+    use IpHeader::*;
+    let ip_header = builder.state.ip_header.unwrap();
+    match ip_header {
+        Version4(mut ip) => {
+            //set total length & udp payload length (ip checks that the payload length is ok)
+            let size = transport.header_len() + payload.len();
+            ip.set_payload_and_options_length(size)?;
+            use TransportHeader::*;
+            match transport {
+                Udp(ref mut udp) => { udp.length = size as u16; }
+                Tcp(_) => {}
+            }
+
+            //traffic class
+            ip.protocol = match transport {
+                Udp(_) => IpTrafficClass::Udp as u8,
+                Tcp(_) => IpTrafficClass::Tcp as u8
+            };
+
+            //calculate the udp checksum
+            transport.update_checksum_ipv4(&ip, payload)?;
+
+            //write (will automatically calculate the checksum)
+            ip.write(writer, &[])?
+        },
+        Version6(mut ip) => {
+            //set total length
+            let size = transport.header_len() + payload.len();
+            ip.set_payload_length(size)?;
+            use TransportHeader::*;
+            match transport {
+                Udp(ref mut udp) => { udp.length = size as u16; }
+                Tcp(_) => {}
+            }
+
+            //set the protocol
+            ip.next_header = match transport {
+                Udp(_) => IpTrafficClass::Udp as u8,
+                Tcp(_) => IpTrafficClass::Tcp as u8
+            };
+
+            //calculate the udp checksum
+            transport.update_checksum_ipv6(&ip, payload)?;
+
+            //write (will automatically calculate the checksum)
+            ip.write(writer)?
+
+        }
+    }
+
+    //finaly write the udp header & payload
+    transport.write(writer)?;
+    writer.write_all(payload)?;
+    Ok(())
+}
+
+///Returns the size of the packet when it is serialized
+fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
+    use IpHeader::*;
+    use VlanHeader::*;
+    use TransportHeader::*;
+    let result = match builder.state.ethernet2_header {
+        Some(_) => Ethernet2Header::SERIALIZED_SIZE,
+        None => 0
+    } + match builder.state.vlan_header {
+        Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
+        Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
+        None => 0 
+    } + match builder.state.ip_header {
+        Some(Version4(_)) => Ipv4Header::SERIALIZED_SIZE,
+        Some(Version6(_)) => Ipv6Header::SERIALIZED_SIZE,
+        None => 0
+    } + match builder.state.transport_header {
+        Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
+        Some(Tcp(ref value)) => value.header_len() as usize,
+        None => 0
+    } + payload_size;
+    result
 }
 
 #[cfg(test)]
@@ -437,7 +559,7 @@ mod whitebox_tests {
                 ethernet2_header: None,
                 ip_header: None,
                 vlan_header: None,
-                udp_header: None
+                transport_header: None
             },
             _marker: marker::PhantomData::<UdpHeader>{}
         }.size(0));

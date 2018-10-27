@@ -101,7 +101,7 @@ And for deserialization into the corresponding header structs have a look at:
 ### Packet Builder
 The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 
-[Example:](examples/write_udp.rs)
+[UDP Example:](examples/write_udp.rs) & [TCP Example:](examples/write_tcp.rs)
 ```rust
 let builder = PacketBuilder::
     ethernet2([1,2,3,4,5,6],     //source mac
@@ -140,7 +140,6 @@ Read the documentations of the different methods for a more details:
 ## Roadmap
 * Documentation
   * Packet Builder
-* Packet Builder TCP support
 * MutPacketSlice -> modifaction of fields in slices directly?
 * Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
 * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)

@@ -22,6 +22,16 @@ impl TransportHeader {
         }
     }
 
+    ///Returns Result::Some containing the udp header if self has the value Udp. 
+    ///Otherwise None is returned.
+    pub fn mut_udp<'a>(&'a mut self) -> Option<&'a mut udp::UdpHeader> {
+        use TransportHeader::*;
+        match self {
+            Udp(ref mut value) => Some(value),
+            Tcp(_) => None
+        }
+    }
+
     ///Returns Result::Some containing the tcp header if self has the value Tcp. 
     ///Otherwise None is returned.
     pub fn tcp(self) -> Option<tcp::TcpHeader> {
@@ -29,6 +39,16 @@ impl TransportHeader {
         match self {
             Udp(_) => None,
             Tcp(value) => Some(value)
+        }
+    }
+
+    ///Returns Result::Some containing a mutable refernce to the tcp header if self has the value Tcp. 
+    ///Otherwise None is returned.
+    pub fn mut_tcp<'a>(&'a mut self) -> Option<&'a mut tcp::TcpHeader> {
+        use TransportHeader::*;
+        match self {
+            Udp(_) => None,
+            Tcp(ref mut value) => Some(value)
         }
     }
 

@@ -13,10 +13,22 @@ mod transport_header {
         assert_eq!(None, TransportHeader::Tcp(Default::default()).udp());
     }
     #[test]
+    fn mut_udp() {
+        let udp: UdpHeader = Default::default();
+        assert_eq!(Some(&mut udp.clone()), TransportHeader::Udp(udp).mut_udp());
+        assert_eq!(None, TransportHeader::Tcp(Default::default()).mut_udp());
+    }
+    #[test]
     fn tcp() {
         let tcp: TcpHeader = Default::default();
         assert_eq!(Some(tcp.clone()), TransportHeader::Tcp(tcp).tcp());
         assert_eq!(None, TransportHeader::Udp(Default::default()).tcp());
+    }
+    #[test]
+    fn mut_tcp() {
+        let tcp: TcpHeader = Default::default();
+        assert_eq!(Some(&mut tcp.clone()), TransportHeader::Tcp(tcp).mut_tcp());
+        assert_eq!(None, TransportHeader::Udp(Default::default()).mut_tcp());
     }
     proptest! {
         #[test]

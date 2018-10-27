@@ -15,10 +15,50 @@ fn main() {
     //payload of the udp packet
     let payload = [1,2,3,4,5,6,7,8];
     
-    //get some memory to store the result
-    let mut result = Vec::<u8>::with_capacity(
-                    builder.size(payload.len()));
-    builder.write(&mut result, &payload).unwrap();
+    //get some memory to store the serialized data
+    let mut serialized = Vec::<u8>::with_capacity(
+                            builder.size(payload.len()));
+    builder.write(&mut serialized, &payload).unwrap();
 
-    
+    //slice the packet into the different header components
+    let sliced_packet = SlicedPacket::from_ethernet(&serialized);
+
+    //print some informations about the sliced packet
+    match sliced_packet {
+        Err(value) => println!("Err {:?}", value),
+        Ok(value) => {
+            println!("Ok");
+            use LinkSlice::*;
+            use InternetSlice::*;
+            use TransportSlice::*;
+            use VlanSlice::*;
+
+            match value.link {
+                Some(Ethernet2(value)) => println!("  Ethernet2 {:?} => {:?}", value.source(), value.destination()),
+                None => {}
+            }
+
+            match value.vlan {
+                Some(SingleVlan(value)) => println!("  SingleVlan {:?}", value.vlan_identifier()),
+                Some(DoubleVlan(value)) => println!("  DoubleVlan {:?}, {:?}", value.outer().vlan_identifier(), value.inner().vlan_identifier()),
+                None => {}
+            }
+
+            match value.ip {
+                Some(Ipv4(value)) => println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr()),
+                Some(Ipv6(value, _)) => println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr()),
+                None => {}
+            }
+
+            match value.transport {
+                Some(Udp(value)) => println!("  UDP {:?} -> {:?}", value.source_port(), value.destination_port()),
+                Some(Tcp(value)) => {
+                    println!("  TCP {:?} -> {:?}", value.source_port(), value.destination_port());
+                    let options: Vec<Result<TcpOptionElement, TcpOptionReadError>> = value.options_iterator().collect();
+                    println!("    {:?}", options);
+                }
+                None => {}
+            }
+        }
+    }
 }
