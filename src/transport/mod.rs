@@ -122,7 +122,7 @@ impl TransportHeader {
 #[cfg(test)]
 mod whitebox_tests {
     #[test]
-    fn dummy() {
+    pub fn dummy() {
         assert_eq!(true, true);
     }
 }

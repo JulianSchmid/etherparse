@@ -1056,7 +1056,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
 mod whitebox_tests {
     use super::*;
     #[test]
-    fn options_iterator() {
+    pub fn options_iterator() {
         fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
             let mut it = TcpOptionsIterator{ options: buffer };
             for element in expected.iter() {
@@ -1121,7 +1121,7 @@ mod whitebox_tests {
     }
 
     #[test]
-    fn options_iterator_unexpected_eos() {
+    pub fn options_iterator_unexpected_eos() {
         fn expect_unexpected_eos(slice: &[u8]) {
             for i in 1..slice.len()-1 {
                 let mut it = TcpOptionsIterator{ options: &slice[..i] };
@@ -1158,7 +1158,7 @@ mod whitebox_tests {
                                 0, 0, 0, 0, 0]);
     }
     #[test]
-    fn options_iterator_unexpected_length() {
+    pub fn options_iterator_unexpected_length() {
         fn expect_unexpected_size(id: u8, size: u8) {
             let data = [id, size, 0, 0, 0,
                         0, 0, 0, 0, 0, //10
@@ -1203,7 +1203,7 @@ mod whitebox_tests {
     }
 
     #[test]
-    fn options_iterator_unexpected_id() {
+    pub fn options_iterator_unexpected_id() {
         let data = [255, 2, 0, 0, 0,
                     0, 0, 0, 0, 0, //10
                     0, 0, 0, 0, 0,
@@ -1220,7 +1220,7 @@ mod whitebox_tests {
     }
 
     #[test]
-    fn eq()
+    pub fn eq()
     {
         let base = TcpHeader {
             source_port: 1,
@@ -1365,7 +1365,7 @@ mod whitebox_tests {
     }
 
     #[test]
-    fn default() {
+    pub fn default() {
         let default : TcpHeader = Default::default();
 
         assert_eq!(0, default.source_port);
