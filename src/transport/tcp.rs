@@ -1053,7 +1053,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
 }
 
 #[cfg(test)]
-mod tests {
+mod whitebox_tests {
     use super::*;
     #[test]
     fn options_iterator() {
