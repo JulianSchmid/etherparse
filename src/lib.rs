@@ -170,3 +170,11 @@ impl Iterator for RangeStep {
         }
     }
 }
+
+#[cfg(test)]
+mod whitebox_tests {
+    #[test]
+    fn dummy() {
+        assert_eq!(true, true);
+    }
+}
