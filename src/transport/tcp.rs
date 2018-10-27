@@ -1052,9 +1052,9 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
     }
 }
 
-#[cfg(test)]
-mod whitebox_tests {
-    use super::*;
+//#[cfg(test)]
+//mod whitebox_tests {
+    //use super::*;
     #[test]
     fn options_iterator() {
         fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
@@ -1387,4 +1387,4 @@ mod whitebox_tests {
         assert_eq!(0, default.urgent_pointer);
         assert_eq!(&[0;40][..], &default.options_buffer[..]);
     }
-}
+//}
