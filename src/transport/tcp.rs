@@ -373,7 +373,7 @@ impl TcpHeader {
         //write options if the data_offset is large enough
         if self._data_offset > TCP_MINIMUM_DATA_OFFSET {
             let len = ((self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
-            writer.write(&self.options_buffer[..len])?;
+            writer.write_all(&self.options_buffer[..len])?;
         }
         Ok(())
     }
