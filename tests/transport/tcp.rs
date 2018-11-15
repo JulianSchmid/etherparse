@@ -415,7 +415,7 @@ fn calc_header_checksum_ipv4() {
             [0;4]
         ).unwrap();
         assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
-        assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+        assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
     }
     //a header with options
     {
@@ -460,7 +460,7 @@ fn calc_header_checksum_ipv4() {
 
         //check checksum
         assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
-        assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+        assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
         //test PacketSlice version
         let mut ip_buffer = Vec::new();
@@ -518,7 +518,7 @@ fn calc_header_checksum_ipv4() {
 
         //check checksum
         assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
-        assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+        assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
         //test PacketSlice version
         let mut ip_buffer = Vec::new();
@@ -602,7 +602,7 @@ fn calc_header_checksum_ipv4_error() {
     tcp_payload.resize(len, 0); 
     let ip_header = Ipv4Header::new(20, 0, IpTrafficClass::Tcp, [0;4], [0;4]).unwrap();
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
-    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
     //test PacketSlice version
     let mut ip_buffer = Vec::new();

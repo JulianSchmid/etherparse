@@ -93,7 +93,7 @@ fn with_ipv4_payload_size_check() {
                         Ok(_));
 
         //checksum calculation raw
-        assert_matches!(header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload),
+        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, &payload),
                         Ok(_));
     }
 
@@ -117,7 +117,7 @@ fn with_ipv4_payload_size_check() {
                         Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
 
         //checksum calculation raw
-        assert_matches!(header.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, &payload),
+        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, &payload),
                         Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
     }
 }
@@ -148,7 +148,7 @@ fn udp_calc_checksum_ipv4_raw() {
     };
     let payload = [9,10,11,12, 13,14,15,16];
 
-    assert_eq!(42134, udp.calc_checksum_ipv4_raw(&[1,2,3,4], &[5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
+    assert_eq!(42134, udp.calc_checksum_ipv4_raw([1,2,3,4], [5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
 }
 
 #[test]

@@ -76,11 +76,11 @@ impl Ipv4Header {
             dont_fragment: true,
             more_fragments: false,
             fragments_offset: 0,
-            time_to_live: time_to_live,
+            time_to_live,
             protocol: protocol as u8,
             header_checksum: 0,
-            source: source,
-            destination: destination
+            source,
+            destination
         })
     }
 
@@ -120,11 +120,11 @@ impl Ipv4Header {
         Ok(Ipv4Header{
             differentiated_services_code_point: dscp,
             explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
+            total_length,
+            identification,
+            dont_fragment,
+            more_fragments,
+            fragments_offset,
             time_to_live: reader.read_u8()?,
             protocol: reader.read_u8()?,
             header_checksum: reader.read_u16::<BigEndian>()?,
@@ -150,7 +150,7 @@ impl Ipv4Header {
             return Err(Ipv4HeaderLengthBad(self.header_length));
         }
 
-        let skip = ((self.header_length - 5) as i64)*4;
+        let skip = i64::from(self.header_length - 5)*4;
         if skip > 0 {
             //seek does not return an error, when the end is reached
             //to ensure this still happens an read_exact is added at the end
@@ -224,10 +224,10 @@ impl Ipv4Header {
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
-                    result = result | 64;
+                    result |= 64;
                 }
                 if self.more_fragments {
-                    result = result | 32;
+                    result |= 32;
                 }
                 result
             };
@@ -272,7 +272,7 @@ impl Ipv4Header {
     ///Calculate the header checksum under the assumtion that all value ranges in the header are correct
     fn calc_header_checksum_unchecked(&self, header_length: u8, options: &[u8]) -> u16 {
         //version & header_length
-        let mut sum = [
+        let mut sum: u32 = [
             BigEndian::read_u16(&[ (4 << 4) | header_length,
                                 (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification ]),
             self.total_length,
@@ -284,10 +284,10 @@ impl Ipv4Header {
                 let flags = {
                     let mut result = 0;
                     if self.dont_fragment {
-                        result = result | 64;
+                        result |= 64;
                     }
                     if self.more_fragments {
-                        result = result | 32;
+                        result |= 32;
                     }
                     result
                 };
@@ -299,13 +299,13 @@ impl Ipv4Header {
             BigEndian::read_u16(&self.source[2..4]),
             BigEndian::read_u16(&self.destination[0..2]),
             BigEndian::read_u16(&self.destination[2..4])
-        ].iter().fold(0, |a: u32, x: &u16| a + (*x as u32));
+        ].into_iter().map(|x| u32::from(*x)).sum();
         for i in 0..(options.len()/2) {
-            sum += BigEndian::read_u16(&options[i*2..i*2 + 2]) as u32;
+            sum += u32::from( BigEndian::read_u16(&options[i*2..i*2 + 2]) );
         }
 
         let carry_add = (sum & 0xffff) + (sum >> 16);
-        !(((carry_add & 0xffff) + (carry_add >> 16)) as u16)
+        !( ((carry_add & 0xffff) + (carry_add >> 16)) as u16 )
     }
 
     ///Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
@@ -370,13 +370,13 @@ impl Ipv6Header {
             let traffic_class = (version_rest << 4) | (buffer[1] >> 4);
 
             //remove traffic class from buffer & read flow_label
-            buffer[1] = buffer[1] & 0xf;
+            buffer[1] &= 0xf;
             (traffic_class, byteorder::BigEndian::read_u32(&buffer))
         };
         
         Ok(Ipv6Header{
-            traffic_class: traffic_class,
-            flow_label: flow_label,
+            traffic_class,
+            flow_label,
             payload_length: reader.read_u16::<BigEndian>()?,
             next_header: reader.read_u8()?,
             hop_limit: reader.read_u8()?,
@@ -403,7 +403,7 @@ impl Ipv6Header {
             7
         } else {
             //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
-            (((reader.read_u8()? as i64) + 1)*8) - 2
+            ((i64::from(reader.read_u8()?) + 1)*8) - 2
         };
         //Sadly seek does not return an error if the seek could not be fullfilled.
         //Some implementations do not even truncate the returned position to the
@@ -453,9 +453,9 @@ impl Ipv6Header {
                 Err(
                     WriteError::ValueError(
                         ValueError::U32TooLarge{
-                            value: value, 
-                            max: max, 
-                            field: field }))
+                            value, 
+                            max, 
+                            field }))
             }
         };
 
@@ -469,7 +469,7 @@ impl Ipv6Header {
             let mut buffer: [u8; 4] = [0;4];
             byteorder::BigEndian::write_u32(&mut buffer, self.flow_label);
             //add the traffic_class
-            buffer[1] = buffer[1] | (self.traffic_class << 4);
+            buffer[1] |= self.traffic_class << 4;
             //skip "highest" byte of big endian
             writer.write_all(&buffer[1..])?;
         }

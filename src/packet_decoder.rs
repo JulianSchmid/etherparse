@@ -13,7 +13,7 @@ pub struct PacketHeaders<'a> {
 
 impl<'a> PacketHeaders<'a> {
     ///Tries to decode as much as possible of a packet.
-    pub fn from_ethernet_slice<'b>(packet: &'b [u8]) -> Result<PacketHeaders<'b>, ReadError> {
+    pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
         use std::io::Cursor;
         let mut cursor = Cursor::new(&packet);
@@ -51,8 +51,8 @@ impl<'a> PacketHeaders<'a> {
                         ether_type = inner.ether_type;
 
                         Some(Double(DoubleVlanHeader{
-                            outer: outer,
-                            inner: inner
+                            outer,
+                            inner
                         }))
                     },
                     //no second vlan header detected -> single vlan header

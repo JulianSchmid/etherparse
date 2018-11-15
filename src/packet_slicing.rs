@@ -131,8 +131,9 @@ impl<'a> SlicedPacket<'a> {
 
                 //extension headers
                 let mut ip_extensions = [None, None, None, None, None, None, None];
+
                 let mut next_header = value.next_header();
-                for i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
+                for extension_header in ip_extensions.iter_mut() {
                     match next_header {
                         IPV6_HOP_BY_HOP | 
                         IPV6_ROUTE | 
@@ -144,7 +145,7 @@ impl<'a> SlicedPacket<'a> {
                             let this_header = next_header;
                             next_header = value.next_header();
                             rest = &rest[value.slice().len()..];
-                            ip_extensions[i] = Some((this_header, value));
+                            *extension_header = Some((this_header, value));
                         },
                         _ => break
                     }
@@ -195,10 +196,10 @@ impl<'a> SlicedPacket<'a> {
         };
 
         Ok(SlicedPacket{
-            link: link,
-            vlan: vlan,
-            ip: ip,
-            transport: transport,
+            link,
+            vlan,
+            ip,
+            transport,
             payload: rest
         })
     }

@@ -41,14 +41,14 @@ impl SingleVlanHeader {
             let drop_eligible_indicator = 0 != (buffer[0] & 0x10);
             let priority_code_point = buffer[0] >> 5;
             //mask and read the vlan id
-            buffer[0] = buffer[0] & 0xf;
+            buffer[0] &= 0xf;
             (priority_code_point, drop_eligible_indicator, BigEndian::read_u16(&buffer))
         };
 
         Ok(SingleVlanHeader{
-            priority_code_point: priority_code_point,
-            drop_eligible_indicator: drop_eligible_indicator,
-            vlan_identifier: vlan_identifier,
+            priority_code_point,
+            drop_eligible_indicator,
+            vlan_identifier,
             ether_type: reader.read_u16::<BigEndian>()?
         })
     }
@@ -63,9 +63,9 @@ impl SingleVlanHeader {
             let mut buffer: [u8;2] = [0;2];
             BigEndian::write_u16(&mut buffer, self.vlan_identifier);
             if self.drop_eligible_indicator {
-                buffer[0] = buffer[0] | 0x10;
+                buffer[0] |= 0x10;
             }
-            buffer[0] = buffer[0] | (self.priority_code_point << 5);
+            buffer[0] |= self.priority_code_point << 5;
             writer.write_all(&buffer)?;
         }
         writer.write_u16::<BigEndian>(self.ether_type)?;
@@ -97,7 +97,7 @@ impl DoubleVlanHeader {
             Err(VlanDoubleTaggingUnexpectedOuterTpid(outer.ether_type))
         } else {
             Ok(DoubleVlanHeader{
-                outer: outer,
+                outer,
                 inner: SingleVlanHeader::read(reader)?
             })
         }

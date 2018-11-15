@@ -24,7 +24,7 @@ impl TransportHeader {
 
     ///Returns Result::Some containing the udp header if self has the value Udp. 
     ///Otherwise None is returned.
-    pub fn mut_udp<'a>(&'a mut self) -> Option<&'a mut udp::UdpHeader> {
+    pub fn mut_udp(&mut self) -> Option<&mut udp::UdpHeader> {
         use TransportHeader::*;
         match self {
             Udp(ref mut value) => Some(value),
@@ -44,7 +44,7 @@ impl TransportHeader {
 
     ///Returns Result::Some containing a mutable refernce to the tcp header if self has the value Tcp. 
     ///Otherwise None is returned.
-    pub fn mut_tcp<'a>(&'a mut self) -> Option<&'a mut tcp::TcpHeader> {
+    pub fn mut_tcp(&mut self) -> Option<&mut tcp::TcpHeader> {
         use TransportHeader::*;
         match self {
             Udp(_) => None,
@@ -58,7 +58,7 @@ impl TransportHeader {
         use TransportHeader::*;
         match self {
             Udp(_) => udp::UdpHeader::SERIALIZED_SIZE,
-            Tcp(value) => value.header_len() as usize
+            Tcp(value) => usize::from(value.header_len())
         }
     }
 
@@ -68,20 +68,13 @@ impl TransportHeader {
         use TransportHeader::*;
         match self {
             Udp(header) => {
-                header.checksum = match header.calc_checksum_ipv4(ip_header, payload) {
-                    Ok(value) => value,
-                    Err(err) => return Err(err)
-                };
-                Ok(())
+                header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
             },
             Tcp(header) => {
-                header.checksum = match header.calc_checksum_ipv4(ip_header, payload) {
-                    Ok(value) => value,
-                    Err(err) => return Err(err)
-                };
-                Ok(())
+                header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
             }
         }
+        Ok(())
     }
 
     ///Calculates the checksum for the transport header & sets it in the header for
@@ -90,20 +83,13 @@ impl TransportHeader {
         use TransportHeader::*;
         match self {
             Udp(header) => {
-                header.checksum = match header.calc_checksum_ipv6(ip_header, payload) {
-                    Ok(value) => value,
-                    Err(err) => return Err(err)
-                };
-                Ok(())
+                header.checksum = header.calc_checksum_ipv6(ip_header, payload)?;
             },
             Tcp(header) => {
-                header.checksum = match header.calc_checksum_ipv6(ip_header, payload) {
-                    Ok(value) => value,
-                    Err(err) => return Err(err)
-                };
-                Ok(())
+                header.checksum = header.calc_checksum_ipv6(ip_header, payload)?;
             }
         }
+        Ok(())
     }
 
     ///Write the transport header to the given writer.
@@ -111,10 +97,7 @@ impl TransportHeader {
         use TransportHeader::*;
         match self {
             Udp(value) => value.write(writer),
-            Tcp(value) => match value.write(writer) {
-                Ok(value) => Ok(value),
-                Err(err) => Err(WriteError::IoError(err))
-            }
+            Tcp(value) => value.write(writer).map_err(WriteError::from)
         }
     }
 }

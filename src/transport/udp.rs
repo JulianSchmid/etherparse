@@ -27,8 +27,8 @@ impl UdpHeader {
         }
 
         Ok(UdpHeader{
-            source_port: source_port,
-            destination_port: destination_port,
+            source_port,
+            destination_port,
             length: (UdpHeader::SERIALIZED_SIZE + payload_length) as u16, //payload plus udp header
             checksum: 0
         })
@@ -44,22 +44,22 @@ impl UdpHeader {
         }
 
         let mut result = UdpHeader{
-            source_port: source_port,
-            destination_port: destination_port,
+            source_port,
+            destination_port,
             length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
             checksum: 0
         };
-        result.checksum = result.calc_checksum_ipv4_internal(&ip_header.source, &ip_header.destination, ip_header.protocol, payload);
+        result.checksum = result.calc_checksum_ipv4_internal(ip_header.source, ip_header.destination, ip_header.protocol, payload);
         Ok(result)
     }
 
     ///Calculates the upd header checksum based on a ipv4 header.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, ip_header.protocol, payload)
+        self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, payload)
     }
 
     ///Calculates the upd header checksum based on a ipv4 header.
-    pub fn calc_checksum_ipv4_raw(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
@@ -70,13 +70,13 @@ impl UdpHeader {
     }
     
     ///Calculates the upd header checksum based on a ipv4 header.
-    fn calc_checksum_ipv4_internal(&self, source: &[u8;4], destination: &[u8;4], protocol: u8, payload: &[u8]) -> u16 {
-        self.calc_checksum_post_ip(BigEndian::read_u16(&source[0..2]) as u64 + //pseudo header
-                                   BigEndian::read_u16(&source[2..4]) as u64 +
-                                   BigEndian::read_u16(&destination[0..2]) as u64 +
-                                   BigEndian::read_u16(&destination[2..4]) as u64 +
-                                   protocol as u64 +
-                                   self.length as u64, 
+    fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> u16 {
+        self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source[0..2]) ) + //pseudo header
+                                   u64::from( BigEndian::read_u16(&source[2..4]) ) +
+                                   u64::from( BigEndian::read_u16(&destination[0..2]) ) +
+                                   u64::from( BigEndian::read_u16(&destination[2..4]) ) +
+                                   u64::from( protocol ) +
+                                   u64::from( self.length ), 
                                    payload)
     }
 
@@ -90,8 +90,8 @@ impl UdpHeader {
         }
 
         let mut result = UdpHeader{
-            source_port: source_port,
-            destination_port: destination_port,
+            source_port,
+            destination_port,
             length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
             checksum: 0
         };
@@ -120,30 +120,30 @@ impl UdpHeader {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
-                result += BigEndian::read_u16(&value[index..(index + 2)]) as u64;
+                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
             }
             result
         }
         self.calc_checksum_post_ip(calc_sum(source) +
                                    calc_sum(destination) +
                                    IpTrafficClass::Udp as u64 +
-                                   self.length as u64,
+                                   u64::from( self.length ),
                                    payload)
     }
 
     ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
     fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
         let mut sum = ip_pseudo_header_sum +
-                      self.source_port as u64 + //udp header start
-                      self.destination_port as u64 +
-                      self.length as u64;
+                      u64::from( self.source_port ) + //udp header start
+                      u64::from( self.destination_port ) +
+                      u64::from( self.length );
 
         for i in 0..(payload.len()/2) {
-            sum += BigEndian::read_u16(&payload[i*2..i*2 + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&payload[i*2..i*2 + 2]) );
         }
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u64;
+            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]));
         }
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +

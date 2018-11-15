@@ -81,9 +81,9 @@ impl TcpHeader {
     ///Creates a TcpHeader with the given values and the rest initialized with default values.
     pub fn new(source_port: u16, destination_port: u16, sequence_number: u32, window_size: u16) -> TcpHeader {
         TcpHeader {
-            source_port: source_port,
-            destination_port: destination_port,
-            sequence_number: sequence_number,
+            source_port,
+            destination_port,
+            sequence_number,
             acknowledgment_number: 0,
             _data_offset: TCP_MINIMUM_DATA_OFFSET,
             ns: false,
@@ -95,7 +95,7 @@ impl TcpHeader {
             ece: false,
             urg: false,
             cwr: false,
-            window_size: window_size,
+            window_size,
             checksum: 0,
             urgent_pointer: 0,
             options_buffer: [0;40]
@@ -112,7 +112,7 @@ impl TcpHeader {
 
     ///Returns the length of the header including the options.
     pub fn header_len(&self) -> u16 {
-        self._data_offset as u16 * 4
+        u16::from(self._data_offset) * 4
     }
 
     ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
@@ -123,7 +123,7 @@ impl TcpHeader {
     }
 
     ///Returns a slice containing the options of the header (size is determined via the data_offset field.
-    pub fn options<'a>(&'a self) -> &'a[u8] {
+    pub fn options(&self) -> &[u8] {
         &self.options_buffer[..self.options_len()]
     }
 
@@ -267,7 +267,7 @@ impl TcpHeader {
     }
 
     ///Returns an iterator that allows to iterate through all known TCP header options.
-    pub fn options_iterator<'a>(&'a self) -> TcpOptionsIterator<'a> {
+    pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator {
             options: &self.options_buffer[..self.options_len()]
         }
@@ -286,11 +286,11 @@ impl TcpHeader {
         let flags = reader.read_u8()?;
 
         Ok(TcpHeader{
-            source_port: source_port,
-            destination_port: destination_port,
-            sequence_number: sequence_number,
-            acknowledgment_number: acknowledgment_number,
-            ns: ns,
+            source_port,
+            destination_port,
+            sequence_number,
+            acknowledgment_number,
+            ns,
             fin: 0 != flags & 1,
             syn: 0 != flags & 2,
             rst: 0 != flags & 4,
@@ -341,28 +341,28 @@ impl TcpHeader {
         writer.write_u8({
             let mut value = 0;
             if self.fin {
-                value = value | 1;
+                value |= 1;
             }
             if self.syn {
-                value = value | 2;
+                value |= 2;
             }
             if self.rst {
-                value = value | 4;
+                value |= 4;
             }
             if self.psh {
-                value = value | 8;
+                value |= 8;
             }
             if self.ack {
-                value = value | 16;
+                value |= 16;
             }
             if self.urg {
-                value = value | 32;
+                value |= 32;
             }
             if self.ece {
-                value = value | 64;
+                value |= 64;
             }
             if self.cwr {
-                value = value | 128;
+                value |= 128;
             }
             value
         })?;
@@ -380,11 +380,11 @@ impl TcpHeader {
 
     ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv4_raw(&ip_header.source, &ip_header.destination, payload)
+        self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
     ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4_raw(&self, source_ip: &[u8;4], destination_ip: &[u8;4], payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4_raw(&self, source_ip: [u8;4], destination_ip: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
         
         //check that the total length fits into the field
         let tcp_length = (self._data_offset as usize)*4 + payload.len();
@@ -393,10 +393,10 @@ impl TcpHeader {
         }
 
         //calculate the checksum
-        Ok(self.calc_checksum_post_ip(BigEndian::read_u16(&source_ip[0..2]) as u64 + //pseudo header
-                                      BigEndian::read_u16(&source_ip[2..4]) as u64 +
-                                      BigEndian::read_u16(&destination_ip[0..2]) as u64 +
-                                      BigEndian::read_u16(&destination_ip[2..4]) as u64 +
+        Ok(self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source_ip[0..2]) ) + //pseudo header
+                                      u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
+                                      u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
+                                      u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
                                       IpTrafficClass::Tcp as u64 +
                                       tcp_length as u64,
                                       payload))
@@ -420,7 +420,7 @@ impl TcpHeader {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
-                result += BigEndian::read_u16(&value[index..(index + 2)]) as u64;
+                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
             }
             result
         }
@@ -431,8 +431,8 @@ impl TcpHeader {
             {
                 let mut buffer: [u8;4] = Default::default();
                 BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
-                BigEndian::read_u16(&buffer[0..2]) as u64 +
-                BigEndian::read_u16(&buffer[2..4]) as u64
+                u64::from( BigEndian::read_u16(&buffer[0..2]) ) +
+                u64::from( BigEndian::read_u16(&buffer[2..4]) )
             },
             payload))
     }
@@ -442,16 +442,16 @@ impl TcpHeader {
         fn calc_u32_checksum(value: u32) -> u64 {
             let mut buffer: [u8;4] = [0;4];
             BigEndian::write_u32(&mut buffer, value);
-            (BigEndian::read_u16(&buffer[..2]) as u64) + 
-            (BigEndian::read_u16(&buffer[2..]) as u64)
+            u64::from( BigEndian::read_u16(&buffer[..2]) ) + 
+            u64::from( BigEndian::read_u16(&buffer[2..]) )
         }
         let mut sum = 
             ip_pseudo_header_sum +
-            self.source_port as u64 + //udp header start
-            self.destination_port as u64 +
+            u64::from( self.source_port ) + //udp header start
+            u64::from( self.destination_port ) +
             calc_u32_checksum(self.sequence_number) +
             calc_u32_checksum(self.acknowledgment_number) +
-            BigEndian::read_u16(&[
+            u64::from( BigEndian::read_u16(&[
                 {
                     let value = (self._data_offset << 4) & 0xF0;
                     if self.ns {
@@ -463,48 +463,48 @@ impl TcpHeader {
                 {
                     let mut value = 0;
                     if self.fin {
-                        value = value | 1;
+                        value |= 1;
                     }
                     if self.syn {
-                        value = value | 2;
+                        value |= 2;
                     }
                     if self.rst {
-                        value = value | 4;
+                        value |= 4;
                     }
                     if self.psh {
-                        value = value | 8;
+                        value |= 8;
                     }
                     if self.ack {
-                        value = value | 16;
+                        value |= 16;
                     }
                     if self.urg {
-                        value = value | 32;
+                        value |= 32;
                     }
                     if self.ece {
-                        value = value | 64;
+                        value |= 64;
                     }
                     if self.cwr {
-                        value = value | 128;
+                        value |= 128;
                     }
                     value
                 }
-            ]) as u64 +
-            self.window_size as u64 +
-            self.urgent_pointer as u64;
+            ]) ) +
+            u64::from( self.window_size ) +
+            u64::from( self.urgent_pointer );
 
         //add the options
         let options_len = self.options_len();
         for i in RangeStep::new(0, options_len, 2) {
-            sum += BigEndian::read_u16(&self.options_buffer[i..i + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&self.options_buffer[i..i + 2]) );
         }
 
         //payload
         for i in RangeStep::new(0, payload.len()/2*2, 2) {
-            sum += BigEndian::read_u16(&payload[i..i + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&payload[i..i + 2]) );
         }
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u64;
+            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]) );
         }
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +
@@ -740,7 +740,7 @@ impl<'a> TcpHeaderSlice<'a> {
     }
 
     ///Returns an iterator that allows to iterate through all known TCP header options.
-    pub fn options_iterator<'b>(&'b self) -> TcpOptionsIterator<'b> {
+    pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator {
             options: self.options()
         }
@@ -769,7 +769,7 @@ impl<'a> TcpHeaderSlice<'a> {
             options_buffer: {
                 let options = self.options();
                 let mut result: [u8;40] = [0;40];
-                if options.len() > 0 {
+                if !options.is_empty() {
                     result[..options.len()].clone_from_slice(&options);
                 }
                 result
@@ -793,10 +793,10 @@ impl<'a> TcpHeaderSlice<'a> {
         }
 
         //calculate the checksum
-        Ok(self.calc_checksum_post_ip(BigEndian::read_u16(&source_ip[0..2]) as u64 + //pseudo header
-                                      BigEndian::read_u16(&source_ip[2..4]) as u64 +
-                                      BigEndian::read_u16(&destination_ip[0..2]) as u64 +
-                                      BigEndian::read_u16(&destination_ip[2..4]) as u64 +
+        Ok(self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source_ip[0..2]) ) + //pseudo header
+                                      u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
+                                      u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
+                                      u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
                                       IpTrafficClass::Tcp as u64 +
                                       tcp_length as u64,
                                       payload))
@@ -820,7 +820,7 @@ impl<'a> TcpHeaderSlice<'a> {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
-                result += BigEndian::read_u16(&value[index..(index + 2)]) as u64;
+                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
             }
             result
         }
@@ -831,8 +831,8 @@ impl<'a> TcpHeaderSlice<'a> {
             {
                 let mut buffer: [u8;4] = Default::default();
                 BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
-                BigEndian::read_u16(&buffer[0..2]) as u64 +
-                BigEndian::read_u16(&buffer[2..4]) as u64
+                u64::from( BigEndian::read_u16(&buffer[0..2]) ) +
+                u64::from( BigEndian::read_u16(&buffer[2..4]) )
             },
             payload))
     }
@@ -844,19 +844,19 @@ impl<'a> TcpHeaderSlice<'a> {
 
         //until checksum
         for i in RangeStep::new(0, 16, 2) {
-            sum += BigEndian::read_u16(&self.slice[i..i + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&self.slice[i..i + 2]) );
         }
         //after checksum
         for i in RangeStep::new(18, self.slice.len(), 2) {
-            sum += BigEndian::read_u16(&self.slice[i..i + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&self.slice[i..i + 2]) );
         }
         //payload
         for i in RangeStep::new(0, payload.len()/2*2, 2) {
-            sum += BigEndian::read_u16(&payload[i..i + 2]) as u64;
+            sum += u64::from( BigEndian::read_u16(&payload[i..i + 2]) );
         }
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += BigEndian::read_u16(&[*payload.last().unwrap(), 0]) as u64;
+            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]) );
         }
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +
@@ -940,7 +940,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
             }
         };
 
-        if self.options.len() == 0 {
+        if self.options.is_empty() {
             None
         } else {
             //first determine the result
@@ -1002,10 +1002,13 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             let mut acks: [Option<(u32,u32)>;3] = [None;3];
                             let first = (BigEndian::read_u32(&self.options[2..2 + 4]),
                                          BigEndian::read_u32(&self.options[2 + 4..2 + 8]));;
-                            for i in 0usize..3 {
+                            for (i, item) in acks.iter_mut()
+                                                 .enumerate()
+                                                 .take(3)
+                            {
                                 let offset = 2 + 8 + (i*8);
                                 if offset < (len as usize) {
-                                    acks[i] = Some((
+                                    *item = Some((
                                         BigEndian::read_u32(&self.options[offset..offset + 4]),
                                         BigEndian::read_u32(&self.options[offset + 4..offset + 8]))
                                     );

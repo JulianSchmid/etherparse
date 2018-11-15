@@ -43,8 +43,8 @@ impl PacketBuilder {
         PacketBuilderStep {
             state: PacketImpl {
                 ethernet2_header: Some(Ethernet2Header{
-                    source: source,
-                    destination: destination,
+                    source,
+                    destination,
                     ether_type: 0 //the type identifier 
                 }),
                 vlan_header: None,
@@ -82,11 +82,11 @@ impl PacketBuilderStep<Ethernet2Header> {
             dont_fragment: true,
             more_fragments: false,
             fragments_offset: 0,
-            time_to_live: time_to_live,
+            time_to_live,
             protocol: 0, //filled in later as soon as the content is clear
             header_checksum: 0, //calculated later
-            source: source,
-            destination: destination
+            source,
+            destination
         }));
         //return for next step
         PacketBuilderStep {
@@ -155,9 +155,9 @@ impl PacketBuilderStep<Ethernet2Header> {
             flow_label: 0,
             payload_length: 0, //filled in on write
             next_header: 0, //filled in on write
-            hop_limit: hop_limit,
-            source: source,
-            destination: destination
+            hop_limit,
+            source,
+            destination
         }));
         
         //return for next step
@@ -182,7 +182,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
-            vlan_identifier: vlan_identifier,
+            vlan_identifier,
             ether_type: 0, //will be set automatically during write
         }));
         //return for next step
@@ -291,8 +291,8 @@ impl PacketBuilderStep<VlanHeader> {
 impl PacketBuilderStep<IpHeader> {
     pub fn udp(mut self, source_port: u16, destination_port: u16) -> PacketBuilderStep<UdpHeader> {
         self.state.transport_header = Some(TransportHeader::Udp(UdpHeader{
-            source_port: source_port,
-            destination_port: destination_port,
+            source_port,
+            destination_port,
             length: 0, //calculated later
             checksum: 0 //calculated later
         }));
@@ -425,22 +425,19 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     };
 
     //ethernetII header
-    match builder.state.ethernet2_header {
-        Some(mut eth) => {
-            eth.ether_type = {
-                
-                use VlanHeader::*;
-                //determine the ether type depending on if there is a vlan tagging header
-                match builder.state.vlan_header {
-                    Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
-                    Some(Double(_)) => EtherType::ProviderBridging as u16,
-                    //if no vlan header exists, the id is purely defined by the ip type
-                    None => ip_ether_type
-                }
-            };
-            eth.write(writer)?;
-        },
-        None => {}
+    if let Some(mut eth) = builder.state.ethernet2_header {
+        eth.ether_type = {
+            
+            use VlanHeader::*;
+            //determine the ether type depending on if there is a vlan tagging header
+            match builder.state.vlan_header {
+                Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
+                Some(Double(_)) => EtherType::ProviderBridging as u16,
+                //if no vlan header exists, the id is purely defined by the ip type
+                None => ip_ether_type
+            }
+        };
+        eth.write(writer)?;
     }
 
     //write the vlan header if it exists
@@ -527,10 +524,10 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     use IpHeader::*;
     use VlanHeader::*;
     use TransportHeader::*;
-    let result = match builder.state.ethernet2_header {
+    (match builder.state.ethernet2_header {
         Some(_) => Ethernet2Header::SERIALIZED_SIZE,
         None => 0
-    } + match builder.state.vlan_header {
+    }) + match builder.state.vlan_header {
         Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
         Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
         None => 0 
@@ -542,8 +539,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
         Some(Tcp(ref value)) => value.header_len() as usize,
         None => 0
-    } + payload_size;
-    result
+    } + payload_size
 }
 
 #[cfg(test)]

@@ -119,9 +119,9 @@ fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError>
         Ok(())
     } else {
         Err(U8TooLarge { 
-            value: value, 
-            max: max,
-            field: field
+            value, 
+            max,
+            field
         })
     }
 }
@@ -132,9 +132,9 @@ fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueErr
         Ok(())
     } else {
         Err(U16TooLarge{ 
-            value: value, 
-            max: max, 
-            field: field
+            value, 
+            max, 
+            field
         })
     }
 }
@@ -149,9 +149,9 @@ struct RangeStep {
 impl RangeStep {
     fn new(start: usize, end: usize, step: usize) -> RangeStep {
         RangeStep {
-            start: start,
-            end: end,
-            step: step 
+            start,
+            end,
+            step 
         }
     }
 }
