@@ -30,7 +30,7 @@ impl<'a> PacketHeaders<'a> {
         };
 
         //parse vlan header(s)
-        use EtherType::*;
+        use crate::EtherType::*;
 
         const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
         const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
@@ -38,7 +38,7 @@ impl<'a> PacketHeaders<'a> {
 
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                use VlanHeader::*;
+                use crate::VlanHeader::*;
                 let outer = SingleVlanHeader::read(&mut cursor)?;
                 ether_type = outer.ether_type;
 
@@ -68,7 +68,7 @@ impl<'a> PacketHeaders<'a> {
         const IPV6: u16 = Ipv6 as u16;
 
         let read_transport = |protocol: u8, cursor: &mut Cursor<&&[u8]>| -> Result<Option<TransportHeader>, ReadError> {
-            use IpTrafficClass::*;
+            use crate::IpTrafficClass::*;
             const UDP: u8 = Udp as u8;
             const TCP: u8 = Tcp as u8;
             match protocol {

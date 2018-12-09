@@ -29,7 +29,7 @@ impl ComponentTest {
 
         //fill all the elements
         self.eth.write(&mut buffer).unwrap();
-        use VlanHeader::*;
+        use crate::VlanHeader::*;
         match &self.vlan {
             Some(Single(header)) => header.write(&mut buffer).unwrap(),
             Some(Double(header)) => {
@@ -109,7 +109,7 @@ impl ComponentTest {
         //ip
         assert_eq!(self.ip,
             {
-                use InternetSlice::*;
+                use crate::InternetSlice::*;
                 use self::IpTest::*;
                 match result.ip {
                     Some(Ipv4(actual)) => Some(Version4(actual.to_header(), 

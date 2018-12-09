@@ -44,7 +44,7 @@ fn options() {
 
     //too big -> expect error
     let mut header = base.clone();
-    use TcpOptionWriteError::*;
+    use crate::TcpOptionWriteError::*;
     assert_eq!(Err(NotEnoughSpace(dummy.len())), header.set_options_raw(&dummy[..]));
 }
 
@@ -57,7 +57,7 @@ fn write_options(elements: &[TcpOptionElement]) -> TcpHeader {
 proptest! {
     #[test]
     fn set_options_maximum_segment_size(arg in any::<u16>()) {
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
         assert_eq!(write_options(&[Nop, Nop, MaximumSegmentSize(arg), Nop]).options(), 
            &{
                 let mut options = [
@@ -74,7 +74,7 @@ proptest! {
 proptest! {
     #[test]
     fn set_options_window_scale(arg in any::<u8>()) {
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
         assert_eq!(write_options(&[Nop, Nop, WindowScale(arg), Nop]).options(), 
            &[
                 TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_WINDOW_SCALE, 3,
@@ -86,7 +86,7 @@ proptest! {
 
 #[test]
 fn set_options_selective_ack_perm() {
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgementPermitted, Nop]).options(), 
        &[
             TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP, TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2,
@@ -98,7 +98,7 @@ fn set_options_selective_ack_perm() {
 proptest! {
     #[test]
     fn set_options_selective_ack(args in proptest::collection::vec(any::<u32>(), 4*2)) {
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
         //1
         assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Nop]).options(), 
            &{
@@ -200,7 +200,7 @@ proptest! {
     #[test]
     fn set_options_timestamp(arg0 in any::<u32>(),
                                         arg1 in any::<u32>()) {
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
         assert_eq!(write_options(&[Nop, Nop, Timestamp(arg0, arg1), Nop]).options(), 
            &{
                 let mut options = [
@@ -218,7 +218,7 @@ proptest! {
 }
 #[test]
 fn set_option_padding() {
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     let mut tcp_header = TcpHeader::default();
     tcp_header.set_options(&[MaximumSegmentSize(1400), // 4
                             SelectiveAcknowledgementPermitted, // 2
@@ -232,7 +232,7 @@ fn set_option_padding() {
 
 #[test]
 fn set_options_not_enough_memory_error() {
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
                TcpHeader::default().set_options(
                     &[MaximumSegmentSize(1), //4
@@ -389,7 +389,7 @@ proptest! {
 
 #[test]
 fn calc_header_checksum_ipv4() {
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     //checksum == 0xf (no carries) (aka sum == 0xffff)
     {
         let tcp_payload = [1,2,3,4,5,6,7,8];
@@ -559,7 +559,7 @@ fn calc_header_checksum_ipv6() {
     tcp.urg = true;
     tcp.cwr = true;
 
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     tcp.set_options(&[
         Nop, Nop, Nop, Nop,
         Timestamp(0x4161008, 0x84161708)

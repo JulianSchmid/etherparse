@@ -24,7 +24,7 @@ impl IpHeader {
     }
     ///Writes an IP (v4 or v6) header to the current position
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        use IpHeader::*;
+        use crate::IpHeader::*;
         match *self {
             Version4(ref value) => value.write(writer, &[]),
             Version6(ref value) => value.write(writer)
@@ -146,7 +146,7 @@ impl Ipv4Header {
     pub fn skip_options<T: io::Read + io::Seek + Sized>(&self, reader: &mut T) -> Result<(), ReadError> {
         //return an error if the provided header length is too small (smaller then the header itself)
         if self.header_length < 5 {
-            use ReadError::*;
+            use crate::ReadError::*;
             return Err(Ipv4HeaderLengthBad(self.header_length));
         }
 
@@ -167,7 +167,7 @@ impl Ipv4Header {
 
     ///Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T, options: &[u8]) -> Result<(), WriteError> {
-        use ErrorField::*;
+        use crate::ErrorField::*;
         
         //check ranges
         max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
@@ -187,7 +187,7 @@ impl Ipv4Header {
 
     ///Writes a given IPv4 header to the current position (this method just writes the specified checksum and header_length and does note compute it).
     pub fn write_raw<T: io::Write + Sized>(&self, writer: &mut T, options: &[u8]) -> Result<(), WriteError> {
-        use ErrorField::*;
+        use crate::ErrorField::*;
         
         //check ranges
         max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
@@ -253,8 +253,8 @@ impl Ipv4Header {
 
     ///Calculate header checksum of the current ipv4 header.
     pub fn calc_header_checksum(&self, options: &[u8]) -> Result<u16, ValueError> {
-        use ErrorField::*;
-        use ValueError::Ipv4OptionsLengthBad;
+        use crate::ErrorField::*;
+        use crate::ValueError::Ipv4OptionsLengthBad;
 
         //check ranges
         max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
@@ -420,7 +420,7 @@ impl Ipv6Header {
 
     ///Skips all ipv6 header extensions and returns the last traffic_class
     pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, ReadError> {
-        use IpTrafficClass::*;
+        use crate::IpTrafficClass::*;
         const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
         const ROUTE: u8 = IPv6RouteHeader as u8;
         const FRAG: u8 = IPv6FragmentationHeader as u8;
@@ -445,7 +445,7 @@ impl Ipv6Header {
 
     ///Writes a given IPv6 header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        use ErrorField::*;
+        use crate::ErrorField::*;
         fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), WriteError> {
             if value <= max {
                 Ok(())
@@ -511,7 +511,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }
@@ -529,7 +529,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
         //check that the ihl is correct
         if ihl < 5 {
-            use ReadError::*;
+            use crate::ReadError::*;
             return Err(Ipv4HeaderLengthBad(ihl));
         }
 
@@ -683,7 +683,7 @@ impl<'a> Ipv6HeaderSlice<'a, > {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < Ipv6Header::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }
@@ -807,7 +807,7 @@ impl<'a> Ipv6ExtensionHeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < 8 {
             return Err(IoError(Error::from(UnexpectedEof)));
         }

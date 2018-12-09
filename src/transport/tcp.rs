@@ -131,7 +131,7 @@ impl TcpHeader {
     pub fn set_options(&mut self, options: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
 
         //calculate the required size of the options
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
         let required_length = options.iter().fold(0, |acc, ref x| {
             acc + match x {
                 Nop => 1,
@@ -602,7 +602,7 @@ impl<'a> TcpHeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < TCP_MINIMUM_HEADER_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }
@@ -923,8 +923,8 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
 
-        use TcpOptionReadError::*;
-        use TcpOptionElement::*;
+        use crate::TcpOptionReadError::*;
+        use crate::TcpOptionElement::*;
 
         let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionReadError> {
             let id = slice[0];
@@ -1070,7 +1070,7 @@ mod whitebox_tests {
             assert_eq!(0, it.options.len());
         }
 
-        use TcpOptionElement::*;
+        use crate::TcpOptionElement::*;
 
         //nop & max segment size
         expect_elements(&[

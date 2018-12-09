@@ -17,7 +17,7 @@ mod transport;
 mod packet_builder;
 mod packet_filter;
 mod proptest_generators;
-pub use proptest_generators::*;
+pub use crate::proptest_generators::*;
 mod packet_compositions;
 
 #[test]
@@ -37,7 +37,7 @@ fn test_debug_write() {
     }
     //read error
     {
-        use ReadError::*;
+        use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             VlanDoubleTaggingUnexpectedOuterTpid(0),
@@ -53,8 +53,8 @@ fn test_debug_write() {
     }
     //write error
     {
-        use ValueError::Ipv4OptionsLengthBad;
-        use WriteError::*;
+        use crate::ValueError::Ipv4OptionsLengthBad;
+        use crate::WriteError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             ValueError(Ipv4OptionsLengthBad(0))
@@ -64,7 +64,7 @@ fn test_debug_write() {
     }
     //value error
     {
-        use ValueError::*;
+        use crate::ValueError::*;
         for value in [
             Ipv4OptionsLengthBad(0),
             Ipv4PayloadAndOptionsLengthTooLarge(0),
@@ -79,7 +79,7 @@ fn test_debug_write() {
     }
     //error field
     {
-        use ErrorField::*;
+        use crate::ErrorField::*;
         for value in [
             Ipv4HeaderLength,
             Ipv4Dscp,

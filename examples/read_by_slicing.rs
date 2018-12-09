@@ -28,10 +28,10 @@ fn main() {
         Err(value) => println!("Err {:?}", value),
         Ok(value) => {
             println!("Ok");
-            use LinkSlice::*;
-            use InternetSlice::*;
-            use TransportSlice::*;
-            use VlanSlice::*;
+            use crate::LinkSlice::*;
+            use crate::InternetSlice::*;
+            use crate::TransportSlice::*;
+            use crate::VlanSlice::*;
 
             match value.link {
                 Some(Ethernet2(value)) => println!("  Ethernet2 {:?} => {:?}", value.source(), value.destination()),

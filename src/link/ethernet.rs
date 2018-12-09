@@ -83,7 +83,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }

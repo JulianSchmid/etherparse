@@ -347,7 +347,7 @@ fn from_slice() {
     input.write(&mut buffer).unwrap();
 
     //check that a too small slices generates an error
-    use ReadError::*;
+    use crate::ReadError::*;
     assert_matches!(UdpHeaderSlice::from_slice(&buffer[..7]), Err(IoError(_)));
 
     //get the slice

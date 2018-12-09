@@ -64,7 +64,7 @@ impl<T> Default for ElementFilter<T> {
 
 impl LinkFilter {
     pub fn applies_to_slice(&self, slice: &LinkSlice) -> bool {
-        use LinkSlice::*;
+        use crate::LinkSlice::*;
         match self {
             LinkFilter::Ethernet2{
                 source: expected_source,
@@ -84,7 +84,7 @@ impl LinkFilter {
 
 impl VlanFilter {
     pub fn applies_to_slice(&self, slice: &VlanSlice) -> bool {
-        use VlanSlice::*;
+        use crate::VlanSlice::*;
         match self {
             VlanFilter::Single(expected_id) => {
                 match slice {
@@ -117,7 +117,7 @@ impl VlanFilter {
 
 impl IpFilter {
     pub fn applies_to_slice(&self, slice: &InternetSlice) -> bool {
-        use InternetSlice::*;
+        use crate::InternetSlice::*;
         match self {
             IpFilter::Ipv4 { source: expected_source, destination: expected_destination } => {
                 match slice {
@@ -153,7 +153,7 @@ impl IpFilter {
 
 impl TransportFilter {
     pub fn applies_to_slice(&self, slice: &TransportSlice) -> bool {
-        use TransportSlice::*;
+        use crate::TransportSlice::*;
         match self {
             TransportFilter::Udp { 
                 source_port: expected_source_port, 

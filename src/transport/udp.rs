@@ -195,7 +195,7 @@ impl<'a> UdpHeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }

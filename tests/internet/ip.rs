@@ -120,8 +120,8 @@ fn ipv4_calc_header_checksum() {
 
 #[test]
 fn ipv4_calc_header_checksum_errors() {
-    use ValueError::*;
-    use ErrorField::*;
+    use crate::ValueError::*;
+    use crate::ErrorField::*;
     //check errors
     {
         //max value check header length
@@ -364,7 +364,7 @@ fn ipv4_slice_bad_ihl() {
     input.write_raw(&mut buffer, &[]).unwrap();
     
     //check that the bad ihl results in an error
-    use ReadError::*;
+    use crate::ReadError::*;
     assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
 }
 
@@ -388,15 +388,15 @@ fn ipv4_slice_bad_version() {
     input.write(&mut buffer).unwrap();
     
     //check that the bad ihl results in an error
-    use ReadError::*;
+    use crate::ReadError::*;
     assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4UnexpectedVersion(6)));
 }
 
 #[test]
 fn write_ipv4_raw_header_errors() {
-    use WriteError::ValueError;
-    use ValueError::*;
-    use ErrorField::*;
+    use crate::WriteError::ValueError;
+    use crate::ValueError::*;
+    use crate::ErrorField::*;
     fn base() -> Ipv4Header {
         Ipv4Header{
             header_length: 10,
@@ -542,7 +542,7 @@ fn skip_options() {
 
     //error: header length too small
     use std::io::Cursor;
-    use ReadError::*;
+    use crate::ReadError::*;
     {
         let mut cursor = Cursor::new(Vec::new());
         assert_matches!(header_with_length(0).skip_options(&mut cursor), 
@@ -602,7 +602,7 @@ fn write_ipv4_error_header() {
         let result = input.write(&mut buffer, &[1,2,3,4,5,6,7]);
         assert_eq!(0, buffer.len());
 
-        use ValueError::Ipv4OptionsLengthBad;
+        use crate::ValueError::Ipv4OptionsLengthBad;
         assert_matches!(result, Err(WriteError::ValueError(Ipv4OptionsLengthBad(7))));
     }
     //serialize with too large options length
@@ -611,7 +611,7 @@ fn write_ipv4_error_header() {
         let result = input.write(&mut buffer, &[0;44]);
         assert_eq!(0, buffer.len());
 
-        use ValueError::Ipv4OptionsLengthBad;
+        use crate::ValueError::Ipv4OptionsLengthBad;
         assert_matches!(result, Err(WriteError::ValueError(Ipv4OptionsLengthBad(44))));
     }
 }
@@ -642,9 +642,9 @@ fn readwrite_ipv6_header() {
 
 #[test]
 fn write_ipv6_header_errors() {
-    use WriteError::ValueError;
-    use ValueError::*;
-    use ErrorField::*;
+    use crate::WriteError::ValueError;
+    use crate::ValueError::*;
+    use crate::ErrorField::*;
     fn base() -> Ipv6Header {
         Ipv6Header {
             traffic_class: 1,
@@ -728,9 +728,9 @@ fn skip_ipv6_header_extension() {
 
 #[test]
 fn skip_all_ipv6_header_extensions() {
-    use io::Cursor;
+    use crate::io::Cursor;
     //extension header values
-    use IpTrafficClass::*;
+    use crate::IpTrafficClass::*;
     //based on RFC 8200 4.1. Extension Header Order
     const EXTENSION_IDS: [u8;7] = [
         IPv6HeaderHopByHop as u8,
@@ -932,14 +932,14 @@ fn ipv6_from_slice_bad_version() {
     input.write_raw(&mut buffer, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]).unwrap();
 
     //check that the unexpected version id is detected
-    use ReadError::*;
+    use crate::ReadError::*;
     assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
 }
 
 #[test]
 fn ipv6_extension_from_slice() {
     //extension header values
-    use IpTrafficClass::*;
+    use crate::IpTrafficClass::*;
     const FRAG: u8 = IPv6FragmentationHeader as u8;
     const UDP: u8 = Udp as u8;
     let buffer: [u8; 8*3] = [
@@ -973,7 +973,7 @@ fn ipv6_extension_from_slice() {
 #[test]
 fn ipv6_extension_from_slice_bad_length() {
     //extension header values
-    use IpTrafficClass::*;
+    use crate::IpTrafficClass::*;
     const FRAG: u8 = IPv6FragmentationHeader as u8;
     const UDP: u8 = Udp as u8;
     //all extension headers that use the length field

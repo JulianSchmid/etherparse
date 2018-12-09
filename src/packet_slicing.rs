@@ -14,8 +14,8 @@ pub enum VlanSlice<'a> {
 impl<'a> VlanSlice<'a> {
     ///Decode all the fields and copy the results to a VlanHeader struct
     pub fn to_header(&self) -> VlanHeader {
-        use VlanHeader::*;
-        use VlanSlice::*;
+        use crate::VlanHeader::*;
+        use crate::VlanSlice::*;
         match self {
             SingleVlan(value) => Single(value.to_header()),
             DoubleVlan(value) => Double(value.to_header())
@@ -74,7 +74,7 @@ impl<'a> SlicedPacket<'a> {
 
         //read link header
         let (rest, ether_type, link) = {
-            use LinkSlice::*;
+            use crate::LinkSlice::*;
 
             let value = Ethernet2HeaderSlice::from_slice(data)?;
             (&data[value.slice().len()..], 
@@ -85,7 +85,7 @@ impl<'a> SlicedPacket<'a> {
         //read vlan header(s) if they exist
         let (rest, ether_type, vlan) = match ether_type {
             ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
-                use VlanSlice::*;
+                use crate::VlanSlice::*;
 
                 //slice the first vlan header
                 let single = SingleVlanHeaderSlice::from_slice(rest)?;
@@ -114,7 +114,7 @@ impl<'a> SlicedPacket<'a> {
         //read ip & transport
         let (rest, protocol, ip) = match ether_type {
             ETH_IPV4 => {
-                use InternetSlice::*;
+                use crate::InternetSlice::*;
 
                 let value = Ipv4HeaderSlice::from_slice(rest)?;
                 (&rest[value.slice().len()..],
@@ -123,7 +123,7 @@ impl<'a> SlicedPacket<'a> {
             },
             //
             ETH_IPV6 => {
-                use InternetSlice::*;
+                use crate::InternetSlice::*;
 
                 let value = Ipv6HeaderSlice::from_slice(rest)?;
 
@@ -176,14 +176,14 @@ impl<'a> SlicedPacket<'a> {
         let (rest, transport) = if ip.is_some() {
             match protocol {
                 IP_UDP => {
-                    use TransportSlice::*;
+                    use crate::TransportSlice::*;
 
                     let value = UdpHeaderSlice::from_slice(rest)?;
                     (&rest[value.slice().len()..],
                      Some(Udp(value)))
                 },
                 IP_TCP => {
-                    use TransportSlice::*;
+                    use crate::TransportSlice::*;
 
                     let value = TcpHeaderSlice::from_slice(rest)?;
                     (&rest[value.slice().len()..],

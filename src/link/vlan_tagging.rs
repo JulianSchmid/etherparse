@@ -55,7 +55,7 @@ impl SingleVlanHeader {
 
     ///Write the IEEE 802.1Q VLAN tagging header
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        use ErrorField::*;
+        use crate::ErrorField::*;
         //check value ranges
         max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
         max_check_u16(self.vlan_identifier, 0xfff, VlanTagVlanId)?;
@@ -93,7 +93,7 @@ impl DoubleVlanHeader {
         let outer = SingleVlanHeader::read(reader)?;
         //check that the tagging protocol identifier is correct
         if (EtherType::VlanTaggedFrame as u16) != outer.ether_type {
-            use ReadError::*;
+            use crate::ReadError::*;
             Err(VlanDoubleTaggingUnexpectedOuterTpid(outer.ether_type))
         } else {
             Ok(DoubleVlanHeader{
@@ -122,7 +122,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }
@@ -183,7 +183,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         //check length
         use std::io::ErrorKind::UnexpectedEof;
         use std::io::Error;
-        use ReadError::*;
+        use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
             return Err(IoError(Error::from(UnexpectedEof)));
         }

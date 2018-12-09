@@ -667,7 +667,7 @@ proptest! {
 fn tcp_options() {
     let mut serialized = Vec::new();
 
-    use TcpOptionElement::*;
+    use crate::TcpOptionElement::*;
     let options = vec![MaximumSegmentSize(1234), Nop];
 
     PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])

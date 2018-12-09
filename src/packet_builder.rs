@@ -416,7 +416,7 @@ impl PacketBuilderStep<TcpHeader> {
 fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
     
     let ip_ether_type = {
-        use IpHeader::*;
+        use crate::IpHeader::*;
         match builder.state.ip_header {
             Some(Version4(_)) => EtherType::Ipv4 as u16,
             Some(Version6(_)) => EtherType::Ipv6 as u16,
@@ -428,7 +428,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     if let Some(mut eth) = builder.state.ethernet2_header {
         eth.ether_type = {
             
-            use VlanHeader::*;
+            use crate::VlanHeader::*;
             //determine the ether type depending on if there is a vlan tagging header
             match builder.state.vlan_header {
                 Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
@@ -441,7 +441,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     }
 
     //write the vlan header if it exists
-    use VlanHeader::*;
+    use crate::VlanHeader::*;
     match builder.state.vlan_header {
         Some(Single(mut value)) => {
             //set ether types
@@ -463,14 +463,14 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     let mut transport = builder.state.transport_header.unwrap();
 
     //ip header
-    use IpHeader::*;
+    use crate::IpHeader::*;
     let ip_header = builder.state.ip_header.unwrap();
     match ip_header {
         Version4(mut ip) => {
             //set total length & udp payload length (ip checks that the payload length is ok)
             let size = transport.header_len() + payload.len();
             ip.set_payload_and_options_length(size)?;
-            use TransportHeader::*;
+            use crate::TransportHeader::*;
             match transport {
                 Udp(ref mut udp) => { udp.length = size as u16; }
                 Tcp(_) => {}
@@ -492,7 +492,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //set total length
             let size = transport.header_len() + payload.len();
             ip.set_payload_length(size)?;
-            use TransportHeader::*;
+            use crate::TransportHeader::*;
             match transport {
                 Udp(ref mut udp) => { udp.length = size as u16; }
                 Tcp(_) => {}
@@ -521,9 +521,9 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
 
 ///Returns the size of the packet when it is serialized
 fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
-    use IpHeader::*;
-    use VlanHeader::*;
-    use TransportHeader::*;
+    use crate::IpHeader::*;
+    use crate::VlanHeader::*;
+    use crate::TransportHeader::*;
     (match builder.state.ethernet2_header {
         Some(_) => Ethernet2Header::SERIALIZED_SIZE,
         None => 0

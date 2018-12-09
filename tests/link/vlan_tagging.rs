@@ -2,7 +2,7 @@ use etherparse::*;
 
 #[test]
 fn vlan_print() {
-    use VlanHeader::*;
+    use crate::VlanHeader::*;
     println!("{:?}", 
          Single(SingleVlanHeader{
             priority_code_point: 0,
@@ -54,9 +54,9 @@ fn vlan_header_read() {
 
 #[test]
 fn vlan_header_write() {
-    use WriteError::ValueError;
-    use ValueError::*;
-    use ErrorField::*;
+    use crate::WriteError::ValueError;
+    use crate::ValueError::*;
+    use crate::ErrorField::*;
     fn base() -> SingleVlanHeader {
         SingleVlanHeader {
             ether_type: EtherType::Ipv4 as u16,

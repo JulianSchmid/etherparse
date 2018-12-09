@@ -2,7 +2,7 @@ use super::super::*;
 
 #[test]
 fn ether_type_convert() {
-    use EtherType::*;
+    use crate::EtherType::*;
 
     assert_eq!(0x0800, Ipv4 as u16);
     assert_eq!(0x86dd, Ipv6 as u16);
@@ -50,7 +50,7 @@ proptest! {
         assert_eq!(14, buffer.len());
 
         //check that a too small slice results in an error
-        use ReadError::*;
+        use crate::ReadError::*;
         assert_matches!(Ethernet2HeaderSlice::from_slice(&buffer[..13]), Err(IoError(_)));
 
         //check if the header slice is reading the correct values
