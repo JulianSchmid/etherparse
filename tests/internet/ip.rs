@@ -887,7 +887,7 @@ proptest! {
         input.write(&mut buffer).unwrap();
 
         //check that a too small slice triggers an error
-        assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::IoError(_)));
+        assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE)));
 
         //check that all the values are read correctly
         use std::net::Ipv6Addr;
@@ -974,6 +974,7 @@ fn ipv6_extension_from_slice() {
 fn ipv6_extension_from_slice_bad_length() {
     //extension header values
     use crate::IpTrafficClass::*;
+    use self::ReadError::*;
     const FRAG: u8 = IPv6FragmentationHeader as u8;
     const UDP: u8 = Udp as u8;
     //all extension headers that use the length field
@@ -990,7 +991,8 @@ fn ipv6_extension_from_slice_bad_length() {
         let buffer: [u8; 7] = [
             UDP,2,0,0, 0,0,0
         ];
-        assert_matches!(Ipv6ExtensionHeaderSlice::from_slice(FRAG, &buffer), Err(_));
+        assert_matches!(Ipv6ExtensionHeaderSlice::from_slice(FRAG, &buffer), 
+                        Err(UnexpectedEndOfSlice(8)));
     }
     //smaller then specified size by length field
     {
@@ -1008,7 +1010,7 @@ fn ipv6_extension_from_slice_bad_length() {
         //all others should generate a range error
         for id in EXTENSION_IDS_WITH_LENGTH.iter() {
             let slice = Ipv6ExtensionHeaderSlice::from_slice(*id, &buffer);
-            assert_matches!(slice, Err(_));
+            assert_matches!(slice, Err(UnexpectedEndOfSlice(_)));
         }
     }
 }

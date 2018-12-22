@@ -600,11 +600,9 @@ impl<'a> TcpHeaderSlice<'a> {
     ///Creates a slice containing an tcp header.
     pub fn from_slice(slice: &'a[u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < TCP_MINIMUM_HEADER_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(TCP_MINIMUM_HEADER_SIZE));
         }
 
         //read data offset
@@ -614,7 +612,7 @@ impl<'a> TcpHeaderSlice<'a> {
         if data_offset < TCP_MINIMUM_DATA_OFFSET {
             Err(ReadError::TcpDataOffsetTooSmall(data_offset))
         } else if slice.len() < len {
-            Err(IoError(Error::from(UnexpectedEof)))
+            Err(UnexpectedEndOfSlice(len))
         } else {
             //done
             Ok(TcpHeaderSlice::<'a>{

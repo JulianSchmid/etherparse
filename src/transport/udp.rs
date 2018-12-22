@@ -193,11 +193,9 @@ impl<'a> UdpHeaderSlice<'a> {
     ///Creates a slice containing an udp header.
     pub fn from_slice(slice: &'a[u8]) -> Result<UdpHeaderSlice<'a>, ReadError> {
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE));
         }
 
         //done

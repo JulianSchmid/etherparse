@@ -72,6 +72,18 @@ const IPV6_ENCAP_SEC: u8 = IpTrafficClass::IPv6EncapSecurityPayload as u8;
 impl<'a> SlicedPacket<'a> {
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
 
+        //helper function to generate mappings for unexpected end of slice error 
+        //(adds previously passed headers)
+        let map_eos = |add: usize| {
+            move |err: ReadError| -> ReadError{
+                use self::ReadError::*;
+                match err {
+                    UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(add + value),
+                    value => value
+                }
+            }
+        };
+
         //read link header
         let (rest, ether_type, link) = {
             use crate::LinkSlice::*;
@@ -88,13 +100,15 @@ impl<'a> SlicedPacket<'a> {
                 use crate::VlanSlice::*;
 
                 //slice the first vlan header
-                let single = SingleVlanHeaderSlice::from_slice(rest)?;
+                let single = SingleVlanHeaderSlice::from_slice(rest)
+                    .map_err(map_eos(data.len() - rest.len()))?;
                 let ether_type = single.ether_type();
                 match ether_type {
 
                     //check if it is a double vlan tagged packet based on the ether_type
                     ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
-                        let double = DoubleVlanHeaderSlice::from_slice(rest)?;
+                        let double = DoubleVlanHeaderSlice::from_slice(rest)
+                            .map_err(map_eos(data.len() - rest.len()))?;
                         (&rest[double.slice().len()..], 
                          double.inner().ether_type(), 
                          Some(DoubleVlan(double)))
@@ -116,7 +130,8 @@ impl<'a> SlicedPacket<'a> {
             ETH_IPV4 => {
                 use crate::InternetSlice::*;
 
-                let value = Ipv4HeaderSlice::from_slice(rest)?;
+                let value = Ipv4HeaderSlice::from_slice(rest)
+                    .map_err(map_eos(data.len() - rest.len()))?;
                 (&rest[value.slice().len()..],
                  value.protocol(),
                  Some(Ipv4(value)))
@@ -125,7 +140,8 @@ impl<'a> SlicedPacket<'a> {
             ETH_IPV6 => {
                 use crate::InternetSlice::*;
 
-                let value = Ipv6HeaderSlice::from_slice(rest)?;
+                let value = Ipv6HeaderSlice::from_slice(rest)
+                    .map_err(map_eos(data.len() - rest.len()))?;
 
                 let mut rest = &rest[value.slice().len()..];
 
@@ -141,7 +157,8 @@ impl<'a> SlicedPacket<'a> {
                         IPV6_OPTIONS | 
                         IPV6_AUTH | 
                         IPV6_ENCAP_SEC => {
-                            let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)?;
+                            let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)
+                                .map_err(map_eos(data.len() - rest.len()))?;
                             let this_header = next_header;
                             next_header = value.next_header();
                             rest = &rest[value.slice().len()..];
@@ -178,14 +195,16 @@ impl<'a> SlicedPacket<'a> {
                 IP_UDP => {
                     use crate::TransportSlice::*;
 
-                    let value = UdpHeaderSlice::from_slice(rest)?;
+                    let value = UdpHeaderSlice::from_slice(rest)
+                        .map_err(map_eos(data.len() - rest.len()))?;
                     (&rest[value.slice().len()..],
                      Some(Udp(value)))
                 },
                 IP_TCP => {
                     use crate::TransportSlice::*;
 
-                    let value = TcpHeaderSlice::from_slice(rest)?;
+                    let value = TcpHeaderSlice::from_slice(rest)
+                        .map_err(map_eos(data.len() - rest.len()))?;
                     (&rest[value.slice().len()..],
                      Some(Tcp(value)))
                 },

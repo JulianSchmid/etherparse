@@ -69,7 +69,7 @@ impl ComponentTest {
         {
             let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
             assert_matches!(SlicedPacket::from_ethernet(too_short_slice), 
-                            Err(ReadError::IoError(_)));
+                            Err(ReadError::UnexpectedEndOfSlice(_)));
             assert_matches!(PacketHeaders::from_ethernet_slice(too_short_slice), 
                             Err(ReadError::IoError(_)));
         }

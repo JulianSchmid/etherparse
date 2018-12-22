@@ -81,11 +81,9 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     ///Creates a ethernet slice from an other slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError>{
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(Ethernet2Header::SERIALIZED_SIZE));
         }
 
         //all done

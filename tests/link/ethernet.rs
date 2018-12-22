@@ -51,7 +51,10 @@ proptest! {
 
         //check that a too small slice results in an error
         use crate::ReadError::*;
-        assert_matches!(Ethernet2HeaderSlice::from_slice(&buffer[..13]), Err(IoError(_)));
+        assert_matches!(
+            Ethernet2HeaderSlice::from_slice(&buffer[..13]), 
+            Err(UnexpectedEndOfSlice(Ethernet2Header::SERIALIZED_SIZE))
+        );
 
         //check if the header slice is reading the correct values
         let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();

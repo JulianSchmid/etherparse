@@ -509,11 +509,9 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(Ipv4Header::SERIALIZED_SIZE));
         }
 
         //read version & ihl
@@ -536,7 +534,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check that the slice contains enough data for the entire header + options
         let total_length = (ihl as usize)*4;
         if slice.len() < total_length {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(total_length));
         }
 
         //all good
@@ -681,11 +679,9 @@ impl<'a> Ipv6HeaderSlice<'a, > {
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6HeaderSlice<'a>, ReadError> {
 
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < Ipv6Header::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE));
         }
 
         //read version & ihl
@@ -805,11 +801,9 @@ impl<'a> Ipv6ExtensionHeaderSlice<'a> {
     pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<Ipv6ExtensionHeaderSlice<'a>, ReadError> {
 
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < 8 {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(8));
         }
 
         //check length
@@ -822,7 +816,7 @@ impl<'a> Ipv6ExtensionHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(len));
         }
 
         //all good

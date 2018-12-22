@@ -120,11 +120,9 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     ///Creates a vlan header slice from a slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<SingleVlanHeaderSlice<'a>, ReadError>{
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE));
         }
 
         //all done
@@ -181,11 +179,9 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
     ///Creates a double header slice from a slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<DoubleVlanHeaderSlice<'a>, ReadError>{
         //check length
-        use std::io::ErrorKind::UnexpectedEof;
-        use std::io::Error;
         use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
-            return Err(IoError(Error::from(UnexpectedEof)));
+            return Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE));
         }
 
         //all done

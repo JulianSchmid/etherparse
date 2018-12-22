@@ -32,6 +32,8 @@ pub trait SerializedSize {
 #[derive(Debug)]
 pub enum ReadError {
     IoError(io::Error),
+    ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
+    UnexpectedEndOfSlice(usize),
     ///Error when a double vlan tag was expected but the tpid of the outer vlan does not contain the expected id of 0x8100.
     VlanDoubleTaggingUnexpectedOuterTpid(u16),
     ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.

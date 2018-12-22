@@ -348,7 +348,10 @@ fn from_slice() {
 
     //check that a too small slices generates an error
     use crate::ReadError::*;
-    assert_matches!(UdpHeaderSlice::from_slice(&buffer[..7]), Err(IoError(_)));
+    assert_matches!(
+        UdpHeaderSlice::from_slice(&buffer[..7]), 
+        Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
+    );
 
     //get the slice
     let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();

@@ -161,7 +161,11 @@ fn single_from_slice() {
     input.write(&mut buffer).unwrap();
 
     //check that a too small slice results in an error
-    assert_matches!(SingleVlanHeaderSlice::from_slice(&buffer[..3]), Err(ReadError::IoError(_)));
+    use self::ReadError::UnexpectedEndOfSlice;
+    assert_matches!(
+        SingleVlanHeaderSlice::from_slice(&buffer[..3]), 
+        Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE))
+    );
 
     //check that all fields are read correctly
     let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
@@ -196,7 +200,11 @@ fn double_from_slice() {
     input.write(&mut buffer).unwrap();
 
     //check that a too small slice results in an error
-    assert_matches!(DoubleVlanHeaderSlice::from_slice(&buffer[..7]), Err(ReadError::IoError(_)));
+    use self::ReadError::UnexpectedEndOfSlice;
+    assert_matches!(
+        DoubleVlanHeaderSlice::from_slice(&buffer[..7]),
+        Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE))
+    );
 
     let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
     assert_eq!(slice.outer().priority_code_point(), input.outer.priority_code_point);
