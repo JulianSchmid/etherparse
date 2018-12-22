@@ -6,6 +6,189 @@ use self::byteorder::{ByteOrder, BigEndian};
 use std::slice;
 
 #[test]
+fn default() {
+    let default : TcpHeader = Default::default();
+
+    assert_eq!(0, default.source_port);
+    assert_eq!(0, default.destination_port);
+    assert_eq!(0, default.sequence_number);
+    assert_eq!(0, default.acknowledgment_number);
+    assert_eq!(5, default.data_offset());
+    assert_eq!(false, default.ns);
+    assert_eq!(false, default.fin);
+    assert_eq!(false, default.syn);
+    assert_eq!(false, default.rst);
+    assert_eq!(false, default.psh);
+    assert_eq!(false, default.ack);
+    assert_eq!(false, default.ece);
+    assert_eq!(false, default.urg);
+    assert_eq!(false, default.cwr);
+    assert_eq!(0, default.window_size);
+    assert_eq!(0, default.checksum);
+    assert_eq!(0, default.urgent_pointer);
+    assert_eq!(&[0;40][0..0], &default.options()[..]);
+}
+
+#[test]
+fn eq()
+{
+    let options = [
+        TcpOptionElement::Timestamp(0x00102030, 0x01112131), //10
+        TcpOptionElement::SelectiveAcknowledgement((0x02122232,0x03132333), [None, None, None]), //20
+        TcpOptionElement::Timestamp(0x04142434, 0x05152535), //30
+        TcpOptionElement::Timestamp(0x06162636, 0x07172737), //40
+    ];
+
+    let base : TcpHeader = {
+        let mut base : TcpHeader = Default::default();
+        base.source_port = 1;
+        base.destination_port = 2;
+        base.sequence_number = 3;
+        base.acknowledgment_number = 4;
+        base.window_size = 6;
+        base.checksum = 7;
+        base.urgent_pointer = 8;
+        base.set_options(&options[..]).unwrap();
+
+        base
+    };
+    
+    //equal
+    {
+        let other = base.clone();
+        assert_eq!(other, base);
+    }
+    //change every field anc check for neq
+    //source_port
+    {
+        let mut other = base.clone();
+        other.source_port = 10;
+        assert_ne!(other, base);
+    }
+    //destination_port
+    {
+        let mut other = base.clone();
+        other.destination_port = 10;
+        assert_ne!(other, base);
+    }
+    //sequence_number
+    {
+        let mut other = base.clone();
+        other.sequence_number = 10;
+        assert_ne!(other, base);
+    }
+    //acknowledgment_number
+    {
+        let mut other = base.clone();
+        other.acknowledgment_number = 10;
+        assert_ne!(other, base);
+    }
+    //data_offset
+    {
+        let mut other = base.clone();
+        other.set_options(&[TcpOptionElement::MaximumSegmentSize(16)]).unwrap();
+        assert_ne!(other, base);
+    }
+    //ns
+    {
+        let mut other = base.clone();
+        other.ns = true;
+        assert_ne!(other, base);
+    }
+    //fin
+    {
+        let mut other = base.clone();
+        other.fin = true;
+        assert_ne!(other, base);
+    }
+    //syn
+    {
+        let mut other = base.clone();
+        other.syn = true;
+        assert_ne!(other, base);
+    }
+    //rst
+    {
+        let mut other = base.clone();
+        other.rst = true;
+        assert_ne!(other, base);
+    }
+    //psh
+    {
+        let mut other = base.clone();
+        other.psh = true;
+        assert_ne!(other, base);
+    }
+    //ack
+    {
+        let mut other = base.clone();
+        other.ack = true;
+        assert_ne!(other, base);
+    }
+    //ece
+    {
+        let mut other = base.clone();
+        other.ece = true;
+        assert_ne!(other, base);
+    }
+    //urg
+    {
+        let mut other = base.clone();
+        other.urg = true;
+        assert_ne!(other, base);
+    }
+    //cwr
+    {
+        let mut other = base.clone();
+        other.cwr = true;
+        assert_ne!(other, base);
+    }
+    //window_size
+    {
+        let mut other = base.clone();
+        other.window_size = 10;
+        assert_ne!(other, base);
+    }
+    //checksum
+    {
+        let mut other = base.clone();
+        other.checksum = 10;
+        assert_ne!(other, base);
+    }
+    //urgent_pointer
+    {
+        let mut other = base.clone();
+        other.urgent_pointer = 10;
+        assert_ne!(other, base);
+    }
+    //options (first element different)
+    {
+        let mut other = base.clone();
+        other.set_options(&{
+            let mut other_options = options.clone();
+            other_options[0] = TcpOptionElement::Timestamp(0x00102039, 0x01112131);
+            other_options
+        }).unwrap();
+
+        assert_ne!(other, base);
+    }
+    //options (last element)
+    {
+        let mut other = base.clone();
+        other.set_options(&options).unwrap();
+
+        let mut other2 = base.clone();
+        other2.set_options(&{
+            let mut options2 = options.clone();
+            options2[3] = TcpOptionElement::Timestamp(0x06162636, 0x97172737);
+            options2
+        }).unwrap();
+
+        assert_ne!(other, other2);
+    }
+}
+
+#[test]
 fn options() {
     let base : TcpHeader = Default::default();
 
@@ -240,7 +423,7 @@ fn set_options_not_enough_memory_error() {
                       SelectiveAcknowledgementPermitted, //+2 = 9
                       SelectiveAcknowledgement((3,4), [Some((5,6)), None, None]), // + 18 = 27
                       Timestamp(5, 6), // + 10 = 37
-                      Nop, Nop, Nop  // + 3 + 1 (for end)
+                      Nop, Nop, Nop, Nop  // + 4
                     ]));
     //test with all fields filled of the selective ack
     assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
@@ -248,7 +431,8 @@ fn set_options_not_enough_memory_error() {
                 &[Nop, // 1
                   SelectiveAcknowledgement((3,4), [Some((5,6)), Some((5,6)), Some((5,6))]), // + 34 = 35
                   MaximumSegmentSize(1), // + 4 = 39 
-                  Nop // + 1 + 1 (for end) = 41
+                  Nop,
+                  Nop // + 2 = 41
                 ]));
 
     //test with all fields filled of the selective ack
@@ -259,7 +443,7 @@ fn set_options_not_enough_memory_error() {
                   Timestamp(1,2), // + 10 = 21
                   Timestamp(1,2), // + 10 = 31
                   MaximumSegmentSize(1), // + 4 = 35
-                  Nop, Nop, Nop, Nop, Nop // + 5 + 1 (for end) = 41
+                  Nop, Nop, Nop, Nop, Nop, Nop // + 6 = 41
                 ]));
 }
 
@@ -657,4 +841,192 @@ fn calc_header_checksum_ipv6_error() {
 
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp_slice.calc_checksum_ipv6_raw(ip_slice.source(), ip_slice.destination(), &tcp_payload));
+}
+
+#[test]
+fn options_iterator_method() {
+    let options = [
+        TcpOptionElement::Timestamp(0x00102030, 0x01112131), //10
+        TcpOptionElement::SelectiveAcknowledgement((0x02122232,0x03132333), [None, None, None]), //20
+        TcpOptionElement::Timestamp(0x04142434, 0x05152535), //30
+        TcpOptionElement::Timestamp(0x06162636, 0x07172737), //40
+    ];
+
+    let base : TcpHeader = {
+        let mut base : TcpHeader = Default::default();
+        base.set_options(&options[..]).unwrap();
+        base
+    };
+
+    assert_eq!(
+        &options[..], 
+        &base
+        .options_iterator()
+        .map(|x| x.unwrap())
+        .collect::<Vec<TcpOptionElement>>()[..]
+    );
+}
+
+#[test]
+fn options_iterator() {
+    fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
+        let mut it = TcpOptionsIterator::from_slice(&buffer[..]);
+        for element in expected.iter() {
+            assert_eq!(element, &it.next().unwrap().unwrap());
+        }
+        //expect no more elements
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.rest().len());
+    }
+
+    use crate::TcpOptionElement::*;
+
+    //nop & max segment size
+    expect_elements(&[
+            TCP_OPTION_ID_NOP, 
+            TCP_OPTION_ID_NOP,
+            TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 
+            0, 1,
+            TCP_OPTION_ID_WINDOW_SCALE, 3, 2,
+            TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2,
+            TCP_OPTION_ID_SELECTIVE_ACK, 10,
+            0, 0, 0, 10,
+            0, 0, 0, 11,
+            TCP_OPTION_ID_SELECTIVE_ACK, 18, 
+            0, 0, 0, 12,
+            0, 0, 0, 13,
+            0, 0, 0, 14,
+            0, 0, 0, 15,
+            TCP_OPTION_ID_SELECTIVE_ACK, 26, 
+            0, 0, 0, 16,
+            0, 0, 0, 17,
+            0, 0, 0, 18,
+            0, 0, 0, 19,
+            0, 0, 0, 20,
+            0, 0, 0, 21,
+            TCP_OPTION_ID_SELECTIVE_ACK, 34, 
+            0, 0, 0, 22,
+            0, 0, 0, 23,
+            0, 0, 0, 24,
+            0, 0, 0, 25,
+            0, 0, 0, 26,
+            0, 0, 0, 27,
+            0, 0, 0, 28,
+            0, 0, 0, 29,
+            TCP_OPTION_ID_TIMESTAMP, 10, 
+            0, 0, 0, 30, 
+            0, 0, 0, 31,
+            TCP_OPTION_ID_END, 0, 0, 0, 0
+        ],
+        &[
+            Nop,
+            Nop,
+            MaximumSegmentSize(1),
+            WindowScale(2),
+            SelectiveAcknowledgementPermitted,
+            SelectiveAcknowledgement((10,11), [None, None, None]),
+            SelectiveAcknowledgement((12,13), [Some((14,15)), None, None]),
+            SelectiveAcknowledgement((16,17), [Some((18,19)), Some((20,21)), None]),
+            SelectiveAcknowledgement((22,23), [Some((24,25)), Some((26,27)), Some((28,29))]),
+            Timestamp(30,31)
+        ]);
+}
+
+#[test]
+fn options_iterator_unexpected_eos() {
+    fn expect_unexpected_eos(slice: &[u8]) {
+        for i in 1..slice.len()-1 {
+            let mut it = TcpOptionsIterator::from_slice(&slice[..i]);
+            assert_eq!(Some(Err(TcpOptionReadError::UnexpectedEndOfSlice(slice[0]))), it.next());
+            //expect the iterator slice to be moved to the end
+            assert_eq!(0, it.rest().len());
+            assert_eq!(None, it.next());
+        }
+    }
+    expect_unexpected_eos(&[TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_WINDOW_SCALE, 3, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 10, 0, 0, 0,
+                            0, 0, 0, 0, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 18, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0, 0, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 26, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0,
+                            0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_SELECTIVE_ACK, 34, 0, 0, 0,
+                            0, 0, 0, 0, 0, //10
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, //20
+                            0, 0, 0, 0, 0,
+                            0, 0, 0, 0, 0, //30
+                            0, 0, 0, 0]);
+    expect_unexpected_eos(&[TCP_OPTION_ID_TIMESTAMP, 10, 0, 0, 0,
+                            0, 0, 0, 0, 0]);
+}
+#[test]
+fn options_iterator_unexpected_length() {
+    fn expect_unexpected_size(id: u8, size: u8) {
+        let data = [id, size, 0, 0, 0,
+                    0, 0, 0, 0, 0, //10
+                    0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, //20
+                    0, 0, 0, 0, 0,
+                    0, 0, 0, 0, 0, //30
+                    0, 0, 0, 0];
+        let mut it = TcpOptionsIterator::from_slice(&data);
+        assert_eq!(Some(Err(TcpOptionReadError::UnexpectedSize {option_id: data[0], size: data[1] })), it.next());
+        //expect the iterator slice to be moved to the end
+        assert_eq!(0, it.rest().len());
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.rest().len());
+    }
+    expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 3);
+    expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 5);
+
+    expect_unexpected_size(TCP_OPTION_ID_WINDOW_SCALE, 2);
+    expect_unexpected_size(TCP_OPTION_ID_WINDOW_SCALE, 4);
+
+    expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 3);
+    expect_unexpected_size(TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 5);
+
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 1);
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 3);
+
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 9);
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 11);
+
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 17);
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 19);
+
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 25);
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 27);
+
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 33);
+    expect_unexpected_size(TCP_OPTION_ID_SELECTIVE_ACK, 35);
+
+    expect_unexpected_size(TCP_OPTION_ID_TIMESTAMP, 9);
+    expect_unexpected_size(TCP_OPTION_ID_TIMESTAMP, 11);
+}
+
+#[test]
+fn options_iterator_unexpected_id() {
+    let data = [255, 2, 0, 0, 0,
+                0, 0, 0, 0, 0, //10
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, //20
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, //30
+                0, 0, 0, 0];
+    let mut it = TcpOptionsIterator::from_slice(&data);
+    assert_eq!(Some(Err(TcpOptionReadError::UnknownId(255))), it.next());
+    //expect the iterator slice to be moved to the end
+    assert_eq!(0, it.rest().len());
+    assert_eq!(None, it.next());
+    assert_eq!(0, it.rest().len());
 }
