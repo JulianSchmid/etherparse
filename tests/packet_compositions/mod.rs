@@ -277,7 +277,7 @@ impl ComponentTest {
         let setup_single = | ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
             result.vlan = Some(VlanHeader::Single({
-                let mut v = outer_vlan.clone();
+                let mut v = inner_vlan.clone();
                 v.ether_type = ether_type;
                 v
             }));
@@ -300,7 +300,7 @@ impl ComponentTest {
         };
 
         //single
-        setup_single(outer_vlan.ether_type).run();
+        setup_single(inner_vlan.ether_type).run();
         setup_single(EtherType::Ipv4 as u16).run_ipv4(ipv4, udp, tcp);
         setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp, tcp);
 

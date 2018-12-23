@@ -67,6 +67,23 @@ prop_compose! {
 }
 
 prop_compose! {
+    [pub] fn vlan_single_with(ether_type: u16)
+                            (priority_code_point in prop::bits::u8::between(0,3),
+                             drop_eligible_indicator in any::<bool>(),
+                             vlan_identifier in prop::bits::u16::between(0,12),
+                             ether_type in proptest::strategy::Just(ether_type))
+                           -> SingleVlanHeader
+    {
+        SingleVlanHeader {
+            priority_code_point: priority_code_point,
+            drop_eligible_indicator: drop_eligible_indicator,
+            vlan_identifier: vlan_identifier,
+            ether_type: ether_type
+        }
+    }
+}
+
+prop_compose! {
     [pub] fn ipv4_with(protocol: u8)
                 (ihl in 5u8..16,
                  protocol in proptest::strategy::Just(protocol))

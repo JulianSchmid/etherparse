@@ -42,7 +42,7 @@ impl PacketFilterTest {
         //single
         {
             let mut t = self.clone();
-            t.vlan = Some(VlanHeader::Single(outer_vlan.clone()));
+            t.vlan = Some(VlanHeader::Single(inner_vlan.clone()));
             t.add_ip_data(ipv4, ipv6, udp, tcp);
         }
         //double
@@ -373,7 +373,12 @@ fn test_compositions()
     {
         let test: PacketFilterTest = Default::default();
         test.add_vlan_data(
-            &Default::default(),
+            &{
+                //explicitly set the outer vlan ether_type id
+                let mut re : SingleVlanHeader = Default::default();
+                re.ether_type = EtherType::VlanTaggedFrame as u16;
+                re
+            },
             &Default::default(),
             &Default::default(),
             &Default::default(),
@@ -387,7 +392,12 @@ fn test_compositions()
         let mut test: PacketFilterTest = Default::default();
         test.link = Some(Default::default());
         test.add_vlan_data(
-            &Default::default(),
+            &{
+                //explicitly set the outer vlan ether_type id
+                let mut re : SingleVlanHeader = Default::default();
+                re.ether_type = EtherType::VlanTaggedFrame as u16;
+                re
+            },
             &Default::default(),
             &Default::default(),
             &Default::default(),
@@ -453,14 +463,14 @@ mod vlan_filter {
     use super::*;
     proptest! {
         #[test]
-        fn applies_to_slice(ref vlan_outer in vlan_single_unknown(),
+        fn applies_to_slice(ref vlan_outer in vlan_single_with(EtherType::VlanTaggedFrame as u16),
                             ref vlan_inner in vlan_single_unknown())
         {
             use self::VlanFilter::*;
             //create the slices the filters can be checked against
             let single_data = {
                 let mut single_data = Vec::new();
-                vlan_outer.write(&mut single_data).unwrap();
+                vlan_inner.write(&mut single_data).unwrap();
                 single_data };
             let single_slice = VlanSlice::SingleVlan(
                 SingleVlanHeaderSlice::from_slice(&single_data[..]).unwrap()
@@ -484,11 +494,11 @@ mod vlan_filter {
             }
             //matching
             assert_eq!(true, Single(
-                Some(vlan_outer.vlan_identifier)
+                Some(vlan_inner.vlan_identifier)
             ).applies_to_slice(&single_slice));
             //non matching
             assert_eq!(false, Single(
-                Some(!vlan_outer.vlan_identifier)
+                Some(!vlan_inner.vlan_identifier)
             ).applies_to_slice(&single_slice));
 
             //test double vlan filter with wildcards

@@ -33,6 +33,15 @@ impl SerializedSize for SingleVlanHeader {
 }
 
 impl SingleVlanHeader {
+
+    ///Read an SingleVlanHeader from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(SingleVlanHeader, &[u8]), ReadError> {
+        Ok((
+            SingleVlanHeaderSlice::from_slice(slice)?.to_header(),
+            &slice[SingleVlanHeader::SERIALIZED_SIZE .. ]
+        ))
+    }
+
     ///Read a IEEE 802.1Q VLAN tagging header
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<SingleVlanHeader, io::Error> {
         let (priority_code_point, drop_eligible_indicator, vlan_identifier) = {
@@ -88,18 +97,36 @@ impl SerializedSize for DoubleVlanHeader {
 }
 
 impl DoubleVlanHeader {
+    ///Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), ReadError> {
+        Ok((
+            DoubleVlanHeaderSlice::from_slice(slice)?.to_header(),
+            &slice[DoubleVlanHeader::SERIALIZED_SIZE .. ]
+        ))
+    }
+
     ///Read a double tagging header from the given source
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanHeader, ReadError> {
         let outer = SingleVlanHeader::read(reader)?;
-        //check that the tagging protocol identifier is correct
-        if (EtherType::VlanTaggedFrame as u16) != outer.ether_type {
-            use crate::ReadError::*;
-            Err(VlanDoubleTaggingUnexpectedOuterTpid(outer.ether_type))
-        } else {
-            Ok(DoubleVlanHeader{
-                outer,
-                inner: SingleVlanHeader::read(reader)?
-            })
+
+
+        use crate::EtherType::*;
+        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
+        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
+        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+
+        //check that outer ethertype is matching
+        match outer.ether_type {
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                Ok(DoubleVlanHeader{
+                    outer,
+                    inner: SingleVlanHeader::read(reader)?
+                })
+            },
+            value => {
+                use crate::ReadError::*;
+                Err(VlanDoubleTaggingUnexpectedOuterTpid(value))
+            }
         }
     }
 
@@ -184,10 +211,26 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
             return Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE));
         }
 
-        //all done
-        Ok(DoubleVlanHeaderSlice {
+        //create slice
+        let result = DoubleVlanHeaderSlice {
             slice: &slice[..DoubleVlanHeader::SERIALIZED_SIZE]
-        })
+        };
+
+        use crate::EtherType::*;
+        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
+        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
+        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+
+        //check that outer ethertype is matching
+        match result.outer().ether_type() {
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                //all done
+                Ok(result)
+            },
+            value => {
+                Err(VlanDoubleTaggingUnexpectedOuterTpid(value))
+            }
+        }
     }
 
     ///Returns the slice containing the double vlan header

@@ -43,13 +43,30 @@ fn vlan_header_read() {
     input.write(&mut buffer).unwrap();
     assert_eq!(4, buffer.len());
 
-    //deserialize
-    let mut cursor = Cursor::new(&buffer);
-    let result = SingleVlanHeader::read(&mut cursor).unwrap();
-    assert_eq!(4, cursor.position());
+    //deserialize with read
+    {
+        let mut cursor = Cursor::new(&buffer);
+        let result = SingleVlanHeader::read(&mut cursor).unwrap();
+        assert_eq!(4, cursor.position());
 
-    //check equivalence
-    assert_eq!(input, result);
+        //check equivalence
+        assert_eq!(input, result);
+    }
+
+    //deserialize with read_from_slice
+    {
+        let result = SingleVlanHeader::read_from_slice(&buffer[..]).unwrap();
+
+        //check equivalence
+        assert_eq!(input, result.0);
+        assert_eq!(&buffer[SingleVlanHeader::SERIALIZED_SIZE..], result.1);
+    }
+
+    //eof with read_from_slice
+    assert_matches!(
+        SingleVlanHeader::read_from_slice(&buffer[..(buffer.len() - 1)]),
+        Err(ReadError::UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE))
+    );
 }
 
 #[test]
@@ -118,7 +135,7 @@ fn double_vlan_header_read_write() {
         let mut cursor = Cursor::new(&buffer);
         assert_eq!(DoubleVlanHeader::read(&mut cursor).unwrap(), IN);
     }
-    //check that an error is thrown if the 
+    //check that an error is thrown if the outer header contains an invalid id
     {
         const IN: DoubleVlanHeader = DoubleVlanHeader {
             outer: SingleVlanHeader {
@@ -139,11 +156,21 @@ fn double_vlan_header_read_write() {
         let mut buffer = Vec::<u8>::new();
         IN.write(&mut buffer).unwrap();
 
-        //read it
-        use std::io::Cursor;
-        let mut cursor = Cursor::new(&buffer);
-        assert_matches!(DoubleVlanHeader::read(&mut cursor), 
-                        Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
+        //read it 
+        {
+            use std::io::Cursor;
+            let mut cursor = Cursor::new(&buffer);
+            assert_matches!(DoubleVlanHeader::read(&mut cursor), 
+                            Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
+        }
+
+        //expect the same error for the slice
+        {
+            assert_matches!(
+                DoubleVlanHeaderSlice::from_slice(&buffer), 
+                Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1))
+            );
+        }
     }
 }
 
@@ -182,7 +209,7 @@ fn single_from_slice() {
 fn double_from_slice() {
     let input = DoubleVlanHeader {
         outer: SingleVlanHeader {
-            ether_type: EtherType::ProviderBridging as u16,
+            ether_type: EtherType::VlanTaggedFrame as u16,
             priority_code_point: 2,
             drop_eligible_indicator: true,
             vlan_identifier: 1234,
