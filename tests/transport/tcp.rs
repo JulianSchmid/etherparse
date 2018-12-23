@@ -812,9 +812,15 @@ fn calc_header_checksum_ipv6_error() {
     
     //lets create a slice of that size that points to zero 
     //(as most systems can not allocate blocks of the size of u32::MAX)
-    let ptr = 0x0 as *const u8;
     let tcp_payload = unsafe {
-        slice::from_raw_parts(ptr, len)
+        //NOTE: The pointer must be initialized with a non null value
+        //      otherwise a key constraint of slices is not fullfilled
+        //      which can lead to crashes in release mode.
+        use std::ptr::NonNull;
+        slice::from_raw_parts(
+            NonNull::<u8>::dangling().as_ptr(),
+            len
+        )
     };
     let ip_header = Ipv6Header {
         traffic_class: 1,
@@ -827,6 +833,7 @@ fn calc_header_checksum_ipv6_error() {
         destination: [21,22,23,24,25,26,27,28,
                       29,30,31,32,33,34,35,36]
     };
+    
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
 

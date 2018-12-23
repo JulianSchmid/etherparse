@@ -63,7 +63,14 @@ mod transport_header {
                 let mut transport = TransportHeader::Udp(udp_header.clone());
                 let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
                 let tcp_payload = unsafe {
-                    slice::from_raw_parts(0x0 as *const u8, len)
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        len
+                    )
                 };
                 assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ip_header.0, &tcp_payload));
             }
@@ -87,7 +94,14 @@ mod transport_header {
                 let mut transport = TransportHeader::Tcp(tcp_header.clone());
                 let len = (std::u16::MAX - tcp_header.header_len()) as usize + 1;
                 let tcp_payload = unsafe {
-                    slice::from_raw_parts(0x0 as *const u8, len)
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        len
+                    )
                 };
                 assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ip_header.0, &tcp_payload));
             }
@@ -112,7 +126,14 @@ mod transport_header {
                 let mut transport = TransportHeader::Udp(udp_header.clone());
                 let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
                 let payload = unsafe {
-                    slice::from_raw_parts(0x0 as *const u8, len)
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        len
+                    )
                 };
                 assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv6(&ip_header, &payload));
             }
@@ -137,7 +158,14 @@ mod transport_header {
                 let mut transport = TransportHeader::Tcp(tcp_header.clone());
                 let len = (std::u32::MAX - tcp_header.header_len() as u32) as usize + 1;
                 let tcp_payload = unsafe {
-                    slice::from_raw_parts(0x0 as *const u8, len)
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        len
+                    )
                 };
                 assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ip_header, &tcp_payload));
             }
