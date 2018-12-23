@@ -17,11 +17,11 @@ exclude = [
 ]
 
 [dependencies]
-byteorder = "1.2.6"
+byteorder = "1.2.7"
 
 [dev-dependencies]
 assert_matches = "1.3.0"
-proptest = "0.8.6"
+proptest = "0.8.7"
 
 [badges]
 travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }
