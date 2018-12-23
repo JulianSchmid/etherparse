@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 use std::io;
 
@@ -51,23 +51,10 @@ impl Ethernet2Header {
 
     ///Read an Ethernet2Header from a slice and return the header & unused parts of the slice.
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
-        use self::ReadError::UnexpectedEndOfSlice;
-        const SERIALIZED_SIZE: usize = Ethernet2Header::SERIALIZED_SIZE;
-
-        if slice.len() < SERIALIZED_SIZE {
-            Err(UnexpectedEndOfSlice(SERIALIZED_SIZE))
-        } else {
-            fn to_addr(slice: &[u8]) -> [u8;6] {
-                let mut result: [u8;6] = Default::default();
-                result.copy_from_slice(slice);
-                result
-            }
-            Ok((Ethernet2Header {
-                destination: to_addr(&slice[..6]),
-                source: to_addr(&slice[6..12]),
-                ether_type: BigEndian::read_u16(&slice[12..14])
-            }, &slice[SERIALIZED_SIZE..]))
-        }
+        Ok((
+            Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
+            &slice[Ethernet2Header::SERIALIZED_SIZE..]
+        ))
     }
 
     ///Reads an Ethernet-II header from the current position of the read argument.
