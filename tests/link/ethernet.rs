@@ -32,11 +32,32 @@ proptest! {
         input.write(&mut buffer).unwrap();
         assert_eq!(14, buffer.len());
 
-        //deserialize
-        let result = Ethernet2Header::read(&mut Cursor::new(&buffer)).unwrap();
+        //read
+        {
+            //deserialize
+            let result = Ethernet2Header::read(&mut Cursor::new(&buffer)).unwrap();
         
-        //check equivalence
-        assert_eq!(input, &result);
+            //check equivalence
+            assert_eq!(input, &result);
+        }
+
+        //read_from_slice
+        {
+            //deserialize
+            let result = Ethernet2Header::read_from_slice(&buffer[..]).unwrap();
+        
+            //check equivalence
+            assert_eq!(input, &result.0);
+            assert_eq!(&buffer[Ethernet2Header::SERIALIZED_SIZE..], result.1);
+        }
+
+        //read_from_slice (eos error)
+        {
+            assert_matches!(
+                Ethernet2Header::read_from_slice(&buffer[..(buffer.len()-1)]),
+                Err(ReadError::UnexpectedEndOfSlice(Ethernet2Header::SERIALIZED_SIZE))
+            );
+        }
     }
 }
 

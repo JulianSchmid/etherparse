@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 use std::io;
 
@@ -48,6 +48,28 @@ impl SerializedSize for Ethernet2Header {
 }
 
 impl Ethernet2Header {
+
+    ///Read an Ethernet2Header from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
+        use self::ReadError::UnexpectedEndOfSlice;
+        const SERIALIZED_SIZE: usize = Ethernet2Header::SERIALIZED_SIZE;
+
+        if slice.len() < SERIALIZED_SIZE {
+            Err(UnexpectedEndOfSlice(SERIALIZED_SIZE))
+        } else {
+            fn to_addr(slice: &[u8]) -> [u8;6] {
+                let mut result: [u8;6] = Default::default();
+                result.copy_from_slice(slice);
+                result
+            }
+            Ok((Ethernet2Header {
+                destination: to_addr(&slice[..6]),
+                source: to_addr(&slice[6..12]),
+                ether_type: BigEndian::read_u16(&slice[12..14])
+            }, &slice[SERIALIZED_SIZE..]))
+        }
+    }
+
     ///Reads an Ethernet-II header from the current position of the read argument.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ethernet2Header, io::Error> {
         fn read_mac_address<T: io::Read>(read: &mut T) -> Result<[u8;6], io::Error> {
@@ -62,6 +84,7 @@ impl Ethernet2Header {
             ether_type: reader.read_u16::<BigEndian>()?
         })
     }
+
     ///Writes a given Ethernet-II header to the current position of the write argument.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), io::Error> {
         writer.write_all(&self.destination)?;

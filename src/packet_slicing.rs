@@ -75,7 +75,7 @@ impl<'a> SlicedPacket<'a> {
         //helper function to generate mappings for unexpected end of slice error 
         //(adds previously passed headers)
         let map_eos = |add: usize| {
-            move |err: ReadError| -> ReadError{
+            move |err: ReadError| -> ReadError {
                 use self::ReadError::*;
                 match err {
                     UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(add + value),
