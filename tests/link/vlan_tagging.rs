@@ -126,14 +126,29 @@ fn double_vlan_header_read_write() {
             }
         };
 
-        //write it
+        //write
         let mut buffer = Vec::<u8>::new();
         IN.write(&mut buffer).unwrap();
 
-        //read it
-        use std::io::Cursor;
-        let mut cursor = Cursor::new(&buffer);
-        assert_eq!(DoubleVlanHeader::read(&mut cursor).unwrap(), IN);
+        //read
+        {
+            use std::io::Cursor;
+            let mut cursor = Cursor::new(&buffer);
+            assert_eq!(DoubleVlanHeader::read(&mut cursor).unwrap(), IN);
+        }
+        //read_from_slice
+        {
+            let result = DoubleVlanHeader::read_from_slice(&buffer).unwrap();
+            assert_eq!(result.0, IN);
+            assert_eq!(result.1, &buffer[buffer.len()..]);
+        }
+
+        //read_from_slice unexpected eos
+        assert_matches!(
+            DoubleVlanHeader::read_from_slice(&buffer[..(buffer.len() - 1)]),
+            Err(ReadError::UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE))
+        );
+        
     }
     //check that an error is thrown if the outer header contains an invalid id
     {
@@ -156,7 +171,7 @@ fn double_vlan_header_read_write() {
         let mut buffer = Vec::<u8>::new();
         IN.write(&mut buffer).unwrap();
 
-        //read it 
+        //read 
         {
             use std::io::Cursor;
             let mut cursor = Cursor::new(&buffer);
@@ -164,7 +179,15 @@ fn double_vlan_header_read_write() {
                             Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1)));
         }
 
-        //expect the same error for the slice
+        //read_from_slice
+        {
+            assert_matches!(
+                DoubleVlanHeader::read_from_slice(&buffer),
+                Err(ReadError::VlanDoubleTaggingUnexpectedOuterTpid(1))
+            );
+        }
+
+        //DoubleVlanHeaderSlice::from_slice
         {
             assert_matches!(
                 DoubleVlanHeaderSlice::from_slice(&buffer), 
