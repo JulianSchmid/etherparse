@@ -1,7 +1,7 @@
 use super::*;
 
 extern crate byteorder;
-use std::marker;
+use std::{io, marker};
 
 /// Helper for building packets.
 ///

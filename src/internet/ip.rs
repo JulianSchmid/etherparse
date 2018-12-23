@@ -5,6 +5,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
+use std::io;
+
 ///Internet protocol headers version 4 & 6
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IpHeader {

@@ -3,6 +3,8 @@ use super::super::*;
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
+use std::io;
+
 ///Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct UdpHeader {

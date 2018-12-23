@@ -40,6 +40,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+            UnexpectedEndOfSlice(0),
             VlanDoubleTaggingUnexpectedOuterTpid(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),

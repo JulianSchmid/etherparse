@@ -3,6 +3,8 @@ pub mod tcp;
 
 use super::*;
 
+use std::io;
+
 ///The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportHeader {

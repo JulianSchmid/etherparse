@@ -3,6 +3,7 @@ use super::super::*;
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
+use std::io;
 
 //TODO checksum calculation
 

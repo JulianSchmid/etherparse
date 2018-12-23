@@ -1,5 +1,3 @@
-use std::io;
-
 mod link;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
@@ -31,7 +29,7 @@ pub trait SerializedSize {
 ///Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
-    IoError(io::Error),
+    IoError(std::io::Error),
     ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
     UnexpectedEndOfSlice(usize),
     ///Error when a double vlan tag was expected but the tpid of the outer vlan does not contain the expected id of 0x8100.
@@ -50,8 +48,8 @@ pub enum ReadError {
     TcpDataOffsetTooSmall(u8),
 }
 
-impl From<io::Error> for ReadError {
-    fn from(err: io::Error) -> ReadError {
+impl From<std::io::Error> for ReadError {
+    fn from(err: std::io::Error) -> ReadError {
         ReadError::IoError(err)
     }
 }
@@ -59,7 +57,7 @@ impl From<io::Error> for ReadError {
 ///Errors that can occur when writing.
 #[derive(Debug)]
 pub enum WriteError {
-    IoError(io::Error),
+    IoError(std::io::Error),
     ///Error in the data that was given to write
     ValueError(ValueError)
 }
@@ -93,8 +91,8 @@ pub enum ValueError {
     U32TooLarge{value: u32, max: u32, field: ErrorField}
 }
 
-impl From<io::Error> for WriteError {
-    fn from(err: io::Error) -> WriteError {
+impl From<std::io::Error> for WriteError {
+    fn from(err: std::io::Error) -> WriteError {
         WriteError::IoError(err)
     }
 }
