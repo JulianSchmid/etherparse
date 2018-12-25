@@ -220,21 +220,32 @@ fn readwrite_ip_header() {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
         input.write(&mut buffer).unwrap();
-        println!("{:?}", input);
+
         match *input {
             IpHeader::Version4(_) => assert_eq!(20, buffer.len()),
             IpHeader::Version6(_) => assert_eq!(40, buffer.len())
         }
         
-        //deserialize
-        let mut cursor = Cursor::new(&buffer);
-        let result = IpHeader::read(&mut cursor).unwrap();
-        match *input {
-            IpHeader::Version4(_) => assert_eq!(20, cursor.position()),
-            IpHeader::Version6(_) => assert_eq!(40, cursor.position())
-        }
+        //deserialize with read
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let result = IpHeader::read(&mut cursor).unwrap();
+            match *input {
+                IpHeader::Version4(_) => assert_eq!(20, cursor.position()),
+                IpHeader::Version6(_) => assert_eq!(40, cursor.position())
+            }
+            assert_eq!(result, *input);
+        } 
 
-        assert_eq!(result, *input);
+        //deserialize with read_from_slice
+        {
+            //add a byte to ensure that only the required data is read
+            buffer.push(1);
+            //return
+            let result = IpHeader::read_from_slice(&buffer).unwrap();
+            assert_eq!(result.0, *input);
+            assert_eq!(result.1, &buffer[buffer.len() - 1 .. ]);
+        }
     }
 }
 
@@ -307,37 +318,48 @@ proptest! {
 
         assert_eq!(expected_size, buffer.len());
 
-        //deserialize
-        let mut cursor = Cursor::new(&buffer);
-        let result = Ipv4Header::read(&mut cursor).unwrap();
-        assert_eq!(20, cursor.position());
+        //deserialize (read)
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let result = Ipv4Header::read(&mut cursor).unwrap();
+            assert_eq!(20, cursor.position());
 
-        //check equivalence
-        assert_eq!(input.0, result);
+            //check equivalence
+            assert_eq!(input.0, result);
+        }
+
+        //deserialize (read_from_slice)
+        {
+            let result = Ipv4Header::read_from_slice(&buffer).unwrap();
+            assert_eq!(input.0, result.0);
+            assert_eq!(&buffer[Ipv4Header::SERIALIZED_SIZE..], result.1);
+        }
 
         //check that the slice implementation also reads the correct values
-        use std::net::Ipv4Addr;
-        let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
-        assert_eq!(slice.version(), 4);
-        assert_eq!(slice.ihl(), input.0.header_length);
-        assert_eq!(slice.dcp(), input.0.differentiated_services_code_point);
-        assert_eq!(slice.ecn(), input.0.explicit_congestion_notification);
-        assert_eq!(slice.total_length(), input.0.total_length);
-        assert_eq!(slice.identification(), input.0.identification);
-        assert_eq!(slice.dont_fragment(), input.0.dont_fragment);
-        assert_eq!(slice.more_fragments(), input.0.more_fragments);
-        assert_eq!(slice.fragments_offset(), input.0.fragments_offset);
-        assert_eq!(slice.ttl(), input.0.time_to_live);
-        assert_eq!(slice.protocol(), input.0.protocol);
-        assert_eq!(slice.header_checksum(), input.0.header_checksum);
-        assert_eq!(slice.source(), input.0.source);
-        assert_eq!(slice.source_addr(), Ipv4Addr::from(input.0.source));
-        assert_eq!(slice.destination(), input.0.destination);
-        assert_eq!(slice.destination_addr(), Ipv4Addr::from(input.0.destination));
+        {
+            use std::net::Ipv4Addr;
+            let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
+            assert_eq!(slice.version(), 4);
+            assert_eq!(slice.ihl(), input.0.header_length);
+            assert_eq!(slice.dcp(), input.0.differentiated_services_code_point);
+            assert_eq!(slice.ecn(), input.0.explicit_congestion_notification);
+            assert_eq!(slice.total_length(), input.0.total_length);
+            assert_eq!(slice.identification(), input.0.identification);
+            assert_eq!(slice.dont_fragment(), input.0.dont_fragment);
+            assert_eq!(slice.more_fragments(), input.0.more_fragments);
+            assert_eq!(slice.fragments_offset(), input.0.fragments_offset);
+            assert_eq!(slice.ttl(), input.0.time_to_live);
+            assert_eq!(slice.protocol(), input.0.protocol);
+            assert_eq!(slice.header_checksum(), input.0.header_checksum);
+            assert_eq!(slice.source(), input.0.source);
+            assert_eq!(slice.source_addr(), Ipv4Addr::from(input.0.source));
+            assert_eq!(slice.destination(), input.0.destination);
+            assert_eq!(slice.destination_addr(), Ipv4Addr::from(input.0.destination));
 
-        //check that a convertion back to a header yields the same result as the original write
-        assert_eq!(slice.to_header(), input.0);
-        assert_eq!(slice.options(), &input.1[..]);
+            //check that a convertion back to a header yields the same result as the original write
+            assert_eq!(slice.to_header(), input.0);
+            assert_eq!(slice.options(), &input.1[..]);
+        }
     }
 }
 
@@ -634,10 +656,18 @@ fn readwrite_ipv6_header() {
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
     input.write(&mut buffer).unwrap();
-    //deserialize
-    let result = Ipv6Header::read(&mut Cursor::new(&buffer)).unwrap();
-    //check equivalence
-    assert_eq!(input, result);
+    //deserialize (with read)
+    {
+        let result = Ipv6Header::read(&mut Cursor::new(&buffer)).unwrap();
+        //check equivalence
+        assert_eq!(input, result);
+    }
+    //deserialize (with read_from_slice)
+    {
+        let result = Ipv6Header::read_from_slice(&buffer).unwrap();
+        assert_eq!(input, result.0);
+        assert_eq!(&buffer[buffer.len()..], result.1);
+    }
 }
 
 #[test]

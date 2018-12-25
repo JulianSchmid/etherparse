@@ -15,9 +15,29 @@ pub enum IpHeader {
 }
 
 impl IpHeader {
+    ///Read an IpvHeader from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, &[u8]), ReadError> {
+        use crate::ReadError::*;
+        if slice.len() < 1 {
+            Err(UnexpectedEndOfSlice(1))
+        } else {
+            match slice[0] >> 4 {
+                4 => {
+                    Ipv4Header::read_from_slice(slice)
+                    .map(|value| (IpHeader::Version4(value.0), value.1))
+                },
+                6 => {
+                    Ipv6Header::read_from_slice(slice)
+                    .map(|value| (IpHeader::Version6(value.0), value.1))
+                },
+                version => Err(ReadError::IpUnsupportedVersion(version))
+            }
+        }
+    }
+
     ///Reads an IP (v4 or v6) header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpHeader, ReadError> {
-        let value = reader .read_u8()?;
+        let value = reader.read_u8()?;
         match value >> 4 {
             4 => Ok(IpHeader::Version4(Ipv4Header::read_without_version(reader, value & 0xf)?)),
             6 => Ok(IpHeader::Version6(Ipv6Header::read_without_version(reader, value & 0xf)?)),
@@ -84,6 +104,14 @@ impl Ipv4Header {
             source,
             destination
         })
+    }
+
+    ///Read an Ipv4Header from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
+        Ok((
+            Ipv4HeaderSlice::from_slice(slice)?.to_header(),
+            &slice[Ipv4Header::SERIALIZED_SIZE..]
+        ))
     }
 
     ///Reads an IPv4 header from the current position.
@@ -347,6 +375,14 @@ impl SerializedSize for Ipv6Header {
 }
 
 impl Ipv6Header {
+
+    ///Read an Ipv6Header from a slice and return the header & unused parts of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
+        Ok((
+            Ipv6HeaderSlice::from_slice(slice)?.to_header(), 
+            &slice[Ipv6Header::SERIALIZED_SIZE..]
+        ))
+    }
 
     ///Reads an IPv6 header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6Header, ReadError> {
