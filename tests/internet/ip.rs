@@ -298,9 +298,21 @@ fn read_ip_header_error() {
     //corrupt the version
     buffer[0] = 0xff;
 
-    //deserialize
-    let mut cursor = Cursor::new(&buffer);
-    assert_matches!(IpHeader::read(&mut cursor), Err(ReadError::IpUnsupportedVersion(0xf)));
+    //deserialize with read
+    {
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(IpHeader::read(&mut cursor), Err(ReadError::IpUnsupportedVersion(0xf)));
+    }
+
+    //deserialize with read_from_slice
+    assert_matches!(
+        IpHeader::read_from_slice(&buffer), 
+        Err(ReadError::IpUnsupportedVersion(0xf))
+    );
+    assert_matches!(
+        IpHeader::read_from_slice(&buffer[buffer.len()..]), 
+        Err(ReadError::UnexpectedEndOfSlice(1))
+    );
 }
 
 proptest! {
