@@ -309,6 +309,8 @@ fn read_ip_header_error() {
         IpHeader::read_from_slice(&buffer), 
         Err(ReadError::IpUnsupportedVersion(0xf))
     );
+    //also check that an error is thrown when the slice is too small 
+    //to even read the version
     assert_matches!(
         IpHeader::read_from_slice(&buffer[buffer.len()..]), 
         Err(ReadError::UnexpectedEndOfSlice(1))
