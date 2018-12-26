@@ -1,9 +1,13 @@
+use std::io;
+
 mod link;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
 
 mod internet;
 pub use crate::internet::ip::*;
+pub use crate::internet::ipv4::*;
+pub use crate::internet::ipv6::*;
 
 mod transport;
 pub use crate::transport::tcp::*;
