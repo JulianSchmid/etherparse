@@ -3,12 +3,83 @@ use std::io;
 use std::io::Write;
 use proptest::prelude::*;
 
+#[test]
+fn default() {
+    let default : Ipv4Header = Default::default();
+    assert_eq!(5, default.header_length);
+    assert_eq!(0, default.differentiated_services_code_point);
+    assert_eq!(0, default.explicit_congestion_notification);
+    assert_eq!(5*4, default.total_length);
+    assert_eq!(0, default.identification);
+    assert_eq!(false, default.dont_fragment);
+    assert_eq!(false, default.more_fragments);
+    assert_eq!(0, default.fragments_offset);
+    assert_eq!(0, default.time_to_live);
+    assert_eq!(0, default.protocol);
+    assert_eq!(0, default.header_checksum);
+    assert_eq!([0;4], default.source);
+    assert_eq!([0;4], default.destination);
+}
+
+proptest! {
+    #[test]
+    fn eq(a in ipv4_any(),
+          b in ipv4_any())
+    {
+        //check equality
+        assert_eq!(
+            a.0.header_length == b.0.header_length &&
+            a.0.differentiated_services_code_point == b.0.differentiated_services_code_point &&
+            a.0.explicit_congestion_notification == b.0.explicit_congestion_notification &&
+            a.0.total_length == b.0.total_length &&
+            a.0.identification == b.0.identification &&
+            a.0.dont_fragment == b.0.dont_fragment &&
+            a.0.more_fragments == b.0.more_fragments &&
+            a.0.fragments_offset == b.0.fragments_offset &&
+            a.0.time_to_live == b.0.time_to_live &&
+            a.0.protocol == b.0.protocol &&
+            a.0.header_checksum == b.0.header_checksum &&
+            a.0.source == b.0.source &&
+            a.0.destination == b.0.destination,
+
+            a.0 == b.0
+        );
+
+        //check identity equality
+        assert!(a == a);
+        assert!(b == b);
+    }
+}
+
+proptest! {
+    #[test]
+    fn debug(input in ipv4_any()) {
+        assert_eq!(&format!("Ipv4Header {{ header_length: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, total_length: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {}, header_checksum: {}, source: {:?}, destination: {:?} }}",
+                input.0.header_length,
+                input.0.differentiated_services_code_point,
+                input.0.explicit_congestion_notification,
+                input.0.total_length,
+                input.0.identification,
+                input.0.dont_fragment,
+                input.0.more_fragments,
+                input.0.fragments_offset,
+                input.0.time_to_live,
+                input.0.protocol,
+                input.0.header_checksum,
+                input.0.source,
+                input.0.destination,
+            ),
+            &format!("{:?}", input.0)
+        );
+    }
+}
+
 proptest! {
     #[test]
     fn new(source_ip in prop::array::uniform4(any::<u8>()),
-                dest_ip in prop::array::uniform4(any::<u8>()),
-                ttl in any::<u8>(),
-                payload_and_options_length in 0u16..(std::u16::MAX - 20))
+           dest_ip in prop::array::uniform4(any::<u8>()),
+           ttl in any::<u8>(),
+           payload_and_options_length in 0u16..(std::u16::MAX - 20))
     {
         let result = Ipv4Header::new(payload_and_options_length as usize, 
                                      ttl, 

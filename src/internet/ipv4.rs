@@ -1,12 +1,13 @@
 use super::super::*;
 
 use std::net::Ipv4Addr;
+use std::fmt::{Debug, Formatter};
 
 extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///IPv4 header without options.
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone)]
 pub struct Ipv4Header {
     ///Length of the header in 4 bytes (often also called IHL - Internet Header Lenght). 
     ///
@@ -304,6 +305,72 @@ impl Ipv4Header {
         Ok(())
     }
 }
+
+//NOTE: I would have prefered to NOT write my own Default, Debug & PartialEq implementation but there are no
+//      default implementations availible for [u8;40] and the alternative of using [u32;10] would lead
+//      to unsafe casting. Writing impl Debug for [u8;40] in a crate is also illegal as it could lead 
+//      to an implementation collision between crates.
+//      So the only option left to me was to write an implementation myself and deal with the added complexity
+//      and potential added error source.
+
+impl Default for Ipv4Header {
+    fn default() -> Ipv4Header {
+        Ipv4Header {
+            header_length: 5,
+            differentiated_services_code_point: 0,
+            explicit_congestion_notification: 0,
+            total_length: 5*4,
+            identification: 0,
+            dont_fragment: false,
+            more_fragments: false,
+            fragments_offset: 0,
+            time_to_live: 0,
+            protocol: 0,
+            header_checksum: 0,
+            source: [0;4],
+            destination: [0;4]
+        }
+    }
+}
+
+impl Debug for Ipv4Header {
+    fn fmt(&self, fotmatter: &mut Formatter) -> Result<(), std::fmt::Error> {
+        write!(fotmatter, "Ipv4Header {{ header_length: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, total_length: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {}, header_checksum: {}, source: {:?}, destination: {:?} }}", 
+            self.header_length,
+            self.differentiated_services_code_point,
+            self.explicit_congestion_notification,
+            self.total_length,
+            self.identification,
+            self.dont_fragment,
+            self.more_fragments,
+            self.fragments_offset,
+            self.time_to_live,
+            self.protocol,
+            self.header_checksum,
+            self.source,
+            self.destination)
+    }
+}
+
+impl std::cmp::PartialEq for Ipv4Header {
+    fn eq(&self, other: &Ipv4Header) -> bool {
+        self.header_length == other.header_length &&
+        self.differentiated_services_code_point == other.differentiated_services_code_point &&
+        self.explicit_congestion_notification == other.explicit_congestion_notification &&
+        self.total_length == other.total_length &&
+        self.identification == other.identification &&
+        self.dont_fragment == other.dont_fragment &&
+        self.more_fragments == other.more_fragments &&
+        self.fragments_offset == other.fragments_offset &&
+        self.time_to_live == other.time_to_live &&
+        self.protocol == other.protocol &&
+        self.header_checksum == other.header_checksum &&
+        self.source == other.source &&
+        self.destination == other.destination
+    }
+}
+
+impl std::cmp::Eq for Ipv4Header {}
 
 ///A slice containing an ipv4 header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
