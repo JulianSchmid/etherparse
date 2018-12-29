@@ -54,9 +54,9 @@ mod transport_header {
             {
                 let mut transport = TransportHeader::Udp(udp_header.clone());
                 let payload = Vec::new();
-                transport.update_checksum_ipv4(&ip_header.0, &payload).unwrap();
+                transport.update_checksum_ipv4(&ip_header, &payload).unwrap();
                 assert_eq!(transport.udp().unwrap().checksum, 
-                           udp_header.calc_checksum_ipv4(&ip_header.0, &payload).unwrap());
+                           udp_header.calc_checksum_ipv4(&ip_header, &payload).unwrap());
             }
             //error case
             {
@@ -72,7 +72,7 @@ mod transport_header {
                         len
                     )
                 };
-                assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ip_header.0, &tcp_payload));
+                assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ip_header, &tcp_payload));
             }
         }
     }
@@ -85,9 +85,9 @@ mod transport_header {
             {
                 let mut transport = TransportHeader::Tcp(tcp_header.clone());
                 let payload = Vec::new();
-                transport.update_checksum_ipv4(&ip_header.0, &payload).unwrap();
+                transport.update_checksum_ipv4(&ip_header, &payload).unwrap();
                 assert_eq!(transport.tcp().unwrap().checksum, 
-                           tcp_header.calc_checksum_ipv4(&ip_header.0, &payload).unwrap());
+                           tcp_header.calc_checksum_ipv4(&ip_header, &payload).unwrap());
             }
             //error case
             {
@@ -103,7 +103,7 @@ mod transport_header {
                         len
                     )
                 };
-                assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ip_header.0, &tcp_payload));
+                assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ip_header, &tcp_payload));
             }
         }
     }

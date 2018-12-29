@@ -28,8 +28,8 @@ fn main() {
     //create the ipv4 header with the helper function
     //Note: It is also possible to define the rest of the header values via Ipv4Header {...}
     let ip_header = Ipv4Header::new(
-        //size of the payload
-        UdpHeader::SERIALIZED_SIZE + udp_payload.len(),
+        //payload length
+        (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
         //time to live
         20,
         //contained protocol is udp
@@ -38,13 +38,13 @@ fn main() {
         [192,168,1,42],
         //destination ip address
         [192,168,1,1]
-    ).unwrap();
+    );
 
-    //write the ipv4 header.
-    //The second argument are the ipv4 options which are not used in this example.
-    //The "write" call automatically calculates the ipv4 checksum, 
-    //alternatively "write_raw" can be used to skip the checksum calculation.
-    ip_header.write(&mut out, &[]).unwrap();
+    //write the ipv4 header
+    //The "write" call automatically calculates the ipv4 checksum.
+    //Alternatively "write_raw" can be used to skip the checksum 
+    //calculation and just write out the checksum set in the header.
+    ip_header.write(&mut out).unwrap();
 
     //write the udp header
     //There is the option to write it with a checksum or without.

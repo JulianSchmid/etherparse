@@ -3,7 +3,7 @@ use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IpTest {
-    Version4(Ipv4Header, Vec<u8>),
+    Version4(Ipv4Header),
     Version6(Ipv6Header, Vec<(u8, Vec<u8>)>)
 }
 
@@ -38,7 +38,7 @@ impl ComponentTest {
             None => {}
         }
         match &self.ip {
-            Some(IpTest::Version4(header, options)) => header.write_raw(&mut buffer, options).unwrap(),
+            Some(IpTest::Version4(header)) => header.write_raw(&mut buffer).unwrap(),
             Some(IpTest::Version6(header, exts)) => {
                 header.write(&mut buffer).unwrap();
                 for ref ext in exts {
@@ -112,8 +112,7 @@ impl ComponentTest {
                 use crate::InternetSlice::*;
                 use self::IpTest::*;
                 match result.ip {
-                    Some(Ipv4(actual)) => Some(Version4(actual.to_header(), 
-                                                        actual.options().to_vec())),
+                    Some(Ipv4(actual)) => Some(Version4(actual.to_header())),
                     Some(Ipv6(actual_header, actual_extensions)) => 
                         Some(Version6(actual_header.to_header(),
                                       actual_extensions.iter()
@@ -157,7 +156,7 @@ impl ComponentTest {
             {
                 use self::IpTest::*;
                 match &self.ip {
-                    Some(Version4(value, _)) => Some(IpHeader::Version4(value.clone())),
+                    Some(Version4(value)) => Some(IpHeader::Version4(value.clone())),
                     Some(Version6(value, _)) => Some(IpHeader::Version6(value.clone())),
                     None => None
                 }
@@ -171,11 +170,11 @@ impl ComponentTest {
         assert_eq!(self.payload[..], actual.payload[..]);
     }
 
-    fn run_ipv4(&self, ip: &(Ipv4Header, Vec<u8>), udp: &UdpHeader, tcp: &TcpHeader) {
+    fn run_ipv4(&self, ip: &Ipv4Header, udp: &UdpHeader, tcp: &TcpHeader) {
         //ipv4 only
         {
             let mut test = self.clone();
-            test.ip = Some(IpTest::Version4(ip.0.clone(), ip.1.clone()));
+            test.ip = Some(IpTest::Version4(ip.clone()));
             test.run();
         }
 
@@ -183,20 +182,20 @@ impl ComponentTest {
         {
             let mut test = self.clone();
             test.ip = Some(IpTest::Version4({
-                let mut header = ip.0.clone();
+                let mut header = ip.clone();
                 header.protocol = IpTrafficClass::Udp as u8;
                 header
-            }, ip.1.clone()));
+            }));
             test.run_udp(udp);
         }
         //tcp
         {
             let mut test = self.clone();
             test.ip = Some(IpTest::Version4({
-                let mut header = ip.0.clone();
+                let mut header = ip.clone();
                 header.protocol = IpTrafficClass::Tcp as u8;
                 header
-            }, ip.1.clone()));
+            }));
             test.run_tcp(tcp);
         }
     }
@@ -268,7 +267,7 @@ impl ComponentTest {
     fn run_vlan(&self, 
                 outer_vlan: &SingleVlanHeader, 
                 inner_vlan: &SingleVlanHeader, 
-                ipv4: &(Ipv4Header, Vec<u8>), 
+                ipv4: &Ipv4Header, 
                 ipv6: &Ipv6Header, 
                 ipv6_ext: &Vec<(u8, Vec<u8>)>, 
                 udp: &UdpHeader,

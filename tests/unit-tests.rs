@@ -45,6 +45,7 @@ fn test_debug_write() {
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
             Ipv4HeaderLengthBad(0),
+            Ipv4TotalLengthTooSmall(0),
             Ipv6UnexpectedVersion(0),
             Ipv6TooManyHeaderExtensions,
             TcpDataOffsetTooSmall(0)
@@ -68,7 +69,7 @@ fn test_debug_write() {
         use crate::ValueError::*;
         for value in [
             Ipv4OptionsLengthBad(0),
-            Ipv4PayloadAndOptionsLengthTooLarge(0),
+            Ipv4PayloadLengthTooLarge(0),
             Ipv6PayloadLengthTooLarge(0),
             UdpPayloadLengthTooLarge(0),
             U8TooLarge{value: 0, max: 0, field: ErrorField::Ipv4Ecn},
@@ -83,6 +84,7 @@ fn test_debug_write() {
         use crate::ErrorField::*;
         for value in [
             Ipv4HeaderLength,
+            Ipv4PayloadLength,
             Ipv4Dscp,
             Ipv4Ecn,
             Ipv4FragmentsOffset,
@@ -120,3 +122,19 @@ fn test_io_error_to_read_error() {
                     ReadError::IoError(_));
 }
 
+mod write_error {
+    #[test]
+    fn value_error() {
+        use super::*;
+        assert_eq!(
+            None, 
+            WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .value_error()
+        );
+        assert_eq!(
+            Some(ValueError::TcpLengthTooLarge(0)),
+            WriteError::ValueError(ValueError::TcpLengthTooLarge(0))
+            .value_error()
+        );
+    }
+}

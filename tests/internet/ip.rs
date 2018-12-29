@@ -5,35 +5,41 @@ fn readwrite_ip_header() {
     use std::io::Cursor;
 
     let inputs = [
-        IpHeader::Version4(Ipv4Header {
-            header_length: 5,
-            differentiated_services_code_point: 42,
-            explicit_congestion_notification: 3,
-            total_length: 1234,
-            identification: 4321,
-            dont_fragment: true,
-            more_fragments: false,
-            fragments_offset: 4367,
-            time_to_live: 8,
-            protocol: 1,
-            header_checksum: 43617,
-            source: [192, 168, 1, 1],
-            destination: [212, 10, 11, 123]
+        IpHeader::Version4({
+            let mut header: Ipv4Header = Default::default();
+
+            header.differentiated_services_code_point = 42;
+            header.explicit_congestion_notification = 3;
+            header.payload_len = 1234 - 20;
+            header.identification = 4321;
+            header.dont_fragment = true;
+            header.more_fragments = false;
+            header.fragments_offset = 4367;
+            header.time_to_live = 8;
+            header.protocol = 1;
+            header.header_checksum = 43617;
+            header.source = [192, 168, 1, 1];
+            header.destination = [212, 10, 11, 123];
+
+            header
         }),
-        IpHeader::Version4(Ipv4Header {
-            header_length: 5,
-            differentiated_services_code_point: 42,
-            explicit_congestion_notification: 3,
-            total_length: 1234,
-            identification: 4321,
-            dont_fragment: false,
-            more_fragments: true,
-            fragments_offset: 4367,
-            time_to_live: 8,
-            protocol: 1,
-            header_checksum: 51809,
-            source: [192, 168, 1, 1],
-            destination: [212, 10, 11, 123]
+        IpHeader::Version4({
+            let mut header: Ipv4Header = Default::default();
+
+            header.differentiated_services_code_point = 42;
+            header.explicit_congestion_notification = 3;
+            header.payload_len = 1234 - 20;
+            header.identification = 4321;
+            header.dont_fragment = false;
+            header.more_fragments = true;
+            header.fragments_offset = 4367;
+            header.time_to_live = 8;
+            header.protocol = 1;
+            header.header_checksum = 51809;
+            header.source = [192, 168, 1, 1];
+            header.destination = [212, 10, 11, 123];
+            
+            header
         }),
         IpHeader::Version6(Ipv6Header {
             traffic_class: 1,

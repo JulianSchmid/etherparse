@@ -44,6 +44,8 @@ pub enum ReadError {
     Ipv4UnexpectedVersion(u8),
     ///Error when the ipv4 header length is smaller then the header itself (5).
     Ipv4HeaderLengthBad(u8),
+    ///Error when the total length field is too small to contain the header itself.
+    Ipv4TotalLengthTooSmall(u16),
     ///Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
@@ -66,6 +68,15 @@ pub enum WriteError {
     ValueError(ValueError)
 }
 
+impl WriteError {
+    pub fn value_error(self) -> Option<ValueError> {
+        match self {
+            WriteError::ValueError(value) => Some(value),
+            _ => None
+        }
+    }
+}
+
 impl From<ValueError> for WriteError {
     fn from(err: ValueError) -> WriteError {
         WriteError::ValueError(err)
@@ -73,13 +84,13 @@ impl From<ValueError> for WriteError {
 }
 
 ///Errors in the given data
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueError {
-    ///Error when the ipv4 options length is too big (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
+    ///Error when the ipv4 options length is too big or not aligned (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
-    ///Error when a given payload & ipv4 options block is bigger then what fits inside an ipv4 total_length field.
-    Ipv4PayloadAndOptionsLengthTooLarge(usize),
-    ///Error when a given payload & ipv6 header existsns block is bigger then what fits inside an ipv6 payload_length field.
+    ///Error when a given payload & ipv4 header is bigger then what fits inside an ipv4 total_length field.
+    Ipv4PayloadLengthTooLarge(usize),
+    ///Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
@@ -102,9 +113,10 @@ impl From<std::io::Error> for WriteError {
 }
 
 ///Fields that can produce errors when serialized.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorField {
     Ipv4HeaderLength,
+    Ipv4PayloadLength,
     Ipv4Dscp,
     Ipv4Ecn,
     Ipv4FragmentsOffset,

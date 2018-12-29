@@ -44,7 +44,7 @@ impl IpHeader {
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use crate::IpHeader::*;
         match *self {
-            Version4(ref value) => value.write(writer, &[]),
+            Version4(ref value) => value.write(writer),
             Version6(ref value) => value.write(writer)
         }
     }

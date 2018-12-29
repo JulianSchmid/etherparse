@@ -338,7 +338,7 @@ impl PacketFilterTest {
             },
             ip: match &self.ip {
                 Some(IpHeader::Version4(header)) => {
-                    header.write(&mut ip_data, &[]).unwrap();
+                    header.write(&mut ip_data).unwrap();
                     Some(InternetSlice::Ipv4(Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap()))
                 },
                 Some(IpHeader::Version6(header)) => {
@@ -540,7 +540,7 @@ mod ip_filter {
             //create the slices the filters can be checked against
             let ipv4_data = {
                 let mut ipv4_data = Vec::new();
-                ipv4.0.write(&mut ipv4_data, &[]).unwrap();
+                ipv4.write(&mut ipv4_data).unwrap();
                 ipv4_data };
             let ipv4_slice = InternetSlice::Ipv4(
                 Ipv4HeaderSlice::from_slice(&ipv4_data[..]).unwrap()
@@ -565,22 +565,22 @@ mod ip_filter {
             }
             //matching
             assert_eq!(true, Ipv4 {
-                source: Some(ipv4.0.source),
-                destination: Some(ipv4.0.destination)
+                source: Some(ipv4.source),
+                destination: Some(ipv4.destination)
             }.applies_to_slice(&ipv4_slice));
             //non matching
             assert_eq!(false, Ipv4 {
                 source: Some({
-                    let mut value = ipv4.0.source;
+                    let mut value = ipv4.source;
                     value[0] = !value[0];
                     value
                 }),
-                destination: Some(ipv4.0.destination)
+                destination: Some(ipv4.destination)
             }.applies_to_slice(&ipv4_slice));
             assert_eq!(false, Ipv4 {
-                source: Some(ipv4.0.source),
+                source: Some(ipv4.source),
                 destination: Some({
-                    let mut value = ipv4.0.destination;
+                    let mut value = ipv4.destination;
                     value[0] = !value[0];
                     value
                 })

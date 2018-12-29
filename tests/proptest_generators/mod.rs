@@ -85,7 +85,7 @@ prop_compose! {
 
 prop_compose! {
     [pub] fn ipv4_with(protocol: u8)
-                (ihl in 5u8..16,
+                (ihl in 0u8..10,
                  protocol in proptest::strategy::Just(protocol))
                 (source in prop::array::uniform4(any::<u8>()),
                   dest in prop::array::uniform4(any::<u8>()),
@@ -97,35 +97,53 @@ prop_compose! {
                   more_fragments in any::<bool>(),
                   fragments_offset in prop::bits::u16::between(0, 13),
                   header_checksum in any::<u16>(),
-                  total_length in any::<u16>(),
+                  payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::SERIALIZED_SIZE as u16)),
                   protocol in proptest::strategy::Just(protocol),
-                  ihl in proptest::strategy::Just(ihl),
-                  options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4))
-                  -> (Ipv4Header, Vec<u8>)
+                  options_len in proptest::strategy::Just(ihl*4),
+                  options_part0 in prop::array::uniform32(any::<u8>()),
+                  options_part1 in prop::array::uniform8(any::<u8>()))
+                  -> Ipv4Header
     {
-        (Ipv4Header {
-            header_length: ihl,
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
-            time_to_live: ttl,
-            protocol: protocol,
-            header_checksum: header_checksum,
-            source: source,
-            destination: dest
-        },
-        options)
+        let mut result: Ipv4Header = Default::default();
+        {
+            let mut options: [u8;40] = [0;40];
+            //copy together 40 bytes of random data (the limit for static arrays in proptest 32,
+            //so a 32 & 8 byte array get combined here)
+            let len = usize::from(options_len);
+            if len > 0 {
+                let sub_len = std::cmp::min(len,32);
+                options[..sub_len].copy_from_slice(&options_part0[..sub_len]);
+            }
+            if len > 32 {
+                let sub_len = len - 32;
+                options[32..len].copy_from_slice(&options_part1[..sub_len]);
+            }
+
+            //set the options
+            result.set_options(&options[..len]).unwrap();
+        }
+        
+        result.differentiated_services_code_point = dscp;
+        result.explicit_congestion_notification = ecn;
+        result.payload_len = payload_len;
+        result.identification = identification;
+        result.dont_fragment = dont_fragment;
+        result.more_fragments = more_fragments;
+        result.fragments_offset = fragments_offset;
+        result.time_to_live = ttl;
+        result.protocol = protocol;
+        result.header_checksum = header_checksum;
+        result.source = source;
+        result.destination = dest;
+
+        return result;
     }
 }
 prop_compose! {
     [pub] fn ipv4_any()
                (protocol in any::<u8>())
                (result in ipv4_with(protocol)) 
-               -> (Ipv4Header, Vec<u8>)
+               -> Ipv4Header
     {
         result
     }
@@ -138,39 +156,13 @@ static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
 
 prop_compose! {
     [pub] fn ipv4_unknown()
-                   (ihl in 5u8..16)
-                   (source in prop::array::uniform4(any::<u8>()),
-                    dest in prop::array::uniform4(any::<u8>()),
-                    dscp in prop::bits::u8::between(0,6),
-                    ecn in prop::bits::u8::between(0,2),
-                    identification in any::<u16>(),
-                    ttl in any::<u8>(),
-                    dont_fragment in any::<bool>(),
-                    more_fragments in any::<bool>(),
-                    fragments_offset in prop::bits::u16::between(0, 13),
-                    header_checksum in any::<u16>(),
-                    total_length in any::<u16>(),
-                    protocol in any::<u8>().prop_filter("protocol must be unknown",
-                               |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x)),
-                    options in proptest::collection::vec(any::<u8>(), (ihl as usize - 5)*4),
-                    ihl in proptest::strategy::Just(ihl))
-                  -> (Ipv4Header, Vec<u8>)
+      (protocol in any::<u8>().prop_filter("protocol must be unknown",
+                 |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
+      )
+      (header in ipv4_with(protocol))
+      -> Ipv4Header
     {
-        (Ipv4Header {
-            header_length: ihl,
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
-            total_length: total_length,
-            identification: identification,
-            dont_fragment: dont_fragment,
-            more_fragments: more_fragments,
-            fragments_offset: fragments_offset,
-            time_to_live: ttl,
-            protocol: protocol,
-            header_checksum: header_checksum,
-            source: source,
-            destination: dest
-        }, options)
+        header
     }
 }
 

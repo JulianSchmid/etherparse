@@ -314,25 +314,19 @@ proptest! {
 #[test]
 fn from_slice_bad_version() {
     //write an ipv4 header and check that the bad version number is detected
-    let input = Ipv4Header {
-        header_length:4,
-        differentiated_services_code_point: 42,
-        explicit_congestion_notification: 3,
-        total_length: 1234,
-        identification: 4321,
-        dont_fragment: true,
-        more_fragments: false,
-        fragments_offset: 4367,
-        time_to_live: 8,
-        protocol: 1,
-        header_checksum: 2345,
-        source: [192, 168, 1, 1],
-        destination: [212, 10, 11, 123]
+    let input = {
+        let mut input: Ipv4Header = Default::default();
+        //set the options to increase the size, 
+        //otherwise an unexpected end of slice error is returned
+        input.set_options(
+            &[0;24]
+        ).unwrap();
+        input
     };
     
     //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write_raw(&mut buffer, &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]).unwrap();
+    let mut buffer: Vec<u8> = Vec::with_capacity(44);
+    input.write_raw(&mut buffer).unwrap();
 
     //check that the unexpected version id is detected
     use crate::ReadError::*;

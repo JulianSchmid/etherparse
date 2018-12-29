@@ -9,13 +9,14 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 ///IPv4 header without options.
 #[derive(Clone)]
 pub struct Ipv4Header {
-    ///Length of the header in 4 bytes (often also called IHL - Internet Header Lenght). 
-    ///
-    ///The minimum allowed length of a header is 5 (= 20 bytes) and the maximum length is 15 (= 60 bytes).
-    pub header_length: u8,
     pub differentiated_services_code_point: u8,
     pub explicit_congestion_notification: u8,
-    pub total_length: u16,
+    ///Length of the payload of the ipv4 packet in bytes (does not contain the options).
+    ///
+    ///This field does not directly exist in an ipv4 header but instead is decoded from
+    /// & encoded to the total_size field together with the options length (using the ihl).
+    ///If the total_length field in a ipv4 header is smaller then 
+    pub payload_len: u16,
     pub identification: u16,
     pub dont_fragment: bool,
     pub more_fragments: bool,
@@ -25,6 +26,9 @@ pub struct Ipv4Header {
     pub header_checksum: u16,
     pub source: [u8;4],
     pub destination: [u8;4],
+    ///Length of the options in the options_buffer in bytes.
+    options_len: u8,
+    options_buffer: [u8;40]
 }
 
 
@@ -33,22 +37,15 @@ impl SerializedSize for Ipv4Header {
     const SERIALIZED_SIZE:usize = 20;
 }
 
+const IPV4_MAX_OPTIONS_LENGTH: usize = 10*4;
+
 impl Ipv4Header {
     ///Constructs an Ipv4Header with standard values for non specified values.
-    ///Note: This header calculates the checksum assuming that there are no ipv4 options. In case there are calculate the checksum using the "calc_header_checksum" method.
-    pub fn new(payload_and_options_length: usize, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Result<Ipv4Header, ValueError> {
-        
-        //check that the total length fits into the field
-        const MAX_PAYLOAD_AND_OPTIONS_LENGTH: usize = (std::u16::MAX as usize) - Ipv4Header::SERIALIZED_SIZE;
-        if MAX_PAYLOAD_AND_OPTIONS_LENGTH < payload_and_options_length {
-            return Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(payload_and_options_length));
-        }
-
-        Ok(Ipv4Header {
-            header_length: 0,
+    pub fn new(payload_len: u16, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
+        Ipv4Header {
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
-            total_length: (payload_and_options_length + 20) as u16,
+            payload_len: payload_len,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
@@ -58,14 +55,78 @@ impl Ipv4Header {
             header_checksum: 0,
             source,
             destination,
-        })
+            options_len: 0,
+            options_buffer: [0;40]
+        }
+    }
+
+    ///Length of the header in 4 bytes (often also called IHL - Internet Header Lenght). 
+    ///
+    ///The minimum allowed length of a header is 5 (= 20 bytes) and the maximum length is 15 (= 60 bytes).
+    pub fn ihl(&self) -> u8 {
+        (self.options_len/4) + 5
+    }
+
+    ///Returns a slice to the options part of the header (empty if no options are present).
+    pub fn options(&self) -> &[u8] {
+        &self.options_buffer[..usize::from(self.options_len)]
+    }
+
+    ///Length of the header (includes options) in bytes.
+    pub fn header_len(&self) -> usize {
+        Ipv4Header::SERIALIZED_SIZE + usize::from(self.options_len)
+    }
+
+    ///Returns the total length of the header + payload in bytes.
+    pub fn total_len(&self) -> u16 {
+        self.payload_len + (Ipv4Header::SERIALIZED_SIZE as u16) + u16::from(self.options_len)
+    }
+
+    ///Sets the payload length if the value is not too big. Otherwise an error is returned.
+    pub fn set_payload_len(&mut self, value: usize) -> Result<(), ValueError> {
+        if usize::from(self.max_payload_len()) < value {
+            use crate::ValueError::*;
+            Err(Ipv4PayloadLengthTooLarge(value))
+        } else {
+            self.payload_len = value as u16;
+            Ok(())
+        }
+    }
+
+    ///Returns the maximum payload size based on the current options size.
+    pub fn max_payload_len(&self) -> u16 {
+        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::SERIALIZED_SIZE as u16)
+    }
+
+    ///Sets the options & header_length based on the provided length.
+    ///The length of the given slice must be a multiple of 4 and maximum 40 bytes.
+    ///If the length is not fullfilling these constraints, no data is set and
+    ///an error is returned.
+    pub fn set_options(&mut self, data: &[u8]) -> Result<(), ValueError> {
+        use crate::ValueError::*;
+
+        //check that the options length is within bounds
+        if (IPV4_MAX_OPTIONS_LENGTH < data.len()) ||
+           (0 != data.len() % 4)
+        {
+            Err(Ipv4OptionsLengthBad(data.len()))
+        } else {
+            //copy the data to the buffer
+            self.options_buffer[..data.len()].copy_from_slice(data);
+
+            //set the header length
+            self.options_len = data.len() as u8;
+            Ok(())
+        }
     }
 
     ///Read an Ipv4Header from a slice and return the header & unused parts of the slice.
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
+        let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();
+        let rest = &slice[header.header_len()..];
         Ok((
-            Ipv4HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Ipv4Header::SERIALIZED_SIZE..]
+            header,
+            rest
         ))
     }
 
@@ -76,20 +137,26 @@ impl Ipv4Header {
         if 4 != version {
             return Err(ReadError::Ipv4UnexpectedVersion(version));
         }
-        match Ipv4Header::read_without_version(reader, value & 0xf) {
-            Ok(value) => Ok(value),
-            Err(err) => Err(ReadError::IoError(err))
-        }
+        Ipv4Header::read_without_version(reader, value & 0xf)
     }
 
     ///Reads an IPv4 header assuming the version & ihl field have already been read.
-    pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, version_rest: u8) -> Result<Ipv4Header, io::Error> {
+    pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, version_rest: u8) -> Result<Ipv4Header, ReadError> {
         let ihl = version_rest;
+        if ihl < 5 {
+            use crate::ReadError::*;
+            return Err(Ipv4HeaderLengthBad(ihl));
+        }
         let (dscp, ecn) = {
             let value = reader.read_u8()?;
             (value >> 2, value & 0x3)
         };
+        let header_length = u16::from(ihl)*4;
         let total_length = reader.read_u16::<BigEndian>()?;
+        if total_length < header_length {
+            use crate::ReadError::*;
+            return Err(Ipv4TotalLengthTooSmall(total_length));
+        }
         let identification = reader.read_u16::<BigEndian>()?;
         let (dont_fragment, more_fragments, fragments_offset) = {
             let mut values: [u8; 2] = [0;2];
@@ -105,7 +172,7 @@ impl Ipv4Header {
         Ok(Ipv4Header{
             differentiated_services_code_point: dscp,
             explicit_congestion_notification: ecn,
-            total_length,
+            payload_len: total_length - header_length,
             identification,
             dont_fragment,
             more_fragments,
@@ -123,83 +190,66 @@ impl Ipv4Header {
                 reader.read_exact(&mut values)?;
                 values
             },
-            header_length: ihl
+            options_len: (ihl - 5)*4,
+            options_buffer: {
+                let mut values: [u8;40] = [0;40];
+                
+                let options_len = usize::from(ihl - 5)*4;
+                if options_len > 0 {
+                    reader.read_exact(&mut values[..options_len])?;
+                }
+                values
+            },
         })
     }
 
-    ///Skips the ipv4 header options based on the header length.
-    pub fn skip_options<T: io::Read + io::Seek + Sized>(&self, reader: &mut T) -> Result<(), ReadError> {
-        //return an error if the provided header length is too small (smaller then the header itself)
-        if self.header_length < 5 {
-            use crate::ReadError::*;
-            return Err(Ipv4HeaderLengthBad(self.header_length));
-        }
+    ///Checks if the values in this header are valid values for an ipv4 header.
+    ///
+    ///Specifically it will be checked, that:
+    /// * payload_len + options_len is not too big to be encoded in the total_size header field
+    /// * differentiated_services_code_point is not greater then 0x3f
+    /// * explicit_congestion_notification is not greater then 0x3
+    /// * fragments_offset is not greater then 0x1fff
+    pub fn check_ranges(&self) -> Result<(), ValueError> {
+        use crate::ErrorField::*;
+        
+        //check ranges
+        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
+        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
+        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
+        max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
 
-        let skip = i64::from(self.header_length - 5)*4;
-        if skip > 0 {
-            //seek does not return an error, when the end is reached
-            //to ensure this still happens an read_exact is added at the end
-            //that throws an error
-            if skip > 4 {
-                use std::io::SeekFrom;
-                reader.seek(SeekFrom::Current(skip - 4))?;
-            }
-            let mut buffer: [u8;4] = [0;4];
-            reader.read_exact(&mut buffer)?;
-        }
         Ok(())
     }
 
     ///Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T, options: &[u8]) -> Result<(), WriteError> {
-        use crate::ErrorField::*;
-        
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
-        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
-        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
-        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
-        if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(
-                WriteError::ValueError(
-                    ValueError::Ipv4OptionsLengthBad(
-                        options.len())));
-        }
+        self.check_ranges()?;
 
         //write with recalculations
-        let header_legnth = 5 + (options.len()/4) as u8;
-        self.write_ipv4_header_internal(writer, options, header_legnth, self.calc_header_checksum_unchecked(header_legnth, options))
+        self.write_ipv4_header_internal(writer, self.calc_header_checksum_unchecked())
     }
 
-    ///Writes a given IPv4 header to the current position (this method just writes the specified checksum and header_length and does note compute it).
-    pub fn write_raw<T: io::Write + Sized>(&self, writer: &mut T, options: &[u8]) -> Result<(), WriteError> {
-        use crate::ErrorField::*;
-        
+    ///Writes a given IPv4 header to the current position (this method just writes the specified checksum and does note compute it).
+    pub fn write_raw<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
-        max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
-        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
-        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
-        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
-        if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(
-                WriteError::ValueError(
-                    ValueError::Ipv4OptionsLengthBad(
-                        options.len())));
-        }
+        self.check_ranges()?;
 
         //write
-        self.write_ipv4_header_internal(writer, options, self.header_length, self.header_checksum)
+        self.write_ipv4_header_internal(writer, self.header_checksum)
     }
 
     ///Write the given header with the  checksum and header length specified in the seperate arguments
-    fn write_ipv4_header_internal<T: io::Write>(&self, write: &mut T, options: &[u8], header_length: u8, header_checksum: u16) -> Result<(), WriteError> {
+    fn write_ipv4_header_internal<T: io::Write>(&self, write: &mut T, header_checksum: u16) -> Result<(), WriteError> {
         //version & header_length
-        write.write_u8((4 << 4) | header_length)?;
+        write.write_u8((4 << 4) | self.ihl())?;
 
         //dscp & ecn        
         write.write_u8((self.differentiated_services_code_point << 2) | self.explicit_congestion_notification)?;
 
         //total length & id 
-        write.write_u16::<BigEndian>(self.total_length)?;
+        write.write_u16::<BigEndian>(self.total_len())?;
         write.write_u16::<BigEndian>(self.identification)?;
 
         //flags & fragmentation offset
@@ -231,36 +281,31 @@ impl Ipv4Header {
         write.write_u16::<BigEndian>(header_checksum)?;
         write.write_all(&self.source)?;
         write.write_all(&self.destination)?;
+
         //options
-        write.write_all(&options)?;
+        write.write_all(&self.options())?;
+
+        //done
         Ok(())
     }
 
     ///Calculate header checksum of the current ipv4 header.
-    pub fn calc_header_checksum(&self, options: &[u8]) -> Result<u16, ValueError> {
-        use crate::ErrorField::*;
-        use crate::ValueError::Ipv4OptionsLengthBad;
+    pub fn calc_header_checksum(&self) -> Result<u16, ValueError> {
 
         //check ranges
-        max_check_u8(self.header_length, 0xf, Ipv4HeaderLength)?;
-        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
-        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
-        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
-        if options.len() > 10*4 || options.len() % 4 != 0 {
-            return Err(Ipv4OptionsLengthBad(options.len()));
-        }
+        self.check_ranges()?;
 
         //calculate the checksum
-        Ok(self.calc_header_checksum_unchecked(self.header_length, options))
+        Ok(self.calc_header_checksum_unchecked())
     }
 
     ///Calculate the header checksum under the assumtion that all value ranges in the header are correct
-    fn calc_header_checksum_unchecked(&self, header_length: u8, options: &[u8]) -> u16 {
+    fn calc_header_checksum_unchecked(&self) -> u16 {
         //version & header_length
         let mut sum: u32 = [
-            BigEndian::read_u16(&[ (4 << 4) | header_length,
+            BigEndian::read_u16(&[ (4 << 4) | self.ihl(),
                                 (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification ]),
-            self.total_length,
+            self.total_len(),
             self.identification,
             //flags & fragmentation offset
             {
@@ -285,24 +330,13 @@ impl Ipv4Header {
             BigEndian::read_u16(&self.destination[0..2]),
             BigEndian::read_u16(&self.destination[2..4])
         ].into_iter().map(|x| u32::from(*x)).sum();
+        let options = self.options();
         for i in 0..(options.len()/2) {
             sum += u32::from( BigEndian::read_u16(&options[i*2..i*2 + 2]) );
         }
 
         let carry_add = (sum & 0xffff) + (sum >> 16);
         !( ((carry_add & 0xffff) + (carry_add >> 16)) as u16 )
-    }
-
-    ///Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
-    pub fn set_payload_and_options_length(&mut self, size: usize) -> Result<(), ValueError> {
-        //check that the total length fits into the field
-        const MAX_PAYLOAD_AND_OPTIONS_LENGTH: usize = (std::u16::MAX as usize) - Ipv4Header::SERIALIZED_SIZE;
-        if MAX_PAYLOAD_AND_OPTIONS_LENGTH < size {
-            return Err(ValueError::Ipv4PayloadAndOptionsLengthTooLarge(size));
-        }
-
-        self.total_length = (size + Ipv4Header::SERIALIZED_SIZE) as u16;
-        Ok(())
     }
 }
 
@@ -316,30 +350,31 @@ impl Ipv4Header {
 impl Default for Ipv4Header {
     fn default() -> Ipv4Header {
         Ipv4Header {
-            header_length: 5,
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
-            total_length: 5*4,
+            payload_len: 0,
             identification: 0,
-            dont_fragment: false,
+            dont_fragment: true,
             more_fragments: false,
             fragments_offset: 0,
             time_to_live: 0,
             protocol: 0,
             header_checksum: 0,
             source: [0;4],
-            destination: [0;4]
+            destination: [0;4],
+            options_len: 0,
+            options_buffer: [0;40]
         }
     }
 }
 
 impl Debug for Ipv4Header {
     fn fmt(&self, fotmatter: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(fotmatter, "Ipv4Header {{ header_length: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, total_length: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {}, header_checksum: {}, source: {:?}, destination: {:?} }}", 
-            self.header_length,
+        write!(fotmatter, "Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}", 
+            self.ihl(),
             self.differentiated_services_code_point,
             self.explicit_congestion_notification,
-            self.total_length,
+            self.payload_len,
             self.identification,
             self.dont_fragment,
             self.more_fragments,
@@ -348,16 +383,16 @@ impl Debug for Ipv4Header {
             self.protocol,
             self.header_checksum,
             self.source,
-            self.destination)
+            self.destination,
+            self.options())
     }
 }
 
 impl std::cmp::PartialEq for Ipv4Header {
     fn eq(&self, other: &Ipv4Header) -> bool {
-        self.header_length == other.header_length &&
         self.differentiated_services_code_point == other.differentiated_services_code_point &&
         self.explicit_congestion_notification == other.explicit_congestion_notification &&
-        self.total_length == other.total_length &&
+        self.payload_len == other.payload_len &&
         self.identification == other.identification &&
         self.dont_fragment == other.dont_fragment &&
         self.more_fragments == other.more_fragments &&
@@ -366,7 +401,9 @@ impl std::cmp::PartialEq for Ipv4Header {
         self.protocol == other.protocol &&
         self.header_checksum == other.header_checksum &&
         self.source == other.source &&
-        self.destination == other.destination
+        self.destination == other.destination &&
+        self.options_len == other.options_len &&
+        self.options() == other.options()
     }
 }
 
@@ -407,14 +444,20 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
 
         //check that the slice contains enough data for the entire header + options
-        let total_length = (ihl as usize)*4;
-        if slice.len() < total_length {
-            return Err(UnexpectedEndOfSlice(total_length));
+        let header_length = (usize::from(ihl))*4;
+        if slice.len() < header_length {
+            return Err(UnexpectedEndOfSlice(header_length));
+        }
+
+        //check the total_length can contain the header
+        let total_length = BigEndian::read_u16(&slice[2..4]);
+        if total_length < header_length as u16 {
+            return Err(Ipv4TotalLengthTooSmall(total_length))
         }
 
         //all good
         Ok(Ipv4HeaderSlice {
-            slice: &slice[..total_length]
+            slice: &slice[..header_length]
         })
     }
 
@@ -445,8 +488,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     ///Read the "total length" from the slice (total length of ip header + payload).
-    pub fn total_length(&self) -> u16 {
+    pub fn total_len(&self) -> u16 {
         BigEndian::read_u16(&self.slice[2..4])
+    }
+
+    ///Determine the payload length based on the ihl & total_length field of the header.
+    pub fn payload_len(&self) -> u16 {
+        self.total_len() - u16::from(self.ihl())*4
     }
 
     ///Read the "identification" field from the slice.
@@ -516,11 +564,11 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     ///Decode all the fields and copy the results to a Ipv4Header struct
     pub fn to_header(&self) -> Ipv4Header {
+        let options = self.options();
         Ipv4Header {
-            header_length: self.ihl(),
             differentiated_services_code_point: self.dcp(),
             explicit_congestion_notification: self.ecn(),
-            total_length: self.total_length(),
+            payload_len: self.payload_len(),
             identification: self.identification(),
             dont_fragment: self.dont_fragment(),
             more_fragments: self.more_fragments(),
@@ -538,6 +586,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
                 result.copy_from_slice(self.destination());
                 result
             },
+            options_len: options.len() as u8,
+            options_buffer: {
+                let mut result: [u8;40] = [0;40];
+                result[..options.len()].copy_from_slice(options);
+                result
+            }
         }
     }
 }

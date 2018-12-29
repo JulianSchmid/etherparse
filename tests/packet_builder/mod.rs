@@ -13,10 +13,11 @@ fn eth_ipv4_udp() {
                   .unwrap();
 
     //check the deserialized size
-    let expected_ip_size: usize = Ipv4Header::SERIALIZED_SIZE + 
-                                  UdpHeader::SERIALIZED_SIZE + 
+    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE +
                                   in_payload.len();
-    assert_eq!(expected_ip_size + Ethernet2Header::SERIALIZED_SIZE, 
+    assert_eq!(expected_ip_size
+               + Ethernet2Header::SERIALIZED_SIZE
+               + Ipv4Header::SERIALIZED_SIZE, 
                serialized.len());
 
     //deserialize and check that everything is as expected
@@ -35,22 +36,14 @@ fn eth_ipv4_udp() {
 
     //ip header
     let ip_actual = Ipv4Header::read(&mut cursor).unwrap();
-    let mut ip_expected = Ipv4Header{
-        header_length: 5,
-        differentiated_services_code_point: 0,
-        explicit_congestion_notification: 0,
-        total_length: expected_ip_size as u16,
-        identification: 0,
-        dont_fragment: true,
-        more_fragments: false,
-        fragments_offset: 0,
-        time_to_live: 21,
-        protocol: IpTrafficClass::Udp as u8,
-        header_checksum: 0,
-        source: [13,14,15,16],
-        destination: [17,18,19,20]
-    };
-    ip_expected.header_checksum = ip_expected.calc_header_checksum(&[]).unwrap();
+    let mut ip_expected = Ipv4Header::new(
+        expected_ip_size as u16,
+        21, //ttl
+        IpTrafficClass::Udp,
+        [13,14,15,16],
+        [17,18,19,20]
+    );
+    ip_expected.header_checksum = ip_expected.calc_header_checksum().unwrap();
     assert_eq!(ip_actual,
                ip_expected);
 
@@ -142,10 +135,10 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     //check the deserialized size
 
         //check the deserialized size
-    let expected_ip_size: usize = Ipv4Header::SERIALIZED_SIZE + 
-                                  UdpHeader::SERIALIZED_SIZE + 
+    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + 
                                   in_payload.len();
     assert_eq!(expected_ip_size + Ethernet2Header::SERIALIZED_SIZE
+                                + Ipv4Header::SERIALIZED_SIZE
                                 + SingleVlanHeader::SERIALIZED_SIZE, 
                serialized.len());
 
@@ -174,22 +167,14 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
 
     //ip header
     let ip_actual = Ipv4Header::read(&mut cursor).unwrap();
-    let mut ip_expected = Ipv4Header{
-        header_length: 5,
-        differentiated_services_code_point: 0,
-        explicit_congestion_notification: 0,
-        total_length: expected_ip_size as u16,
-        identification: 0,
-        dont_fragment: true,
-        more_fragments: false,
-        fragments_offset: 0,
-        time_to_live: 21,
-        protocol: IpTrafficClass::Udp as u8,
-        header_checksum: 0,
-        source: [13,14,15,16],
-        destination: [17,18,19,20]
-    };
-    ip_expected.header_checksum = ip_expected.calc_header_checksum(&[]).unwrap();
+    let mut ip_expected = Ipv4Header::new(
+        expected_ip_size as u16, //payload_len
+        21, //ttl
+        IpTrafficClass::Udp,
+        [13,14,15,16],
+        [17,18,19,20]
+    );
+    ip_expected.header_checksum = ip_expected.calc_header_checksum().unwrap();
     assert_eq!(ip_actual,
                ip_expected);
 
@@ -444,22 +429,14 @@ proptest! {
         let in_payload = [24,25,26,27];
 
         //ip v4 header
-        let mut ip_expected = Ipv4Header{
-            header_length: 5,
-            differentiated_services_code_point: 0,
-            explicit_congestion_notification: 0,
-            total_length: (Ipv4Header::SERIALIZED_SIZE + (input.header_len() as usize) + in_payload.len()) as u16,
-            identification: 0,
-            dont_fragment: true,
-            more_fragments: false,
-            fragments_offset: 0,
-            time_to_live: 21,
-            protocol: IpTrafficClass::Tcp as u8,
-            header_checksum: 0,
-            source: [13,14,15,16],
-            destination: [17,18,19,20]
-        };
-        ip_expected.header_checksum = ip_expected.calc_header_checksum(&[]).unwrap();
+        let mut ip_expected = Ipv4Header::new(
+            in_payload.len() as u16 + input.header_len(),
+            21, //ttl
+            IpTrafficClass::Tcp,
+            [13,14,15,16],
+            [17,18,19,20]
+        );
+        ip_expected.header_checksum = ip_expected.calc_header_checksum().unwrap();
 
         //generated the expected output
         let expected = {

@@ -25,11 +25,12 @@ fn read_write() {
 fn with_ipv4_checksum() {
     let payload = [9,10,11,12, 13,14,15,16];
     let ip_header = Ipv4Header::new(
-        UdpHeader::SERIALIZED_SIZE + payload.len(), 
-        5, 
+        (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+        5,
         IpTrafficClass::Udp, 
         [1,2,3,4], 
-        [5,6,7,8]).unwrap();
+        [5,6,7,8]
+    );
 
     let result = UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload).unwrap();
     assert_eq!(UdpHeader {
@@ -48,11 +49,12 @@ fn with_ipv4_checksum_flip() {
                         payload.len() as u16));
     BigEndian::write_u16(&mut payload, 0xffff - sum);
     let ip_header = Ipv4Header::new(
-        UdpHeader::SERIALIZED_SIZE + payload.len(), 
+        (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         5, 
         IpTrafficClass::Udp, 
         [0,0,0,0],
-        [0,0,0,0]).unwrap();
+        [0,0,0,0],
+    );
 
     let result = UdpHeader::with_ipv4_checksum(0, 0, &ip_header, &payload).unwrap();
     assert_eq!(UdpHeader {
@@ -68,14 +70,16 @@ fn with_ipv4_payload_size_check() {
     use std;
     //check that an error is produced when the payload size is too large
     let mut payload = Vec::with_capacity(std::u16::MAX as usize);
+
     //first try out the maximum size uint16 - udp header size
     payload.resize(std::u16::MAX as usize - UdpHeader::SERIALIZED_SIZE, 0);
     let ip_header = Ipv4Header::new(
-        1234, //set the size here to something different, as otherwise the ip header size check will trigger 
+        0,
         5, 
         IpTrafficClass::Udp, 
         [1,2,3,4], 
-        [5,6,7,8]).unwrap();
+        [5,6,7,8]
+    );
 
     //with checksum
     assert_matches!(UdpHeader::with_ipv4_checksum(1234, 5678, &ip_header, &payload),
@@ -125,7 +129,7 @@ fn with_ipv4_payload_size_check() {
 #[test]
 fn udp_calc_checksum_ipv4() {
     //even sized payload
-    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]).unwrap();
+    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
     let payload = [9,10,11,12, 13,14,15,16];
     let udp = UdpHeader {
         source_port: 1234,

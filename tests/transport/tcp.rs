@@ -587,8 +587,8 @@ fn calc_header_checksum_ipv4() {
             0
         );
         let ip_header = Ipv4Header::new(
-            //size of the payload
-            tcp.header_len() as usize + tcp_payload.len(),
+            //payload length
+            tcp.header_len() + (tcp_payload.len() as u16),
             //time to live
             0,
             //contained protocol is udp
@@ -597,7 +597,7 @@ fn calc_header_checksum_ipv4() {
             [0;4],
             //destination ip address
             [0;4]
-        ).unwrap();
+        );
         assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
         assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
     }
@@ -630,8 +630,8 @@ fn calc_header_checksum_ipv4() {
         ]).unwrap();
 
         let ip_header = Ipv4Header::new(
-            //size of the payload
-            tcp.header_len() as usize + tcp_payload.len(),
+            //payload length
+            tcp.header_len() + (tcp_payload.len() as u16),
             //time to live
             20,
             //contained protocol is udp
@@ -640,7 +640,7 @@ fn calc_header_checksum_ipv4() {
             [192,168,1,42],
             //destination ip address
             [192,168,1,1]
-        ).unwrap();
+        );
 
         //check checksum
         assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
@@ -648,7 +648,7 @@ fn calc_header_checksum_ipv4() {
 
         //test PacketSlice version
         let mut ip_buffer = Vec::new();
-        ip_header.write(&mut ip_buffer, &[]).unwrap();
+        ip_header.write(&mut ip_buffer).unwrap();
         let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
 
         let mut tcp_buffer = Vec::new();
@@ -688,8 +688,8 @@ fn calc_header_checksum_ipv4() {
         ]).unwrap();
 
         let ip_header = Ipv4Header::new(
-            //size of the payload
-            tcp.header_len() as usize + tcp_payload.len(),
+            //payload length
+            tcp.header_len() + (tcp_payload.len() as u16),
             //time to live
             20,
             //contained protocol is udp
@@ -698,7 +698,7 @@ fn calc_header_checksum_ipv4() {
             [192,168,1,42],
             //destination ip address
             [192,168,1,1]
-        ).unwrap();
+        );
 
         //check checksum
         assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
@@ -706,7 +706,7 @@ fn calc_header_checksum_ipv4() {
 
         //test PacketSlice version
         let mut ip_buffer = Vec::new();
-        ip_header.write(&mut ip_buffer, &[]).unwrap();
+        ip_header.write(&mut ip_buffer).unwrap();
         let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
 
         let mut tcp_buffer = Vec::new();
@@ -784,13 +784,13 @@ fn calc_header_checksum_ipv4_error() {
     let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
     let mut tcp_payload = Vec::with_capacity(len);
     tcp_payload.resize(len, 0); 
-    let ip_header = Ipv4Header::new(20, 0, IpTrafficClass::Tcp, [0;4], [0;4]).unwrap();
+    let ip_header = Ipv4Header::new(0, 0, IpTrafficClass::Tcp, [0;4], [0;4]);
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
     //test PacketSlice version
     let mut ip_buffer = Vec::new();
-    ip_header.write(&mut ip_buffer, &[]).unwrap();
+    ip_header.write(&mut ip_buffer).unwrap();
     let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
 
     let mut tcp_buffer = Vec::new();

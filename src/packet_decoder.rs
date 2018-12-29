@@ -81,8 +81,6 @@ impl<'a> PacketHeaders<'a> {
         match ether_type {
             IPV4 => {
                 let ip = Ipv4Header::read(&mut cursor)?;
-                //skip options
-                ip.skip_options(&mut cursor)?;
                 //parse the transport layer
                 result.transport = read_transport(ip.protocol, &mut cursor)?;
                 result.ip = Some(IpHeader::Version4(ip));

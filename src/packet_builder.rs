@@ -73,20 +73,12 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///Add an ip v4 header
     pub fn ipv4(mut self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
         //add ip header
-        self.state.ip_header = Some(IpHeader::Version4(Ipv4Header{
-            header_length: 5,
-            differentiated_services_code_point: 0,
-            explicit_congestion_notification: 0,
-            total_length: 0, //filled in later
-            identification: 0,
-            dont_fragment: true,
-            more_fragments: false,
-            fragments_offset: 0,
-            time_to_live,
-            protocol: 0, //filled in later as soon as the content is clear
-            header_checksum: 0, //calculated later
-            source,
-            destination
+        self.state.ip_header = Some(IpHeader::Version4({
+            let mut value: Ipv4Header = Default::default();
+            value.source = source;
+            value.destination = destination;
+            value.time_to_live = time_to_live;
+            value
         }));
         //return for next step
         PacketBuilderStep {
@@ -104,21 +96,14 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .ip(IpHeader::Version4(Ipv4Header{
-    ///         header_length: 0, //will be replaced during write
-    ///         differentiated_services_code_point: 0,
-    ///         explicit_congestion_notification: 0,
-    ///         total_length: 0, //will be replaced during write
-    ///         identification: 0,
-    ///         dont_fragment: true,
-    ///         more_fragments: false,
-    ///         fragments_offset: 0,
-    ///         time_to_live: 12,
-    ///         protocol: 0, //will be replaced during write
-    ///         header_checksum: 0, //will be replaced during write
-    ///         source: [0,1,2,3],
-    ///         destination: [4,5,6,7]
-    ///     }));
+    ///    //payload_len, protocol & checksum will be replaced during write
+    ///    .ip(IpHeader::Version4(Ipv4Header::new(
+    ///        0, //payload_len will be replaced during write
+    ///        12, //time_to_live
+    ///        IpTrafficClass::Udp, //will be replaced during write
+    ///        [0,1,2,3], //source
+    ///        [4,5,6,7] //destination
+    ///     )));
     /// ```
     ///
     /// # Example IPv6
@@ -227,21 +212,14 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .ip(IpHeader::Version4(Ipv4Header{
-    ///         header_length: 0, //will be replaced during write
-    ///         differentiated_services_code_point: 0,
-    ///         explicit_congestion_notification: 0,
-    ///         total_length: 0, //will be replaced during write
-    ///         identification: 0,
-    ///         dont_fragment: true,
-    ///         more_fragments: false,
-    ///         fragments_offset: 0,
-    ///         time_to_live: 12,
-    ///         protocol: 0, //will be replaced during write
-    ///         header_checksum: 0, //will be replaced during write
-    ///         source: [0,1,2,3],
-    ///         destination: [4,5,6,7]
-    ///     }));
+    ///    //payload_len, protocol & checksum will be replaced during write
+    ///    .ip(IpHeader::Version4(Ipv4Header::new(
+    ///        0, //payload_len will be replaced during write
+    ///        12, //time_to_live
+    ///        IpTrafficClass::Udp, //will be replaced during write
+    ///        [0,1,2,3], //source
+    ///        [4,5,6,7] //destination
+    ///     )));
     /// ```
     ///
     /// # Example IPv6
@@ -469,7 +447,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
         Version4(mut ip) => {
             //set total length & udp payload length (ip checks that the payload length is ok)
             let size = transport.header_len() + payload.len();
-            ip.set_payload_and_options_length(size)?;
+            ip.set_payload_len(size)?;
             use crate::TransportHeader::*;
             match transport {
                 Udp(ref mut udp) => { udp.length = size as u16; }
@@ -486,7 +464,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             transport.update_checksum_ipv4(&ip, payload)?;
 
             //write (will automatically calculate the checksum)
-            ip.write(writer, &[])?
+            ip.write(writer)?
         },
         Version6(mut ip) => {
             //set total length
@@ -532,7 +510,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
         None => 0 
     } + match builder.state.ip_header {
-        Some(Version4(_)) => Ipv4Header::SERIALIZED_SIZE,
+        Some(Version4(ref value)) => value.header_len(),
         Some(Version6(_)) => Ipv6Header::SERIALIZED_SIZE,
         None => 0
     } + match builder.state.transport_header {
