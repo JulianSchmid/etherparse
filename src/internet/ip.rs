@@ -14,7 +14,7 @@ impl IpHeader {
     ///Read an IpvHeader from a slice and return the header & unused parts of the slice.
     pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, &[u8]), ReadError> {
         use crate::ReadError::*;
-        if slice.len() < 1 {
+        if slice.is_empty() {
             Err(UnexpectedEndOfSlice(1))
         } else {
             match slice[0] >> 4 {

@@ -31,7 +31,6 @@ pub struct Ipv4Header {
     options_buffer: [u8;40]
 }
 
-
 impl SerializedSize for Ipv4Header {
     ///Size of the header itself (without options) in bytes.
     const SERIALIZED_SIZE:usize = 20;
@@ -45,7 +44,7 @@ impl Ipv4Header {
         Ipv4Header {
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
-            payload_len: payload_len,
+            payload_len,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
