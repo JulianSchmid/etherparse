@@ -25,29 +25,129 @@ proptest! {
     fn eq(a in ipv4_any(),
           b in ipv4_any())
     {
-        //check equality
-        assert_eq!(
-            a.ihl() == b.ihl() &&
-            a.differentiated_services_code_point == b.differentiated_services_code_point &&
-            a.explicit_congestion_notification == b.explicit_congestion_notification &&
-            a.payload_len == b.payload_len &&
-            a.identification == b.identification &&
-            a.dont_fragment == b.dont_fragment &&
-            a.more_fragments == b.more_fragments &&
-            a.fragments_offset == b.fragments_offset &&
-            a.time_to_live == b.time_to_live &&
-            a.protocol == b.protocol &&
-            a.header_checksum == b.header_checksum &&
-            a.source == b.source &&
-            a.destination == b.destination &&
-            a.options() == b.options(),
-
-            a == b
-        );
-
         //check identity equality
         assert!(a == a);
         assert!(b == b);
+
+        //check every field
+        //differentiated_services_code_point
+        assert_eq!(
+            a.differentiated_services_code_point == b.differentiated_services_code_point,
+            a == {
+                let mut other = a.clone();
+                other.differentiated_services_code_point = b.differentiated_services_code_point;
+                other
+            }
+        );
+        //explicit_congestion_notification
+        assert_eq!(
+            a.explicit_congestion_notification == b.explicit_congestion_notification,
+            a == {
+                let mut other = a.clone();
+                other.explicit_congestion_notification = b.explicit_congestion_notification;
+                other
+            }
+        );
+        //payload_len
+        assert_eq!(
+            a.payload_len == b.payload_len,
+            a == {
+                let mut other = a.clone();
+                other.payload_len = b.payload_len;
+                other
+            }
+        );
+        //identification
+        assert_eq!(
+            a.identification == b.identification,
+            a == {
+                let mut other = a.clone();
+                other.identification = b.identification;
+                other
+            }
+        );
+        //dont_fragment
+        assert_eq!(
+            a.dont_fragment == b.dont_fragment,
+            a == {
+                let mut other = a.clone();
+                other.dont_fragment = b.dont_fragment;
+                other
+            }
+        );
+        //more_fragments
+        assert_eq!(
+            a.more_fragments == b.more_fragments,
+            a == {
+                let mut other = a.clone();
+                other.more_fragments = b.more_fragments;
+                other
+            }
+        );
+        //fragments_offset
+        assert_eq!(
+            a.fragments_offset == b.fragments_offset,
+            a == {
+                let mut other = a.clone();
+                other.fragments_offset = b.fragments_offset;
+                other
+            }
+        );
+        //time_to_live
+        assert_eq!(
+            a.time_to_live == b.time_to_live,
+            a == {
+                let mut other = a.clone();
+                other.time_to_live = b.time_to_live;
+                other
+            }
+        );
+        //protocol
+        assert_eq!(
+            a.protocol == b.protocol,
+            a == {
+                let mut other = a.clone();
+                other.protocol = b.protocol;
+                other
+            }
+        );
+        //header_checksum
+        assert_eq!(
+            a.header_checksum == b.header_checksum,
+            a == {
+                let mut other = a.clone();
+                other.header_checksum = b.header_checksum;
+                other
+            }
+        );
+        //source
+        assert_eq!(
+            a.source == b.source,
+            a == {
+                let mut other = a.clone();
+                other.source = b.source;
+                other
+            }
+        );
+        //destination
+        assert_eq!(
+            a.destination == b.destination,
+            a == {
+                let mut other = a.clone();
+                other.destination = b.destination;
+                other
+            }
+        );
+
+        //options
+        assert_eq!(
+            a.options() == b.options(),
+            a == {
+                let mut other = a.clone();
+                other.set_options(b.options()).unwrap();
+                other
+            }
+        );
     }
 }
 
