@@ -423,6 +423,35 @@ proptest! {
     }
 }
 
+proptest! {
+    #[test]
+    fn too_small_total_length(ref input in ipv4_any())
+    {
+        use std::io::Cursor;
+        use byteorder::{ByteOrder, BigEndian};
+
+        let mut buffer: [u8;60] = [0;60];
+        {
+            let mut cursor = Cursor::new(&mut buffer[..]);
+            input.write(&mut cursor).unwrap();
+        }
+        //change the total length to be smaller then the header length
+        BigEndian::write_u16(&mut buffer[2..4], (input.header_len() as u16) - 1);
+
+        //check that the read methods generate a error
+        use self::ReadError::Ipv4TotalLengthTooSmall;
+        let slice = &buffer[..input.header_len()];
+        assert_matches!(
+            Ipv4HeaderSlice::from_slice(slice),
+            Err(Ipv4TotalLengthTooSmall(_))
+        );
+        assert_matches!(
+            Ipv4Header::read(&mut Cursor::new(slice)),
+            Err(Ipv4TotalLengthTooSmall(_))
+        );   
+    }
+}
+
 #[test]
 fn slice_bad_ihl() {
     let input: Ipv4Header = Default::default();
