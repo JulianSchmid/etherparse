@@ -157,6 +157,14 @@ impl UdpHeader {
         }
     }
 
+    ///Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+        Ok((
+            UdpHeaderSlice::from_slice(slice)?.to_header(),
+            &slice[UdpHeader::SERIALIZED_SIZE..]
+        ))
+    }
+
     ///Tries to read an udp header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, io::Error> {
         Ok(UdpHeader{

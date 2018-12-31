@@ -1,24 +1,33 @@
 use etherparse::*;
 
 use byteorder::{ByteOrder, BigEndian};
+use super::super::*;
 
-#[test]
-fn read_write() {
-    use std::io::Cursor;
 
-    let input = UdpHeader {
-        source_port: 1234,
-        destination_port: 5678,
-        length: 1356,
-        checksum: 2467
-    };
-    //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write(&mut buffer).unwrap();
-    //deserialize
-    let result = UdpHeader::read(&mut Cursor::new(&buffer)).unwrap();
-    //check equivalence
-    assert_eq!(input, result);
+proptest! {
+    #[test]
+    fn read_write(ref input in udp_any()) {
+        use std::io::Cursor;
+
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE + 1);
+        input.write(&mut buffer).unwrap();
+        //deserialize with read
+        {
+            let result = UdpHeader::read(&mut Cursor::new(&buffer)).unwrap();
+            //check equivalence
+            assert_eq!(input, &result);
+        }
+        //deserialize from slice
+        {
+            //add some data to test the return slice
+            buffer.push(1);
+
+            let result = UdpHeader::read_from_slice(&buffer).unwrap();
+            assert_eq!(input, &result.0);
+            assert_eq!(&buffer[buffer.len()-1 .. ], result.1);
+        }
+    }
 }
 
 #[test]
