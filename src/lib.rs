@@ -65,7 +65,9 @@ impl From<std::io::Error> for ReadError {
 pub enum WriteError {
     IoError(std::io::Error),
     ///Error in the data that was given to write
-    ValueError(ValueError)
+    ValueError(ValueError),
+    ///Error when a given slice is not big enough to serialize the data.
+    SliceTooSmall(usize),
 }
 
 impl WriteError {

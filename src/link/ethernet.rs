@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt};
 
 use std::io;
 
@@ -72,12 +72,33 @@ impl Ethernet2Header {
         })
     }
 
+    ///Serialize the header to a given slice. Returns the unused part of the slice.
+    pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], WriteError> {
+        use self::WriteError::*;
+        //length check
+        if slice.len() < Ethernet2Header::SERIALIZED_SIZE
+        {
+            Err(SliceTooSmall(Ethernet2Header::SERIALIZED_SIZE))
+        }
+        else
+        {
+            self.write_to_slice_unchecked(slice);
+            Ok(&mut slice[Ethernet2Header::SERIALIZED_SIZE..])
+        }
+    }
+
     ///Writes a given Ethernet-II header to the current position of the write argument.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), io::Error> {
-        writer.write_all(&self.destination)?;
-        writer.write_all(&self.source)?;
-        writer.write_u16::<BigEndian>(self.ether_type)?;
-        Ok(())
+        let mut buffer: [u8;Ethernet2Header::SERIALIZED_SIZE] = Default::default();
+        self.write_to_slice_unchecked(&mut buffer);
+        writer.write_all(&buffer)
+    }
+
+    ///Write the header to a slice without checking the slice length
+    fn write_to_slice_unchecked(&self, slice: &mut [u8]) {
+        slice[..6].copy_from_slice(&self.destination);
+        slice[6..12].copy_from_slice(&self.source);
+        BigEndian::write_u16(&mut slice[12..14], self.ether_type);
     }
 }
 

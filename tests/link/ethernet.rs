@@ -63,6 +63,29 @@ proptest! {
 
 proptest! {
     #[test]
+    fn write_to_slice(ref input in ethernet_2_any()) {
+        use self::WriteError::*;
+
+        //error check
+        assert_matches!(
+            input.write_to_slice(&mut [0; Ethernet2Header::SERIALIZED_SIZE - 1]),
+            Err(SliceTooSmall(Ethernet2Header::SERIALIZED_SIZE))
+        );
+
+        //write & read
+        let mut buffer: [u8; Ethernet2Header::SERIALIZED_SIZE + 2] = Default::default();
+        let result = input.write_to_slice(&mut buffer).unwrap();
+        
+        assert_eq!(result.len(), 2);
+        assert_eq!(
+            input,
+            &Ethernet2Header::read_from_slice(&buffer).unwrap().0
+        );
+    }
+}
+
+proptest! {
+    #[test]
     fn from_slice(ref input in ethernet_2_any()) {
 
         //serialize
