@@ -274,7 +274,7 @@ impl TcpHeader {
     }
 
     ///Reads a tcp header from a slice
-    pub fn read_from_slice<'a>(slice: &'a [u8]) -> Result<(TcpHeader, &'a [u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
         let h = TcpHeaderSlice::from_slice(slice)?;
         Ok((
             h.to_header(),
