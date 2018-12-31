@@ -11,7 +11,7 @@ pub struct Ipv6Header {
     pub traffic_class: u8,
     ///If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
     pub flow_label: u32,
-    ///The length of the payload and extension headers in 
+    ///The length of the payload and extension headers in bytes (0 in case of jumbo payloads).
     pub payload_length: u16,
     ///Specifies what the next header or transport layer protocol is (see IpTrafficClass for a definitions of ids).
     pub next_header: u8,

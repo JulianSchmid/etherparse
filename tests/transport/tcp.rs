@@ -457,10 +457,21 @@ proptest! {
         //check length
         assert_eq!(input.data_offset() as usize * 4, buffer.len());
         assert_eq!(input.header_len() as usize, buffer.len());
-        //deserialize
-        let result = TcpHeader::read(&mut Cursor::new(&buffer)).unwrap();
-        //check equivalence
-        assert_eq!(input, &result);
+        //deserialize with read
+        {
+            let result = TcpHeader::read(&mut Cursor::new(&buffer)).unwrap();
+            //check equivalence (read)
+            assert_eq!(input, &result);
+        }
+        //deserialize with read_from_slice
+        {
+            //add some more data to check the returning slice
+            buffer.push(1);
+
+            let result = TcpHeader::read_from_slice(&buffer).unwrap();
+            assert_eq!(input, &result.0);
+            assert_eq!(&buffer[buffer.len()-1..], result.1);
+        }
     }
 }
 

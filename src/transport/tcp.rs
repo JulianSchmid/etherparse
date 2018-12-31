@@ -273,6 +273,15 @@ impl TcpHeader {
         }
     }
 
+    ///Reads a tcp header from a slice
+    pub fn read_from_slice<'a>(slice: &'a [u8]) -> Result<(TcpHeader, &'a [u8]), ReadError> {
+        let h = TcpHeaderSlice::from_slice(slice)?;
+        Ok((
+            h.to_header(),
+            &slice[h.slice().len()..]
+        ))
+    }
+
     ///Read a tcp header from the current position
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
         let source_port = reader.read_u16::<BigEndian>()?;
