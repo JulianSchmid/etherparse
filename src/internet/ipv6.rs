@@ -109,29 +109,29 @@ impl Ipv6Header {
 
     ///Takes a slice & traffic class (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
     pub fn skip_all_header_extensions_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const AUTH: u8 = IPv6AuthenticationHeader as u8;
-        const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8;
-
+        
         let mut next_traffic_class = traffic_class;
         let mut rest = slice;
+        
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-            match next_traffic_class {
-                HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => {
-                    let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
-                    next_traffic_class = n_id;
-                    rest = n_rest;
-                },
-                _ => return Ok((next_traffic_class, rest))
+
+            if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class)
+            {
+                let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
+                next_traffic_class = n_id;
+                rest = n_rest;
+            }
+            else
+            {
+                return Ok((next_traffic_class, rest))
             }
         }
-        match next_traffic_class {
-            HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => Err(ReadError::Ipv6TooManyHeaderExtensions),
-            value => Ok((value, rest))
+        
+        //final check
+        if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class) {
+            Err(ReadError::Ipv6TooManyHeaderExtensions)
+        } else {
+            Ok((next_traffic_class, rest))
         }
     }
 
@@ -162,26 +162,25 @@ impl Ipv6Header {
 
     ///Skips all ipv6 header extensions and returns the last traffic_class
     pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, ReadError> {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const AUTH: u8 = IPv6AuthenticationHeader as u8;
-        const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8;
 
         let mut next_traffic_class = traffic_class;
+
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-            match next_traffic_class {
-                HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => {
-                    next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
-                },
-                _ => return Ok(next_traffic_class)
+            if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class)
+            {
+                next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
+            }
+            else
+            {
+                return Ok(next_traffic_class);
             }
         }
-        match next_traffic_class {
-            HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => Err(ReadError::Ipv6TooManyHeaderExtensions),
-            value => Ok(value)
+
+        //final check
+        if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class) {
+            Err(ReadError::Ipv6TooManyHeaderExtensions)
+        } else {
+            Ok(next_traffic_class)
         }
     }
 

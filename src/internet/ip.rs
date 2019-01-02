@@ -338,3 +338,21 @@ pub enum IpTrafficClass {
     ///Robust Header Compression [RFC5858]
     Rohc = 142
 }
+
+impl IpTrafficClass {
+
+    ///Returns true if the given id identifies an IPV6 extension header traffic class.
+    pub fn is_ipv6_ext_header_value(value: u8) -> bool {
+        use crate::IpTrafficClass::*;
+        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
+        const ROUTE: u8 = IPv6RouteHeader as u8;
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const OPTIONS: u8 = IPv6DestinationOptions as u8;
+        const AUTH: u8 = IPv6AuthenticationHeader as u8;
+        const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8;
+        match value {
+            HOP_BY_HOP | ROUTE | FRAG | OPTIONS | AUTH | ENCAP_SEC => true,
+            _ => false
+        }
+    }
+}

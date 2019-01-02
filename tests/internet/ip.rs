@@ -127,3 +127,26 @@ fn read_ip_header_error() {
     );
 }
 
+mod ip_traffic_class {
+    
+    #[test]
+    fn is_ipv6_ext_header_value() {
+        use crate::IpTrafficClass;
+        use crate::IpTrafficClass::*;
+        let ext_ids = [
+            IPv6HeaderHopByHop as u8,
+            IPv6RouteHeader as u8,
+            IPv6FragmentationHeader as u8,
+            IPv6DestinationOptions as u8,
+            IPv6AuthenticationHeader as u8,
+            IPv6EncapSecurityPayload as u8
+        ];
+
+        for i in 0..std::u8::MAX {
+            assert_eq!(
+                ext_ids.contains(&i),
+                IpTrafficClass::is_ipv6_ext_header_value(i)
+            );
+        }
+    }
+}
