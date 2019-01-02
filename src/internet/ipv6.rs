@@ -126,7 +126,7 @@ impl Ipv6Header {
                 return Ok((next_traffic_class, rest))
             }
         }
-        
+
         //final check
         if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class) {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
@@ -351,8 +351,8 @@ impl<'a> Ipv6HeaderSlice<'a, > {
     }
 }
 
-///Maximum number of header extensions allowed (according to the ipv6 rfc8200).
-pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 7;
+///Maximum number of header extensions allowed (according to the ipv6 rfc8200, & iana protocol numbers).
+pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
 
 ///Dummy struct for ipv6 header extensions.
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -137,9 +137,14 @@ mod ip_traffic_class {
             IPv6HeaderHopByHop as u8,
             IPv6RouteHeader as u8,
             IPv6FragmentationHeader as u8,
-            IPv6DestinationOptions as u8,
+            IPv6EncapSecurityPayload as u8,
             IPv6AuthenticationHeader as u8,
-            IPv6EncapSecurityPayload as u8
+            IPv6DestinationOptions as u8,
+            MobilityHeader as u8,
+            Hip as u8,
+            Shim6 as u8,
+            ExperimentalAndTesting0 as u8,
+            ExperimentalAndTesting1 as u8
         ];
 
         for i in 0..std::u8::MAX {

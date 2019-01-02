@@ -146,7 +146,9 @@ impl<'a> SlicedPacket<'a> {
                 let mut rest = &rest[value.slice().len()..];
 
                 //extension headers
-                let mut ip_extensions = [None, None, None, None, None, None, None];
+                let mut ip_extensions = [None, None, None, None, None, 
+                                         None, None, None, None, None,
+                                         None, None];
 
                 let mut next_header = value.next_header();
                 for extension_header in ip_extensions.iter_mut() {

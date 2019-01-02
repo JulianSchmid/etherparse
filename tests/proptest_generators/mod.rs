@@ -207,7 +207,12 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
     IpTrafficClass::IPv6FragmentationHeader as u8,
     IpTrafficClass::IPv6EncapSecurityPayload as u8,
     IpTrafficClass::IPv6AuthenticationHeader as u8,
-    IpTrafficClass::IPv6DestinationOptions as u8
+    IpTrafficClass::IPv6DestinationOptions as u8,
+    IpTrafficClass::MobilityHeader as u8,
+    IpTrafficClass::Hip as u8,
+    IpTrafficClass::Shim6 as u8,
+    IpTrafficClass::ExperimentalAndTesting0 as u8,
+    IpTrafficClass::ExperimentalAndTesting1 as u8
 ];
 
 prop_compose! {

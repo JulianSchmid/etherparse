@@ -343,7 +343,11 @@ impl PacketFilterTest {
                 },
                 Some(IpHeader::Version6(header)) => {
                     header.write(&mut ip_data).unwrap();
-                    Some(InternetSlice::Ipv6(Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(), [None, None, None, None, None, None, None]))
+                    Some(
+                        InternetSlice::Ipv6(Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(), 
+                        [None, None, None, None, None, 
+                         None, None, None, None, None,
+                         None, None]))
                 },
 
                 None => None
@@ -551,7 +555,9 @@ mod ip_filter {
                 ipv6_data };
             let ipv6_slice = InternetSlice::Ipv6(
                 Ipv6HeaderSlice::from_slice(&ipv6_data[..]).unwrap(),
-                [None,None,None,None,None,None,None]
+                [None, None, None, None, None,
+                 None, None, None, None, None,
+                 None, None]
             );
 
             //test ipv4 filter with wildcards

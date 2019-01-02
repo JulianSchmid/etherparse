@@ -151,14 +151,20 @@ fn skip_all_extensions() {
     //extension header values
     use crate::IpTrafficClass::*;
     //based on RFC 8200 4.1. Extension Header Order
-    const EXTENSION_IDS: [u8;7] = [
+    // & IANA https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml
+    const EXTENSION_IDS: [u8;12] = [
         IPv6HeaderHopByHop as u8,
         IPv6DestinationOptions as u8,
         IPv6RouteHeader as u8,
         IPv6FragmentationHeader as u8, //3
         IPv6AuthenticationHeader as u8,
         IPv6EncapSecurityPayload as u8,
-        IPv6DestinationOptions as u8
+        IPv6DestinationOptions as u8,
+        MobilityHeader as u8,
+        Hip as u8,
+        Shim6 as u8,
+        ExperimentalAndTesting0 as u8,
+        ExperimentalAndTesting1 as u8,
     ];
     const UDP: u8 = Udp as u8;
 
@@ -203,91 +209,103 @@ fn skip_all_extensions() {
         }
 
     }
-    //skip 7 (max)
-    {
-        let buffer = vec![
-            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[2],1,0,0, 0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            //fragmentation header (fixed size 8 bytes)
-            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
-            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
-            UDP,2,0,0, 0,0,0,0,
 
-            0,0,0,0,   0,0,0,0,
-            0,0,0,0,   0,0,0,0,
-            1,2,3,4,   5,6,7,8
-        ];
+    //creates an buffer filled with extension headers with the given ids
+    fn create_buffer(ids: &[u8]) -> Vec<u8> {
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        let mut prev: u8 = ids[0];
+        let mut result = Vec::with_capacity(ids.len()*8*4);
+        for (index, value) in ids[1..].iter().enumerate() {
+            let len: u8 = if prev == FRAG {
+                0
+            } else {
+                (index % 3) as u8
+            };
+
+            //write first line
+            result.extend_from_slice(&[*value, len, 0, 0,  0, 0, 0, 0]);
+            
+            //fill rest with dummy data
+            for _ in 0..len {
+                result.extend_from_slice(&[0, 0, 0, 0,  0, 0, 0, 0]);
+            }
+
+            //cache prev
+            prev = *value;
+        }
+
+        //add some dummy data to the end (useful for checking that the returned slice are correct)
+        result.extend_from_slice(&[0, 0, 0, 0,  0, 0, 0, 0]);
+
+        result
+    }
+
+    //skip maximum number
+    {
+        let ids = {
+            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 1);
+            ids.extend_from_slice(&EXTENSION_IDS);
+            ids.push(UDP);
+            ids
+        };
+        let buffer = create_buffer(&ids);
+
         //reader
         {
             let mut cursor = Cursor::new(&buffer);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
             assert_matches!(result, Ok(UDP));
             assert_eq!(buffer.len() - 8, cursor.position() as usize);
         }
         //slice
         {
             
-            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]).unwrap();
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, ids[0]).unwrap();
             assert_eq!(result.0, UDP);
             assert_eq!(result.1, &buffer[buffer.len() - 8 .. ]);
         }
     }
     //trigger "too many" error
     {
-        let buffer = vec![
-            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[2],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[3],0,0,0, 0,0,0,0,
-            //fragmentation header (fixed size 8 bytes)
-            EXTENSION_IDS[4],4,0,0, 0,0,0,0,
-            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
-        ];
+        let ids = {
+            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 2);
+            ids.extend_from_slice(&EXTENSION_IDS);
+            ids.push(EXTENSION_IDS[0]);
+            ids.push(UDP);
+            ids
+        };
+        let buffer = create_buffer(&ids);
+
         //reader
         {
             let mut cursor = Cursor::new(&buffer);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
             assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
         }
         //slice
         {
-            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]);
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, ids[0]);
             assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
         }
     }
     //trigger missing unexpected eof
     {
-        let buffer = vec![
-            EXTENSION_IDS[1],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[2],1,0,0, 0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            EXTENSION_IDS[3],2,0,0, 0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            0,0,0,0,                0,0,0,0,
-            //fragmentation header (fixed size 8 bytes)
-            EXTENSION_IDS[4],5,0,0, 0,0,0,0,
-            EXTENSION_IDS[5],0,0,0, 0,0,0,0,
-            EXTENSION_IDS[6],0,0,0, 0,0,0,0,
-            UDP,2,0,0, 0,0,0,0,
-
-            0,0,0,0,   0,0,0,0,
-            0,0,0,0,   0,0,0
-        ];
+        let ids = {
+            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 1);
+            ids.extend_from_slice(&EXTENSION_IDS);
+            ids.push(UDP);
+            ids
+        };
+        let buffer = create_buffer(&ids);
         //reader
         {
-            let mut cursor = Cursor::new(&buffer);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            let mut cursor = Cursor::new(&buffer[..buffer.len() - 9]);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
             assert_matches!(result, Err(ReadError::IoError(_)));
         }
         //slice
         {
-            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]);
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer[..buffer.len() - 9], ids[0]);
             assert_matches!(result, Err(ReadError::UnexpectedEndOfSlice(_)));
         }
     }
