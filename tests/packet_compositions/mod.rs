@@ -71,7 +71,7 @@ impl ComponentTest {
             assert_matches!(SlicedPacket::from_ethernet(too_short_slice), 
                             Err(ReadError::UnexpectedEndOfSlice(_)));
             assert_matches!(PacketHeaders::from_ethernet_slice(too_short_slice), 
-                            Err(ReadError::IoError(_)));
+                            Err(ReadError::UnexpectedEndOfSlice(_)));
         }
     }
 

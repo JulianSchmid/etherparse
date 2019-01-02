@@ -15,10 +15,7 @@ impl<'a> PacketHeaders<'a> {
     ///Tries to decode as much as possible of a packet.
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
-        use std::io::Cursor;
-        let mut cursor = Cursor::new(&packet);
-
-        let ethernet = Ethernet2Header::read(&mut cursor)?;
+        let (ethernet, mut rest) = Ethernet2Header::read_from_slice(&packet)?;
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders{
@@ -39,7 +36,10 @@ impl<'a> PacketHeaders<'a> {
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
-                let outer = SingleVlanHeader::read(&mut cursor)?;
+                let (outer, outer_rest) = SingleVlanHeader::read_from_slice(rest)?;
+
+                //set the rest & ether_type for the following operations
+                rest = outer_rest;
                 ether_type = outer.ether_type;
 
                 //parse second vlan header if present
@@ -47,7 +47,10 @@ impl<'a> PacketHeaders<'a> {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
 
-                        let inner = SingleVlanHeader::read(&mut cursor)?;
+                        let (inner, inner_rest) = SingleVlanHeader::read_from_slice(rest)?;
+
+                        //set the rest & ether_type for the following operations
+                        rest = inner_rest;
                         ether_type = inner.ether_type;
 
                         Some(Double(DoubleVlanHeader{
@@ -67,38 +70,66 @@ impl<'a> PacketHeaders<'a> {
         const IPV4: u16 = Ipv4 as u16;
         const IPV6: u16 = Ipv6 as u16;
 
-        let read_transport = |protocol: u8, cursor: &mut Cursor<&&[u8]>| -> Result<Option<TransportHeader>, ReadError> {
+        fn read_transport(protocol: u8, rest: &[u8]) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
             use crate::IpTrafficClass::*;
             const UDP: u8 = Udp as u8;
             const TCP: u8 = Tcp as u8;
             match protocol {
-                UDP => Ok(Some(TransportHeader::Udp(UdpHeader::read(cursor)?))),
-                TCP => Ok(Some(TransportHeader::Tcp(TcpHeader::read(cursor)?))),
-                _ => Ok(None)
+                UDP => Ok(UdpHeader::read_from_slice(rest)
+                          .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
+                TCP => Ok(TcpHeader::read_from_slice(rest)
+                          .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),
+                _ => Ok((None, rest))
             }
         };
 
         match ether_type {
             IPV4 => {
-                let ip = Ipv4Header::read(&mut cursor)?;
-                //parse the transport layer
-                result.transport = read_transport(ip.protocol, &mut cursor)?;
+                let (ip, ip_rest) = Ipv4Header::read_from_slice(rest)?;
+
+                //cache the protocol for the next parsing layer
+                let ip_protocol = ip.protocol;
+
+                //set the ip result & rest
+                rest = ip_rest;
                 result.ip = Some(IpHeader::Version4(ip));
+
+                //parse the transport layer
+                let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
+
+                //assign to the output
+                rest = transport_rest;
+                result.transport = transport;
+                
             },
             IPV6 => {
-                let ip = Ipv6Header::read(&mut cursor)?;
-                //skip the header extensions
-                let next_header = Ipv6Header::skip_all_header_extensions(&mut cursor, ip.next_header)?;
-                //parse the transport layer
-                result.transport = read_transport(next_header, &mut cursor)?;
-                //done
+                let (ip, ip_rest) = Ipv6Header::read_from_slice(rest)?;
+
+                //cache the protocol for the next parsing layer
+                let next_header = ip.next_header;
+
+                //set the ip result & rest
+                rest = ip_rest;
                 result.ip = Some(IpHeader::Version6(ip));
+
+                //skip the header extensions
+                let (next_header, ip_rest) = Ipv6Header::skip_all_header_extensions_in_slice(rest, next_header)?;
+                
+                //set the rest
+                rest = ip_rest;
+
+                //parse the transport layer
+                let (transport, transport_rest) = read_transport(next_header, rest)?;
+                
+                rest = transport_rest;
+                result.transport = transport;
+
             },
             _ => {}
         }
 
         //finally update the rest slice based on the cursor position
-        result.payload = &packet[(cursor.position() as usize)..];
+        result.payload = rest;
 
         Ok(result)
     }
