@@ -164,32 +164,40 @@ fn skip_all_extensions() {
 
     //no & single skipping
     {
-        let buffer: [u8; 8*3] = [
+        let buffer: [u8; 8*4] = [
             UDP,2,0,0, 0,0,0,0, //set next to udp
             0,0,0,0,   0,0,0,0,
             0,0,0,0,   0,0,0,0,
+            1,2,3,4,   5,6,7,8,
         ];
 
         for i_as16 in 0..((u8::max_value() as u16) + 1) {
             let i = i_as16 as u8; //note: I would prefer to use the inclusive range ..= but this feature is not yet marked as stable -> replace when stable
             let mut cursor = Cursor::new(&buffer);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, i);
-
+            let reader_result = Ipv6Header::skip_all_header_extensions(&mut cursor, i);
+            let slice_result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, i).unwrap();
             match EXTENSION_IDS.iter().find(|&&x| x == i) {
                 Some(_) => {
                     //ipv6 header extension -> expect skip
-                    assert_matches!(result, Ok(UDP));
-                    if i == IPv6FragmentationHeader as u8 {
+                    assert_matches!(reader_result, Ok(UDP));
+                    assert_matches!(slice_result.0, UDP);
+
+                    let len = if i == IPv6FragmentationHeader as u8 {
                         //fragmentation header has a fixed size
-                        assert_eq!(8, cursor.position() as usize);
+                        8
                     } else {
-                        assert_eq!(buffer.len(), cursor.position() as usize);
-                    }
+                        buffer.len() - 8
+                    };
+                    assert_eq!(len, cursor.position() as usize);
+                    assert_eq!(&buffer[len..], slice_result.1);
                 },
                 None => {
                     //non ipv6 header expect no read movement and direct return
-                    assert_matches!(result, Ok(next) => assert_eq!(i, next));
+                    assert_matches!(reader_result, Ok(next) => assert_eq!(i, next));
                     assert_eq!(0, cursor.position());
+
+                    assert_eq!(i, slice_result.0);
+                    assert_eq!(&buffer, slice_result.1);
                 }
             }
         }
@@ -212,11 +220,22 @@ fn skip_all_extensions() {
 
             0,0,0,0,   0,0,0,0,
             0,0,0,0,   0,0,0,0,
+            1,2,3,4,   5,6,7,8
         ];
-        let mut cursor = Cursor::new(&buffer);
-        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
-        assert_matches!(result, Ok(UDP));
-        assert_eq!(buffer.len(), cursor.position() as usize);
+        //reader
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            assert_matches!(result, Ok(UDP));
+            assert_eq!(buffer.len() - 8, cursor.position() as usize);
+        }
+        //slice
+        {
+            
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]).unwrap();
+            assert_eq!(result.0, UDP);
+            assert_eq!(result.1, &buffer[buffer.len() - 8 .. ]);
+        }
     }
     //trigger "too many" error
     {
@@ -230,9 +249,17 @@ fn skip_all_extensions() {
             EXTENSION_IDS[6],0,0,0, 0,0,0,0,
             EXTENSION_IDS[1],0,0,0, 0,0,0,0,
         ];
-        let mut cursor = Cursor::new(&buffer);
-        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
-        assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
+        //reader
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
+        }
+        //slice
+        {
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]);
+            assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
+        }
     }
     //trigger missing unexpected eof
     {
@@ -252,10 +279,17 @@ fn skip_all_extensions() {
             0,0,0,0,   0,0,0,0,
             0,0,0,0,   0,0,0
         ];
-        println!("buffer.len(). {}", buffer.len());
-        let mut cursor = Cursor::new(&buffer);
-        let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
-        assert_matches!(result, Err(ReadError::IoError(_)));
+        //reader
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, EXTENSION_IDS[0]);
+            assert_matches!(result, Err(ReadError::IoError(_)));
+        }
+        //slice
+        {
+            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, EXTENSION_IDS[0]);
+            assert_matches!(result, Err(ReadError::UnexpectedEndOfSlice(_)));
+        }
     }
 }
 
