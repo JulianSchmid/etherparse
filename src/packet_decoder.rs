@@ -125,6 +125,38 @@ impl<'a> PacketHeaders<'a> {
 
     /// Tries to decode an ip packet and its transport headers.  
     /// Assumes the given slice starts with the first byte of the IP header
+    /// # Example
+    /// ```
+    /// # use etherparse::*;
+    /// // build a UDP packet
+    /// let payload = [0u8;18];
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],     //source mac
+    ///               [7,8,9,10,11,12]) //destionation mac
+    ///    .ipv4([192,168,1,1], //source ip
+    ///          [192,168,1,2], //desitionation ip
+    ///          20)            //time to life
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// // serialize the packet
+    /// let packet = {
+    ///     let mut packet Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     builder.write(&mut packet, &payload).unwrap();
+    ///     packet
+    /// };
+    /// # // should be 64 bytes long (including the ethernet FCS/CRC32) but since 
+    /// # // this is not provided at the moment we're gonna be fine with 60
+    /// # assert_eq!(packet.len(), 60);
+    ///
+    /// // parse the ip packet from a slice
+    /// // - start of ip packet: 14 (after ethernet header)
+    /// // - length of the ip packet: 20 (ip header) + 8 (udp header) + 18 (payload)
+    /// let p = PacketHeaders::from_ip_slice(&packet[14..14+20+8+18])
+    ///     .expect("Failed to decode the packet");
+    /// # assert_eq!(p.payload, payload);
+    /// ```
     pub fn from_ip_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         let mut result = PacketHeaders {
             link: None,
