@@ -2,10 +2,10 @@
 [![Build Status][build_badge]][build_status]
 [![Code Coverage][coverage_badge]][coverage_report]
 [![pipeline status][gitlab_badge]][gitlab_link]
-[![pipeline status][appveyor_badge]][appveyor_link]
+[![appveyor status][appveyor_badge]][appveyor_link]
 [![crates.io][crate_badge]][crate_link]
 
-A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
+A zero allocation library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
 Currently supported are:
 * Ethernet II
@@ -21,7 +21,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.7.1"
+etherparse = "0.8.0"
 ```
 
 Next, add this to your crate root:
@@ -36,7 +36,7 @@ Etherparse is intended to provide the basic network parsing functions that allow
 Some key points are:
 
 * It is completly written in Rust and thoroughly tested.
-* Special attention has been paid to avoid allocations or other syscalls whenever possible.
+* Special attention has been paid to not use allocations or syscalls.
 * The package is still in development and can & will still change. 
 * The current focus of development is on the most popular protocols in the internet & transport layer.
 
@@ -89,14 +89,14 @@ Have a look at the documentation for the <NAME>Slice.from_slice methods, if you 
 
 And for deserialization into the corresponding header structs have a look at:
 
-* [Ethernet2Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read)
-* [SingleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read)
-* [DoubleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read)
-* [IpHeader.read](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read)
-* [Ipv4Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read)
-* [Ipv6Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read)
-* [UdpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read)
-* [TcpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read)
+* [Ethernet2Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [Ethernet2Header.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read_from_slice)
+* [SingleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [SingleVlanHeader.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read_from_slice)
+* [DoubleVlanHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [DoubleVlanHeader.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read_from_slice)
+* [IpHeader.read](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read) & [IpHeader.read_from_slice](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read_from_slice)
+* [Ipv4Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [Ipv4Header.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read_from_slice)
+* [Ipv6Header.read](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [Ipv6Header.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read_from_slice)
+* [UdpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [UdpHeader.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read_from_slice)
+* [TcpHeader.read](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [TcpHeader.read_from_slice](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read_from_slice)
 
 ## How to generate fake packet data?
 ### Packet Builder
