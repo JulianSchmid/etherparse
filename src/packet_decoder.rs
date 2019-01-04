@@ -1,6 +1,8 @@
 use super::*;
 
-///Decoded packet headers. You can use PacketHeaders::decode_from_ethernet2 to decode packets and get this struct as a result.
+/// Decoded packet headers (data link layer and higher).
+/// You can use PacketHeaders::from_ethernet_slice or PacketHeader::from_ip_slice
+/// to decode and get this struct as a result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PacketHeaders<'a> {
     pub link: Option<Ethernet2Header>,
@@ -70,19 +72,6 @@ impl<'a> PacketHeaders<'a> {
         const IPV4: u16 = Ipv4 as u16;
         const IPV6: u16 = Ipv6 as u16;
 
-        fn read_transport(protocol: u8, rest: &[u8]) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
-            use crate::IpTrafficClass::*;
-            const UDP: u8 = Udp as u8;
-            const TCP: u8 = Tcp as u8;
-            match protocol {
-                UDP => Ok(UdpHeader::read_from_slice(rest)
-                          .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
-                TCP => Ok(TcpHeader::read_from_slice(rest)
-                          .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),
-                _ => Ok((None, rest))
-            }
-        };
-
         match ether_type {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::read_from_slice(rest)?;
@@ -132,5 +121,57 @@ impl<'a> PacketHeaders<'a> {
         result.payload = rest;
 
         Ok(result)
+    }
+
+    /// Tries to decode an ip packet and its transport headers.  
+    /// Assumes the given slice starts with the first byte of the IP header
+    pub fn from_ip_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
+        let mut result = PacketHeaders {
+            link: None,
+            vlan: None,
+            ip: None,
+            transport: None,
+            payload: &[],
+        };
+
+        let (transport_proto, rest) = {
+            use crate::IpHeader;
+            let (ip, rest) = IpHeader::read_from_slice(packet)?;
+            // grab transport protocol
+            let transport_proto = match &ip {
+                IpHeader::Version4(h) => h.protocol,
+                IpHeader::Version6(h) => h.next_header,
+            };
+            // update output
+            result.ip = Some(ip);
+            (transport_proto, rest)
+        };
+
+        // try to parse the transport header
+        let (transport, rest) = read_transport(transport_proto, rest)?;
+
+        // update output
+        result.transport = transport;
+
+        result.payload = rest;
+
+        Ok(result)
+    }
+}
+
+/// helper function to process transport headers
+fn read_transport(
+    protocol: u8,
+    rest: &[u8],
+) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
+    use crate::IpTrafficClass::*;
+    const UDP: u8 = Udp as u8;
+    const TCP: u8 = Tcp as u8;
+    match protocol {
+        UDP => Ok(UdpHeader::read_from_slice(rest)
+            .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
+        TCP => Ok(TcpHeader::read_from_slice(rest)
+            .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),
+        _ => Ok((None, rest)),
     }
 }
