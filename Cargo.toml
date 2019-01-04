@@ -27,3 +27,4 @@ proptest = "0.8.7"
 travis-ci = { repository = "JulianSchmid/etherparse", branch = "master" }
 codecov = { repository = "JulianSchmid/etherparse", branch = "master", service = "github" }
 gitlab = { repository = "julian.schmid/etherparse", branch = "master" }
+appveyor = { repository = "JulianSchmid/etherparse", branch = "master", service = "github" }
