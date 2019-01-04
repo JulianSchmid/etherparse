@@ -57,21 +57,62 @@ impl ComponentTest {
         buffer
     }
 
+    ///Serialize a packet without ethernet & vlan headers.
+    fn serialize_from_ip(&self) -> Vec<u8> {
+        let mut buffer = Vec::<u8>::new();
+        match &self.ip {
+            Some(IpTest::Version4(header)) => header.write_raw(&mut buffer).unwrap(),
+            Some(IpTest::Version6(header, exts)) => {
+                header.write(&mut buffer).unwrap();
+                for ref ext in exts {
+                    buffer.write(&ext.1).unwrap();
+                }
+            },
+            None => {}
+        }
+        match &self.transport {
+            Some(TransportHeader::Udp(header)) => header.write(&mut buffer).unwrap(),
+            Some(TransportHeader::Tcp(header)) => header.write(&mut buffer).unwrap(),
+            None => {}
+        }
+        use std::io::Write;
+        buffer.write(&self.payload[..]).unwrap();
+        buffer
+    }
+
     fn run(&self) {
-        //serialize to buffer
-        let buffer = self.serialize();
-
-        //test the slicing & decoding of the packet
-        self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
-        self.assert_decoded_packet(&buffer);
-
-        //test that an error is generated when the data is too small
+        //packet with ethernet2 & vlan headers
         {
-            let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
-            assert_matches!(SlicedPacket::from_ethernet(too_short_slice), 
-                            Err(ReadError::UnexpectedEndOfSlice(_)));
-            assert_matches!(PacketHeaders::from_ethernet_slice(too_short_slice), 
-                            Err(ReadError::UnexpectedEndOfSlice(_)));
+            //serialize to buffer
+            let buffer = self.serialize();
+
+            //test the slicing & decoding of the packet
+            self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
+            self.assert_decoded_packet(&buffer);
+
+            //test that an error is generated when the data is too small
+            {
+                let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
+                assert_matches!(SlicedPacket::from_ethernet(too_short_slice), 
+                                Err(ReadError::UnexpectedEndOfSlice(_)));
+                assert_matches!(PacketHeaders::from_ethernet_slice(too_short_slice), 
+                                Err(ReadError::UnexpectedEndOfSlice(_)));
+            }
+        }
+        //packet from the internet layer down (without ethernet2 & vlan headers)
+        if self.ip.is_some() {
+            //serialize to buffer
+            let buffer = self.serialize_from_ip();
+
+            //test the decoding of the packet
+            self.assert_from_ip_decoded_packet(&buffer);
+
+            //test that an error is generated when the data is too small
+            {
+                let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
+                assert_matches!(PacketHeaders::from_ip_slice(too_short_slice), 
+                                Err(ReadError::UnexpectedEndOfSlice(_)));
+            }
         }
     }
 
@@ -150,6 +191,35 @@ impl ComponentTest {
 
         //vlan
         assert_eq!(self.vlan, actual.vlan);
+
+        //ip
+        assert_eq!(actual.ip,
+            {
+                use self::IpTest::*;
+                match &self.ip {
+                    Some(Version4(value)) => Some(IpHeader::Version4(value.clone())),
+                    Some(Version6(value, _)) => Some(IpHeader::Version6(value.clone())),
+                    None => None
+                }
+            }
+        );
+
+        //transport
+        assert_eq!(self.transport, actual.transport);
+
+        //payload
+        assert_eq!(self.payload[..], actual.payload[..]);
+    }
+
+    fn assert_from_ip_decoded_packet(&self, buffer: &Vec<u8>) {
+        //decode
+        let actual = PacketHeaders::from_ip_slice(&buffer[..]).unwrap();
+
+        //ethernet
+        assert_eq!(None, actual.link);
+
+        //vlan
+        assert_eq!(None, actual.vlan);
 
         //ip
         assert_eq!(actual.ip,
