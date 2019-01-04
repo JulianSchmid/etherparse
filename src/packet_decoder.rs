@@ -141,7 +141,7 @@ impl<'a> PacketHeaders<'a> {
     ///
     /// // serialize the packet
     /// let packet = {
-    ///     let mut packet Vec::<u8>::with_capacity(
+    ///     let mut packet = Vec::<u8>::with_capacity(
     ///                     builder.size(payload.len()));
     ///     builder.write(&mut packet, &payload).unwrap();
     ///     packet
