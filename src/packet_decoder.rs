@@ -169,11 +169,15 @@ impl<'a> PacketHeaders<'a> {
         let (transport_proto, rest) = {
             use crate::IpHeader;
             let (ip, rest) = IpHeader::read_from_slice(packet)?;
+
             // grab transport protocol
-            let transport_proto = match &ip {
-                IpHeader::Version4(h) => h.protocol,
-                IpHeader::Version6(h) => h.next_header,
+            let (transport_proto, rest) = match &ip {
+                IpHeader::Version4(h) => (h.protocol, rest),
+                IpHeader::Version6(h) => {
+                    Ipv6Header::skip_all_header_extensions_in_slice(rest, h.next_header)?
+                },
             };
+
             // update output
             result.ip = Some(ip);
             (transport_proto, rest)
