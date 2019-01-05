@@ -64,143 +64,241 @@ const IP_TCP: u8 = IpTrafficClass::Tcp as u8;
 
 impl<'a> SlicedPacket<'a> {
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
-
-        //helper function to generate mappings for unexpected end of slice error 
-        //(adds previously passed headers)
-        let map_eos = |add: usize| {
-            move |err: ReadError| -> ReadError {
-                use self::ReadError::*;
-                match err {
-                    UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(add + value),
-                    value => value
-                }
-            }
-        };
-
-        //read link header
-        let (rest, ether_type, link) = {
-            use crate::LinkSlice::*;
-
-            let value = Ethernet2HeaderSlice::from_slice(data)?;
-            (&data[value.slice().len()..], 
-             value.ether_type(), 
-             Some(Ethernet2(value)))
-        };
-        
-        //read vlan header(s) if they exist
-        let (rest, ether_type, vlan) = match ether_type {
-            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
-                use crate::VlanSlice::*;
-
-                //slice the first vlan header
-                let single = SingleVlanHeaderSlice::from_slice(rest)
-                    .map_err(map_eos(data.len() - rest.len()))?;
-                let ether_type = single.ether_type();
-                match ether_type {
-
-                    //check if it is a double vlan tagged packet based on the ether_type
-                    ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => {
-                        let double = DoubleVlanHeaderSlice::from_slice(rest)
-                            .map_err(map_eos(data.len() - rest.len()))?;
-                        (&rest[double.slice().len()..], 
-                         double.inner().ether_type(), 
-                         Some(DoubleVlan(double)))
-                    },
-
-                    //otherwise it is single tagged
-                    _ => (&rest[single.slice().len()..], 
-                          ether_type, 
-                          Some(SingleVlan(single)))
-                }
-            },
-
-            //no vlan header found
-            _ => (rest, ether_type, None)
-        };
-
-        //read ip & transport
-        let (rest, protocol, ip) = match ether_type {
-            ETH_IPV4 => {
-                use crate::InternetSlice::*;
-
-                let value = Ipv4HeaderSlice::from_slice(rest)
-                    .map_err(map_eos(data.len() - rest.len()))?;
-                (&rest[value.slice().len()..],
-                 value.protocol(),
-                 Some(Ipv4(value)))
-            },
-            //
-            ETH_IPV6 => {
-                use crate::InternetSlice::*;
-
-                let value = Ipv6HeaderSlice::from_slice(rest)
-                    .map_err(map_eos(data.len() - rest.len()))?;
-
-                let mut rest = &rest[value.slice().len()..];
-
-                //extension headers
-                let mut ip_extensions = [None, None, None, None, None, 
-                                         None, None, None, None, None,
-                                         None, None];
-
-                let mut next_header = value.next_header();
-                for extension_header in ip_extensions.iter_mut() {
-                    if !IpTrafficClass::is_ipv6_ext_header_value(next_header) {
-                        break;
-                    } else {
-                        let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)
-                            .map_err(map_eos(data.len() - rest.len()))?;
-                        let this_header = next_header;
-                        next_header = value.next_header();
-                        rest = &rest[value.slice().len()..];
-                        *extension_header = Some((this_header, value));
-                    }
-                }
-
-                //check that the next header is not an extension header
-                if IpTrafficClass::is_ipv6_ext_header_value(next_header) {
-                    return Err(ReadError::Ipv6TooManyHeaderExtensions)
-                }
-
-                //return ip header result
-                (rest,
-                 next_header,
-                 Some(Ipv6(value, ip_extensions)))
-            },
-            _ => (rest, 0, None)
-        };
-
-        //read transport
-        let (rest, transport) = if ip.is_some() {
-            match protocol {
-                IP_UDP => {
-                    use crate::TransportSlice::*;
-
-                    let value = UdpHeaderSlice::from_slice(rest)
-                        .map_err(map_eos(data.len() - rest.len()))?;
-                    (&rest[value.slice().len()..],
-                     Some(Udp(value)))
-                },
-                IP_TCP => {
-                    use crate::TransportSlice::*;
-
-                    let value = TcpHeaderSlice::from_slice(rest)
-                        .map_err(map_eos(data.len() - rest.len()))?;
-                    (&rest[value.slice().len()..],
-                     Some(Tcp(value)))
-                },
-                _ => (rest, None)
-            }
-        } else {
-            (rest, None)
-        };
-
-        Ok(SlicedPacket{
-            link,
-            vlan,
-            ip,
-            transport,
-            payload: rest
-        })
+        CursorSlice::new(data).slice_ethernet2()
     }
+
+    pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
+        CursorSlice::new(data).slice_ip()
+    }
+}
+
+///Helper class for slicing packets
+struct CursorSlice<'a> {
+    pub slice: &'a [u8],
+    pub offset: usize,
+    pub result: SlicedPacket<'a>
+}
+
+impl<'a> CursorSlice<'a> {
+
+    pub fn new(slice: &'a [u8]) -> CursorSlice<'a> {
+        CursorSlice {
+            offset: 0,
+            slice,
+            result: SlicedPacket {
+                link: None,
+                vlan: None,
+                ip: None,
+                transport: None,
+                payload: slice
+            }
+        }
+    }
+
+    fn move_by_slice(&mut self, other: &'a[u8]) {
+        self.slice = &self.slice[other.len()..];
+        self.offset += other.len();
+    }
+
+    pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::LinkSlice::*;
+
+        let result = Ethernet2HeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //cache the ether_type for later
+        let ether_type = result.ether_type();
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.link = Some(Ethernet2(result));
+
+        //continue parsing (if required)
+        match ether_type {
+            ETH_IPV4 => self.slice_ipv4(),
+            ETH_IPV6 => self.slice_ipv6(),
+            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => self.slice_vlan(),
+            _ => self.slice_payload()
+        }
+    }
+
+    pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::VlanSlice::*;
+
+        let single = SingleVlanHeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //check if it is a double vlan header
+        let ether_type = single.ether_type();
+        match ether_type {
+            //in case of a double vlan header continue with the inner
+            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => self.slice_double_vlan(),
+            value => {
+                //set the vlan header and continue the normal parsing
+                self.move_by_slice(single.slice());
+                self.result.vlan = Some(SingleVlan(single));
+
+                match value {
+                    ETH_IPV4 => self.slice_ipv4(),
+                    ETH_IPV6 => self.slice_ipv6(),
+                    _ => self.slice_payload()
+                }
+            }
+        }
+    }
+
+    pub fn slice_double_vlan(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::VlanSlice::*;
+
+        let result = DoubleVlanHeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //cache ether_type for later
+        let ether_type = result.inner().ether_type();
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.vlan = Some(DoubleVlan(result));
+
+        //continue parsing (if required)
+        match ether_type {
+            ETH_IPV4 => self.slice_ipv4(),
+            ETH_IPV6 => self.slice_ipv6(),
+            _ => self.slice_payload()
+        }
+    }
+
+    pub fn slice_ip(self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::ReadError::*;
+        if self.slice.is_empty() {
+            Err(UnexpectedEndOfSlice(self.offset + 1))
+        } else {
+            match self.slice[0] >> 4 {
+                4 => self.slice_ipv4(),
+                6 => self.slice_ipv6(),
+                version => Err(IpUnsupportedVersion(version))
+            }
+        }
+    }
+
+    pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::InternetSlice::*;
+
+        let result = Ipv4HeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //cache protocol for later
+        let protocol = result.protocol();
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.ip = Some(Ipv4(result));
+
+        match protocol {
+            IP_UDP => self.slice_udp(),
+            IP_TCP => self.slice_tcp(),
+            _ => self.slice_payload()
+        }
+    }
+
+    pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::InternetSlice::*;
+
+        let ip = Ipv6HeaderSlice::from_slice(self.slice)
+                 .map_err(|err| 
+                    err.add_slice_offset(self.offset)
+                 )?;
+
+        //move the slice
+        self.move_by_slice(ip.slice());
+
+        //extension headers
+        let mut ip_extensions = [None, None, None, None, None, 
+                                 None, None, None, None, None,
+                                 None, None];
+
+        let mut next_header = ip.next_header();
+        for extension_header in ip_extensions.iter_mut() {
+            if !IpTrafficClass::is_ipv6_ext_header_value(next_header) {
+                break;
+            } else {
+                let ext = Ipv6ExtensionHeaderSlice::from_slice(next_header, self.slice)
+                          .map_err(|err| 
+                            err.add_slice_offset(self.offset)
+                          )?;
+
+                //move the slice
+                self.move_by_slice(ext.slice());
+
+                //save the result
+                let ext_protocol = next_header;
+                next_header = ext.next_header();
+                *extension_header = Some((ext_protocol, ext));
+            }
+        }
+
+        //parse the underlying protocol (or error in case of too many extension headers)
+        if IpTrafficClass::is_ipv6_ext_header_value(next_header)
+        {
+            return Err(ReadError::Ipv6TooManyHeaderExtensions)
+        }
+        else
+        {
+            //save the result
+            self.result.ip = Some(Ipv6(ip, ip_extensions));
+
+            //parse the data bellow
+            match next_header {
+                IP_UDP => self.slice_udp(),
+                IP_TCP => self.slice_tcp(),
+                _ => self.slice_payload()
+            }
+        }
+    }
+
+    pub fn slice_udp(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::TransportSlice::*;
+
+        let result = UdpHeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.transport = Some(Udp(result));
+
+        //done
+        self.slice_payload()
+    }
+
+    pub fn slice_tcp(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::TransportSlice::*;
+
+        let result = TcpHeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.transport = Some(Tcp(result));
+
+        //done
+        self.slice_payload()
+    }
+
+    pub fn slice_payload(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        self.result.payload = self.slice;
+        Ok(self.result)
+    }
+
 }

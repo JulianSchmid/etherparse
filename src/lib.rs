@@ -54,6 +54,17 @@ pub enum ReadError {
     TcpDataOffsetTooSmall(u8),
 }
 
+impl ReadError {
+    ///Adds an offset value to the UnexpectedEndOfSlice error.
+    pub fn add_slice_offset(self, offset: usize) -> ReadError {
+        use crate::ReadError::*;
+        match self {
+            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(value + offset),
+            value => value
+        }
+    }
+}
+
 impl From<std::io::Error> for ReadError {
     fn from(err: std::io::Error) -> ReadError {
         ReadError::IoError(err)

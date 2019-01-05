@@ -122,6 +122,21 @@ fn test_io_error_to_read_error() {
                     ReadError::IoError(_));
 }
 
+mod read_error {
+    #[test]
+    fn add_slice_offset() {
+        use super::*;
+        assert_matches!(
+            ReadError::UnexpectedEndOfSlice(2).add_slice_offset(3),
+            ReadError::UnexpectedEndOfSlice(5)
+        );
+        assert_matches!(
+            ReadError::VlanDoubleTaggingUnexpectedOuterTpid(2).add_slice_offset(3),
+            ReadError::VlanDoubleTaggingUnexpectedOuterTpid(2)
+        );
+    }
+}
+
 mod write_error {
     #[test]
     fn value_error() {

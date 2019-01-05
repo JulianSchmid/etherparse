@@ -105,11 +105,14 @@ impl ComponentTest {
             let buffer = self.serialize_from_ip();
 
             //test the decoding of the packet
+            self.assert_from_ip_sliced_packet(SlicedPacket::from_ip(&buffer).unwrap());
             self.assert_from_ip_decoded_packet(&buffer);
 
             //test that an error is generated when the data is too small
             {
                 let too_short_slice = &buffer[..buffer.len() - 1 - self.payload.len()];
+                assert_matches!(SlicedPacket::from_ip(too_short_slice), 
+                                Err(ReadError::UnexpectedEndOfSlice(_)));
                 assert_matches!(PacketHeaders::from_ip_slice(too_short_slice), 
                                 Err(ReadError::UnexpectedEndOfSlice(_)));
             }
@@ -147,6 +150,49 @@ impl ComponentTest {
             }
         );
 
+        //ip
+        assert_eq!(self.ip,
+            {
+                use crate::InternetSlice::*;
+                use self::IpTest::*;
+                match result.ip {
+                    Some(Ipv4(actual)) => Some(Version4(actual.to_header())),
+                    Some(Ipv6(actual_header, actual_extensions)) => 
+                        Some(Version6(actual_header.to_header(),
+                                      actual_extensions.iter()
+                                                       .filter(|x| x.is_some() )
+                                                       .map(|x| {
+                                                            let r = x.as_ref().unwrap();
+                                                            (r.0, r.1.slice().to_vec())
+                                                       })
+                                                       .collect()
+                        )),
+                    None => None
+                }
+            }
+        );
+        
+        //transport
+        assert_eq!(self.transport,
+            match result.transport {
+                Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
+                Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),
+                None => None
+            }
+        );
+
+        //payload
+        assert_eq!(self.payload[..], result.payload[..]);
+    }
+
+    fn assert_from_ip_sliced_packet(&self, result: SlicedPacket) {
+        //assert identity to touch the derives (code coverage hack)
+        assert_eq!(result, result);
+
+        //ethernet & vlan
+        assert_eq!(None, result.link);
+        assert_eq!(None, result.vlan);
+        
         //ip
         assert_eq!(self.ip,
             {
