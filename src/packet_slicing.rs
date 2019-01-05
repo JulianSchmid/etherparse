@@ -62,13 +62,6 @@ const ETH_VLAN_DOUBLE: u16 = EtherType::VlanDoubleTaggedFrame as u16;
 const IP_UDP: u8 = IpTrafficClass::Udp as u8;
 const IP_TCP: u8 = IpTrafficClass::Tcp as u8;
 
-const IPV6_HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
-const IPV6_ROUTE: u8 = IpTrafficClass::IPv6RouteHeader as u8;
-const IPV6_FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
-const IPV6_OPTIONS: u8 = IpTrafficClass::IPv6DestinationOptions as u8;
-const IPV6_AUTH: u8 = IpTrafficClass::IPv6AuthenticationHeader as u8;
-const IPV6_ENCAP_SEC: u8 = IpTrafficClass::IPv6EncapSecurityPayload as u8;
-
 impl<'a> SlicedPacket<'a> {
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
 
@@ -152,35 +145,21 @@ impl<'a> SlicedPacket<'a> {
 
                 let mut next_header = value.next_header();
                 for extension_header in ip_extensions.iter_mut() {
-                    match next_header {
-                        IPV6_HOP_BY_HOP | 
-                        IPV6_ROUTE | 
-                        IPV6_FRAG | 
-                        IPV6_OPTIONS | 
-                        IPV6_AUTH | 
-                        IPV6_ENCAP_SEC => {
-                            let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)
-                                .map_err(map_eos(data.len() - rest.len()))?;
-                            let this_header = next_header;
-                            next_header = value.next_header();
-                            rest = &rest[value.slice().len()..];
-                            *extension_header = Some((this_header, value));
-                        },
-                        _ => break
+                    if !IpTrafficClass::is_ipv6_ext_header_value(next_header) {
+                        break;
+                    } else {
+                        let value = Ipv6ExtensionHeaderSlice::from_slice(next_header, rest)
+                            .map_err(map_eos(data.len() - rest.len()))?;
+                        let this_header = next_header;
+                        next_header = value.next_header();
+                        rest = &rest[value.slice().len()..];
+                        *extension_header = Some((this_header, value));
                     }
                 }
 
                 //check that the next header is not an extension header
-                match next_header {
-                    IPV6_HOP_BY_HOP | 
-                    IPV6_ROUTE | 
-                    IPV6_FRAG | 
-                    IPV6_OPTIONS | 
-                    IPV6_AUTH | 
-                    IPV6_ENCAP_SEC => {
-                        return Err(ReadError::Ipv6TooManyHeaderExtensions)
-                    },
-                    _ => {}
+                if IpTrafficClass::is_ipv6_ext_header_value(next_header) {
+                    return Err(ReadError::Ipv6TooManyHeaderExtensions)
                 }
 
                 //return ip header result

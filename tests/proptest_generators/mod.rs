@@ -261,6 +261,7 @@ prop_compose! {
 // * Authentication header (note 2)
 // * Encapsulating Security Payload header (note 2)
 // * Destination Options header (note 3)
+// (rest appended to the end)
 
 static IPV6_EXTENSION_HEADER_ORDER: &'static [u8] = &[
     IpTrafficClass::IPv6HeaderHopByHop as u8,
@@ -269,20 +270,30 @@ static IPV6_EXTENSION_HEADER_ORDER: &'static [u8] = &[
     IpTrafficClass::IPv6FragmentationHeader as u8,
     IpTrafficClass::IPv6AuthenticationHeader as u8,
     IpTrafficClass::IPv6EncapSecurityPayload as u8,
-    IpTrafficClass::IPv6DestinationOptions as u8
+    IpTrafficClass::IPv6DestinationOptions as u8,
+    IpTrafficClass::MobilityHeader as u8,
+    IpTrafficClass::Hip as u8,
+    IpTrafficClass::Shim6 as u8,
+    IpTrafficClass::ExperimentalAndTesting0 as u8,
+    IpTrafficClass::ExperimentalAndTesting1 as u8
 ];
 
 prop_compose! {
     [pub] fn ipv6_extensions_unknown()
                               (last_next_header in any::<u8>().prop_filter("next_header must be unknown",
                                |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)),
-                               len0 in 0u8..5,//any::<u8>(),
-                               len1 in 0u8..5,//any::<u8>(),
-                               len2 in 0u8..5,//any::<u8>(),
+                               len0 in 0u8..5,
+                               len1 in 0u8..5,
+                               len2 in 0u8..5,
                                //skip fragmenetation header (fixed size 0))
-                               len4 in 0u8..5,//any::<u8>(),
-                               len5 in 0u8..5,//any::<u8>(),
-                               len6 in 0u8..5)//any::<u8>())
+                               len4 in 0u8..5,
+                               len5 in 0u8..5,
+                               len6 in 0u8..5,
+                               len7 in 0u8..5,
+                               len8 in 0u8..5,
+                               len9 in 0u8..5,
+                               len10 in 0u8..5,
+                               len11 in 0u8..5)
                               (last_next_header in proptest::strategy::Just(last_next_header),
                                hdr0 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len0),
                                hdr1 in ipv6_extension_with(IpTrafficClass::IPv6RouteHeader as u8, len1),
@@ -290,11 +301,18 @@ prop_compose! {
                                hdr3 in ipv6_extension_with(IpTrafficClass::IPv6FragmentationHeader as u8, 0),
                                hdr4 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len4),
                                hdr5 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len5),
-                               hdr6 in ipv6_extension_with(last_next_header, len6),
+                               hdr6 in ipv6_extension_with(IpTrafficClass::MobilityHeader as u8, len6),
+                               hdr7 in ipv6_extension_with(IpTrafficClass::Hip as u8, len7),
+                               hdr8 in ipv6_extension_with(IpTrafficClass::Shim6 as u8, len8),
+                               hdr9 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting0 as u8, len9),
+                               hdr10 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting1 as u8, len10),
+                               hdr11 in ipv6_extension_with(last_next_header, len11),
                                order in proptest::sample::subsequence((0..IPV6_EXTENSION_HEADER_ORDER.len()).collect::<Vec<usize>>(), 1..IPV6_EXTENSION_HEADER_ORDER.len()))
                               -> Vec<(u8, Vec<u8>)>
     {
-        let all_headers = vec![hdr0, hdr1, hdr2, hdr3, hdr4, hdr5, hdr6];
+        let all_headers = vec![hdr0, hdr1, hdr2, hdr3, hdr4, 
+                               hdr5, hdr6, hdr7, hdr8, hdr9, 
+                               hdr10, hdr11];
 
         //get the corresponding next headers
         let mut next_headers : Vec<u8> = order.iter()
