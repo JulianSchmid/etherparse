@@ -1,10 +1,13 @@
 use super::*;
 
+///A slice containing the link layer header (currently only Ethernet II is supported).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkSlice<'a> {
+    ///A slice containing an Ethernet II header.
     Ethernet2(Ethernet2HeaderSlice<'a>)
 }
 
+///A slice containing a single or double vlan header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VlanSlice<'a> {
     SingleVlan(SingleVlanHeaderSlice<'a>),
@@ -32,10 +35,13 @@ pub enum InternetSlice<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
+    ///A slice containing an UDP header.
     Udp(UdpHeaderSlice<'a>),
+    ///A slice containing a TCP header.
     Tcp(TcpHeaderSlice<'a>)
 }
 
+///A sliced into its component headers. Everything that could not be parsed is stored in a slice in the field "payload".
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
@@ -63,10 +69,81 @@ const IP_UDP: u8 = IpTrafficClass::Udp as u8;
 const IP_TCP: u8 = IpTrafficClass::Tcp as u8;
 
 impl<'a> SlicedPacket<'a> {
+    /// Seperates a network packet slice into different slices containing the headers from the ethernet header downwards. 
+    ///
+    /// The result is returned as a SlicerPacket struct. This function assumes the given data starts 
+    /// with an ethernet II header.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{SlicedPacket, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //desitionation ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port 
+    /// #         1234); //desitnation port
+    /// #    //payload of the udp packet
+    /// #    let payload = [1,2,3,4,5,6,7,8];
+    /// #    //get some memory to store the serialized data
+    /// #    let mut packet = Vec::<u8>::with_capacity(
+    /// #                            builder.size(payload.len()));
+    /// #    builder.write(&mut packet, &payload).unwrap();
+    /// match SlicedPacket::from_ethernet(&packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
         CursorSlice::new(data).slice_ethernet2()
     }
 
+    /// Seperates a network packet slice into different slices containing the headers from the ip header downwards. 
+    ///
+    /// The result is returned as a SlicerPacket struct. This function assumes the given data starts 
+    /// with an IPv4 or IPv6 header.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{SlicedPacket, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ipv4([192,168,1,1], //source ip
+    /// #         [192,168,1,2], //desitionation ip
+    /// #         20)            //time to life
+    /// #    .udp(21,    //source port 
+    /// #         1234); //desitnation port
+    /// #    //payload of the udp packet
+    /// #    let payload = [1,2,3,4,5,6,7,8];
+    /// #    //get some memory to store the serialized data
+    /// #    let mut packet = Vec::<u8>::with_capacity(
+    /// #                            builder.size(payload.len()));
+    /// #    builder.write(&mut packet, &payload).unwrap();
+    /// match SlicedPacket::from_ip(&packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         //link & vlan fields are empty when parsing from ip downwards
+    ///         assert_eq!(None, value.link);
+    ///         assert_eq!(None, value.vlan);
+    ///
+    ///         //ip & transport (udp or tcp)
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
     pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
         CursorSlice::new(data).slice_ip()
     }
