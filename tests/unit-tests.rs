@@ -16,6 +16,7 @@ mod internet;
 mod transport;
 mod packet_builder;
 mod packet_filter;
+mod packet_slicing;
 mod proptest_generators;
 pub use crate::proptest_generators::*;
 mod packet_compositions;
