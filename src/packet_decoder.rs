@@ -131,9 +131,7 @@ impl<'a> PacketHeaders<'a> {
     /// // build a UDP packet
     /// let payload = [0u8;18];
     /// let builder = PacketBuilder::
-    ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
-    ///    .ipv4([192,168,1,1], //source ip
+    ///    ipv4([192,168,1,1], //source ip
     ///          [192,168,1,2], //desitionation ip
     ///          20)            //time to life
     ///    .udp(21,    //source port 
@@ -147,13 +145,11 @@ impl<'a> PacketHeaders<'a> {
     ///     packet
     /// };
     /// # // should be 64 bytes long (including the ethernet FCS/CRC32) but since 
-    /// # // this is not provided at the moment we're gonna be fine with 60
-    /// # assert_eq!(packet.len(), 60);
+    /// # // this is not provided at the moment we're gonna be fine with 46
+    /// # assert_eq!(packet.len(), 46);
     ///
     /// // parse the ip packet from a slice
-    /// // - start of ip packet: 14 (after ethernet header)
-    /// // - length of the ip packet: 20 (ip header) + 8 (udp header) + 18 (payload)
-    /// let p = PacketHeaders::from_ip_slice(&packet[14..14+20+8+18])
+    /// let p = PacketHeaders::from_ip_slice(&packet)
     ///     .expect("Failed to decode the packet");
     /// # assert_eq!(p.payload, payload);
     /// ```
