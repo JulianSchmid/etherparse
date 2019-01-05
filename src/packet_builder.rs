@@ -11,10 +11,13 @@ use std::{io, marker};
 /// for ip & udp and set type identifiers for ethernetII and ip. This makes it 
 /// easy and less error prone to construct custom packets.
 ///
-/// # Example
+/// # Example:
+///
+/// Generating a packet that starts with an Ethernet II header:
+///
 /// ```
-/// # use etherparse::PacketBuilder;
-/// #
+/// use etherparse::PacketBuilder;
+/// 
 /// let builder = PacketBuilder::
 ///     ethernet2([1,2,3,4,5,6],     //source mac
 ///               [7,8,9,10,11,12]) //destionation mac
@@ -38,7 +41,34 @@ use std::{io, marker};
 pub struct PacketBuilder {}
 
 impl PacketBuilder {
-    ///Start an packet with an ethernetII header.
+    /// Start an packet with an ethernetII header.
+    ///
+    /// # Example
+    ///
+    /// Basic usage: 
+    ///
+    /// ```
+    /// # use etherparse::PacketBuilder;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],     //source mac
+    ///               [7,8,9,10,11,12]) //destionation mac
+    ///    .ipv4([192,168,1,1], //source ip
+    ///          [192,168,1,2], //desitionation ip
+    ///          20)            //time to life
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///     
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
     pub fn ethernet2(source: [u8;6], destination: [u8;6]) -> PacketBuilderStep<Ethernet2Header> {
         PacketBuilderStep {
             state: PacketImpl {
@@ -53,6 +83,158 @@ impl PacketBuilder {
             },
             _marker: marker::PhantomData::<Ethernet2Header>{}
         }
+    }
+
+    ///Starts a packet with an IPv4 header.
+    ///
+    /// # Example
+    ///
+    /// Basic usage: 
+    ///
+    /// ```
+    /// # use etherparse::PacketBuilder;
+    /// #
+    /// let builder = PacketBuilder::
+    ///    ipv4([192,168,1,1],  //source ip
+    ///          [192,168,1,2], //desitionation ip
+    ///          20)            //time to life
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///     
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn ipv4(source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
+        PacketBuilderStep {
+            state: PacketImpl {
+                ethernet2_header: None,
+                vlan_header: None,
+                ip_header: None,
+                transport_header: None
+            },
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ipv4(source, destination, time_to_live)
+    }
+
+    ///Start a packet with an IPv6 header.
+    ///
+    /// # Example
+    ///
+    /// Basic usage: 
+    ///
+    /// ```
+    /// # use etherparse::PacketBuilder;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     ipv6(
+    ///         //source
+    ///         [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+    ///         //destination
+    ///         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
+    ///         //hop_limit
+    ///         47)
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///     
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn ipv6(source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
+        PacketBuilderStep {
+            state: PacketImpl {
+                ethernet2_header: None,
+                vlan_header: None,
+                ip_header: None,
+                transport_header: None
+            },
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ipv6(source, destination, hop_limit)
+    }
+
+    ///Starts a packet with an arbitrary ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
+    ///
+    /// # Examples
+    ///
+    /// With an IPv4 header:
+    ///
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///    //payload_len, protocol & checksum will be replaced during write
+    ///    ip(IpHeader::Version4(Ipv4Header::new(
+    ///        0, //payload_len will be replaced during write
+    ///        12, //time_to_live
+    ///        IpTrafficClass::Udp, //will be replaced during write
+    ///        [0,1,2,3], //source
+    ///        [4,5,6,7] //destination
+    ///     )))
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///     
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    ///
+    /// With an IPv6 header:
+    ///
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///    ip(IpHeader::Version6(Ipv6Header{
+    ///         traffic_class: 0,
+    ///         flow_label: 0,
+    ///         payload_length: 0, //will be replaced during write
+    ///         next_header: 0, //will be replaced during write
+    ///         hop_limit: 4,
+    ///         source: [0;16],
+    ///         destination: [0;16]
+    ///     }))
+    ///    .udp(21,    //source port 
+    ///         1234); //desitnation port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///     
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///     
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn ip(ip_header: IpHeader) -> PacketBuilderStep<IpHeader> {
+        PacketBuilderStep {
+            state: PacketImpl {
+                ethernet2_header: None,
+                vlan_header: None,
+                ip_header: None,
+                transport_header: None
+            },
+            _marker: marker::PhantomData::<Ethernet2Header>{}
+        }.ip(ip_header)
     }
 }
 
@@ -89,7 +271,10 @@ impl PacketBuilderStep<Ethernet2Header> {
 
     ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
-    /// # Example IPv4
+    /// # Examples
+    ///
+    /// With an IPv4 header:
+    ///
     /// ```
     /// # use etherparse::*;
     /// #
@@ -106,7 +291,8 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     )));
     /// ```
     ///
-    /// # Example IPv6
+    /// With an IPv6 header:
+    ///
     /// ```
     /// # use etherparse::*;
     /// #
