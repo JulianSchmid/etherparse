@@ -222,17 +222,17 @@ impl<'a> UdpHeaderSlice<'a> {
         BigEndian::read_u16(&self.slice[..2])
     }
 
-    ///Reads the "udp source port" from the slice.
+    ///Reads the "udp destination port" from the slice.
     pub fn destination_port(&self) -> u16 {
         BigEndian::read_u16(&self.slice[2..4])
     }
 
-    ///Reads the "udp source port" from the slice.
+    ///Reads the "length" from the slice.
     pub fn length(&self) -> u16 {
         BigEndian::read_u16(&self.slice[4..6])
     }
 
-    ///Reads the "udp source port" from the slice.
+    ///Reads the "checksum" from the slice.
     pub fn checksum(&self) -> u16 {
         BigEndian::read_u16(&self.slice[6..8])
     }
