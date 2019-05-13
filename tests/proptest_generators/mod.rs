@@ -3,10 +3,11 @@ use proptest::*;
 use proptest::prelude::*;
 
 prop_compose! {
-    [pub] fn ethernet_2_with(ether_type: u16)(source in prop::array::uniform6(any::<u8>()),
-                         dest in prop::array::uniform6(any::<u8>()),
-                         ether_type in proptest::strategy::Just(ether_type))
-                         -> Ethernet2Header
+    pub(crate) fn ethernet_2_with(ether_type: u16)(
+        source in prop::array::uniform6(any::<u8>()),
+        dest in prop::array::uniform6(any::<u8>()),
+        ether_type in proptest::strategy::Just(ether_type))
+        -> Ethernet2Header
     {
         Ethernet2Header {
             source: source,
@@ -17,10 +18,10 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn ethernet_2_any()
-               (ether_type in any::<u16>())
-               (result in ethernet_2_with(ether_type)) 
-               -> Ethernet2Header
+    pub(crate) fn ethernet_2_any()
+        (ether_type in any::<u16>())
+        (result in ethernet_2_with(ether_type)) 
+        -> Ethernet2Header
     {
         result
     }
@@ -35,11 +36,12 @@ pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
 ];
 
 prop_compose! {
-    [pub] fn ethernet_2_unknown()(source in prop::array::uniform6(any::<u8>()),
-                           dest in prop::array::uniform6(any::<u8>()),
-                           ether_type in any::<u16>().prop_filter("ether_type must be unknown",
-                               |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
-                           -> Ethernet2Header
+    pub(crate) fn ethernet_2_unknown()(
+        source in prop::array::uniform6(any::<u8>()),
+        dest in prop::array::uniform6(any::<u8>()),
+        ether_type in any::<u16>().prop_filter("ether_type must be unknown",
+            |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+        -> Ethernet2Header
     {
         Ethernet2Header {
             source: source,
@@ -50,12 +52,13 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn vlan_single_unknown()(priority_code_point in prop::bits::u8::between(0,3),
-                             drop_eligible_indicator in any::<bool>(),
-                             vlan_identifier in prop::bits::u16::between(0,12),
-                             ether_type in any::<u16>().prop_filter("ether_type must be unknown",
-                               |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
-                           -> SingleVlanHeader
+    pub(crate) fn vlan_single_unknown()(
+        priority_code_point in prop::bits::u8::between(0,3),
+        drop_eligible_indicator in any::<bool>(),
+        vlan_identifier in prop::bits::u16::between(0,12),
+        ether_type in any::<u16>().prop_filter("ether_type must be unknown",
+            |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+        -> SingleVlanHeader
     {
         SingleVlanHeader {
             priority_code_point: priority_code_point,
@@ -67,12 +70,12 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn vlan_single_with(ether_type: u16)
-                            (priority_code_point in prop::bits::u8::between(0,3),
-                             drop_eligible_indicator in any::<bool>(),
-                             vlan_identifier in prop::bits::u16::between(0,12),
-                             ether_type in proptest::strategy::Just(ether_type))
-                           -> SingleVlanHeader
+    pub(crate) fn vlan_single_with(ether_type: u16)(
+        priority_code_point in prop::bits::u8::between(0,3),
+        drop_eligible_indicator in any::<bool>(),
+        vlan_identifier in prop::bits::u16::between(0,12),
+        ether_type in proptest::strategy::Just(ether_type))
+        -> SingleVlanHeader
     {
         SingleVlanHeader {
             priority_code_point: priority_code_point,
@@ -84,25 +87,26 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn ipv4_with(protocol: u8)
-                (ihl in 0u8..10,
-                 protocol in proptest::strategy::Just(protocol))
-                (source in prop::array::uniform4(any::<u8>()),
-                  dest in prop::array::uniform4(any::<u8>()),
-                  dscp in prop::bits::u8::between(0,6),
-                  ecn in prop::bits::u8::between(0,2),
-                  identification in any::<u16>(),
-                  ttl in any::<u8>(),
-                  dont_fragment in any::<bool>(),
-                  more_fragments in any::<bool>(),
-                  fragments_offset in prop::bits::u16::between(0, 13),
-                  header_checksum in any::<u16>(),
-                  payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::SERIALIZED_SIZE as u16)),
-                  protocol in proptest::strategy::Just(protocol),
-                  options_len in proptest::strategy::Just(ihl*4),
-                  options_part0 in prop::array::uniform32(any::<u8>()),
-                  options_part1 in prop::array::uniform8(any::<u8>()))
-                  -> Ipv4Header
+    pub(crate) fn ipv4_with(protocol: u8)
+    (
+        ihl in 0u8..10,
+        protocol in proptest::strategy::Just(protocol))
+        (source in prop::array::uniform4(any::<u8>()),
+        dest in prop::array::uniform4(any::<u8>()),
+        dscp in prop::bits::u8::between(0,6),
+        ecn in prop::bits::u8::between(0,2),
+        identification in any::<u16>(),
+        ttl in any::<u8>(),
+        dont_fragment in any::<bool>(),
+        more_fragments in any::<bool>(),
+        fragments_offset in prop::bits::u16::between(0, 13),
+        header_checksum in any::<u16>(),
+        payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::SERIALIZED_SIZE as u16)),
+        protocol in proptest::strategy::Just(protocol),
+        options_len in proptest::strategy::Just(ihl*4),
+        options_part0 in prop::array::uniform32(any::<u8>()),
+        options_part1 in prop::array::uniform8(any::<u8>())
+    ) -> Ipv4Header
     {
         let mut result: Ipv4Header = Default::default();
         {
@@ -140,7 +144,7 @@ prop_compose! {
     }
 }
 prop_compose! {
-    [pub] fn ipv4_any()
+    pub(crate) fn ipv4_any()
                (protocol in any::<u8>())
                (result in ipv4_with(protocol)) 
                -> Ipv4Header
@@ -155,27 +159,28 @@ static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
 ];
 
 prop_compose! {
-    [pub] fn ipv4_unknown()
-      (protocol in any::<u8>().prop_filter("protocol must be unknown",
-                 |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
-      )
-      (header in ipv4_with(protocol))
-      -> Ipv4Header
+    pub(crate) fn ipv4_unknown()
+        (protocol in any::<u8>().prop_filter("protocol must be unknown",
+            |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
+        )
+        (header in ipv4_with(protocol)
+    ) -> Ipv4Header
     {
         header
     }
 }
 
 prop_compose! {
-    [pub] fn ipv6_with(next_header: u8)
-                (source in prop::array::uniform16(any::<u8>()),
-                 dest in prop::array::uniform16(any::<u8>()),
-                 traffic_class in any::<u8>(),
-                 flow_label in prop::bits::u32::between(0,20),
-                 payload_length in any::<u16>(),
-                 hop_limit in any::<u8>(),
-                 next_header in proptest::strategy::Just(next_header))
-                -> Ipv6Header
+    pub(crate) fn ipv6_with(next_header: u8)
+    (
+        source in prop::array::uniform16(any::<u8>()),
+        dest in prop::array::uniform16(any::<u8>()),
+        traffic_class in any::<u8>(),
+        flow_label in prop::bits::u32::between(0,20),
+        payload_length in any::<u16>(),
+        hop_limit in any::<u8>(),
+        next_header in proptest::strategy::Just(next_header)
+    ) -> Ipv6Header
     {
         Ipv6Header {
             traffic_class: traffic_class,
@@ -190,10 +195,10 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn ipv6_any()
-               (next_header in any::<u8>())
-               (result in ipv6_with(next_header)) 
-               -> Ipv6Header
+    pub(crate) fn ipv6_any()
+        (next_header in any::<u8>())
+        (result in ipv6_with(next_header)
+    ) -> Ipv6Header
     {
         result
     }
@@ -216,15 +221,16 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
 ];
 
 prop_compose! {
-    [pub] fn ipv6_unknown()(source in prop::array::uniform16(any::<u8>()),
-                      dest in prop::array::uniform16(any::<u8>()),
-                      traffic_class in any::<u8>(),
-                      flow_label in prop::bits::u32::between(0,20),
-                      payload_length in any::<u16>(),
-                      hop_limit in any::<u8>(),
-                      next_header in any::<u8>().prop_filter("next_header must be unknown",
-                               |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)))
-                  -> Ipv6Header
+    pub(crate) fn ipv6_unknown()(
+        source in prop::array::uniform16(any::<u8>()),
+        dest in prop::array::uniform16(any::<u8>()),
+        traffic_class in any::<u8>(),
+        flow_label in prop::bits::u32::between(0,20),
+        payload_length in any::<u16>(),
+        hop_limit in any::<u8>(),
+        next_header in any::<u8>().prop_filter("next_header must be unknown",
+            |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x))
+    ) -> Ipv6Header
     {
         Ipv6Header {
             traffic_class: traffic_class,
@@ -239,12 +245,14 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn ipv6_extension_with(next_header: u8,
-                           len: u8)
-                          (next_header in proptest::strategy::Just(next_header),
-                           len in proptest::strategy::Just(len),
-                           payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 8))
-                          -> Vec<u8>
+    pub(crate) fn ipv6_extension_with(
+        next_header: u8,
+        len: u8
+    ) (
+        next_header in proptest::strategy::Just(next_header),
+        len in proptest::strategy::Just(len),
+        payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 8)
+    ) -> Vec<u8>
     {
         let mut result = payload.clone();
         //insert next header & length
@@ -279,36 +287,39 @@ static IPV6_EXTENSION_HEADER_ORDER: &'static [u8] = &[
 ];
 
 prop_compose! {
-    [pub] fn ipv6_extensions_unknown()
-                              (last_next_header in any::<u8>().prop_filter("next_header must be unknown",
-                               |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)),
-                               len0 in 0u8..5,
-                               len1 in 0u8..5,
-                               len2 in 0u8..5,
-                               //skip fragmenetation header (fixed size 0))
-                               len4 in 0u8..5,
-                               len5 in 0u8..5,
-                               len6 in 0u8..5,
-                               len7 in 0u8..5,
-                               len8 in 0u8..5,
-                               len9 in 0u8..5,
-                               len10 in 0u8..5,
-                               len11 in 0u8..5)
-                              (last_next_header in proptest::strategy::Just(last_next_header),
-                               hdr0 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len0),
-                               hdr1 in ipv6_extension_with(IpTrafficClass::IPv6RouteHeader as u8, len1),
-                               hdr2 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len2),
-                               hdr3 in ipv6_extension_with(IpTrafficClass::IPv6FragmentationHeader as u8, 0),
-                               hdr4 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len4),
-                               hdr5 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len5),
-                               hdr6 in ipv6_extension_with(IpTrafficClass::MobilityHeader as u8, len6),
-                               hdr7 in ipv6_extension_with(IpTrafficClass::Hip as u8, len7),
-                               hdr8 in ipv6_extension_with(IpTrafficClass::Shim6 as u8, len8),
-                               hdr9 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting0 as u8, len9),
-                               hdr10 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting1 as u8, len10),
-                               hdr11 in ipv6_extension_with(last_next_header, len11),
-                               order in proptest::sample::subsequence((0..IPV6_EXTENSION_HEADER_ORDER.len()).collect::<Vec<usize>>(), 1..IPV6_EXTENSION_HEADER_ORDER.len()))
-                              -> Vec<(u8, Vec<u8>)>
+    pub(crate) fn ipv6_extensions_unknown()
+    (
+        last_next_header in any::<u8>().prop_filter("next_header must be unknown",
+        |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)),
+        len0 in 0u8..5,
+        len1 in 0u8..5,
+        len2 in 0u8..5,
+        //skip fragmenetation header (fixed size 0))
+        len4 in 0u8..5,
+        len5 in 0u8..5,
+        len6 in 0u8..5,
+        len7 in 0u8..5,
+        len8 in 0u8..5,
+        len9 in 0u8..5,
+        len10 in 0u8..5,
+        len11 in 0u8..5
+    )
+    (
+        last_next_header in proptest::strategy::Just(last_next_header),
+        hdr0 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len0),
+        hdr1 in ipv6_extension_with(IpTrafficClass::IPv6RouteHeader as u8, len1),
+        hdr2 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len2),
+        hdr3 in ipv6_extension_with(IpTrafficClass::IPv6FragmentationHeader as u8, 0),
+        hdr4 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len4),
+        hdr5 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len5),
+        hdr6 in ipv6_extension_with(IpTrafficClass::MobilityHeader as u8, len6),
+        hdr7 in ipv6_extension_with(IpTrafficClass::Hip as u8, len7),
+        hdr8 in ipv6_extension_with(IpTrafficClass::Shim6 as u8, len8),
+        hdr9 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting0 as u8, len9),
+        hdr10 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting1 as u8, len10),
+        hdr11 in ipv6_extension_with(last_next_header, len11),
+        order in proptest::sample::subsequence((0..IPV6_EXTENSION_HEADER_ORDER.len()).collect::<Vec<usize>>(), 1..IPV6_EXTENSION_HEADER_ORDER.len())
+    ) -> Vec<(u8, Vec<u8>)>
     {
         let all_headers = vec![hdr0, hdr1, hdr2, hdr3, hdr4, 
                                hdr5, hdr6, hdr7, hdr8, hdr9, 
@@ -336,11 +347,12 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn udp_any()(source_port in any::<u16>(),
-                       destination_port in any::<u16>(),
-                       length in any::<u16>(),
-                       checksum in any::<u16>())
-                  -> UdpHeader
+    pub(crate) fn udp_any()(
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            length in any::<u16>(),
+            checksum in any::<u16>())
+        -> UdpHeader
     {
         UdpHeader {
             source_port: source_port,
@@ -352,25 +364,27 @@ prop_compose! {
 }
 
 prop_compose! {
-    [pub] fn tcp_any()(data_offset in TCP_MINIMUM_DATA_OFFSET..(TCP_MAXIMUM_DATA_OFFSET + 1))
-                      (source_port in any::<u16>(),
-                       destination_port in any::<u16>(),
-                       sequence_number in any::<u32>(),
-                       acknowledgment_number in any::<u32>(),
-                       ns in any::<bool>(),
-                       fin in any::<bool>(),
-                       syn in any::<bool>(),
-                       rst in any::<bool>(),
-                       psh in any::<bool>(),
-                       ack in any::<bool>(),
-                       ece in any::<bool>(),
-                       urg in any::<bool>(),
-                       cwr  in any::<bool>(),
-                       window_size in any::<u16>(),
-                       checksum in any::<u16>(),
-                       urgent_pointer in any::<u16>(),
-                       options in proptest::collection::vec(any::<u8>(), ((data_offset - 5) as usize)*4))
-                  -> TcpHeader
+    pub(crate) fn tcp_any()
+        (data_offset in TCP_MINIMUM_DATA_OFFSET..(TCP_MAXIMUM_DATA_OFFSET + 1))
+        (
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            sequence_number in any::<u32>(),
+            acknowledgment_number in any::<u32>(),
+            ns in any::<bool>(),
+            fin in any::<bool>(),
+            syn in any::<bool>(),
+            rst in any::<bool>(),
+            psh in any::<bool>(),
+            ack in any::<bool>(),
+            ece in any::<bool>(),
+            urg in any::<bool>(),
+            cwr  in any::<bool>(),
+            window_size in any::<u16>(),
+            checksum in any::<u16>(),
+            urgent_pointer in any::<u16>(),
+            options in proptest::collection::vec(any::<u8>(), ((data_offset - 5) as usize)*4))
+        -> TcpHeader
     {
         let mut result = TcpHeader::new(source_port, destination_port, sequence_number, window_size);
         result.acknowledgment_number = acknowledgment_number;
