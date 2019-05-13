@@ -14,7 +14,7 @@
 //! 
 //! ```toml
 //! [dependencies]
-//! etherparse = "0.8.0"
+//! etherparse = "0.8.1"
 //! ```
 //! 
 //! Next, add this to your crate root:
