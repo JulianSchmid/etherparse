@@ -23,7 +23,7 @@ First, add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.8.1"
+etherparse = "0.8.2"
 ```
 
 Next, add this to your crate root:
