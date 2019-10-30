@@ -325,10 +325,8 @@ impl<'a> CursorSlice<'a> {
         //parse the underlying protocol (or error in case of too many extension headers)
         if IpTrafficClass::is_ipv6_ext_header_value(next_header)
         {
-            return Err(ReadError::Ipv6TooManyHeaderExtensions)
-        }
-        else
-        {
+            Err(ReadError::Ipv6TooManyHeaderExtensions)
+        } else {
             //save the result
             self.result.ip = Some(Ipv6(ip, ip_extensions));
 

@@ -120,9 +120,7 @@ impl Ipv6Header {
                 let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
                 next_traffic_class = n_id;
                 rest = n_rest;
-            }
-            else
-            {
+            } else {
                 return Ok((next_traffic_class, rest))
             }
         }
@@ -169,9 +167,7 @@ impl Ipv6Header {
             if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class)
             {
                 next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
-            }
-            else
-            {
+            } else {
                 return Ok(next_traffic_class);
             }
         }

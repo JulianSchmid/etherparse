@@ -76,12 +76,9 @@ impl Ethernet2Header {
     pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], WriteError> {
         use self::WriteError::*;
         //length check
-        if slice.len() < Ethernet2Header::SERIALIZED_SIZE
-        {
+        if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
             Err(SliceTooSmall(Ethernet2Header::SERIALIZED_SIZE))
-        }
-        else
-        {
+        } else {
             self.write_to_slice_unchecked(slice);
             Ok(&mut slice[Ethernet2Header::SERIALIZED_SIZE..])
         }
