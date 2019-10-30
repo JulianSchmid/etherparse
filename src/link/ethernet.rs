@@ -141,7 +141,6 @@ impl<'a> Ethernet2HeaderSlice<'a> {
 
     ///Read the ether_type field of the header (in system native byte order).
     pub fn ether_type(&self) -> u16 {
-        use self::byteorder::ByteOrder;
         BigEndian::read_u16(&self.slice[12..14])
     }
 

@@ -163,7 +163,6 @@ impl<'a> PacketHeaders<'a> {
         };
 
         let (transport_proto, rest) = {
-            use crate::IpHeader;
             let (ip, rest) = IpHeader::read_from_slice(packet)?;
 
             // grab transport protocol
