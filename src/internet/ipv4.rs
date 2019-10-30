@@ -328,7 +328,7 @@ impl Ipv4Header {
             BigEndian::read_u16(&self.source[2..4]),
             BigEndian::read_u16(&self.destination[0..2]),
             BigEndian::read_u16(&self.destination[2..4])
-        ].into_iter().map(|x| u32::from(*x)).sum();
+        ].iter().map(|x| u32::from(*x)).sum();
         let options = self.options();
         for i in 0..(options.len()/2) {
             sum += u32::from( BigEndian::read_u16(&options[i*2..i*2 + 2]) );
