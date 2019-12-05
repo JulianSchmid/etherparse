@@ -1,7 +1,7 @@
 [![Crates.io](https://img.shields.io/crates/v/etherparse.svg)](https://crates.io/crates/etherparse)
 [![docs.rs](https://docs.rs/etherparse/badge.svg)](https://docs.rs/etherparse)
 [![Build Status](https://ci.appveyor.com/api/projects/status/github/JulianSchmid/etherparse?branch=master&svg=true)](https://ci.appveyor.com/project/JulianSchmid/etherparse/branch/master)
-[![Build Status](https://gitlab.com/julian.schmid/etherparse/badges/master/build.svg)](https://gitlab.com/julian.schmid/etherparse/commits/master)
+[![Build Status](https://gitlab.com/julian.schmid/etherparse/badges/master/pipeline.svg)](https://gitlab.com/julian.schmid/etherparse/commits/master)
 [![Build Status](https://travis-ci.org/JulianSchmid/etherparse.svg?branch=master)](https://travis-ci.org/JulianSchmid/etherparse)
 [![Coverage Status](https://codecov.io/gh/JulianSchmid/etherparse/branch/master/graph/badge.svg)](https://codecov.io/gh/JulianSchmid/etherparse)
 
