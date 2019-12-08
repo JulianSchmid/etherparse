@@ -199,6 +199,8 @@
 //! * Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
 
 use std::io;
+use std::fmt;
+use std::error::Error;
 
 mod link;
 pub use crate::link::ethernet::*;
@@ -261,6 +263,55 @@ impl ReadError {
         match self {
             UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(value + offset),
             value => value
+        }
+    }
+}
+
+
+impl fmt::Display for ReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ReadError::*;
+
+        match self {
+            IoError(err) => {
+                err.fmt(f)
+            },
+            UnexpectedEndOfSlice(expected_minimum_size) => { // usize
+                write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
+            },
+            VlanDoubleTaggingUnexpectedOuterTpid(tpid) => { //u16
+                write!(f, "ReadError: Expected a double vlan header, but the outer tpid {} is a non vlan header tpid.", tpid)
+            },
+            IpUnsupportedVersion(version_number) => { // u8
+                write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
+            },
+            Ipv4UnexpectedVersion(version_number) => { //u8
+                write!(f, "ReadError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
+            },
+            Ipv4HeaderLengthBad(header_length) => { //u8
+                write!(f, "ReadError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
+            },
+            Ipv4TotalLengthTooSmall(total_length_field) => { //u16
+                write!(f, "ReadError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
+            },
+            Ipv6UnexpectedVersion(version_number) => { //u8
+                write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
+            },
+            Ipv6TooManyHeaderExtensions => {
+                write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
+            },
+            TcpDataOffsetTooSmall(data_offset) => { //u8
+                write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
+            },
+        }
+    }
+}
+
+impl Error for ReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            ReadError::IoError(ref err) => Some(err),
+            _ => None
         }
     }
 }

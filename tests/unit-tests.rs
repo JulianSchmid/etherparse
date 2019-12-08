@@ -11,6 +11,7 @@ extern crate proptest;
 
 use std::io;
 
+mod errors;
 mod link;
 mod internet;
 mod transport;
@@ -19,6 +20,7 @@ mod packet_filter;
 mod packet_slicing;
 mod proptest_generators;
 pub use crate::proptest_generators::*;
+use proptest::prelude::*;
 mod packet_compositions;
 
 #[test]
@@ -125,6 +127,7 @@ fn test_io_error_to_read_error() {
 }
 
 mod read_error {
+
     #[test]
     fn add_slice_offset() {
         use super::*;
