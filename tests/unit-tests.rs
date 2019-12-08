@@ -86,7 +86,6 @@ fn test_debug_write() {
     {
         use crate::ErrorField::*;
         for value in [
-            Ipv4HeaderLength,
             Ipv4PayloadLength,
             Ipv4Dscp,
             Ipv4Ecn,

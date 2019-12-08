@@ -379,7 +379,6 @@ impl From<std::io::Error> for WriteError {
 ///Fields that can produce errors when serialized.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorField {
-    Ipv4HeaderLength,
     Ipv4PayloadLength,
     Ipv4Dscp,
     Ipv4Ecn,
