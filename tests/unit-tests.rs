@@ -6,7 +6,6 @@ extern crate byteorder;
 #[macro_use]
 extern crate assert_matches;
 
-#[macro_use]
 extern crate proptest;
 
 use std::io;

@@ -1,5 +1,4 @@
 use super::*;
-use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum IpTest {
