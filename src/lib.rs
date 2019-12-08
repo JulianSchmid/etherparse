@@ -347,6 +347,12 @@ impl From<ValueError> for WriteError {
     }
 }
 
+impl From<std::io::Error> for WriteError {
+    fn from(err: std::io::Error) -> WriteError {
+        WriteError::IoError(err)
+    }
+}
+
 ///Errors in the given data
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueError {
@@ -368,12 +374,6 @@ pub enum ValueError {
     U16TooLarge{value: u16, max: u16, field: ErrorField},
     ///Error when a u32 field in a header has a larger value then supported.
     U32TooLarge{value: u32, max: u32, field: ErrorField}
-}
-
-impl From<std::io::Error> for WriteError {
-    fn from(err: std::io::Error) -> WriteError {
-        WriteError::IoError(err)
-    }
 }
 
 ///Fields that can produce errors when serialized.
