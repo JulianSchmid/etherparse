@@ -103,3 +103,16 @@ fn read_error_source() {
         assert_matches!(value.source(), None);
     }
 }
+
+#[test]
+fn value_error_display() {
+    use ErrorField::*;
+
+    assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
+    assert_eq!("Ipv4Header.differentiated_services_code_point", &format!("{}", Ipv4Dscp));
+    assert_eq!("Ipv4Header.explicit_congestion_notification", &format!("{}", Ipv4Ecn));
+    assert_eq!("Ipv4Header.fragments_offset", &format!("{}", Ipv4FragmentsOffset));
+    assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
+    assert_eq!("SingleVlanHeader.priority_code_point", &format!("{}", VlanTagPriorityCodePoint));
+    assert_eq!("SingleVlanHeader.vlan_identifier", &format!("{}", VlanTagVlanId));
+}

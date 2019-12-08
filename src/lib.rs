@@ -390,6 +390,21 @@ pub enum ErrorField {
     VlanTagVlanId,
 }
 
+impl fmt::Display for ErrorField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ErrorField::*;
+        match self {
+            Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
+            Ipv4Dscp => write!(f, "Ipv4Header.differentiated_services_code_point"),
+            Ipv4Ecn => write!(f, "Ipv4Header.explicit_congestion_notification"),
+            Ipv4FragmentsOffset => write!(f, "Ipv4Header.fragments_offset"),
+            Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
+            VlanTagPriorityCodePoint => write!(f, "SingleVlanHeader.priority_code_point"),
+            VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier")
+        }
+    }
+}
+
 fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError> {
     use crate::ValueError::U8TooLarge;
     if value <= max {
