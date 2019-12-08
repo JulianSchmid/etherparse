@@ -1017,7 +1017,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         } else {
                             let mut acks: [Option<(u32,u32)>;3] = [None;3];
                             let first = (BigEndian::read_u32(&self.options[2..2 + 4]),
-                                         BigEndian::read_u32(&self.options[2 + 4..2 + 8]));;
+                                         BigEndian::read_u32(&self.options[2 + 4..2 + 8]));
                             for (i, item) in acks.iter_mut()
                                                  .enumerate()
                                                  .take(3)
