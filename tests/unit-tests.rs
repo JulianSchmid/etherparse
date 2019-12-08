@@ -92,8 +92,7 @@ fn test_debug_write() {
             Ipv4FragmentsOffset,
             Ipv6FlowLabel,
             VlanTagPriorityCodePoint,
-            VlanTagVlanId,
-            TcpDataOffset
+            VlanTagVlanId
         ].iter() {
             println!("{:?}", value);
         }

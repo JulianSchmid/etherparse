@@ -388,8 +388,6 @@ pub enum ErrorField {
     VlanTagPriorityCodePoint,
     ///VlanTaggingHeader.vlan_identifier
     VlanTagVlanId,
-    ///The data offset field in a tcp header
-    TcpDataOffset
 }
 
 fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError> {
