@@ -2,6 +2,19 @@ use super::*;
 use proptest::*;
 use proptest::prelude::*;
 
+pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
+    use ErrorField::*;
+    prop_oneof![
+        Just(Ipv4PayloadLength),
+        Just(Ipv4Dscp),
+        Just(Ipv4Ecn),
+        Just(Ipv4FragmentsOffset),
+        Just(Ipv6FlowLabel),
+        Just(VlanTagPriorityCodePoint),
+        Just(VlanTagVlanId)
+    ]
+}
+
 prop_compose! {
     pub(crate) fn ethernet_2_with(ether_type: u16)(
         source in prop::array::uniform6(any::<u8>()),

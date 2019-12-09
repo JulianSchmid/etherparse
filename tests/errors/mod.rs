@@ -103,9 +103,84 @@ fn read_error_source() {
         assert_matches!(value.source(), None);
     }
 }
+proptest! {
+    #[test]
+    fn value_error_display(
+        value_u8 in any::<u8>(),
+        max_u8 in any::<u8>(),
+        value_u16 in any::<u16>(),
+        max_u16 in any::<u16>(),
+        value_u32 in any::<u32>(),
+        max_u32 in any::<u32>(),
+        arg_usize in any::<usize>(),
+        field in error_field_any()
+    ) {
+        use ValueError::*;
+
+        //Ipv4OptionsLengthBad
+        assert_eq!(
+            &format!("Bad IPv4 'options_len'. The IPv4 options length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 40 bytes.", arg_usize),
+            &format!("{}", Ipv4OptionsLengthBad(arg_usize))
+        );
+
+        //Ipv4PayloadLengthTooLarge
+        assert_eq!(
+            &format!("IPv4 'total_legnth' too large. The IPv4 header and payload have a larger size ({} bytes) than can be be represented by the 'total_legnth' field in the IPv4 header.", arg_usize),
+            &format!("{}", Ipv4PayloadLengthTooLarge(arg_usize))
+        );
+
+        //Ipv6PayloadLengthTooLarge
+        assert_eq!(
+            &format!("IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", arg_usize),
+            &format!("{}", Ipv6PayloadLengthTooLarge(arg_usize))
+        );
+
+        //UdpPayloadLengthTooLarge
+        assert_eq!(
+            &format!("UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", arg_usize),
+            &format!("{}", UdpPayloadLengthTooLarge(arg_usize))
+        );
+
+        //TcpLengthTooLarge
+        assert_eq!(
+            &format!("TCP length too large. The TCP packet length ({} bytes) is larger then what is supported.", arg_usize),
+            &format!("{}", TcpLengthTooLarge(arg_usize))
+        );
+
+        //U8TooLarge
+        assert_eq!(
+            &format!("The value {} of the field '{}' is larger then the allowed maximum of {}.", value_u8, field, max_u8),
+            &format!("{}", U8TooLarge{
+                value: value_u8,
+                max: max_u8,
+                field: field.clone()
+            })
+        );
+
+        //U16TooLarge
+        assert_eq!(
+            &format!("The value {} of the field '{}' is larger then the allowed maximum of {}.", value_u16, field, max_u16),
+            &format!("{}", U16TooLarge{
+                value: value_u16,
+                max: max_u16,
+                field: field.clone()
+            })
+        );
+
+        //U32TooLarge
+        assert_eq!(
+            &format!("The value {} of the field '{}' is larger then the allowed maximum of {}.", value_u32, field, max_u32),
+            &format!("{}", U32TooLarge{
+                value: value_u32,
+                max: max_u32,
+                field: field.clone()
+            })
+        );
+    }
+}
 
 #[test]
-fn value_error_display() {
+fn error_field_display() {
     use ErrorField::*;
 
     assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));

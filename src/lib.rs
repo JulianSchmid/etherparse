@@ -376,6 +376,42 @@ pub enum ValueError {
     U32TooLarge{value: u32, max: u32, field: ErrorField}
 }
 
+impl Error for ValueError {
+
+}
+
+impl fmt::Display for ValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ValueError::*;
+        match self {
+            Ipv4OptionsLengthBad(options_len) => { //usize
+                write!(f, "Bad IPv4 'options_len'. The IPv4 options length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 40 bytes.", options_len)
+            },
+            Ipv4PayloadLengthTooLarge(total_length) => { //usize
+                write!(f, "IPv4 'total_legnth' too large. The IPv4 header and payload have a larger size ({} bytes) than can be be represented by the 'total_legnth' field in the IPv4 header.", total_length)
+            },
+            Ipv6PayloadLengthTooLarge(size) => { //usize
+                write!(f, "IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", size)
+            },
+            UdpPayloadLengthTooLarge(length) => { //usize
+                write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)
+            }, 
+            TcpLengthTooLarge(length) => {  //usize
+                write!(f, "TCP length too large. The TCP packet length ({} bytes) is larger then what is supported.", length)
+            },
+            U8TooLarge{value, max, field} => {
+                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
+            },
+            U16TooLarge{value, max, field} => {
+                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
+            },
+            U32TooLarge{value, max, field} => {
+                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
+            }
+        }
+    }
+}
+
 ///Fields that can produce errors when serialized.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorField {
