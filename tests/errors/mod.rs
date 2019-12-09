@@ -103,6 +103,29 @@ fn read_error_source() {
         assert_matches!(value.source(), None);
     }
 }
+
+/// Check that all values return None as source
+#[test]
+fn value_error_source() {
+    use ValueError::*;
+    use std::error::Error;
+
+    let none_values = [
+        Ipv4OptionsLengthBad(0),
+        Ipv4PayloadLengthTooLarge(0),
+        Ipv6PayloadLengthTooLarge(0),
+        UdpPayloadLengthTooLarge(0),
+        TcpLengthTooLarge(0),
+        U8TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
+        U16TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
+        U32TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
+    ];
+
+    for value in &none_values {
+        assert_matches!(value.source(), None);
+    }
+}
+
 proptest! {
     #[test]
     fn value_error_display(
