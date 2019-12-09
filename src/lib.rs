@@ -273,9 +273,7 @@ impl fmt::Display for ReadError {
         use ReadError::*;
 
         match self {
-            IoError(err) => {
-                err.fmt(f)
-            },
+            IoError(err) => err.fmt(f),
             UnexpectedEndOfSlice(expected_minimum_size) => { // usize
                 write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
             },
@@ -358,15 +356,24 @@ impl fmt::Display for WriteError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use WriteError::*;
         match self {
-            IoError(err) => {
-                err.fmt(f)
-            },
+            IoError(err) => err.fmt(f),
             ValueError(err) => {
                 write!(f, "ValueError: {}", err)
             },
             SliceTooSmall(size) => {
                 write!(f, "SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size)
             }
+        }
+    }
+}
+
+impl Error for WriteError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use WriteError::*;
+        match self {
+            IoError(ref err) => Some(err),
+            ValueError(ref err) => Some(err),
+            SliceTooSmall(_) => None
         }
     }
 }

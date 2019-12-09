@@ -139,6 +139,28 @@ fn write_error_display() {
     }
 }
 
+/// Check the write error display fmt generate the expected strings
+#[test]
+fn write_error_source() {
+    use super::WriteError::{IoError, SliceTooSmall};
+    use std::error::Error;
+
+    assert_matches!(
+        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source(),
+        Some(_)
+    );
+
+    assert_matches!(
+        WriteError::ValueError(ValueError::Ipv4OptionsLengthBad(0)).source(),
+        Some(_)
+    );
+
+    assert_matches!(
+        SliceTooSmall(0).source(),
+        None
+    );
+}
+
 /// Check that all values return None as source
 #[test]
 fn value_error_source() {
