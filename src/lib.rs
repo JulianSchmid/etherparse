@@ -334,6 +334,7 @@ pub enum WriteError {
 
 impl WriteError {
     pub fn value_error(self) -> Option<ValueError> {
+
         match self {
             WriteError::ValueError(value) => Some(value),
             _ => None
@@ -350,6 +351,23 @@ impl From<ValueError> for WriteError {
 impl From<std::io::Error> for WriteError {
     fn from(err: std::io::Error) -> WriteError {
         WriteError::IoError(err)
+    }
+}
+
+impl fmt::Display for WriteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use WriteError::*;
+        match self {
+            IoError(err) => {
+                err.fmt(f)
+            },
+            ValueError(err) => {
+                write!(f, "ValueError: {}", err)
+            },
+            SliceTooSmall(size) => {
+                write!(f, "SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size)
+            }
+        }
     }
 }
 

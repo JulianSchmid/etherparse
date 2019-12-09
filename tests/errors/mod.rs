@@ -104,6 +104,41 @@ fn read_error_source() {
     }
 }
 
+/// Check the write error display fmt generate the expected strings
+#[test]
+fn write_error_display() {
+
+    use WriteError::{IoError, SliceTooSmall};
+    use ValueError::Ipv4OptionsLengthBad;
+
+    //IoError
+    {
+        let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
+        assert_eq!(
+            &format!("{}", custom_error),
+            &format!("{}", IoError(custom_error))
+        );
+    }
+
+    //ValueError
+    {
+        let value_error = Ipv4OptionsLengthBad(0);
+        assert_eq!(
+            &format!("ValueError: {}", value_error),
+            &format!("{}", WriteError::ValueError(value_error))
+        );
+    }
+
+    //SliceTooSmall
+    {
+        let size = 1234;
+        assert_eq!(
+            &format!("SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size),
+            &format!("{}", SliceTooSmall(size))
+        );
+    }
+}
+
 /// Check that all values return None as source
 #[test]
 fn value_error_source() {
@@ -116,9 +151,9 @@ fn value_error_source() {
         Ipv6PayloadLengthTooLarge(0),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
-        U8TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
-        U16TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
-        U32TooLarge{value:0, max:0, field:ErrorField::Ipv4Dscp},
+        U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
     ];
 
     for value in &none_values {
