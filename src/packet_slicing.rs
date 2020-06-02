@@ -274,11 +274,15 @@ impl<'a> CursorSlice<'a> {
 
         //cache protocol for later
         let protocol = result.protocol();
+        let fragments_offset = result.fragments_offset();
 
         //set the new data
         self.move_by_slice(result.slice());
         self.result.ip = Some(Ipv4(result));
 
+        if fragments_offset != 0 {
+            return self.slice_payload();
+        }
         match protocol {
             IP_UDP => self.slice_udp(),
             IP_TCP => self.slice_tcp(),
@@ -303,6 +307,7 @@ impl<'a> CursorSlice<'a> {
                                  None, None];
 
         let mut next_header = ip.next_header();
+        let mut is_fragment = false;
         for extension_header in ip_extensions.iter_mut() {
             if !IpTrafficClass::is_ipv6_ext_header_value(next_header) {
                 break;
@@ -317,8 +322,18 @@ impl<'a> CursorSlice<'a> {
 
                 //save the result
                 let ext_protocol = next_header;
+                let fragmented = ext_protocol == (IpTrafficClass::IPv6FragmentationHeader as u8);
+
                 next_header = ext.next_header();
+                if fragmented {
+                    is_fragment = ext.slice()[2] > 0 || ext.slice()[3] > 7;
+                }
                 *extension_header = Some((ext_protocol, ext));
+
+                //fragmentation must be the last extension before the payload
+                if fragmented {
+                    break;
+                }
             }
         }
 
@@ -330,7 +345,10 @@ impl<'a> CursorSlice<'a> {
             //save the result
             self.result.ip = Some(Ipv6(ip, ip_extensions));
 
-            //parse the data bellow
+            //parse the data below
+            if is_fragment {
+                return self.slice_payload();
+            }
             match next_header {
                 IP_UDP => self.slice_udp(),
                 IP_TCP => self.slice_tcp(),

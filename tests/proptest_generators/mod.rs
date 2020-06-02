@@ -112,7 +112,6 @@ prop_compose! {
         ttl in any::<u8>(),
         dont_fragment in any::<bool>(),
         more_fragments in any::<bool>(),
-        fragments_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
         payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::SERIALIZED_SIZE as u16)),
         protocol in proptest::strategy::Just(protocol),
@@ -146,7 +145,7 @@ prop_compose! {
         result.identification = identification;
         result.dont_fragment = dont_fragment;
         result.more_fragments = more_fragments;
-        result.fragments_offset = fragments_offset;
+        result.fragments_offset = 0;
         result.time_to_live = ttl;
         result.protocol = protocol;
         result.header_checksum = header_checksum;
