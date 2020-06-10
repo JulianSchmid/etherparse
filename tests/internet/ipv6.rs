@@ -157,8 +157,8 @@ fn skip_all_extensions() {
         IPv6DestinationOptions as u8,
         IPv6RouteHeader as u8,
         IPv6FragmentationHeader as u8, //3
-        IPv6AuthenticationHeader as u8,
-        IPv6EncapSecurityPayload as u8,
+        AuthenticationHeader as u8,
+        EncapsulatingSecurityPayload as u8,
         IPv6DestinationOptions as u8,
         MobilityHeader as u8,
         Hip as u8,
@@ -408,8 +408,8 @@ fn extension_from_slice() {
             IPv6HeaderHopByHop as u8,
             IPv6DestinationOptions as u8,
             IPv6RouteHeader as u8,
-            IPv6AuthenticationHeader as u8,
-            IPv6EncapSecurityPayload as u8
+            AuthenticationHeader as u8,
+            EncapsulatingSecurityPayload as u8
         ];
         for id in EXTENSION_IDS_WITH_LENGTH.iter() {
             let slice = Ipv6ExtensionHeaderSlice::from_slice(*id, &buffer).unwrap();
@@ -431,8 +431,8 @@ fn extension_from_slice_bad_length() {
         IPv6HeaderHopByHop as u8,
         IPv6DestinationOptions as u8,
         IPv6RouteHeader as u8,
-        IPv6AuthenticationHeader as u8,
-        IPv6EncapSecurityPayload as u8
+        AuthenticationHeader as u8,
+        EncapsulatingSecurityPayload as u8
     ];
 
     //smaller then minimum extension header size (8 bytes)

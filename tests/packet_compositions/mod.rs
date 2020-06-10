@@ -355,8 +355,8 @@ impl ComponentTest {
             IpTrafficClass::IPv6RouteHeader as u8,
             IpTrafficClass::IPv6FragmentationHeader as u8,
             IpTrafficClass::IPv6DestinationOptions as u8,
-            IpTrafficClass::IPv6AuthenticationHeader as u8,
-            IpTrafficClass::IPv6EncapSecurityPayload as u8
+            IpTrafficClass::AuthenticationHeader as u8,
+            IpTrafficClass::EncapsulatingSecurityPayload as u8
         ];
 
         //generate a too many ipv6 extensions error
