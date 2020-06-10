@@ -153,10 +153,10 @@ pub enum IpTrafficClass {
     Dsr = 48,
     ///BNA [Gary Salamon]
     Bna = 49,
-    ///Encap Security Payload [RFC4303]
-    IPv6EncapSecurityPayload = 50,
+    ///Encapsulating Security Payload [RFC4303]
+    EncapsulatingSecurityPayload = 50,
     ///Authentication Header [RFC4302]
-    IPv6AuthenticationHeader = 51,
+    AuthenticationHeader = 51,
     ///Integrated Net Layer Security  TUBA [K_Robert_Glenn]
     Inlsp = 52,
     ///IP with Encryption (deprecated) [John_Ioannidis]
@@ -351,8 +351,8 @@ impl IpTrafficClass {
         const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8; //0
         const ROUTE: u8 = IPv6RouteHeader as u8; //43
         const FRAG: u8 = IPv6FragmentationHeader as u8; //44
-        const ENCAP_SEC: u8 = IPv6EncapSecurityPayload as u8; //50
-        const AUTH: u8 = IPv6AuthenticationHeader as u8; //51
+        const ENCAP_SEC: u8 = EncapsulatingSecurityPayload as u8; //50
+        const AUTH: u8 = AuthenticationHeader as u8; //51
         const OPTIONS: u8 = IPv6DestinationOptions as u8; //60
         const MOBILITY: u8 = MobilityHeader as u8; //135
         const HIP: u8 = Hip as u8; //139
