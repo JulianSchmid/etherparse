@@ -99,11 +99,16 @@ fn test_debug_write() {
     }
     //PacketHeaders
     {
-        let dummy = vec![1,2,3,4];
+        let dummy = vec![1,2,3,4]; 
         let value = PacketHeaders{
             link: None,
             vlan: None,
             ip: None,
+            ip_extensions: [
+                None, None, None, None, None,
+                None, None, None, None, None,
+                None, None
+            ],
             transport: None,
             payload: &dummy[..]
         };

@@ -215,6 +215,12 @@ proptest! {
             &format!("{}", Ipv6PayloadLengthTooLarge(arg_usize))
         );
 
+        //Ipv6PayloadLengthTooLarge
+        assert_eq!(
+            &format!("IPv6 hop by hop 'options' are too large. The options size ({} bytes) is larger then what can be be represented by the 'extended header size' field in the IPv6 hop by hop header.", arg_usize),
+            &format!("{}", Ipv6HopByHopOptionsTooLarge(arg_usize))
+        );
+
         //UdpPayloadLengthTooLarge
         assert_eq!(
             &format!("UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", arg_usize),
