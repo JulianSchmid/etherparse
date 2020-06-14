@@ -210,6 +210,7 @@ mod internet;
 pub use crate::internet::ip::*;
 pub use crate::internet::ipv4::*;
 pub use crate::internet::ipv6::*;
+pub use crate::internet::ipv6_ext_hop_by_hop::*;
 
 mod transport;
 pub use crate::transport::tcp::*;
@@ -387,6 +388,8 @@ pub enum ValueError {
     Ipv4PayloadLengthTooLarge(usize),
     ///Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
+    ///Error when a given options block is bigger then what fits inside an ipv6 hop by hop extended header size.
+    Ipv6HopByHopOptionsTooLarge(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
@@ -418,6 +421,9 @@ impl fmt::Display for ValueError {
             Ipv6PayloadLengthTooLarge(size) => { //usize
                 write!(f, "IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", size)
             },
+            Ipv6HopByHopOptionsTooLarge(size) => {
+                write!(f, "IPv6 hop by hop 'options' are too large. The options size ({} bytes) is larger then what can be be represented by the 'extended header size' field in the IPv6 hop by hop header.", size)
+            }
             UdpPayloadLengthTooLarge(length) => { //usize
                 write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)
             }, 
