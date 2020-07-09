@@ -15,7 +15,7 @@ pub struct PacketHeaders<'a> {
     /// The headers are in the same order as they are written to the packet.
     pub ip_extensions: [Option<IpExtensionHeader>;IP_MAX_NUM_HEADER_EXTENSIONS],
     pub transport: Option<TransportHeader>,
-    ///Rest of the packet that could not be decoded as a header (usually the payload).
+    /// Rest of the packet that could not be decoded as a header (usually the payload).
     pub payload: &'a [u8]
 }
 
