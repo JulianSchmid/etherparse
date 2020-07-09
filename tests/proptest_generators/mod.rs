@@ -360,6 +360,35 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub(crate) fn ipv6_fragment_with(
+        next_header: u8
+    ) (
+        next_header in proptest::strategy::Just(next_header),
+        fragment_offset in 0u16..=0b0001_1111_1111_1111u16,
+        more_fragments in any::<bool>(),
+        identification in any::<u32>(),
+    ) -> Ipv6FragmentHeader
+    {
+        Ipv6FragmentHeader::new(
+            next_header,
+            fragment_offset,
+            more_fragments,
+            identification
+        )
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv6_fragment_any()
+        (next_header in any::<u8>())
+        (result in ipv6_fragment_with(next_header)
+    ) -> Ipv6FragmentHeader
+    {
+        result
+    }
+}
+
+prop_compose! {
     pub(crate) fn udp_any()(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
