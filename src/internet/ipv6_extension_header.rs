@@ -69,7 +69,7 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
 /// * Shim6 Protocol
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6ExtensionHeader<'a> {
-    /// Type of content after this header (protocol number)
+    /// Type of content after this header (traffic class/protocol number)
     pub next_header: u8,
     //// The data contained in the extension header (excluding next_header & hdr length).
     pub data: &'a [u8],

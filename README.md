@@ -176,6 +176,7 @@ Read the documentations of the different methods for a more details:
 * TCP Extensions for High Performance [RFC 7323](https://tools.ietf.org/html/rfc7323)
 * The Addition of Explicit Congestion Notification (ECN) to IP [RFC 3168](https://tools.ietf.org/html/rfc3168)
 * Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
+* IP Authentication Header [RFC 4302](https://tools.ietf.org/html/rfc4302)
 
 ## License
 Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
