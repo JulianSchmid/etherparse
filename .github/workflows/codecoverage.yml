@@ -1,0 +1,27 @@
+name: codecoverage 
+
+on: [ push, pull_request ]
+
+jobs:
+  codecoverage_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1.0.6
+      with:
+        toolchain: nightly
+        override: true
+    - name: cargo test (instrumented)
+      uses: actions-rs/cargo@v1.0.1
+      with:
+        command: test
+        args: --no-fail-fast
+      env:
+        CARGO_INCREMENTAL: '0'
+        RUSTFLAGS: '-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort'
+        RUSTDOCFLAGS: '-Cpanic=abort'
+    - name: rust-grcov
+      uses: actions-rs/grcov@v0.1.5
+    - name: Codecov
+      uses: codecov/codecov-action@v1.0.10
