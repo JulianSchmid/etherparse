@@ -42,6 +42,7 @@ proptest! {
             assert_eq!(input.fragment_offset, result.fragment_offset());
             assert_eq!(input.more_fragments, result.more_fragments());
             assert_eq!(input.identification, result.identification());
+            assert_eq!(&buffer[..8], result.slice());
             assert_eq!(input, result.to_header());
         }
         //deserialize (with read_from_slice)
@@ -50,6 +51,33 @@ proptest! {
             assert_eq!(input, result.0);
             assert_eq!(&buffer[8..], result.1);
         }
+    }
+}
+
+proptest! {
+    /// Check that a too small slice triggers an error
+    #[test]
+    fn from_slice_bad_slice_len(
+        input in ipv6_fragment_any(),
+        bad_slice_len in 0..8usize,
+    ) {
+        use crate::ReadError::*;
+
+        //serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(8);
+        input.write(&mut buffer).unwrap();
+
+        // header
+        assert_matches!(
+            Ipv6FragmentHeader::read_from_slice(&buffer[..bad_slice_len]).unwrap_err(),
+            UnexpectedEndOfSlice(8)
+        );
+
+        // slice
+        assert_matches!(
+            Ipv6FragmentHeaderSlice::from_slice(&buffer[..bad_slice_len]).unwrap_err(),
+            UnexpectedEndOfSlice(8)
+        );
     }
 }
 
@@ -76,6 +104,5 @@ proptest! {
             input.write(&mut buffer).unwrap_err().value_error().unwrap(),
             U16TooLarge{value: fragment_offset, max: 0b0001_1111_1111_1111, field: Ipv6FragmentOffset}
         );
-
     }
 }
