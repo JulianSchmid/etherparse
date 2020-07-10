@@ -26,6 +26,3 @@ addons:
       - gcc
       - binutils-dev
       - libiberty-dev
-
-after_success:
-  - ./.travis/calculate_coverage.sh
