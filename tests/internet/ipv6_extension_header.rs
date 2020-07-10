@@ -211,9 +211,17 @@ fn write() {
         let input = Ipv6ExtensionHeader::new_raw(123, test.options);
         let mut buffer: Vec<u8> = Vec::new();
         input.write(&mut buffer).unwrap();
-        let actual = Ipv6ExtensionHeaderSlice::from_slice(0, &buffer).unwrap();
-        assert_eq!(123, actual.next_header());
-        assert_eq!(test.expected, actual.data());
+        {
+            let actual = Ipv6ExtensionHeaderSlice::from_slice(0, &buffer).unwrap();
+            assert_eq!(123, actual.next_header());
+            assert_eq!(test.expected, actual.data());
+        }
+        {
+            let actual = Ipv6ExtensionHeader::read_from_slice(0, &buffer).unwrap();
+            assert_eq!(123, actual.0.next_header);
+            assert_eq!(test.expected, actual.0.data);
+            assert_eq!(&test.expected[test.expected.len()..], actual.1);
+        }
     }
 }
 
