@@ -143,7 +143,7 @@ pub struct Ipv6ExtensionHeaderSlice<'a> {
 
 impl<'a> Ipv6ExtensionHeaderSlice<'a> {
 
-    /// Creates a genric ipv6 extension header slice from a slice.
+    /// Creates a generic ipv6 extension header slice from a slice.
     pub fn from_slice(header_type: u8, slice: &'a[u8]) -> Result<Ipv6ExtensionHeaderSlice<'a>, ReadError> {
 
         //check length
