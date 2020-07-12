@@ -209,11 +209,11 @@ pub use crate::link::vlan_tagging::*;
 
 mod internet;
 pub use crate::internet::ip::*;
-pub use crate::internet::ip_authentication_header::*;
+pub use crate::internet::ip_authentication::*;
 pub use crate::internet::ipv4::*;
 pub use crate::internet::ipv6::*;
-pub use crate::internet::ipv6_extension_header::*;
-pub use crate::internet::ipv6_fragment_header::*;
+pub use crate::internet::ipv6_extension::*;
+pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
 pub use crate::transport::tcp::*;
