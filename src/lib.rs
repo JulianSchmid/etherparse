@@ -209,6 +209,7 @@ pub use crate::link::vlan_tagging::*;
 
 mod internet;
 pub use crate::internet::ip::*;
+pub use crate::internet::ip_authentication_header::*;
 pub use crate::internet::ipv4::*;
 pub use crate::internet::ipv6::*;
 pub use crate::internet::ipv6_extension_header::*;
@@ -392,6 +393,8 @@ pub enum ValueError {
     Ipv6PayloadLengthTooLarge(usize),
     ///Error when a given data block is bigger then what fits inside an ipv6 extended header size.
     Ipv6ExtensionDataTooLarge(usize),
+    ///Error when a given authentication header icv size is not a multiple of 4 bytes or bigger then 1016 bytes and therefor can not be represented in the header length field.
+    IpAuthenticationHeaderBadIcvLength(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
@@ -425,6 +428,9 @@ impl fmt::Display for ValueError {
             },
             Ipv6ExtensionDataTooLarge(size) => {
                 write!(f, "IPv6 extensions header 'data' are too large. The data size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", size)
+            },
+            IpAuthenticationHeaderBadIcvLength(size) => {
+                write!(f, "IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", size)
             }
             UdpPayloadLengthTooLarge(length) => { //usize
                 write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)

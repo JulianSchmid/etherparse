@@ -10,7 +10,7 @@ pub struct PacketHeaders<'a> {
     pub ip: Option<IpHeader>,
     /// IP Extension headers present after the ip header. 
     ///
-    /// In case of IPV4 these can be ipsec authentifaction & encapsulated
+    /// In case of IPV4 these can be ipsec authentication & encapsulated
     /// security headers. In case of IPv6 these are the ipv6 extension headers.
     /// The headers are in the same order as they are written to the packet.
     pub ip_extensions: [Option<IpExtensionHeader>;IP_MAX_NUM_HEADER_EXTENSIONS],

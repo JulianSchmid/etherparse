@@ -177,6 +177,9 @@ Read the documentations of the different methods for a more details:
 * The Addition of Explicit Congestion Notification (ECN) to IP [RFC 3168](https://tools.ietf.org/html/rfc3168)
 * Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
 * IP Authentication Header [RFC 4302](https://tools.ietf.org/html/rfc4302)
+* Mobility Support in IPv6 [RFC 6275](https://tools.ietf.org/html/rfc6275)
+* Host Identity Protocol Version 2 (HIPv2) [RFC 7401](https://tools.ietf.org/html/rfc7401)
+* Shim6: Level 3 Multihoming Shim Protocol for IPv6 [RFC 5533](https://tools.ietf.org/html/rfc5533)
 
 ## License
 Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
