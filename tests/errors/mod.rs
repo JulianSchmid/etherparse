@@ -68,6 +68,12 @@ proptest! {
             &format!("{}", Ipv6TooManyHeaderExtensions)
         );
 
+        //IpAuthenticationHeaderTooSmallPayloadLength
+        assert_eq!(
+            &format!("ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", arg_u8),
+            &format!("{}", IpAuthenticationHeaderTooSmallPayloadLength(arg_u8))
+        );
+
         //TcpDataOffsetTooSmall
         assert_eq!(
             &format!("ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", arg_u8),
@@ -274,6 +280,7 @@ fn error_field_display() {
     assert_eq!("Ipv4Header.explicit_congestion_notification", &format!("{}", Ipv4Ecn));
     assert_eq!("Ipv4Header.fragments_offset", &format!("{}", Ipv4FragmentsOffset));
     assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
+    assert_eq!("Ipv6FragmentHeader.fragment_offset", &format!("{}", Ipv6FragmentOffset));
     assert_eq!("SingleVlanHeader.priority_code_point", &format!("{}", VlanTagPriorityCodePoint));
     assert_eq!("SingleVlanHeader.vlan_identifier", &format!("{}", VlanTagVlanId));
 }

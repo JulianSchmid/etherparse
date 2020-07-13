@@ -256,6 +256,8 @@ pub enum ReadError {
     Ipv6UnexpectedVersion(u8),
     ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
     Ipv6TooManyHeaderExtensions,
+    ///Error if the header length in the ip authentication header is smaller then the minimum size of 1.
+    IpAuthenticationHeaderTooSmallPayloadLength(u8),
     ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
     TcpDataOffsetTooSmall(u8),
 }
@@ -301,6 +303,9 @@ impl fmt::Display for ReadError {
             },
             Ipv6TooManyHeaderExtensions => {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
+            },
+            IpAuthenticationHeaderTooSmallPayloadLength(length) => {
+                write!(f, "ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", length)
             },
             TcpDataOffsetTooSmall(data_offset) => { //u8
                 write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)

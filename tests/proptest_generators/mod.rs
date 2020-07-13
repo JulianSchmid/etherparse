@@ -388,6 +388,57 @@ prop_compose! {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IpAuthenticationComponents {
+    pub next_header: u8,
+    pub spi: u32,
+    pub sequence_number: u32,
+    pub icv: Vec<u8>
+}
+
+impl IpAuthenticationComponents {
+
+    pub fn to_header<'a>(&'a self) -> IpAuthenticationHeader<'a> {
+        IpAuthenticationHeader::new(
+            self.next_header,
+            self.spi,
+            self.sequence_number,
+            &self.icv
+        )
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ip_authentication_with(
+        next_header: u8
+    ) (
+        next_header in proptest::strategy::Just(next_header),
+        len in 1..0xffu8
+    ) (
+        next_header in proptest::strategy::Just(next_header),
+        spi in any::<u32>(),
+        sequence_number in any::<u32>(),
+        icv in proptest::collection::vec(any::<u8>(), (len as usize)*4)
+    ) -> IpAuthenticationComponents {
+        IpAuthenticationComponents {
+            next_header,
+            spi,
+            sequence_number,
+            icv
+        }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ip_authentication_any() (
+        next_header in any::<u8>()
+    ) (
+        header in ip_authentication_with(next_header)
+    ) -> IpAuthenticationComponents {
+        header
+    }
+}
+
 prop_compose! {
     pub(crate) fn udp_any()(
             source_port in any::<u16>(),
