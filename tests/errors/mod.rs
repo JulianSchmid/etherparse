@@ -177,6 +177,8 @@ fn value_error_source() {
         Ipv4OptionsLengthBad(0),
         Ipv4PayloadLengthTooLarge(0),
         Ipv6PayloadLengthTooLarge(0),
+        Ipv6ExtensionDataTooLarge(0),
+        IpAuthenticationHeaderBadIcvLength(0),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
         U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
@@ -225,6 +227,12 @@ proptest! {
         assert_eq!(
             &format!("IPv6 extensions header 'data' are too large. The data size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", arg_usize),
             &format!("{}", Ipv6ExtensionDataTooLarge(arg_usize))
+        );
+
+        //IpAuthenticationHeaderBadIcvLength
+        assert_eq!(
+            &format!("IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", arg_usize),
+            &format!("{}", IpAuthenticationHeaderBadIcvLength(arg_usize))
         );
 
         //UdpPayloadLengthTooLarge
