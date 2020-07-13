@@ -4,16 +4,17 @@ extern crate byteorder;
 use self::byteorder::{BigEndian, ByteOrder, WriteBytesExt};
 
 /// IP Authentication Header (rfc4302)
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IpAuthenticationHeader<'a> {
     /// Type of content after this header (traffic class/protocol number)
-    next_header: u8,
+    pub next_header: u8,
     /// Security Parameters Index
-    spi: u32,
+    pub spi: u32,
     /// This unsigned 32-bit field contains a counter value that 
     /// increases by one for each packet sent.
-    sequence_number: u32,
+    pub sequence_number: u32,
     /// Encoded Integrity Check Value-ICV (variable)
-    raw_icv: &'a[u8],
+    pub raw_icv: &'a[u8],
 }
 
 impl<'a> IpAuthenticationHeader<'a> {
@@ -84,6 +85,7 @@ impl<'a> IpAuthenticationHeader<'a> {
 }
 
 /// A slice containing an IP Authentication Header (rfc4302)
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IpAuthenticationHeaderSlice<'a> {
     slice: &'a [u8]
 }
@@ -93,10 +95,15 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
     /// Creates a ip authentication header slice from a slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<IpAuthenticationHeaderSlice<'a>, ReadError> {
         
-        // check length
+        // check slice length
         use crate::ReadError::*;
         if slice.len() < 8 {
             return Err(UnexpectedEndOfSlice(8));
+        }
+
+        // check header length minimum size
+        if slice[1] < 1 {
+            return Err(IpAuthenticationHeaderTooSmallPayloadLength(slice[1]));
         }
 
         // check length
