@@ -117,3 +117,36 @@ proptest! {
     }
 }
 
+/// Test that an error is thrown if trying to write a raw_icv bigger then supported by the length field.
+#[test]
+fn write_too_big_raw_icv() {
+    let raw_icv = vec![0;0xff*4];
+    // ok case, exactly enough to support it
+    {
+        let header = IpAuthenticationHeader::new(
+            0,
+            0,
+            0,
+            &raw_icv[..raw_icv.len()-4]
+        );
+        let mut buffer: Vec<u8> = Vec::new();
+        header.write(&mut buffer).unwrap();
+        assert_eq!(header, IpAuthenticationHeader::read_from_slice(&buffer).unwrap().0);
+    }
+    // more data then supported
+    {
+        let header = IpAuthenticationHeader::new(
+            0,
+            0,
+            0,
+            &raw_icv
+        );
+        let mut buffer: Vec<u8> = Vec::new();
+        use ValueError::*;
+        assert_eq!(
+            header.write(&mut buffer).unwrap_err().value_error().unwrap(),
+            IpAuthenticationHeaderBadIcvLength(raw_icv.len())
+        );
+    }
+}
+
