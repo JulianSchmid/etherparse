@@ -30,7 +30,7 @@ impl<'a> VlanSlice<'a> {
 pub enum InternetSlice<'a> {
     Ipv4(Ipv4HeaderSlice<'a>),
     ///First element is the Ipv6 header slice and second one are the Ipv6 extensions headers filled in order from 0 to the length of the array.
-    Ipv6(Ipv6HeaderSlice<'a>, [Option<(u8, Ipv6ExtensionHeaderSlice<'a>)>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
+    Ipv6(Ipv6HeaderSlice<'a>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,6 +47,12 @@ pub struct SlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
     pub vlan: Option<VlanSlice<'a>>,
     pub ip: Option<InternetSlice<'a>>,
+    /// IP Extension headers present after the ip header. 
+    ///
+    /// In case of IPV4 these can be ipsec authentication & encapsulated
+    /// security headers. In case of IPv6 these are the ipv6 extension headers.
+    /// The headers are in the same order as they are written to the packet.
+    //pub ip_extensions: [Option<IpExtensionHeaderSlice<'a>>;IP_MAX_NUM_HEADER_EXTENSIONS],
     pub transport: Option<TransportSlice<'a>>,
     /// The payload field points to the rest of the packet that could not be parsed by etherparse.
     ///
@@ -166,6 +172,7 @@ impl<'a> CursorSlice<'a> {
                 link: None,
                 vlan: None,
                 ip: None,
+                //ip_extensions: [None;IP_MAX_NUM_HEADER_EXTENSIONS],
                 transport: None,
                 payload: slice
             }
@@ -304,10 +311,10 @@ impl<'a> CursorSlice<'a> {
 
         let mut next_header = ip.next_header();
         for extension_header in ip_extensions.iter_mut() {
-            if !IpTrafficClass::is_ipv6_ext_header_value(next_header) {
+            if !Ipv6GenericExtensionHeaderSlice::header_type_supported(next_header) {
                 break;
             } else {
-                let ext = Ipv6ExtensionHeaderSlice::from_slice(next_header, self.slice)
+                let ext = Ipv6GenericExtensionHeaderSlice::from_slice(self.slice)
                           .map_err(|err| 
                             err.add_slice_offset(self.offset)
                           )?;
@@ -323,12 +330,12 @@ impl<'a> CursorSlice<'a> {
         }
 
         //parse the underlying protocol (or error in case of too many extension headers)
-        if IpTrafficClass::is_ipv6_ext_header_value(next_header)
+        if Ipv6GenericExtensionHeaderSlice::header_type_supported(next_header)
         {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
         } else {
             //save the result
-            self.result.ip = Some(Ipv6(ip, ip_extensions));
+            self.result.ip = Some(Ipv6(ip));
 
             //parse the data bellow
             match next_header {

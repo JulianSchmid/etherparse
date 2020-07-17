@@ -1,13 +1,66 @@
 use super::super::*;
 
 #[test]
-fn new() {
-    let e_icv = [1,2,3,4];
-    let a = IpAuthenticationHeader::new(5, 6, 7, &e_icv);
-    assert_eq!(5, a.next_header);
-    assert_eq!(6, a.spi);
-    assert_eq!(7, a.sequence_number);
-    assert_eq!(e_icv, a.raw_icv);
+fn new_and_set_icv() {
+    use ValueError::*;
+
+    struct Test {
+        icv: &'static [u8],
+        ok: bool
+    }
+
+    let tests = [
+        // ok
+        Test{ icv: &[], ok: true },
+        Test{ icv: &[1,2,3,4], ok: true },
+        Test{ icv: &[1,2,3,4,5,6,7,8], ok: true },
+        Test{ icv: &[1,2,3,4,5,6,7,8,9,10,11,12], ok: true },
+        Test{ icv: &[0;0xfe*4], ok: true },
+        // unaligned
+        Test{ icv: &[1], ok: false },
+        Test{ icv: &[1,2,3], ok: false },
+        Test{ icv: &[1,2,3,4,5], ok: false },
+        Test{ icv: &[1,2,3,4,5,6,7], ok: false },
+        // too big
+        Test{ icv: &[0;0xff*4], ok: false },
+    ];
+
+    for test in tests.iter() {
+        // new
+        {
+            let a = IpAuthenticationHeader::new(5, 6, 7, test.icv);
+            if test.ok {
+                let unwrapped = a.unwrap();
+                assert_eq!(5, unwrapped.next_header);
+                assert_eq!(6, unwrapped.spi);
+                assert_eq!(7, unwrapped.sequence_number);
+                assert_eq!(test.icv, unwrapped.raw_icv());
+            } else {
+                assert_eq!(
+                    Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())),
+                    a
+                );
+            }
+        }
+        // set_raw_icv
+        {
+            let mut header = IpAuthenticationHeader::new(5, 6, 7, &[0;4]).unwrap();
+            let result = header.set_raw_icv(test.icv);
+            assert_eq!(5, header.next_header);
+            assert_eq!(6, header.spi);
+            assert_eq!(7, header.sequence_number);
+            if test.ok {
+                assert_eq!(Ok(()), result);
+                assert_eq!(test.icv, header.raw_icv());
+            } else {
+                assert_eq!(
+                    Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())),
+                    result
+                );
+                assert_eq!(&[0;4], header.raw_icv());
+            }
+        }
+    }
 }
 
 proptest! {
@@ -48,9 +101,8 @@ fn from_slice_bad_header_len() {
 proptest! {
     #[test]
     fn write_read(
-        input in ip_authentication_any()
+        expected in ip_authentication_any()
     ) {
-        let expected = input.to_header();
         let buffer = {
             let mut buffer: Vec<u8> = Vec::new();
             expected.write(&mut buffer).unwrap();
@@ -61,10 +113,10 @@ proptest! {
         {
             let actual = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(actual.slice(), &buffer[..]);
-            assert_eq!(actual.next_header(), input.next_header);
-            assert_eq!(actual.spi(), input.spi);
-            assert_eq!(actual.sequence_number(), input.sequence_number);
-            assert_eq!(actual.raw_icv(), &input.icv[..]);
+            assert_eq!(actual.next_header(), expected.next_header);
+            assert_eq!(actual.spi(), expected.spi);
+            assert_eq!(actual.sequence_number(), expected.sequence_number);
+            assert_eq!(actual.raw_icv(), expected.raw_icv());
             assert_eq!(actual.to_header(), expected);
         }
         // check header
@@ -92,60 +144,6 @@ proptest! {
         assert_matches!(
             IpAuthenticationHeaderSlice::from_slice(&buffer[..buffer.len()-1]),
             Err(UnexpectedEndOfSlice(_))
-        );
-    }
-}
-
-// write with a bad data lenght (not multiple of 4)
-proptest! {
-    #[test]
-    fn write_non_4_byte_length(
-        len_u8 in 2..0xffu8
-    ) {
-        let icv_base_len = ((len_u8 - 1) as usize)*4;
-        let icv_data = vec![0;icv_base_len];
-        for offset in 1..4 {
-            let header = IpAuthenticationHeader::new(
-                0,0,0,&icv_data[..icv_base_len - offset]
-            );
-            let mut buffer: Vec<u8> = Vec::new();
-            assert_eq!(
-                header.write(&mut buffer).unwrap_err().value_error().unwrap(),
-                ValueError::IpAuthenticationHeaderBadIcvLength(icv_base_len - offset)
-            );
-        }
-    }
-}
-
-/// Test that an error is thrown if trying to write a raw_icv bigger then supported by the length field.
-#[test]
-fn write_too_big_raw_icv() {
-    let raw_icv = vec![0;0xff*4];
-    // ok case, exactly enough to support it
-    {
-        let header = IpAuthenticationHeader::new(
-            0,
-            0,
-            0,
-            &raw_icv[..raw_icv.len()-4]
-        );
-        let mut buffer: Vec<u8> = Vec::new();
-        header.write(&mut buffer).unwrap();
-        assert_eq!(header, IpAuthenticationHeader::read_from_slice(&buffer).unwrap().0);
-    }
-    // more data then supported
-    {
-        let header = IpAuthenticationHeader::new(
-            0,
-            0,
-            0,
-            &raw_icv
-        );
-        let mut buffer: Vec<u8> = Vec::new();
-        use ValueError::*;
-        assert_eq!(
-            header.write(&mut buffer).unwrap_err().value_error().unwrap(),
-            IpAuthenticationHeaderBadIcvLength(raw_icv.len())
         );
     }
 }

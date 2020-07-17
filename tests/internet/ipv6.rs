@@ -109,6 +109,27 @@ fn read_error() {
 }
 
 #[test]
+fn is_skippable_header_extension() {
+    use crate::IpTrafficClass::*;
+    const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
+    const ROUTE: u8 = IPv6RouteHeader as u8;
+    const FRAG: u8 = IPv6FragmentationHeader as u8;
+    const AUTH: u8 = AuthenticationHeader as u8;
+    const OPTIONS: u8 = IPv6DestinationOptions as u8;
+    const MOBILITY: u8 = MobilityHeader as u8;
+    const HIP: u8 = Hip as u8;
+    const SHIM6: u8 = Shim6 as u8;
+
+    for i in 0..0xffu8 {
+        let expected = match i {
+            HOP_BY_HOP | ROUTE | FRAG | AUTH | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            _ => false
+        };
+        assert_eq!(expected, Ipv6Header::is_skippable_header_extension(i));
+    }
+}
+
+#[test]
 fn skip_extension() {
 
     const HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
@@ -152,20 +173,23 @@ fn skip_all_extensions() {
     use crate::IpTrafficClass::*;
     //based on RFC 8200 4.1. Extension Header Order
     // & IANA https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml
-    const EXTENSION_IDS: [u8;12] = [
+    const EXTENSION_IDS: [u8;9] = [
         IPv6HeaderHopByHop as u8,
         IPv6DestinationOptions as u8,
         IPv6RouteHeader as u8,
         IPv6FragmentationHeader as u8, //3
         AuthenticationHeader as u8,
-        EncapsulatingSecurityPayload as u8,
         IPv6DestinationOptions as u8,
         MobilityHeader as u8,
         Hip as u8,
         Shim6 as u8,
-        ExperimentalAndTesting0 as u8,
-        ExperimentalAndTesting1 as u8,
     ];
+
+    // note the following ids are extensions but are not skippable:
+    //
+    // - EncapsulatingSecurityPayload
+    // - ExperimentalAndTesting0
+    // - ExperimentalAndTesting0
     const UDP: u8 = Udp as u8;
 
     //no & single skipping
@@ -191,6 +215,9 @@ fn skip_all_extensions() {
                     let len = if i == IPv6FragmentationHeader as u8 {
                         //fragmentation header has a fixed size
                         8
+                    } else if i == AuthenticationHeader as u8 {
+                        //authentification headers use 4-octets to describe the length
+                        8 + 2*4
                     } else {
                         buffer.len() - 8
                     };
@@ -213,6 +240,8 @@ fn skip_all_extensions() {
     //creates an buffer filled with extension headers with the given ids
     fn create_buffer(ids: &[u8]) -> Vec<u8> {
         const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const AUTH: u8 = AuthenticationHeader as u8;
+
         let mut prev: u8 = ids[0];
         let mut result = Vec::with_capacity(ids.len()*8*4);
         for (index, value) in ids[1..].iter().enumerate() {
@@ -227,9 +256,17 @@ fn skip_all_extensions() {
             
             //fill rest with dummy data
             for _ in 0..len {
-                result.extend_from_slice(&[0, 0, 0, 0,  0, 0, 0, 0]);
+                result.extend_from_slice(
+                    if prev == AUTH {
+                        // authentification headers interpret the length as in 4-octets
+                        &[0;4]
+                    } else {
+                        // all other headers (excluding the fragmentation header) interpret the length as in 8-octets
+                        &[0;8]
+                    }
+                );
             }
-
+        
             //cache prev
             prev = *value;
         }
@@ -268,8 +305,11 @@ fn skip_all_extensions() {
     //trigger "too many" error
     {
         let ids = {
-            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 2);
+            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 5);
             ids.extend_from_slice(&EXTENSION_IDS);
+            ids.push(EXTENSION_IDS[0]);
+            ids.push(EXTENSION_IDS[0]);
+            ids.push(EXTENSION_IDS[0]);
             ids.push(EXTENSION_IDS[0]);
             ids.push(UDP);
             ids

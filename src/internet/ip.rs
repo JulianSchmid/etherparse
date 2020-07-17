@@ -368,22 +368,3 @@ impl IpTrafficClass {
         }
     }
 }
-
-pub const IP_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
-
-/// Headers that can follow an ip header but are not transport related headers
-/// (e.g. ipsec authentication headers or ipv6 extension headers like fragmentation).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum IpExtensionHeader {
-    Ipv6HopByHop,
-    Ipv6Route,
-    Ipv6Fragmentation,
-    EncapsulatingSecurityPayload,
-    AuthenticationHeader,
-    IPv6DestinationOptions,
-    Mobility,
-    Hip,
-    Shim6,
-    ExperimentalAndTesting0,
-    ExperimentalAndTesting1
-}

@@ -223,14 +223,15 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
     IpTrafficClass::IPv6HeaderHopByHop as u8,
     IpTrafficClass::IPv6RouteHeader as u8,
     IpTrafficClass::IPv6FragmentationHeader as u8,
-    IpTrafficClass::EncapsulatingSecurityPayload as u8,
     IpTrafficClass::AuthenticationHeader as u8,
     IpTrafficClass::IPv6DestinationOptions as u8,
     IpTrafficClass::MobilityHeader as u8,
     IpTrafficClass::Hip as u8,
     IpTrafficClass::Shim6 as u8,
-    IpTrafficClass::ExperimentalAndTesting0 as u8,
-    IpTrafficClass::ExperimentalAndTesting1 as u8
+    // currently not supported:
+    // - EncapsulatingSecurityPayload
+    // - ExperimentalAndTesting0
+    // - ExperimentalAndTesting1
 ];
 
 prop_compose! {
@@ -256,6 +257,67 @@ prop_compose! {
         }
     }
 }
+/*
+/// Contains everything to construct the supported ip extension headers
+pub enum IpExtensionComponent {
+    Ipv6HeaderHopByHop(Ipv6GenericExtensionHeader),
+    Ipv6Route(Ipv6GenericExtensionHeader),
+    Ipv6DestinationOptions(Ipv6GenericExtensionHeader),
+
+    MobilityHeader(Ipv6GenericExtensionHeader),
+    Hip(Ipv6GenericExtensionHeader),
+    Shim6(Ipv6GenericExtensionHeader),
+
+    AuthenticationHeader(IpAuthenticationHeader),
+    Ipv6Fragment(Ipv6FragmentHeader),
+}
+
+impl IpExtensionComponent {
+    pub fn traffic_class(&self) -> u8 {
+        match self {
+            Ipv6HeaderHopByHop(_) => IpTrafficClass::IPv6HeaderHopByHop as u8,
+            Ipv6Route(_) => IpTrafficClass::IPv6RouteHeader as u8,
+            Ipv6DestinationOptions(_) => IpTrafficClass::IPv6DestinationOptions as u8,
+
+            MobilityHeader(_) => IpTrafficClass::MobilityHeader as u8,
+            Hip(_) => IpTrafficClass::Hip as u8,
+            Shim6(_) => IpTrafficClass::Shim6 as u8,
+
+            AuthenticationHeader(_) => IpTrafficClass::AuthenticationHeader as u8,
+            Ipv6Fragment(_) => IpTrafficClass::IPv6FragmentationHeader as u8,
+        }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ip_extension_component(
+        next_header: u8,
+        len: u8
+    ) (
+        component_type in 0..8usize,
+        next_header in proptest::strategy::Just(next_header),
+        len in proptest::strategy::Just(len),
+        ext in ipv6_extension_with(next_header, len),
+        frag in ipv6_fragment_with(next_header),
+        auth in ipv6_fragment_with(next_header)
+    ) {
+        use IpExtensionComponent::*;
+        match component_type {
+            0 => Ipv6HeaderHopByHop(ext),
+            1 => Ipv6Route(ext),
+            2 => Ipv6DestinationOptions(ext),
+
+            3 => MobilityHeader(ext),
+            4 => Hip(ext),
+            5 => Shim6(ext),
+
+            6 => AuthenticationHeader(auth),
+            7 => Ipv6Fragment(frag),
+
+            _ => panic!("unsupported ip_extension_component");
+        }
+    }
+}
 
 prop_compose! {
     pub(crate) fn ipv6_extension_with(
@@ -265,13 +327,12 @@ prop_compose! {
         next_header in proptest::strategy::Just(next_header),
         len in proptest::strategy::Just(len),
         payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 8)
-    ) -> Vec<u8>
+    ) -> Ipv6ExtensionComponents
     {
-        let mut result = payload.clone();
-        //insert next header & length
-        result[0] = next_header;
-        result[1] = len;
-        result
+        Ipv6ExtensionComponents {
+            next_header,
+            data: payload.clone()
+        }
     }
 }
 //Order of ipv6 heder extensions defined by ipv6 rfc
@@ -332,7 +393,7 @@ prop_compose! {
         hdr10 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting1 as u8, len10),
         hdr11 in ipv6_extension_with(last_next_header, len11),
         order in proptest::sample::subsequence((0..IPV6_EXTENSION_HEADER_ORDER.len()).collect::<Vec<usize>>(), 1..IPV6_EXTENSION_HEADER_ORDER.len())
-    ) -> Vec<(u8, Vec<u8>)>
+    ) -> Vec<Ipv6ExtensionComponents>
     {
         let all_headers = vec![hdr0, hdr1, hdr2, hdr3, hdr4, 
                                hdr5, hdr6, hdr7, hdr8, hdr9, 
@@ -358,7 +419,7 @@ prop_compose! {
         result
     }
 }
-
+*/
 prop_compose! {
     pub(crate) fn ipv6_fragment_with(
         next_header: u8
@@ -388,26 +449,6 @@ prop_compose! {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct IpAuthenticationComponents {
-    pub next_header: u8,
-    pub spi: u32,
-    pub sequence_number: u32,
-    pub icv: Vec<u8>
-}
-
-impl IpAuthenticationComponents {
-
-    pub fn to_header<'a>(&'a self) -> IpAuthenticationHeader<'a> {
-        IpAuthenticationHeader::new(
-            self.next_header,
-            self.spi,
-            self.sequence_number,
-            &self.icv
-        )
-    }
-}
-
 prop_compose! {
     pub(crate) fn ip_authentication_with(
         next_header: u8
@@ -419,13 +460,13 @@ prop_compose! {
         spi in any::<u32>(),
         sequence_number in any::<u32>(),
         icv in proptest::collection::vec(any::<u8>(), (len as usize)*4)
-    ) -> IpAuthenticationComponents {
-        IpAuthenticationComponents {
+    ) -> IpAuthenticationHeader {
+        IpAuthenticationHeader::new(
             next_header,
             spi,
             sequence_number,
-            icv
-        }
+            &icv
+        ).unwrap()
     }
 }
 
@@ -434,7 +475,7 @@ prop_compose! {
         next_header in any::<u8>()
     ) (
         header in ip_authentication_with(next_header)
-    ) -> IpAuthenticationComponents {
+    ) -> IpAuthenticationHeader {
         header
     }
 }

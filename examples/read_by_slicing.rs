@@ -46,7 +46,7 @@ fn main() {
 
             match value.ip {
                 Some(Ipv4(value)) => println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr()),
-                Some(Ipv6(value, _)) => println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr()),
+                Some(Ipv6(value)) => println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr()),
                 None => {}
             }
 

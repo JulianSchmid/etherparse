@@ -177,7 +177,7 @@ fn value_error_source() {
         Ipv4OptionsLengthBad(0),
         Ipv4PayloadLengthTooLarge(0),
         Ipv6PayloadLengthTooLarge(0),
-        Ipv6ExtensionDataTooLarge(0),
+        Ipv6ExtensionPayloadTooLarge(0),
         IpAuthenticationHeaderBadIcvLength(0),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
@@ -223,10 +223,10 @@ proptest! {
             &format!("{}", Ipv6PayloadLengthTooLarge(arg_usize))
         );
 
-        //Ipv6ExtensionDataTooLarge
+        //Ipv6ExtensionPayloadTooLarge
         assert_eq!(
-            &format!("IPv6 extensions header 'data' are too large. The data size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", arg_usize),
-            &format!("{}", Ipv6ExtensionDataTooLarge(arg_usize))
+            &format!("IPv6 extensions header payload length is too large. The payload size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", arg_usize),
+            &format!("{}", Ipv6ExtensionPayloadTooLarge(arg_usize))
         );
 
         //IpAuthenticationHeaderBadIcvLength
