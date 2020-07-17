@@ -104,11 +104,11 @@ fn test_debug_write() {
             link: None,
             vlan: None,
             ip: None,
-            ip_extensions: [
+            /*ip_extensions: [
                 None, None, None, None, None,
                 None, None, None, None, None,
                 None, None
-            ],
+            ],*/
             transport: None,
             payload: &dummy[..]
         };

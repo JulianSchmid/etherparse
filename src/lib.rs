@@ -116,7 +116,7 @@
 //! * [`DoubleVlanHeaderSlice.from_slice`](struct.DoubleVlanHeaderSlice.html#method.from_slice)
 //! * [`Ipv4HeaderSlice.from_slice`](struct.Ipv4HeaderSlice.html#method.from_slice)
 //! * [`Ipv6HeaderSlice.from_slice`](struct.Ipv6HeaderSlice.html#method.from_slice)
-//! * [`Ipv6ExtensionHeaderSlice.from_slice`](struct.Ipv6ExtensionHeaderSlice.html)
+//! * [`Ipv6ExtensionHeader.from_slice`](struct.Ipv6ExtensionHeader.html)
 //! * [`UdpHeaderSlice.from_slice`](struct.UdpHeaderSlice.html#method.from_slice)
 //! * [`TcpHeaderSlice.from_slice`](struct.TcpHeaderSlice.html#method.from_slice)
 //! 
@@ -211,8 +211,10 @@ mod internet;
 pub use crate::internet::ip::*;
 pub use crate::internet::ip_authentication::*;
 pub use crate::internet::ipv4::*;
+pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv6::*;
-pub use crate::internet::ipv6_extension::*;
+pub use crate::internet::ipv6_extensions::*;
+pub use crate::internet::ipv6_generic_extension::*;
 pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
@@ -396,8 +398,12 @@ pub enum ValueError {
     Ipv4PayloadLengthTooLarge(usize),
     ///Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
-    ///Error when a given data block is bigger then what fits inside an ipv6 extended header size.
-    Ipv6ExtensionDataTooLarge(usize),
+    ///Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size (`Ipv6GenericExtensionHeader::MAX_PAYLOAD_LEN`).
+    Ipv6ExtensionPayloadTooSmall(usize),
+    ///Error when a given payload size is bigger then what fits inside an ipv6 extended header size (`Ipv6GenericExtensionHeader::MAX_PAYLOAD_LEN`).
+    Ipv6ExtensionPayloadTooLarge(usize),
+    ///Error when a given payload length is not aligned to be a multiple of 8 octets when 6 is substracted and can not be represented by the header length field.
+    Ipv6ExtensionPayloadLengthUnaligned(usize),
     ///Error when a given authentication header icv size is not a multiple of 4 bytes or bigger then 1016 bytes and therefor can not be represented in the header length field.
     IpAuthenticationHeaderBadIcvLength(usize),
     ///Error when a given payload is bigger then what fits inside an udp packet
@@ -431,8 +437,14 @@ impl fmt::Display for ValueError {
             Ipv6PayloadLengthTooLarge(size) => { //usize
                 write!(f, "IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", size)
             },
-            Ipv6ExtensionDataTooLarge(size) => {
-                write!(f, "IPv6 extensions header 'data' are too large. The data size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", size)
+            Ipv6ExtensionPayloadTooSmall(size) => {
+                write!(f, "IPv6 extensions header payload length is too small. The payload size ({} bytes) is less then 6 octets which is the minimum IPv6 extension header payload size.", size)
+            },
+            Ipv6ExtensionPayloadTooLarge(size) => {
+                write!(f, "IPv6 extensions header payload length is too large. The payload size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", size)
+            },
+            Ipv6ExtensionPayloadLengthUnaligned(size) => {
+                write!(f, "IPv6 extensions header 'payload length ({} bytes) + 2' is not multiple of 8 (+ 2 for the `next_header` and `header_length` fields). This is required as the header length field can only express lengths in multiple of 8 bytes.", size)
             },
             IpAuthenticationHeaderBadIcvLength(size) => {
                 write!(f, "IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", size)

@@ -88,45 +88,74 @@ impl Ipv6Header {
     ///Takes a slice and skips an ipv6 header extensions and returns the next_header id & the slice past the header.
     ///NOTE: There must be a ipv6 header extension id given as a traffic_class.
     pub fn skip_header_extension_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
-        if slice.len() < 8 {
-            Err(ReadError::UnexpectedEndOfSlice(8))
-        } else {
-            let next_header = slice[0];
-            const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
-            //determine the length (fragmentation header has a fixed length & the rest a length field)
-            let len = if traffic_class == FRAG {
-                8
-            } else {
+        use crate::IpTrafficClass::*;
+        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
+        const ROUTE: u8 = IPv6RouteHeader as u8;
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const AUTH: u8 = AuthenticationHeader as u8;
+        const OPTIONS: u8 = IPv6DestinationOptions as u8;
+        const MOBILITY: u8 = MobilityHeader as u8;
+        const HIP: u8 = Hip as u8;
+        const SHIM6: u8 = Shim6 as u8;
+
+        //determine the length
+        let len = match traffic_class {
+            FRAG => 8,
+            AUTH => (usize::from(slice[1]) + 2)*4,
+            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => {
                 (usize::from(slice[1]) + 1)*8
-            };
-            if slice.len() < len {
-                Err(ReadError::UnexpectedEndOfSlice(len))
-            } else {
-                Ok((next_header, &slice[len..]))
-            }
+            },
+            // not a ipv6 header extension that can be skipped
+            _ => return Ok((traffic_class, slice))
+        };
+
+        if slice.len() < len {
+            Err(ReadError::UnexpectedEndOfSlice(len))
+        } else {
+            Ok((slice[0], &slice[len..]))
+        }
+    }
+
+    /// Returns true if the given traffic class is a skippable header extension.
+    ///
+    /// Meaning it is known how to determine the next traffic class and jump to it's location.
+    pub fn is_skippable_header_extension(traffic_class: u8) -> bool {
+        use crate::IpTrafficClass::*;
+        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
+        const ROUTE: u8 = IPv6RouteHeader as u8;
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const AUTH: u8 = AuthenticationHeader as u8;
+        const OPTIONS: u8 = IPv6DestinationOptions as u8;
+        const MOBILITY: u8 = MobilityHeader as u8;
+        const HIP: u8 = Hip as u8;
+        const SHIM6: u8 = Shim6 as u8;
+        //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
+        match traffic_class {
+            HOP_BY_HOP | ROUTE | FRAG | AUTH | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            _ => false
         }
     }
 
     ///Takes a slice & traffic class (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
     pub fn skip_all_header_extensions_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
-        
+
         let mut next_traffic_class = traffic_class;
         let mut rest = slice;
         
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
 
-            if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class)
-            {
-                let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
+            let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
+
+            if n_rest.len() == rest.len() {
+                return Ok((next_traffic_class, rest))
+            } else {
                 next_traffic_class = n_id;
                 rest = n_rest;
-            } else {
-                return Ok((next_traffic_class, rest))
             }
         }
 
-        //final check
-        if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class) {
+        // final check
+        if Ipv6Header::is_skippable_header_extension(next_traffic_class) {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
         } else {
             Ok((next_traffic_class, rest))
@@ -135,16 +164,30 @@ impl Ipv6Header {
 
     ///Skips the ipv6 header extension and returns the traffic_class
     pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, io::Error> {
-        let next_header = reader.read_u8()?;
-        //determine the length (fragmentation header has a fixed length & the rest a length field)
-        const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
-        let rest_length = if traffic_class == FRAG {
-            //fragmentation header has the fixed length of 64bits (one already read)
-            7
-        } else {
-            //Length of the Hop-by-Hop Options header in 8-octet units, not including the first 8 octets.
-            ((i64::from(reader.read_u8()?) + 1)*8) - 2
+        use crate::IpTrafficClass::*;
+        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
+        const ROUTE: u8 = IPv6RouteHeader as u8;
+        const FRAG: u8 = IPv6FragmentationHeader as u8;
+        const AUTH: u8 = AuthenticationHeader as u8;
+        const OPTIONS: u8 = IPv6DestinationOptions as u8;
+        const MOBILITY: u8 = MobilityHeader as u8;
+        const HIP: u8 = Hip as u8;
+        const SHIM6: u8 = Shim6 as u8;
+
+        let (next_header, rest_length) = match traffic_class {
+            FRAG => (reader.read_u8()?, 7),
+            AUTH => (
+                reader.read_u8()?,
+                i64::from(reader.read_u8()?)*4 + 6
+            ),
+            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => (
+                reader.read_u8()?,
+                i64::from(reader.read_u8()?)*8 + 6
+            ),
+            // not a ipv6 header extension that can be skipped
+            _ => return Ok(traffic_class)
         };
+
         //Sadly seek does not return an error if the seek could not be fullfilled.
         //Some implementations do not even truncate the returned position to the
         //last valid one. std::io::Cursor for example just moves the position
@@ -164,7 +207,7 @@ impl Ipv6Header {
         let mut next_traffic_class = traffic_class;
 
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-            if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class)
+            if Ipv6Header::is_skippable_header_extension(next_traffic_class)
             {
                 next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
             } else {
@@ -173,7 +216,7 @@ impl Ipv6Header {
         }
 
         //final check
-        if IpTrafficClass::is_ipv6_ext_header_value(next_traffic_class) {
+        if Ipv6Header::is_skippable_header_extension(next_traffic_class) {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
         } else {
             Ok(next_traffic_class)

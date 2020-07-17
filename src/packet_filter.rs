@@ -135,7 +135,7 @@ impl IpFilter {
             },
             IpFilter::Ipv6 { source: expected_source, destination: expected_destination } => {
                 match slice {
-                    Ipv6(header, _) => {
+                    Ipv6(header) => {
                         (match expected_source {
                             Some(e) => header.source() == &e[..],
                             None => true
