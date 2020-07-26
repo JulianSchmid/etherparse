@@ -176,7 +176,7 @@ fn ipv_custom_udp() {
             IpTrafficClass::Tcp, //will be replaced during write
             [13,14,15,16], //source
             [17,18,19,20] //destination
-        )))
+        ), Default::default()))
        .udp(22,23)
        .write(&mut serialized, &in_payload)
        .unwrap();
@@ -445,7 +445,7 @@ fn udp_builder_eth_ip_udp() {
                         hop_limit: 47,
                         source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                         destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
-                    }))
+                    }, Default::default()))
                   .udp(48,49)
                   .write(&mut serialized, &in_payload)
                   .unwrap();
@@ -518,7 +518,7 @@ fn udp_builder_eth_vlan_ip_udp() {
                         hop_limit: 47,
                         source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                         destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
-                    }))
+                    }, Default::default()))
                   .udp(48,49)
                   .write(&mut serialized, &in_payload)
                   .unwrap();

@@ -45,8 +45,12 @@ fn main() {
             }
 
             match value.ip {
-                Some(Ipv4(value)) => println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr()),
-                Some(Ipv6(value)) => println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr()),
+                Some(Ipv4(value, extensions)) => {
+                    println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr())
+                },
+                Some(Ipv6(value, extensions)) => {
+                    println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr())
+                },
                 None => {}
             }
 
@@ -57,6 +61,7 @@ fn main() {
                     let options: Vec<Result<TcpOptionElement, TcpOptionReadError>> = value.options_iterator().collect();
                     println!("    {:?}", options);
                 }
+                Some(Unknown(ip_protocol)) => println!("  Unknwon Protocol (ip protocol number {:?}", ip_protocol),
                 None => {}
             }
         }

@@ -121,7 +121,7 @@ impl IpFilter {
         match self {
             IpFilter::Ipv4 { source: expected_source, destination: expected_destination } => {
                 match slice {
-                    Ipv4(header) => {
+                    Ipv4(header, _) => {
                         (match expected_source {
                             Some(e) => header.source() == &e[..],
                             None => true
@@ -135,7 +135,7 @@ impl IpFilter {
             },
             IpFilter::Ipv6 { source: expected_source, destination: expected_destination } => {
                 match slice {
-                    Ipv6(header) => {
+                    Ipv6(header, _) => {
                         (match expected_source {
                             Some(e) => header.source() == &e[..],
                             None => true

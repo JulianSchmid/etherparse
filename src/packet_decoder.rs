@@ -30,11 +30,6 @@ impl<'a> PacketHeaders<'a> {
             link: Some(ethernet),
             vlan: None,
             ip: None,
-/*            ip_extensions: [
-                None, None, None, None, None,
-                None, None, None, None, None,
-                None, None
-            ],*/
             transport: None,
             payload: &[]
         };
@@ -86,26 +81,11 @@ impl<'a> PacketHeaders<'a> {
         match ether_type {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::read_from_slice(rest)?;
-
-                //cache the protocol for the next parsing layer
-                let mut ip_protocol = ip.protocol;
+                let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::read_from_slice(ip.protocol, ip_rest)?;
 
                 //set the ip result & rest
-                rest = ip_rest;
-                result.ip = Some(IpHeader::Version4(ip));
-
-                //check for ip extensions (authentication header)
-                const AUTH: u8 = IpTrafficClass::AuthenticationHeader as u8;
-                if AUTH == ip_protocol {
-                    // TODO re-implement
-                    /*let (auth, auth_rest) = IpAuthenticationHeader::read_from_slice(rest)?;
-                    ip_protocol = auth.next_header;
-                    rest = auth_rest;
-                    result.ip_extensions[0] = Some(
-                        IpExtensionHeader::AuthenticationHeader(
-                            auth
-                    ));*/
-                }
+                rest = ip_ext_rest;
+                result.ip = Some(IpHeader::Version4(ip, ip_ext));
 
                 //parse the transport layer
                 let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
@@ -117,20 +97,11 @@ impl<'a> PacketHeaders<'a> {
             },
             IPV6 => {
                 let (ip, ip_rest) = Ipv6Header::read_from_slice(rest)?;
-
-                //cache the protocol for the next parsing layer
-                let next_header = ip.next_header;
+                let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::read_from_slice(ip.traffic_class, ip_rest)?;
 
                 //set the ip result & rest
-                rest = ip_rest;
-                result.ip = Some(IpHeader::Version6(ip));
-
-                //skip the header extensions
-                // TODO parse headers
-                let (next_header, ip_rest) = Ipv6Header::skip_all_header_extensions_in_slice(rest, next_header)?;
-                
-                //set the rest
-                rest = ip_rest;
+                rest = ip_ext_rest;
+                result.ip = Some(IpHeader::Version6(ip, ip_ext));
 
                 //parse the transport layer
                 let (transport, transport_rest) = read_transport(next_header, rest)?;
@@ -183,26 +154,12 @@ impl<'a> PacketHeaders<'a> {
             link: None,
             vlan: None,
             ip: None,
-/*            ip_extensions: [
-                None, None, None, None, None,
-                None, None, None, None, None,
-                None, None
-            ],*/
             transport: None,
             payload: &[],
         };
 
         let (transport_proto, rest) = {
-            let (ip, rest) = IpHeader::read_from_slice(packet)?;
-
-            // grab transport protocol
-            let (transport_proto, rest) = match &ip {
-                IpHeader::Version4(h) => (h.protocol, rest),
-                IpHeader::Version6(h) => {
-                    Ipv6Header::skip_all_header_extensions_in_slice(rest, h.next_header)?
-                },
-            };
-
+            let (ip, transport_proto, rest) = IpHeader::read_from_slice(packet)?;
             // update output
             result.ip = Some(ip);
             (transport_proto, rest)
@@ -213,7 +170,6 @@ impl<'a> PacketHeaders<'a> {
 
         // update output
         result.transport = transport;
-
         result.payload = rest;
 
         Ok(result)

@@ -176,13 +176,15 @@ impl PacketBuilder {
     /// #
     /// let builder = PacketBuilder::
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    ip(IpHeader::Version4(Ipv4Header::new(
-    ///        0, //payload_len will be replaced during write
-    ///        12, //time_to_live
-    ///        IpTrafficClass::Udp, //will be replaced during write
-    ///        [0,1,2,3], //source
-    ///        [4,5,6,7] //destination
-    ///     )))
+    ///    ip(IpHeader::Version4(
+    ///        Ipv4Header::new(
+    ///            0, //payload_len will be replaced during write
+    ///            12, //time_to_live
+    ///            IpTrafficClass::Udp, //will be replaced during write
+    ///            [0,1,2,3], //source
+    ///            [4,5,6,7] //destination
+    ///        ), 
+    ///        Default::default()))
     ///    .udp(21,    //source port 
     ///         1234); //desitnation port
     ///
@@ -203,15 +205,17 @@ impl PacketBuilder {
     /// # use etherparse::*;
     /// #
     /// let builder = PacketBuilder::
-    ///    ip(IpHeader::Version6(Ipv6Header{
-    ///         traffic_class: 0,
-    ///         flow_label: 0,
-    ///         payload_length: 0, //will be replaced during write
-    ///         next_header: 0, //will be replaced during write
-    ///         hop_limit: 4,
-    ///         source: [0;16],
-    ///         destination: [0;16]
-    ///     }))
+    ///    ip(IpHeader::Version6(
+    ///         Ipv6Header{
+    ///             traffic_class: 0,
+    ///             flow_label: 0,
+    ///             payload_length: 0, //will be replaced during write
+    ///             next_header: 0, //will be replaced during write
+    ///             hop_limit: 4,
+    ///             source: [0;16],
+    ///             destination: [0;16]
+    ///         },
+    ///         Default::default()))
     ///    .udp(21,    //source port 
     ///         1234); //desitnation port
     ///
@@ -261,7 +265,7 @@ impl PacketBuilderStep<Ethernet2Header> {
             value.destination = destination;
             value.time_to_live = time_to_live;
             value
-        }));
+        }, Default::default()));
         //return for next step
         PacketBuilderStep {
             state: self.state,
@@ -282,13 +286,15 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    .ip(IpHeader::Version4(Ipv4Header::new(
-    ///        0, //payload_len will be replaced during write
-    ///        12, //time_to_live
-    ///        IpTrafficClass::Udp, //will be replaced during write
-    ///        [0,1,2,3], //source
-    ///        [4,5,6,7] //destination
-    ///     )));
+    ///    .ip(IpHeader::Version4(
+    ///        Ipv4Header::new(
+    ///            0, //payload_len will be replaced during write
+    ///            12, //time_to_live
+    ///            IpTrafficClass::Udp, //will be replaced during write
+    ///            [0,1,2,3], //source
+    ///            [4,5,6,7] //destination
+    ///        ),
+    ///        Default::default()));
     /// ```
     ///
     /// With an IPv6 header:
@@ -299,15 +305,17 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .ip(IpHeader::Version6(Ipv6Header{
-    ///         traffic_class: 0,
-    ///         flow_label: 0,
-    ///         payload_length: 0, //will be replaced during write
-    ///         next_header: 0, //will be replaced during write
-    ///         hop_limit: 4,
-    ///         source: [0;16],
-    ///         destination: [0;16]
-    ///     }));
+    ///    .ip(IpHeader::Version6(
+    ///         Ipv6Header{
+    ///             traffic_class: 0,
+    ///             flow_label: 0,
+    ///             payload_length: 0, //will be replaced during write
+    ///             next_header: 0, //will be replaced during write
+    ///             hop_limit: 4,
+    ///             source: [0;16],
+    ///             destination: [0;16]
+    ///         },
+    ///         Default::default()));
     /// ```
     pub fn ip(mut self, ip_header: IpHeader) -> PacketBuilderStep<IpHeader> {
         //add ip header
@@ -329,7 +337,7 @@ impl PacketBuilderStep<Ethernet2Header> {
             hop_limit,
             source,
             destination
-        }));
+        }, Default::default()));
         
         //return for next step
         PacketBuilderStep {
@@ -399,13 +407,15 @@ impl PacketBuilderStep<VlanHeader> {
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    .ip(IpHeader::Version4(Ipv4Header::new(
-    ///        0, //payload_len will be replaced during write
-    ///        12, //time_to_live
-    ///        IpTrafficClass::Udp, //will be replaced during write
-    ///        [0,1,2,3], //source
-    ///        [4,5,6,7] //destination
-    ///     )));
+    ///    .ip(IpHeader::Version4(
+    ///         Ipv4Header::new(
+    ///             0, //payload_len will be replaced during write
+    ///             12, //time_to_live
+    ///             IpTrafficClass::Udp, //will be replaced during write
+    ///             [0,1,2,3], //source
+    ///             [4,5,6,7] //destination
+    ///         ),
+    ///         Default::default()));
     /// ```
     ///
     /// # Example IPv6
@@ -415,15 +425,17 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .ip(IpHeader::Version6(Ipv6Header{
-    ///         traffic_class: 0,
-    ///         flow_label: 0,
-    ///         payload_length: 0, //will be replaced during write
-    ///         next_header: 0, //will be replaced during write
-    ///         hop_limit: 4,
-    ///         source: [0;16],
-    ///         destination: [0;16]
-    ///     }));
+    ///    .ip(IpHeader::Version6(
+    ///         Ipv6Header{
+    ///             traffic_class: 0,
+    ///             flow_label: 0,
+    ///             payload_length: 0, //will be replaced during write
+    ///             next_header: 0, //will be replaced during write
+    ///             hop_limit: 4,
+    ///             source: [0;16],
+    ///             destination: [0;16]
+    ///         },
+    ///         Default::default()));
     /// ```
     pub fn ip(self, ip_header: IpHeader) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
@@ -582,8 +594,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     let ip_ether_type = {
         use crate::IpHeader::*;
         match builder.state.ip_header {
-            Some(Version4(_)) => EtherType::Ipv4 as u16,
-            Some(Version6(_)) => EtherType::Ipv6 as u16,
+            Some(Version4(_,_)) => EtherType::Ipv4 as u16,
+            Some(Version6(_,_)) => EtherType::Ipv6 as u16,
             None => panic!("Missing ip header")
         }
     };
@@ -630,29 +642,32 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     use crate::IpHeader::*;
     let ip_header = builder.state.ip_header.unwrap();
     match ip_header {
-        Version4(mut ip) => {
+        Version4(mut ip, mut ext) => {
             //set total length & udp payload length (ip checks that the payload length is ok)
-            let size = transport.header_len() + payload.len();
-            ip.set_payload_len(size)?;
+            let udp_size = transport.header_len() + payload.len();
+            ip.set_payload_len(ext.header_len() + udp_size)?;
             use crate::TransportHeader::*;
             match transport {
-                Udp(ref mut udp) => { udp.length = size as u16; }
+                Udp(ref mut udp) => { udp.length = udp_size as u16; }
                 Tcp(_) => {}
             }
 
-            //traffic class
-            ip.protocol = match transport {
-                Udp(_) => IpTrafficClass::Udp as u8,
-                Tcp(_) => IpTrafficClass::Tcp as u8
-            };
+            //ip protocol number & next header values of the extension header
+            ip.protocol = ext.set_next_headers(
+                match transport {
+                    Udp(_) => IpTrafficClass::Udp as u8,
+                    Tcp(_) => IpTrafficClass::Tcp as u8
+                }
+            );
 
             //calculate the udp checksum
             transport.update_checksum_ipv4(&ip, payload)?;
 
             //write (will automatically calculate the checksum)
-            ip.write(writer)?
+            ip.write(writer)?;
+            ext.write(writer, ip.protocol)?
         },
-        Version6(mut ip) => {
+        Version6(mut ip, mut ext) => {
             //set total length
             let size = transport.header_len() + payload.len();
             ip.set_payload_length(size)?;
@@ -663,17 +678,19 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             }
 
             //set the protocol
-            ip.next_header = match transport {
-                Udp(_) => IpTrafficClass::Udp as u8,
-                Tcp(_) => IpTrafficClass::Tcp as u8
-            };
+            ip.next_header = ext.set_next_headers(
+                match transport {
+                    Udp(_) => IpTrafficClass::Udp as u8,
+                    Tcp(_) => IpTrafficClass::Tcp as u8
+                }
+            );
 
             //calculate the udp checksum
             transport.update_checksum_ipv6(&ip, payload)?;
 
             //write (will automatically calculate the checksum)
-            ip.write(writer)?
-
+            ip.write(writer)?;
+            ext.write(writer, ip.next_header)?
         }
     }
 
@@ -696,8 +713,8 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
         None => 0 
     } + match builder.state.ip_header {
-        Some(Version4(ref value)) => value.header_len(),
-        Some(Version6(_)) => Ipv6Header::SERIALIZED_SIZE,
+        Some(Version4(ref value, ref ext)) => value.header_len() + ext.header_len(),
+        Some(Version6(_, ref ext)) => Ipv6Header::SERIALIZED_SIZE + ext.header_len(),
         None => 0
     } + match builder.state.transport_header {
         Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,

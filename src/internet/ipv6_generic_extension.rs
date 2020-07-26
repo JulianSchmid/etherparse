@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{WriteBytesExt};
+use self::byteorder::{WriteBytesExt, ReadBytesExt};
 use std::fmt::{Debug, Formatter};
 
 ///Maximum number of header extensions allowed (according to the ipv6 rfc8200, & iana protocol numbers).
@@ -141,6 +141,22 @@ impl Ipv6GenericExtensionHeader {
         }
     }
 
+    /// Read an fragment header from the current reader position.
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6GenericExtensionHeader, ReadError> {
+        let next_header = reader.read_u8()?;
+        let header_length = reader.read_u8()?;
+
+        Ok(Ipv6GenericExtensionHeader {
+            next_header,
+            header_length,
+            payload_buffer: {
+                let mut buffer = [0;0xff * 8 + 6];
+                reader.read_exact(&mut buffer[..usize::from(header_length)*8 + 6])?;
+                buffer
+            },
+        })
+    }
+
     /// Writes a given IPv6 extension header to the current position.
     pub fn write<W: io::Write + Sized>(&self, writer: &mut W) -> Result<(), WriteError> {
         writer.write_u8(self.next_header)?;
@@ -149,6 +165,10 @@ impl Ipv6GenericExtensionHeader {
         Ok(())
     }
 
+    ///Length of the header in bytes.
+    pub fn header_len(&self) -> usize {
+        2 + (6 + usize::from(self.header_length)*8)
+    }
 }
 
 /// Slice containing an IPv6 extension header with only minimal data interpretation. NOTE only ipv6 header
