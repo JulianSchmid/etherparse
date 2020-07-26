@@ -24,7 +24,8 @@ fn read() {
     let result = IpHeader::read(&mut cursor).unwrap();
     assert_eq!(40, cursor.position());
 
-    assert_matches!(result, IpHeader::Version6(INPUT));
+    assert_eq!(result.0, IpHeader::Version6(INPUT, Default::default()));
+    assert_eq!(result.1, INPUT.next_header);
 }
 
 #[test]

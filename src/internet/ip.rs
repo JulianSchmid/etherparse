@@ -6,25 +6,31 @@ use self::byteorder::ReadBytesExt;
 ///Internet protocol headers version 4 & 6
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IpHeader {
-    Version4(Ipv4Header),
-    Version6(Ipv6Header)
+    Version4(Ipv4Header, Ipv4Extensions),
+    Version6(Ipv6Header, Ipv6Extensions)
 }
 
 impl IpHeader {
     ///Read an IpvHeader from a slice and return the header & unused parts of the slice.
-    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         use crate::ReadError::*;
         if slice.is_empty() {
             Err(UnexpectedEndOfSlice(1))
         } else {
             match slice[0] >> 4 {
                 4 => {
-                    Ipv4Header::read_from_slice(slice)
-                    .map(|value| (IpHeader::Version4(value.0), value.1))
+                    let (header, rest) = Ipv4Header::read_from_slice(slice)?;
+                    Ipv4Extensions::read_from_slice(header.protocol, rest).map(
+                        |(ext, next_protocol, rest)|
+                        (IpHeader::Version4(header, ext), next_protocol, rest)
+                    )
                 },
                 6 => {
-                    Ipv6Header::read_from_slice(slice)
-                    .map(|value| (IpHeader::Version6(value.0), value.1))
+                    let (header, rest) = Ipv6Header::read_from_slice(slice)?;
+                    Ipv6Extensions::read_from_slice(header.next_header, rest).map(
+                        |(ext, next_protocol, rest)| 
+                        (IpHeader::Version6(header, ext), next_protocol, rest)
+                    )
                 },
                 version => Err(ReadError::IpUnsupportedVersion(version))
             }
@@ -32,20 +38,37 @@ impl IpHeader {
     }
 
     ///Reads an IP (v4 or v6) header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpHeader, ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<(IpHeader, u8), ReadError> {
         let value = reader.read_u8()?;
         match value >> 4 {
-            4 => Ok(IpHeader::Version4(Ipv4Header::read_without_version(reader, value & 0xf)?)),
-            6 => Ok(IpHeader::Version6(Ipv6Header::read_without_version(reader, value & 0xf)?)),
+            4 => {
+                let header = Ipv4Header::read_without_version(reader, value & 0xf)?;
+                Ipv4Extensions::read(reader, header.protocol).map( 
+                    |(ext, next)| (IpHeader::Version4(header, ext), next)
+                )
+            },
+            6 => {
+                let header = Ipv6Header::read_without_version(reader, value & 0xf)?;
+                Ipv6Extensions::read(reader, header.next_header).map(
+                    |(ext, next)| (IpHeader::Version6(header, ext), next)
+                )
+            },
             version => Err(ReadError::IpUnsupportedVersion(version))
         }
     }
+
     ///Writes an IP (v4 or v6) header to the current position
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use crate::IpHeader::*;
         match *self {
-            Version4(ref value) => value.write(writer),
-            Version6(ref value) => value.write(writer)
+            Version4(ref header, ref extensions) => {
+                header.write(writer)?;
+                extensions.write(writer, header.protocol)
+            }
+            Version6(ref header, ref extensions) => {
+                header.write(writer)?;
+                extensions.write(writer, header.next_header)
+            }
         }
     }
 }

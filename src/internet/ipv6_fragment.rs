@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, WriteBytesExt};
+use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///IPv6 fragment header.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -43,6 +43,34 @@ impl Ipv6FragmentHeader {
         ))
     }
 
+    /// Read an fragment header from the current reader position.
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6FragmentHeader, ReadError> {
+        let next_header = reader.read_u8()?;
+        // reserved can be skipped
+        reader.read_u8()?;
+
+        let (fragment_offset, more_fragments) = {
+            let mut buf: [u8;2] = [0;2];
+            reader.read_exact(&mut buf[..])?;
+            (
+                // fragment offset
+                BigEndian::read_u16(&[
+                    (buf[0] >> 3) & 0b0001_1111u8,
+                    ((buf[0] << 5) & 0b1110_0000u8) |
+                     (buf[1] & 0b0001_1111u8)
+                ]),
+                // more fragments 
+                0 != buf[1] & 0b1000_0000u8
+            )
+        };
+        Ok(Ipv6FragmentHeader {
+            next_header: next_header,
+            fragment_offset: fragment_offset,
+            more_fragments: more_fragments,
+            identification: reader.read_u32::<BigEndian>()?
+        })
+    }
+
     /// Writes a given IPv6 fragment header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use ErrorField::*;
@@ -79,6 +107,10 @@ impl Ipv6FragmentHeader {
         Ok(())
     }
 
+    ///Length of the header in bytes.
+    pub fn header_len(&self) -> usize {
+        8
+    }
 }
 
 /// Slice containing an IPv6 fragment header.

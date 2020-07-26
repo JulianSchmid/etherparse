@@ -258,6 +258,8 @@ pub enum ReadError {
     Ipv6UnexpectedVersion(u8),
     ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
     Ipv6TooManyHeaderExtensions,
+    ///Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    Ipv6HopByHopHeaderNotAtStart,
     ///Error if the header length in the ip authentication header is smaller then the minimum size of 1.
     IpAuthenticationHeaderTooSmallPayloadLength(u8),
     ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
@@ -305,6 +307,9 @@ impl fmt::Display for ReadError {
             },
             Ipv6TooManyHeaderExtensions => {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
+            },
+            Ipv6HopByHopHeaderNotAtStart => {
+                write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200-")
             },
             IpAuthenticationHeaderTooSmallPayloadLength(length) => {
                 write!(f, "ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", length)
@@ -406,6 +411,14 @@ pub enum ValueError {
     Ipv6ExtensionPayloadLengthUnaligned(usize),
     ///Error when a given authentication header icv size is not a multiple of 4 bytes or bigger then 1016 bytes and therefor can not be represented in the header length field.
     IpAuthenticationHeaderBadIcvLength(usize),
+    ///Error when a header in `Ipv4Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial `protocol`.
+    Ipv4ExtensionNotReferenced(IpTrafficClass),
+    ///Error when a hop-by-hop header is not referenced as the first header after the ipv6 header but as a later extension header.
+    Ipv6ExtensionHopByHopNotAtStart,
+    ///Error when a header in `Ipv6Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial traffic_class.
+    Ipv6ExtensionNotReferenced(IpTrafficClass),
+    ///Error when a header in `Ipv6Extensions` is referenced multiple times or is referenced and not defined.
+    Ipv6ExtensionNotDefinedReference(IpTrafficClass),
     ///Error when a given payload is bigger then what fits inside an udp packet
     ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
@@ -448,7 +461,19 @@ impl fmt::Display for ValueError {
             },
             IpAuthenticationHeaderBadIcvLength(size) => {
                 write!(f, "IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", size)
+            },
+            Ipv4ExtensionNotReferenced(traffic_class) => {
+                write!(f, "IPv4 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'protocol' field of the IPv4 header.", traffic_class)
             }
+            Ipv6ExtensionHopByHopNotAtStart => {
+                write!(f, "IPv6 extensions hop-by-hop is not located directly after the IPv6 header (required by IPv6).")
+            },
+            Ipv6ExtensionNotReferenced(traffic_class) => {
+                write!(f, "IPv6 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'traffic_class' field of the IPv6 header.", traffic_class)
+            },
+            Ipv6ExtensionNotDefinedReference(traffic_class) => {
+                write!(f, "IPv6 extensions '{:?}' is referenced by one of the 'next_header' of another extension headers or the 'traffic_class' field of the IPv6 header but is not defined in the 'Ipv4Extensions'.", traffic_class)
+            },
             UdpPayloadLengthTooLarge(length) => { //usize
                 write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)
             }, 

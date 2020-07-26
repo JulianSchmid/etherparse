@@ -73,14 +73,14 @@ impl PacketFilterTest {
         //ipv4
         {
             let mut t = self.clone();
-            t.ip = Some(IpHeader::Version4(ipv4.0.clone()));
+            t.ip = Some(IpHeader::Version4(ipv4.0.clone(), Default::default()));
             t.add_transport_data(udp, tcp);
         }
 
         //ipv6
         {
             let mut t = self.clone();
-            t.ip = Some(IpHeader::Version6(ipv6.clone()));
+            t.ip = Some(IpHeader::Version6(ipv6.clone(), Default::default()));
             t.add_transport_data(udp, tcp);
         }
     }
@@ -220,7 +220,7 @@ impl PacketFilterTest {
 
         //some
         match &self.ip {
-            Some(IpHeader::Version4(_)) => {
+            Some(IpHeader::Version4(_, _)) => {
                 let mut t = self.clone();
                 t.filter.ip = ElementFilter::Some(
                     IpFilter::Ipv4 {
@@ -230,7 +230,7 @@ impl PacketFilterTest {
                 );
                 t.add_transport_filter(expected_result);
             },
-            Some(IpHeader::Version6(_)) => {
+            Some(IpHeader::Version6(_,_)) => {
                 let mut t = self.clone();
                 t.filter.ip = ElementFilter::Some(
                     IpFilter::Ipv6 {
@@ -337,17 +337,23 @@ impl PacketFilterTest {
                 None => None
             },
             ip: match &self.ip {
-                Some(IpHeader::Version4(header)) => {
-                    header.write(&mut ip_data).unwrap();
-                    Some(InternetSlice::Ipv4(Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap()))
-                },
-                Some(IpHeader::Version6(header)) => {
+                Some(IpHeader::Version4(header, _)) => {
                     header.write(&mut ip_data).unwrap();
                     Some(
-                        InternetSlice::Ipv6(Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(), 
-                        /*[None, None, None, None, None, 
-                         None, None, None, None, None,
-                         None, None]*/))
+                         InternetSlice::Ipv4(
+                            Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap(),
+                            Default::default()
+                        )
+                    )
+                },
+                Some(IpHeader::Version6(header, _)) => {
+                    header.write(&mut ip_data).unwrap();
+                    Some(
+                        InternetSlice::Ipv6(
+                            Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(),
+                            Default::default()
+                        )
+                    )
                 },
 
                 None => None
@@ -547,7 +553,8 @@ mod ip_filter {
                 ipv4.write(&mut ipv4_data).unwrap();
                 ipv4_data };
             let ipv4_slice = InternetSlice::Ipv4(
-                Ipv4HeaderSlice::from_slice(&ipv4_data[..]).unwrap()
+                Ipv4HeaderSlice::from_slice(&ipv4_data[..]).unwrap(),
+                Default::default()
             );
             let ipv6_data = {
                 let mut ipv6_data = Vec::new();
@@ -555,9 +562,7 @@ mod ip_filter {
                 ipv6_data };
             let ipv6_slice = InternetSlice::Ipv6(
                 Ipv6HeaderSlice::from_slice(&ipv6_data[..]).unwrap(),
-                /*[None, None, None, None, None,
-                 None, None, None, None, None,
-                 None, None]*/
+                Default::default()
             );
 
             //test ipv4 filter with wildcards

@@ -1,7 +1,7 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ByteOrder, WriteBytesExt};
+use self::byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 
 /// IP Authentication Header (rfc4302)
@@ -88,6 +88,34 @@ impl<'a> IpAuthenticationHeader {
         ))
     }
 
+    /// Read an authentication header from the current reader position.
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpAuthenticationHeader, ReadError> {
+        let next_header = reader.read_u8()?;
+        let payload_len = reader.read_u8()?;
+
+        // payload len must be at least 1
+        if payload_len < 1 {
+            use ReadError::*;
+            Err(IpAuthenticationHeaderTooSmallPayloadLength(payload_len))
+        } else {
+            // skip reserved
+            reader.read_u8()?;
+            reader.read_u8()?;
+            // read the rest of the header
+            Ok(IpAuthenticationHeader {
+                next_header: next_header,
+                spi: reader.read_u32::<BigEndian>()?,
+                sequence_number: reader.read_u32::<BigEndian>()?,
+                raw_icv_len: payload_len - 1,
+                raw_icv_buffer: {
+                    let mut buffer = [0;0xfe*4];
+                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1)*4])?;
+                    buffer
+                },
+            })
+        }
+    }
+
     /// Returns a slice the raw icv value.
     pub fn raw_icv(&self) -> &[u8] {
         &self.raw_icv_buffer[..usize::from(self.raw_icv_len)*4]
@@ -122,6 +150,11 @@ impl<'a> IpAuthenticationHeader {
         writer.write_u32::<BigEndian>(self.sequence_number)?;
         writer.write_all(self.raw_icv())?;
         Ok(())
+    }
+
+    ///Length of the header in bytes.
+    pub fn header_len(&self) -> usize {
+        12 + usize::from(self.raw_icv_len)*4
     }
 }
 
