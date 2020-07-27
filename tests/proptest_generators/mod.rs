@@ -257,6 +257,36 @@ prop_compose! {
         }
     }
 }
+
+prop_compose! {
+    pub(crate) fn ipv6_generic_extension_with(
+        next_header: u8,
+        len: u8
+    ) (
+        next_header in proptest::strategy::Just(next_header),
+        payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 6)
+    ) -> Ipv6GenericExtensionHeader
+    {
+        Ipv6GenericExtensionHeader::new_raw(
+            next_header,
+            &payload[..]
+        ).unwrap()
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv6_generic_extension_any() 
+        (
+            next_header in any::<u8>(),
+            len in any::<u8>()
+        ) (
+            result in ipv6_generic_extension_with(next_header, len)
+    ) -> Ipv6GenericExtensionHeader
+    {
+        result
+    }
+}
+
 /*
 /// Contains everything to construct the supported ip extension headers
 pub enum IpExtensionComponent {
