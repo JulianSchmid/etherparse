@@ -1,5 +1,7 @@
 use super::super::*;
 
+use std::io::Cursor;
+
 proptest! {
     /// Constructor check
     #[test]
@@ -27,7 +29,7 @@ proptest! {
     #[test]
     fn write_read(
         input in ipv6_fragment_any(),
-        dummy_data in proptest::collection::vec(any::<u8>(), 0..1024)
+        dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
     ) {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(16);
@@ -44,12 +46,29 @@ proptest! {
             assert_eq!(input.identification, result.identification());
             assert_eq!(&buffer[..8], result.slice());
             assert_eq!(input, result.to_header());
+            // check for clone (for coverage)
+            assert_eq!(result.clone(), result);
         }
         //deserialize (with read_from_slice)
         {
             let result = Ipv6FragmentHeader::read_from_slice(&buffer).unwrap();
             assert_eq!(input, result.0);
             assert_eq!(&buffer[8..], result.1);
+        }
+        //read
+        {
+            let mut cursor = Cursor::new(&buffer);
+            let actual = Ipv6FragmentHeader::read(&mut cursor).unwrap();
+            assert_eq!(actual, input);
+            assert_eq!(cursor.position(), (buffer.len() - dummy_data.len()) as u64);
+        }
+        //not enough data for read
+        for len in 0..buffer.len() - dummy_data.len() {
+            let mut cursor = Cursor::new(&buffer[..len]);
+            assert_matches!(
+                Ipv6FragmentHeader::read(&mut cursor),
+                Err(ReadError::IoError(_))
+            );
         }
     }
 }
@@ -106,3 +125,11 @@ proptest! {
         );
     }
 }
+
+proptest! {
+    #[test]
+    fn header_len(input in ipv6_fragment_any()) {
+        assert_eq!(8, input.header_len());
+    }
+}
+
