@@ -176,34 +176,132 @@ fn header_type_supported() {
     }
 }
 
-#[test]
-fn write_and_read() {
-    let lengths: [usize;4] = [6, 14, 22, 30];
-    let payload: [u8;30] = [
-               1, 2, 3, 4, 5, 6,
-         7, 8, 9,10,11,12,13,14,
-        15,16,17,18,19,20,21,22,
-        23,24,25,26,27,28,29,30,
-    ];
-
-    for l in lengths.iter() {
-        let input = Ipv6GenericExtensionHeader::new_raw(123, &payload[..*l]).unwrap();
+proptest! {
+    #[test]
+    fn write_and_read(
+        input in ipv6_generic_extension_any()
+    ) {
         let mut buffer: Vec<u8> = Vec::new();
         input.write(&mut buffer).unwrap();
         // add some dummy data to check the slice length
         buffer.push(0);
         buffer.push(1);
-
         {
             let actual = Ipv6GenericExtensionHeaderSlice::from_slice(&buffer).unwrap();
-            assert_eq!(123, actual.next_header());
-            assert_eq!(&payload[..*l], actual.payload());
+            assert_eq!(actual.next_header(), input.next_header);
+            assert_eq!(actual.payload(), input.payload());
+            assert_eq!(actual.to_header(), input);
+            // slice clone & equal check
+            assert_eq!(actual, actual.clone());
         }
         {
             let actual = Ipv6GenericExtensionHeader::read_from_slice(&buffer).unwrap();
-            assert_eq!(123, actual.0.next_header);
-            assert_eq!(&payload[..*l], actual.0.payload());
-            assert_eq!(&buffer[*l + 2..], actual.1);
+            assert_eq!(input, actual.0);
+            assert_eq!(&buffer[buffer.len() - 2..], actual.1);
         }
+        {
+            use std::io::Cursor;
+            let mut cursor = Cursor::new(&buffer);
+            let actual = Ipv6GenericExtensionHeader::read(&mut cursor).unwrap();
+            assert_eq!(input, actual);
+            assert_eq!(cursor.position(), (buffer.len() - 2) as u64);
+        }
+    }
+}
+
+#[test]
+fn read_errors() {
+    use std::io::Cursor;
+    // errors:
+    // length smaller then 8
+    for i in 0..8 {
+        let buffer = [0u8;7];
+        let mut cursor = Cursor::new(&buffer[..i]);
+        assert_matches!(
+            Ipv6GenericExtensionHeader::read(&mut cursor),
+            Err(ReadError::IoError(_))
+        );
+    }
+    // length smaller then spezified size
+    {
+        let buffer = {
+            let mut buffer: [u8;4*8 - 1] = [0;4*8 - 1];
+            // set length field
+            buffer[1] = 3;
+            buffer
+        };
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(
+            Ipv6GenericExtensionHeader::read(&mut cursor),
+            Err(ReadError::IoError(_))
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn header_len(input in ipv6_generic_extension_any()) {
+        assert_eq!(input.header_len(), input.payload().len() + 2);
+    }
+}
+
+proptest! {
+    #[test]
+    fn debug(input in ipv6_generic_extension_any()) {
+        // debug trait
+        {
+            assert_eq!(
+                &format!("Ipv6GenericExtensionHeader {{ next_header: {}, payload: {:?} }}", input.next_header, input.payload()),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}
+
+#[test]
+fn partial_equal() {
+    let a = Ipv6GenericExtensionHeader::new_raw(
+        123,
+        &[
+                   1, 2, 3, 4, 5, 6,
+             7, 8, 9,10,11,12,13,14,
+            15,16,17,18,19,20,21,22,
+            23,24,25,26,27,28,29,30,
+        ]
+    ).unwrap();
+    assert_eq!(a, a);
+
+    // non equal next_header
+    {
+        let mut b = a.clone();
+        b.next_header = 0;
+        assert_ne!(a, b);
+    }
+
+    // non equal payload data
+    {
+        let b = Ipv6GenericExtensionHeader::new_raw(
+            123,
+            &[
+                       1, 2, 3, 4, 5, 6,
+                 7, 8, 9,99,11,12,13,14,
+                15,16,17,18,19,20,21,22,
+                23,24,25,26,27,28,29,30,
+            ]
+        ).unwrap();
+        assert_ne!(a, b);
+    }
+
+    // non equal payload length
+    {
+        let b = Ipv6GenericExtensionHeader::new_raw(
+            123,
+            &[
+                       1, 2, 3, 4, 5, 6,
+                 7, 8, 9,10,11,12,13,14,
+                15,16,17,18,19,20,21,22,
+            ]
+        ).unwrap();
+        assert_ne!(a, b);
     }
 }
