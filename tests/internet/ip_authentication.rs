@@ -1,5 +1,7 @@
 use super::super::*;
 
+use std::io::Cursor;
+
 #[test]
 fn new_and_set_icv() {
     use ValueError::*;
@@ -97,54 +99,120 @@ fn from_slice_bad_header_len() {
     );
 }
 
-// read & write
 proptest! {
     #[test]
-    fn write_read(
-        expected in ip_authentication_any()
-    ) {
+    fn header_len(expected in ip_authentication_any()) {
+        assert_eq!(expected.header_len(), expected.raw_icv().len() + 12);
+    }
+}
+
+proptest! {
+    #[test]
+    fn write_read(expected in ip_authentication_any()) {
         let buffer = {
             let mut buffer: Vec<u8> = Vec::new();
             expected.write(&mut buffer).unwrap();
+
+            // add some extra data
+            buffer.push(1);
+            buffer.push(2);
+
             buffer
         };
 
-        // check slice
+        // from_slice
         {
             let actual = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
-            assert_eq!(actual.slice(), &buffer[..]);
+            assert_eq!(actual.slice(), &buffer[..buffer.len()-2]);
             assert_eq!(actual.next_header(), expected.next_header);
             assert_eq!(actual.spi(), expected.spi);
             assert_eq!(actual.sequence_number(), expected.sequence_number);
             assert_eq!(actual.raw_icv(), expected.raw_icv());
             assert_eq!(actual.to_header(), expected);
+            // clone and equal check for slice
+            assert_eq!(actual.clone(), actual);
         }
-        // check header
+        // read_from_slice
         {
             let (actual, rest) = IpAuthenticationHeader::read_from_slice(&buffer).unwrap();
             assert_eq!(actual, expected);
-            assert_eq!(rest, &buffer[buffer.len()..]);
+            assert_eq!(rest, &buffer[buffer.len()-2..]);
         }
-        // test with more data then in buffer
+        // read
         {
-            let mut buffer2 = buffer.clone();
-            buffer2.push(1);
-            buffer2.push(2);
-            let (actual, rest) = IpAuthenticationHeader::read_from_slice(&buffer).unwrap();
-            assert_eq!(actual, expected);
-            assert_eq!(rest, &buffer[buffer2.len()-2..]);
+            let mut cursor = Cursor::new(&buffer);
+            let actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+            assert_eq!(expected, actual);
+            assert_eq!(cursor.position(), (buffer.len()-2) as u64);
         }
 
         // test error when the slice is smaller then the data lenght
-        use ReadError::*;
-        assert_matches!(
-            IpAuthenticationHeader::read_from_slice(&buffer[..buffer.len()-1]),
-            Err(UnexpectedEndOfSlice(_))
-        );
-        assert_matches!(
-            IpAuthenticationHeaderSlice::from_slice(&buffer[..buffer.len()-1]),
-            Err(UnexpectedEndOfSlice(_))
-        );
+        for len in 0..buffer.len()-3 {
+            use ReadError::*;
+            assert_matches!(
+                IpAuthenticationHeader::read_from_slice(&buffer[..len]),
+                Err(UnexpectedEndOfSlice(_))
+            );
+            assert_matches!(
+                IpAuthenticationHeaderSlice::from_slice(&buffer[..len]),
+                Err(UnexpectedEndOfSlice(_))
+            );
+            {
+                let mut cursor = Cursor::new(&buffer[..len]);
+                assert_matches!(
+                    IpAuthenticationHeader::read(&mut cursor),
+                    Err(IoError(_))
+                );
+            }
+        }
     }
 }
 
+#[test]
+pub fn read_too_small_payload_len() {
+    let input = [0u8;16]; // the 2nd
+    let mut cursor = Cursor::new(&input);
+    assert_matches!(
+        IpAuthenticationHeader::read(&mut cursor),
+        Err(ReadError::IpAuthenticationHeaderTooSmallPayloadLength(0))
+    );
+}
+
+/// Dummy test for the clone function
+#[test]
+pub fn clone() {
+    let a = IpAuthenticationHeader::new(0,0,0,&[0;4]);
+    assert_eq!(a.clone(), a);
+}
+
+#[test]
+pub fn partial_eq() {
+    let a = IpAuthenticationHeader::new(0,0,0,&[0;4]);
+    
+    //equal
+    assert!(a == IpAuthenticationHeader::new(0,0,0,&[0;4]));
+
+    //not equal tests
+    assert!(a != IpAuthenticationHeader::new(1,0,0,&[0;4]));
+    assert!(a != IpAuthenticationHeader::new(0,1,0,&[0;4]));
+    assert!(a != IpAuthenticationHeader::new(0,0,1,&[0;4]));
+    assert!(a != IpAuthenticationHeader::new(0,0,0,&[0,1,0,0]));
+    assert!(a != IpAuthenticationHeader::new(0,0,1,&[]));
+    assert!(a != IpAuthenticationHeader::new(0,0,1,&[0;8]));
+}
+
+proptest! {
+    #[test]
+    /// Test for the manually implemented debug trait
+    fn debug(input in ip_authentication_any()) {
+        assert_eq!(
+            &format!(
+                "IpAuthenticationHeader {{ next_header: {}, spi: {}, sequence_number: {}, raw_icv: {:?} }}",
+                input.next_header,
+                input.spi,
+                input.sequence_number,
+                input.raw_icv()),
+            &format!("{:?}", input)
+        );
+    }
+}
