@@ -644,11 +644,11 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     match ip_header {
         Version4(mut ip, mut ext) => {
             //set total length & udp payload length (ip checks that the payload length is ok)
-            let udp_size = transport.header_len() + payload.len();
-            ip.set_payload_len(ext.header_len() + udp_size)?;
+            let transport_size = transport.header_len() + payload.len();
+            ip.set_payload_len(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
-                Udp(ref mut udp) => { udp.length = udp_size as u16; }
+                Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
 
@@ -669,11 +669,11 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
         },
         Version6(mut ip, mut ext) => {
             //set total length
-            let size = transport.header_len() + payload.len();
-            ip.set_payload_length(size)?;
+            let transport_size = transport.header_len() + payload.len();
+            ip.set_payload_length(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
-                Udp(ref mut udp) => { udp.length = size as u16; }
+                Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
 
