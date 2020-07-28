@@ -309,7 +309,7 @@ impl fmt::Display for ReadError {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
             },
             Ipv6HopByHopHeaderNotAtStart => {
-                write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200-")
+                write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
             },
             IpAuthenticationHeaderTooSmallPayloadLength(length) => {
                 write!(f, "ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", length)
@@ -462,17 +462,17 @@ impl fmt::Display for ValueError {
             IpAuthenticationHeaderBadIcvLength(size) => {
                 write!(f, "IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", size)
             },
-            Ipv4ExtensionNotReferenced(traffic_class) => {
-                write!(f, "IPv4 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'protocol' field of the IPv4 header.", traffic_class)
+            Ipv4ExtensionNotReferenced(ip_protocol_number) => {
+                write!(f, "IPv4 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'protocol' field of the IPv4 header.", ip_protocol_number)
             }
             Ipv6ExtensionHopByHopNotAtStart => {
                 write!(f, "IPv6 extensions hop-by-hop is not located directly after the IPv6 header (required by IPv6).")
             },
-            Ipv6ExtensionNotReferenced(traffic_class) => {
-                write!(f, "IPv6 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'traffic_class' field of the IPv6 header.", traffic_class)
+            Ipv6ExtensionNotReferenced(ip_protocol_number) => {
+                write!(f, "IPv6 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the IPv6 header.", ip_protocol_number)
             },
-            Ipv6ExtensionNotDefinedReference(traffic_class) => {
-                write!(f, "IPv6 extensions '{:?}' is referenced by one of the 'next_header' of another extension headers or the 'traffic_class' field of the IPv6 header but is not defined in the 'Ipv4Extensions'.", traffic_class)
+            Ipv6ExtensionNotDefinedReference(ip_protocol_number) => {
+                write!(f, "IPv6 extensions '{:?}' is referenced by the 'next_header' field of an extension headers or the IPv6 header but is not defined in the 'Ipv6Extensions'.", ip_protocol_number)
             },
             UdpPayloadLengthTooLarge(length) => { //usize
                 write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)
