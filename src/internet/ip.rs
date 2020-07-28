@@ -74,7 +74,7 @@ impl IpHeader {
 }
 
 ///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum IpTrafficClass {
     ///IPv6 Hop-by-Hop Option [RFC8200]
     IPv6HeaderHopByHop = 0,

@@ -68,6 +68,12 @@ proptest! {
             &format!("{}", Ipv6TooManyHeaderExtensions)
         );
 
+        //Ipv6HopByHopHeaderNotAtStart
+        assert_eq!(
+            &format!("ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200."),
+            &format!("{}", Ipv6HopByHopHeaderNotAtStart)
+        );
+
         //IpAuthenticationHeaderTooSmallPayloadLength
         assert_eq!(
             &format!("ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", arg_u8),
@@ -102,11 +108,37 @@ fn read_error_source() {
         Ipv4TotalLengthTooSmall(0),
         Ipv6UnexpectedVersion(0),
         Ipv6TooManyHeaderExtensions,
+        Ipv6HopByHopHeaderNotAtStart,
+        IpAuthenticationHeaderTooSmallPayloadLength(0),
         TcpDataOffsetTooSmall(0),
     ];
 
     for value in &none_values {
         assert_matches!(value.source(), None);
+    }
+}
+
+#[test]
+fn read_error_debug() {
+    use super::ReadError::*;
+
+    let values = [
+        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
+        UnexpectedEndOfSlice(0),
+        VlanDoubleTaggingUnexpectedOuterTpid(0),
+        IpUnsupportedVersion(0),
+        Ipv4UnexpectedVersion(0),
+        Ipv4HeaderLengthBad(0),
+        Ipv4TotalLengthTooSmall(0),
+        Ipv6UnexpectedVersion(0),
+        Ipv6TooManyHeaderExtensions,
+        Ipv6HopByHopHeaderNotAtStart,
+        IpAuthenticationHeaderTooSmallPayloadLength(0),
+        TcpDataOffsetTooSmall(0),
+    ];
+
+    for value in &values {
+        format!("{:?}", value);
     }
 }
 
@@ -179,6 +211,9 @@ fn value_error_source() {
         Ipv6PayloadLengthTooLarge(0),
         Ipv6ExtensionPayloadTooLarge(0),
         IpAuthenticationHeaderBadIcvLength(0),
+        Ipv4ExtensionNotReferenced(IpTrafficClass::Icmp),
+        Ipv6ExtensionNotReferenced(IpTrafficClass::Icmp),
+        Ipv6ExtensionNotDefinedReference(IpTrafficClass::Icmp),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
         U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
@@ -188,6 +223,31 @@ fn value_error_source() {
 
     for value in &none_values {
         assert_matches!(value.source(), None);
+    }
+}
+
+#[test]
+fn value_error_debug() {
+    use ValueError::*;
+
+    let values = [
+        Ipv4OptionsLengthBad(0),
+        Ipv4PayloadLengthTooLarge(0),
+        Ipv6PayloadLengthTooLarge(0),
+        Ipv6ExtensionPayloadTooLarge(0),
+        IpAuthenticationHeaderBadIcvLength(0),
+        Ipv4ExtensionNotReferenced(IpTrafficClass::Icmp),
+        Ipv6ExtensionNotReferenced(IpTrafficClass::Icmp),
+        Ipv6ExtensionNotDefinedReference(IpTrafficClass::Icmp),
+        UdpPayloadLengthTooLarge(0),
+        TcpLengthTooLarge(0),
+        U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+    ];
+
+    for value in &values {
+        format!("{:?}", value);
     }
 }
 
@@ -201,7 +261,8 @@ proptest! {
         value_u32 in any::<u32>(),
         max_u32 in any::<u32>(),
         arg_usize in any::<usize>(),
-        field in error_field_any()
+        field in error_field_any(),
+        ip_protocol_number in ip_protocol_numbber_any(),
     ) {
         use ValueError::*;
 
@@ -223,16 +284,52 @@ proptest! {
             &format!("{}", Ipv6PayloadLengthTooLarge(arg_usize))
         );
 
+        //Ipv6ExtensionPayloadTooSmall
+        assert_eq!(
+            &format!("IPv6 extensions header payload length is too small. The payload size ({} bytes) is less then 6 octets which is the minimum IPv6 extension header payload size.", arg_usize),
+            &format!("{}", Ipv6ExtensionPayloadTooSmall(arg_usize))
+        );
+
         //Ipv6ExtensionPayloadTooLarge
         assert_eq!(
             &format!("IPv6 extensions header payload length is too large. The payload size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", arg_usize),
             &format!("{}", Ipv6ExtensionPayloadTooLarge(arg_usize))
         );
 
+        //Ipv6ExtensionPayloadLengthUnaligned
+        assert_eq!(
+            &format!("IPv6 extensions header 'payload length ({} bytes) + 2' is not multiple of 8 (+ 2 for the `next_header` and `header_length` fields). This is required as the header length field can only express lengths in multiple of 8 bytes.", arg_usize),
+            &format!("{}", Ipv6ExtensionPayloadLengthUnaligned(arg_usize))
+        );
+
         //IpAuthenticationHeaderBadIcvLength
         assert_eq!(
             &format!("IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", arg_usize),
             &format!("{}", IpAuthenticationHeaderBadIcvLength(arg_usize))
+        );
+
+        //Ipv4ExtensionNotReferenced
+        assert_eq!(
+            &format!("IPv4 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'protocol' field of the IPv4 header.", ip_protocol_number),
+            &format!("{}", Ipv4ExtensionNotReferenced(ip_protocol_number))
+        );
+
+        //Ipv6ExtensionHopByHopNotAtStart
+        assert_eq!(
+            "IPv6 extensions hop-by-hop is not located directly after the IPv6 header (required by IPv6).",
+            &format!("{}", Ipv6ExtensionHopByHopNotAtStart)
+        );
+
+        //Ipv6ExtensionNotReferenced
+        assert_eq!(
+            &format!("IPv6 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the IPv6 header.", ip_protocol_number),
+            &format!("{}", Ipv6ExtensionNotReferenced(ip_protocol_number))
+        );
+
+        //Ipv6ExtensionNotDefinedReference
+        assert_eq!(
+            &format!("IPv6 extensions '{:?}' is referenced by the 'next_header' field of an extension headers or the IPv6 header but is not defined in the 'Ipv6Extensions'.", ip_protocol_number),
+            &format!("{}", Ipv6ExtensionNotDefinedReference(ip_protocol_number))
         );
 
         //UdpPayloadLengthTooLarge
