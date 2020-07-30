@@ -219,6 +219,8 @@ fn single_from_slice() {
 
     //check that all fields are read correctly
     let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
+    assert_eq!(slice.clone(), slice);
+    assert_eq!(slice.slice(), &buffer[..]);
     assert_eq!(slice.priority_code_point(), input.priority_code_point);
     assert_eq!(slice.drop_eligible_indicator(), input.drop_eligible_indicator);
     assert_eq!(slice.vlan_identifier(), input.vlan_identifier);
@@ -257,11 +259,18 @@ fn double_from_slice() {
     );
 
     let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
+
+    assert_eq!(slice.clone(), slice);
+
+    assert_eq!(slice.slice(), &buffer[..]);
+
+    assert_eq!(slice.outer().slice(), &buffer[..SingleVlanHeader::SERIALIZED_SIZE]);
     assert_eq!(slice.outer().priority_code_point(), input.outer.priority_code_point);
     assert_eq!(slice.outer().drop_eligible_indicator(), input.outer.drop_eligible_indicator);
     assert_eq!(slice.outer().vlan_identifier(), input.outer.vlan_identifier);
     assert_eq!(slice.outer().ether_type(), input.outer.ether_type);
 
+    assert_eq!(slice.inner().slice(), &buffer[SingleVlanHeader::SERIALIZED_SIZE..SingleVlanHeader::SERIALIZED_SIZE*2]);
     assert_eq!(slice.inner().priority_code_point(), input.inner.priority_code_point);
     assert_eq!(slice.inner().drop_eligible_indicator(), input.inner.drop_eligible_indicator);
     assert_eq!(slice.inner().vlan_identifier(), input.inner.vlan_identifier);
