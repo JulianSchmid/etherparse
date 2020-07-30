@@ -136,8 +136,15 @@ fn skip_extension() {
     const HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
     const ROUTE: u8 = IpTrafficClass::IPv6RouteHeader as u8;
     const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
+    const ICMP: u8 = IpTrafficClass::Icmp as u8;
 
     use std::io::Cursor;
+    {
+        let buffer: [u8; 8] = [0;8];
+        let mut cursor = Cursor::new(&buffer);
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, ICMP), Ok(ICMP));
+        assert_eq!(0, cursor.position());
+    }
     {
         let buffer: [u8; 8] = [0;8];
         let mut cursor = Cursor::new(&buffer);
@@ -202,8 +209,7 @@ fn skip_all_extensions() {
             1,2,3,4,   5,6,7,8,
         ];
 
-        for i_as16 in 0..((u8::max_value() as u16) + 1) {
-            let i = i_as16 as u8; //note: I would prefer to use the inclusive range ..= but this feature is not yet marked as stable -> replace when stable
+        for i in 0..=u8::max_value() {
             let mut cursor = Cursor::new(&buffer);
             let reader_result = Ipv6Header::skip_all_header_extensions(&mut cursor, i);
             let slice_result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, i).unwrap();
@@ -281,8 +287,11 @@ fn skip_all_extensions() {
     //skip maximum number
     {
         let ids = {
-            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 1);
-            ids.extend_from_slice(&EXTENSION_IDS);
+            let mut ids = Vec::with_capacity(IPV6_MAX_NUM_HEADER_EXTENSIONS);
+            while ids.len() < IPV6_MAX_NUM_HEADER_EXTENSIONS {
+                // fill with extension headers until filled
+                ids.extend_from_slice(&EXTENSION_IDS[..std::cmp::min(EXTENSION_IDS.len(), IPV6_MAX_NUM_HEADER_EXTENSIONS - ids.len())]);
+            }
             ids.push(UDP);
             ids
         };
@@ -388,6 +397,7 @@ proptest! {
         //check that all the values are read correctly
         use std::net::Ipv6Addr;
         let slice = Ipv6HeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(slice.slice(), &buffer[..]);
         assert_eq!(slice.version(), 6);
         assert_eq!(slice.traffic_class(), input.traffic_class);
         assert_eq!(slice.flow_label(), input.flow_label);
@@ -398,6 +408,9 @@ proptest! {
         assert_eq!(slice.source_addr(), Ipv6Addr::from(input.source));
         assert_eq!(slice.destination(), input.destination);
         assert_eq!(slice.destination_addr(), Ipv6Addr::from(input.destination));
+
+        //test for derive
+        assert_eq!(slice.clone(), slice);
 
         //check that the convertion back to a header struct results in the same struct
         assert_eq!(&slice.to_header(), input);

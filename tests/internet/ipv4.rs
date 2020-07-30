@@ -529,6 +529,7 @@ proptest! {
     {
         use std::io::Cursor;
         use byteorder::{ByteOrder, BigEndian};
+        use ReadError::*;
 
         let mut buffer: [u8;60] = [0;60];
         {
@@ -538,8 +539,13 @@ proptest! {
         //change the total length to be smaller then the header length
         BigEndian::write_u16(&mut buffer[2..4], (input.header_len() as u16) - 1);
 
+        //size smaller then the minimum size of the header
+        assert_matches!(
+            Ipv4HeaderSlice::from_slice(&buffer[..Ipv4Header::SERIALIZED_SIZE - 1]),
+            Err(UnexpectedEndOfSlice(Ipv4Header::SERIALIZED_SIZE))
+        );
+
         //check that the read methods generate a error
-        use self::ReadError::Ipv4TotalLengthTooSmall;
         let slice = &buffer[..input.header_len()];
         assert_matches!(
             Ipv4HeaderSlice::from_slice(slice),
