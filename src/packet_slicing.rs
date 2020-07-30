@@ -40,7 +40,7 @@ pub enum TransportSlice<'a> {
     Udp(UdpHeaderSlice<'a>),
     ///A slice containing a TCP header.
     Tcp(TcpHeaderSlice<'a>),
-    ///Unknonwn transport layer protocol. The value is the last traffic class id.
+    ///Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
     Unknown(u8),
 }
 

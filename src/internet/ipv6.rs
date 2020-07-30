@@ -116,10 +116,10 @@ impl Ipv6Header {
         }
     }
 
-    /// Returns true if the given traffic class is a skippable header extension.
+    /// Returns true if the given ip protocol number is a skippable header extension.
     ///
     /// Meaning it is known how to determine the next traffic class and jump to it's location.
-    pub fn is_skippable_header_extension(traffic_class: u8) -> bool {
+    pub fn is_skippable_header_extension(ip_protocol_number: u8) -> bool {
         use crate::IpTrafficClass::*;
         const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
         const ROUTE: u8 = IPv6RouteHeader as u8;
@@ -130,40 +130,40 @@ impl Ipv6Header {
         const HIP: u8 = Hip as u8;
         const SHIM6: u8 = Shim6 as u8;
         //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
-        match traffic_class {
+        match ip_protocol_number {
             HOP_BY_HOP | ROUTE | FRAG | AUTH | OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         }
     }
 
-    ///Takes a slice & traffic class (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
-    pub fn skip_all_header_extensions_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
+    ///Takes a slice & ip protocol number (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
+    pub fn skip_all_header_extensions_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), ReadError> {
 
-        let mut next_traffic_class = traffic_class;
+        let mut next_header = next_header;
         let mut rest = slice;
         
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
 
-            let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_traffic_class)?;
+            let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_header)?;
 
             if n_rest.len() == rest.len() {
-                return Ok((next_traffic_class, rest))
+                return Ok((next_header, rest))
             } else {
-                next_traffic_class = n_id;
+                next_header = n_id;
                 rest = n_rest;
             }
         }
 
         // final check
-        if Ipv6Header::is_skippable_header_extension(next_traffic_class) {
+        if Ipv6Header::is_skippable_header_extension(next_header) {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
         } else {
-            Ok((next_traffic_class, rest))
+            Ok((next_header, rest))
         }
     }
 
-    ///Skips the ipv6 header extension and returns the traffic_class
-    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, io::Error> {
+    ///Skips the ipv6 header extension and returns the next ip protocol number
+    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, ip_protocol_number: u8) -> Result<u8, io::Error> {
         use crate::IpTrafficClass::*;
         const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
         const ROUTE: u8 = IPv6RouteHeader as u8;
@@ -174,7 +174,7 @@ impl Ipv6Header {
         const HIP: u8 = Hip as u8;
         const SHIM6: u8 = Shim6 as u8;
 
-        let (next_header, rest_length) = match traffic_class {
+        let (next_header, rest_length) = match ip_protocol_number {
             FRAG => (reader.read_u8()?, 7),
             AUTH => (
                 reader.read_u8()?,
@@ -185,7 +185,7 @@ impl Ipv6Header {
                 i64::from(reader.read_u8()?)*8 + 6
             ),
             // not a ipv6 header extension that can be skipped
-            _ => return Ok(traffic_class)
+            _ => return Ok(ip_protocol_number)
         };
 
         //Sadly seek does not return an error if the seek could not be fullfilled.
@@ -201,25 +201,25 @@ impl Ipv6Header {
         Ok(next_header)
     }
 
-    ///Skips all ipv6 header extensions and returns the last traffic_class
-    pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(reader: &mut T, traffic_class: u8) -> Result<u8, ReadError> {
+    ///Skips all ipv6 header extensions and returns the next ip protocol number
+    pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(reader: &mut T, next_header: u8) -> Result<u8, ReadError> {
 
-        let mut next_traffic_class = traffic_class;
+        let mut next_header = next_header;
 
         for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-            if Ipv6Header::is_skippable_header_extension(next_traffic_class)
+            if Ipv6Header::is_skippable_header_extension(next_header)
             {
-                next_traffic_class = Ipv6Header::skip_header_extension(reader, next_traffic_class)?;
+                next_header = Ipv6Header::skip_header_extension(reader, next_header)?;
             } else {
-                return Ok(next_traffic_class);
+                return Ok(next_header);
             }
         }
 
         //final check
-        if Ipv6Header::is_skippable_header_extension(next_traffic_class) {
+        if Ipv6Header::is_skippable_header_extension(next_header) {
             Err(ReadError::Ipv6TooManyHeaderExtensions)
         } else {
-            Ok(next_traffic_class)
+            Ok(next_header)
         }
     }
 
