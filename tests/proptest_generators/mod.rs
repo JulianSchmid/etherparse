@@ -167,8 +167,8 @@ prop_compose! {
 }
 
 static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
-    IpTrafficClass::Udp as u8,
-    IpTrafficClass::Tcp as u8
+    ip_number::UDP,
+    ip_number::TCP
 ];
 
 prop_compose! {
@@ -218,16 +218,16 @@ prop_compose! {
 }
 
 static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
-    IpTrafficClass::Udp as u8,
-    IpTrafficClass::Tcp as u8,
-    IpTrafficClass::IPv6HeaderHopByHop as u8,
-    IpTrafficClass::IPv6RouteHeader as u8,
-    IpTrafficClass::IPv6FragmentationHeader as u8,
-    IpTrafficClass::AuthenticationHeader as u8,
-    IpTrafficClass::IPv6DestinationOptions as u8,
-    IpTrafficClass::MobilityHeader as u8,
-    IpTrafficClass::Hip as u8,
-    IpTrafficClass::Shim6 as u8,
+    ip_number::UDP,
+    ip_number::TCP,
+    ip_number::IPV6_HOP_BY_HOP,
+    ip_number::IPV6_ROUTE,
+    ip_number::IPV6_FRAG,
+    ip_number::AUTH,
+    ip_number::IPV6_DEST_OPTIONS,
+    ip_number::MOBILITY,
+    ip_number::HIP,
+    ip_number::SHIM6,
     // currently not supported:
     // - EncapsulatingSecurityPayload
     // - ExperimentalAndTesting0
@@ -568,8 +568,8 @@ prop_compose! {
     }
 }
 
-pub fn ip_protocol_numbber_any() -> impl Strategy<Value = IpTrafficClass> {
-    use IpTrafficClass::*;
+pub fn ip_number_any() -> impl Strategy<Value = IpNumber> {
+    use IpNumber::*;
     prop_oneof![
         Just(IPv6HeaderHopByHop),
         Just(Icmp),

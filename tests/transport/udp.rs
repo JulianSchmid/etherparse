@@ -36,7 +36,7 @@ fn with_ipv4_checksum() {
     let ip_header = Ipv4Header::new(
         (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         5,
-        IpTrafficClass::Udp, 
+        IpNumber::Udp, 
         [1,2,3,4], 
         [5,6,7,8]
     );
@@ -53,14 +53,14 @@ fn with_ipv4_checksum() {
 #[test]
 fn with_ipv4_checksum_flip() {
     let mut payload = [0,0,0,0];
-    let sum: u16 = IpTrafficClass::Udp as u16 +
+    let sum: u16 = u16::from(ip_number::UDP) +
                     (2*(UdpHeader::SERIALIZED_SIZE as u16 + 
                         payload.len() as u16));
     BigEndian::write_u16(&mut payload, 0xffff - sum);
     let ip_header = Ipv4Header::new(
         (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         5, 
-        IpTrafficClass::Udp, 
+        IpNumber::Udp, 
         [0,0,0,0],
         [0,0,0,0],
     );
@@ -85,7 +85,7 @@ fn with_ipv4_payload_size_check() {
     let ip_header = Ipv4Header::new(
         0,
         5, 
-        IpTrafficClass::Udp, 
+        IpNumber::Udp, 
         [1,2,3,4], 
         [5,6,7,8]
     );
@@ -138,7 +138,7 @@ fn with_ipv4_payload_size_check() {
 #[test]
 fn udp_calc_checksum_ipv4() {
     //even sized payload
-    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpTrafficClass::Udp, [1,2,3,4], [5,6,7,8]);
+    let ipheader = Ipv4Header::new(4*3 + 8, 5, IpNumber::Udp, [1,2,3,4], [5,6,7,8]);
     let payload = [9,10,11,12, 13,14,15,16];
     let udp = UdpHeader {
         source_port: 1234,
@@ -161,7 +161,7 @@ fn udp_calc_checksum_ipv4_raw() {
     };
     let payload = [9,10,11,12, 13,14,15,16];
 
-    assert_eq!(42134, udp.calc_checksum_ipv4_raw([1,2,3,4], [5,6,7,8], IpTrafficClass::Udp as u8, &payload).unwrap());
+    assert_eq!(42134, udp.calc_checksum_ipv4_raw([1,2,3,4], [5,6,7,8], ip_number::UDP, &payload).unwrap());
 }
 
 #[test]
@@ -175,7 +175,7 @@ fn udp_with_ipv6_checksum() {
             traffic_class: 1,
             flow_label: 0x81806,
             payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
-            next_header: IpTrafficClass::Udp as u8,
+            next_header: ip_number::UDP,
             hop_limit: 40,
             source: [1, 2, 3, 4, 5, 6, 7, 8,
                      9,10,11,12,13,14,15,16],
@@ -215,7 +215,7 @@ fn udp_with_ipv6_checksum() {
             traffic_class: 1,
             flow_label: 0x81806,
             payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
-            next_header: IpTrafficClass::Udp as u8,
+            next_header: ip_number::UDP,
             hop_limit: 40,
             source: [1, 2, 3, 4, 5, 6, 7, 8,
                      9,10,11,12,13,14,15,16],
@@ -259,7 +259,7 @@ fn udp_with_ipv6_checksum() {
             traffic_class: 1,
             flow_label: 0x81806,
             payload_length: (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
-            next_header: IpTrafficClass::Udp as u8,
+            next_header: ip_number::UDP,
             hop_limit: 40,
             source: [0xff;16],
             destination: [0xff;16]
@@ -302,7 +302,7 @@ fn udp_ipv6_errors() {
         traffic_class: 1,
         flow_label: 0x81806,
         payload_length: 1234,
-        next_header: IpTrafficClass::Udp as u8,
+        next_header: ip_number::UDP,
         hop_limit: 40,
         source: [0xff;16],
         destination: [0xff;16]

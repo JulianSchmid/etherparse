@@ -131,9 +131,8 @@ fn slice_from_slice_error() {
 
 #[test]
 fn extension_from_slice_bad_length() {
-    use crate::IpTrafficClass::*;
+    use crate::ip_number::UDP;
     use self::ReadError::*;
-    const UDP: u8 = Udp as u8;
 
     //smaller then minimum extension header size (8 bytes)
     {
@@ -158,17 +157,10 @@ fn extension_from_slice_bad_length() {
 
 #[test]
 fn header_type_supported() {
-    use crate::IpTrafficClass::*;
-    const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-    const ROUTE: u8 = IPv6RouteHeader as u8;
-    const OPTIONS: u8 = IPv6DestinationOptions as u8;
-    const MOBILITY: u8 = MobilityHeader as u8;
-    const HIP: u8 = Hip as u8;
-    const SHIM6: u8 = Shim6 as u8;
-
+    use crate::ip_number::*;
     for i in 0..0xffu8 {
         let expected = match i {
-            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         };
         assert_eq!(expected, Ipv6GenericExtensionHeader::header_type_supported(i));

@@ -107,17 +107,11 @@ impl Ipv6Extensions {
         let mut result: Ipv6Extensions = Default::default();
         let mut next_protocol = start_protocol;
 
-        use IpTrafficClass::*;
+        use ip_number::*;
         use ReadError::*;
 
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const DESTINATION_OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const ROUTING: u8 = IPv6RouteHeader as u8;
-        const FRAGMENT: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-
         // the hop by hop header is required to occur directly after the ipv6 header
-        if HOP_BY_HOP == next_protocol {
+        if IPV6_HOP_BY_HOP == next_protocol {
             let header = Ipv6GenericExtensionHeader::read(reader)?;
             next_protocol = header.next_header;
             result.hop_by_hop_options = Some(header);   
@@ -125,10 +119,10 @@ impl Ipv6Extensions {
 
         loop {
             match next_protocol {
-                HOP_BY_HOP => {
+                IPV6_HOP_BY_HOP => {
                     return Err(Ipv6HopByHopHeaderNotAtStart);
                 },
-                DESTINATION_OPTIONS => {
+                IPV6_DEST_OPTIONS => {
                     if result.routing.is_some() {
                         // if the routing header is already present
                         // asume this is a "final destination options" header
@@ -151,7 +145,7 @@ impl Ipv6Extensions {
                         }
                     }
                 },
-                ROUTING => {
+                IPV6_ROUTE => {
                     if result.routing.is_some() {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
@@ -161,7 +155,7 @@ impl Ipv6Extensions {
                         result.routing = Some(header);
                     }
                 },
-                FRAGMENT => {
+                IPV6_FRAG => {
                     if result.fragment.is_some() {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
@@ -197,7 +191,8 @@ impl Ipv6Extensions {
     /// It is required that all next header are correctly set in the headers and no other ipv6 header 
     /// extensions follow this header. If this is not the case a ``
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T, first_header: u8) -> Result<(), WriteError> {
-        use IpTrafficClass::*;
+        use ip_number::*;
+        use IpNumber::*;
         use ValueError::*;
 
         /// Struct flagging if a header needs to be written.
@@ -233,14 +228,8 @@ impl Ipv6Extensions {
         let mut next_header = first_header;
         let mut route_written = false;
 
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const DESTINATION_OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const ROUTING: u8 = IPv6RouteHeader as u8;
-        const FRAGMENT: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-
         // check if hop by hop header should be written first
-        if HOP_BY_HOP == next_header {
+        if IPV6_HOP_BY_HOP == next_header {
             if needs_write.hop_by_hop_options {
                 let header = &self.hop_by_hop_options.as_ref().unwrap();
                 header.write(writer)?;
@@ -253,11 +242,11 @@ impl Ipv6Extensions {
 
         while needs_write.writes_left() {
             match next_header {
-                HOP_BY_HOP => {
+                IPV6_HOP_BY_HOP => {
                     // the hop by hop header is only allowed at the start
                     return Err(Ipv6ExtensionHopByHopNotAtStart.into());
                 },
-                DESTINATION_OPTIONS => {
+                IPV6_DEST_OPTIONS => {
                     // the destination options are allowed to be written twice
                     // once before a routing header and once after.
                     if route_written {
@@ -280,7 +269,7 @@ impl Ipv6Extensions {
                         }
                     }
                 },
-                ROUTING => {
+                IPV6_ROUTE => {
                     if needs_write.routing {
                         let header = &self.routing.as_ref().unwrap();
                         header.write(writer)?;
@@ -292,7 +281,7 @@ impl Ipv6Extensions {
                         return Err(Ipv6ExtensionNotDefinedReference(IPv6RouteHeader).into());
                     }
                 },
-                FRAGMENT => {
+                IPV6_FRAG => {
                     if needs_write.fragment {
                         let header = &self.fragment.as_ref().unwrap();
                         header.write(writer)?;
@@ -370,32 +359,25 @@ impl Ipv6Extensions {
     ///
     /// If no extension headers are present the value of the argument is returned.
     pub fn set_next_headers(&mut self, last_protocol_number: u8) -> u8 {
-
-        use IpTrafficClass::*;
-
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const DESTINATION_OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const ROUTING: u8 = IPv6RouteHeader as u8;
-        const FRAGMENT: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
+        use ip_number::*;
 
         let mut next = last_protocol_number;
 
         if let Some(ref mut header) = self.hop_by_hop_options {
             header.next_header = next;
-            next = HOP_BY_HOP;
+            next = IPV6_HOP_BY_HOP;
         }
         if let Some(ref mut header) = self.destination_options {
             header.next_header = next;
-            next = DESTINATION_OPTIONS;
+            next = IPV6_DEST_OPTIONS;
         }
         if let Some(ref mut header) = self.routing {
             header.next_header = next;
-            next = ROUTING;
+            next = IPV6_ROUTE;
         }
         if let Some(ref mut header) = self.fragment {
             header.next_header = next;
-            next = FRAGMENT;
+            next = IPV6_FRAG;
         }
         if let Some(ref mut header) = self.auth {
             header.next_header = next;
@@ -403,7 +385,7 @@ impl Ipv6Extensions {
         }
         if let Some(ref mut header) = self.final_destination_options {
             header.next_header = next;
-            next = DESTINATION_OPTIONS;
+            next = IPV6_DEST_OPTIONS;
         }
 
         next
@@ -437,17 +419,11 @@ impl<'a> Ipv6ExtensionSlices<'a> {
         let mut rest = start_slice;
         let mut next_traffic_class = start_traffic_class;
 
-        use IpTrafficClass::*;
+        use ip_number::*;
         use ReadError::*;
 
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const DESTINATION_OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const ROUTING: u8 = IPv6RouteHeader as u8;
-        const FRAGMENT: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-
         // the hop by hop header is required to occur directly after the ipv6 header
-        if HOP_BY_HOP == next_traffic_class {
+        if IPV6_HOP_BY_HOP == next_traffic_class {
             let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
             rest = &rest[slice.slice().len()..];
             next_traffic_class = slice.next_header();
@@ -456,10 +432,10 @@ impl<'a> Ipv6ExtensionSlices<'a> {
 
         loop {
             match next_traffic_class {
-                HOP_BY_HOP => {
+                IPV6_HOP_BY_HOP => {
                     return Err(Ipv6HopByHopHeaderNotAtStart);
                 },
-                DESTINATION_OPTIONS => {
+                IPV6_DEST_OPTIONS => {
                     if result.routing.is_some() {
                         // if the routing header is already present
                         // this this a "final destination options" header
@@ -484,7 +460,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                         }
                     }
                 },
-                ROUTING => {
+                IPV6_ROUTE => {
                     if result.routing.is_some() {
                         // more then one header of this type found -> abort parsing
                         return Ok((Default::default(), start_traffic_class, start_slice));
@@ -495,7 +471,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                         result.routing = Some(slice);
                     }
                 },
-                FRAGMENT => {
+                IPV6_FRAG => {
                     if result.fragment.is_some() {
                         // more then one header of this type found -> abort parsing
                         return Ok((Default::default(), start_traffic_class, start_slice));

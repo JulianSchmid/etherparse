@@ -56,16 +56,9 @@ impl Ipv6GenericExtensionHeader {
 
     /// Returns true if the given header type can be represented in an `Ipv6ExtensionHeader`.
     pub fn header_type_supported(traffic_class: u8) -> bool {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const MOBILITY: u8 = MobilityHeader as u8;
-        const HIP: u8 = Hip as u8;
-        const SHIM6: u8 = Shim6 as u8;
-
+        use crate::ip_number::*;
         match traffic_class {
-            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         }
     }

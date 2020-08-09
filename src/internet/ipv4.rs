@@ -40,7 +40,7 @@ const IPV4_MAX_OPTIONS_LENGTH: usize = 10*4;
 
 impl Ipv4Header {
     ///Constructs an Ipv4Header with standard values for non specified values.
-    pub fn new(payload_len: u16, time_to_live: u8, protocol: IpTrafficClass, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
+    pub fn new(payload_len: u16, time_to_live: u8, protocol: IpNumber, source: [u8;4], destination: [u8;4]) -> Ipv4Header {
         Ipv4Header {
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,

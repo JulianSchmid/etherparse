@@ -180,7 +180,7 @@ impl PacketBuilder {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpTrafficClass::Udp, //will be replaced during write
+    ///            IpNumber::Udp, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ), 
@@ -290,7 +290,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpTrafficClass::Udp, //will be replaced during write
+    ///            IpNumber::Udp, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ),
@@ -411,7 +411,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///         Ipv4Header::new(
     ///             0, //payload_len will be replaced during write
     ///             12, //time_to_live
-    ///             IpTrafficClass::Udp, //will be replaced during write
+    ///             IpNumber::Udp, //will be replaced during write
     ///             [0,1,2,3], //source
     ///             [4,5,6,7] //destination
     ///         ),
@@ -655,8 +655,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //ip protocol number & next header values of the extension header
             ip.protocol = ext.set_next_headers(
                 match transport {
-                    Udp(_) => IpTrafficClass::Udp as u8,
-                    Tcp(_) => IpTrafficClass::Tcp as u8
+                    Udp(_) => ip_number::UDP,
+                    Tcp(_) => ip_number::TCP
                 }
             );
 
@@ -680,8 +680,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //set the protocol
             ip.next_header = ext.set_next_headers(
                 match transport {
-                    Udp(_) => IpTrafficClass::Udp as u8,
-                    Tcp(_) => IpTrafficClass::Tcp as u8
+                    Udp(_) => ip_number::UDP as u8,
+                    Tcp(_) => ip_number::TCP as u8
                 }
             );
 

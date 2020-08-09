@@ -36,8 +36,7 @@ impl Ipv4Extensions {
     /// Reads the known ipv4 extension headers from the reader and returns the 
     /// result and last "next_header" traffic class.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T, start_traffic_class: u8) -> Result<(Ipv4Extensions, u8), ReadError> {
-        use IpTrafficClass::*;
-        const AUTH: u8 = AuthenticationHeader as u8;
+        use ip_number::*;
         if AUTH == start_traffic_class {
             let header = IpAuthenticationHeader::read(reader)?;
             let next_traffic_class = header.next_header;
@@ -54,9 +53,9 @@ impl Ipv4Extensions {
 
     /// Write the extensions to the writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T, start_protocol: u8) -> Result<(), WriteError> {
-        use IpTrafficClass::*;
+        use ip_number::*;
+        use IpNumber::*;
         use ValueError::*;
-        const AUTH: u8 = AuthenticationHeader as u8;
         match self.auth {
             Some(ref header) => if AUTH == start_protocol {
                 header.write(writer)
@@ -83,8 +82,7 @@ impl Ipv4Extensions {
     ///
     /// If no extension headers are present the value of the argument is returned.
     pub fn set_next_headers(&mut self, last_protocol_number: u8) -> u8 {
-        use IpTrafficClass::*;
-        const AUTH: u8 = AuthenticationHeader as u8;
+        use ip_number::*;
 
         let mut next = last_protocol_number;
 
@@ -102,8 +100,7 @@ impl<'a> Ipv4ExtensionSlices<'a> {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final traffic_class and a slice pointing to the non parsed data.
     pub fn from_slice(start_traffic_class: u8, start_slice: &'a [u8]) -> Result<(Ipv4ExtensionSlices, u8, &[u8]), ReadError> {
-        use IpTrafficClass::*;
-        const AUTH: u8 = AuthenticationHeader as u8;
+        use ip_number::*;
         if AUTH == start_traffic_class {
             let header = IpAuthenticationHeaderSlice::from_slice(start_slice)?;
             let rest = &start_slice[header.slice().len()..];

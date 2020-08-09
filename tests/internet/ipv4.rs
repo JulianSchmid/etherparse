@@ -185,7 +185,7 @@ proptest! {
         let result = Ipv4Header::new(
             payload_len,
             ttl, 
-            IpTrafficClass::Udp, 
+            IpNumber::Udp, 
             source_ip, 
             dest_ip
         );
@@ -198,7 +198,7 @@ proptest! {
         assert_eq!(result.more_fragments, false);
         assert_eq!(result.fragments_offset, 0);
         assert_eq!(result.time_to_live, ttl);
-        assert_eq!(result.protocol, IpTrafficClass::Udp as u8);
+        assert_eq!(result.protocol, ip_number::UDP);
         assert_eq!(result.header_checksum, 0);
         assert_eq!(result.source, source_ip);
         assert_eq!(result.destination, dest_ip);
@@ -208,7 +208,7 @@ proptest! {
 
 #[test]
 fn set_payload_len() {
-    let mut header = Ipv4Header::new(0, 0, IpTrafficClass::Udp, [0;4], [0;4]);
+    let mut header = Ipv4Header::new(0, 0, IpNumber::Udp, [0;4], [0;4]);
 
     //add options (to make sure they are included in the calculation)
     header.set_options(&[1,2,3,4]).unwrap();
@@ -294,7 +294,7 @@ fn calc_header_checksum() {
     let base: Ipv4Header = Ipv4Header::new(
         40,
         4, // ttl
-        IpTrafficClass::Udp,
+        IpNumber::Udp,
         [192, 168, 1, 1], // source
         [212, 10, 11, 123] // destination
     );

@@ -603,7 +603,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             0,
             //contained protocol is udp
-            IpTrafficClass::Tcp,
+            IpNumber::Tcp,
             //source ip address
             [0;4],
             //destination ip address
@@ -646,7 +646,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             20,
             //contained protocol is udp
-            IpTrafficClass::Tcp,
+            IpNumber::Tcp,
             //source ip address
             [192,168,1,42],
             //destination ip address
@@ -704,7 +704,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             20,
             //contained protocol is udp
-            IpTrafficClass::Tcp,
+            IpNumber::Tcp,
             //source ip address
             [192,168,1,42],
             //destination ip address
@@ -764,7 +764,7 @@ fn calc_header_checksum_ipv6() {
         traffic_class: 1,
         flow_label: 0x81806,
         payload_length: tcp_payload.len() as u16 + tcp.header_len(),
-        next_header: IpTrafficClass::Tcp as u8,
+        next_header: ip_number::TCP,
         hop_limit: 40,
         source: [1,2,3,4,5,6,7,8,
                  9,10,11,12,13,14,15,16],
@@ -795,7 +795,7 @@ fn calc_header_checksum_ipv4_error() {
     let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
     let mut tcp_payload = Vec::with_capacity(len);
     tcp_payload.resize(len, 0); 
-    let ip_header = Ipv4Header::new(0, 0, IpTrafficClass::Tcp, [0;4], [0;4]);
+    let ip_header = Ipv4Header::new(0, 0, IpNumber::Tcp, [0;4], [0;4]);
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
@@ -837,7 +837,7 @@ fn calc_header_checksum_ipv6_error() {
         traffic_class: 1,
         flow_label: 0x81806,
         payload_length: 0, //lets assume jumbograms behavior (set to 0, as bigger then u16)
-        next_header: IpTrafficClass::Tcp as u8,
+        next_header: ip_number::TCP,
         hop_limit: 40,
         source: [1,2,3,4,5,6,7,8,
                  9,10,11,12,13,14,15,16],

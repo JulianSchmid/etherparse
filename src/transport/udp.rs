@@ -126,7 +126,7 @@ impl UdpHeader {
         }
         self.calc_checksum_post_ip(calc_sum(source) +
                                    calc_sum(destination) +
-                                   IpTrafficClass::Udp as u64 +
+                                   ip_number::UDP as u64 +
                                    u64::from( self.length ),
                                    payload)
     }
