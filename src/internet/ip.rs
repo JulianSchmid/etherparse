@@ -73,9 +73,11 @@ impl IpHeader {
     }
 }
 
-///Identifiers for the traffic_class field in ipv6 headers and protocol field in ipv4 headers.
+/// Identifiers for the next_header field in ipv6 headers and protocol field in ipv4 headers.
+///
+/// The list was extracted from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum IpTrafficClass {
+pub enum IpNumber {
     ///IPv6 Hop-by-Hop Option [RFC8200]
     IPv6HeaderHopByHop = 0,
     ///Internet Control Message [RFC792]
@@ -366,28 +368,61 @@ pub enum IpTrafficClass {
     ExperimentalAndTesting1 = 254
 }
 
-impl IpTrafficClass {
+impl IpNumber {
 
     ///Returns true if the given id identifies an IPV6 extension header traffic class.
     pub fn is_ipv6_ext_header_value(value: u8) -> bool {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8; //0
-        const ROUTE: u8 = IPv6RouteHeader as u8; //43
-        const FRAG: u8 = IPv6FragmentationHeader as u8; //44
-        const ENCAP_SEC: u8 = EncapsulatingSecurityPayload as u8; //50
-        const AUTH: u8 = AuthenticationHeader as u8; //51
-        const OPTIONS: u8 = IPv6DestinationOptions as u8; //60
-        const MOBILITY: u8 = MobilityHeader as u8; //135
-        const HIP: u8 = Hip as u8; //139
-        const SHIM6: u8 = Shim6 as u8; //140
-        const EXP0: u8 = ExperimentalAndTesting0 as u8; //253
-        const EXP1: u8 = ExperimentalAndTesting1 as u8; //254
-        
+        use crate::ip_number::*;
+
         match value {
-            HOP_BY_HOP | ROUTE | FRAG | ENCAP_SEC | AUTH 
-            | OPTIONS | MOBILITY | HIP | SHIM6 | EXP0 | EXP1
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | ENCAP_SEC | AUTH 
+            | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 | EXP0 | EXP1
                 => true,
             _ => false
         }
     }
+}
+
+/// Module containing the u8 constants for the most used ip protocol number.
+pub mod ip_number {
+    use crate::IpNumber::*;
+
+    ///IPv6 Hop-by-Hop Option [RFC8200]
+    pub const IPV6_HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8; //0
+    ///Internet Control Message [RFC792]
+    pub const ICMP: u8 = Icmp as u8; //1
+    ///Internet Group Management [RFC1112]
+    pub const IGMP: u8 = Igmp as u8; //2
+    ///Gateway-to-Gateway [RFC823]
+    pub const GGP: u8 = Ggp as u8; //3
+    ///IPv4 encapsulation [RFC2003]
+    pub const IPV4: u8 = IPv4 as u8; //4
+    ///Stream [RFC1190][RFC1819]
+    pub const STREAM: u8 = Stream as u8; //5
+    ///Transmission Control [RFC793]
+    pub const TCP: u8 = Tcp as u8; //6
+    ///User Datagram [RFC768][Jon_Postel]
+    pub const UDP: u8 = Udp as u8; //17
+    ///IPv6 encapsulation [RFC2473]
+    pub const IPV6: u8 = Ipv6 as u8; //41
+    ///Routing Header for IPv6 [Steve_Deering]
+    pub const IPV6_ROUTE: u8 = IPv6RouteHeader as u8; //43
+    ///Fragment Header for IPv6 [Steve_Deering]
+    pub const IPV6_FRAG: u8 = IPv6FragmentationHeader as u8; //44
+    ///Encapsulating Security Payload [RFC4303]
+    pub const ENCAP_SEC: u8 = EncapsulatingSecurityPayload as u8; //50
+    ///Authentication Header [RFC4302]
+    pub const AUTH: u8 = AuthenticationHeader as u8; //51
+    ///Destination Options for IPv6 [RFC8200]
+    pub const IPV6_DEST_OPTIONS: u8 = IPv6DestinationOptions as u8; //60
+    ///MobilityHeader [RFC6275]
+    pub const MOBILITY: u8 = MobilityHeader as u8; //135
+    ///Host Identity Protocol [RFC7401]
+    pub const HIP: u8 = Hip as u8; //139
+    ///Shim6 Protocol [RFC5533]
+    pub const SHIM6: u8 = Shim6 as u8; //140
+    ///Use for experimentation and testing
+    pub const EXP0: u8 = ExperimentalAndTesting0 as u8; //253
+    ///Use for experimentation and testing
+    pub const EXP1: u8 = ExperimentalAndTesting1 as u8; //254
 }

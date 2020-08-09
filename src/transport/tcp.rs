@@ -406,7 +406,7 @@ impl TcpHeader {
                                       u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
                                       u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
                                       u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
-                                      IpTrafficClass::Tcp as u64 +
+                                      u64::from( ip_number::TCP ) +
                                       tcp_length as u64,
                                       payload))
     }
@@ -436,7 +436,7 @@ impl TcpHeader {
         Ok(self.calc_checksum_post_ip(
             calc_sum(source) +
             calc_sum(destination) +
-            IpTrafficClass::Tcp as u64 +
+            u64::from( ip_number::TCP ) +
             {
                 let mut buffer: [u8;4] = Default::default();
                 BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
@@ -801,7 +801,7 @@ impl<'a> TcpHeaderSlice<'a> {
                                       u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
                                       u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
                                       u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
-                                      IpTrafficClass::Tcp as u64 +
+                                      u64::from( ip_number::TCP ) +
                                       tcp_length as u64,
                                       payload))
     }
@@ -831,7 +831,7 @@ impl<'a> TcpHeaderSlice<'a> {
         Ok(self.calc_checksum_post_ip(
             calc_addr_sum(source) +
             calc_addr_sum(destination) +
-            IpTrafficClass::Tcp as u64 +
+            u64::from( ip_number::TCP ) +
             {
                 let mut buffer: [u8;4] = Default::default();
                 BigEndian::write_u32(&mut buffer[..], tcp_length as u32);

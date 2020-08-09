@@ -181,9 +181,7 @@ fn read_transport(
     protocol: u8,
     rest: &[u8],
 ) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
-    use crate::IpTrafficClass::*;
-    const UDP: u8 = Udp as u8;
-    const TCP: u8 = Tcp as u8;
+    use crate::ip_number::*;
     match protocol {
         UDP => Ok(UdpHeader::read_from_slice(rest)
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),

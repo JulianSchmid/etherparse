@@ -88,21 +88,13 @@ impl Ipv6Header {
     ///Takes a slice and skips an ipv6 header extensions and returns the next_header id & the slice past the header.
     ///NOTE: There must be a ipv6 header extension id given as a traffic_class.
     pub fn skip_header_extension_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const MOBILITY: u8 = MobilityHeader as u8;
-        const HIP: u8 = Hip as u8;
-        const SHIM6: u8 = Shim6 as u8;
+        use crate::ip_number::*;
 
         //determine the length
         let len = match traffic_class {
-            FRAG => 8,
+            IPV6_FRAG => 8,
             AUTH => (usize::from(slice[1]) + 2)*4,
-            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => {
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
                 (usize::from(slice[1]) + 1)*8
             },
             // not a ipv6 header extension that can be skipped
@@ -120,18 +112,10 @@ impl Ipv6Header {
     ///
     /// Meaning it is known how to determine the next traffic class and jump to it's location.
     pub fn is_skippable_header_extension(ip_protocol_number: u8) -> bool {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const MOBILITY: u8 = MobilityHeader as u8;
-        const HIP: u8 = Hip as u8;
-        const SHIM6: u8 = Shim6 as u8;
+        use crate::ip_number::*;
         //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
         match ip_protocol_number {
-            HOP_BY_HOP | ROUTE | FRAG | AUTH | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         }
     }
@@ -164,23 +148,15 @@ impl Ipv6Header {
 
     ///Skips the ipv6 header extension and returns the next ip protocol number
     pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, ip_protocol_number: u8) -> Result<u8, io::Error> {
-        use crate::IpTrafficClass::*;
-        const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-        const ROUTE: u8 = IPv6RouteHeader as u8;
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
-        const OPTIONS: u8 = IPv6DestinationOptions as u8;
-        const MOBILITY: u8 = MobilityHeader as u8;
-        const HIP: u8 = Hip as u8;
-        const SHIM6: u8 = Shim6 as u8;
+        use crate::ip_number::*;
 
         let (next_header, rest_length) = match ip_protocol_number {
-            FRAG => (reader.read_u8()?, 7),
+            IPV6_FRAG => (reader.read_u8()?, 7),
             AUTH => (
                 reader.read_u8()?,
                 i64::from(reader.read_u8()?)*4 + 6
             ),
-            HOP_BY_HOP | ROUTE | OPTIONS | MOBILITY | HIP | SHIM6 => (
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => (
                 reader.read_u8()?,
                 i64::from(reader.read_u8()?)*8 + 6
             ),

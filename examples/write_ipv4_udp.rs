@@ -33,7 +33,7 @@ fn main() {
         //time to live
         20,
         //contained protocol is udp
-        IpTrafficClass::Udp,
+        IpNumber::Udp,
         //source ip address
         [192,168,1,42],
         //destination ip address

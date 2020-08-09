@@ -47,7 +47,7 @@ mod transport_header {
     }
     proptest! {
         #[test]
-        fn update_checksum_ipv4_udp(ref ip_header in ipv4_with(IpTrafficClass::Udp as u8),
+        fn update_checksum_ipv4_udp(ref ip_header in ipv4_with(ip_number::UDP),
                                     ref udp_header in udp_any())
         {
             //ok case
@@ -78,7 +78,7 @@ mod transport_header {
     }
     proptest! {
         #[test]
-        fn update_checksum_ipv4_tcp(ref ip_header in ipv4_with(IpTrafficClass::Tcp as u8),
+        fn update_checksum_ipv4_tcp(ref ip_header in ipv4_with(ip_number::TCP),
                                     ref tcp_header in tcp_any())
         {
             //ok case
@@ -110,7 +110,7 @@ mod transport_header {
     proptest! {
         #[test]
         #[cfg(target_pointer_width = "64")] 
-        fn update_checksum_ipv6_udp(ref ip_header in ipv6_with(IpTrafficClass::Udp as u8),
+        fn update_checksum_ipv6_udp(ref ip_header in ipv6_with(ip_number::UDP),
                                     ref udp_header in udp_any())
         {
             //ok case
@@ -142,7 +142,7 @@ mod transport_header {
     proptest! {
         #[test]
         #[cfg(target_pointer_width = "64")] 
-        fn update_checksum_ipv6_tcp(ref ip_header in ipv6_with(IpTrafficClass::Tcp as u8),
+        fn update_checksum_ipv6_tcp(ref ip_header in ipv6_with(ip_number::TCP),
                                     ref tcp_header in tcp_any())
         {
             //ok case

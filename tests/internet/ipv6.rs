@@ -111,19 +111,11 @@ fn read_error() {
 
 #[test]
 fn is_skippable_header_extension() {
-    use crate::IpTrafficClass::*;
-    const HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8;
-    const ROUTE: u8 = IPv6RouteHeader as u8;
-    const FRAG: u8 = IPv6FragmentationHeader as u8;
-    const AUTH: u8 = AuthenticationHeader as u8;
-    const OPTIONS: u8 = IPv6DestinationOptions as u8;
-    const MOBILITY: u8 = MobilityHeader as u8;
-    const HIP: u8 = Hip as u8;
-    const SHIM6: u8 = Shim6 as u8;
+    use crate::ip_number::*;
 
     for i in 0..0xffu8 {
         let expected = match i {
-            HOP_BY_HOP | ROUTE | FRAG | AUTH | OPTIONS | MOBILITY | HIP | SHIM6 => true,
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         };
         assert_eq!(expected, Ipv6Header::is_skippable_header_extension(i));
@@ -132,11 +124,7 @@ fn is_skippable_header_extension() {
 
 #[test]
 fn skip_extension() {
-
-    const HOP_BY_HOP: u8 = IpTrafficClass::IPv6HeaderHopByHop as u8;
-    const ROUTE: u8 = IpTrafficClass::IPv6RouteHeader as u8;
-    const FRAG: u8 = IpTrafficClass::IPv6FragmentationHeader as u8;
-    const ICMP: u8 = IpTrafficClass::Icmp as u8;
+    use crate::ip_number::*;
 
     use std::io::Cursor;
     {
@@ -148,7 +136,7 @@ fn skip_extension() {
     {
         let buffer: [u8; 8] = [0;8];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, HOP_BY_HOP), Ok(0));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, IPV6_HOP_BY_HOP), Ok(0));
         assert_eq!(8, cursor.position());
     }
     {
@@ -158,7 +146,7 @@ fn skip_extension() {
             0,0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, ROUTE), Ok(4));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, IPV6_ROUTE), Ok(4));
         assert_eq!(8*3, cursor.position());
     }
     {
@@ -169,7 +157,7 @@ fn skip_extension() {
             0,0,0,0, 0,0,0,0,
         ];
         let mut cursor = Cursor::new(&buffer);
-        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, FRAG), Ok(4));
+        assert_matches!(Ipv6Header::skip_header_extension(&mut cursor, IPV6_FRAG), Ok(4));
         assert_eq!(8, cursor.position());
     }
 }
@@ -178,19 +166,19 @@ fn skip_extension() {
 fn skip_all_extensions() {
     use crate::io::Cursor;
     //extension header values
-    use crate::IpTrafficClass::*;
+    use crate::ip_number::*;
     //based on RFC 8200 4.1. Extension Header Order
     // & IANA https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml
     const EXTENSION_IDS: [u8;9] = [
-        IPv6HeaderHopByHop as u8,
-        IPv6DestinationOptions as u8,
-        IPv6RouteHeader as u8,
-        IPv6FragmentationHeader as u8, //3
-        AuthenticationHeader as u8,
-        IPv6DestinationOptions as u8,
-        MobilityHeader as u8,
-        Hip as u8,
-        Shim6 as u8,
+        IPV6_HOP_BY_HOP,
+        IPV6_DEST_OPTIONS,
+        IPV6_ROUTE,
+        IPV6_FRAG,
+        AUTH,
+        IPV6_DEST_OPTIONS,
+        MOBILITY,
+        HIP,
+        SHIM6,
     ];
 
     // note the following ids are extensions but are not skippable:
@@ -198,7 +186,6 @@ fn skip_all_extensions() {
     // - EncapsulatingSecurityPayload
     // - ExperimentalAndTesting0
     // - ExperimentalAndTesting0
-    const UDP: u8 = Udp as u8;
 
     //no & single skipping
     {
@@ -219,10 +206,10 @@ fn skip_all_extensions() {
                     assert_matches!(reader_result, Ok(UDP));
                     assert_matches!(slice_result.0, UDP);
 
-                    let len = if i == IPv6FragmentationHeader as u8 {
+                    let len = if i == IPV6_FRAG {
                         //fragmentation header has a fixed size
                         8
-                    } else if i == AuthenticationHeader as u8 {
+                    } else if i == AUTH {
                         //authentification headers use 4-octets to describe the length
                         8 + 2*4
                     } else {
@@ -246,13 +233,12 @@ fn skip_all_extensions() {
 
     //creates an buffer filled with extension headers with the given ids
     fn create_buffer(ids: &[u8]) -> Vec<u8> {
-        const FRAG: u8 = IPv6FragmentationHeader as u8;
-        const AUTH: u8 = AuthenticationHeader as u8;
+        use crate::ip_number::*;
 
         let mut prev: u8 = ids[0];
         let mut result = Vec::with_capacity(ids.len()*8*4);
         for (index, value) in ids[1..].iter().enumerate() {
-            let len: u8 = if prev == FRAG {
+            let len: u8 = if prev == IPV6_FRAG {
                 0
             } else {
                 (index % 3) as u8

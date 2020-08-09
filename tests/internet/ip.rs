@@ -141,26 +141,26 @@ mod ip_traffic_class {
     
     #[test]
     fn is_ipv6_ext_header_value() {
-        use crate::IpTrafficClass;
-        use crate::IpTrafficClass::*;
+        use crate::IpNumber;
+        use crate::ip_number::*;
         let ext_ids = [
-            IPv6HeaderHopByHop as u8,
-            IPv6RouteHeader as u8,
-            IPv6FragmentationHeader as u8,
-            EncapsulatingSecurityPayload as u8,
-            AuthenticationHeader as u8,
-            IPv6DestinationOptions as u8,
-            MobilityHeader as u8,
-            Hip as u8,
-            Shim6 as u8,
-            ExperimentalAndTesting0 as u8,
-            ExperimentalAndTesting1 as u8
+            IPV6_HOP_BY_HOP,
+            IPV6_ROUTE,
+            IPV6_FRAG,
+            ENCAP_SEC,
+            AUTH,
+            IPV6_DEST_OPTIONS,
+            MOBILITY,
+            HIP,
+            SHIM6 as u8,
+            EXP0 as u8,
+            EXP1 as u8
         ];
 
         for i in 0..std::u8::MAX {
             assert_eq!(
                 ext_ids.contains(&i),
-                IpTrafficClass::is_ipv6_ext_header_value(i)
+                IpNumber::is_ipv6_ext_header_value(i)
             );
         }
     }

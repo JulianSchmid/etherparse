@@ -74,9 +74,6 @@ const ETH_VLAN: u16 = EtherType::VlanTaggedFrame as u16;
 const ETH_BRIDGE: u16 = EtherType::ProviderBridging as u16;
 const ETH_VLAN_DOUBLE: u16 = EtherType::VlanDoubleTaggedFrame as u16;
 
-const IP_UDP: u8 = IpTrafficClass::Udp as u8;
-const IP_TCP: u8 = IpTrafficClass::Tcp as u8;
-
 impl<'a> SlicedPacket<'a> {
     /// Seperates a network packet slice into different slices containing the headers from the ethernet header downwards. 
     ///
@@ -300,8 +297,8 @@ impl<'a> CursorSlice<'a> {
         self.result.ip = Some(Ipv4(ip_header, ip_ext));
 
         match protocol {
-            IP_UDP => self.slice_udp(),
-            IP_TCP => self.slice_tcp(),
+            ip_number::UDP => self.slice_udp(),
+            ip_number::TCP => self.slice_tcp(),
             value => {
                 use TransportSlice::*;
                 self.result.transport = Some(Unknown(value));
@@ -333,8 +330,8 @@ impl<'a> CursorSlice<'a> {
 
         //parse the data bellow
         match next_header {
-            IP_UDP => self.slice_udp(),
-            IP_TCP => self.slice_tcp(),
+            ip_number::UDP => self.slice_udp(),
+            ip_number::TCP => self.slice_tcp(),
             value => {
                 use TransportSlice::*;
                 self.result.transport = Some(Unknown(value));
