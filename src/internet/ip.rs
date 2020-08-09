@@ -73,6 +73,20 @@ impl IpHeader {
     }
 }
 
+/// This type has been deprecated please use `IpNumber` instead.
+///
+/// IPv6 headers have a field called `traffic_class` which has nothing
+/// to do this enum. This unlucky coincedence got even the developer
+/// of this library confused enough to write that the next header number
+/// should be written into the `traffic_class` field instead of the
+/// `next_header` field.
+///
+/// To avoid such confusions in the future the enum has been renamed
+/// to `IpNumber`, which also closer to the name
+/// "Assigned Internet Protocol Numbers" used on iana.org .
+#[deprecated]
+pub type IpTrafficClass = IpNumber;
+
 /// Identifiers for the next_header field in ipv6 headers and protocol field in ipv4 headers.
 ///
 /// The list was extracted from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
@@ -384,6 +398,12 @@ impl IpNumber {
 }
 
 /// Module containing the u8 constants for the most used ip protocol number.
+///
+/// The constants are equivalt if values of the enum type `IpNumber` get cast
+/// to a u8 value.
+///
+/// The list original values were copied from
+/// https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
 pub mod ip_number {
     use crate::IpNumber::*;
 
