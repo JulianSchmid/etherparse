@@ -85,20 +85,19 @@ impl Ipv6Header {
         })
     }
 
-    ///Takes a slice and skips an ipv6 header extensions and returns the next_header id & the slice past the header.
-    ///NOTE: There must be a ipv6 header extension id given as a traffic_class.
-    pub fn skip_header_extension_in_slice(slice: &[u8], traffic_class: u8) -> Result<(u8, &[u8]), ReadError> {
+    ///Takes a slice and skips an ipv6 header extensions and returns the next_header ip number & the slice past the header.
+    pub fn skip_header_extension_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), ReadError> {
         use crate::ip_number::*;
 
         //determine the length
-        let len = match traffic_class {
+        let len = match next_header {
             IPV6_FRAG => 8,
             AUTH => (usize::from(slice[1]) + 2)*4,
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
                 (usize::from(slice[1]) + 1)*8
             },
             // not a ipv6 header extension that can be skipped
-            _ => return Ok((traffic_class, slice))
+            _ => return Ok((next_header, slice))
         };
 
         if slice.len() < len {
@@ -110,7 +109,9 @@ impl Ipv6Header {
 
     /// Returns true if the given ip protocol number is a skippable header extension.
     ///
-    /// Meaning it is known how to determine the next traffic class and jump to it's location.
+    /// A skippable header extension is an extension header for which it is known how 
+    /// to determine the protocol number of the following header as well as how many 
+    /// octets have to be skipped to reach the start of the following header.
     pub fn is_skippable_header_extension(ip_protocol_number: u8) -> bool {
         use crate::ip_number::*;
         //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
@@ -147,10 +148,10 @@ impl Ipv6Header {
     }
 
     ///Skips the ipv6 header extension and returns the next ip protocol number
-    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, ip_protocol_number: u8) -> Result<u8, io::Error> {
+    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, next_header: u8) -> Result<u8, io::Error> {
         use crate::ip_number::*;
 
-        let (next_header, rest_length) = match ip_protocol_number {
+        let (next_header, rest_length) = match next_header {
             IPV6_FRAG => (reader.read_u8()?, 7),
             AUTH => (
                 reader.read_u8()?,
@@ -161,7 +162,7 @@ impl Ipv6Header {
                 i64::from(reader.read_u8()?)*8 + 6
             ),
             // not a ipv6 header extension that can be skipped
-            _ => return Ok(ip_protocol_number)
+            _ => return Ok(next_header)
         };
 
         //Sadly seek does not return an error if the seek could not be fullfilled.

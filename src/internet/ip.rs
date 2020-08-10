@@ -384,7 +384,7 @@ pub enum IpNumber {
 
 impl IpNumber {
 
-    ///Returns true if the given id identifies an IPV6 extension header traffic class.
+    /// Returns true if the given number is the internet number of an IPV6 extension header.
     pub fn is_ipv6_ext_header_value(value: u8) -> bool {
         use crate::ip_number::*;
 

@@ -97,7 +97,7 @@ impl<'a> PacketHeaders<'a> {
             },
             IPV6 => {
                 let (ip, ip_rest) = Ipv6Header::read_from_slice(rest)?;
-                let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::read_from_slice(ip.traffic_class, ip_rest)?;
+                let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::read_from_slice(ip.next_header, ip_rest)?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
