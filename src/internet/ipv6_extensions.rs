@@ -54,55 +54,68 @@ pub struct Ipv6ExtensionSlices<'a> {
 
 impl Ipv6Extensions {
 
-    /// Reads as many extension headers as possible from the slice
-    /// and returns the found ipv6 extension header, the next traffic class
-    /// and the slice that should contain the content of the next traffic class.
+    /// Reads as many extension headers as possible from the slice and returns the found
+    /// ipv6 extension headers, the next header ip number after the read headers and a slice 
+    /// containing the rest of the packet after the read headers.
     ///
     /// Note that this function can only handle ipv6 extensions if each extension header does 
     /// occur at most once, except for destination options headers which are allowed to 
     /// exist once in front of a routing header and once after a routing header.
     ///
-    /// In case that an extension header is encountered more then once the parsing is stoped
-    /// and an unfilled result with the original start traffic class and slice is returned.
-    /// In this case it is in the responsibility of the caller to handle a scenario like this.
+    /// In case that more extension headers then can fit into a `Ipv6Extensions` struct are
+    /// encountered, the parsing is stoped at the point where the data would no longer fit into
+    /// the struct. In such a scenario a struct with the data that could be parsed is returned
+    /// together with the next header ip number and slice containing the unparsed data.
     ///
-    /// The reason that no error is generated, is that packets "should" not contain more then
-    /// one occurence of an extension header according to RFC 8200, but at the same time the RFC specifies
+    /// It is in the responsibility of the caller to handle a scenario like this.
+    ///
+    /// The reason that no error is generated, is that even though according to RFC 8200 packets 
+    /// "should" not contain more then one occurence of an extension header the RFC also specifies
     /// that "IPv6 nodes must accept and attempt to process extension headers in any order and 
     /// occurring any number of times in the same packet". So packets with multiple headers "should"
     /// not exist, but are still valid IPv6 packets. As such this function does not generate a
-    /// parsing error, as it is not an invalid packet, but it does not support packets like these.
+    /// parsing error, as it is not an invalid packet, but if packets like these are encountered
+    /// the user of this function has to themself decide how to handle packets like these.
     ///
-    /// Additonally if a hop by hop header is located somewhere else then directly at the start an `ReadError::Ipv6HopByHopHeaderNotAtStart` 
-    /// error is generated as this is required by RFC 8200.
+    /// The only exception is if an hop by hop header is located somewhere else then directly at 
+    /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
+    /// the hop by hop header is required to be located directly after the IPv6 header according 
+    /// to RFC 8200.
     pub fn read_from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv6Extensions, u8, &[u8]), ReadError> {
         Ipv6ExtensionSlices::from_slice(start_protocol, slice).map(
             |v| (v.0.to_header(), v.1, v.2)
         )
     }
 
-    /// Reads as many extension headers as possible from the reader
-    /// and returns the found ipv6 extension headers, the next traffic class.
-    /// If no extension headers are present an unfilled struct and the original `first_header` traffic class
-    /// is returned.
+    /// Reads as many extension headers as possible from the reader and returns the found ipv6
+    /// extension headers, the next header ip number.
+    ///
+    /// If no extension headers are present an unfilled struct and the original `first_header`
+    /// ip number is returned.
     ///
     /// Note that this function can only handle ipv6 extensions if each extension header does 
     /// occur at most once, except for destination options headers which are allowed to 
     /// exist once in front of a routing header and once after a routing header.
     ///
-    /// In case that an extension header is encountered more then once the parsing is stoped
-    /// and the current result with next traffic class is returned. In this case the caller must
-    /// decide how to handle a scenario like this.
+    /// In case that more extension headers then can fit into a `Ipv6Extensions` struct are
+    /// encountered, the parsing is stoped at the point where the data would no longer fit into
+    /// the struct. In such a scenario a struct with the data that could be parsed is returned
+    /// together with the next header ip number that identfies which header could be read next.
     ///
-    /// The reason that no error is generated, is that packets "should" not contain more then
-    /// one occurence of an extension header according to RFC 8200, but at the same time the RFC specifies
+    /// It is in the responsibility of the caller to handle a scenario like this.
+    ///
+    /// The reason that no error is generated, is that even though according to RFC 8200, packets 
+    /// "should" not contain more then one occurence of an extension header, the RFC also specifies
     /// that "IPv6 nodes must accept and attempt to process extension headers in any order and 
     /// occurring any number of times in the same packet". So packets with multiple headers "should"
     /// not exist, but are still valid IPv6 packets. As such this function does not generate a
-    /// parsing error, as it is not an invalid packet, but it does not support packets like these.
+    /// parsing error, as it is not an invalid packet, but if packets like these are encountered
+    /// the user of this function has to themself decide how to handle packets like these.
     ///
-    /// Additonally if a hop by hop header is located somewhere else then directly at the start an `ReadError::Ipv6HopByHopHeaderNotAtStart` 
-    /// error is generated as this is required by RFC 8200.
+    /// The only exception is if an hop by hop header is located somewhere else then directly at 
+    /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
+    /// the hop by hop header is required to be located directly after the IPv6 header according 
+    /// to RFC 8200.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T, start_protocol: u8) -> Result<(Ipv6Extensions, u8), ReadError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut next_protocol = start_protocol;
@@ -185,11 +198,11 @@ impl Ipv6Extensions {
         //should not be hit
     }
 
-    /// Writes the given headers to a writer based on the order defined in the next_header fields of the headers
-    /// and the first header_id passed to this function.
+    /// Writes the given headers to a writer based on the order defined in the next_header fields of 
+    /// the headers and the first header_id passed to this function.
     ///
     /// It is required that all next header are correctly set in the headers and no other ipv6 header 
-    /// extensions follow this header. If this is not the case a ``
+    /// extensions follow this header. If this is not the case a `ValueError::Ipv6ExtensionNotReferenced`
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T, first_header: u8) -> Result<(), WriteError> {
         use ip_number::*;
         use IpNumber::*;
@@ -393,45 +406,51 @@ impl Ipv6Extensions {
 }
 
 impl<'a> Ipv6ExtensionSlices<'a> {
-    /// Reads as many extension headers as possible from the slice
-    /// and returns the found ipv6 extension header slices, the next traffic class
-    /// and the slice that should contain the content of the next traffic class.
+    /// Reads as many extension headers as possible from the slice and returns the found 
+    /// ipv6 extension header slices, the next header ip number and the slice that should
+    /// contain the content of the next header as well as the rest of the packet.
     ///
     /// Note that this function can only handle ipv6 extensions if each extension header does 
     /// occur at most once, except for destination options headers which are allowed to 
     /// exist once in front of a routing header and once after a routing header.
     ///
-    /// In case that an extension header is encountered more then once the parsing is stoped
-    /// and an unfilled result with the original start traffic class and slice is returned.
-    /// In this case it is in the responsibility of the caller to handle a scenario like this.
+    /// In case that more extension headers then can fit into a `Ipv6Extensions` struct are
+    /// encountered, the parsing is stoped at the point where the data would no longer fit into
+    /// the struct. In such a scenario a struct with the data that could be parsed is returned
+    /// together with the next header ip number and slice containing the unparsed data.
     ///
-    /// The reason that no error is generated, is that packets "should" not contain more then
-    /// one occurence of an extension header according to RFC 8200, but at the same time the RFC specifies
+    /// It is in the responsibility of the caller to handle a scenario like this.
+    ///
+    /// The reason that no error is generated, is that even though according to RFC 8200 packets 
+    /// "should" not contain more then one occurence of an extension header the RFC also specifies
     /// that "IPv6 nodes must accept and attempt to process extension headers in any order and 
     /// occurring any number of times in the same packet". So packets with multiple headers "should"
     /// not exist, but are still valid IPv6 packets. As such this function does not generate a
-    /// parsing error, as it is not an invalid packet, but it does not support packets like these.
+    /// parsing error, as it is not an invalid packet, but if packets like these are encountered
+    /// the user of this function has to themself decide how to handle packets like these.
     ///
-    /// Additonally if a hop by hop header is located somewhere else then directly at the start an `ReadError::Ipv6HopByHopHeaderNotAtStart` 
-    /// error is generated as this is required by RFC 8200.
-    pub fn from_slice(start_traffic_class: u8, start_slice: &'a [u8]) -> Result<(Ipv6ExtensionSlices, u8, &'a[u8]), ReadError> {
+    /// The only exception is if an hop by hop header is located somewhere else then directly at 
+    /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
+    /// the hop by hop header is required to be located directly after the IPv6 header according 
+    /// to RFC 8200.
+    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv6ExtensionSlices, u8, &'a[u8]), ReadError> {
         let mut result: Ipv6ExtensionSlices = Default::default();
         let mut rest = start_slice;
-        let mut next_traffic_class = start_traffic_class;
+        let mut next_header = start_ip_number;
 
         use ip_number::*;
         use ReadError::*;
 
         // the hop by hop header is required to occur directly after the ipv6 header
-        if IPV6_HOP_BY_HOP == next_traffic_class {
+        if IPV6_HOP_BY_HOP == next_header {
             let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
             rest = &rest[slice.slice().len()..];
-            next_traffic_class = slice.next_header();
+            next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice);   
         }
 
         loop {
-            match next_traffic_class {
+            match next_header {
                 IPV6_HOP_BY_HOP => {
                     return Err(Ipv6HopByHopHeaderNotAtStart);
                 },
@@ -441,21 +460,21 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                         // this this a "final destination options" header
                         if result.final_destination_options.is_some() {
                             // more then one header of this type found -> abort parsing
-                            return Ok((Default::default(), start_traffic_class, start_slice))
+                            return Ok((result, next_header, rest))
                         } else {
                             let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
                             rest = &rest[slice.slice().len()..];
-                            next_traffic_class = slice.next_header();
+                            next_header = slice.next_header();
                             result.final_destination_options = Some(slice);
                         }
                     } else {
                         if result.destination_options.is_some() {
                             // more then one header of this type found -> abort parsing
-                            return Ok((Default::default(), start_traffic_class, start_slice));
+                            return Ok((result, next_header, rest));
                         } else {
                             let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
                             rest = &rest[slice.slice().len()..];
-                            next_traffic_class = slice.next_header();
+                            next_header = slice.next_header();
                             result.destination_options = Some(slice);
                         }
                     }
@@ -463,39 +482,39 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                 IPV6_ROUTE => {
                     if result.routing.is_some() {
                         // more then one header of this type found -> abort parsing
-                        return Ok((Default::default(), start_traffic_class, start_slice));
+                        return Ok((result, next_header, rest))
                     } else {
                         let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
-                        next_traffic_class = slice.next_header();
+                        next_header = slice.next_header();
                         result.routing = Some(slice);
                     }
                 },
                 IPV6_FRAG => {
                     if result.fragment.is_some() {
                         // more then one header of this type found -> abort parsing
-                        return Ok((Default::default(), start_traffic_class, start_slice));
+                        return Ok((result, next_header, rest))
                     } else {
                         let slice = Ipv6FragmentHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
-                        next_traffic_class = slice.next_header();
+                        next_header = slice.next_header();
                         result.fragment = Some(slice);
                     }
                 },
                 AUTH => {
                     if result.fragment.is_some() {
                         // more then one header of this type found -> abort parsing
-                        return Ok((Default::default(), start_traffic_class, start_slice));
+                        return Ok((result, next_header, rest))
                     } else {
                         let slice = IpAuthenticationHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
-                        next_traffic_class = slice.next_header();
+                        next_header = slice.next_header();
                         result.auth = Some(slice);
                     }
                 },
                 _ => {
                     // done parsing, the next header is not a known header extension
-                    return Ok((result, next_traffic_class, rest))
+                    return Ok((result, next_header, rest))
                 }
             }
         }

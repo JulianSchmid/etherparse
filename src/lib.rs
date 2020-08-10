@@ -415,7 +415,7 @@ pub enum ValueError {
     Ipv4ExtensionNotReferenced(IpNumber),
     ///Error when a hop-by-hop header is not referenced as the first header after the ipv6 header but as a later extension header.
     Ipv6ExtensionHopByHopNotAtStart,
-    ///Error when a header in `Ipv6Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial traffic_class.
+    ///Error when a header in `Ipv6Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial ip number.
     Ipv6ExtensionNotReferenced(IpNumber),
     ///Error when a header in `Ipv6Extensions` is referenced multiple times or is referenced and not defined.
     Ipv6ExtensionNotDefinedReference(IpNumber),

@@ -7,7 +7,7 @@ use std::fmt::{Debug, Formatter};
 /// IP Authentication Header (rfc4302)
 #[derive(Clone)]
 pub struct IpAuthenticationHeader {
-    /// Type of content after this header (traffic class/protocol number)
+    /// Type of content after this header (internet protocol number)
     pub next_header: u8,
     /// Security Parameters Index
     pub spi: u32,

@@ -21,7 +21,7 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
 /// * Shim6 Protocol
 #[derive(Clone)]
 pub struct Ipv6GenericExtensionHeader {
-    /// Type of content after this header (traffic class/protocol number)
+    /// Internet protocol number of the content after this header
     pub next_header: u8,
     /// Length of the extension header in 8 octets (minus the first 8 octets).
     header_length: u8,
@@ -54,10 +54,10 @@ impl Ipv6GenericExtensionHeader {
     /// Maximum length of the payload
     const MAX_PAYLOAD_LEN: usize = 0xff*8 + 6;
 
-    /// Returns true if the given header type can be represented in an `Ipv6ExtensionHeader`.
-    pub fn header_type_supported(traffic_class: u8) -> bool {
+    /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeader`.
+    pub fn header_type_supported(next_header: u8) -> bool {
         use crate::ip_number::*;
-        match traffic_class {
+        match next_header {
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
             _ => false
         }
@@ -184,9 +184,9 @@ pub struct Ipv6GenericExtensionHeaderSlice<'a> {
 
 impl<'a> Ipv6GenericExtensionHeaderSlice<'a> {
 
-    /// Returns true if the given header type can be represented in an `Ipv6ExtensionHeaderSlice`.
-    pub fn header_type_supported(traffic_class: u8) -> bool {
-        Ipv6GenericExtensionHeader::header_type_supported(traffic_class)
+    /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeaderSlice`.
+    pub fn header_type_supported(next_header: u8) -> bool {
+        Ipv6GenericExtensionHeader::header_type_supported(next_header)
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.

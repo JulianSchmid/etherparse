@@ -319,7 +319,7 @@ impl<'a> CursorSlice<'a> {
         self.move_by_slice(ip.slice());
 
         //extension headers
-        let (ip_ext, next_header, rest) = Ipv6ExtensionSlices::from_slice(ip.traffic_class(), self.slice)
+        let (ip_ext, next_header, rest) = Ipv6ExtensionSlices::from_slice(ip.next_header(), self.slice)
                                           .map_err(|err| 
                                               err.add_slice_offset(self.offset)
                                           )?;
