@@ -22,6 +22,25 @@ fn ether_type_convert() {
     assert_eq!(EtherType::from_u16(0x1234), None);
 }
 
+#[test]
+fn ether_type_u16_constants() {
+    use crate::EtherType::*;
+    use crate::ether_type::*;
+    let pairs = &[
+        (Ipv4, IPV4),
+        (Ipv6, IPV6),
+        (Arp, ARP),
+        (WakeOnLan, WAKE_ON_LAN),
+        (VlanTaggedFrame, VLAN_TAGGED_FRAME),
+        (ProviderBridging, PROVIDER_BRIDGING),
+        (VlanDoubleTaggedFrame, VLAN_DOUBLE_TAGGED_FRAME)
+    ];
+
+    for (enum_value, constant) in pairs {
+        assert_eq!(*enum_value as u16, *constant);
+    }
+}
+
 proptest! {
     #[test]
     fn read_write(ref input in ethernet_2_any()) {
