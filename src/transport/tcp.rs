@@ -413,11 +413,11 @@ impl TcpHeader {
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, payload)
+        self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
     ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv6_raw(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
 
         //check that the total length fits into the field
         let tcp_length = (self._data_offset as usize)*4 + payload.len();
@@ -425,7 +425,7 @@ impl TcpHeader {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        fn calc_sum(value: &[u8;16]) -> u64 {
+        fn calc_sum(value: [u8;16]) -> u64 {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
@@ -808,11 +808,11 @@ impl<'a> TcpHeaderSlice<'a> {
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv6_raw(&ip_header.source(), &ip_header.destination(), payload)
+        self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv6_raw(&self, source: &[u8], destination: &[u8], payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
 
         //check that the total length fits into the field
         let tcp_length = (self.data_offset() as usize)*4 + payload.len();
@@ -820,7 +820,7 @@ impl<'a> TcpHeaderSlice<'a> {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        fn calc_addr_sum(value: &[u8]) -> u64 {
+        fn calc_addr_sum(value: [u8;16]) -> u64 {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;

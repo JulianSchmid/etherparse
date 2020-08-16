@@ -95,17 +95,17 @@ impl UdpHeader {
             length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
             checksum: 0
         };
-        result.checksum = result.calc_checksum_ipv6_internal(&ip_header.source, &ip_header.destination, payload);
+        result.checksum = result.calc_checksum_ipv6_internal(ip_header.source, ip_header.destination, payload);
         Ok(result)
     }
 
     ///Calculates the checksum of the current udp header given an ipv6 header and the payload.
     pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, payload)
+        self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
     ///Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
-    pub fn calc_checksum_ipv6_raw(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
@@ -115,8 +115,8 @@ impl UdpHeader {
         Ok(self.calc_checksum_ipv6_internal(source, destination, payload))
     }
 
-    fn calc_checksum_ipv6_internal(&self, source: &[u8;16], destination: &[u8;16], payload: &[u8]) -> u16 {
-        fn calc_sum(value: &[u8;16]) -> u64 {
+    fn calc_checksum_ipv6_internal(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> u16 {
+        fn calc_sum(value: [u8;16]) -> u64 {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
