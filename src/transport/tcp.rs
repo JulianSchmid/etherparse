@@ -784,11 +784,11 @@ impl<'a> TcpHeaderSlice<'a> {
 
     ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv4_raw(&ip_header.source(), &ip_header.destination(), payload)
+        self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4_raw(&self, source_ip: &[u8], destination_ip: &[u8], payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4_raw(&self, source_ip: [u8;4], destination_ip: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
         
         //check that the total length fits into the field
         let tcp_length = self.slice.len() + payload.len();
