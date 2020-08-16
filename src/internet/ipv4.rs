@@ -533,27 +533,25 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
     
     ///Returns a slice containing the ipv4 source address.
-    pub fn source(&self) -> &'a [u8] {
-        &self.slice[12..16]
+    pub fn source(&self) -> [u8;4] {
+        let s = &self.slice[12..16];
+        [s[0], s[1], s[2], s[3]]
     }
 
     ///Return the ipv4 source address as an std::net::Ipv4Addr
     pub fn source_addr(&self) -> Ipv4Addr {
-        let mut result: [u8; 4] = Default::default();
-        result.copy_from_slice(self.source());
-        Ipv4Addr::from(result)
+        Ipv4Addr::from(self.source())
     }
 
     ///Returns a slice containing the ipv4 source address.
-    pub fn destination(&self) -> &'a [u8] {
-        &self.slice[16..20]
+    pub fn destination(&self) -> [u8;4] {
+        let d = &self.slice[16..20];
+        [d[0], d[1], d[2], d[3]]
     }
 
     ///Return the ipv4 destination address as an std::net::Ipv4Addr
     pub fn destination_addr(&self) -> Ipv4Addr {
-        let mut result: [u8; 4] = Default::default();
-        result.copy_from_slice(self.destination());
-        Ipv4Addr::from(result)
+        Ipv4Addr::from(self.destination())
     }
 
     ///Returns a slice containing the ipv4 header options (empty when there are no options).
@@ -575,16 +573,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
             time_to_live: self.ttl(),
             protocol: self.protocol(),
             header_checksum: self.header_checksum(),
-            source: {
-                let mut result: [u8; 4] = Default::default();
-                result.copy_from_slice(self.source());
-                result
-            },
-            destination: {
-                let mut result: [u8; 4] = Default::default();
-                result.copy_from_slice(self.destination());
-                result
-            },
+            source: self.source(),
+            destination: self.destination(),
             options_len: options.len() as u8,
             options_buffer: {
                 let mut result: [u8;40] = [0;40];
