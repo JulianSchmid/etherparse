@@ -322,27 +322,31 @@ impl<'a> Ipv6HeaderSlice<'a, > {
     }
 
     ///Returns a slice containing the IPv6 source address.
-    pub fn source(&self) -> &'a[u8] {
-        &self.slice[8..8+16]
+    pub fn source(&self) -> [u8;16] {
+        let s = &self.slice[8..8+16];
+        [ s[ 0], s[ 1], s[ 2], s[ 3],
+          s[ 4], s[ 5], s[ 6], s[ 7],
+          s[ 8], s[ 9], s[10], s[11],
+          s[12], s[13], s[14], s[15] ]
     }
 
     ///Return the ipv6 source address as an std::net::Ipv6Addr
     pub fn source_addr(&self) -> Ipv6Addr {
-        let mut result: [u8; 16] = Default::default();
-        result.copy_from_slice(self.source());
-        Ipv6Addr::from(result)
+        Ipv6Addr::from(self.source())
     }
 
     ///Returns a slice containing the IPv6 destination address.
-    pub fn destination(&self) -> &'a[u8] {
-        &self.slice[24..24+16]
+    pub fn destination(&self) -> [u8;16] {
+        let d = &self.slice[24..24+16];
+        [ d[ 0], d[ 1], d[ 2], d[ 3],
+          d[ 4], d[ 5], d[ 6], d[ 7],
+          d[ 8], d[ 9], d[10], d[11],
+          d[12], d[13], d[14], d[15] ]
     }
 
     ///Return the ipv6 destination address as an std::net::Ipv6Addr
     pub fn destination_addr(&self) -> Ipv6Addr {
-        let mut result: [u8; 16] = Default::default();
-        result.copy_from_slice(self.destination());
-        Ipv6Addr::from(result)
+        Ipv6Addr::from(self.destination())
     }
 
     ///Decode all the fields and copy the results to a Ipv6Header struct
@@ -353,16 +357,8 @@ impl<'a> Ipv6HeaderSlice<'a, > {
             payload_length: self.payload_length(),
             next_header: self.next_header(),
             hop_limit: self.hop_limit(),
-            source: {
-                let mut result: [u8; 16] = Default::default();
-                result.copy_from_slice(self.source());
-                result
-            },
-            destination: {
-                let mut result: [u8; 16] = Default::default();
-                result.copy_from_slice(self.destination());
-                result
-            }
+            source: self.source(),
+            destination: self.destination()
         }
     }
 }

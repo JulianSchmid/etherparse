@@ -201,8 +201,8 @@ fn udp_with_ipv6_checksum() {
         assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
                                                       &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
-                                                          &ip_header.destination,
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source,
+                                                          ip_header.destination,
                                                           &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
     }
@@ -241,8 +241,8 @@ fn udp_with_ipv6_checksum() {
         assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
                                                       &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
-                                                          &ip_header.destination,
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source,
+                                                          ip_header.destination,
                                                           &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
     }
@@ -287,8 +287,8 @@ fn udp_with_ipv6_checksum() {
         assert_matches!(udp_header.calc_checksum_ipv6(&ip_header,
                                                       &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source,
-                                                          &ip_header.destination,
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source,
+                                                          ip_header.destination,
                                                           &udp_payload),
                         Ok(EXPECTED_CHECKSUM));
     }
@@ -324,7 +324,7 @@ fn udp_ipv6_errors() {
                         Ok(_));
         assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
                         Ok(_));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &payload), 
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &payload), 
                         Ok(_));
     }
     //border still small enough
@@ -342,7 +342,7 @@ fn udp_ipv6_errors() {
                         Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
         assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
                         Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &payload), 
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &payload), 
                         Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
     }
 }

@@ -773,7 +773,7 @@ fn calc_header_checksum_ipv6() {
     };
     //check checksum
     assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
-    assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+    assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
     //test PacketSlice version
     let mut ip_buffer = Vec::new();
@@ -846,7 +846,7 @@ fn calc_header_checksum_ipv6_error() {
     };
     
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
-    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6_raw(&ip_header.source, &ip_header.destination, &tcp_payload));
+    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), tcp.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &tcp_payload));
 
     //test PacketSlice version
     let mut ip_buffer = Vec::new();
