@@ -446,7 +446,7 @@ impl TcpHeader {
             payload))
     }
 
-    ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
+    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
     fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
         fn calc_u32_checksum(value: u32) -> u64 {
             let mut buffer: [u8;4] = [0;4];
@@ -841,7 +841,7 @@ impl<'a> TcpHeaderSlice<'a> {
             payload))
     }
 
-    ///This method takes the sum of the preudo ip header and calculates the rest of the checksum.
+    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
     fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
 
         let mut sum = ip_pseudo_header_sum;
