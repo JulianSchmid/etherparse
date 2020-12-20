@@ -123,10 +123,10 @@ impl IpFilter {
                 match slice {
                     Ipv4(header, _) => {
                         (match expected_source {
-                            Some(e) => header.source() == &e[..],
+                            Some(e) => header.source() == *e,
                             None => true
                         }) && (match expected_destination {
-                            Some(e) => header.destination() == &e[..],
+                            Some(e) => header.destination() == *e,
                             None => true
                         })
                     },
@@ -137,10 +137,10 @@ impl IpFilter {
                 match slice {
                     Ipv6(header, _) => {
                         (match expected_source {
-                            Some(e) => header.source() == &e[..],
+                            Some(e) => header.source() == *e,
                             None => true
                         }) && (match expected_destination {
-                            Some(e) => header.destination() == &e[..],
+                            Some(e) => header.destination() == *e,
                             None => true
                         })
                     },

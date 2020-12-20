@@ -33,7 +33,7 @@ impl Ipv6FragmentHeader {
     }
 
     /// Read an Ipv6FragmentHeader from a slice and return the header & unused parts of the slice.
-    pub fn read_from_slice<'a>(slice: &'a [u8]) -> Result<(Ipv6FragmentHeader, &'a[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6FragmentHeader, &[u8]), ReadError> {
         let s = Ipv6FragmentHeaderSlice::from_slice(slice)?;
         let rest = &slice[8..];
         let header = s.to_header();
@@ -64,9 +64,9 @@ impl Ipv6FragmentHeader {
             )
         };
         Ok(Ipv6FragmentHeader {
-            next_header: next_header,
-            fragment_offset: fragment_offset,
-            more_fragments: more_fragments,
+            next_header,
+            fragment_offset,
+            more_fragments,
             identification: reader.read_u32::<BigEndian>()?
         })
     }
