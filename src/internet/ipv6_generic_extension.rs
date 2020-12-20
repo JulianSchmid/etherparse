@@ -95,7 +95,7 @@ impl Ipv6GenericExtensionHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn read_from_slice<'a>(slice: &'a[u8]) -> Result<(Ipv6GenericExtensionHeader, &'a[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6GenericExtensionHeader, &[u8]), ReadError> {
         let s = Ipv6GenericExtensionHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -235,7 +235,7 @@ impl<'a> Ipv6GenericExtensionHeaderSlice<'a> {
     /// Ipv6ExtensionHeader struct together with a slice pointing
     /// to the non decoded parts.
     pub fn to_header(&self) -> Ipv6GenericExtensionHeader {
-        return Ipv6GenericExtensionHeader::new_raw(
+        Ipv6GenericExtensionHeader::new_raw(
             self.next_header(),
             self.payload()
         ).unwrap()

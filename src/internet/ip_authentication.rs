@@ -103,7 +103,7 @@ impl<'a> IpAuthenticationHeader {
             reader.read_u8()?;
             // read the rest of the header
             Ok(IpAuthenticationHeader {
-                next_header: next_header,
+                next_header,
                 spi: reader.read_u32::<BigEndian>()?,
                 sequence_number: reader.read_u32::<BigEndian>()?,
                 raw_icv_len: payload_len - 1,

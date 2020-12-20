@@ -147,15 +147,13 @@ impl Ipv6Extensions {
                             next_protocol = header.next_header;
                             result.final_destination_options = Some(header);
                         }
+                    } else if result.destination_options.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_protocol));
                     } else {
-                        if result.destination_options.is_some() {
-                            // more then one header of this type found -> abort parsing
-                            return Ok((result, next_protocol));
-                        } else {
-                            let header = Ipv6GenericExtensionHeader::read(reader)?;
-                            next_protocol = header.next_header;
-                            result.destination_options = Some(header);
-                        }
+                        let header = Ipv6GenericExtensionHeader::read(reader)?;
+                        next_protocol = header.next_header;
+                        result.destination_options = Some(header);
                     }
                 },
                 IPV6_ROUTE => {
@@ -271,15 +269,13 @@ impl Ipv6Extensions {
                         } else {
                             return Err(Ipv6ExtensionNotDefinedReference(IPv6DestinationOptions).into());
                         }
+                    } else if needs_write.destination_options {
+                        let header = &self.destination_options.as_ref().unwrap();
+                        header.write(writer)?;
+                        next_header = header.next_header;
+                        needs_write.destination_options = false;
                     } else {
-                        if needs_write.destination_options {
-                            let header = &self.destination_options.as_ref().unwrap();
-                            header.write(writer)?;
-                            next_header = header.next_header;
-                            needs_write.destination_options = false;
-                        } else {
-                            return Err(Ipv6ExtensionNotDefinedReference(IPv6DestinationOptions).into());
-                        }
+                        return Err(Ipv6ExtensionNotDefinedReference(IPv6DestinationOptions).into());
                     }
                 },
                 IPV6_ROUTE => {
@@ -467,16 +463,14 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                             next_header = slice.next_header();
                             result.final_destination_options = Some(slice);
                         }
+                    } else if result.destination_options.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_header, rest));
                     } else {
-                        if result.destination_options.is_some() {
-                            // more then one header of this type found -> abort parsing
-                            return Ok((result, next_header, rest));
-                        } else {
-                            let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
-                            rest = &rest[slice.slice().len()..];
-                            next_header = slice.next_header();
-                            result.destination_options = Some(slice);
-                        }
+                        let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
+                        rest = &rest[slice.slice().len()..];
+                        next_header = slice.next_header();
+                        result.destination_options = Some(slice);
                     }
                 },
                 IPV6_ROUTE => {
