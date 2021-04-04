@@ -356,7 +356,7 @@ fn range_errors() {
                        .unwrap_err()
                        .value_error());
         }
-    };
+    }
     //dscp
     {
         let value = {

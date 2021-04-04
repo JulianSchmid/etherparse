@@ -214,7 +214,7 @@ impl Ipv6Header {
                             max, 
                             field }))
             }
-        };
+        }
 
         //version & traffic class p0
         writer.write_u8((6 << 4) | (self.traffic_class >> 4))?;
