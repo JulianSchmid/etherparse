@@ -81,14 +81,14 @@ fn vlan_header_write() {
             drop_eligible_indicator: true,
             vlan_identifier: 1234,
         }
-    };
+    }
 
     fn test_write(input: &SingleVlanHeader) -> Result<(), WriteError> {
         let mut buffer: Vec<u8> = Vec::new();
         let result = input.write(&mut buffer);
         assert_eq!(0, buffer.len());
         result
-    };
+    }
 
     //priority_code_point
     assert_matches!(test_write(&{
