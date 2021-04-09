@@ -21,6 +21,14 @@ mod proptest_generators;
 pub use crate::proptest_generators::*;
 use proptest::prelude::*;
 mod packet_compositions;
+mod test_writer;
+use test_writer::*;
+
+#[test]
+fn test_eq() {
+    assert_eq!(ErrorField::Ipv4PayloadLength, ErrorField::Ipv4PayloadLength);
+    assert_ne!(ErrorField::Ipv4PayloadLength, ErrorField::Ipv4Dscp);
+}
 
 #[test]
 fn test_debug_write() {
@@ -145,6 +153,21 @@ mod read_error {
 }
 
 mod write_error {
+    #[test]
+    fn io_error() {
+        use super::*;
+        assert_eq!(
+            std::io::ErrorKind::Other,
+            WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .io_error().unwrap().kind()
+        );
+        assert_eq!(
+            true,
+            WriteError::ValueError(ValueError::TcpLengthTooLarge(0))
+            .io_error().is_none()
+        );
+    }
+
     #[test]
     fn value_error() {
         use super::*;

@@ -347,8 +347,17 @@ pub enum WriteError {
 }
 
 impl WriteError {
+    /// Returns the `std::io::Error` value if the `WriteError` is an `IoError`.
+    /// Otherwise `None is returned.
+    pub fn io_error(self) -> Option<std::io::Error> {
+        match self {
+            WriteError::IoError(value) => Some(value),
+            _ => None
+        }
+    }
+    /// Returns the `std::io::Error` value if the `WriteError` is an `ValueError`.
+    /// Otherwise `None` is returned.
     pub fn value_error(self) -> Option<ValueError> {
-
         match self {
             WriteError::ValueError(value) => Some(value),
             _ => None
