@@ -168,6 +168,25 @@ proptest! {
     }
 }
 
+/// Test that an IoError is correctly forwarded
+#[test]
+pub fn write_io_error() {
+    let header = IpAuthenticationHeader::new(
+        1,
+        2,
+        3,
+        &[4,5,6,7]
+    ).unwrap();
+    // iterate through all too short lenghts
+    for len in 0..header.header_len() {
+        let mut writer = TestWriter::with_max_size(len);
+        assert_eq!(
+            writer.error_kind(),
+            header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+        );
+    }
+}
+
 #[test]
 pub fn read_too_small_payload_len() {
     let input = [0u8;16]; // the 2nd
