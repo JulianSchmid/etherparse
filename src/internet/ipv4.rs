@@ -160,13 +160,13 @@ impl Ipv4Header {
         let (dont_fragment, more_fragments, fragments_offset) = {
             let mut values: [u8; 2] = [0;2];
             reader.read_exact(&mut values)?;
-            (0 != (values[0] & 0x40),
-             0 != (values[0] & 0x20),
-             {
-                let buf = [values[0] & 0x1f, values[1]];
-                let mut cursor = io::Cursor::new(&buf);
-                cursor.read_u16::<BigEndian>()?
-             })
+            (
+                0 != (values[0] & 0b0100_0000),
+                0 != (values[0] & 0b0010_0000),
+                u16::from_be_bytes(
+                    [values[0] & 0b0001_1111, values[1]]
+                )
+            )
         };
         Ok(Ipv4Header{
             differentiated_services_code_point: dscp,

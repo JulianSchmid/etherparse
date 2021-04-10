@@ -1,6 +1,6 @@
 use super::super::*;
 
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 
 proptest! {
     /// Constructor check
@@ -69,34 +69,25 @@ proptest! {
                 Ipv6FragmentHeader::read(&mut cursor),
                 Err(ReadError::IoError(_))
             );
+            assert_matches!(
+                Ipv6FragmentHeader::read_from_slice(&buffer[0..len]),
+                Err(ReadError::UnexpectedEndOfSlice(_))
+            );
         }
     }
 }
 
 proptest! {
-    /// Check that a too small slice triggers an error
+    /// Check that aribtrary fragment header can be serialized and deserialized
     #[test]
-    fn from_slice_bad_slice_len(
-        input in ipv6_fragment_any(),
-        bad_slice_len in 0..8usize,
-    ) {
-        use crate::ReadError::*;
-
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(8);
-        input.write(&mut buffer).unwrap();
-
-        // header
-        assert_matches!(
-            Ipv6FragmentHeader::read_from_slice(&buffer[..bad_slice_len]).unwrap_err(),
-            UnexpectedEndOfSlice(8)
-        );
-
-        // slice
-        assert_matches!(
-            Ipv6FragmentHeaderSlice::from_slice(&buffer[..bad_slice_len]).unwrap_err(),
-            UnexpectedEndOfSlice(8)
-        );
+    fn write_io_error(input in ipv6_fragment_any()) {
+        for len in 0..input.header_len() {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                ErrorKind::UnexpectedEof,
+                input.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+            );
+        }
     }
 }
 
@@ -133,3 +124,19 @@ proptest! {
     }
 }
 
+proptest! {
+    #[test]
+    fn clone_eq_dbg(input in ipv6_fragment_any()) {
+        println!("{:?}", input);
+        assert_eq!(input, input.clone());
+
+        let buffer = {
+            let mut buffer = Vec::new();
+            input.write(&mut buffer).unwrap();
+            buffer
+        };
+        let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+        println!("{:?}", slice);
+        assert_eq!(slice, slice.clone());
+    }
+}

@@ -23,6 +23,8 @@ use proptest::prelude::*;
 mod packet_compositions;
 mod test_writer;
 use test_writer::*;
+mod test_reader;
+use test_reader::*;
 
 #[test]
 fn test_eq() {

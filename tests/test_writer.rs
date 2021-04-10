@@ -14,6 +14,17 @@ pub struct TestWriter {
 }
 
 impl TestWriter {
+
+    /// Create a new test writer without a maximum size
+    pub fn new() -> TestWriter {
+        TestWriter{
+            data: Vec::new(),
+            cur_size: 0,
+            max_size: None,
+            error_kind: io::ErrorKind::UnexpectedEof,
+        }
+    }
+
     /// Create a new error writer that throws an `io::Error` of kind `io::Error::UnexpectedEof` 
     /// if a write would exceed the given maximum size.
     pub fn with_max_size(max_size: usize) -> TestWriter {
@@ -59,6 +70,15 @@ impl io::Write for TestWriter {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+#[test]
+fn new() {
+    use io::Write;
+
+    let mut writer = TestWriter::new();
+    assert_eq!(true, writer.flush().is_ok());
+    assert_eq!(4, writer.write(&[1,2,3,4]).unwrap());
 }
 
 #[test]
