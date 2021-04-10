@@ -68,7 +68,7 @@ fn write_errors() {
     fn base() -> Ipv6Header {
         Ipv6Header {
             traffic_class: 1,
-            flow_label: 0x201806,
+            flow_label: 0x0,
             payload_length: 0x8021,
             next_header: 30,
             hop_limit: 40,
@@ -91,6 +91,18 @@ fn write_errors() {
             value
         }), 
         Err(ValueError(U32TooLarge{value: 0x100000, max: 0xFFFFF, field: Ipv6FlowLabel})));
+
+    //io error (not enough space)
+    {
+        let header = base();
+        for len in 0..Ipv6Header::SERIALIZED_SIZE {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                writer.error_kind(),
+                header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+            );
+        }
+    }
 }
 
 #[test]
@@ -101,11 +113,26 @@ fn read_error() {
         let result = Ipv6Header::read(&mut io::Cursor::new(&buffer));
         assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
     }
-    //io error
+    //io error and unexpected end of slice
     {
-        let buffer: [u8;1] = [0x60];
-        let result = Ipv6Header::read(&mut io::Cursor::new(&buffer));
-        assert_matches!(result, Err(ReadError::IoError(_)));
+        let buffer = {
+            let mut buffer: [u8;Ipv6Header::SERIALIZED_SIZE] = [0;Ipv6Header::SERIALIZED_SIZE];
+            buffer[0] = 0x60; //ip number is needed
+            buffer
+        };
+        for len in 0..Ipv6Header::SERIALIZED_SIZE {
+            // read
+            assert_matches!(
+                Ipv6Header::read(&mut io::Cursor::new(&buffer[0..len])),
+                Err(ReadError::IoError(_))
+            );
+
+            // read from slice
+            assert_matches!(
+                Ipv6Header::read_from_slice(&buffer[0..len]),
+                Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE))
+            );
+        }
     }
 }
 
@@ -333,16 +360,20 @@ fn skip_all_extensions() {
             ids
         };
         let buffer = create_buffer(&ids);
-        //reader
-        {
-            let mut cursor = Cursor::new(&buffer[..buffer.len() - 9]);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
-            assert_matches!(result, Err(ReadError::IoError(_)));
-        }
-        //slice
-        {
-            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer[..buffer.len() - 9], ids[0]);
-            assert_matches!(result, Err(ReadError::UnexpectedEndOfSlice(_)));
+
+        // check for all offsets
+        for len in 0..buffer.len() - 8 { // minus 8 for the dummy data
+            //reader
+            {
+                let mut cursor = TestReader::new(&buffer[..len]);
+                let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
+                assert_matches!(result, Err(ReadError::IoError(_)));
+            }
+            //slice
+            {
+                let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer[..len], ids[0]);
+                assert_matches!(result, Err(ReadError::UnexpectedEndOfSlice(_)));
+            }
         }
     }
 }
@@ -423,4 +454,28 @@ fn from_slice_bad_version() {
     //check that the unexpected version id is detected
     use crate::ReadError::*;
     assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..]), Err(Ipv6UnexpectedVersion(4)));
+}
+
+#[test]
+fn dbg() {
+    let header: Ipv6Header = Default::default();
+    println!("{:?}", header);
+
+    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::SERIALIZED_SIZE);
+    header.write(&mut buffer).unwrap();
+    let slice = Ipv6HeaderSlice::from_slice(&buffer[..]).unwrap();
+    println!("{:?}", slice);
+}
+
+#[test]
+fn eq() {
+    let header: Ipv6Header = Default::default();
+    assert!(header.eq(&header.clone()));
+    assert!(false == header.ne(&header.clone()));
+
+    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::SERIALIZED_SIZE);
+    header.write(&mut buffer).unwrap();
+    let slice = Ipv6HeaderSlice::from_slice(&buffer[..]).unwrap();
+    assert!(slice.eq(&slice.clone()));
+    assert!(false == slice.ne(&slice.clone()));
 }

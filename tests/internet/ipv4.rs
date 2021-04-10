@@ -1,5 +1,5 @@
 use super::super::*;
-use std::io;
+use std::io::Cursor;
 use proptest::prelude::*;
 
 #[test]
@@ -410,56 +410,234 @@ fn range_errors() {
     }
 }
 
-#[test]
-fn write() {
-    use std::io::Cursor;
+proptest! {
+    #[test]
+    fn write(ref base_header in ipv4_any()) {
+        let header = {
+            let mut header = base_header.clone();
+            // set the header checksum to something else to
+            // ensure it is calculated during the write call
+            header.header_checksum = 0;
+            header
+        };
 
-    let mut input: Ipv4Header = Default::default();
+        //serialize
+        let buffer = {
+            let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+        assert_eq!(header.header_len(), buffer.len());
 
-    input.differentiated_services_code_point = 42;
-    input.explicit_congestion_notification = 3;
-    input.payload_len = 1234;
-    input.identification = 4321;
-    input.dont_fragment = true;
-    input.more_fragments = false;
-    input.fragments_offset = 4367;
-    input.time_to_live = 8;
-    input.protocol = 1;
-    input.header_checksum = 0;
-    input.source = [192, 168, 1, 1];
-    input.destination = [212, 10, 11, 123];
+        //deserialize
+        let mut cursor = Cursor::new(&buffer);
+        let result = Ipv4Header::read(&mut cursor).unwrap();
+        assert_eq!(header.header_len(), cursor.position() as usize);
 
-    //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write(&mut buffer).unwrap();
-    assert_eq!(20, buffer.len());
-
-    //deserialize
-    let mut cursor = Cursor::new(&buffer);
-    let result = Ipv4Header::read(&mut cursor).unwrap();
-    assert_eq!(20, cursor.position());
-
-    //check equivalence (with calculated checksum)    
-    input.header_checksum = input.calc_header_checksum().unwrap();
-    assert_eq!(input, result);
+        //check equivalence (with calculated checksum)
+        let header_with_checksum = {
+            let mut h = header.clone();
+            h.header_checksum = h.calc_header_checksum().unwrap();
+            h
+        };
+        assert_eq!(header_with_checksum, result);
+    }
 }
 
 #[test]
-fn read_error() {
-    //version error
-    {
-        let result = Ipv4Header::read(&mut io::Cursor::new(&[0;20]));
-        assert_matches!(result, Err(ReadError::Ipv4UnexpectedVersion(0)));
+fn write_io_error() {
+    let header = {
+        let mut header: Ipv4Header = Default::default();
+        // set some options so that we can also provoke io errors
+        // in this part of the code
+        header.set_options(&[1,2,3,4,5,6,7,8]).unwrap();
+        header
+    };
+
+    for len in 0..header.header_len() {
+        // write
+        {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                writer.error_kind(),
+                header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+            );
+        }
+        // write raw
+        {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                writer.error_kind(),
+                header.write_raw(&mut writer).unwrap_err().io_error().unwrap().kind()
+            );
+        }
     }
-    //io error
-    {
-        let result = Ipv4Header::read(&mut io::Cursor::new(&[5 | 4 << 4]));
-        assert_matches!(result, Err(ReadError::IoError(_)));
-    }
-    //io error
-    {
-        let result = Ipv4Header::read(&mut io::Cursor::new(&[5 | 4 << 4;19]));
-        assert_matches!(result, Err(ReadError::IoError(_)));
+}
+
+proptest! {
+    #[test]
+    fn read_errors(ref header in ipv4_any()) {
+        use crate::ReadError::*;
+
+        // non matching version
+        for version in 0..0xf {
+            if 4 != version {
+                let buffer = {
+                    let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+                    header.write(&mut buffer).unwrap();
+
+                    //change the ihl
+                    buffer[0] = (version << 4) | (buffer[0] & 0xf); //version + ihl
+                    buffer
+                };
+
+                // read
+                assert_matches!(
+                    Ipv4Header::read(&mut Cursor::new(&buffer)),
+                    Err(Ipv4UnexpectedVersion(_))
+                );
+
+                // read_from_slice
+                assert_matches!(
+                    Ipv4Header::read_from_slice(&buffer),
+                    Err(Ipv4UnexpectedVersion(_))
+                );
+
+                // from_slice
+                assert_matches!(
+                    Ipv4HeaderSlice::from_slice(&buffer),
+                    Err(Ipv4UnexpectedVersion(_))
+                );
+            }
+        }
+
+        //bad ihl (smaller then 5)
+        for ihl in 0..5 {
+            let buffer = {
+                let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+
+                //change the ihl
+                buffer[0] = (4 << 4) | ihl; //version + ihl
+                buffer
+            };
+
+            // read
+            assert_matches!(
+                Ipv4Header::read(&mut Cursor::new(&buffer)),
+                Err(Ipv4HeaderLengthBad(_))
+            );
+
+            // read_without_version
+            assert_matches!(
+                Ipv4Header::read_without_version(
+                    &mut Cursor::new(&buffer[1..]),
+                    buffer[0] & 0xf
+                ),
+                Err(Ipv4HeaderLengthBad(_))
+            );
+            
+            // read_from_slice
+            assert_matches!(
+                Ipv4Header::read_from_slice(&buffer),
+                Err(Ipv4HeaderLengthBad(_))
+            );
+
+            // from_slice
+            assert_matches!(
+                Ipv4HeaderSlice::from_slice(&buffer),
+                Err(Ipv4HeaderLengthBad(_))
+            );
+        }
+
+        //bad total_length
+        for total_length in 0..header.header_len() {
+            use byteorder::{ByteOrder, BigEndian};
+
+            let buffer = {
+                let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                //change the total length to be smaller then the header length
+                BigEndian::write_u16(&mut buffer[2..4], total_length as u16);
+                buffer
+            };
+
+            // read
+            assert_matches!(
+                Ipv4Header::read(&mut Cursor::new(&buffer)),
+                Err(Ipv4TotalLengthTooSmall(_))
+            );
+
+            // read_without_version
+            assert_matches!(
+                Ipv4Header::read_without_version(
+                    &mut Cursor::new(&buffer[1..]),
+                    buffer[0] & 0xf
+                ),
+                Err(Ipv4TotalLengthTooSmall(_))
+            );
+
+            // read_from_slice
+            assert_matches!(
+                Ipv4Header::read_from_slice(&buffer),
+                Err(Ipv4TotalLengthTooSmall(_))
+            );
+
+            // from_slice
+            assert_matches!(
+                Ipv4HeaderSlice::from_slice(&buffer),
+                Err(Ipv4TotalLengthTooSmall(_))
+            );
+        }
+
+        //io error (bad slice length)
+        {
+            let buffer = {
+                // create a header with some options (so a lenght check can fail there)
+                let header = {
+                    let mut header: Ipv4Header = Default::default();
+                    header.set_options(&[1,2,3,4]).unwrap();
+                    header
+                };
+
+                // serialize to buffer
+                let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+
+            // check that all too small lenghts trigger an error
+            for len in 0..buffer.len() {
+                // read
+                assert_matches!(
+                    Ipv4Header::read(&mut Cursor::new(&buffer[..len])),
+                    Err(IoError(_))
+                );
+
+                // read_without_version
+                if len > 0 {
+                    assert_matches!(
+                        Ipv4Header::read_without_version(
+                            &mut Cursor::new(&buffer[1..len]),
+                            buffer[0] & 0xf
+                        ),
+                        Err(IoError(_))
+                    );
+                }
+
+                // read_from_slice
+                assert_matches!(
+                    Ipv4Header::read_from_slice(&buffer[..len]),
+                    Err(UnexpectedEndOfSlice(_))
+                );
+
+                // from_slice
+                assert_matches!(
+                    Ipv4HeaderSlice::from_slice(&buffer[..len]),
+                    Err(UnexpectedEndOfSlice(_))
+                );
+            }
+        }
     }
 }
 
@@ -467,15 +645,10 @@ proptest! {
     #[test]
     fn readwrite_header_raw(ref input in ipv4_any())
     {
-        use std::io::Cursor;
-
         //serialize
-        let expected_size = input.header_len();
-        let mut buffer: Vec<u8> = Vec::with_capacity(expected_size);
-
+        let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
         input.write_raw(&mut buffer).unwrap();
-
-        assert_eq!(expected_size, buffer.len());
+        assert_eq!(input.header_len(), buffer.len());
 
         //deserialize (read)
         {
@@ -498,6 +671,9 @@ proptest! {
         {
             use std::net::Ipv4Addr;
             let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
+            
+            assert_eq!(slice.slice(), &buffer);
+
             assert_eq!(slice.version(), 4);
             assert_eq!(slice.ihl(), input.ihl());
             assert_eq!(slice.dcp(), input.differentiated_services_code_point);
@@ -525,75 +701,51 @@ proptest! {
 
 proptest! {
     #[test]
-    fn too_small_total_length(ref input in ipv4_any())
-    {
-        use std::io::Cursor;
-        use byteorder::{ByteOrder, BigEndian};
-        use ReadError::*;
+    fn slice_eq(ref header in ipv4_any()) {
 
-        let mut buffer: [u8;60] = [0;60];
-        {
-            let mut cursor = Cursor::new(&mut buffer[..]);
-            input.write(&mut cursor).unwrap();
-        }
-        //change the total length to be smaller then the header length
-        BigEndian::write_u16(&mut buffer[2..4], (input.header_len() as u16) - 1);
+        let buffer_a = {
+            let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
 
-        //size smaller then the minimum size of the header
-        assert_matches!(
-            Ipv4HeaderSlice::from_slice(&buffer[..Ipv4Header::SERIALIZED_SIZE - 1]),
-            Err(UnexpectedEndOfSlice(Ipv4Header::SERIALIZED_SIZE))
+        let buffer_b = {
+            let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+
+        assert_eq!(
+            Ipv4HeaderSlice::from_slice(&buffer_a).unwrap(),
+            Ipv4HeaderSlice::from_slice(&buffer_b).unwrap(),
         );
-
-        //check that the read methods generate a error
-        let slice = &buffer[..input.header_len()];
-        assert_matches!(
-            Ipv4HeaderSlice::from_slice(slice),
-            Err(Ipv4TotalLengthTooSmall(_))
-        );
-        assert_matches!(
-            Ipv4Header::read(&mut Cursor::new(slice)),
-            Err(Ipv4TotalLengthTooSmall(_))
-        );   
     }
 }
 
 #[test]
-fn slice_bad_ihl() {
-    let input: Ipv4Header = Default::default();
-
-    //serialize a default ip header
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write_raw(&mut buffer).unwrap();
-
-    //change the size field to 4
-    buffer[0] = (4 << 4) | 4; //version + ihl 4
-    
-    //check that the bad ihl results in an error
-    use crate::ReadError::*;
-    assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4HeaderLengthBad(4)));
+fn slice_dbg() {
+    let buffer = {
+        let header: Ipv4Header = Default::default();
+        let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+        header.write(&mut buffer).unwrap();
+        buffer
+    };
+    println!("{:?}", Ipv4HeaderSlice::from_slice(&buffer).unwrap());
 }
 
-#[test]
-fn slice_bad_version() {
-    //write an ipv6 header to ensure that the version field is checked
-    let input = Ipv6Header {
-        traffic_class: 1,
-        flow_label: 0x81806,
-        payload_length: 0x8021,
-        next_header: 30,
-        hop_limit: 40,
-        source: [1, 2, 3, 4, 5, 6, 7, 8,
-                 9,10,11,12,13,14,15,16],
-        destination: [21,22,23,24,25,26,27,28,
-                      29,30,31,32,33,34,35,36]
-    };
+proptest! {
+    #[test]
+    fn clone(ref header in ipv4_any()) {
+        // header
+        assert_eq!(header, &header.clone());
 
-    //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(20);
-    input.write(&mut buffer).unwrap();
-    
-    //check that the bad ihl results in an error
-    use crate::ReadError::*;
-    assert_matches!(Ipv4HeaderSlice::from_slice(&buffer[..]), Err(Ipv4UnexpectedVersion(6)));
+        // slice
+        let buffer = {
+            let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+        let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(slice.clone(), slice.clone());
+    }
 }

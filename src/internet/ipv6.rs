@@ -89,21 +89,25 @@ impl Ipv6Header {
     pub fn skip_header_extension_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), ReadError> {
         use crate::ip_number::*;
 
-        //determine the length
-        let len = match next_header {
-            IPV6_FRAG => 8,
-            AUTH => (usize::from(slice[1]) + 2)*4,
-            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
-                (usize::from(slice[1]) + 1)*8
-            },
-            // not a ipv6 header extension that can be skipped
-            _ => return Ok((next_header, slice))
-        };
+        if slice.len() >= 2 {
+            //determine the length
+            let len = match next_header {
+                IPV6_FRAG => 8,
+                AUTH => (usize::from(slice[1]) + 2)*4,
+                IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
+                    (usize::from(slice[1]) + 1)*8
+                },
+                // not a ipv6 header extension that can be skipped
+                _ => return Ok((next_header, slice))
+            };
 
-        if slice.len() < len {
-            Err(ReadError::UnexpectedEndOfSlice(len))
+            if slice.len() < len {
+                Err(ReadError::UnexpectedEndOfSlice(len))
+            } else {
+                Ok((slice[0], &slice[len..]))
+            }
         } else {
-            Ok((slice[0], &slice[len..]))
+            Err(ReadError::UnexpectedEndOfSlice(2))
         }
     }
 
