@@ -26,10 +26,10 @@ proptest! {
             &format!("{}", UnexpectedEndOfSlice(arg_usize))
         );
 
-        //VlanDoubleTaggingUnexpectedOuterTpid
+        //DoubleVlanOuterNonVlanEtherType
         assert_eq!(
-            &format!("ReadError: Expected a double vlan header, but the outer tpid {} is a non vlan header tpid.", arg_u16),
-            &format!("{}", VlanDoubleTaggingUnexpectedOuterTpid(arg_u16))
+            &format!("ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", arg_u16),
+            &format!("{}", DoubleVlanOuterNonVlanEtherType(arg_u16))
         );
 
         //IpUnsupportedVersion
@@ -101,7 +101,7 @@ fn read_error_source() {
 
     let none_values = [
         UnexpectedEndOfSlice(0),
-        VlanDoubleTaggingUnexpectedOuterTpid(0),
+        DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
         Ipv4HeaderLengthBad(0),
@@ -125,7 +125,7 @@ fn read_error_debug() {
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
         UnexpectedEndOfSlice(0),
-        VlanDoubleTaggingUnexpectedOuterTpid(0),
+        DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
         Ipv4HeaderLengthBad(0),

@@ -14,6 +14,15 @@ pub enum VlanHeader {
     Double(DoubleVlanHeader)
 }
 
+impl VlanHeader {
+    ///All ether types that identify a vlan header.
+    pub const VLAN_ETHER_TYPES: [u16;3] = [
+        ether_type::VLAN_TAGGED_FRAME,
+        ether_type::PROVIDER_BRIDGING,
+        ether_type::VLAN_DOUBLE_TAGGED_FRAME,
+    ];
+}
+
 ///IEEE 802.1Q VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SingleVlanHeader {
@@ -97,6 +106,7 @@ impl SerializedSize for DoubleVlanHeader {
 }
 
 impl DoubleVlanHeader {
+
     ///Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     pub fn read_from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), ReadError> {
         Ok((
@@ -109,12 +119,7 @@ impl DoubleVlanHeader {
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanHeader, ReadError> {
         let outer = SingleVlanHeader::read(reader)?;
 
-
-        use crate::EtherType::*;
-        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
-        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
-        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
-
+        use crate::ether_type::{ VLAN_TAGGED_FRAME, PROVIDER_BRIDGING, VLAN_DOUBLE_TAGGED_FRAME };
         //check that outer ethertype is matching
         match outer.ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
@@ -125,7 +130,7 @@ impl DoubleVlanHeader {
             },
             value => {
                 use crate::ReadError::*;
-                Err(VlanDoubleTaggingUnexpectedOuterTpid(value))
+                Err(DoubleVlanOuterNonVlanEtherType(value))
             }
         }
     }
@@ -228,7 +233,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
                 Ok(result)
             },
             value => {
-                Err(VlanDoubleTaggingUnexpectedOuterTpid(value))
+                Err(DoubleVlanOuterNonVlanEtherType(value))
             }
         }
     }

@@ -241,11 +241,13 @@ pub trait SerializedSize {
 ///Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
+    ///Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
     UnexpectedEndOfSlice(usize),
-    ///Error when a double vlan tag was expected but the tpid of the outer vlan does not contain the expected id of 0x8100.
-    VlanDoubleTaggingUnexpectedOuterTpid(u16),
+    ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
+    ///The value is the unexpected ether type value in the outer vlan header.
+    DoubleVlanOuterNonVlanEtherType(u16),
     ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
     ///Error when the ip header version field is not equal 4. The value is the version that was received.
@@ -275,8 +277,23 @@ impl ReadError {
             value => value
         }
     }
-}
 
+    /// Returns the `std::io::Error` value if the `ReadError` is an `IoError`.
+    /// Otherwise `None is returned.
+    pub fn io_error(self) -> Option<std::io::Error> {
+        match self {
+            ReadError::IoError(value) => Some(value),
+            _ => None
+        }
+    }
+    /// Returns the expected minimum size if the error is an `UnexpectedEndOfSlice`.
+    pub fn unexpected_end_of_slice_min_expected_size(self) -> Option<usize> {
+        match self {
+            ReadError::UnexpectedEndOfSlice(value) => Some(value),
+            _ => None
+        }
+    }
+}
 
 impl fmt::Display for ReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -287,8 +304,8 @@ impl fmt::Display for ReadError {
             UnexpectedEndOfSlice(expected_minimum_size) => { // usize
                 write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
             },
-            VlanDoubleTaggingUnexpectedOuterTpid(tpid) => { //u16
-                write!(f, "ReadError: Expected a double vlan header, but the outer tpid {} is a non vlan header tpid.", tpid)
+            DoubleVlanOuterNonVlanEtherType(ether_type) => { //u16
+                write!(f, "ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", ether_type)
             },
             IpUnsupportedVersion(version_number) => { // u8
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
