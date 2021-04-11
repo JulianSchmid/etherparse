@@ -27,6 +27,8 @@
 * Renamed `Ipv6ExtensionHeaderSlice` to `Ipv6OptionsHeaderSlice`
 * Renamed `IPv6AuthenticationHeader` to `AuthenticationHeader`
 * Renamed `IPv6EncapSecurityPayload` to `EncapsulatingSecurityPayload`
+* Renamed `ReadError` values:
+  * Renamed `VlanDoubleTaggingUnexpectedOuterTpid` to `DoubleVlanOuterNonVlanEtherType`
 * Moved the extensions out of the Ipv6Header[Slice] and into the PacketHeaders & SlicedPacket struct.
 
 This change had been a long time coming. Originally I coupled the IPv6 header extensions to the ipv6 header under the assumption that they only exist in IPv6. But this was not correct, the authentication header and encapsulating security payload are present in IPv6 as well as IPv4. So seperating this form IPv6 made sense.

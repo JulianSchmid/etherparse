@@ -97,7 +97,7 @@ fn readwrite_ip_header() {
 }
 
 #[test]
-fn read_ip_header_error() {
+fn read_ip_header_version_error() {
     use std::io::Cursor;
     let input = Ipv6Header {
         traffic_class: 1,

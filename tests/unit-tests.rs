@@ -53,7 +53,7 @@ fn test_debug_write() {
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             UnexpectedEndOfSlice(0),
-            VlanDoubleTaggingUnexpectedOuterTpid(0),
+            DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
             Ipv4HeaderLengthBad(0),
@@ -148,8 +148,36 @@ mod read_error {
             ReadError::UnexpectedEndOfSlice(5)
         );
         assert_matches!(
-            ReadError::VlanDoubleTaggingUnexpectedOuterTpid(2).add_slice_offset(3),
-            ReadError::VlanDoubleTaggingUnexpectedOuterTpid(2)
+            ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
+            ReadError::DoubleVlanOuterNonVlanEtherType(2)
+        );
+    }
+
+    #[test]
+    fn io_error() {
+        use super::*;
+        assert_eq!(
+            std::io::ErrorKind::Other,
+            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .io_error().unwrap().kind()
+        );
+        assert!(
+            ReadError::UnexpectedEndOfSlice(0)
+            .io_error().is_none()
+        );
+    }
+
+    #[test]
+    fn unexpected_end_of_slice_min_expected_size() {
+        use super::*;
+        assert!(
+            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .unexpected_end_of_slice_min_expected_size().is_none()
+        );
+        assert_eq!(
+            123,
+            ReadError::UnexpectedEndOfSlice(123)
+            .unexpected_end_of_slice_min_expected_size().unwrap()
         );
     }
 }
@@ -163,8 +191,7 @@ mod write_error {
             WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
             .io_error().unwrap().kind()
         );
-        assert_eq!(
-            true,
+        assert!(
             WriteError::ValueError(ValueError::TcpLengthTooLarge(0))
             .io_error().is_none()
         );
@@ -173,10 +200,9 @@ mod write_error {
     #[test]
     fn value_error() {
         use super::*;
-        assert_eq!(
-            None, 
+        assert!(
             WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            .value_error()
+            .value_error().is_none()
         );
         assert_eq!(
             Some(ValueError::TcpLengthTooLarge(0)),

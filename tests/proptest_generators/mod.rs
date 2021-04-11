@@ -100,6 +100,16 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub(crate) fn vlan_single_any()
+        (ether_type in any::<u16>())
+        (result in vlan_single_with(ether_type)) 
+        -> SingleVlanHeader
+    {
+        result
+    }
+}
+
+prop_compose! {
     pub(crate) fn ipv4_with(protocol: u8)
     (
         ihl in 0u8..10,
