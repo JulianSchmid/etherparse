@@ -2,16 +2,20 @@ use etherparse::*;
 
 use byteorder::{ByteOrder, BigEndian};
 use super::super::*;
-
+use std::io::Cursor;
 
 proptest! {
     #[test]
     fn read_write(ref input in udp_any()) {
-        use std::io::Cursor;
-
         //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE + 1);
-        input.write(&mut buffer).unwrap();
+        let buffer = {
+            let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE + 1);
+            input.write(&mut buffer).unwrap();
+            //add some data to test the return slice
+            buffer.push(1);
+            buffer
+        };
+
         //deserialize with read
         {
             let result = UdpHeader::read(&mut Cursor::new(&buffer)).unwrap();
@@ -20,9 +24,6 @@ proptest! {
         }
         //deserialize from slice
         {
-            //add some data to test the return slice
-            buffer.push(1);
-
             let result = UdpHeader::read_from_slice(&buffer).unwrap();
             assert_eq!(input, &result.0);
             assert_eq!(&buffer[buffer.len()-1 .. ], result.1);
@@ -349,30 +350,101 @@ fn udp_ipv6_errors() {
 
 #[test]
 fn from_slice() {
-    let input = UdpHeader {
+    let header = UdpHeader {
         source_port: 1234,
         destination_port: 5678,
         length: 1356,
         checksum: 2467
     };
-    //serialize
-    let mut buffer: Vec<u8> = Vec::with_capacity(8);
-    input.write(&mut buffer).unwrap();
-
-    //check that a too small slices generates an error
-    use crate::ReadError::*;
-    assert_matches!(
-        UdpHeaderSlice::from_slice(&buffer[..7]), 
-        Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
-    );
+    let buffer = {
+        let mut buffer = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
+        header.write(&mut buffer).unwrap();
+        buffer
+    };
 
     //get the slice
     let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();
-    assert_eq!(slice.source_port(), input.source_port);
-    assert_eq!(slice.destination_port(), input.destination_port);
-    assert_eq!(slice.length(), input.length);
-    assert_eq!(slice.checksum(), input.checksum);
+
+    assert_eq!(slice.slice(), &buffer);
+
+    assert_eq!(slice.source_port(), header.source_port);
+    assert_eq!(slice.destination_port(), header.destination_port);
+    assert_eq!(slice.length(), header.length);
+    assert_eq!(slice.checksum(), header.checksum);
 
     //check that the to_header method also results in the same header
-    assert_eq!(slice.to_header(), input);
+    assert_eq!(slice.to_header(), header);
+}
+
+#[test]
+fn read_write_length_error() {
+
+    let header = UdpHeader {
+        source_port: 1234,
+        destination_port: 5678,
+        length: 1356,
+        checksum: 2467
+    };
+
+    // write with an io error (not enough space)
+    for len in 0..UdpHeader::SERIALIZED_SIZE {
+        let mut writer = TestWriter::with_max_size(len);
+        assert_eq!(
+            writer.error_kind(),
+            header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+        );
+    }
+
+    // serialize
+    let buffer = {
+        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
+        header.write(&mut buffer).unwrap();
+        buffer
+    };
+
+    // read with an length error
+    for len in 0..UdpHeader::SERIALIZED_SIZE {
+        use ReadError::*;
+        // read
+        assert_matches!(
+            UdpHeader::read(&mut Cursor::new(&buffer[..len])),
+            Err(_)
+        );
+
+        // read_from_slice
+        assert_matches!(
+            UdpHeader::read_from_slice(&buffer[..len]),
+            Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
+        );
+
+        // from_slice
+        assert_matches!(
+            UdpHeaderSlice::from_slice(&buffer[..len]),
+            Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
+        );
+    }
+}
+
+#[test]
+fn dbg_clone_eq() {
+    let header = UdpHeader {
+        source_port: 1234,
+        destination_port: 5678,
+        length: 1356,
+        checksum: 2467
+    };
+
+    println!("{:?}", header);
+    assert_eq!(header.clone(), header);
+
+    // write with an io error (not enough space)
+    let buffer = {
+        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
+        header.write(&mut buffer).unwrap();
+        buffer
+    };
+
+    let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();
+    println!("{:?}", slice);
+    assert_eq!(slice.clone(), slice);
 }
