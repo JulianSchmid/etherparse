@@ -4,73 +4,6 @@ use std::io::Cursor;
 use proptest::prelude::*;
 
 #[test]
-fn dbg() {
-    let double = DoubleVlanHeader{
-        outer: SingleVlanHeader{
-            priority_code_point: 0,
-            drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
-            ether_type: ether_type::VLAN_TAGGED_FRAME
-        },
-        inner: SingleVlanHeader{
-            priority_code_point: 0,
-            drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
-            ether_type: 0x12
-        }
-    };
-    println!("{:?}", double.outer);
-    println!("{:?}", double);
-    use crate::VlanHeader::*;
-    println!("{:?}", Single(double.inner.clone()));
-    println!("{:?}", Double(double.clone()));
-
-    //slice
-    {
-        let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
-        double.write(&mut buffer).unwrap();
-        let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
-        println!("{:?}", slice.inner().clone());
-        println!("{:?}", slice.clone());
-    }
-}
-
-proptest!{
-    #[test]
-    fn eq(
-        ref outer in vlan_single_any(),
-        ref inner in vlan_single_any()
-    ) {
-        assert_eq!(outer, &outer.clone());
-        assert_eq!(
-            DoubleVlanHeader{
-                outer: outer.clone(),
-                inner: inner.clone()
-            },
-            DoubleVlanHeader{
-                outer: outer.clone(),
-                inner: inner.clone()
-            }
-        );
-        use VlanHeader::*;
-        assert_eq!(
-            Single(outer.clone()),
-            Single(outer.clone())
-        );
-        assert_eq!(
-            Double(DoubleVlanHeader{
-                outer: outer.clone(),
-                inner: inner.clone(),
-            }),
-            Double(DoubleVlanHeader{
-                outer: outer.clone(),
-                inner: inner.clone(),
-            })
-        );
-    }
-}
-
-#[test]
 fn vlan_ether_types() {
     use ether_type::*;
     use crate::VlanHeader as V;
@@ -371,5 +304,69 @@ proptest!{
             DoubleVlanHeaderSlice::from_slice(&buffer), 
             Err(DoubleVlanOuterNonVlanEtherType(IPV4))
         );
+    }
+}
+
+#[test]
+fn default() {
+    let v: DoubleVlanHeader = Default::default();
+    assert_eq!(v.outer.priority_code_point, 0);
+    assert_eq!(v.outer.drop_eligible_indicator, false);
+    assert_eq!(v.outer.vlan_identifier, 0);
+    assert_eq!(v.outer.ether_type, ether_type::VLAN_TAGGED_FRAME);
+
+    assert_eq!(v.inner.priority_code_point, 0);
+    assert_eq!(v.inner.drop_eligible_indicator, false);
+    assert_eq!(v.inner.vlan_identifier, 0);
+    assert_eq!(v.inner.ether_type, 0);
+}
+
+#[test]
+fn dbg_eq_clone() {
+    // double header & single header
+    let double = DoubleVlanHeader{
+        outer: SingleVlanHeader{
+            priority_code_point: 0,
+            drop_eligible_indicator: false,
+            vlan_identifier: 0x123,
+            ether_type: ether_type::VLAN_TAGGED_FRAME
+        },
+        inner: SingleVlanHeader{
+            priority_code_point: 0,
+            drop_eligible_indicator: false,
+            vlan_identifier: 0x123,
+            ether_type: 0x12
+        }
+    };
+    assert_eq!(double.outer, double.outer.clone());
+    println!("{:?}", double.outer);
+
+    assert_eq!(double, double.clone());
+    println!("{:?}", double);
+
+    // vlan header
+    use crate::VlanHeader::*;
+    {
+        let s = Single(double.inner.clone());
+        assert_eq!(s, s.clone());
+        println!("{:?}", s);
+    }
+    {
+        let d = Double(double.clone());
+        assert_eq!(d, d.clone());
+        println!("{:?}", d.clone());
+    }
+
+    //slice
+    {
+        let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
+        double.write(&mut buffer).unwrap();
+        let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
+
+        assert_eq!(slice.inner(), slice.inner().clone());
+        println!("{:?}", slice.inner().clone());
+
+        assert_eq!(slice, slice.clone());
+        println!("{:?}", slice.clone());
     }
 }

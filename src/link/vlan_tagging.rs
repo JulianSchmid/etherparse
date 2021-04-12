@@ -142,6 +142,19 @@ impl DoubleVlanHeader {
     }
 }
 
+impl Default for DoubleVlanHeader {
+    fn default() -> Self {
+        DoubleVlanHeader {
+            outer: {
+                let mut outer: SingleVlanHeader = Default::default();
+                outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
+                outer
+            },
+            inner: Default::default()
+        }
+    }
+}
+
 ///A slice containing a single vlan header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SingleVlanHeaderSlice<'a> {
