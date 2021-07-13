@@ -186,6 +186,184 @@ fn eq()
 
         assert_ne!(other, other2);
     }
+    //options (check only relevant data is compared)
+    {
+        let mut other = base.clone();
+        other.set_options(&options).unwrap();
+
+        let mut other2 = base.clone();
+        other2.set_options(&{
+            let mut options2 = options.clone();
+            options2[3] = TcpOptionElement::Timestamp(0x06162636, 0x97172737);
+            options2
+        }).unwrap();
+
+        // reset the data
+        let new_options = [
+            TcpOptionElement::Timestamp(0x00102030, 0x01112131)
+        ];
+        other.set_options(&new_options).unwrap();
+        other2.set_options(&new_options).unwrap();
+
+        assert_eq!(other, other2);
+    }
+    // slice (auto generated)
+    {
+        let header = base.clone();
+        let buffer = {
+            let mut buffer = Vec::with_capacity(header.header_len().into());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+        let slice = TcpHeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(slice, slice.clone());
+    }
+    // TcpOptionReadError
+    {
+        use TcpOptionReadError::*;
+        let value = UnexpectedEndOfSlice(123);
+        assert_eq!(value, value.clone());
+    }
+    // TcpOptionWriteError
+    {
+        use TcpOptionWriteError::*;
+        let value = NotEnoughSpace(123);
+        assert_eq!(value, value.clone());
+    }
+}
+
+#[test]
+fn debug()
+{
+    // header
+    {
+        // TODO extend to containt the options
+        let header: TcpHeader = Default::default();
+
+        // normal debug printing
+        assert_eq!(
+            format!(
+                "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {} }}", 
+                header.source_port,
+                header.destination_port,
+                header.sequence_number,
+                header.acknowledgment_number,
+                header.data_offset(),
+                header.ns,
+                header.fin,
+                header.syn,
+                header.rst,
+                header.psh,
+                header.ack,
+                header.urg,
+                header.ece,
+                header.cwr,
+                header.window_size,
+                header.checksum,
+                header.urgent_pointer
+            ),
+            format!("{:?}", header)
+        );
+
+        // multi line debug printing
+        assert_eq!(
+            format!(
+                "TcpHeader {{
+    source_port: {},
+    destination_port: {},
+    sequence_number: {},
+    acknowledgment_number: {},
+    data_offset: {},
+    ns: {},
+    fin: {},
+    syn: {},
+    rst: {},
+    psh: {},
+    ack: {},
+    urg: {},
+    ece: {},
+    cwr: {},
+    window_size: {},
+    checksum: {},
+    urgent_pointer: {},
+}}", 
+                header.source_port,
+                header.destination_port,
+                header.sequence_number,
+                header.acknowledgment_number,
+                header.data_offset(),
+                header.ns,
+                header.fin,
+                header.syn,
+                header.rst,
+                header.psh,
+                header.ack,
+                header.urg,
+                header.ece,
+                header.cwr,
+                header.window_size,
+                header.checksum,
+                header.urgent_pointer
+            ),
+            format!("{:#?}", header)
+        );
+    }
+    // slice (auto generated, just make sure the implementation is there)
+    {
+        let header: TcpHeader = Default::default();
+        println!("{:?}", header);
+        let buffer = {
+            let mut buffer = Vec::with_capacity(header.header_len().into());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+        let slice = TcpHeaderSlice::from_slice(&buffer).unwrap();
+        println!("{:?}", slice);
+        assert_eq!(slice, slice.clone());
+    }
+    // TcpOptionElement
+    {
+        use TcpOptionElement::*;
+        assert_eq!("Nop", format!("{:?}", Nop));
+        assert_eq!(
+            "MaximumSegmentSize(123)",
+            format!("{:?}", MaximumSegmentSize(123))
+        );
+        assert_eq!(
+            "WindowScale(123)",
+            format!("{:?}", WindowScale(123))
+        );
+        assert_eq!(
+            "SelectiveAcknowledgementPermitted",
+            format!("{:?}", SelectiveAcknowledgementPermitted)
+        );
+        assert_eq!(
+            "SelectiveAcknowledgement((1, 2), [Some((3, 4)), Some((5, 6)), None])",
+            format!("{:?}",
+                SelectiveAcknowledgement((1, 2), [Some((3,4)), Some((5,6)), None])
+            )
+        );
+        assert_eq!(
+            "Timestamp(123, 456)",
+            format!("{:?}", Timestamp(123,456))
+        );
+    }
+    // TcpOptionReadError
+    {
+        use TcpOptionReadError::*;
+        assert_eq!(
+            "UnexpectedEndOfSlice(0)",
+            format!("{:?}", UnexpectedEndOfSlice(0))
+        );
+    }
+    // TcpOptionWriteError
+    {
+        use TcpOptionWriteError::*;
+        assert_eq!(
+            "NotEnoughSpace(0)",
+            format!("{:?}", NotEnoughSpace(0))
+        );
+    }
 }
 
 #[test]
@@ -502,6 +680,85 @@ proptest! {
         let len = buffer.len() - 1;
         assert_matches!(TcpHeader::read(&mut Cursor::new(&buffer[..len])),
                         Err(ReadError::IoError(_)));
+    }
+}
+
+#[test]
+fn write_and_read_length_error() {
+    let headers = {
+        let base_header = TcpHeader::new(1234,4567,9876,789);
+        use TcpOptionElement::*;
+        [
+            {
+                let mut header = base_header.clone();
+                header.ns = true;
+                header.fin = true;
+                header.syn = true;
+                header.rst = true;
+                header.psh = true;
+                header.ack = true;
+                header.urg = true;
+                header.ece = true;
+                header.cwr = true;
+                header
+            }, {
+                let mut header = base_header.clone();
+                header.set_options(&[
+                    MaximumSegmentSize(111),
+                    WindowScale(222),
+                    SelectiveAcknowledgementPermitted,
+                    Timestamp(12,23)
+                ]).unwrap();
+                header
+            }, {
+                let mut header = base_header.clone();
+                header.set_options(&[
+                    SelectiveAcknowledgement(
+                        (1,2), [Some((3,4)),Some((5,6)), Some((7,8))]
+                    ),
+                ]).unwrap();
+                header
+            }
+        ]
+    };
+    
+    for header in &headers {
+
+        // write not enough space
+        for len in 0..usize::from(header.header_len()) {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                writer.error_kind(),
+                header.write(&mut writer).unwrap_err().kind()
+            );
+        }
+
+        let buffer = {
+            let mut buffer = Vec::with_capacity(header.header_len().into());
+            header.write(&mut buffer).unwrap();
+            buffer
+        };
+
+        for len in 0..buffer.len() {
+            use ReadError::*;
+            // read
+            assert_matches!(
+                TcpHeader::read(&mut Cursor::new(&buffer[0..len])),
+                Err(IoError(_))
+            );
+
+            // read_from_slice
+            assert_matches!(
+                TcpHeader::read_from_slice(&buffer[0..len]),
+                Err(UnexpectedEndOfSlice(_))
+            );
+
+            // from_slice
+            assert_matches!(
+                TcpHeaderSlice::from_slice(&buffer[0..len]),
+                Err(UnexpectedEndOfSlice(_))
+            );
+        }
     }
 }
 
@@ -887,11 +1144,63 @@ fn options_iterator_method() {
 
 #[test]
 fn options_iterator() {
-    fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
-        let mut it = TcpOptionsIterator::from_slice(&buffer[..]);
+    use crate::TcpOptionElement::*;
+
+    let header = {
+        let mut header : TcpHeader = Default::default();
+        header.set_options_raw(&[
+            TCP_OPTION_ID_NOP, TCP_OPTION_ID_NOP,
+            TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4,
+            0, 1,
+            TCP_OPTION_ID_END, 0, 0, 0
+        ]).unwrap();
+        header
+    };
+
+    // TcpHeader::options_iterator
+    {
+        let mut it = header.options_iterator();
+        let expected = [
+            Nop,
+            Nop,
+            MaximumSegmentSize(1),
+        ];
         for element in expected.iter() {
             assert_eq!(element, &it.next().unwrap().unwrap());
         }
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.rest().len());
+    }
+
+    // TcpHeaderSlice::options_iterator
+    {
+        let mut buffer = Vec::with_capacity(header.header_len().into());
+        header.write(&mut buffer).unwrap();
+        let slice = TcpHeaderSlice::from_slice(&buffer).unwrap();
+
+        let mut it = slice.options_iterator();
+        let expected = [
+            Nop,
+            Nop,
+            MaximumSegmentSize(1),
+        ];
+        for element in expected.iter() {
+            assert_eq!(element, &it.next().unwrap().unwrap());
+        }
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.rest().len());
+    }
+}
+
+#[test]
+fn options_iterator_from_slice() {
+    fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
+        // options iterator via from_slice()
+        let mut it = TcpOptionsIterator::from_slice(buffer);
+        for element in expected.iter() {
+            assert_eq!(element, &it.next().unwrap().unwrap());
+        }
+
         //expect no more elements
         assert_eq!(None, it.next());
         assert_eq!(0, it.rest().len());
@@ -1048,3 +1357,73 @@ fn options_iterator_unexpected_id() {
     assert_eq!(None, it.next());
     assert_eq!(0, it.rest().len());
 }
+
+#[test]
+fn options_iterator_debug() {
+    fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
+        // options iterator via from_slice()
+        let mut it = TcpOptionsIterator::from_slice(buffer);
+        for element in expected.iter() {
+            assert_eq!(element, &it.next().unwrap().unwrap());
+        }
+
+        //expect no more elements
+        assert_eq!(None, it.next());
+        assert_eq!(0, it.rest().len());
+    }
+
+    use crate::TcpOptionElement::*;
+
+    //nop & max segment size
+    expect_elements(&[
+            TCP_OPTION_ID_NOP, 
+            TCP_OPTION_ID_NOP,
+            TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE, 4, 
+            0, 1,
+            TCP_OPTION_ID_WINDOW_SCALE, 3, 2,
+            TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED, 2,
+            TCP_OPTION_ID_SELECTIVE_ACK, 10,
+            0, 0, 0, 10,
+            0, 0, 0, 11,
+            TCP_OPTION_ID_SELECTIVE_ACK, 18, 
+            0, 0, 0, 12,
+            0, 0, 0, 13,
+            0, 0, 0, 14,
+            0, 0, 0, 15,
+            TCP_OPTION_ID_SELECTIVE_ACK, 26, 
+            0, 0, 0, 16,
+            0, 0, 0, 17,
+            0, 0, 0, 18,
+            0, 0, 0, 19,
+            0, 0, 0, 20,
+            0, 0, 0, 21,
+            TCP_OPTION_ID_SELECTIVE_ACK, 34, 
+            0, 0, 0, 22,
+            0, 0, 0, 23,
+            0, 0, 0, 24,
+            0, 0, 0, 25,
+            0, 0, 0, 26,
+            0, 0, 0, 27,
+            0, 0, 0, 28,
+            0, 0, 0, 29,
+            TCP_OPTION_ID_TIMESTAMP, 10, 
+            0, 0, 0, 30, 
+            0, 0, 0, 31,
+            TCP_OPTION_ID_END, 0, 0, 0, 0
+        ],
+        &[
+            Nop,
+            Nop,
+            MaximumSegmentSize(1),
+            WindowScale(2),
+            SelectiveAcknowledgementPermitted,
+            SelectiveAcknowledgement((10,11), [None, None, None]),
+            SelectiveAcknowledgement((12,13), [Some((14,15)), None, None]),
+            SelectiveAcknowledgement((16,17), [Some((18,19)), Some((20,21)), None]),
+            SelectiveAcknowledgement((22,23), [Some((24,25)), Some((26,27)), Some((28,29))]),
+            Timestamp(30,31)
+        ]
+    );
+}
+
+

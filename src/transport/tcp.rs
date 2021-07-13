@@ -4,8 +4,6 @@ extern crate byteorder;
 use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 
-//TODO checksum calculation
-
 ///The minimum size of the tcp header in bytes
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;
 ///The minimum data offset size (size of the tcp header itself).
@@ -550,26 +548,27 @@ impl Default for TcpHeader {
 //      So the only option left to me was to write an implementation myself and deal with the added complexity
 //      and potential added error source.
 impl Debug for TcpHeader {
-    fn fmt(&self, fotmatter: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), std::fmt::Error> {
         // TODO add printing of decoded options
-        write!(fotmatter, "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {} }}", 
-            self.source_port,
-            self.destination_port,
-            self.sequence_number,
-            self.acknowledgment_number,
-            self._data_offset,
-            self.ns,
-            self.fin,
-            self.syn,
-            self.rst,
-            self.psh,
-            self.ack,
-            self.urg,
-            self.ece,
-            self.cwr,
-            self.window_size,
-            self.checksum,
-            self.urgent_pointer)
+        fmt.debug_struct("TcpHeader")
+            .field("source_port", &self.source_port)
+            .field("destination_port", &self.destination_port)
+            .field("sequence_number", &self.sequence_number)
+            .field("acknowledgment_number", &self.acknowledgment_number)
+            .field("data_offset", &self._data_offset)
+            .field("ns", &self.ns)
+            .field("fin", &self.fin)
+            .field("syn", &self.syn)
+            .field("rst", &self.rst)
+            .field("psh", &self.psh)
+            .field("ack", &self.ack)
+            .field("urg", &self.urg)
+            .field("ece", &self.ece)
+            .field("cwr", &self.cwr)
+            .field("window_size", &self.window_size)
+            .field("checksum", &self.checksum)
+            .field("urgent_pointer", &self.urgent_pointer)
+            .finish()
     }
 }
 
@@ -592,7 +591,7 @@ impl std::cmp::PartialEq for TcpHeader {
         self.window_size == other.window_size &&
         self.checksum == other.checksum &&
         self.urgent_pointer  == other.urgent_pointer &&
-        self.options_buffer[..] == other.options_buffer[..]
+        self.options() == other.options()
     }
 }
 
@@ -910,6 +909,7 @@ pub enum TcpOptionWriteError {
 }
 
 ///Allows iterating over the options after a TCP header.
+#[derive(Clone, Eq, PartialEq)]
 pub struct TcpOptionsIterator<'a> {
     options: &'a [u8]
 }
@@ -1068,5 +1068,32 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
             //finally return the result
             result
         }
+    }
+}
+
+impl<'a> Debug for TcpOptionsIterator<'a> {
+    fn fmt(&self, fmt: &mut Formatter) -> Result<(), std::fmt::Error> {
+        let mut list = fmt.debug_list();
+
+        // create a copy and iterate over all elements
+        let mut clone = self.clone();
+        while let Some(it) = clone.next() {
+            match it {
+                Ok(e) => { list.entry(&e); },
+                Err(e) => {
+                    list.entry(&e);
+                    // if an error is encountered also print the unparsed raw bytes
+                    let cc = clone.clone();
+                    list.entry(
+                        &format_args!(
+                            "{:?}",
+                            cc.rest()
+                        )
+                    );
+                }
+            }
+        }
+
+        list.finish()
     }
 }
