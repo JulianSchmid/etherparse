@@ -132,7 +132,7 @@ impl TcpHeader {
         use crate::TcpOptionElement::*;
         let required_length = options.iter().fold(0, |acc, ref x| {
             acc + match x {
-                Nop => 1,
+                Noop => 1,
                 MaximumSegmentSize(_) => 4,
                 WindowScale(_) => 3,
                 SelectiveAcknowledgementPermitted => 2,
@@ -164,7 +164,7 @@ impl TcpHeader {
             let mut i = 0;
             for element in options {
                 match element {
-                    Nop => {
+                    Noop => {
                         self.options_buffer[i] = ID_NOOP;
                         i += 1;
                     },
@@ -871,10 +871,28 @@ impl<'a> TcpHeaderSlice<'a> {
     }
 }
 
-///Different kinds of options that can be present in the options part of a tcp header.
+/// Different kinds of options that can be present in the options part of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionElement {
-    Nop,
+    /// "No-Operation" option.
+    ///
+    /// Description from RFC 793:
+    ///
+    /// This option code may be used between options, for example, to
+    /// align the beginning of a subsequent option on a word boundary.
+    /// There is no guarantee that senders will use this option, so
+    /// receivers must be prepared to process options even if they do
+    /// not begin on a word boundary.
+    Noop,
+    /// "Maximum Segment Size" option.
+    ///
+    /// Description from RFC 793:
+    ///
+    /// If this option is present, then it communicates the maximum
+    /// receive segment size at the TCP which sends this segment.
+    /// This field must only be sent in the initial connection request
+    /// (i.e., in segments with the SYN control bit set).  If this
+    //// option is not used, any segment size is allowed.
     MaximumSegmentSize(u16),
     WindowScale(u8),
     SelectiveAcknowledgementPermitted,
@@ -915,54 +933,70 @@ pub struct TcpOptionsIterator<'a> {
     options: &'a [u8]
 }
 
-#[deprecated]
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_END instead"
+)]
+/// Deprecated please use [tcp_option::ID_END] instead.
 pub const TCP_OPTION_ID_END: u8 = 0;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_NOOP instead"
 )]
+/// Deprecated please use [tcp_option::ID_NOOP] instead.
 pub const TCP_OPTION_ID_NOP: u8 = 1;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_MAXIMUM_SEGMENT_SIZE instead"
 )]
+/// Deprecated please use [tcp_option::ID_MAXIMUM_SEGMENT_SIZE] instead.
 pub const TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_WINDOW_SCALE instead"
 )]
+/// Deprecated please use [tcp_option::ID_WINDOW_SCALE] instead.
 pub const TCP_OPTION_ID_WINDOW_SCALE: u8 = 3;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_SELECTIVE_ACK_PERMITTED instead"
 )]
+/// Deprecated please use [tcp_option::ID_SELECTIVE_ACK_PERMITTED] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_SELECTIVE_ACK instead"
 )]
+/// Deprecated please use [tcp_option::ID_SELECTIVE_ACK] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
+
 #[deprecated(
     since = "0.10.0",
     note = "Please use tcp_option::ID_TIMESTAMP instead"
 )]
+/// Deprecated please use [tcp_option::ID_TIMESTAMP] instead.
 pub const TCP_OPTION_ID_TIMESTAMP: u8 = 8;
 
 /// Module containing the constants for tcp options (id number & sizes).
 pub mod tcp_option {
     /// `u8` identifying the "end of options list" in the tcp option.
     pub const ID_END: u8 = 0;
-    /// `u8` identifying the "no operation" tcp option.
+    /// `u8` identifying a "no operation" tcp option.
     pub const ID_NOOP: u8 = 1;
-    /// `u8` identifying the start of an "maximum segment size" tcp option.
+    /// `u8` identifying a "maximum segment size" tcp option.
     pub const ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
-    /// `u8` identifying the start of an "window scaling" tcp option.
+    /// `u8` identifying a "window scaling" tcp option.
     pub const ID_WINDOW_SCALE: u8 = 3;
-    /// `u8` identifying the start of an "selective acknowledgement permitted" tcp option.
+    /// `u8` identifying a "selective acknowledgement permitted" tcp option.
     pub const ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
-    /// `u8` identifying the start of an "selective acknowledgement" tcp option.
+    /// `u8` identifying a "selective acknowledgement" tcp option.
     pub const ID_SELECTIVE_ACK: u8 = 5;
-    /// `u8` identifying the start of an "timestamp and echo of previous timestamp" tcp option.
+    /// `u8` identifying a "timestamp and echo of previous timestamp" tcp option.
     pub const ID_TIMESTAMP: u8 = 8;
 }
 
@@ -1012,7 +1046,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                 },
                 ID_NOOP => {
                     self.options = &self.options[1..];
-                    Some(Ok(Nop))
+                    Some(Ok(Noop))
                 },
                 ID_MAXIMUM_SEGMENT_SIZE => {
                     match expect_specific_size(4, self.options) {

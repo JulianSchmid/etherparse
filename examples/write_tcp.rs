@@ -23,7 +23,7 @@ fn main() {
 
     //tcp header options
     .options(&[
-        TcpOptionElement::Nop,
+        TcpOptionElement::Noop,
         TcpOptionElement::MaximumSegmentSize(1234)
     ]).unwrap();
 

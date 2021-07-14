@@ -805,7 +805,7 @@ fn tcp_options() {
     let mut serialized = Vec::new();
 
     use crate::TcpOptionElement::*;
-    let options = vec![MaximumSegmentSize(1234), Nop];
+    let options = vec![MaximumSegmentSize(1234), Noop];
 
     PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
         .ipv4([13,14,15,16], [17,18,19,20], 21)
@@ -819,7 +819,7 @@ fn tcp_options() {
     let decoded = PacketHeaders::from_ethernet_slice(&serialized[..]).unwrap();
     let dec_options: Vec<Result<TcpOptionElement, TcpOptionReadError>> = decoded.transport.unwrap().tcp().unwrap().options_iterator().collect();
     assert_eq!(
-        &[Ok(MaximumSegmentSize(1234)), Ok(Nop)],
+        &[Ok(MaximumSegmentSize(1234)), Ok(Noop)],
         &dec_options[..]
     );
 }
