@@ -160,15 +160,16 @@ impl TcpHeader {
             //note to whoever: I would have prefered to use std::io::Cursor as it would be less error 
             //                 prone. But just in case that "no std" support is added later lets
             //                 not not rewrite it just yet with cursor.
+            use tcp_option::*;
             let mut i = 0;
             for element in options {
                 match element {
                     Nop => {
-                        self.options_buffer[i] = TCP_OPTION_ID_NOP;
+                        self.options_buffer[i] = ID_NOOP;
                         i += 1;
                     },
                     MaximumSegmentSize(value) => {
-                        self.options_buffer[i] = TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE;
+                        self.options_buffer[i] = ID_MAXIMUM_SEGMENT_SIZE;
                         i += 1;
                         self.options_buffer[i] = 4;
                         i += 1;
@@ -176,7 +177,7 @@ impl TcpHeader {
                         i += 2;
                     },
                     WindowScale(value) => {
-                        self.options_buffer[i] = TCP_OPTION_ID_WINDOW_SCALE;
+                        self.options_buffer[i] = ID_WINDOW_SCALE;
                         i += 1;
                         self.options_buffer[i] = 3;
                         i += 1;
@@ -184,13 +185,13 @@ impl TcpHeader {
                         i += 1;
                     },
                     SelectiveAcknowledgementPermitted => {
-                        self.options_buffer[i] = TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED;
+                        self.options_buffer[i] = ID_SELECTIVE_ACK_PERMITTED;
                         i += 1;
                         self.options_buffer[i] = 2;
                         i += 1;
                     },
                     SelectiveAcknowledgement(first, rest) => {
-                        self.options_buffer[i] = TCP_OPTION_ID_SELECTIVE_ACK;
+                        self.options_buffer[i] = ID_SELECTIVE_ACK;
                         i += 1;
 
                         //write the length
@@ -222,7 +223,7 @@ impl TcpHeader {
                         }
                     },
                     Timestamp(a, b) =>  {
-                        self.options_buffer[i] = TCP_OPTION_ID_TIMESTAMP;
+                        self.options_buffer[i] = ID_TIMESTAMP;
                         i += 1;
                         self.options_buffer[i] = 10;
                         i += 1;
@@ -549,7 +550,6 @@ impl Default for TcpHeader {
 //      and potential added error source.
 impl Debug for TcpHeader {
     fn fmt(&self, fmt: &mut Formatter) -> Result<(), std::fmt::Error> {
-        // TODO add printing of decoded options
         fmt.debug_struct("TcpHeader")
             .field("source_port", &self.source_port)
             .field("destination_port", &self.destination_port)
@@ -568,6 +568,7 @@ impl Debug for TcpHeader {
             .field("window_size", &self.window_size)
             .field("checksum", &self.checksum)
             .field("urgent_pointer", &self.urgent_pointer)
+            .field("options", &self.options_iterator())
             .finish()
     }
 }
@@ -914,13 +915,56 @@ pub struct TcpOptionsIterator<'a> {
     options: &'a [u8]
 }
 
+#[deprecated]
 pub const TCP_OPTION_ID_END: u8 = 0;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_NOOP instead"
+)]
 pub const TCP_OPTION_ID_NOP: u8 = 1;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_MAXIMUM_SEGMENT_SIZE instead"
+)]
 pub const TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_WINDOW_SCALE instead"
+)]
 pub const TCP_OPTION_ID_WINDOW_SCALE: u8 = 3;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_SELECTIVE_ACK_PERMITTED instead"
+)]
 pub const TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_SELECTIVE_ACK instead"
+)]
 pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use tcp_option::ID_TIMESTAMP instead"
+)]
 pub const TCP_OPTION_ID_TIMESTAMP: u8 = 8;
+
+/// Module containing the constants for tcp options (id number & sizes).
+pub mod tcp_option {
+    /// `u8` identifying the "end of options list" in the tcp option.
+    pub const ID_END: u8 = 0;
+    /// `u8` identifying the "no operation" tcp option.
+    pub const ID_NOOP: u8 = 1;
+    /// `u8` identifying the start of an "maximum segment size" tcp option.
+    pub const ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
+    /// `u8` identifying the start of an "window scaling" tcp option.
+    pub const ID_WINDOW_SCALE: u8 = 3;
+    /// `u8` identifying the start of an "selective acknowledgement permitted" tcp option.
+    pub const ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
+    /// `u8` identifying the start of an "selective acknowledgement" tcp option.
+    pub const ID_SELECTIVE_ACK: u8 = 5;
+    /// `u8` identifying the start of an "timestamp and echo of previous timestamp" tcp option.
+    pub const ID_TIMESTAMP: u8 = 8;
+}
 
 impl<'a> TcpOptionsIterator<'a> {
     ///Creates an options iterator from a slice containing encoded tcp options.
@@ -960,16 +1004,17 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
             None
         } else {
             //first determine the result
+            use tcp_option::*;
             let result = match self.options[0] {
                 //end
-                TCP_OPTION_ID_END => {
+                ID_END => {
                     None
                 },
-                TCP_OPTION_ID_NOP => {
+                ID_NOOP => {
                     self.options = &self.options[1..];
                     Some(Ok(Nop))
                 },
-                TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE => {
+                ID_MAXIMUM_SEGMENT_SIZE => {
                     match expect_specific_size(4, self.options) {
                         Err(value) => {
                             Some(Err(value))
@@ -981,7 +1026,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                TCP_OPTION_ID_WINDOW_SCALE => {
+                ID_WINDOW_SCALE => {
                     match expect_specific_size(3, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
@@ -991,7 +1036,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED => {
+                ID_SELECTIVE_ACK_PERMITTED => {
                     match expect_specific_size(2, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
@@ -1000,7 +1045,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                TCP_OPTION_ID_SELECTIVE_ACK => {
+                ID_SELECTIVE_ACK => {
                     //check that the length field can be read
                     if self.options.len() < 2 {
                         Some(Err(UnexpectedEndOfSlice(self.options[0])))
@@ -1036,7 +1081,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                TCP_OPTION_ID_TIMESTAMP => {
+                ID_TIMESTAMP => {
                     match expect_specific_size(10, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
@@ -1081,15 +1126,7 @@ impl<'a> Debug for TcpOptionsIterator<'a> {
             match it {
                 Ok(e) => { list.entry(&e); },
                 Err(e) => {
-                    list.entry(&e);
-                    // if an error is encountered also print the unparsed raw bytes
-                    let cc = clone.clone();
-                    list.entry(
-                        &format_args!(
-                            "{:?}",
-                            cc.rest()
-                        )
-                    );
+                    list.entry(&Result::<(), TcpOptionReadError>::Err(e.clone()));
                 }
             }
         }

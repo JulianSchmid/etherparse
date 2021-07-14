@@ -8,6 +8,7 @@
 * Added support for authentifaction headers in IPv4 packets.
 * Corrected handling of fragmented packets. `InternetSlice::from_*` & `PacketHeaders::from_*` no longer try to decode packets that have been flaged as fragmented (IPv4 & IPv6).
 * Added support for parsing "IPv6 Fragment Headers" & "Authentification Headers"
+* `packet_filter` was marked as deprecated and will be removed in a future release. `packet_filter` was never especially well thought out, so I made the decision to remove it. If you still want to use it feel free to copy the source into your project https://github.com/JulianSchmid/etherparse/blob/0.9.0/src/packet_filter.rs directly.
 
 ### Fixed bugs:
 

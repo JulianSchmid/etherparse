@@ -1,5 +1,9 @@
 use super::*;
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum ElementFilter<T> {
     Any,
@@ -7,6 +11,10 @@ pub enum ElementFilter<T> {
     Some(T)
 }
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum LinkFilter {
     Ethernet2 {
@@ -15,6 +23,10 @@ pub enum LinkFilter {
     }
 }
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum VlanFilter {
     Single(Option<u16>),
@@ -24,6 +36,10 @@ pub enum VlanFilter {
     }
 }
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum IpFilter {
     Ipv4 {
@@ -36,6 +52,10 @@ pub enum IpFilter {
     }
 }
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum TransportFilter {
     Udp {
@@ -48,7 +68,12 @@ pub enum TransportFilter {
     }
 }
 
+#[deprecated(
+    since = "0.10.0",
+    note = "The module packet_filter will be removed."
+)]
 #[derive(Debug, Clone, Default, Eq, PartialEq)]
+#[allow(deprecated)]
 pub struct Filter {
     pub link: ElementFilter<LinkFilter>,
     pub vlan: ElementFilter<VlanFilter>,
@@ -56,13 +81,19 @@ pub struct Filter {
     pub transport: ElementFilter<TransportFilter>,
 }
 
+#[allow(deprecated)]
 impl<T> Default for ElementFilter<T> {
     fn default() -> ElementFilter<T> {
         ElementFilter::Any
     }
 }
 
+#[allow(deprecated)]
 impl LinkFilter {
+    #[deprecated(
+        since = "0.10.0",
+        note = "The module packet_filter will be removed."
+    )]
     pub fn applies_to_slice(&self, slice: &LinkSlice) -> bool {
         use crate::LinkSlice::*;
         match self {
@@ -82,7 +113,12 @@ impl LinkFilter {
     }
 }
 
+#[allow(deprecated)]
 impl VlanFilter {
+    #[deprecated(
+        since = "0.10.0",
+        note = "The module packet_filter will be removed."
+    )]
     pub fn applies_to_slice(&self, slice: &VlanSlice) -> bool {
         use crate::VlanSlice::*;
         match self {
@@ -115,7 +151,12 @@ impl VlanFilter {
     }
 }
 
+#[allow(deprecated)]
 impl IpFilter {
+    #[deprecated(
+        since = "0.10.0",
+        note = "The module packet_filter will be removed."
+    )]
     pub fn applies_to_slice(&self, slice: &InternetSlice) -> bool {
         use crate::InternetSlice::*;
         match self {
@@ -151,7 +192,12 @@ impl IpFilter {
     }
 }
 
+#[allow(deprecated)]
 impl TransportFilter {
+    #[deprecated(
+        since = "0.10.0",
+        note = "The module packet_filter will be removed."
+    )]
     pub fn applies_to_slice(&self, slice: &TransportSlice) -> bool {
         use crate::TransportSlice::*;
         match self {
@@ -193,8 +239,13 @@ impl TransportFilter {
     }
 }
 
+#[allow(deprecated)]
 impl Filter {
     ///Returns true if a given sliced network package fullfills all conditions of this filter.
+    #[deprecated(
+        since = "0.10.0",
+        note = "The module packet_filter will be removed."
+    )]
     pub fn applies_to_slice(&self, slice: &SlicedPacket) -> bool {
         //TODO link
          (match &self.link {

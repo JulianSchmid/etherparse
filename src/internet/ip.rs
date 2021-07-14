@@ -84,7 +84,10 @@ impl IpHeader {
 /// To avoid such confusions in the future the enum has been renamed
 /// to `IpNumber`, which also closer to the name
 /// "Assigned Internet Protocol Numbers" used on iana.org .
-#[deprecated]
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use the type IpNumber instead"
+)]
 pub type IpTrafficClass = IpNumber;
 
 /// Identifiers for the next_header field in ipv6 headers and protocol field in ipv4 headers.
