@@ -998,6 +998,18 @@ pub mod tcp_option {
     pub const KIND_SELECTIVE_ACK: u8 = 5;
     /// `u8` identifying a "timestamp and echo of previous timestamp" tcp option.
     pub const KIND_TIMESTAMP: u8 = 8;
+    /// Length in octets/bytes of the "end" tcp option (includes kind value).
+    pub const LEN_END: u8 = 1;
+    /// Length in octets/bytes of the "no operation" tcp option (includes kind value).
+    pub const LEN_NOOP: u8 = 1;
+    /// Length in octets/bytes of the "maximum segment size" tcp option (includes kind value).
+    pub const LEN_MAXIMUM_SEGMENT_SIZE: u8 = 4;
+    /// Length in octets/bytes of the "window scaling" tcp option (includes kind value).
+    pub const LEN_WINDOW_SCALE: u8 = 3;
+    /// Length in octets/bytes of the "selective acknowledgement permitted" tcp option (includes kind value).
+    pub const LEN_SELECTIVE_ACK_PERMITTED: u8 = 2;
+    /// Length in octets/bytes of the "timestamp and echo of previous timestamp" tcp option (includes kind value).
+    pub const LEN_TIMESTAMP: u8 = 10;
 }
 
 impl<'a> TcpOptionsIterator<'a> {
@@ -1049,7 +1061,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                     Some(Ok(Noop))
                 },
                 KIND_MAXIMUM_SEGMENT_SIZE => {
-                    match expect_specific_size(4, self.options) {
+                    match expect_specific_size(LEN_MAXIMUM_SEGMENT_SIZE, self.options) {
                         Err(value) => {
                             Some(Err(value))
                         },
@@ -1061,7 +1073,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                     }
                 },
                 KIND_WINDOW_SCALE => {
-                    match expect_specific_size(3, self.options) {
+                    match expect_specific_size(LEN_WINDOW_SCALE, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
                             let value = self.options[2];
@@ -1071,7 +1083,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                     }
                 },
                 KIND_SELECTIVE_ACK_PERMITTED => {
-                    match expect_specific_size(2, self.options) {
+                    match expect_specific_size(LEN_SELECTIVE_ACK_PERMITTED, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
                             self.options = &self.options[2..];
@@ -1116,7 +1128,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                     }
                 },
                 KIND_TIMESTAMP => {
-                    match expect_specific_size(10, self.options) {
+                    match expect_specific_size(LEN_TIMESTAMP, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
                             let t = Timestamp(
