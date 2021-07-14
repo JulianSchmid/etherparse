@@ -165,11 +165,11 @@ impl TcpHeader {
             for element in options {
                 match element {
                     Noop => {
-                        self.options_buffer[i] = ID_NOOP;
+                        self.options_buffer[i] = KIND_NOOP;
                         i += 1;
                     },
                     MaximumSegmentSize(value) => {
-                        self.options_buffer[i] = ID_MAXIMUM_SEGMENT_SIZE;
+                        self.options_buffer[i] = KIND_MAXIMUM_SEGMENT_SIZE;
                         i += 1;
                         self.options_buffer[i] = 4;
                         i += 1;
@@ -177,7 +177,7 @@ impl TcpHeader {
                         i += 2;
                     },
                     WindowScale(value) => {
-                        self.options_buffer[i] = ID_WINDOW_SCALE;
+                        self.options_buffer[i] = KIND_WINDOW_SCALE;
                         i += 1;
                         self.options_buffer[i] = 3;
                         i += 1;
@@ -185,13 +185,13 @@ impl TcpHeader {
                         i += 1;
                     },
                     SelectiveAcknowledgementPermitted => {
-                        self.options_buffer[i] = ID_SELECTIVE_ACK_PERMITTED;
+                        self.options_buffer[i] = KIND_SELECTIVE_ACK_PERMITTED;
                         i += 1;
                         self.options_buffer[i] = 2;
                         i += 1;
                     },
                     SelectiveAcknowledgement(first, rest) => {
-                        self.options_buffer[i] = ID_SELECTIVE_ACK;
+                        self.options_buffer[i] = KIND_SELECTIVE_ACK;
                         i += 1;
 
                         //write the length
@@ -223,7 +223,7 @@ impl TcpHeader {
                         }
                     },
                     Timestamp(a, b) =>  {
-                        self.options_buffer[i] = ID_TIMESTAMP;
+                        self.options_buffer[i] = KIND_TIMESTAMP;
                         i += 1;
                         self.options_buffer[i] = 10;
                         i += 1;
@@ -935,69 +935,69 @@ pub struct TcpOptionsIterator<'a> {
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_END instead"
+    note = "Please use tcp_option::KIND_END instead"
 )]
-/// Deprecated please use [tcp_option::ID_END] instead.
+/// Deprecated please use [tcp_option::KIND_END] instead.
 pub const TCP_OPTION_ID_END: u8 = 0;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_NOOP instead"
+    note = "Please use tcp_option::KIND_NOOP instead"
 )]
-/// Deprecated please use [tcp_option::ID_NOOP] instead.
+/// Deprecated please use [tcp_option::KIND_NOOP] instead.
 pub const TCP_OPTION_ID_NOP: u8 = 1;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_MAXIMUM_SEGMENT_SIZE instead"
+    note = "Please use tcp_option::KIND_MAXIMUM_SEGMENT_SIZE instead"
 )]
-/// Deprecated please use [tcp_option::ID_MAXIMUM_SEGMENT_SIZE] instead.
+/// Deprecated please use [tcp_option::KIND_MAXIMUM_SEGMENT_SIZE] instead.
 pub const TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_WINDOW_SCALE instead"
+    note = "Please use tcp_option::KIND_WINDOW_SCALE instead"
 )]
-/// Deprecated please use [tcp_option::ID_WINDOW_SCALE] instead.
+/// Deprecated please use [tcp_option::KIND_WINDOW_SCALE] instead.
 pub const TCP_OPTION_ID_WINDOW_SCALE: u8 = 3;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_SELECTIVE_ACK_PERMITTED instead"
+    note = "Please use tcp_option::KIND_SELECTIVE_ACK_PERMITTED instead"
 )]
-/// Deprecated please use [tcp_option::ID_SELECTIVE_ACK_PERMITTED] instead.
+/// Deprecated please use [tcp_option::KIND_SELECTIVE_ACK_PERMITTED] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_SELECTIVE_ACK instead"
+    note = "Please use tcp_option::KIND_SELECTIVE_ACK instead"
 )]
-/// Deprecated please use [tcp_option::ID_SELECTIVE_ACK] instead.
+/// Deprecated please use [tcp_option::KIND_SELECTIVE_ACK] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
 
 #[deprecated(
     since = "0.10.0",
-    note = "Please use tcp_option::ID_TIMESTAMP instead"
+    note = "Please use tcp_option::KIND_TIMESTAMP instead"
 )]
-/// Deprecated please use [tcp_option::ID_TIMESTAMP] instead.
+/// Deprecated please use [tcp_option::KIND_TIMESTAMP] instead.
 pub const TCP_OPTION_ID_TIMESTAMP: u8 = 8;
 
 /// Module containing the constants for tcp options (id number & sizes).
 pub mod tcp_option {
     /// `u8` identifying the "end of options list" in the tcp option.
-    pub const ID_END: u8 = 0;
+    pub const KIND_END: u8 = 0;
     /// `u8` identifying a "no operation" tcp option.
-    pub const ID_NOOP: u8 = 1;
+    pub const KIND_NOOP: u8 = 1;
     /// `u8` identifying a "maximum segment size" tcp option.
-    pub const ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
+    pub const KIND_MAXIMUM_SEGMENT_SIZE: u8 = 2;
     /// `u8` identifying a "window scaling" tcp option.
-    pub const ID_WINDOW_SCALE: u8 = 3;
+    pub const KIND_WINDOW_SCALE: u8 = 3;
     /// `u8` identifying a "selective acknowledgement permitted" tcp option.
-    pub const ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
+    pub const KIND_SELECTIVE_ACK_PERMITTED: u8 = 4;
     /// `u8` identifying a "selective acknowledgement" tcp option.
-    pub const ID_SELECTIVE_ACK: u8 = 5;
+    pub const KIND_SELECTIVE_ACK: u8 = 5;
     /// `u8` identifying a "timestamp and echo of previous timestamp" tcp option.
-    pub const ID_TIMESTAMP: u8 = 8;
+    pub const KIND_TIMESTAMP: u8 = 8;
 }
 
 impl<'a> TcpOptionsIterator<'a> {
@@ -1041,14 +1041,14 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
             use tcp_option::*;
             let result = match self.options[0] {
                 //end
-                ID_END => {
+                KIND_END => {
                     None
                 },
-                ID_NOOP => {
+                KIND_NOOP => {
                     self.options = &self.options[1..];
                     Some(Ok(Noop))
                 },
-                ID_MAXIMUM_SEGMENT_SIZE => {
+                KIND_MAXIMUM_SEGMENT_SIZE => {
                     match expect_specific_size(4, self.options) {
                         Err(value) => {
                             Some(Err(value))
@@ -1060,7 +1060,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                ID_WINDOW_SCALE => {
+                KIND_WINDOW_SCALE => {
                     match expect_specific_size(3, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
@@ -1070,7 +1070,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                ID_SELECTIVE_ACK_PERMITTED => {
+                KIND_SELECTIVE_ACK_PERMITTED => {
                     match expect_specific_size(2, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
@@ -1079,7 +1079,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                ID_SELECTIVE_ACK => {
+                KIND_SELECTIVE_ACK => {
                     //check that the length field can be read
                     if self.options.len() < 2 {
                         Some(Err(UnexpectedEndOfSlice(self.options[0])))
@@ -1115,7 +1115,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                         }
                     }
                 },
-                ID_TIMESTAMP => {
+                KIND_TIMESTAMP => {
                     match expect_specific_size(10, self.options) {
                         Err(value) => Some(Err(value)),
                         _ => {
