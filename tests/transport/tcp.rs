@@ -372,8 +372,8 @@ fn debug()
             format!(
                 "{:?}",
                 TcpOptionsIterator::from_slice(&[
-                    ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
-                    ID_WINDOW_SCALE, 3, 0, ID_END,
+                    KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
+                    KIND_WINDOW_SCALE, 3, 0, KIND_END,
                 ])
             )
         );
@@ -382,8 +382,8 @@ fn debug()
             format!(
                 "{:?}",
                 TcpOptionsIterator::from_slice(&[
-                    ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
-                    ID_WINDOW_SCALE, 0, 0, 0,
+                    KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
+                    KIND_WINDOW_SCALE, 0, 0, 0,
                 ])
             )
         );
@@ -446,8 +446,8 @@ proptest! {
            &{
                 use tcp_option::*;
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_MAXIMUM_SEGMENT_SIZE, 4,
-                    0, 0, ID_NOOP, ID_END
+                    KIND_NOOP, KIND_NOOP, KIND_MAXIMUM_SEGMENT_SIZE, 4,
+                    0, 0, KIND_NOOP, KIND_END
                 ];
                 BigEndian::write_u16(&mut options[4..6], arg);
                 options
@@ -463,8 +463,8 @@ proptest! {
         use tcp_option::*;
         assert_eq!(write_options(&[Noop, Noop, WindowScale(arg), Noop]).options(), 
            &[
-                ID_NOOP, ID_NOOP, ID_WINDOW_SCALE, 3,
-                arg, ID_NOOP, ID_END, 0
+                KIND_NOOP, KIND_NOOP, KIND_WINDOW_SCALE, 3,
+                arg, KIND_NOOP, KIND_END, 0
             ]
         );
     }
@@ -476,8 +476,8 @@ fn set_options_selective_ack_perm() {
     use tcp_option::*;
     assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgementPermitted, Noop]).options(), 
        &[
-            ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK_PERMITTED, 2,
-            ID_NOOP, ID_END, 0, 0
+            KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK_PERMITTED, 2,
+            KIND_NOOP, KIND_END, 0, 0
         ]
     );
 }
@@ -491,10 +491,10 @@ proptest! {
         assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Noop]).options(), 
            &{
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 10,
+                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 10,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
-                    ID_NOOP, ID_END, 0, 0
+                    KIND_NOOP, KIND_END, 0, 0
                 ];
                 BigEndian::write_u32(&mut options[4..8], args[0]);
                 BigEndian::write_u32(&mut options[8..12], args[1]);
@@ -509,12 +509,12 @@ proptest! {
                                    Noop]).options(), 
            &{
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 18,
+                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 18,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
-                    ID_NOOP, ID_END, 0, 0
+                    KIND_NOOP, KIND_END, 0, 0
                 ];
                 BigEndian::write_u32(&mut options[4..8], args[0]);
                 BigEndian::write_u32(&mut options[8..12], args[1]);
@@ -532,14 +532,14 @@ proptest! {
                                    Noop]).options(), 
            &{
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 26,
+                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 26,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
-                    ID_NOOP, ID_END, 0, 0
+                    KIND_NOOP, KIND_END, 0, 0
                 ];
                 BigEndian::write_u32(&mut options[4..8], args[0]);
                 BigEndian::write_u32(&mut options[8..12], args[1]);
@@ -559,7 +559,7 @@ proptest! {
                                    Noop]).options(), 
            &{
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 34,
+                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 34,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
@@ -568,7 +568,7 @@ proptest! {
                     0, 0, 0, 0,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
-                    ID_NOOP, ID_END, 0, 0
+                    KIND_NOOP, KIND_END, 0, 0
                 ];
                 BigEndian::write_u32(&mut options[4..8], args[0]);
                 BigEndian::write_u32(&mut options[8..12], args[1]);
@@ -593,10 +593,10 @@ proptest! {
         assert_eq!(write_options(&[Noop, Noop, Timestamp(arg0, arg1), Noop]).options(), 
            &{
                 let mut options = [
-                    ID_NOOP, ID_NOOP, ID_TIMESTAMP, 10,
+                    KIND_NOOP, KIND_NOOP, KIND_TIMESTAMP, 10,
                     0, 0, 0, 0,
                     0, 0, 0, 0,
-                    ID_NOOP, ID_END, 0, 0
+                    KIND_NOOP, KIND_END, 0, 0
                 ];
                 BigEndian::write_u32(&mut options[4..8], arg0);
                 BigEndian::write_u32(&mut options[8..12], arg1);
@@ -1179,10 +1179,10 @@ fn options_iterator() {
     let header = {
         let mut header : TcpHeader = Default::default();
         header.set_options_raw(&[
-            ID_NOOP, ID_NOOP,
-            ID_MAXIMUM_SEGMENT_SIZE, 4,
+            KIND_NOOP, KIND_NOOP,
+            KIND_MAXIMUM_SEGMENT_SIZE, 4,
             0, 1,
-            ID_END, 0, 0, 0
+            KIND_END, 0, 0, 0
         ]).unwrap();
         header
     };
@@ -1241,28 +1241,28 @@ fn options_iterator_from_slice() {
 
     //nop & max segment size
     expect_elements(&[
-            ID_NOOP, 
-            ID_NOOP,
-            ID_MAXIMUM_SEGMENT_SIZE, 4, 
+            KIND_NOOP, 
+            KIND_NOOP,
+            KIND_MAXIMUM_SEGMENT_SIZE, 4, 
             0, 1,
-            ID_WINDOW_SCALE, 3, 2,
-            ID_SELECTIVE_ACK_PERMITTED, 2,
-            ID_SELECTIVE_ACK, 10,
+            KIND_WINDOW_SCALE, 3, 2,
+            KIND_SELECTIVE_ACK_PERMITTED, 2,
+            KIND_SELECTIVE_ACK, 10,
             0, 0, 0, 10,
             0, 0, 0, 11,
-            ID_SELECTIVE_ACK, 18, 
+            KIND_SELECTIVE_ACK, 18, 
             0, 0, 0, 12,
             0, 0, 0, 13,
             0, 0, 0, 14,
             0, 0, 0, 15,
-            ID_SELECTIVE_ACK, 26, 
+            KIND_SELECTIVE_ACK, 26, 
             0, 0, 0, 16,
             0, 0, 0, 17,
             0, 0, 0, 18,
             0, 0, 0, 19,
             0, 0, 0, 20,
             0, 0, 0, 21,
-            ID_SELECTIVE_ACK, 34, 
+            KIND_SELECTIVE_ACK, 34, 
             0, 0, 0, 22,
             0, 0, 0, 23,
             0, 0, 0, 24,
@@ -1271,10 +1271,10 @@ fn options_iterator_from_slice() {
             0, 0, 0, 27,
             0, 0, 0, 28,
             0, 0, 0, 29,
-            ID_TIMESTAMP, 10, 
+            KIND_TIMESTAMP, 10, 
             0, 0, 0, 30, 
             0, 0, 0, 31,
-            ID_END, 0, 0, 0, 0
+            KIND_END, 0, 0, 0, 0
         ],
         &[
             Noop,
@@ -1302,30 +1302,30 @@ fn options_iterator_unexpected_eos() {
         }
     }
     use tcp_option::*;
-    expect_unexpected_eos(&[ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
-    expect_unexpected_eos(&[ID_WINDOW_SCALE, 3, 0]);
-    expect_unexpected_eos(&[ID_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
-    expect_unexpected_eos(&[ID_SELECTIVE_ACK_PERMITTED, 2]);
-    expect_unexpected_eos(&[ID_SELECTIVE_ACK, 10, 0, 0, 0,
+    expect_unexpected_eos(&[KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+    expect_unexpected_eos(&[KIND_WINDOW_SCALE, 3, 0]);
+    expect_unexpected_eos(&[KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+    expect_unexpected_eos(&[KIND_SELECTIVE_ACK_PERMITTED, 2]);
+    expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 10, 0, 0, 0,
                             0, 0, 0, 0, 0]);
-    expect_unexpected_eos(&[ID_SELECTIVE_ACK, 18, 0, 0, 0,
+    expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 18, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0, 0, 0]);
-    expect_unexpected_eos(&[ID_SELECTIVE_ACK, 26, 0, 0, 0,
+    expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 26, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0,
                             0]);
-    expect_unexpected_eos(&[ID_SELECTIVE_ACK, 34, 0, 0, 0,
+    expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 34, 0, 0, 0,
                             0, 0, 0, 0, 0, //10
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0, //20
                             0, 0, 0, 0, 0,
                             0, 0, 0, 0, 0, //30
                             0, 0, 0, 0]);
-    expect_unexpected_eos(&[ID_TIMESTAMP, 10, 0, 0, 0,
+    expect_unexpected_eos(&[KIND_TIMESTAMP, 10, 0, 0, 0,
                             0, 0, 0, 0, 0]);
 }
 #[test]
@@ -1346,32 +1346,32 @@ fn options_iterator_unexpected_length() {
         assert_eq!(0, it.rest().len());
     }
     use tcp_option::*;
-    expect_unexpected_size(ID_MAXIMUM_SEGMENT_SIZE, 3);
-    expect_unexpected_size(ID_MAXIMUM_SEGMENT_SIZE, 5);
+    expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 3);
+    expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 5);
 
-    expect_unexpected_size(ID_WINDOW_SCALE, 2);
-    expect_unexpected_size(ID_WINDOW_SCALE, 4);
+    expect_unexpected_size(KIND_WINDOW_SCALE, 2);
+    expect_unexpected_size(KIND_WINDOW_SCALE, 4);
 
-    expect_unexpected_size(ID_MAXIMUM_SEGMENT_SIZE, 3);
-    expect_unexpected_size(ID_MAXIMUM_SEGMENT_SIZE, 5);
+    expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 3);
+    expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 5);
 
-    expect_unexpected_size(ID_SELECTIVE_ACK_PERMITTED, 1);
-    expect_unexpected_size(ID_SELECTIVE_ACK_PERMITTED, 3);
+    expect_unexpected_size(KIND_SELECTIVE_ACK_PERMITTED, 1);
+    expect_unexpected_size(KIND_SELECTIVE_ACK_PERMITTED, 3);
 
-    expect_unexpected_size(ID_SELECTIVE_ACK, 9);
-    expect_unexpected_size(ID_SELECTIVE_ACK, 11);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 9);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 11);
 
-    expect_unexpected_size(ID_SELECTIVE_ACK, 17);
-    expect_unexpected_size(ID_SELECTIVE_ACK, 19);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 17);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 19);
 
-    expect_unexpected_size(ID_SELECTIVE_ACK, 25);
-    expect_unexpected_size(ID_SELECTIVE_ACK, 27);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 25);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 27);
 
-    expect_unexpected_size(ID_SELECTIVE_ACK, 33);
-    expect_unexpected_size(ID_SELECTIVE_ACK, 35);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 33);
+    expect_unexpected_size(KIND_SELECTIVE_ACK, 35);
 
-    expect_unexpected_size(ID_TIMESTAMP, 9);
-    expect_unexpected_size(ID_TIMESTAMP, 11);
+    expect_unexpected_size(KIND_TIMESTAMP, 9);
+    expect_unexpected_size(KIND_TIMESTAMP, 11);
 }
 
 #[test]
@@ -1410,28 +1410,28 @@ fn options_iterator_debug() {
 
     //nop & max segment size
     expect_elements(&[
-            ID_NOOP, 
-            ID_NOOP,
-            ID_MAXIMUM_SEGMENT_SIZE, 4, 
+            KIND_NOOP, 
+            KIND_NOOP,
+            KIND_MAXIMUM_SEGMENT_SIZE, 4, 
             0, 1,
-            ID_WINDOW_SCALE, 3, 2,
-            ID_SELECTIVE_ACK_PERMITTED, 2,
-            ID_SELECTIVE_ACK, 10,
+            KIND_WINDOW_SCALE, 3, 2,
+            KIND_SELECTIVE_ACK_PERMITTED, 2,
+            KIND_SELECTIVE_ACK, 10,
             0, 0, 0, 10,
             0, 0, 0, 11,
-            ID_SELECTIVE_ACK, 18, 
+            KIND_SELECTIVE_ACK, 18, 
             0, 0, 0, 12,
             0, 0, 0, 13,
             0, 0, 0, 14,
             0, 0, 0, 15,
-            ID_SELECTIVE_ACK, 26, 
+            KIND_SELECTIVE_ACK, 26, 
             0, 0, 0, 16,
             0, 0, 0, 17,
             0, 0, 0, 18,
             0, 0, 0, 19,
             0, 0, 0, 20,
             0, 0, 0, 21,
-            ID_SELECTIVE_ACK, 34, 
+            KIND_SELECTIVE_ACK, 34, 
             0, 0, 0, 22,
             0, 0, 0, 23,
             0, 0, 0, 24,
@@ -1440,10 +1440,10 @@ fn options_iterator_debug() {
             0, 0, 0, 27,
             0, 0, 0, 28,
             0, 0, 0, 29,
-            ID_TIMESTAMP, 10, 
+            KIND_TIMESTAMP, 10, 
             0, 0, 0, 30, 
             0, 0, 0, 31,
-            ID_END, 0, 0, 0, 0
+            KIND_END, 0, 0, 0, 0
         ],
         &[
             Noop,
