@@ -73,7 +73,7 @@ impl IpHeader {
     }
 }
 
-/// This type has been deprecated please use `IpNumber` instead.
+/// This type has been deprecated please use [IpNumber] instead.
 ///
 /// IPv6 headers have a field called `traffic_class` which has nothing
 /// to do this enum. This unlucky coincedence got even the developer
@@ -82,7 +82,7 @@ impl IpHeader {
 /// `next_header` field.
 ///
 /// To avoid such confusions in the future the enum has been renamed
-/// to `IpNumber`, which also closer to the name
+/// to [IpNumber], which also closer to the name
 /// "Assigned Internet Protocol Numbers" used on iana.org .
 #[deprecated(
     since = "0.10.0",

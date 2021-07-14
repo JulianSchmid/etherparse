@@ -324,7 +324,7 @@ fn debug()
     // TcpOptionElement
     {
         use TcpOptionElement::*;
-        assert_eq!("Nop", format!("{:?}", Nop));
+        assert_eq!("Noop", format!("{:?}", Noop));
         assert_eq!(
             "MaximumSegmentSize(123)",
             format!("{:?}", MaximumSegmentSize(123))
@@ -442,7 +442,7 @@ proptest! {
     #[test]
     fn set_options_maximum_segment_size(arg in any::<u16>()) {
         use crate::TcpOptionElement::*;
-        assert_eq!(write_options(&[Nop, Nop, MaximumSegmentSize(arg), Nop]).options(), 
+        assert_eq!(write_options(&[Noop, Noop, MaximumSegmentSize(arg), Noop]).options(), 
            &{
                 use tcp_option::*;
                 let mut options = [
@@ -461,7 +461,7 @@ proptest! {
     fn set_options_window_scale(arg in any::<u8>()) {
         use crate::TcpOptionElement::*;
         use tcp_option::*;
-        assert_eq!(write_options(&[Nop, Nop, WindowScale(arg), Nop]).options(), 
+        assert_eq!(write_options(&[Noop, Noop, WindowScale(arg), Noop]).options(), 
            &[
                 ID_NOOP, ID_NOOP, ID_WINDOW_SCALE, 3,
                 arg, ID_NOOP, ID_END, 0
@@ -474,7 +474,7 @@ proptest! {
 fn set_options_selective_ack_perm() {
     use crate::TcpOptionElement::*;
     use tcp_option::*;
-    assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgementPermitted, Nop]).options(), 
+    assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgementPermitted, Noop]).options(), 
        &[
             ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK_PERMITTED, 2,
             ID_NOOP, ID_END, 0, 0
@@ -488,7 +488,7 @@ proptest! {
         use crate::TcpOptionElement::*;
         use tcp_option::*;
         //1
-        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Nop]).options(), 
+        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Noop]).options(), 
            &{
                 let mut options = [
                     ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 10,
@@ -503,10 +503,10 @@ proptest! {
         );
 
         //2
-        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
                                                                       [Some((args[2], args[3])), 
                                                                        None, None]), 
-                                   Nop]).options(), 
+                                   Noop]).options(), 
            &{
                 let mut options = [
                     ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 18,
@@ -525,11 +525,11 @@ proptest! {
         );
 
         //3
-        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
                                                                       [Some((args[2], args[3])), 
                                                                        Some((args[4], args[5])), 
                                                                        None]), 
-                                   Nop]).options(), 
+                                   Noop]).options(), 
            &{
                 let mut options = [
                     ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 26,
@@ -552,11 +552,11 @@ proptest! {
         );
 
         //4
-        assert_eq!(write_options(&[Nop, Nop, SelectiveAcknowledgement((args[0], args[1]), 
+        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
                                                                       [Some((args[2], args[3])), 
                                                                        Some((args[4], args[5])), 
                                                                        Some((args[6], args[7]))]), 
-                                   Nop]).options(), 
+                                   Noop]).options(), 
            &{
                 let mut options = [
                     ID_NOOP, ID_NOOP, ID_SELECTIVE_ACK, 34,
@@ -590,7 +590,7 @@ proptest! {
                                         arg1 in any::<u32>()) {
         use crate::TcpOptionElement::*;
         use tcp_option::*;
-        assert_eq!(write_options(&[Nop, Nop, Timestamp(arg0, arg1), Nop]).options(), 
+        assert_eq!(write_options(&[Noop, Noop, Timestamp(arg0, arg1), Noop]).options(), 
            &{
                 let mut options = [
                     ID_NOOP, ID_NOOP, ID_TIMESTAMP, 10,
@@ -612,7 +612,7 @@ fn set_option_padding() {
     tcp_header.set_options(&[MaximumSegmentSize(1400), // 4
                             SelectiveAcknowledgementPermitted, // 2
                             Timestamp(2661445915, 0), // 10
-                            Nop, // 1
+                            Noop, // 1
                             WindowScale(7)]).unwrap(); // 3 
                             // total 20
                             // + header 20 = 40 byte
@@ -629,27 +629,27 @@ fn set_options_not_enough_memory_error() {
                       SelectiveAcknowledgementPermitted, //+2 = 9
                       SelectiveAcknowledgement((3,4), [Some((5,6)), None, None]), // + 18 = 27
                       Timestamp(5, 6), // + 10 = 37
-                      Nop, Nop, Nop, Nop  // + 4
+                      Noop, Noop, Noop, Noop  // + 4
                     ]));
     //test with all fields filled of the selective ack
     assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
            TcpHeader::default().set_options(
-                &[Nop, // 1
+                &[Noop, // 1
                   SelectiveAcknowledgement((3,4), [Some((5,6)), Some((5,6)), Some((5,6))]), // + 34 = 35
                   MaximumSegmentSize(1), // + 4 = 39 
-                  Nop,
-                  Nop // + 2 = 41
+                  Noop,
+                  Noop // + 2 = 41
                 ]));
 
     //test with all fields filled of the selective ack
     assert_eq!(Err(TcpOptionWriteError::NotEnoughSpace(41)),
            TcpHeader::default().set_options(
-                &[Nop, // 1
+                &[Noop, // 1
                   SelectiveAcknowledgement((3,4), [None, None, None]), // + 10 = 11
                   Timestamp(1,2), // + 10 = 21
                   Timestamp(1,2), // + 10 = 31
                   MaximumSegmentSize(1), // + 4 = 35
-                  Nop, Nop, Nop, Nop, Nop, Nop // + 6 = 41
+                  Noop, Noop, Noop, Noop, Noop, Noop // + 6 = 41
                 ]));
 }
 
@@ -922,7 +922,7 @@ fn calc_header_checksum_ipv4() {
         tcp.cwr = true;
 
         tcp.set_options(&[
-            Nop, Nop, Nop, Nop,
+            Noop, Noop, Noop, Noop,
             Timestamp(0x4161008, 0x84161708)
         ]).unwrap();
 
@@ -980,7 +980,7 @@ fn calc_header_checksum_ipv4() {
         tcp.cwr = true;
 
         tcp.set_options(&[
-            Nop, Nop, Nop, Nop,
+            Noop, Noop, Noop, Noop,
             Timestamp(0x4161008, 0x84161708)
         ]).unwrap();
 
@@ -1042,7 +1042,7 @@ fn calc_header_checksum_ipv6() {
 
     use crate::TcpOptionElement::*;
     tcp.set_options(&[
-        Nop, Nop, Nop, Nop,
+        Noop, Noop, Noop, Noop,
         Timestamp(0x4161008, 0x84161708)
     ]).unwrap();
 
@@ -1191,8 +1191,8 @@ fn options_iterator() {
     {
         let mut it = header.options_iterator();
         let expected = [
-            Nop,
-            Nop,
+            Noop,
+            Noop,
             MaximumSegmentSize(1),
         ];
         for element in expected.iter() {
@@ -1210,8 +1210,8 @@ fn options_iterator() {
 
         let mut it = slice.options_iterator();
         let expected = [
-            Nop,
-            Nop,
+            Noop,
+            Noop,
             MaximumSegmentSize(1),
         ];
         for element in expected.iter() {
@@ -1277,8 +1277,8 @@ fn options_iterator_from_slice() {
             ID_END, 0, 0, 0, 0
         ],
         &[
-            Nop,
-            Nop,
+            Noop,
+            Noop,
             MaximumSegmentSize(1),
             WindowScale(2),
             SelectiveAcknowledgementPermitted,
@@ -1446,8 +1446,8 @@ fn options_iterator_debug() {
             ID_END, 0, 0, 0, 0
         ],
         &[
-            Nop,
-            Nop,
+            Noop,
+            Noop,
             MaximumSegmentSize(1),
             WindowScale(2),
             SelectiveAcknowledgementPermitted,

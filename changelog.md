@@ -15,7 +15,7 @@
 * The length field in authentification fields was assumed to be in 8 octet units (same as hop-by-hop options header & the routing header). This was incorrect, the length field is in 4 octet units and the code has been corrected to support this.
 * For the "Encapsulating Security Payload header" it was incorrectly assumed, that the basic build up is the same as for the other header extensions (with a next_header & header length field at the start of the header). Parsing of packets will now stop as soon as a "Encapsulating Security Payload header" is encountered.
 
-### Breaking API changes:
+### Breaking API changes:
 
 * Renamed `Ipv6ExtensionHeader` to `Ipv6OptionsHeader`
     * Reduced the list of supported headers as `Ipv6OptionsHeader` to:
@@ -35,4 +35,5 @@
 This change had been a long time coming. Originally I coupled the IPv6 header extensions to the ipv6 header under the assumption that they only exist in IPv6. But this was not correct, the authentication header and encapsulating security payload are present in IPv6 as well as IPv4. So seperating this form IPv6 made sense.
 
 * Ipv6ExtensionHeader was extended with a slice pointing to the data of the header
-
+* Moved `TCP_OPTION_ID_*` contants into a new module `tcp_options::KIND_*` (the old constants still present but marked as deprecated).
+* Renamed `TcpOptionElement::Nop` to `TcpOptionElement::Noop`
