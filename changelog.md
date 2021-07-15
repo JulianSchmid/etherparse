@@ -17,6 +17,7 @@
 
 ### Breaking API changes:
 
+* Renamed `TcpOptionElement::Nop` to `TcpOptionElement::Noop`
 * Renamed `Ipv6ExtensionHeader` to `Ipv6OptionsHeader`
     * Reduced the list of supported headers as `Ipv6OptionsHeader` to:
         * Hop-by-Hop Options Header
@@ -36,4 +37,4 @@ This change had been a long time coming. Originally I coupled the IPv6 header ex
 
 * Ipv6ExtensionHeader was extended with a slice pointing to the data of the header
 * Moved `TCP_OPTION_ID_*` contants into a new module `tcp_options::KIND_*` (the old constants still present but marked as deprecated).
-* Renamed `TcpOptionElement::Nop` to `TcpOptionElement::Noop`
+* Return type of `Ethernet2HeaderSlice::{destination, source}`  changed to `[u8;6]` (previously `&'a [u8]`)
