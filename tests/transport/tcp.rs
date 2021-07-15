@@ -230,6 +230,14 @@ fn eq()
         let value = NotEnoughSpace(123);
         assert_eq!(value, value.clone());
     }
+    // TcpOptionsIterator
+    {
+        use tcp_option::*;
+        let it = TcpOptionsIterator::from_slice(&[
+            KIND_END
+        ]);
+        assert_eq!(it, it.clone());
+    }
 }
 
 #[test]
