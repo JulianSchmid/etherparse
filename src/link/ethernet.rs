@@ -143,13 +143,15 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     }
 
     ///Read the destination mac address
-    pub fn destination(&self) -> &'a [u8] {
-        &self.slice[..6]
+    pub fn destination(&self) -> [u8;6] {
+        let d = &self.slice[..6];
+        [d[0], d[1], d[2], d[3], d[4], d[5]]
     }
 
     ///Read the source mac address
-    pub fn source(&self) -> &'a [u8] {
-        &self.slice[6..12]
+    pub fn source(&self) -> [u8;6] {
+        let s = &self.slice[6..12];
+        [s[0], s[1], s[2], s[3], s[4], s[5]]
     }
 
     ///Read the ether_type field of the header (in system native byte order).
@@ -160,16 +162,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     ///Decode all the fields and copy the results to a Ipv4Header struct
     pub fn to_header(&self) -> Ethernet2Header {
         Ethernet2Header {
-            source: {
-                let mut result: [u8;6] = Default::default();
-                result.copy_from_slice(self.source());
-                result
-            },
-            destination: {
-                let mut result: [u8;6] = Default::default();
-                result.copy_from_slice(self.destination());
-                result
-            },
+            source: self.source(),
+            destination: self.destination(),
             ether_type: self.ether_type()
         }
     }
