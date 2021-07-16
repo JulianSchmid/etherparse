@@ -7,7 +7,9 @@ use std::fmt::{Debug, Formatter};
 /// IP Authentication Header (rfc4302)
 #[derive(Clone)]
 pub struct IpAuthenticationHeader {
-    /// Type of content after this header (internet protocol number)
+    /// IP protocol number specifying the next header or transport layer protocol.
+    ///
+    /// See [IpNumber] or [ip_number] for a definition of the known values.
     pub next_header: u8,
     /// Security Parameters Index
     pub spi: u32,
@@ -199,7 +201,9 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         self.slice
     }
 
-    /// Returns the id of the next header (see IpTrafficClass for a definition of all ids).
+    /// Returns the IP protocol number of the next header or transport layer protocol.
+    ///
+    /// See [IpNumber] or [ip_number] for a definition of the known values.
     pub fn next_header(&self) -> u8 {
         self.slice[0]
     }

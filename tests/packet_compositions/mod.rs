@@ -304,7 +304,7 @@ impl ComponentTest {
             let mut test = self.clone();
             test.ip = Some(IpTest::Version4({
                 let mut header = ip.clone();
-                header.protocol = IpTrafficClass::Udp as u8;
+                header.protocol = IpNumber::Udp as u8;
                 header
             }));
             test.run_udp(udp);
@@ -314,7 +314,7 @@ impl ComponentTest {
             let mut test = self.clone();
             test.ip = Some(IpTest::Version4({
                 let mut header = ip.clone();
-                header.protocol = IpTrafficClass::Tcp as u8;
+                header.protocol = IpNumber::Tcp as u8;
                 header
             }));
             test.run_tcp(tcp);
@@ -350,19 +350,19 @@ impl ComponentTest {
         //standalone & udp & extension headers
         setup(ip.next_header, &Vec::new()).run();
         setup(ip.next_header, ipv6_ext).run();
-        setup(IpTrafficClass::Udp as u8, &Vec::new()).run_udp(udp);
-        setup(IpTrafficClass::Udp as u8, ipv6_ext).run_udp(udp);
-        setup(IpTrafficClass::Tcp as u8, &Vec::new()).run_tcp(tcp);
-        setup(IpTrafficClass::Tcp as u8, ipv6_ext).run_tcp(tcp);
+        setup(IpNumber::Udp as u8, &Vec::new()).run_udp(udp);
+        setup(IpNumber::Udp as u8, ipv6_ext).run_udp(udp);
+        setup(IpNumber::Tcp as u8, &Vec::new()).run_tcp(tcp);
+        setup(IpNumber::Tcp as u8, ipv6_ext).run_tcp(tcp);
 
         //extensions
         const IPV6_EXT_IDS: [u8;6] = [
-            IpTrafficClass::IPv6HeaderHopByHop as u8,
-            IpTrafficClass::IPv6RouteHeader as u8,
-            IpTrafficClass::IPv6FragmentationHeader as u8,
-            IpTrafficClass::IPv6DestinationOptions as u8,
-            IpTrafficClass::AuthenticationHeader as u8,
-            IpTrafficClass::EncapsulatingSecurityPayload as u8
+            IpNumber::IPv6HeaderHopByHop as u8,
+            IpNumber::IPv6RouteHeader as u8,
+            IpNumber::IPv6FragmentationHeader as u8,
+            IpNumber::IPv6DestinationOptions as u8,
+            IpNumber::AuthenticationHeader as u8,
+            IpNumber::EncapsulatingSecurityPayload as u8
         ];
 
         //generate a too many ipv6 extensions error

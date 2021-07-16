@@ -6,7 +6,9 @@ use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
 ///IPv6 fragment header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6FragmentHeader {
-    /// Type of content after this header (protocol number)
+    /// IP protocol number specifying the next header or transport layer protocol.
+    ///
+    /// See [IpNumber] or [ip_number] for a definition of the known values.
     pub next_header: u8,
     /// Offset in 8 octets
     ///
@@ -135,13 +137,15 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
         }
     }
 
-    /// Returns the slice containing the ipv6 extension header
+    /// Returns the slice containing the ipv6 fragment header.
     #[inline]
     pub fn slice(&self) -> &'a[u8] {
         self.slice
     }
 
-    /// Returns the id of the next header (see IpTrafficClass for a definition of all ids).
+    /// Returns the IP protocol number of the next header.
+    ///
+    /// See [IpNumber] or [ip_number] for a definition of the known values.
     pub fn next_header(&self) -> u8 {
         self.slice[0]
     }
