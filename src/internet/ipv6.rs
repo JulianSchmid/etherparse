@@ -13,7 +13,9 @@ pub struct Ipv6Header {
     pub flow_label: u32,
     ///The length of the payload and extension headers in bytes (0 in case of jumbo payloads).
     pub payload_length: u16,
-    ///Specifies what the next header or transport layer protocol is (see IpTrafficClass for a definitions of ids).
+    /// IP protocol number specifying the next header or transport layer protocol.
+    ///
+    /// See [IpNumber] or [ip_number] for a definitions of ids.
     pub next_header: u8,
     ///The number of hops the packet can take before it is discarded.
     pub hop_limit: u8,
@@ -315,7 +317,10 @@ impl<'a> Ipv6HeaderSlice<'a, > {
         byteorder::BigEndian::read_u16(&self.slice[4..6])
     }
 
-    ///Read the "next header" field from the slice. The next header value specifies what the next header or transport layer protocol is (see IpTrafficClass for a definitions of ids).
+    /// Read the "next header" field from the slice.
+    ///
+    /// The next header value specifies what the next header or transport
+    /// layer protocol is (see [IpNumber] or [ip_number] for a definitions of ids).
     pub fn next_header(&self) -> u8 {
         self.slice[6]
     }

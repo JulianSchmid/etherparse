@@ -275,9 +275,9 @@ prop_compose! {
     ) (
         next_header in proptest::strategy::Just(next_header),
         payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 6)
-    ) -> Ipv6GenericExtensionHeader
+    ) -> Ipv6RawExtensionHeader
     {
-        Ipv6GenericExtensionHeader::new_raw(
+        Ipv6RawExtensionHeader::new_raw(
             next_header,
             &payload[..]
         ).unwrap()
@@ -291,7 +291,7 @@ prop_compose! {
             len in any::<u8>()
         ) (
             result in ipv6_generic_extension_with(next_header, len)
-    ) -> Ipv6GenericExtensionHeader
+    ) -> Ipv6RawExtensionHeader
     {
         result
     }
@@ -300,13 +300,13 @@ prop_compose! {
 /*
 /// Contains everything to construct the supported ip extension headers
 pub enum IpExtensionComponent {
-    Ipv6HeaderHopByHop(Ipv6GenericExtensionHeader),
-    Ipv6Route(Ipv6GenericExtensionHeader),
-    Ipv6DestinationOptions(Ipv6GenericExtensionHeader),
+    Ipv6HeaderHopByHop(Ipv6RawExtensionHeader),
+    Ipv6Route(Ipv6RawExtensionHeader),
+    Ipv6DestinationOptions(Ipv6RawExtensionHeader),
 
-    MobilityHeader(Ipv6GenericExtensionHeader),
-    Hip(Ipv6GenericExtensionHeader),
-    Shim6(Ipv6GenericExtensionHeader),
+    MobilityHeader(Ipv6RawExtensionHeader),
+    Hip(Ipv6RawExtensionHeader),
+    Shim6(Ipv6RawExtensionHeader),
 
     AuthenticationHeader(IpAuthenticationHeader),
     Ipv6Fragment(Ipv6FragmentHeader),
@@ -315,16 +315,16 @@ pub enum IpExtensionComponent {
 impl IpExtensionComponent {
     pub fn traffic_class(&self) -> u8 {
         match self {
-            Ipv6HeaderHopByHop(_) => IpTrafficClass::IPv6HeaderHopByHop as u8,
-            Ipv6Route(_) => IpTrafficClass::IPv6RouteHeader as u8,
-            Ipv6DestinationOptions(_) => IpTrafficClass::IPv6DestinationOptions as u8,
+            Ipv6HeaderHopByHop(_) => IpNumber::IPv6HeaderHopByHop as u8,
+            Ipv6Route(_) => IpNumber::IPv6RouteHeader as u8,
+            Ipv6DestinationOptions(_) => IpNumber::IPv6DestinationOptions as u8,
 
-            MobilityHeader(_) => IpTrafficClass::MobilityHeader as u8,
-            Hip(_) => IpTrafficClass::Hip as u8,
-            Shim6(_) => IpTrafficClass::Shim6 as u8,
+            MobilityHeader(_) => IpNumber::MobilityHeader as u8,
+            Hip(_) => IpNumber::Hip as u8,
+            Shim6(_) => IpNumber::Shim6 as u8,
 
-            AuthenticationHeader(_) => IpTrafficClass::AuthenticationHeader as u8,
-            Ipv6Fragment(_) => IpTrafficClass::IPv6FragmentationHeader as u8,
+            AuthenticationHeader(_) => IpNumber::AuthenticationHeader as u8,
+            Ipv6Fragment(_) => IpNumber::IPv6FragmentationHeader as u8,
         }
     }
 }
@@ -386,18 +386,18 @@ prop_compose! {
 // (rest appended to the end)
 
 static IPV6_EXTENSION_HEADER_ORDER: &'static [u8] = &[
-    IpTrafficClass::IPv6HeaderHopByHop as u8,
-    IpTrafficClass::IPv6DestinationOptions as u8,
-    IpTrafficClass::IPv6RouteHeader as u8,
-    IpTrafficClass::IPv6FragmentationHeader as u8,
-    IpTrafficClass::AuthenticationHeader as u8,
-    IpTrafficClass::EncapsulatingSecurityPayload as u8,
-    IpTrafficClass::IPv6DestinationOptions as u8,
-    IpTrafficClass::MobilityHeader as u8,
-    IpTrafficClass::Hip as u8,
-    IpTrafficClass::Shim6 as u8,
-    IpTrafficClass::ExperimentalAndTesting0 as u8,
-    IpTrafficClass::ExperimentalAndTesting1 as u8
+    IpNumber::IPv6HeaderHopByHop as u8,
+    IpNumber::IPv6DestinationOptions as u8,
+    IpNumber::IPv6RouteHeader as u8,
+    IpNumber::IPv6FragmentationHeader as u8,
+    IpNumber::AuthenticationHeader as u8,
+    IpNumber::EncapsulatingSecurityPayload as u8,
+    IpNumber::IPv6DestinationOptions as u8,
+    IpNumber::MobilityHeader as u8,
+    IpNumber::Hip as u8,
+    IpNumber::Shim6 as u8,
+    IpNumber::ExperimentalAndTesting0 as u8,
+    IpNumber::ExperimentalAndTesting1 as u8
 ];
 
 prop_compose! {
@@ -420,17 +420,17 @@ prop_compose! {
     )
     (
         last_next_header in proptest::strategy::Just(last_next_header),
-        hdr0 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len0),
-        hdr1 in ipv6_extension_with(IpTrafficClass::IPv6RouteHeader as u8, len1),
-        hdr2 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len2),
-        hdr3 in ipv6_extension_with(IpTrafficClass::IPv6FragmentationHeader as u8, 0),
-        hdr4 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len4),
-        hdr5 in ipv6_extension_with(IpTrafficClass::IPv6DestinationOptions as u8, len5),
-        hdr6 in ipv6_extension_with(IpTrafficClass::MobilityHeader as u8, len6),
-        hdr7 in ipv6_extension_with(IpTrafficClass::Hip as u8, len7),
-        hdr8 in ipv6_extension_with(IpTrafficClass::Shim6 as u8, len8),
-        hdr9 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting0 as u8, len9),
-        hdr10 in ipv6_extension_with(IpTrafficClass::ExperimentalAndTesting1 as u8, len10),
+        hdr0 in ipv6_extension_with(IpNumber::IPv6DestinationOptions as u8, len0),
+        hdr1 in ipv6_extension_with(IpNumber::IPv6RouteHeader as u8, len1),
+        hdr2 in ipv6_extension_with(IpNumber::IPv6DestinationOptions as u8, len2),
+        hdr3 in ipv6_extension_with(IpNumber::IPv6FragmentationHeader as u8, 0),
+        hdr4 in ipv6_extension_with(IpNumber::IPv6DestinationOptions as u8, len4),
+        hdr5 in ipv6_extension_with(IpNumber::IPv6DestinationOptions as u8, len5),
+        hdr6 in ipv6_extension_with(IpNumber::MobilityHeader as u8, len6),
+        hdr7 in ipv6_extension_with(IpNumber::Hip as u8, len7),
+        hdr8 in ipv6_extension_with(IpNumber::Shim6 as u8, len8),
+        hdr9 in ipv6_extension_with(IpNumber::ExperimentalAndTesting0 as u8, len9),
+        hdr10 in ipv6_extension_with(IpNumber::ExperimentalAndTesting1 as u8, len10),
         hdr11 in ipv6_extension_with(last_next_header, len11),
         order in proptest::sample::subsequence((0..IPV6_EXTENSION_HEADER_ORDER.len()).collect::<Vec<usize>>(), 1..IPV6_EXTENSION_HEADER_ORDER.len())
     ) -> Vec<Ipv6ExtensionComponents>

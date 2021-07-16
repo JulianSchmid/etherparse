@@ -17,15 +17,15 @@ use super::super::*;
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6Extensions {
-    pub hop_by_hop_options: Option<Ipv6GenericExtensionHeader>,
-    pub destination_options: Option<Ipv6GenericExtensionHeader>,
-    pub routing: Option<Ipv6GenericExtensionHeader>,
+    pub hop_by_hop_options: Option<Ipv6RawExtensionHeader>,
+    pub destination_options: Option<Ipv6RawExtensionHeader>,
+    pub routing: Option<Ipv6RawExtensionHeader>,
     pub fragment: Option<Ipv6FragmentHeader>,
     pub auth: Option<IpAuthenticationHeader>,
-    pub final_destination_options: Option<Ipv6GenericExtensionHeader>
+    pub final_destination_options: Option<Ipv6RawExtensionHeader>
 }
 
-/// IPv6 extension headers present after the ip header.
+/// Slice containing the IPv6 extension headers present after the ip header.
 ///
 /// Currently supported:
 /// * Authentication Header
@@ -42,14 +42,14 @@ pub struct Ipv6Extensions {
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6ExtensionSlices<'a> {
-    pub hop_by_hop_options: Option<Ipv6GenericExtensionHeaderSlice<'a>>,
+    pub hop_by_hop_options: Option<Ipv6RawExtensionHeaderSlice<'a>>,
     /// Destination options encountered before a routing header.
-    pub destination_options: Option<Ipv6GenericExtensionHeaderSlice<'a>>,
-    pub routing: Option<Ipv6GenericExtensionHeaderSlice<'a>>,
+    pub destination_options: Option<Ipv6RawExtensionHeaderSlice<'a>>,
+    pub routing: Option<Ipv6RawExtensionHeaderSlice<'a>>,
     pub fragment: Option<Ipv6FragmentHeaderSlice<'a>>,
     pub auth: Option<IpAuthenticationHeaderSlice<'a>>,
     /// Destination options enountered after a routing header.
-    pub final_destination_options: Option<Ipv6GenericExtensionHeaderSlice<'a>>
+    pub final_destination_options: Option<Ipv6RawExtensionHeaderSlice<'a>>
 }
 
 impl Ipv6Extensions {
@@ -88,7 +88,7 @@ impl Ipv6Extensions {
     }
 
     /// Reads as many extension headers as possible from the reader and returns the found ipv6
-    /// extension headers, the next header ip number.
+    /// extension headers and the next header ip number.
     ///
     /// If no extension headers are present an unfilled struct and the original `first_header`
     /// ip number is returned.
@@ -125,7 +125,7 @@ impl Ipv6Extensions {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_protocol {
-            let header = Ipv6GenericExtensionHeader::read(reader)?;
+            let header = Ipv6RawExtensionHeader::read(reader)?;
             next_protocol = header.next_header;
             result.hop_by_hop_options = Some(header);   
         }
@@ -143,7 +143,7 @@ impl Ipv6Extensions {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_protocol));
                         } else {
-                            let header = Ipv6GenericExtensionHeader::read(reader)?;
+                            let header = Ipv6RawExtensionHeader::read(reader)?;
                             next_protocol = header.next_header;
                             result.final_destination_options = Some(header);
                         }
@@ -151,7 +151,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6GenericExtensionHeader::read(reader)?;
+                        let header = Ipv6RawExtensionHeader::read(reader)?;
                         next_protocol = header.next_header;
                         result.destination_options = Some(header);
                     }
@@ -161,7 +161,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6GenericExtensionHeader::read(reader)?;
+                        let header = Ipv6RawExtensionHeader::read(reader)?;
                         next_protocol = header.next_header;
                         result.routing = Some(header);
                     }
@@ -439,7 +439,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
+            let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice);   
@@ -458,7 +458,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_header, rest))
                         } else {
-                            let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
+                            let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
                             rest = &rest[slice.slice().len()..];
                             next_header = slice.next_header();
                             result.final_destination_options = Some(slice);
@@ -467,7 +467,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.destination_options = Some(slice);
@@ -478,7 +478,7 @@ impl<'a> Ipv6ExtensionSlices<'a> {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest))
                     } else {
-                        let slice = Ipv6GenericExtensionHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.routing = Some(slice);

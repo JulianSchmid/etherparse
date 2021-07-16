@@ -214,7 +214,7 @@ pub use crate::internet::ipv4::*;
 pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv6::*;
 pub use crate::internet::ipv6_extensions::*;
-pub use crate::internet::ipv6_generic_extension::*;
+pub use crate::internet::ipv6_raw_extension::*;
 pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
@@ -433,9 +433,9 @@ pub enum ValueError {
     Ipv4PayloadLengthTooLarge(usize),
     ///Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
-    ///Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size (`Ipv6GenericExtensionHeader::MAX_PAYLOAD_LEN`).
+    ///Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
     Ipv6ExtensionPayloadTooSmall(usize),
-    ///Error when a given payload size is bigger then what fits inside an ipv6 extended header size (`Ipv6GenericExtensionHeader::MAX_PAYLOAD_LEN`).
+    ///Error when a given payload size is bigger then what fits inside an ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
     Ipv6ExtensionPayloadTooLarge(usize),
     ///Error when a given payload length is not aligned to be a multiple of 8 octets when 6 is substracted and can not be represented by the header length field.
     Ipv6ExtensionPayloadLengthUnaligned(usize),
