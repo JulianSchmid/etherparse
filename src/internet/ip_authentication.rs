@@ -4,6 +4,13 @@ extern crate byteorder;
 use self::byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 
+/// Deprecated use [IpAuthenticationHeader] instead.
+#[deprecated(
+    since = "0.10.0",
+    note = "Please use the type IpAuthenticationHeader instead"
+)]
+pub type IPv6AuthenticationHeader = IpAuthenticationHeader;
+
 /// IP Authentication Header (rfc4302)
 #[derive(Clone)]
 pub struct IpAuthenticationHeader {

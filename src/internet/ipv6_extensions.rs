@@ -41,7 +41,7 @@ pub struct Ipv6Extensions {
 /// * IP Mobility
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct Ipv6ExtensionSlices<'a> {
+pub struct Ipv6ExtensionsSlice<'a> {
     pub hop_by_hop_options: Option<Ipv6RawExtensionHeaderSlice<'a>>,
     /// Destination options encountered before a routing header.
     pub destination_options: Option<Ipv6RawExtensionHeaderSlice<'a>>,
@@ -82,7 +82,7 @@ impl Ipv6Extensions {
     /// the hop by hop header is required to be located directly after the IPv6 header according 
     /// to RFC 8200.
     pub fn read_from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv6Extensions, u8, &[u8]), ReadError> {
-        Ipv6ExtensionSlices::from_slice(start_protocol, slice).map(
+        Ipv6ExtensionsSlice::from_slice(start_protocol, slice).map(
             |v| (v.0.to_header(), v.1, v.2)
         )
     }
@@ -401,7 +401,7 @@ impl Ipv6Extensions {
     }
 }
 
-impl<'a> Ipv6ExtensionSlices<'a> {
+impl<'a> Ipv6ExtensionsSlice<'a> {
     /// Reads as many extension headers as possible from the slice and returns the found 
     /// ipv6 extension header slices, the next header ip number and the slice that should
     /// contain the content of the next header as well as the rest of the packet.
@@ -429,8 +429,8 @@ impl<'a> Ipv6ExtensionSlices<'a> {
     /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
     /// the hop by hop header is required to be located directly after the IPv6 header according 
     /// to RFC 8200.
-    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv6ExtensionSlices, u8, &'a[u8]), ReadError> {
-        let mut result: Ipv6ExtensionSlices = Default::default();
+    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv6ExtensionsSlice, u8, &'a[u8]), ReadError> {
+        let mut result: Ipv6ExtensionsSlice = Default::default();
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
 

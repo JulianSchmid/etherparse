@@ -18,19 +18,18 @@
 ### Breaking API changes:
 
 * Renamed `TcpOptionElement::Nop` to `TcpOptionElement::Noop`
-* Renamed `Ipv6ExtensionHeader` to `Ipv6OptionsHeader`
-    * Reduced the list of supported headers as `Ipv6OptionsHeader` to:
-        * Hop-by-Hop Options Header
-        * Routing Header
-        * Destination Options Header
-        * Mobility Header
-        * Host Identity Protocol
-        * Shim6 Header
-* Renamed `Ipv6ExtensionHeaderSlice` to `Ipv6OptionsHeaderSlice`
-* Renamed `IPv6AuthenticationHeader` to `AuthenticationHeader`
-* Renamed `IPv6EncapSecurityPayload` to `EncapsulatingSecurityPayload`
-* Renamed `ReadError` values:
-  * Renamed `VlanDoubleTaggingUnexpectedOuterTpid` to `DoubleVlanOuterNonVlanEtherType`
+* Renamed `Ipv6ExtensionHeader` to `Ipv6RawExtensionHeader`
+* Renamed `Ipv6ExtensionHeaderSlice` to `Ipv6RawExtensionHeaderSlice`
+* Reduced the list of supported headers as `Ipv6RawExtensionHeader` & `Ipv6RawExtensionHeaderSlice` to:
+    * Hop-by-Hop Options Header
+    * Routing Header
+    * Destination Options Header
+    * Mobility Header
+    * Host Identity Protocol
+    * Shim6 Header
+* Renamed `IpTrafficClass::IPv6AuthenticationHeader` to `IpNumber::AuthenticationHeader`.
+* Renamed `IpTrafficClass::IPv6EncapSecurityPayload` to `IpNumber::EncapsulatingSecurityPayload`
+* Renamed `ReadError::VlanDoubleTaggingUnexpectedOuterTpid` to `ReadError::DoubleVlanOuterNonVlanEtherType`
 * Moved the extensions out of the Ipv6Header[Slice] and into the PacketHeaders & SlicedPacket struct.
 
 This change had been a long time coming. Originally I coupled the IPv6 header extensions to the ipv6 header under the assumption that they only exist in IPv6. But this was not correct, the authentication header and encapsulating security payload are present in IPv6 as well as IPv4. So seperating this form IPv6 made sense.
@@ -38,3 +37,10 @@ This change had been a long time coming. Originally I coupled the IPv6 header ex
 * Ipv6ExtensionHeader was extended with a slice pointing to the data of the header
 * Moved `TCP_OPTION_ID_*` contants into a new module `tcp_options::KIND_*` (the old constants still present but marked as deprecated).
 * Return type of `Ethernet2HeaderSlice::{destination, source}`  changed to `[u8;6]` (previously `&'a [u8]`)
+
+### API changes with deprecation warning:
+
+The following changes will cause a deprecation warning:
+
+* Renamed `IpTrafficClass` to `IpNumber`. Traffic class was just the wrong name and confusing as there is a traffic class field in IPv6 headers.
+
