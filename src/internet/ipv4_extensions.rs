@@ -20,7 +20,7 @@ pub struct Ipv4Extensions {
 /// Currently not supported:
 /// * Encapsulating Security Payload Header (ESP)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
-pub struct Ipv4ExtensionSlices<'a> {
+pub struct Ipv4ExtensionsSlice<'a> {
     pub auth: Option<IpAuthenticationHeaderSlice<'a>>,
 }
 
@@ -28,7 +28,7 @@ impl Ipv4Extensions {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
     pub fn read_from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
-        Ipv4ExtensionSlices::from_slice(start_protocol, slice).map(
+        Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(
             |v| (v.0.to_header(), v.1, v.2)
         )
     }
@@ -96,18 +96,18 @@ impl Ipv4Extensions {
     }
 }
 
-impl<'a> Ipv4ExtensionSlices<'a> {
+impl<'a> Ipv4ExtensionsSlice<'a> {
 
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
-    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv4ExtensionSlices, u8, &[u8]), ReadError> {
+    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), ReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthenticationHeaderSlice::from_slice(start_slice)?;
             let rest = &start_slice[header.slice().len()..];
             let next_header = header.next_header();
             Ok((
-                Ipv4ExtensionSlices{
+                Ipv4ExtensionsSlice{
                     auth: Some(header)
                 },
                 next_header,

@@ -29,9 +29,9 @@ impl<'a> VlanSlice<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
     /// The ipv6 header & the decoded extension headers.
-    Ipv4(Ipv4HeaderSlice<'a>, Ipv4ExtensionSlices<'a>),
+    Ipv4(Ipv4HeaderSlice<'a>, Ipv4ExtensionsSlice<'a>),
     /// The ipv6 header & the decoded extension headers.
-    Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionSlices<'a>),
+    Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionsSlice<'a>),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -287,7 +287,7 @@ impl<'a> CursorSlice<'a> {
         self.move_by_slice(ip_header.slice());
 
         // slice extensions
-        let (ip_ext, protocol, rest) = Ipv4ExtensionSlices::from_slice(ip_header.protocol(), self.slice)
+        let (ip_ext, protocol, rest) = Ipv4ExtensionsSlice::from_slice(ip_header.protocol(), self.slice)
                                        .map_err(|err| 
                                             err.add_slice_offset(self.offset)
                                        )?;
@@ -319,7 +319,7 @@ impl<'a> CursorSlice<'a> {
         self.move_by_slice(ip.slice());
 
         //extension headers
-        let (ip_ext, next_header, rest) = Ipv6ExtensionSlices::from_slice(ip.next_header(), self.slice)
+        let (ip_ext, next_header, rest) = Ipv6ExtensionsSlice::from_slice(ip.next_header(), self.slice)
                                           .map_err(|err| 
                                               err.add_slice_offset(self.offset)
                                           )?;
