@@ -67,18 +67,18 @@ fn new_and_set_icv() {
 
 proptest! {
     #[test]
-    fn from_slice_slice_smaller_8(len in 0..8usize) {
+    fn from_slice_slice_smaller_12(len in 0..12usize) {
         use ReadError::*;
 
-        let data = [0;8];
+        let data = [0;12];
         assert_matches!(
             IpAuthenticationHeaderSlice::from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(8))
+            Err(UnexpectedEndOfSlice(12))
         );
 
         assert_matches!(
             IpAuthenticationHeader::read_from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(8))
+            Err(UnexpectedEndOfSlice(12))
         );
     }
 }
@@ -131,6 +131,11 @@ proptest! {
             assert_eq!(actual.to_header(), expected);
             // clone and equal check for slice
             assert_eq!(actual.clone(), actual);
+        }
+        // from_slice_unchecked
+        unsafe {
+            let actual = IpAuthenticationHeaderSlice::from_slice_unchecked(&buffer);
+            assert_eq!(actual.slice(), &buffer[..buffer.len()-2]);
         }
         // read_from_slice
         {
@@ -232,6 +237,20 @@ proptest! {
                 input.sequence_number,
                 input.raw_icv()),
             &format!("{:?}", input)
+        );
+
+        let buffer = {
+            let mut buffer = Vec::with_capacity(input.header_len());
+            input.write(&mut buffer).unwrap();
+            buffer
+        };
+        let slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(
+            &format!(
+                "IpAuthenticationHeaderSlice {{ slice: {:?} }}",
+                slice.slice()
+            ),
+            &format!("{:?}", slice)
         );
     }
 }

@@ -1,5 +1,7 @@
 use super::super::*;
 
+use std::io::ErrorKind;
+
 #[test]
 fn header_new_raw_and_set_payload() {
     use ValueError::*;
@@ -78,7 +80,6 @@ fn header_new_raw_and_set_payload() {
 
 #[test]
 fn slice_from_slice() {
-
     // base test
     let data = {
         let mut data = [0;6*8];
@@ -105,12 +106,30 @@ fn slice_from_slice() {
 }
 
 #[test]
+fn slice_from_slice_unchecked() {
+    let data = {
+        let mut data = [0;6*8];
+        data[0] = 1; // next header type
+        data[1] = 4; // header length
+        data
+    };
+    let header = unsafe {
+        Ipv6RawExtensionHeaderSlice::from_slice_unchecked(&data)
+    };
+    assert_eq!(&data[..5*8], header.slice());
+}
+
+#[test]
 fn slice_from_slice_error() {
     // errors:
     // length smaller then 8
     {
         assert_matches!(
             Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]),
+            Err(ReadError::UnexpectedEndOfSlice(8))
+        );
+        assert_matches!(
+            Ipv6RawExtensionHeader::read_from_slice(&[0;7]),
             Err(ReadError::UnexpectedEndOfSlice(8))
         );
     }
@@ -124,6 +143,10 @@ fn slice_from_slice_error() {
         };
         assert_matches!(
             Ipv6RawExtensionHeaderSlice::from_slice(&data),
+            Err(ReadError::UnexpectedEndOfSlice(32))
+        );
+        assert_matches!(
+            Ipv6RawExtensionHeader::read_from_slice(&data),
             Err(ReadError::UnexpectedEndOfSlice(32))
         );
     }
@@ -232,6 +255,22 @@ fn read_errors() {
 
 proptest! {
     #[test]
+    fn write_errors(
+        input in ipv6_generic_extension_any()
+    ) {
+        // check that all possible "not enough data" cases trigger an error on write
+        for len in 0..input.header_len()-1 {
+            let mut writer = TestWriter::with_max_size(len);
+            assert_eq!(
+                ErrorKind::UnexpectedEof,
+                input.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+            );
+        }
+    }
+}
+
+proptest! {
+    #[test]
     fn header_len(input in ipv6_generic_extension_any()) {
         assert_eq!(input.header_len(), input.payload().len() + 2);
     }
@@ -245,6 +284,18 @@ proptest! {
             assert_eq!(
                 &format!("Ipv6RawExtensionHeader {{ next_header: {}, payload: {:?} }}", input.next_header, input.payload()),
                 &format!("{:?}", input)
+            );
+        }
+        {
+            let buffer = {
+                let mut buffer = Vec::with_capacity(input.header_len());
+                input.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                &format!("Ipv6RawExtensionHeaderSlice {{ slice: {:?} }}", slice.slice()),
+                &format!("{:?}", slice)
             );
         }
     }

@@ -1,9 +1,7 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
-
 use std::io;
+use std::slice::from_raw_parts;
 
 ///IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,22 +51,15 @@ impl SingleVlanHeader {
 
     ///Read a IEEE 802.1Q VLAN tagging header
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<SingleVlanHeader, io::Error> {
-        let (priority_code_point, drop_eligible_indicator, vlan_identifier) = {
-            let mut buffer: [u8;2] = [0;2];
+        let buffer = {
+            let mut buffer : [u8; SingleVlanHeader::SERIALIZED_SIZE] = [0;SingleVlanHeader::SERIALIZED_SIZE];
             reader.read_exact(&mut buffer)?;
-            let drop_eligible_indicator = 0 != (buffer[0] & 0x10);
-            let priority_code_point = buffer[0] >> 5;
-            //mask and read the vlan id
-            buffer[0] &= 0xf;
-            (priority_code_point, drop_eligible_indicator, BigEndian::read_u16(&buffer))
+            buffer
         };
 
-        Ok(SingleVlanHeader{
-            priority_code_point,
-            drop_eligible_indicator,
-            vlan_identifier,
-            ether_type: reader.read_u16::<BigEndian>()?
-        })
+        Ok(SingleVlanHeaderSlice{
+            slice: &buffer
+        }.to_header())
     }
 
     ///Write the IEEE 802.1Q VLAN tagging header
@@ -78,15 +69,14 @@ impl SingleVlanHeader {
         max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
         max_check_u16(self.vlan_identifier, 0xfff, VlanTagVlanId)?;
         {
-            let mut buffer: [u8;2] = [0;2];
-            BigEndian::write_u16(&mut buffer, self.vlan_identifier);
+            let mut buffer: [u8;2] = self.vlan_identifier.to_be_bytes();
             if self.drop_eligible_indicator {
                 buffer[0] |= 0x10;
             }
             buffer[0] |= self.priority_code_point << 5;
             writer.write_all(&buffer)?;
         }
-        writer.write_u16::<BigEndian>(self.ether_type)?;
+        writer.write_all(&self.ether_type.to_be_bytes())?;
         Ok(())
     }
 }
@@ -172,7 +162,15 @@ impl<'a> SingleVlanHeaderSlice<'a> {
 
         //all done
         Ok(SingleVlanHeaderSlice::<'a> {
-            slice: &slice[..SingleVlanHeader::SERIALIZED_SIZE]
+            // SAFETY:
+            // Safe as the slice length is checked beforehand to have
+            // at least the length of SingleVlanHeader::SERIALIZED_SIZE (4)
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    SingleVlanHeader::SERIALIZED_SIZE
+                )
+            }
         })
     }
 
@@ -183,24 +181,48 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     }
 
     ///Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
+    #[inline]
     pub fn priority_code_point(&self) -> u8 {
-        self.slice[0] >> 5
+        // SAFETY:
+        // Slice len checked in constructor to be at least 4.
+        unsafe {
+            *self.slice.get_unchecked(0) >> 5
+        }
     }
 
     ///Read the "drop_eligible_indicator" flag from the slice. Indicates that the frame may be dropped under the presence of congestion.
+    #[inline]
     pub fn drop_eligible_indicator(&self) -> bool {
-        0 != (self.slice[0] & 0x10)
+        // SAFETY:
+        // Slice len checked in constructor to be at least 4.
+        unsafe {
+            0 != (*self.slice.get_unchecked(0) & 0x10)
+        }
     }
 
     ///Reads the 12 bits "vland identifier" field from the slice.
+    #[inline]
     pub fn vlan_identifier(&self) -> u16 {
-        let buffer = [self.slice[0] & 0xf, self.slice[1]];
-        BigEndian::read_u16(&buffer)
+        u16::from_be_bytes(
+            // SAFETY:
+            // Slice len checked in constructor to be at least 4.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(0) & 0xf,
+                    *self.slice.get_unchecked(1)
+                ]
+            }
+        )
     }
 
     ///Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
+    #[inline]
     pub fn ether_type(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[2..4])
+        // SAFETY:
+        // Slice len checked in constructor to be at least 4.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(2))
+        }
     }
 
     ///Decode all the fields and copy the results to a SingleVlanHeader struct
@@ -231,7 +253,15 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
 
         //create slice
         let result = DoubleVlanHeaderSlice {
-            slice: &slice[..DoubleVlanHeader::SERIALIZED_SIZE]
+            // SAFETY:
+            // Safe as the slice length is checked is before to have
+            // at least the length of DoubleVlanHeader::SERIALIZED_SIZE (8)
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    DoubleVlanHeader::SERIALIZED_SIZE,
+                )
+            }
         };
 
         use crate::EtherType::*;
@@ -258,16 +288,36 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
     }
 
     ///Returns a slice with the outer vlan header
+    #[inline]
     pub fn outer(&self) -> SingleVlanHeaderSlice<'a> {
         SingleVlanHeaderSlice::<'a> {
-            slice: &self.slice[..SingleVlanHeader::SERIALIZED_SIZE]
+            // SAFETY:
+            // Safe as the constructor checks that the slice has the length
+            // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
+            // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
+            slice: unsafe {
+                from_raw_parts(
+                    self.slice.as_ptr(),
+                    SingleVlanHeader::SERIALIZED_SIZE
+                )
+            }
         }
     }
 
     ///Returns a slice with the inner vlan header.
+    #[inline]
     pub fn inner(&self) -> SingleVlanHeaderSlice<'a> {
         SingleVlanHeaderSlice::<'a> {
-            slice: &self.slice[SingleVlanHeader::SERIALIZED_SIZE..SingleVlanHeader::SERIALIZED_SIZE*2]
+            // SAFETY:
+            // Safe as the constructor checks that the slice has the length
+            // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
+            // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
+            slice: unsafe {
+                from_raw_parts(
+                    self.slice.as_ptr().add(SingleVlanHeader::SERIALIZED_SIZE),
+                    SingleVlanHeader::SERIALIZED_SIZE
+                )
+            }
         }
     }
 

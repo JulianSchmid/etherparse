@@ -71,13 +71,24 @@ impl UdpHeader {
     
     ///Calculates the upd header checksum based on a ipv4 header.
     fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> u16 {
-        self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source[0..2]) ) + //pseudo header
-                                   u64::from( BigEndian::read_u16(&source[2..4]) ) +
-                                   u64::from( BigEndian::read_u16(&destination[0..2]) ) +
-                                   u64::from( BigEndian::read_u16(&destination[2..4]) ) +
-                                   u64::from( protocol ) +
-                                   u64::from( self.length ), 
-                                   payload)
+        self.calc_checksum_post_ip(
+            //pseudo header
+            u64::from(
+                u16::from_be_bytes([source[0], source[1]])
+            ) +
+            u64::from(
+                u16::from_be_bytes([source[2], source[3]])
+            ) +
+            u64::from(
+                u16::from_be_bytes([destination[0], destination[1]])
+            ) +
+            u64::from(
+                u16::from_be_bytes([destination[2], destination[3]])
+            ) +
+            u64::from( protocol ) +
+            u64::from( self.length ), 
+            payload
+        )
     }
 
     ///Calculate an udp header given an ipv6 header and the payload
@@ -120,15 +131,24 @@ impl UdpHeader {
             let mut result = 0;
             for i in 0..8 {
                 let index = i*2;
-                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
+                result += u64::from(
+                    u16::from_be_bytes(
+                        [
+                            value[index],
+                            value[index + 1]
+                        ]
+                    )
+                );
             }
             result
         }
-        self.calc_checksum_post_ip(calc_sum(source) +
-                                   calc_sum(destination) +
-                                   ip_number::UDP as u64 +
-                                   u64::from( self.length ),
-                                   payload)
+        self.calc_checksum_post_ip(
+            calc_sum(source) +
+            calc_sum(destination) +
+            ip_number::UDP as u64 +
+            u64::from( self.length ),
+            payload
+        )
     }
 
     ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
@@ -139,11 +159,25 @@ impl UdpHeader {
                       u64::from( self.length );
 
         for i in 0..(payload.len()/2) {
-            sum += u64::from( BigEndian::read_u16(&payload[i*2..i*2 + 2]) );
+            sum += u64::from(
+                u16::from_be_bytes(
+                    [
+                        payload[i*2],
+                        payload[i*2 + 1]
+                    ]
+                )
+            );
         }
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]));
+            sum += u64::from(
+                u16::from_be_bytes(
+                    [
+                        *payload.last().unwrap(),
+                        0
+                    ]
+                )
+            );
         }
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +
@@ -213,26 +247,31 @@ impl<'a> UdpHeaderSlice<'a> {
     }
 
     ///Returns the slice containing the udp header
+    #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
     ///Reads the "udp source port" from the slice.
+    #[inline]
     pub fn source_port(&self) -> u16 {
         BigEndian::read_u16(&self.slice[..2])
     }
 
     ///Reads the "udp destination port" from the slice.
+    #[inline]
     pub fn destination_port(&self) -> u16 {
         BigEndian::read_u16(&self.slice[2..4])
     }
 
     ///Reads the "length" from the slice.
+    #[inline]
     pub fn length(&self) -> u16 {
         BigEndian::read_u16(&self.slice[4..6])
     }
 
     ///Reads the "checksum" from the slice.
+    #[inline]
     pub fn checksum(&self) -> u16 {
         BigEndian::read_u16(&self.slice[6..8])
     }

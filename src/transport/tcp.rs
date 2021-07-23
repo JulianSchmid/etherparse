@@ -1,8 +1,9 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
+use std::slice::from_raw_parts;
 
 ///The minimum size of the tcp header in bytes
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;
@@ -169,68 +170,76 @@ impl TcpHeader {
                         i += 1;
                     },
                     MaximumSegmentSize(value) => {
-                        self.options_buffer[i] = KIND_MAXIMUM_SEGMENT_SIZE;
-                        i += 1;
-                        self.options_buffer[i] = 4;
-                        i += 1;
-                        BigEndian::write_u16(&mut self.options_buffer[i..i + 2], *value);
-                        i += 2;
+                        // determine insertion area
+                        let insert = &mut self.options_buffer[i..i+4];
+                        i += 4;
+
+                        // write data
+                        insert[0] = KIND_MAXIMUM_SEGMENT_SIZE;
+                        insert[1] = 4;
+                        insert[2..4].copy_from_slice(&value.to_be_bytes());
                     },
                     WindowScale(value) => {
-                        self.options_buffer[i] = KIND_WINDOW_SCALE;
-                        i += 1;
-                        self.options_buffer[i] = 3;
-                        i += 1;
-                        self.options_buffer[i] = *value;
-                        i += 1;
+                        // determine insertion area
+                        let insert = &mut self.options_buffer[i..i+3];
+                        i += 3;
+
+                        // write data
+                        insert[0] = KIND_WINDOW_SCALE;
+                        insert[1] = 3;
+                        insert[2] = *value;
                     },
                     SelectiveAcknowledgementPermitted => {
-                        self.options_buffer[i] = KIND_SELECTIVE_ACK_PERMITTED;
-                        i += 1;
-                        self.options_buffer[i] = 2;
-                        i += 1;
+                        // determine insertion area
+                        let insert = &mut self.options_buffer[i..i+2];
+                        i += 2;
+
+                        // write data
+                        insert[0] = KIND_SELECTIVE_ACK_PERMITTED;
+                        insert[1] = 2;
                     },
                     SelectiveAcknowledgement(first, rest) => {
-                        self.options_buffer[i] = KIND_SELECTIVE_ACK;
-                        i += 1;
+                        //write guranteed data
+                        {
+                            let insert = &mut self.options_buffer[i..i + 10];
+                            i += 10;
 
-                        //write the length
-                        self.options_buffer[i] = rest.iter().fold(10, |acc, ref y| {
-                            match y {
-                                None => acc,
-                                Some(_) => acc + 8
-                            }
-                        });
-                        i += 1;
-
-                        //write first
-                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], first.0);
-                        i += 4;
-                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], first.1);
-                        i += 4;
-
+                            insert[0] = KIND_SELECTIVE_ACK;
+                            //write the length
+                            insert[1] = rest.iter().fold(10, |acc, ref y| {
+                                match y {
+                                    None => acc,
+                                    Some(_) => acc + 8
+                                }
+                            });
+                            // write first
+                            insert[2..6].copy_from_slice(&first.0.to_be_bytes());
+                            insert[6..10].copy_from_slice(&first.1.to_be_bytes());
+                        }
                         //write the rest
                         for v in rest {
                             match v {
                                 None => {},
                                 Some((a,b)) => {
-                                    BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *a);
-                                    i += 4;
-                                    BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *b);
-                                    i += 4;
+                                    // determine insertion area
+                                    let insert = &mut self.options_buffer[i..i + 8];
+                                    i += 8;
+
+                                    // insert
+                                    insert[0..4].copy_from_slice(&a.to_be_bytes());
+                                    insert[4..8].copy_from_slice(&b.to_be_bytes());
                                 }
                             }
                         }
                     },
                     Timestamp(a, b) =>  {
-                        self.options_buffer[i] = KIND_TIMESTAMP;
-                        i += 1;
-                        self.options_buffer[i] = 10;
-                        i += 1;
-                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *a);
-                        i += 4;
-                        BigEndian::write_u32(&mut self.options_buffer[i..i + 4], *b);
-                        i += 4;
+                        let insert = &mut self.options_buffer[i..i + 10];
+                        i += 10;
+
+                        insert[0] = KIND_TIMESTAMP;
+                        insert[1] = 10;
+                        insert[2..6].copy_from_slice(&a.to_be_bytes());
+                        insert[6..10].copy_from_slice(&b.to_be_bytes());
                     }
                 }
             }
@@ -400,14 +409,27 @@ impl TcpHeader {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        //calculate the checksum
-        Ok(self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source_ip[0..2]) ) + //pseudo header
-                                      u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
-                                      u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
-                                      u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
-                                      u64::from( ip_number::TCP ) +
-                                      tcp_length as u64,
-                                      payload))
+        // calculate the checksum
+        Ok(
+            self.calc_checksum_post_ip(
+                // pseudo header checksum value
+                u64::from(
+                    u16::from_be_bytes([source_ip[0], source_ip[1]]) 
+                ) + 
+                u64::from(
+                    u16::from_be_bytes([source_ip[2], source_ip[3]])
+                ) +
+                u64::from(
+                    u16::from_be_bytes([destination_ip[0], destination_ip[1]])
+                ) +
+                u64::from(
+                    u16::from_be_bytes([destination_ip[2], destination_ip[3]])
+                ) +
+                u64::from( ip_number::TCP ) +
+                tcp_length as u64,
+                payload
+            )
+        )
     }
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
@@ -425,22 +447,37 @@ impl TcpHeader {
         }
 
         fn calc_sum(value: [u8;16]) -> u64 {
-            let mut result = 0;
-            for i in 0..8 {
-                let index = i*2;
-                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
-            }
-            result
+            value[..]
+            .chunks_exact(2)
+            .map(|r| u64::from(
+                u16::from_be_bytes(
+                    [r[0], r[1]]
+                )
+            ))
+            .sum()
         }
         Ok(self.calc_checksum_post_ip(
             calc_sum(source) +
             calc_sum(destination) +
             u64::from( ip_number::TCP ) +
             {
-                let mut buffer: [u8;4] = Default::default();
-                BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
-                u64::from( BigEndian::read_u16(&buffer[0..2]) ) +
-                u64::from( BigEndian::read_u16(&buffer[2..4]) )
+                let buffer: [u8;4] = (tcp_length as u32).to_be_bytes();
+                u64::from(
+                    u16::from_be_bytes(
+                        [
+                            buffer[0],
+                            buffer[1]
+                        ]
+                    )
+                ) +
+                u64::from(
+                    u16::from_be_bytes(
+                        [
+                            buffer[2],
+                            buffer[3]
+                        ]
+                    )
+                )
             },
             payload))
     }
@@ -448,18 +485,18 @@ impl TcpHeader {
     ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
     fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
         fn calc_u32_checksum(value: u32) -> u64 {
-            let mut buffer: [u8;4] = [0;4];
-            BigEndian::write_u32(&mut buffer, value);
-            u64::from( BigEndian::read_u16(&buffer[..2]) ) + 
-            u64::from( BigEndian::read_u16(&buffer[2..]) )
+            let buffer: [u8;4] = value.to_be_bytes();
+            u64::from( u16::from_be_bytes([buffer[0], buffer[1]]) ) + 
+            u64::from( u16::from_be_bytes([buffer[2], buffer[3]]) )
         }
-        let mut sum = 
+
+        let mut sum = {
             ip_pseudo_header_sum +
             u64::from( self.source_port ) + //udp header start
             u64::from( self.destination_port ) +
             calc_u32_checksum(self.sequence_number) +
             calc_u32_checksum(self.acknowledgment_number) +
-            u64::from( BigEndian::read_u16(&[
+            u64::from( u16::from_be_bytes([
                 {
                     let value = (self._data_offset << 4) & 0xF0;
                     if self.ns {
@@ -498,22 +535,39 @@ impl TcpHeader {
                 }
             ]) ) +
             u64::from( self.window_size ) +
-            u64::from( self.urgent_pointer );
+            u64::from( self.urgent_pointer )
+        };
 
         //add the options
-        let options_len = self.options_len();
-        for i in RangeStep::new(0, options_len, 2) {
-            sum += u64::from( BigEndian::read_u16(&self.options_buffer[i..i + 2]) );
-        }
+        let two_bytes_to_checksum = |r: &[u8]| -> u64 {
+            u64::from(
+                u16::from_be_bytes([r[0], r[1]])
+            )
+        };
+
+        sum += self.options_buffer[..self.options_len()]
+            .chunks_exact(2)
+            .map(two_bytes_to_checksum)
+            .sum::<u64>();
 
         //payload
-        for i in RangeStep::new(0, payload.len()/2*2, 2) {
-            sum += u64::from( BigEndian::read_u16(&payload[i..i + 2]) );
-        }
+        sum += payload[..payload.len() - (payload.len() % 2)]
+            .chunks_exact(2)
+            .map(two_bytes_to_checksum)
+            .sum::<u64>();
+
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]) );
+            sum += u64::from(
+                u16::from_be_bytes(
+                    [
+                        *payload.last().unwrap(),
+                        0
+                    ]
+                )
+            );
         }
+
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +
                         ((sum >> 32) & 0xffff) +
@@ -614,8 +668,12 @@ impl<'a> TcpHeaderSlice<'a> {
             return Err(UnexpectedEndOfSlice(TCP_MINIMUM_HEADER_SIZE));
         }
 
-        //read data offset
-        let data_offset = (slice[12] & 0xf0) >> 4;
+        // SAFETY:
+        // Safe as it is checked at the start of the function that the
+        // length of the slice is at least TCP_MINIMUM_HEADER_SIZE (20).
+        let data_offset = unsafe {
+            (*slice.get_unchecked(12) & 0xf0) >> 4
+        };
         let len = data_offset as usize * 4;
 
         if data_offset < TCP_MINIMUM_DATA_OFFSET {
@@ -625,32 +683,56 @@ impl<'a> TcpHeaderSlice<'a> {
         } else {
             //done
             Ok(TcpHeaderSlice::<'a>{
-                slice: &slice[..len],
+                // SAFETY:
+                // Safe as there is a check above that the slice length
+                // is at least len.
+                slice: unsafe {
+                    from_raw_parts(slice.as_ptr(), len)
+                },
             })
         }
     }
     ///Returns the slice containing the tcp header
+    #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
     ///Read the destination port number.
+    #[inline]
     pub fn source_port(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[..2])
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr())
+        }
     }
 
     ///Read the destination port number.
+    #[inline]
     pub fn destination_port(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[2..4])
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(2))
+        }
     }
 
     ///Read the sequence number of the first data octet in this segment (except when SYN is present).
     ///
     ///If SYN is present the sequence number is the initial sequence number (ISN) 
     ///and the first data octet is ISN+1.
-    ///[copied from RFC 793, page 16]
+    ///\[copied from RFC 793, page 16\]
+    #[inline]
     pub fn sequence_number(&self) -> u32 {
-        BigEndian::read_u32(&self.slice[4..8])
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            get_unchecked_be_u32(self.slice.as_ptr().add(4))
+        }
     }
 
     ///Reads the acknowledgment number.
@@ -660,75 +742,165 @@ impl<'a> TcpHeaderSlice<'a> {
     ///receive.
     ///
     ///Once a connection is established this is always sent.
+    #[inline]
     pub fn acknowledgment_number(&self) -> u32 {
-        BigEndian::read_u32(&self.slice[8..12])
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            get_unchecked_be_u32(self.slice.as_ptr().add(8))
+        }
     }
 
     ///Read the number of 32 bit words in the TCP Header.
     ///
     ///This indicates where the data begins.  The TCP header (even one including options) is an
     ///integral number of 32 bits long.
+    #[inline]
     pub fn data_offset(&self) -> u8 {
-        (self.slice[12] & 0xf0) >> 4
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            (*self.slice.get_unchecked(12) & 0b1111_0000) >> 4
+        }
     }
 
     ///ECN-nonce - concealment protection (experimental: see RFC 3540)
+    #[inline]
     pub fn ns(&self) -> bool {
-        0 != (self.slice[12] & 1)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(12) & 0b0000_0001)
+        }
     }
 
     ///Read the fin flag (no more data from sender).
+    #[inline]
     pub fn fin(&self) -> bool {
-        0 != (self.slice[13] & 1)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0000_0001)
+        }
     }
 
     ///Reads the syn flag (synchronize sequence numbers).
+    #[inline]
     pub fn syn(&self) -> bool {
-        0 != (self.slice[13] & 2)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0000_0010)
+        }
     }
 
     ///Reads the rst flag (reset the connection).
+    #[inline]
     pub fn rst(&self) -> bool {
-        0 != (self.slice[13] & 4)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0000_0100)
+        }
     }
 
     ///Reads the psh flag (push function).
+    #[inline]
     pub fn psh(&self) -> bool {
-        0 != (self.slice[13] & 8)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0000_1000)
+        }
     }
 
     ///Reads the ack flag (acknowledgment field significant).
+    #[inline]
     pub fn ack(&self) -> bool {
-        0 != (self.slice[13] & 16)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0001_0000)
+        }
     }
 
     ///Reads the urg flag (Urgent Pointer field significant).
+    #[inline]
     pub fn urg(&self) -> bool {
-        0 != (self.slice[13] & 32)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0010_0000)
+        }
     }
 
     ///Read the ECN-Echo flag (RFC 3168).
+    #[inline]
     pub fn ece(&self) -> bool {
-        0 != (self.slice[13] & 64)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b0100_0000)
+        }
     }
 
-    ///Reads the cwr flag (Congestion Window Reduced). 
+    /// Reads the cwr flag (Congestion Window Reduced). 
     ///
-    ///This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
+    /// This flag is set by the sending host to indicate that it received a TCP
+    /// segment with the ECE flag set and had responded in congestion control 
+    /// mechanism (added to header by RFC 3168).
+    #[inline]
     pub fn cwr(&self) -> bool {
-        0 != (self.slice[13] & 128)
+        // SAFETY:
+        // Constructor checks that the slice has at least the length
+        // of 20.
+        unsafe {
+            0 != (*self.slice.get_unchecked(13) & 0b1000_0000)
+        }
     }
 
     ///The number of data octets beginning with the one indicated in the
     ///acknowledgment field which the sender of this segment is willing to
     ///accept.
+    #[inline]
     pub fn window_size(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[14..16])
+        u16::from_be_bytes(
+            // SAFETY:
+            // Constructor checks that the slice has at least the length
+            // of 20.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(14),
+                    *self.slice.get_unchecked(15),
+                ]
+            }
+        )
     }
 
     ///Checksum (16 bit one's complement) of the pseudo ip header, this tcp header and the payload.
+    #[inline]
     pub fn checksum(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[16..18])
+        u16::from_be_bytes(
+            // SAFETY:
+            // Constructor checks that the slice has at least the length
+            // of 20.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(16),
+                    *self.slice.get_unchecked(17),
+                ]
+            }
+        )
     }
 
     ///This field communicates the current value of the urgent pointer as a
@@ -737,16 +909,29 @@ impl<'a> TcpHeaderSlice<'a> {
     ///The urgent pointer points to the sequence number of the octet following
     ///the urgent data.  This field is only be interpreted in segments with
     ///the URG control bit set.
+    #[inline]
     pub fn urgent_pointer(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[18..20])
+        u16::from_be_bytes(
+            // SAFETY:
+            // Constructor checks that the slice has at least the length
+            // of 20.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(18),
+                    *self.slice.get_unchecked(19),
+                ]
+            }
+        )
     }
 
     ///Options of the header
+    #[inline]
     pub fn options(&self) -> &[u8] {
         &self.slice[TCP_MINIMUM_HEADER_SIZE..self.data_offset() as usize*4]
     }
 
     ///Returns an iterator that allows to iterate through all known TCP header options.
+    #[inline]
     pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator::from_slice(self.options())
     }
@@ -775,7 +960,7 @@ impl<'a> TcpHeaderSlice<'a> {
                 let options = self.options();
                 let mut result: [u8;40] = [0;40];
                 if !options.is_empty() {
-                    result[..options.len()].clone_from_slice(&options);
+                    result[..options.len()].clone_from_slice(options);
                 }
                 result
             }
@@ -797,13 +982,18 @@ impl<'a> TcpHeaderSlice<'a> {
         }
 
         //calculate the checksum
-        Ok(self.calc_checksum_post_ip(u64::from( BigEndian::read_u16(&source_ip[0..2]) ) + //pseudo header
-                                      u64::from( BigEndian::read_u16(&source_ip[2..4]) ) +
-                                      u64::from( BigEndian::read_u16(&destination_ip[0..2]) ) +
-                                      u64::from( BigEndian::read_u16(&destination_ip[2..4]) ) +
-                                      u64::from( ip_number::TCP ) +
-                                      tcp_length as u64,
-                                      payload))
+        Ok(
+            self.calc_checksum_post_ip(
+                // pseudo header checksum
+                u64::from( u16::from_be_bytes([source_ip[0], source_ip[1]]) ) +
+                u64::from( u16::from_be_bytes([source_ip[2], source_ip[3]]) ) +
+                u64::from( u16::from_be_bytes([destination_ip[0], destination_ip[1]]) ) +
+                u64::from( u16::from_be_bytes([destination_ip[2], destination_ip[3]]) ) +
+                u64::from( ip_number::TCP ) +
+                tcp_length as u64,
+                payload
+            )
+        )
     }
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
@@ -821,22 +1011,23 @@ impl<'a> TcpHeaderSlice<'a> {
         }
 
         fn calc_addr_sum(value: [u8;16]) -> u64 {
-            let mut result = 0;
-            for i in 0..8 {
-                let index = i*2;
-                result += u64::from( BigEndian::read_u16(&value[index..(index + 2)]) );
-            }
-            result
+            value[..]
+                .chunks_exact(2)
+                .map(|r| u64::from(
+                    u16::from_be_bytes(
+                        [r[0], r[1]]
+                    )
+                ))
+                .sum()
         }
         Ok(self.calc_checksum_post_ip(
             calc_addr_sum(source) +
             calc_addr_sum(destination) +
             u64::from( ip_number::TCP ) +
             {
-                let mut buffer: [u8;4] = Default::default();
-                BigEndian::write_u32(&mut buffer[..], tcp_length as u32);
-                u64::from( BigEndian::read_u16(&buffer[0..2]) ) +
-                u64::from( BigEndian::read_u16(&buffer[2..4]) )
+                let buffer: [u8;4] = (tcp_length as u32).to_be_bytes();
+                u64::from( u16::from_be_bytes([buffer[0], buffer[1]]) ) +
+                u64::from( u16::from_be_bytes([buffer[2], buffer[3]]) )
             },
             payload))
     }
@@ -846,21 +1037,40 @@ impl<'a> TcpHeaderSlice<'a> {
 
         let mut sum = ip_pseudo_header_sum;
 
+        let two_bytes_to_checksum = |r: &[u8]| -> u64 {
+            u64::from(
+                u16::from_be_bytes([r[0], r[1]])
+            )
+        };
+
         //until checksum
-        for i in RangeStep::new(0, 16, 2) {
-            sum += u64::from( BigEndian::read_u16(&self.slice[i..i + 2]) );
-        }
+        sum += self.slice[..16]
+            .chunks_exact(2)
+            .map(two_bytes_to_checksum)
+            .sum::<u64>();
+
         //after checksum
-        for i in RangeStep::new(18, self.slice.len(), 2) {
-            sum += u64::from( BigEndian::read_u16(&self.slice[i..i + 2]) );
-        }
+        sum += self.slice[18..self.slice.len()]
+            .chunks_exact(2)
+            .map(two_bytes_to_checksum)
+            .sum::<u64>();
+
         //payload
-        for i in RangeStep::new(0, payload.len()/2*2, 2) {
-            sum += u64::from( BigEndian::read_u16(&payload[i..i + 2]) );
-        }
+        sum += payload[..payload.len() - (payload.len() % 2)]
+            .chunks_exact(2)
+            .map(two_bytes_to_checksum)
+            .sum::<u64>();
+
         //pad the last byte with 0
         if payload.len() % 2 == 1 {
-            sum += u64::from( BigEndian::read_u16(&[*payload.last().unwrap(), 0]) );
+            sum += u64::from(
+                u16::from_be_bytes(
+                    [
+                        *payload.last().unwrap(),
+                        0
+                    ]
+                )
+            );
         }
         let carry_add = (sum & 0xffff) + 
                         ((sum >> 16) & 0xffff) +
@@ -905,16 +1115,40 @@ pub enum TcpOptionElement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionReadError {
     ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
-    UnexpectedEndOfSlice(u8),
+    UnexpectedEndOfSlice{ option_id: u8, expected_len: u8, actual_len: usize },
 
     ///Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
-    UnexpectedSize{option_id: u8, size: u8 },
+    UnexpectedSize{ option_id: u8, size: u8 },
 
     ///Returned if an unknown tcp header option is encountered.
     ///
     ///The first element is the identifier and the slice contains the rest of data left in the options.
     UnknownId(u8),
 }
+
+impl Error for TcpOptionReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl fmt::Display for TcpOptionReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TcpOptionReadError::*;
+        match self {
+            UnexpectedEndOfSlice{option_id, expected_len, actual_len} => {
+                write!(f, "TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", option_id, expected_len, actual_len)
+            },
+            UnexpectedSize{option_id, size} => {
+                write!(f, "TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", option_id, size)
+            },
+            UnknownId(id) => {
+                write!(f, "TcpOptionReadError: Unknown tcp option kind value {}.", id)
+            }
+        }
+    }
+}
+
 
 ///Errors that can occour when setting the options of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -925,6 +1159,23 @@ pub enum TcpOptionWriteError {
     ///the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
     ///part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself). 
     NotEnoughSpace(usize)
+}
+
+impl Error for TcpOptionWriteError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl fmt::Display for TcpOptionWriteError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use TcpOptionWriteError::*;
+        match self {
+            NotEnoughSpace(size) => {
+                write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", size)
+            },
+        }
+    }
 }
 
 ///Allows iterating over the options after a TCP header.
@@ -1035,7 +1286,13 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
         let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionReadError> {
             let id = slice[0];
             if slice.len() < expected_size as usize {
-                Err(UnexpectedEndOfSlice(id))
+                Err(
+                    UnexpectedEndOfSlice{
+                        option_id: id, 
+                        expected_len: expected_size, 
+                        actual_len: slice.len()
+                    },
+                )
             } else if slice[1] != expected_size {
                 Err(UnexpectedSize{
                     option_id: slice[0],
@@ -1066,7 +1323,12 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             Some(Err(value))
                         },
                         _ => {
-                            let value = BigEndian::read_u16(&self.options[2..4]);
+                            // SAFETY:
+                            // Safe as the slice size is checked beforehand to be at
+                            // least of size LEN_MAXIMUM_SEGMENT_SIZE (4).
+                            let value = unsafe {
+                                get_unchecked_be_u16(self.options.as_ptr().add(2))
+                            };
                             self.options = &self.options[4..];
                             Some(Ok(MaximumSegmentSize(value)))
                         }
@@ -1094,7 +1356,15 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                 KIND_SELECTIVE_ACK => {
                     //check that the length field can be read
                     if self.options.len() < 2 {
-                        Some(Err(UnexpectedEndOfSlice(self.options[0])))
+                        Some(
+                            Err(
+                                UnexpectedEndOfSlice {
+                                    option_id: self.options[0], 
+                                    expected_len: 2, 
+                                    actual_len: self.options.len()
+                                }
+                            )
+                        )
                     } else {
                         //check that the length is an allowed one for this option
                         let len = self.options[1];
@@ -1104,21 +1374,45 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                                 size: len 
                             }))
                         } else if self.options.len() < (len as usize) {
-                            Some(Err(UnexpectedEndOfSlice(self.options[0])))
+                            Some(
+                                Err(
+                                    UnexpectedEndOfSlice {
+                                        option_id: self.options[0], 
+                                        expected_len: len, 
+                                        actual_len: self.options.len()
+                                    }
+                                )
+                            )
                         } else {
                             let mut acks: [Option<(u32,u32)>;3] = [None;3];
-                            let first = (BigEndian::read_u32(&self.options[2..2 + 4]),
-                                         BigEndian::read_u32(&self.options[2 + 4..2 + 8]));
+                            // SAFETY:
+                            // This is safe as above the len is checked
+                            // to be at least 10 and the slice len is
+                            // checked to be at least len bytes.
+                            let first = unsafe {
+                                (
+                                    get_unchecked_be_u32(self.options.as_ptr().add(2)),
+                                    get_unchecked_be_u32(self.options.as_ptr().add(6)),
+                                )
+                            };
                             for (i, item) in acks.iter_mut()
                                                  .enumerate()
                                                  .take(3)
                             {
                                 let offset = 2 + 8 + (i*8);
-                                if offset < (len as usize) {
-                                    *item = Some((
-                                        BigEndian::read_u32(&self.options[offset..offset + 4]),
-                                        BigEndian::read_u32(&self.options[offset + 4..offset + 8]))
-                                    );
+                                // SAFETY:
+                                // len can only be 10, 18, 26 or 34
+                                // therefore if the offset is smaller then the
+                                // len, then at least 8 bytes can be read.
+                                unsafe {
+                                    if offset < (len as usize) {
+                                        *item = Some(
+                                            (
+                                                get_unchecked_be_u32(self.options.as_ptr().add(offset)),
+                                                get_unchecked_be_u32(self.options.as_ptr().add(offset + 4)),
+                                            )
+                                        );
+                                    }
                                 }
                             }
                             //iterate the options
@@ -1130,10 +1424,14 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                 KIND_TIMESTAMP => {
                     match expect_specific_size(LEN_TIMESTAMP, self.options) {
                         Err(value) => Some(Err(value)),
-                        _ => {
+                        
+                        _ => unsafe {
                             let t = Timestamp(
-                                BigEndian::read_u32(&self.options[2..6]),
-                                BigEndian::read_u32(&self.options[6..10])
+                                // SAFETY:
+                                // Safe as the len first gets checked to be equal
+                                // LEN_TIMESTAMP (10).
+                                get_unchecked_be_u32(self.options.as_ptr().add(2)),
+                                get_unchecked_be_u32(self.options.as_ptr().add(6)),
                             );
                             self.options = &self.options[10..];
                             Some(Ok(t))

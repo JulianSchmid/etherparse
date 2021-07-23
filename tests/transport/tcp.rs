@@ -221,7 +221,11 @@ fn eq()
     // TcpOptionReadError
     {
         use TcpOptionReadError::*;
-        let value = UnexpectedEndOfSlice(123);
+        let value = UnexpectedEndOfSlice{
+            option_id: 123,
+            expected_len: 5,
+            actual_len: 4,
+        };
         assert_eq!(value, value.clone());
     }
     // TcpOptionWriteError
@@ -360,8 +364,15 @@ fn debug()
     {
         use TcpOptionReadError::*;
         assert_eq!(
-            "UnexpectedEndOfSlice(0)",
-            format!("{:?}", UnexpectedEndOfSlice(0))
+            "UnexpectedEndOfSlice { option_id: 1, expected_len: 2, actual_len: 3 }",
+            format!(
+                "{:?}", 
+                UnexpectedEndOfSlice{
+                    option_id: 1,
+                    expected_len: 2,
+                    actual_len: 3 
+                }
+            )
         );
     }
     // TcpOptionWriteError
@@ -1303,7 +1314,31 @@ fn options_iterator_unexpected_eos() {
     fn expect_unexpected_eos(slice: &[u8]) {
         for i in 1..slice.len()-1 {
             let mut it = TcpOptionsIterator::from_slice(&slice[..i]);
-            assert_eq!(Some(Err(TcpOptionReadError::UnexpectedEndOfSlice(slice[0]))), it.next());
+            assert_eq!(
+                Some(
+                    Err(
+                        TcpOptionReadError::UnexpectedEndOfSlice{
+                            option_id: slice[0],
+                            expected_len: match slice[0] {
+                                KIND_MAXIMUM_SEGMENT_SIZE => 4,
+                                KIND_WINDOW_SCALE => 3,
+                                KIND_SELECTIVE_ACK_PERMITTED => 2,
+                                KIND_SELECTIVE_ACK => if i < 2 {
+                                    // the inial check only checks if there
+                                    // is enough data to read the length field
+                                    2
+                                } else {
+                                    slice[1]
+                                },
+                                KIND_TIMESTAMP => 10,
+                                _ => panic!("not part of the tests"),
+                            },
+                            actual_len: i
+                        }
+                    )
+                ),
+                it.next()
+            );
             //expect the iterator slice to be moved to the end
             assert_eq!(0, it.rest().len());
             assert_eq!(None, it.next());
@@ -1468,4 +1503,76 @@ fn options_iterator_debug() {
     );
 }
 
+proptest! {
+    #[test]
+    fn tcp_options_read_error_display(
+        arg_u8_0 in any::<u8>(),
+        arg_u8_1 in any::<u8>(),
+        arg_usize in any::<usize>()
+    ) {
+        use crate::TcpOptionReadError::*;
 
+        //UnexpectedEndOfSlice
+        assert_eq!(
+            &format!("TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", arg_u8_0, arg_u8_1, arg_usize),
+            &format!("{}", UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize})
+        );
+
+        //UnexpectedSize
+        assert_eq!(
+            &format!("TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", arg_u8_0, arg_u8_1),
+            &format!("{}", UnexpectedSize{ option_id: arg_u8_0, size: arg_u8_1 })
+        );
+
+        //UnknownId
+        assert_eq!(
+            &format!("TcpOptionReadError: Unknown tcp option kind value {}.", arg_u8_0),
+            &format!("{}", UnknownId(arg_u8_0))
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn tcp_options_read_error_source(
+        arg_u8_0 in any::<u8>(),
+        arg_u8_1 in any::<u8>(),
+        arg_usize in any::<usize>()
+    ) {
+        use std::error::Error;
+        use crate::TcpOptionReadError::*;
+
+        assert!(UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize}.source().is_none());
+        assert!(UnexpectedSize{ option_id: arg_u8_0, size: arg_u8_1 }.source().is_none());
+        assert!(UnknownId(arg_u8_0).source().is_none());
+    }
+}
+
+proptest! {
+    #[test]
+    fn tcp_options_write_error_display(
+        arg_usize in any::<usize>()
+    ) {
+
+        use crate::TcpOptionWriteError::*;
+
+        //NotEnoughSpace
+        assert_eq!(
+            &format!("TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", arg_usize),
+            &format!("{}", NotEnoughSpace(arg_usize))
+        );
+    }
+}
+
+proptest! {
+    #[test]
+    fn tcp_options_write_error_source(
+        arg_usize in any::<usize>()
+    ) {
+        use std::error::Error;
+        use crate::TcpOptionWriteError::*;
+
+        //NotEnoughSpace
+        assert!(NotEnoughSpace(arg_usize).source().is_none());
+    }
+}
