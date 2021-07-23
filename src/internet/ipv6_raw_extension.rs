@@ -3,6 +3,7 @@ use super::super::*;
 extern crate byteorder;
 use self::byteorder::{WriteBytesExt, ReadBytesExt};
 use std::fmt::{Debug, Formatter};
+use std::slice::from_raw_parts;
 
 ///Maximum number of header extensions allowed (according to the ipv6 rfc8200, & iana protocol numbers).
 pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
@@ -214,8 +215,26 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
 
         //all good
         Ok(Ipv6RawExtensionHeaderSlice {
-            slice: &slice[..len]
+            // SAFETY:
+            // Safe as the slice has been checked in the previous if
+            // to have at least the the length of the variable len.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    len
+                )
+            }
         })
+    }
+
+    /// Creates a generic ipv6 extension header slice from a slice (assumes slice size & content was validated before).
+    pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
+        Ipv6RawExtensionHeaderSlice {
+            slice: from_raw_parts(
+                slice.as_ptr(),
+                ((*slice.get_unchecked(1) as usize) + 1)*8
+            )
+        }
     }
 
     /// Returns the slice containing the ipv6 extension header
@@ -227,8 +246,11 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     /// Returns the IP protocol number of the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
+    #[inline]
     pub fn next_header(&self) -> u8 {
-        self.slice[0]
+        unsafe {
+            *self.slice.get_unchecked(0)
+        }
     }
 
     /// Returns a slice containing the payload data of the header.
@@ -236,8 +258,14 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     /// This contains all the data after the header length field
     /// until the end of the header (length specified by the
     /// hdr ext length field).
+    #[inline]
     pub fn payload(&self) -> &'a[u8] {
-        &self.slice[2..]
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(2),
+                self.slice.len() - 2
+            )
+        }
     }
 
     /// Convert the slice to an [Ipv6RawExtensionHeader].

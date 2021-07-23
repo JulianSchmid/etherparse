@@ -499,7 +499,7 @@ impl PacketBuilderStep<UdpHeader> {
 
     ///Returns the size of the packet when it is serialized
     pub fn size(&self, payload_size: usize) -> usize {
-        final_size(&self, payload_size)
+        final_size(self, payload_size)
     }
 }
 
@@ -584,7 +584,7 @@ impl PacketBuilderStep<TcpHeader> {
 
     ///Returns the size of the packet when it is serialized
     pub fn size(&self, payload_size: usize) -> usize {
-        final_size(&self, payload_size)
+        final_size(self, payload_size)
     }
 }
 

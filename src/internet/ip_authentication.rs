@@ -1,8 +1,9 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ByteOrder, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
+use std::slice::from_raw_parts;
 
 /// Deprecated use [IpAuthenticationHeader] instead.
 #[deprecated(
@@ -180,30 +181,55 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         
         // check slice length
         use crate::ReadError::*;
-        if slice.len() < 8 {
-            return Err(UnexpectedEndOfSlice(8));
+        if slice.len() < 12 {
+            return Err(UnexpectedEndOfSlice(12));
         }
 
+        // SAFETY: 
+        // Safe the slice length gets checked to be at least 12 beforehand.
+        let payload_len_enc = unsafe {
+            *slice.get_unchecked(1)
+        };
+
         // check header length minimum size
-        if slice[1] < 1 {
-            return Err(IpAuthenticationHeaderTooSmallPayloadLength(slice[1]));
+        if payload_len_enc < 1 {
+            return Err(IpAuthenticationHeaderTooSmallPayloadLength(payload_len_enc));
         }
 
         // check length
         // note: The unit is different then all other ipv6 extension headers.
         //       In the other headers the lenth is in 8 octets, but for authentication
         //       headers the length is in 4 octets.
-        let len = ((slice[1] as usize) + 2)*4;
+        let len = ((payload_len_enc as usize) + 2)*4;
         if slice.len() < len {
             return Err(UnexpectedEndOfSlice(len));
         }
 
         // all good
         Ok(IpAuthenticationHeaderSlice{
-            slice: &slice[..len]
+            // SAFETY:
+            // Safe as slice len is checked to be at last len above.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    len
+                )
+            }
         })
     }
 
+    /// Creates a ip authentication header slice from a slice (assumes slice size & content was validated before).
+    pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> IpAuthenticationHeaderSlice<'a> {
+        IpAuthenticationHeaderSlice{
+            slice: from_raw_parts(
+                slice.as_ptr(),
+                ((*slice.get_unchecked(1) as usize) + 2)*4
+            )
+        }
+    }
+
+    /// Returns the slice containing the authentification header.
+    #[inline]
     pub fn slice(&self) -> &'a[u8] {
         self.slice
     }
@@ -211,19 +237,37 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
     /// Returns the IP protocol number of the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
+    #[inline]
     pub fn next_header(&self) -> u8 {
-        self.slice[0]
+        // SAFETY:
+        // Safe as slice length is checked in the constructor
+        // to be at least 12.
+        unsafe {
+            *self.slice.get_unchecked(0)
+        }
     }
 
     /// Read the security parameters index from the slice
+    #[inline]
     pub fn spi(&self) -> u32 {
-        BigEndian::read_u32(&self.slice[4..8])
+        // SAFETY:
+        // Safe as slice length is checked in the constructor
+        // to be at least 12.
+        unsafe {
+            get_unchecked_be_u32(self.slice.as_ptr().add(4))
+        }
     }
 
     /// This unsigned 32-bit field contains a counter value that 
     /// increases by one for each packet sent.
+    #[inline]
     pub fn sequence_number(&self) -> u32 {
-        BigEndian::read_u32(&self.slice[8..12])
+        // SAFETY:
+        // Safe as slice length is checked in the constructor
+        // to be at least 12.
+        unsafe {
+            get_unchecked_be_u32(self.slice.as_ptr().add(8))
+        }
     }
 
     /// Return a slice with the raw integrity check value

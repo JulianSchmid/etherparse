@@ -23,7 +23,7 @@ impl<'a> PacketHeaders<'a> {
     ///Tries to decode as much as possible of a packet.
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
-        let (ethernet, mut rest) = Ethernet2Header::read_from_slice(&packet)?;
+        let (ethernet, mut rest) = Ethernet2Header::read_from_slice(packet)?;
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders{

@@ -2,9 +2,10 @@ use super::super::*;
 
 use std::net::Ipv4Addr;
 use std::fmt::{Debug, Formatter};
+use std::slice::from_raw_parts;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///IPv4 header without options.
 #[derive(Clone)]
@@ -72,6 +73,7 @@ impl Ipv4Header {
     }
 
     ///Length of the header (includes options) in bytes.
+    #[inline]
     pub fn header_len(&self) -> usize {
         Ipv4Header::SERIALIZED_SIZE + usize::from(self.options_len)
     }
@@ -253,8 +255,7 @@ impl Ipv4Header {
 
         //flags & fragmentation offset
         {
-            let mut buf: [u8;2] = [0;2];
-            BigEndian::write_u16(&mut buf, self.fragments_offset);
+            let buf: [u8;2] = self.fragments_offset.to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -302,14 +303,17 @@ impl Ipv4Header {
     fn calc_header_checksum_unchecked(&self) -> u16 {
         //version & header_length
         let mut sum: u32 = [
-            BigEndian::read_u16(&[ (4 << 4) | self.ihl(),
-                                (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification ]),
+            u16::from_be_bytes(
+                [
+                    (4 << 4) | self.ihl(),
+                    (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification 
+                ]
+            ),
             self.total_len(),
             self.identification,
             //flags & fragmentation offset
             {
-                let mut buf: [u8;2] = [0;2];
-                BigEndian::write_u16(&mut buf, self.fragments_offset);
+                let buf: [u8;2] = self.fragments_offset.to_be_bytes();
                 let flags = {
                     let mut result = 0;
                     if self.dont_fragment {
@@ -320,18 +324,30 @@ impl Ipv4Header {
                     }
                     result
                 };
-                BigEndian::read_u16(&[flags | (buf[0] & 0x1f), buf[1]])
+                u16::from_be_bytes(
+                    [
+                        flags | (buf[0] & 0x1f),
+                        buf[1]
+                    ]
+                )
             },
-            BigEndian::read_u16(&[self.time_to_live, self.protocol]),
+            u16::from_be_bytes([self.time_to_live, self.protocol]),
             //skip checksum (for obvious reasons)
-            BigEndian::read_u16(&self.source[0..2]),
-            BigEndian::read_u16(&self.source[2..4]),
-            BigEndian::read_u16(&self.destination[0..2]),
-            BigEndian::read_u16(&self.destination[2..4])
+            u16::from_be_bytes([self.source[0], self.source[1]]),
+            u16::from_be_bytes([self.source[2], self.source[3]]),
+            u16::from_be_bytes([self.destination[0], self.destination[1]]),
+            u16::from_be_bytes([self.destination[2], self.destination[3]]),
         ].iter().map(|x| u32::from(*x)).sum();
         let options = self.options();
         for i in 0..(options.len()/2) {
-            sum += u32::from( BigEndian::read_u16(&options[i*2..i*2 + 2]) );
+            sum += u32::from( 
+                u16::from_be_bytes(
+                    [
+                        options[i*2],
+                        options[i*2 + 1]
+                    ]
+                )
+            );
         }
 
         let carry_add = (sum & 0xffff) + (sum >> 16);
@@ -426,8 +442,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
 
         //read version & ihl
-        let (version, ihl) = {
-            let value = slice[0];
+        let (version, ihl) = unsafe {
+            let value = slice.get_unchecked(0);
             (value >> 4, value & 0xf)
         };
 
@@ -448,15 +464,30 @@ impl<'a> Ipv4HeaderSlice<'a> {
             return Err(UnexpectedEndOfSlice(header_length));
         }
 
-        //check the total_length can contain the header
-        let total_length = BigEndian::read_u16(&slice[2..4]);
+        // check the total_length can contain the header
+        //
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) at the start.
+        let total_length = unsafe {
+            get_unchecked_be_u16(slice.as_ptr().add(2))
+        };
+
         if total_length < header_length as u16 {
             return Err(Ipv4TotalLengthTooSmall(total_length))
         }
 
         //all good
         Ok(Ipv4HeaderSlice {
-            slice: &slice[..header_length]
+            // SAFETY:
+            // Safe as the slice length is checked to be at least
+            // header_length or greater above.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    header_length
+                )
+            }
         })
     }
 
@@ -467,75 +498,157 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     ///Read the "version" field of the IPv4 header (should be 4).
+    #[inline]
     pub fn version(&self) -> u8 {
-        self.slice[0] >> 4
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(0) >> 4
+        }
     }
 
     ///Read the "ip header length" (length of the ipv4 header + options in multiples of 4 bytes).
+    #[inline]
     pub fn ihl(&self) -> u8 {
-        self.slice[0] & 0xf
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(0) & 0xf
+        }
     }
 
     ///Read the "differentiated_services_code_point" from the slice.
+    #[inline]
     pub fn dcp(&self) -> u8 {
-        self.slice[1] >> 2
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(1) >> 2
+        }
     }
 
     ///Read the "explicit_congestion_notification" from the slice.
+    #[inline]
     pub fn ecn(&self) -> u8 {
-        self.slice[1] & 0x3
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(1) & 0x3
+        }
     }
 
     ///Read the "total length" from the slice (total length of ip header + payload).
+    #[inline]
     pub fn total_len(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[2..4])
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(2))
+        }
     }
 
     ///Determine the payload length based on the ihl & total_length field of the header.
+    #[inline]
     pub fn payload_len(&self) -> u16 {
         self.total_len() - u16::from(self.ihl())*4
     }
 
     ///Read the "identification" field from the slice.
+    #[inline]
     pub fn identification(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[4..6])
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(4))
+        }
     }
 
     ///Read the "dont fragment" flag from the slice.
+    #[inline]
     pub fn dont_fragment(&self) -> bool {
-        0 != (self.slice[6] & 0x40)
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            0 != (*self.slice.get_unchecked(6) & 0x40)
+        }
     }
 
     ///Read the "more fragments" flag from the slice.
+    #[inline]
     pub fn more_fragments(&self) -> bool {
-        0 != (self.slice[6] & 0x20)
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            0 != (*self.slice.get_unchecked(6) & 0x20)
+        }
     }
 
     ///Read the "fragment_offset" field from the slice.
+    #[inline]
     pub fn fragments_offset(&self) -> u16 {
-        let buf = [self.slice[6] & 0x1f, self.slice[7]];
-        BigEndian::read_u16(&buf[..])
+        u16::from_be_bytes(
+            // SAFETY:
+            // Safe as the slice length is checked to be at least
+            // SERIALIZED_SIZE (20) in the constructor.
+            unsafe {
+                [
+                    *self.slice.get_unchecked(6) & 0x1f,
+                    *self.slice.get_unchecked(7)
+                ]
+            }
+        )
     }
 
     ///Read the "time_to_live" field from the slice.
+    #[inline]
     pub fn ttl(&self) -> u8 {
-        self.slice[8]
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(8)
+        }
     }
 
     ///Read the "protocol" field from the slice.
+    #[inline]
     pub fn protocol(&self) -> u8 {
-        self.slice[9]
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            *self.slice.get_unchecked(9)
+        }
     }
 
     ///Read the "header checksum" field from the slice.
+    #[inline]
     pub fn header_checksum(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[10..12])
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(10))
+        }
     }
     
     ///Returns a slice containing the ipv4 source address.
+    #[inline]
     pub fn source(&self) -> [u8;4] {
-        let s = &self.slice[12..16];
-        [s[0], s[1], s[2], s[3]]
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            get_unchecked_4_byte_array(self.slice.as_ptr().add(12))
+        }
     }
 
     ///Return the ipv4 source address as an std::net::Ipv4Addr
@@ -544,9 +657,14 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     ///Returns a slice containing the ipv4 source address.
+    #[inline]
     pub fn destination(&self) -> [u8;4] {
-        let d = &self.slice[16..20];
-        [d[0], d[1], d[2], d[3]]
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            get_unchecked_4_byte_array(self.slice.as_ptr().add(16))
+        }
     }
 
     ///Return the ipv4 destination address as an std::net::Ipv4Addr
@@ -555,8 +673,17 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     ///Returns a slice containing the ipv4 header options (empty when there are no options).
+    #[inline]
     pub fn options(&self) -> &'a [u8] {
-        &self.slice[20..]
+        // SAFETY:
+        // Safe as the slice length is checked to be at least
+        // SERIALIZED_SIZE (20) in the constructor.
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(20),
+                self.slice.len() - 20
+            )
+        }
     }
 
     ///Decode all the fields and copy the results to a Ipv4Header struct

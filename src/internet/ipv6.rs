@@ -1,9 +1,10 @@
 use super::super::*;
 
 use std::net::Ipv6Addr;
+use std::slice::from_raw_parts;
 
 extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 ///IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -65,7 +66,7 @@ impl Ipv6Header {
 
             //remove traffic class from buffer & read flow_label
             buffer[1] &= 0xf;
-            (traffic_class, byteorder::BigEndian::read_u32(&buffer))
+            (traffic_class, u32::from_be_bytes(buffer))
         };
         
         Ok(Ipv6Header{
@@ -229,8 +230,7 @@ impl Ipv6Header {
         max_check_u32(self.flow_label, 0xfffff, Ipv6FlowLabel)?;
         {
             //write as a u32 to a buffer and write only the "lower bytes"
-            let mut buffer: [u8; 4] = [0;4];
-            byteorder::BigEndian::write_u32(&mut buffer, self.flow_label);
+            let mut buffer: [u8; 4] = self.flow_label.to_be_bytes();
             //add the traffic_class
             buffer[1] |= self.traffic_class << 4;
             //skip "highest" byte of big endian
@@ -268,26 +268,41 @@ pub struct Ipv6HeaderSlice<'a> {
 
 impl<'a> Ipv6HeaderSlice<'a, > {
 
-    ///Creates a slice containing an ipv6 header (without header extensions).
+    /// Creates a slice containing an ipv6 header (without header extensions).
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6HeaderSlice<'a>, ReadError> {
 
-        //check length
+        // check length
         use crate::ReadError::*;
         if slice.len() < Ipv6Header::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE));
         }
 
-        //read version & ihl
-        let version = slice[0] >> 4;
+        // read version & ihl
+        //
+        // SAFETY:
+        // This is safe as the slice len is checked to be
+        // at least 40 bytes at the start of the function.
+        let version = unsafe {
+            slice.get_unchecked(0) >> 4
+        };
 
-        //check version
+        // check version
         if 6 != version {
             return Err(Ipv6UnexpectedVersion(version));
         }
 
-        //all good
+        // all good
         Ok(Ipv6HeaderSlice {
-            slice: &slice[..Ipv6Header::SERIALIZED_SIZE]
+            // SAFETY:
+            // This is safe as the slice length is checked to be
+            // at least Ipv6Header::SERIALIZED_SIZE (40)
+            // at the start of the function.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    Ipv6Header::SERIALIZED_SIZE
+                )
+            }
         })
     }
 
@@ -298,45 +313,98 @@ impl<'a> Ipv6HeaderSlice<'a, > {
     }
 
     ///Read the "version" field from the slice (should be 6).
+    #[inline]
     pub fn version(&self) -> u8 {
-        self.slice[0] >> 4
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            *self.slice.get_unchecked(0) >> 4
+        }
     }
 
     ///Read the "traffic class" field from the slice.
+    #[inline]
     pub fn traffic_class(&self) -> u8 {
-        (self.slice[0] << 4) | (self.slice[1] >> 4)
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            (self.slice.get_unchecked(0) << 4) | 
+            (self.slice.get_unchecked(1) >> 4)
+        }
     }
 
     ///Read the "flow label" field from the slice.
+    #[inline]
     pub fn flow_label(&self) -> u32 {
-        byteorder::BigEndian::read_u32(&[0, self.slice[1] & 0xf, self.slice[2], self.slice[3]])
+        u32::from_be_bytes(
+            // SAFETY:
+            // Safe as the slice length is set to
+            // Ipv6Header::SERIALIZED_SIZE (40) during construction
+            // of the struct.
+            unsafe {
+                [
+                    0,
+                    *self.slice.get_unchecked(1) & 0xf,
+                    *self.slice.get_unchecked(2),
+                    *self.slice.get_unchecked(3)
+                ]
+            }
+        )
     }
 
     ///Read the "payload length" field from  the slice. The length should contain the length of all extension headers and payload.
+    #[inline]
     pub fn payload_length(&self) -> u16 {
-        byteorder::BigEndian::read_u16(&self.slice[4..6])
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(4))
+        }
     }
 
     /// Read the "next header" field from the slice.
     ///
     /// The next header value specifies what the next header or transport
     /// layer protocol is (see [IpNumber] or [ip_number] for a definitions of ids).
+    #[inline]
     pub fn next_header(&self) -> u8 {
-        self.slice[6]
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            *self.slice.get_unchecked(6)
+        }
     }
 
     ///Read the "hop limit" field from the slice. The hop limit specifies the number of hops the packet can take before it is discarded.
+    #[inline]
     pub fn hop_limit(&self) -> u8 {
-        self.slice[7]
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            *self.slice.get_unchecked(7)
+        }
     }
 
     ///Returns a slice containing the IPv6 source address.
+    #[inline]
     pub fn source(&self) -> [u8;16] {
-        let s = &self.slice[8..8+16];
-        [ s[ 0], s[ 1], s[ 2], s[ 3],
-          s[ 4], s[ 5], s[ 6], s[ 7],
-          s[ 8], s[ 9], s[10], s[11],
-          s[12], s[13], s[14], s[15] ]
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            get_unchecked_16_byte_array(self.slice.as_ptr().add(8))
+        }
     }
 
     ///Return the ipv6 source address as an std::net::Ipv6Addr
@@ -345,12 +413,15 @@ impl<'a> Ipv6HeaderSlice<'a, > {
     }
 
     ///Returns a slice containing the IPv6 destination address.
+    #[inline]
     pub fn destination(&self) -> [u8;16] {
-        let d = &self.slice[24..24+16];
-        [ d[ 0], d[ 1], d[ 2], d[ 3],
-          d[ 4], d[ 5], d[ 6], d[ 7],
-          d[ 8], d[ 9], d[10], d[11],
-          d[12], d[13], d[14], d[15] ]
+        // SAFETY:
+        // Safe as the slice length is set to
+        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // of the struct.
+        unsafe {
+            get_unchecked_16_byte_array(self.slice.as_ptr().add(24))
+        }
     }
 
     ///Return the ipv6 destination address as an std::net::Ipv6Addr

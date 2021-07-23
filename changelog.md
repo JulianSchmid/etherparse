@@ -1,6 +1,61 @@
 # Changelog:
 
-## 0.10.0: Corrected Fragmentation Handling & Additional IP Extension Headers Support
+## 0.10.0: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
+
+It has been 1.5 years since the last update, I think it is fair to say I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes has piled on. Sadly this also means there are some breaking changes in this version.
+
+But I hope the changes overall improve the library and will be worth it in the long run.
+
+### `source()` & `destination()` now return static arrays:
+
+Previously when slicing packets the the methods for accessing the `source` & `destionation` returned a slice reference:
+
+```rust
+
+pub fn source(&self) -> &'a [u8] {
+    ...
+}
+
+```
+
+which becomes a problem if you want to copy it to an actual header as the header structs expect an fixed-sized array. E.g. `[u8;4]` for IPv4:
+
+```rust
+Ipv4Header::new(
+    ...
+    // expects [u8;4], so we have to convert the slice into an fixed-sized array
+    [
+        slice.source()[0],
+        slice.source()[1],
+        slice.source()[2],
+        slice.source()[3],
+    ],
+    ...
+)
+```
+
+To get around this problem the return types of the `source` & `destination` methods have been changed to return fixed-sized arrays for `Ipv4HeaderSlice`, `Ipv6HeaderSlice` & `Ethernet2HeaderSlice`. E.g. for IPv4 the signature is now
+
+```rust
+
+pub fn source(&self) -> [u8;4] {
+    ...
+}
+
+```
+
+which enables you to simply pass address values to `Ipv4Header::new`:
+
+```rust
+Ipv4Header::new(
+    ...
+    // much better
+    slice.source(),
+    ...
+)
+```
+
+Not only makes this change it easier to copy address values from a slice to a header, but it also should bring a minor performance improvements (together with other changes). Fixed-sized arrays don't require slice range checks when acessed and the arrays are small enough that they fit in one or two registers on 64bit systems.
 
 ### General:
 
@@ -31,6 +86,7 @@
 * Renamed `IpTrafficClass::IPv6EncapSecurityPayload` to `IpNumber::EncapsulatingSecurityPayload`
 * Renamed `ReadError::VlanDoubleTaggingUnexpectedOuterTpid` to `ReadError::DoubleVlanOuterNonVlanEtherType`
 * Moved the extensions out of the Ipv6Header[Slice] and into the PacketHeaders & SlicedPacket struct.
+* `TcpOptionReadError::UnexpectedEndOfSlice` changed from a single value 
 
 This change had been a long time coming. Originally I coupled the IPv6 header extensions to the ipv6 header under the assumption that they only exist in IPv6. But this was not correct, the authentication header and encapsulating security payload are present in IPv6 as well as IPv4. So seperating this form IPv6 made sense.
 

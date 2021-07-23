@@ -1,8 +1,6 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt};
-
+use std::slice::from_raw_parts;
 use std::io;
 
 ///Ether type enum present in ethernet II header.
@@ -75,17 +73,16 @@ impl Ethernet2Header {
 
     ///Reads an Ethernet-II header from the current position of the read argument.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ethernet2Header, io::Error> {
-        fn read_mac_address<T: io::Read>(read: &mut T) -> Result<[u8;6], io::Error> {
-            let mut result: [u8;6] = [0;6];
-            read.read_exact(&mut result)?;
-            Ok(result)
-        }
 
-        Ok(Ethernet2Header {
-            destination: read_mac_address(reader)?,
-            source: read_mac_address(reader)?,
-            ether_type: reader.read_u16::<BigEndian>()?
-        })
+        let buffer = {
+            let mut buffer = [0;Ethernet2Header::SERIALIZED_SIZE];
+            reader.read_exact(&mut buffer)?;
+            buffer
+        };
+
+        Ok(Ethernet2HeaderSlice{
+            slice: &buffer
+        }.to_header())
     }
 
     ///Serialize the header to a given slice. Returns the unused part of the slice.
@@ -111,7 +108,7 @@ impl Ethernet2Header {
     fn write_to_slice_unchecked(&self, slice: &mut [u8]) {
         slice[..6].copy_from_slice(&self.destination);
         slice[6..12].copy_from_slice(&self.source);
-        BigEndian::write_u16(&mut slice[12..14], self.ether_type);
+        slice[12..14].copy_from_slice(&self.ether_type.to_be_bytes());
     }
 }
 
@@ -132,7 +129,15 @@ impl<'a> Ethernet2HeaderSlice<'a> {
 
         //all done
         Ok(Ethernet2HeaderSlice {
-            slice: &slice[..14]
+            // SAFETY:
+            // Safe as slice length is checked to be at least
+            // Ethernet2Header::SERIALIZED_SIZE (14) before this.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    Ethernet2Header::SERIALIZED_SIZE
+                )
+            }
         })
     }
 
@@ -143,20 +148,36 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     }
 
     ///Read the destination mac address
+    #[inline]
     pub fn destination(&self) -> [u8;6] {
-        let d = &self.slice[..6];
-        [d[0], d[1], d[2], d[3], d[4], d[5]]
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        unsafe {
+            get_unchecked_6_byte_array(self.slice.as_ptr())
+        }
     }
 
     ///Read the source mac address
+    #[inline]
     pub fn source(&self) -> [u8;6] {
-        let s = &self.slice[6..12];
-        [s[0], s[1], s[2], s[3], s[4], s[5]]
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        unsafe {
+            get_unchecked_6_byte_array(self.slice.as_ptr().add(6))
+        }
     }
 
     ///Read the ether_type field of the header (in system native byte order).
+    #[inline]
     pub fn ether_type(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[12..14])
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(12))
+        }
     }
 
     ///Decode all the fields and copy the results to a Ipv4Header struct

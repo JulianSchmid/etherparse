@@ -24,6 +24,91 @@ proptest! {
     }
 }
 
+proptest!{
+    #[test]
+    fn is_fragmenting_payload(
+        non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
+        identification in any::<u32>(),
+        next_header in any::<u8>(),
+
+    ) {
+        // negative case
+        {
+            let header = Ipv6FragmentHeader {
+                next_header,
+                fragment_offset: 0,
+                more_fragments: false,
+                identification
+            };
+            assert!(false == header.is_fragmenting_payload());
+            // slice
+            let buffer = {
+                let mut buffer = Vec::with_capacity(8);
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert!(false == slice.is_fragmenting_payload());
+        }
+        // positive case (non zero offset)
+        {
+            let header = Ipv6FragmentHeader {
+                next_header,
+                fragment_offset: non_zero_offset,
+                more_fragments: false,
+                identification
+            };
+            assert!(header.is_fragmenting_payload());
+            // slice
+            let buffer = {
+                let mut buffer = Vec::with_capacity(8);
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+
+        // positive case (more fragments)
+        {
+            let header = Ipv6FragmentHeader {
+                next_header,
+                fragment_offset: 0,
+                more_fragments: true,
+                identification
+            };
+            assert!(header.is_fragmenting_payload());
+            // slice
+            let buffer = {
+                let mut buffer = Vec::with_capacity(8);
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+
+        // positive case (non zero offset & more fragments)
+        {
+            let header = Ipv6FragmentHeader {
+                next_header,
+                fragment_offset: non_zero_offset,
+                more_fragments: true,
+                identification
+            };
+            assert!(header.is_fragmenting_payload());
+            // slice
+            let buffer = {
+                let mut buffer = Vec::with_capacity(8);
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+    }
+}
+
 proptest! {
     /// Check that aribtrary fragment header can be serialized and deserialized
     #[test]
@@ -35,7 +120,7 @@ proptest! {
         let mut buffer: Vec<u8> = Vec::with_capacity(16);
         input.write(&mut buffer).unwrap();
         buffer.extend(&dummy_data[..]);
-        //deserialize (with Ipv6ExtensionHeaderSlice)
+        //Ipv6ExtensionHeaderSlice::from_slice
         {
             let result = Ipv6FragmentHeaderSlice::from_slice(&buffer[..]).unwrap();
 
@@ -48,6 +133,11 @@ proptest! {
             assert_eq!(input, result.to_header());
             // check for clone (for coverage)
             assert_eq!(result.clone(), result);
+        }
+        //Ipv6ExtensionHeaderSlice::from_slice_unchecked
+        unsafe {
+            let result = Ipv6FragmentHeaderSlice::from_slice_unchecked(&buffer[..]);
+            assert_eq!(result.slice(), &buffer[..buffer.len() - dummy_data.len()]);
         }
         //deserialize (with read_from_slice)
         {
