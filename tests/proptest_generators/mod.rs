@@ -269,7 +269,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_generic_extension_with(
+    pub(crate) fn ipv6_raw_extension_with(
         next_header: u8,
         len: u8
     ) (
@@ -290,7 +290,7 @@ prop_compose! {
             next_header in any::<u8>(),
             len in any::<u8>()
         ) (
-            result in ipv6_generic_extension_with(next_header, len)
+            result in ipv6_raw_extension_with(next_header, len)
     ) -> Ipv6RawExtensionHeader
     {
         result
