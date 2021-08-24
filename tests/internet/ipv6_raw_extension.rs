@@ -194,7 +194,7 @@ fn header_type_supported() {
 proptest! {
     #[test]
     fn write_and_read(
-        input in ipv6_generic_extension_any()
+        input in ipv6_raw_extension_any()
     ) {
         let mut buffer: Vec<u8> = Vec::new();
         input.write(&mut buffer).unwrap();
@@ -256,7 +256,7 @@ fn read_errors() {
 proptest! {
     #[test]
     fn write_errors(
-        input in ipv6_generic_extension_any()
+        input in ipv6_raw_extension_any()
     ) {
         // check that all possible "not enough data" cases trigger an error on write
         for len in 0..input.header_len()-1 {
@@ -271,14 +271,14 @@ proptest! {
 
 proptest! {
     #[test]
-    fn header_len(input in ipv6_generic_extension_any()) {
+    fn header_len(input in ipv6_raw_extension_any()) {
         assert_eq!(input.header_len(), input.payload().len() + 2);
     }
 }
 
 proptest! {
     #[test]
-    fn debug(input in ipv6_generic_extension_any()) {
+    fn debug(input in ipv6_raw_extension_any()) {
         // debug trait
         {
             assert_eq!(

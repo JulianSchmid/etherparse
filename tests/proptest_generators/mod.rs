@@ -194,6 +194,35 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub(crate) fn ipv4_extensions_with(next_header: u8)
+    (
+        has_auth in any::<bool>(),
+        auth in ip_authentication_with(next_header)
+    ) -> Ipv4Extensions
+    {
+        if has_auth {
+            Ipv4Extensions{
+                auth: Some(auth),
+            }
+        } else {
+            Ipv4Extensions{
+                auth: None,
+            }
+        }
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv4_extensions_any()
+               (protocol in any::<u8>())
+               (result in ipv4_extensions_with(protocol)) 
+               -> Ipv4Extensions
+    {
+        result
+    }
+}
+
+prop_compose! {
     pub(crate) fn ipv6_with(next_header: u8)
     (
         source in prop::array::uniform16(any::<u8>()),
@@ -285,13 +314,83 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_generic_extension_any() 
+    pub(crate) fn ipv6_raw_extension_any() 
         (
             next_header in any::<u8>(),
             len in any::<u8>()
         ) (
             result in ipv6_raw_extension_with(next_header, len)
     ) -> Ipv6RawExtensionHeader
+    {
+        result
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv6_extensions_with(next_header: u8)
+    (
+        has_hop_by_hop_options in any::<bool>(),
+        hop_by_hop_options in ipv6_raw_extension_any(),
+        has_destination_options in any::<bool>(),
+        destination_options in ipv6_raw_extension_any(),
+        has_routing in any::<bool>(),
+        routing in ipv6_raw_extension_any(),
+        has_fragment in any::<bool>(),
+        fragment in ipv6_fragment_any(),
+        has_auth in any::<bool>(),
+        auth in ip_authentication_with(next_header),
+        has_final_destination_options in any::<bool>(),
+        final_destination_options in ipv6_raw_extension_any()
+    ) -> Ipv6Extensions
+    {
+        let mut result = Ipv6Extensions {
+            hop_by_hop_options: if has_hop_by_hop_options {
+                Some(hop_by_hop_options)
+            } else {
+                None
+            },
+            destination_options: if has_destination_options {
+                Some(destination_options)
+            } else {
+                None
+            },
+            routing: if has_routing {
+                Some(
+                    Ipv6RoutingExtensions{
+                        routing,
+                        final_destination_options: if has_final_destination_options {
+                            Some(final_destination_options)
+                        } else {
+                            None
+                        }
+                    }
+                )
+            } else {
+                None
+            },
+            fragment: if has_fragment {
+                Some(fragment)
+            } else {
+                None
+            },
+            auth: if has_auth {
+                Some(auth)
+            } else {
+                None
+            },
+        };
+        result.set_next_headers(next_header);
+        result
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv6_extensions_any() 
+        (
+            next_header in any::<u8>()
+        ) (
+            result in ipv6_extensions_with(next_header)
+    ) -> Ipv6Extensions
     {
         result
     }
