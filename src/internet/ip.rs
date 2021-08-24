@@ -71,6 +71,33 @@ impl IpHeader {
             }
         }
     }
+
+    /// Returns the size when the ip header & extensions are serialized
+    pub fn header_len(&self) -> usize {
+        use crate::IpHeader::*;
+        match *self {
+            Version4(ref header, ref extensions) => {
+                header.header_len() + extensions.header_len()
+            }
+            Version6(_, ref extensions) => {
+                Ipv6Header::SERIALIZED_SIZE + extensions.header_len()
+            }
+        }
+    }
+
+    /// Returns the last next header number following the ip header
+    /// and header extensions.
+    pub fn next_header(&self) -> Result<u8, ValueError> {
+        use crate::IpHeader::*;
+        match *self {
+            Version4(ref header, ref extensions) => {
+                extensions.next_header(header.protocol)
+            }
+            Version6(ref header, ref extensions) => {
+                extensions.next_header(header.next_header)
+            }
+        }
+    }
 }
 
 /// This type has been deprecated please use [IpNumber] instead.

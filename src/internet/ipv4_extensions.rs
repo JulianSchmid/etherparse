@@ -94,6 +94,28 @@ impl Ipv4Extensions {
 
         next
     }
+
+    /// Return next header based on the extension headers and
+    /// the first ip protocol number.
+    ///
+    /// In case a header is never
+    /// referenced a ValueError::Ipv4ExtensionNotReferenced is returned.
+    pub fn next_header(&self, first_next_header: u8) -> Result<u8, ValueError> {
+        use ip_number::*;
+        if let Some(ref auth) = self.auth {
+            if first_next_header == AUTH {
+                Ok(auth.next_header)
+            } else {
+                Err(
+                    ValueError::Ipv4ExtensionNotReferenced(
+                        IpNumber::AuthenticationHeader
+                    )
+                )
+            }
+        } else {
+            Ok(first_next_header)
+        }
+    }
 }
 
 impl<'a> Ipv4ExtensionsSlice<'a> {
