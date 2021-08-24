@@ -12,8 +12,10 @@ readme = "README.md"
 exclude = [
     ".gitignore",
     ".travis.yml",
+    ".github/*",
     ".gitlab-ci.yml",
-    ".travis/*"
+    ".travis/*",
+    "appveyor.yml"
 ]
 
 [dependencies]

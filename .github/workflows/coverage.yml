@@ -1,0 +1,29 @@
+name: codecoverage 
+
+on: [ push, pull_request ]
+
+jobs:
+  codecoverage_test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        override: true
+        components: llvm-tools-preview
+    - uses: actions-rs/cargo@v1
+      with:
+        toolchain: nightly
+        command: install
+        args: cargo-binutils rustfilt
+    - name: Install jq
+      run: sudo apt install jq
+    - name: Determine coverage
+      run: scripts/coverage.bash
+      shell: bash
+    - name: Codecov
+      uses: codecov/codecov-action@v2
+      with:
+        files: target/coverage/export.lcov.txt
