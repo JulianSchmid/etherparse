@@ -1,7 +1,6 @@
 use super::super::*;
 
 extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::slice::from_raw_parts;
 
 /// IPv6 fragment header.
@@ -36,7 +35,7 @@ impl Ipv6FragmentHeader {
     }
 
     /// Read an Ipv6FragmentHeader from a slice and return the header & unused parts of the slice.
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6FragmentHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6FragmentHeader, &[u8]), ReadError> {
         let s = Ipv6FragmentHeaderSlice::from_slice(slice)?;
         let rest = &slice[8..];
         let header = s.to_header();
@@ -48,67 +47,36 @@ impl Ipv6FragmentHeader {
 
     /// Read an fragment header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6FragmentHeader, ReadError> {
-        let next_header = reader.read_u8()?;
-        // reserved can be skipped
-        reader.read_u8()?;
-
-        let (fragment_offset, more_fragments) = {
-            let mut buf: [u8;2] = [0;2];
-            reader.read_exact(&mut buf[..])?;
-            (
-                // fragment offset
-                u16::from_be_bytes(
-                    [
-                        (buf[0] >> 3) & 0b0001_1111u8,
-                        ((buf[0] << 5) & 0b1110_0000u8) |
-                        (buf[1] & 0b0001_1111u8)
-                    ]
-                ),
-                // more fragments 
-                0 != buf[1] & 0b1000_0000u8
-            )
+        let buffer = {
+            let mut buffer : [u8;8] = [0;8];
+            reader.read_exact(&mut buffer)?;
+            buffer
         };
+
         Ok(Ipv6FragmentHeader {
-            next_header,
-            fragment_offset,
-            more_fragments,
-            identification: reader.read_u32::<BigEndian>()?
+            next_header: buffer[0],
+            fragment_offset: u16::from_be_bytes(
+                [
+                    (buffer[2] >> 3) & 0b0001_1111u8,
+                    ((buffer[2] << 5) & 0b1110_0000u8) |
+                    (buffer[3] & 0b0001_1111u8)
+                ]
+            ),
+            more_fragments: 0 != buffer[3] & 0b1000_0000u8,
+            identification: u32::from_be_bytes(
+                [
+                    buffer[4],
+                    buffer[5],
+                    buffer[6],
+                    buffer[7],
+                ]
+            ),
         })
     }
 
     /// Writes a given IPv6 fragment header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        use ErrorField::*;
-
-        max_check_u16(
-            self.fragment_offset,
-            0b0001_1111_1111_1111u16,
-            Ipv6FragmentOffset
-        )?;
-
-        writer.write_u8(self.next_header)?;
-        writer.write_u8(0)?;
-        // offset (13bit big endian) & more fragments
-        {
-            let buf: [u8;2] = self.fragment_offset.to_be_bytes();
-            
-            writer.write_u8(
-                ((buf[0] << 3) & 0b1111_1000u8) |
-                ((buf[1] >> 5) & 0b0000_0111u8)
-            )?;
-
-            writer.write_u8(
-                (buf[1] & 0b0001_1111u8) |
-                if self.more_fragments {
-                    0b1000_0000u8
-                } else {
-                    0
-                }
-            )?;
-            
-        }
-        writer.write_u32::<BigEndian>(self.identification)?;
-        Ok(())
+        Ok(writer.write_all(&self.to_bytes()?)?)
     }
 
     /// Length of the header in bytes.
@@ -163,6 +131,47 @@ impl Ipv6FragmentHeader {
     pub fn is_fragmenting_payload(&self) -> bool {
         self.more_fragments ||
         (0 != self.fragment_offset)
+    }
+
+    /// Returns the serialized form of the header as a statically
+    /// sized byte array.
+    ///
+    /// The `fragment_offset` is only allowed to have the maximum
+    /// size of `0x1FFF`.
+    #[inline]
+    pub fn to_bytes(&self) -> Result<[u8;8], ValueError> {
+        use ErrorField::*;
+
+        max_check_u16(
+            self.fragment_offset,
+            0b0001_1111_1111_1111u16,
+            Ipv6FragmentOffset
+        )?;
+
+        let fo_be: [u8;2] = self.fragment_offset.to_be_bytes();
+        let id_be = self.identification.to_be_bytes();
+        Ok(
+            [
+                self.next_header,
+                0,
+                (
+                    ((fo_be[0] << 3) & 0b1111_1000u8) |
+                    ((fo_be[1] >> 5) & 0b0000_0111u8)
+                ),
+                (
+                    (fo_be[1] & 0b0001_1111u8) |
+                    if self.more_fragments {
+                        0b1000_0000u8
+                    } else {
+                        0
+                    }
+                ),
+                id_be[0],
+                id_be[1],
+                id_be[2],
+                id_be[3],
+            ]
+        )
     }
 }
 

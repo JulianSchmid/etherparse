@@ -1,372 +1,714 @@
 use super::super::*;
 
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 use proptest::prelude::*;
 
-#[test]
-fn vlan_ether_types() {
-    use ether_type::*;
-    use crate::VlanHeader as V;
-    assert_eq!(3, V::VLAN_ETHER_TYPES.len());
-    assert_eq!(VLAN_TAGGED_FRAME,        V::VLAN_ETHER_TYPES[0]);
-    assert_eq!(PROVIDER_BRIDGING,        V::VLAN_ETHER_TYPES[1]);
-    assert_eq!(VLAN_DOUBLE_TAGGED_FRAME, V::VLAN_ETHER_TYPES[2]);
-}
+mod vlan_header {
+    use super::*;
 
-proptest!{
     #[test]
-    fn single_vlan_read(ref header in vlan_single_any()) {
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(SingleVlanHeader::SERIALIZED_SIZE);
-        header.write(&mut buffer).unwrap();
-        assert_eq!(4, buffer.len());
+    fn constants() {
+        use ether_type::*;
+        use VlanHeader as V;
 
-        //deserialize with read
-        {
-            let mut cursor = Cursor::new(&buffer);
-            let result = SingleVlanHeader::read(&mut cursor).unwrap();
-            assert_eq!(4, cursor.position());
+        assert_eq!(3, V::VLAN_ETHER_TYPES.len());
+        assert_eq!(VLAN_TAGGED_FRAME,        V::VLAN_ETHER_TYPES[0]);
+        assert_eq!(PROVIDER_BRIDGING,        V::VLAN_ETHER_TYPES[1]);
+        assert_eq!(VLAN_DOUBLE_TAGGED_FRAME, V::VLAN_ETHER_TYPES[2]);
+    }
 
-            //check equivalence
-            assert_eq!(header, &result);
+    proptest!{
+        #[test]
+        fn clone_eq(
+            single in vlan_single_any(),
+            double in vlan_double_any(),
+        ) {
+            // single eq
+            {
+                let value = VlanHeader::Single(single.clone());
+                assert_eq!(value, value.clone());
+            }
+            // double
+            {
+                let value = VlanHeader::Double(double);
+                assert_eq!(value, value.clone());
+            }
         }
+    }
 
-        //deserialize with read_from_slice
-        {
-            let result = SingleVlanHeader::read_from_slice(&buffer[..]).unwrap();
-
-            //check equivalence
-            assert_eq!(header, &result.0);
-            assert_eq!(&buffer[SingleVlanHeader::SERIALIZED_SIZE..], result.1);
-        }
-
-        // slice version from_slice
-        {
-            let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
-            assert_eq!(slice.clone(), slice);
-            assert_eq!(slice.slice(), &buffer[..]);
-            assert_eq!(slice.priority_code_point(), header.priority_code_point);
-            assert_eq!(slice.drop_eligible_indicator(), header.drop_eligible_indicator);
-            assert_eq!(slice.vlan_identifier(), header.vlan_identifier);
-            assert_eq!(slice.ether_type(), header.ether_type);
-
-            //check that the to_header results in the same as the input
-            assert_eq!(&slice.to_header(), header);
+    proptest!{
+        #[test]
+        fn dbg(
+            single in vlan_single_any(),
+            double in vlan_double_any(),
+        ) {
+            // single
+            {
+                let value = VlanHeader::Single(single.clone());
+                assert_eq!(
+                    &format!(
+                        "Single({:?})",
+                        single
+                    ),
+                    &format!("{:?}", value)
+                );
+            }
+            // double
+            {
+                let value = VlanHeader::Double(double.clone());
+                assert_eq!(
+                    &format!(
+                        "Double({:?})",
+                        double
+                    ),
+                    &format!("{:?}", value)
+                );
+            }
         }
     }
 }
 
-#[test]
-fn single_vlan_read_and_write_length_error() {
+mod single_vlan_header {
+    use super::*;
 
-    use ReadError::*;
+    #[test]
+    fn constants() {
+        assert_eq!(4, SingleVlanHeader::SERIALIZED_SIZE);
+    }
 
-    let header = SingleVlanHeader {
-        ether_type: EtherType::Ipv4 as u16,
-        priority_code_point: 2,
-        drop_eligible_indicator: true,
-        vlan_identifier: 1234,
-    };
+    proptest!{
+        #[test]
+        fn from_slice(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
 
-    // error if a complete write is not possible
-    for len in 0..SingleVlanHeader::SERIALIZED_SIZE {
-        let mut writer = TestWriter::with_max_size(len);
+            // normal
+            {
+                let (result, rest) = SingleVlanHeader::from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[4..]);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = SingleVlanHeader::read_from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[4..]);
+            }
+
+            // slice length to small
+            for len in 0..4 {
+                assert_eq!(
+                    SingleVlanHeader::from_slice(&buffer[..len])
+                        .unwrap_err()
+                        .unexpected_end_of_slice_min_expected_size()
+                        .unwrap(),
+                    4
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_bytes(input in vlan_single_any()) {
+            let actual = SingleVlanHeader::from_bytes(
+                input.to_bytes().unwrap()
+            );
+            assert_eq!(actual, input);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn read(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = SingleVlanHeader::read(&mut cursor).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(4, cursor.position());
+            }
+
+            // unexpexted eof
+            for len in 0..4 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    SingleVlanHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn write_and_to_bytes(input in vlan_single_any()) {
+            // normal write
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                input.write(&mut buffer).unwrap();
+                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                {
+                    let id_be = input.vlan_identifier.to_be_bytes();
+                    let eth_type_be = input.ether_type.to_be_bytes();
+                    assert_eq!(
+                        input.to_bytes().unwrap(),
+                        [
+                            (
+                                id_be[0] | if input.drop_eligible_indicator {
+                                    0x10
+                                } else {
+                                    0
+                                } | (input.priority_code_point << 5)
+                            ),
+                            id_be[1],
+                            eth_type_be[0],
+                            eth_type_be[1]
+                        ]
+                    );
+                }
+            }
+
+            // priority_code_point: outside of range error
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                for i in 1..=0b0001_1111u8 {
+                    let mut bad_input = input.clone();
+                    bad_input.priority_code_point |= i << 3;
+                    let expected = ValueError::U8TooLarge{
+                        value: bad_input.priority_code_point,
+                        max: 0b111,
+                        field: ErrorField::VlanTagPriorityCodePoint
+                    };
+                    assert_eq!(
+                        expected,
+                        bad_input.write(&mut buffer)
+                            .unwrap_err()
+                            .value_error()
+                            .unwrap()
+                    );
+                    assert_eq!(
+                        expected,
+                        bad_input.to_bytes()
+                            .unwrap_err()
+                    );
+                }
+            }
+
+            // vlan_identifier: outside of range error
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                for i in 1..=0b1111u16 {
+                    let mut bad_input = input.clone();
+                    bad_input.vlan_identifier |= i << 12;
+                    let expected = ValueError::U16TooLarge{
+                        value: bad_input.vlan_identifier,
+                        max: 0b1111_1111_1111,
+                        field: ErrorField::VlanTagVlanId
+                    };
+                    assert_eq!(
+                        expected,
+                        bad_input.write(&mut buffer)
+                            .unwrap_err()
+                            .value_error()
+                            .unwrap()
+                    );
+                    assert_eq!(
+                        expected,
+                        bad_input.to_bytes()
+                            .unwrap_err()
+                    );
+                }
+            }
+
+            // unexpected eof
+            for len in 0..4 {
+                let mut writer = TestWriter::with_max_size(len);
+                assert_eq!(
+                    ErrorKind::UnexpectedEof,
+                    input.write(&mut writer)
+                        .unwrap_err()
+                        .io_error()
+                        .unwrap()
+                        .kind()
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn header_len(input in vlan_single_any()) {
+            assert_eq!(4, input.header_len());
+        }
+    }
+
+    #[test]
+    fn default() {
+        let actual : SingleVlanHeader = Default::default();
+        assert_eq!(0, actual.priority_code_point);
+        assert_eq!(false, actual.drop_eligible_indicator);
+        assert_eq!(0, actual.vlan_identifier);
+        assert_eq!(0, actual.ether_type);
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(input in vlan_single_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn dbg(input in vlan_single_any()) {
+            assert_eq!(
+                &format!(
+                    "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {}, ether_type: {} }}",
+                    input.priority_code_point,
+                    input.drop_eligible_indicator,
+                    input.vlan_identifier,
+                    input.ether_type,
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}
+
+mod double_vlan_header {
+    use super::*;
+
+    #[test]
+    fn constants() {
+        assert_eq!(8, DoubleVlanHeader::SERIALIZED_SIZE);
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let (result, rest) = DoubleVlanHeader::from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = DoubleVlanHeader::read_from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+
+            // slice length to small
+            for len in 0..8 {
+                assert_eq!(
+                    DoubleVlanHeader::from_slice(&buffer[..len])
+                        .unwrap_err()
+                        .unexpected_end_of_slice_min_expected_size()
+                        .unwrap(),
+                    8
+                );
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                let bytes = bad_outer.to_bytes().unwrap();
+                assert_matches!(
+                    DoubleVlanHeader::from_slice(&bytes)
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn read(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = DoubleVlanHeader::read(&mut cursor).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(8, cursor.position());
+            }
+
+            // outer & inner error
+            for len in 0..8 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    DoubleVlanHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .io_error()
+                    .unwrap()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                let bytes = bad_outer.to_bytes().unwrap();
+                let mut cursor = Cursor::new(&bytes);
+                assert_matches!(
+                    DoubleVlanHeader::read(&mut cursor)
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn write_and_to_bytes(input in vlan_double_any()) {
+            // normal write
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                input.write(&mut buffer).unwrap();
+                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                {
+                    let inner_bytes = input.inner.to_bytes().unwrap();
+                    let outer_bytes = input.outer.to_bytes().unwrap();
+                    assert_eq!(
+                        input.to_bytes().unwrap(),
+                        [
+                            outer_bytes[0],
+                            outer_bytes[1],
+                            outer_bytes[2],
+                            outer_bytes[3],
+                            inner_bytes[0],
+                            inner_bytes[1],
+                            inner_bytes[2],
+                            inner_bytes[3],
+                        ]
+                    );
+                }
+            }
+
+            // bad value outer
+            {
+                let mut bad_input = input.clone();
+                bad_input.outer.priority_code_point = 0b1000;
+
+                let mut buffer: Vec<u8> = Vec::new();
+                let expected = ValueError::U8TooLarge{
+                    value: bad_input.outer.priority_code_point,
+                    max: 0b111,
+                    field: ErrorField::VlanTagPriorityCodePoint
+                };
+
+                assert_eq!(
+                    bad_input
+                        .write(&mut buffer)
+                        .unwrap_err()
+                        .value_error()
+                        .unwrap(),
+                    expected
+                );
+                assert_eq!(
+                    bad_input
+                        .to_bytes()
+                        .unwrap_err(),
+                    expected
+                );
+            }
+
+            // bad value inner
+            {
+                let mut bad_input = input.clone();
+                bad_input.inner.priority_code_point = 0b1000;
+
+                let mut buffer: Vec<u8> = Vec::new();
+                let expected = ValueError::U8TooLarge{
+                    value: bad_input.inner.priority_code_point,
+                    max: 0b111,
+                    field: ErrorField::VlanTagPriorityCodePoint
+                };
+
+                assert_eq!(
+                    bad_input
+                        .write(&mut buffer)
+                        .unwrap_err()
+                        .value_error()
+                        .unwrap(),
+                    expected
+                );
+                assert_eq!(
+                    bad_input
+                        .to_bytes()
+                        .unwrap_err(),
+                    expected
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn header_len(input in vlan_double_any()) {
+            assert_eq!(8, input.header_len());
+        }
+    }
+
+    #[test]
+    fn default() {
+        let actual : DoubleVlanHeader = Default::default();
         assert_eq!(
-            writer.error_kind(),
-            header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
-        );
-    }
-
-    // error check for unexpected eof
-    let buffer = {
-        let mut buffer = Vec::with_capacity(SingleVlanHeader::SERIALIZED_SIZE);
-        header.write(&mut buffer).unwrap();
-        buffer
-    };
-    for len in 0..SingleVlanHeader::SERIALIZED_SIZE {
-        // read
-        assert_matches!(
-            SingleVlanHeader::read(&mut Cursor::new(&buffer[..len])),
-            Err(_)
-        );
-        
-        // read_from_slice
-        assert_matches!(
-            SingleVlanHeader::read_from_slice(&buffer[..len]),
-            Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE))
-        );
-
-        // from_slice
-        assert_matches!(
-            SingleVlanHeaderSlice::from_slice(&buffer[..len]), 
-            Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE))
-        );
-    }
-}
-
-#[test]
-fn single_vlan_write() {
-    use crate::WriteError::ValueError;
-    use crate::ValueError::*;
-    use crate::ErrorField::*;
-    fn base() -> SingleVlanHeader {
-        SingleVlanHeader {
-            ether_type: EtherType::Ipv4 as u16,
-            priority_code_point: 2,
-            drop_eligible_indicator: true,
-            vlan_identifier: 1234,
-        }
-    }
-
-    fn test_write(input: &SingleVlanHeader) -> Result<(), WriteError> {
-        let mut buffer: Vec<u8> = Vec::new();
-        let result = input.write(&mut buffer);
-        assert_eq!(0, buffer.len());
-        result
-    }
-
-    //priority_code_point
-    assert_matches!(test_write(&{
-                        let mut value = base();
-                        value.priority_code_point = 8;
-                        value
-                    }),
-                    Err(ValueError(U8TooLarge{value: 8, max: 7, field: VlanTagPriorityCodePoint})));
-
-    //vlan_identifier
-    assert_matches!(test_write(&{
-                        let mut value = base();
-                        value.vlan_identifier = 0x1000;
-                        value
-                    }),
-                    Err(ValueError(U16TooLarge{value: 0x1000, max: 0xFFF, field: VlanTagVlanId})));
-}
-
-proptest!{
-    #[test]
-    fn double_vlan_header_read_write(
-        ref outer_base in vlan_single_any(),
-        ref inner in vlan_single_any()
-    ) {
-
-        for outer_ether_type in &VlanHeader::VLAN_ETHER_TYPES {
-
-            let header = DoubleVlanHeader {
-                outer: {
-                    let mut outer = outer_base.clone();
-                    outer.ether_type = *outer_ether_type;
-                    outer
-                },
-                inner: inner.clone()
-            };
-            let buffer = {
-                let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
-                header.write(&mut buffer).unwrap();
-                buffer
-            };
-            
-            //read
-            assert_eq!(
-                header,
-                DoubleVlanHeader::read(&mut Cursor::new(&buffer)).unwrap(),
-            );
-        
-            //read_from_slice
+            actual.outer,
             {
-                let result = DoubleVlanHeader::read_from_slice(&buffer).unwrap();
-                assert_eq!(result.0, header);
-                assert_eq!(result.1, &buffer[buffer.len()..]);
-            }
-
-            //from_slice
-            {
-                let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
-
-                assert_eq!(slice.clone(), slice);
-
-                assert_eq!(slice.slice(), &buffer[..]);
-
-                assert_eq!(slice.outer().slice(), &buffer[..SingleVlanHeader::SERIALIZED_SIZE]);
-                assert_eq!(slice.outer().priority_code_point(), header.outer.priority_code_point);
-                assert_eq!(slice.outer().drop_eligible_indicator(), header.outer.drop_eligible_indicator);
-                assert_eq!(slice.outer().vlan_identifier(), header.outer.vlan_identifier);
-                assert_eq!(slice.outer().ether_type(), header.outer.ether_type);
-
-                assert_eq!(slice.inner().slice(), &buffer[SingleVlanHeader::SERIALIZED_SIZE..SingleVlanHeader::SERIALIZED_SIZE*2]);
-                assert_eq!(slice.inner().priority_code_point(), header.inner.priority_code_point);
-                assert_eq!(slice.inner().drop_eligible_indicator(), header.inner.drop_eligible_indicator);
-                assert_eq!(slice.inner().vlan_identifier(), header.inner.vlan_identifier);
-                assert_eq!(slice.inner().ether_type(), header.inner.ether_type);
-
-                //check that the to_header results in the same as the input
-                assert_eq!(slice.to_header(), header);
-            }
-        }
-    }
-}
-
-#[test]
-fn double_vlan_header_read_and_write_length_error() {
-    use crate::ether_type::*;
-    use ReadError::*;
-
-    for ether_type in &VlanHeader::VLAN_ETHER_TYPES {
-        let header = DoubleVlanHeader {
-            outer: SingleVlanHeader{
-                priority_code_point: 0,
-                drop_eligible_indicator: false,
-                vlan_identifier: 0,
-                ether_type: *ether_type
-            },
-            inner: SingleVlanHeader{
-                priority_code_point: 0,
-                drop_eligible_indicator: false,
-                vlan_identifier: 0,
-                ether_type: IPV4
-            }
-        };
-
-        // check that an error is triggered if not enough memory for the write
-        // is availible
-        for len in 0..DoubleVlanHeader::SERIALIZED_SIZE {
-            let mut writer = TestWriter::with_max_size(len);
-            assert_eq!(
-                writer.error_kind(),
-                header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
-            );
-        }
-
-        // check that a length error is written for every too small length
-        let buffer = {
-            let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
-            header.write(&mut buffer).unwrap();
-            buffer
-        };
-        for len in 0..DoubleVlanHeader::SERIALIZED_SIZE {
-            // read
-            assert_matches!(
-                DoubleVlanHeader::read(&mut Cursor::new(&buffer[..len])),
-                Err(IoError(_))
-            );
-
-            // read_from_slice
-            assert_matches!(
-                DoubleVlanHeader::read_from_slice(&buffer[..len]),
-                Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE))
-            );
-
-            // from_slice
-            assert_matches!(
-                DoubleVlanHeaderSlice::from_slice(&buffer[..len]),
-                Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE))
-            );
-        }
-    }
-}
-
-proptest!{
-    #[test]
-    fn double_vlan_header_read_error_ether_type(
-        ref outer_base in vlan_single_any(),
-        ref inner in vlan_single_any()
-    ) {
-        use crate::ether_type::*;
-        use ReadError::*;
-
-        let header = DoubleVlanHeader {
-            outer: {
-                let mut outer = outer_base.clone();
-                outer.ether_type = IPV4; // some ethertype not associated with a vlan header
+                let mut outer : SingleVlanHeader = Default::default();
+                outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
                 outer
-            },
-            inner: inner.clone()
-        };
-        let buffer = {
-            let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
-            header.write(&mut buffer).unwrap();
-            buffer
-        };
-
-        // read
-        assert_matches!(
-            DoubleVlanHeader::read(&mut Cursor::new(&buffer)), 
-            Err(DoubleVlanOuterNonVlanEtherType(IPV4))
+            }
         );
-
-        // read_from_slice
-        assert_matches!(
-            DoubleVlanHeader::read_from_slice(&buffer),
-            Err(DoubleVlanOuterNonVlanEtherType(IPV4))
-        );
-
-        // from_slice
-        assert_matches!(
-            DoubleVlanHeaderSlice::from_slice(&buffer), 
-            Err(DoubleVlanOuterNonVlanEtherType(IPV4))
-        );
+        assert_eq!(actual.inner, Default::default());
     }
-}
 
-#[test]
-fn default() {
-    let v: DoubleVlanHeader = Default::default();
-    assert_eq!(v.outer.priority_code_point, 0);
-    assert_eq!(v.outer.drop_eligible_indicator, false);
-    assert_eq!(v.outer.vlan_identifier, 0);
-    assert_eq!(v.outer.ether_type, ether_type::VLAN_TAGGED_FRAME);
-
-    assert_eq!(v.inner.priority_code_point, 0);
-    assert_eq!(v.inner.drop_eligible_indicator, false);
-    assert_eq!(v.inner.vlan_identifier, 0);
-    assert_eq!(v.inner.ether_type, 0);
-}
-
-#[test]
-fn dbg_eq_clone() {
-    // double header & single header
-    let double = DoubleVlanHeader{
-        outer: SingleVlanHeader{
-            priority_code_point: 0,
-            drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
-            ether_type: ether_type::VLAN_TAGGED_FRAME
-        },
-        inner: SingleVlanHeader{
-            priority_code_point: 0,
-            drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
-            ether_type: 0x12
+    proptest!{
+        #[test]
+        fn clone_eq(input in vlan_double_any()) {
+            assert_eq!(input, input.clone());
         }
-    };
-    assert_eq!(double.outer, double.outer.clone());
-    println!("{:?}", double.outer);
-
-    assert_eq!(double, double.clone());
-    println!("{:?}", double);
-
-    // vlan header
-    use crate::VlanHeader::*;
-    {
-        let s = Single(double.inner.clone());
-        assert_eq!(s, s.clone());
-        println!("{:?}", s);
-    }
-    {
-        let d = Double(double.clone());
-        assert_eq!(d, d.clone());
-        println!("{:?}", d.clone());
     }
 
-    //slice
-    {
-        let mut buffer = Vec::<u8>::with_capacity(DoubleVlanHeader::SERIALIZED_SIZE);
-        double.write(&mut buffer).unwrap();
-        let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
+    proptest!{
+        #[test]
+        fn dbg(input in vlan_double_any()) {
+            assert_eq!(
+                &format!(
+                    "DoubleVlanHeader {{ outer: {:?}, inner: {:?} }}",
+                    input.outer,
+                    input.inner,
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}
 
-        assert_eq!(slice.inner(), slice.inner().clone());
-        println!("{:?}", slice.inner().clone());
+mod single_vlan_header_slice {
+    use super::*;
 
-        assert_eq!(slice, slice.clone());
-        println!("{:?}", slice.clone());
+    proptest!{
+        #[test]
+        fn from_slice(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
+                assert_eq!(slice.slice(), &buffer[..4]);
+            }
+
+            // slice length to small
+            for len in 0..4 {
+                assert_eq!(
+                    SingleVlanHeaderSlice::from_slice(&buffer[..len])
+                        .unwrap_err()
+                        .unexpected_end_of_slice_min_expected_size()
+                        .unwrap(),
+                    4
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(input.priority_code_point, slice.priority_code_point());
+            assert_eq!(input.drop_eligible_indicator, slice.drop_eligible_indicator());
+            assert_eq!(input.vlan_identifier, slice.vlan_identifier());
+            assert_eq!(input.ether_type, slice.ether_type());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn dbg(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "SingleVlanHeaderSlice {{ slice: {:?} }}",
+                    slice.slice(),
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+}
+
+mod double_vlan_header_slice {
+    use super::*;
+
+    proptest!{
+        #[test]
+        fn from_slice(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            {
+                // serialize
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+                input.write(&mut buffer).unwrap();
+                buffer.extend(&dummy_data[..]);
+
+                // normal
+                {
+                    let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
+                    assert_eq!(slice.slice(), &buffer[..8]);
+                }
+
+                // slice length to small
+                for len in 0..8 {
+                    assert_eq!(
+                        DoubleVlanHeaderSlice::from_slice(&buffer[..len])
+                            .unwrap_err()
+                            .unexpected_end_of_slice_min_expected_size()
+                            .unwrap(),
+                        8
+                    );
+                }
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                assert_matches!(
+                    DoubleVlanHeaderSlice::from_slice(&bad_outer.to_bytes().unwrap())
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(input.outer, slice.outer().to_header());
+            assert_eq!(input.inner, slice.inner().to_header());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(
+                DoubleVlanHeader{
+                    outer: input.outer,
+                    inner: input.inner,
+                },
+                slice.to_header()
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn dbg(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "DoubleVlanHeaderSlice {{ slice: {:?} }}",
+                    slice.slice(),
+                ),
+                &format!("{:?}", slice)
+            );
+        }
     }
 }

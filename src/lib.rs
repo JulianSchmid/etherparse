@@ -384,6 +384,14 @@ impl WriteError {
             _ => None
         }
     }
+
+    /// Returns the expected minimum size if the error is an `SliceTooSmall`.
+    pub fn slice_too_small_size(self) -> Option<usize> {
+        match self {
+            WriteError::SliceTooSmall(value) => Some(value),
+            _ => None
+        }
+    }
 }
 
 impl From<ValueError> for WriteError {
@@ -424,42 +432,42 @@ impl Error for WriteError {
     }
 }
 
-///Errors in the given data
+/// Errors in the given data
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ValueError {
-    ///Error when the ipv4 options length is too big or not aligned (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
+    /// Error when the ipv4 options length is too big or not aligned (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
-    ///Error when a given payload & ipv4 header is bigger then what fits inside an ipv4 total_length field.
+    /// Error when a given payload & ipv4 header is bigger then what fits inside an ipv4 total_length field.
     Ipv4PayloadLengthTooLarge(usize),
-    ///Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
+    /// Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
-    ///Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
+    /// Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
     Ipv6ExtensionPayloadTooSmall(usize),
-    ///Error when a given payload size is bigger then what fits inside an ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
+    /// Error when a given payload size is bigger then what fits inside an ipv6 extended header size ([Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN]).
     Ipv6ExtensionPayloadTooLarge(usize),
-    ///Error when a given payload length is not aligned to be a multiple of 8 octets when 6 is substracted and can not be represented by the header length field.
+    /// Error when a given payload length is not aligned to be a multiple of 8 octets when 6 is substracted and can not be represented by the header length field.
     Ipv6ExtensionPayloadLengthUnaligned(usize),
-    ///Error when a given authentication header icv size is not a multiple of 4 bytes or bigger then 1016 bytes and therefor can not be represented in the header length field.
+    /// Error when a given authentication header icv size is not a multiple of 4 bytes or bigger then 1016 bytes and therefor can not be represented in the header length field.
     IpAuthenticationHeaderBadIcvLength(usize),
-    ///Error when a header in `Ipv4Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial `protocol`.
+    /// Error when a header in `Ipv4Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial `protocol`.
     Ipv4ExtensionNotReferenced(IpNumber),
-    ///Error when a hop-by-hop header is not referenced as the first header after the ipv6 header but as a later extension header.
+    /// Error when a hop-by-hop header is not referenced as the first header after the ipv6 header but as a later extension header.
     Ipv6ExtensionHopByHopNotAtStart,
-    ///Error when a header in `Ipv6Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial ip number.
+    /// Error when a header in `Ipv6Extensions` is never written as it is never referenced by any of the other `next_header` fields or the initial ip number.
     Ipv6ExtensionNotReferenced(IpNumber),
-    ///Error when a header in `Ipv6Extensions` is referenced multiple times or is referenced and not defined.
+    /// Error when a header in `Ipv6Extensions` is referenced multiple times or is referenced and not defined.
     Ipv6ExtensionNotDefinedReference(IpNumber),
-    ///Error when a given payload is bigger then what fits inside an udp packet
-    ///Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
+    /// Error when a given payload is bigger then what fits inside an udp packet
+    /// Note that a the maximum payload size, as far as udp is conceirned, is max_value(u16) - 8. The 8 is for the size of the udp header itself.
     UdpPayloadLengthTooLarge(usize),
-    ///Error when a given payload + tcp header options is bigger then what fits inside an tcp packet
-    ///Note that a the maximum size, as far as tcp is conceirned, is max_value(u16) - tcp_header.data_offset()*4. The data_offset is for the size of the udp header itself.
+    /// Error when a given payload + tcp header options is bigger then what fits inside an tcp packet
+    /// Note that a the maximum size, as far as tcp is conceirned, is max_value(u16) - tcp_header.data_offset()*4. The data_offset is for the size of the udp header itself.
     TcpLengthTooLarge(usize),
-    ///Error when a u8 field in a header has a larger value then supported.
+    /// Error when a u8 field in a header has a larger value then supported.
     U8TooLarge{value: u8, max: u8, field: ErrorField},
-    ///Error when a u16 field in a header has a larger value then supported.
+    /// Error when a u16 field in a header has a larger value then supported.
     U16TooLarge{value: u16, max: u16, field: ErrorField},
-    ///Error when a u32 field in a header has a larger value then supported.
+    /// Error when a u32 field in a header has a larger value then supported.
     U32TooLarge{value: u32, max: u32, field: ErrorField}
 }
 
