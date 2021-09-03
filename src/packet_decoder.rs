@@ -23,7 +23,7 @@ impl<'a> PacketHeaders<'a> {
     ///Tries to decode as much as possible of a packet.
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
-        let (ethernet, mut rest) = Ethernet2Header::read_from_slice(packet)?;
+        let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)?;
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders{
@@ -44,7 +44,7 @@ impl<'a> PacketHeaders<'a> {
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
-                let (outer, outer_rest) = SingleVlanHeader::read_from_slice(rest)?;
+                let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)?;
 
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
@@ -55,7 +55,7 @@ impl<'a> PacketHeaders<'a> {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
 
-                        let (inner, inner_rest) = SingleVlanHeader::read_from_slice(rest)?;
+                        let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;

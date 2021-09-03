@@ -2,231 +2,450 @@ use super::super::*;
 
 use std::io::{Cursor, ErrorKind};
 
-proptest! {
-    /// Constructor check
-    #[test]
-    fn new(
-        next_header in any::<u8>(),
-        fragment_offset in any::<u16>(),
-        more_fragments in any::<bool>(),
-        identification in any::<u32>(),
-    ) {
-        let a = Ipv6FragmentHeader::new(
-            next_header,
-            fragment_offset,
-            more_fragments,
-            identification
-        );
-        assert_eq!(next_header, a.next_header);
-        assert_eq!(fragment_offset, a.fragment_offset);
-        assert_eq!(more_fragments, a.more_fragments);
-        assert_eq!(identification, a.identification);
-    }
-}
+pub mod header {
+    use super::*;
 
-proptest!{
-    #[test]
-    fn is_fragmenting_payload(
-        non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
-        identification in any::<u32>(),
-        next_header in any::<u8>(),
-
-    ) {
-        // negative case
-        {
-            let header = Ipv6FragmentHeader {
+    proptest! {
+        #[test]
+        fn new(
+            next_header in any::<u8>(),
+            fragment_offset in any::<u16>(),
+            more_fragments in any::<bool>(),
+            identification in any::<u32>(),
+        ) {
+            let a = Ipv6FragmentHeader::new(
                 next_header,
-                fragment_offset: 0,
-                more_fragments: false,
+                fragment_offset,
+                more_fragments,
                 identification
-            };
-            assert!(false == header.is_fragmenting_payload());
-            // slice
-            let buffer = {
-                let mut buffer = Vec::with_capacity(8);
-                header.write(&mut buffer).unwrap();
-                buffer
-            };
-            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
-            assert!(false == slice.is_fragmenting_payload());
-        }
-        // positive case (non zero offset)
-        {
-            let header = Ipv6FragmentHeader {
-                next_header,
-                fragment_offset: non_zero_offset,
-                more_fragments: false,
-                identification
-            };
-            assert!(header.is_fragmenting_payload());
-            // slice
-            let buffer = {
-                let mut buffer = Vec::with_capacity(8);
-                header.write(&mut buffer).unwrap();
-                buffer
-            };
-            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
-            assert!(slice.is_fragmenting_payload());
-        }
-
-        // positive case (more fragments)
-        {
-            let header = Ipv6FragmentHeader {
-                next_header,
-                fragment_offset: 0,
-                more_fragments: true,
-                identification
-            };
-            assert!(header.is_fragmenting_payload());
-            // slice
-            let buffer = {
-                let mut buffer = Vec::with_capacity(8);
-                header.write(&mut buffer).unwrap();
-                buffer
-            };
-            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
-            assert!(slice.is_fragmenting_payload());
-        }
-
-        // positive case (non zero offset & more fragments)
-        {
-            let header = Ipv6FragmentHeader {
-                next_header,
-                fragment_offset: non_zero_offset,
-                more_fragments: true,
-                identification
-            };
-            assert!(header.is_fragmenting_payload());
-            // slice
-            let buffer = {
-                let mut buffer = Vec::with_capacity(8);
-                header.write(&mut buffer).unwrap();
-                buffer
-            };
-            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
-            assert!(slice.is_fragmenting_payload());
-        }
-    }
-}
-
-proptest! {
-    /// Check that aribtrary fragment header can be serialized and deserialized
-    #[test]
-    fn write_read(
-        input in ipv6_fragment_any(),
-        dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
-    ) {
-        //serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(16);
-        input.write(&mut buffer).unwrap();
-        buffer.extend(&dummy_data[..]);
-        //Ipv6ExtensionHeaderSlice::from_slice
-        {
-            let result = Ipv6FragmentHeaderSlice::from_slice(&buffer[..]).unwrap();
-
-            //check equivalence
-            assert_eq!(input.next_header, result.next_header());
-            assert_eq!(input.fragment_offset, result.fragment_offset());
-            assert_eq!(input.more_fragments, result.more_fragments());
-            assert_eq!(input.identification, result.identification());
-            assert_eq!(&buffer[..8], result.slice());
-            assert_eq!(input, result.to_header());
-            // check for clone (for coverage)
-            assert_eq!(result.clone(), result);
-        }
-        //Ipv6ExtensionHeaderSlice::from_slice_unchecked
-        unsafe {
-            let result = Ipv6FragmentHeaderSlice::from_slice_unchecked(&buffer[..]);
-            assert_eq!(result.slice(), &buffer[..buffer.len() - dummy_data.len()]);
-        }
-        //deserialize (with read_from_slice)
-        {
-            let result = Ipv6FragmentHeader::read_from_slice(&buffer).unwrap();
-            assert_eq!(input, result.0);
-            assert_eq!(&buffer[8..], result.1);
-        }
-        //read
-        {
-            let mut cursor = Cursor::new(&buffer);
-            let actual = Ipv6FragmentHeader::read(&mut cursor).unwrap();
-            assert_eq!(actual, input);
-            assert_eq!(cursor.position(), (buffer.len() - dummy_data.len()) as u64);
-        }
-        //not enough data for read
-        for len in 0..buffer.len() - dummy_data.len() {
-            let mut cursor = Cursor::new(&buffer[..len]);
-            assert_matches!(
-                Ipv6FragmentHeader::read(&mut cursor),
-                Err(ReadError::IoError(_))
             );
-            assert_matches!(
-                Ipv6FragmentHeader::read_from_slice(&buffer[0..len]),
-                Err(ReadError::UnexpectedEndOfSlice(_))
-            );
+            assert_eq!(next_header, a.next_header);
+            assert_eq!(fragment_offset, a.fragment_offset);
+            assert_eq!(more_fragments, a.more_fragments);
+            assert_eq!(identification, a.identification);
         }
     }
-}
 
-proptest! {
-    /// Check that aribtrary fragment header can be serialized and deserialized
-    #[test]
-    fn write_io_error(input in ipv6_fragment_any()) {
-        for len in 0..input.header_len() {
-            let mut writer = TestWriter::with_max_size(len);
-            assert_eq!(
-                ErrorKind::UnexpectedEof,
-                input.write(&mut writer).unwrap_err().io_error().unwrap().kind()
-            );
-        }
-    }
-}
-
-proptest! {
-    /// Check that a too big offset triggers an error
-    #[test]
-    fn write_bad_offset(
-        next_header in any::<u8>(),
-        fragment_offset in 0b0010_0000_0000_0000u16..=0xffffu16,
-        more_fragments in any::<bool>(),
-        identification in any::<u32>(),
-    ) {
-        use crate::ValueError::*;
-        use crate::ErrorField::*;
-
-        let input = Ipv6FragmentHeader::new(
-            next_header,
-            fragment_offset,
-            more_fragments,
-            identification
-        );
-        let mut buffer: Vec<u8> = Vec::with_capacity(0);
-        assert_eq!(
-            input.write(&mut buffer).unwrap_err().value_error().unwrap(),
-            U16TooLarge{value: fragment_offset, max: 0b0001_1111_1111_1111, field: Ipv6FragmentOffset}
-        );
-    }
-}
-
-proptest! {
-    #[test]
-    fn header_len(input in ipv6_fragment_any()) {
-        assert_eq!(8, input.header_len());
-    }
-}
-
-proptest! {
-    #[test]
-    fn clone_eq_dbg(input in ipv6_fragment_any()) {
-        println!("{:?}", input);
-        assert_eq!(input, input.clone());
-
-        let buffer = {
-            let mut buffer = Vec::new();
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in ipv6_fragment_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
             input.write(&mut buffer).unwrap();
-            buffer
-        };
-        let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
-        println!("{:?}", slice);
-        assert_eq!(slice, slice.clone());
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let (result, rest) = Ipv6FragmentHeader::from_slice(&buffer[..]).unwrap();
+                assert_eq!(input, result);
+                assert_eq!(&buffer[8..], rest);
+            }
+            // call with not enough data in the slice
+            for len in 0..=7 {
+                assert_matches!(
+                    Ipv6FragmentHeader::from_slice(&buffer[0..len]),
+                    Err(ReadError::UnexpectedEndOfSlice(_))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            input in ipv6_fragment_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = Ipv6FragmentHeader::read(&mut cursor).unwrap();
+                assert_eq!(input, result);
+                assert_eq!(cursor.position(), 8);
+            }
+            // call with not enough data in the slice
+            for len in 0..=7 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    Ipv6FragmentHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .io_error()
+                    .unwrap()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write(input in ipv6_fragment_any()) {
+
+            // normal write
+            {
+                let mut buffer = Vec::with_capacity(8);
+                input.write(&mut buffer).unwrap();
+                assert_eq!(
+                    &buffer,
+                    &input.to_bytes().unwrap()
+                );
+            }
+
+            // too big fragment offset
+            for i in 0b001..=0b111u16 {
+                use crate::ValueError::*;
+                use crate::ErrorField::*;
+
+                let fragment_offset = input.fragment_offset | (i << 13);
+
+                let input_with_bad_frag_off = {
+                    let mut re = input.clone();
+                    re.fragment_offset = fragment_offset;
+                    re
+                };
+
+                let mut buffer = Vec::with_capacity(8);
+                assert_eq!(
+                    input_with_bad_frag_off
+                        .write(&mut buffer)
+                        .unwrap_err()
+                        .value_error()
+                        .unwrap(),
+                    U16TooLarge{
+                        value: fragment_offset,
+                        max: 0b0001_1111_1111_1111,
+                        field: Ipv6FragmentOffset
+                    }
+                );
+            }
+
+            // not enough memory for write
+            for len in 0..8 {
+                let mut writer = TestWriter::with_max_size(len);
+                assert_eq!(
+                    ErrorKind::UnexpectedEof,
+                    input.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(input in ipv6_fragment_any()) {
+            assert_eq!(8, input.header_len());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn is_fragmenting_payload(
+            non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
+            identification in any::<u32>(),
+            next_header in any::<u8>(),
+
+        ) {
+            // negative case
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: 0,
+                    more_fragments: false,
+                    identification
+                };
+                assert!(false == header.is_fragmenting_payload());
+            }
+            // positive case (non zero offset)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: non_zero_offset,
+                    more_fragments: false,
+                    identification
+                };
+                assert!(header.is_fragmenting_payload());
+            }
+
+            // positive case (more fragments)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: 0,
+                    more_fragments: true,
+                    identification
+                };
+                assert!(header.is_fragmenting_payload());
+            }
+
+            // positive case (non zero offset & more fragments)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: non_zero_offset,
+                    more_fragments: true,
+                    identification
+                };
+                assert!(header.is_fragmenting_payload());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_bytes(input in ipv6_fragment_any()) {
+
+            // normal write
+            {
+                let fragment_offset_be = input.fragment_offset.to_be_bytes();
+                let id_be = input.identification.to_be_bytes();
+                assert_eq!(
+                    &input.to_bytes().unwrap(),
+                    &[
+                        input.next_header,
+                        0,
+                        (
+                            (fragment_offset_be[0] << 3 & 0b1111_1000u8) |
+                            (fragment_offset_be[1] >> 5 & 0b0000_0111u8)
+                        ),
+                        (
+                            (fragment_offset_be[1] & 0b0001_1111u8) |
+                            if input.more_fragments {
+                                0b1000_0000u8
+                            } else {
+                                0u8
+                            }
+                        ),
+                        id_be[0],
+                        id_be[1],
+                        id_be[2],
+                        id_be[3],
+                    ]
+                );
+            }
+
+            // too big fragment offset
+            for i in 0b001..=0b111u16 {
+                use crate::ValueError::*;
+                use crate::ErrorField::*;
+
+                let fragment_offset = input.fragment_offset | (i << 13);
+
+                let input_with_bad_frag_off = {
+                    let mut re = input.clone();
+                    re.fragment_offset = fragment_offset;
+                    re
+                };
+
+                assert_eq!(
+                    input_with_bad_frag_off
+                        .to_bytes()
+                        .unwrap_err(),
+                    U16TooLarge{
+                        value: fragment_offset,
+                        max: 0b0001_1111_1111_1111,
+                        field: Ipv6FragmentOffset
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in ipv6_fragment_any()) {
+            assert_eq!(
+                &format!(
+                    "Ipv6FragmentHeader {{ next_header: {}, fragment_offset: {}, more_fragments: {}, identification: {} }}",
+                    input.next_header,
+                    input.fragment_offset,
+                    input.more_fragments,
+                    input.identification
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in ipv6_fragment_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+}
+
+pub mod slice {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in ipv6_fragment_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer[..]).unwrap();
+                assert_eq!(slice.slice(), &buffer[..8]);
+            }
+
+            // call with not enough data in the slice
+            for len in 0..=7 {
+                assert_matches!(
+                    Ipv6FragmentHeaderSlice::from_slice(&buffer[0..len])
+                        .unwrap_err()
+                        .unexpected_end_of_slice_min_expected_size()
+                        .unwrap(),
+                    8
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice_unchecked(
+            input in ipv6_fragment_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+                        // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            unsafe {
+                let slice = Ipv6FragmentHeaderSlice::from_slice_unchecked(&buffer[..]);
+                assert_eq!(slice.slice(), &buffer[..8]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in ipv6_fragment_any()) {
+            let buffer = input.to_bytes().unwrap();
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer[..]).unwrap();
+
+            assert_eq!(input.next_header, slice.next_header());
+            assert_eq!(input.fragment_offset, slice.fragment_offset());
+            assert_eq!(input.more_fragments, slice.more_fragments());
+            assert_eq!(input.identification, slice.identification());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn is_fragmenting_payload(
+            non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
+            identification in any::<u32>(),
+            next_header in any::<u8>(),
+        ) {
+            // negative case
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: 0,
+                    more_fragments: false,
+                    identification
+                };
+                // slice
+                let buffer = header.to_bytes().unwrap();
+                let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+                assert!(false == slice.is_fragmenting_payload());
+            }
+            // positive case (non zero offset)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: non_zero_offset,
+                    more_fragments: false,
+                    identification
+                };
+                // slice
+                let buffer = header.to_bytes().unwrap();
+                let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+                assert!(slice.is_fragmenting_payload());
+            }
+
+            // positive case (more fragments)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: 0,
+                    more_fragments: true,
+                    identification
+                };
+                // slice
+                let buffer = header.to_bytes().unwrap();
+                let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+                assert!(slice.is_fragmenting_payload());
+            }
+
+            // positive case (non zero offset & more fragments)
+            {
+                let header = Ipv6FragmentHeader {
+                    next_header,
+                    fragment_offset: non_zero_offset,
+                    more_fragments: true,
+                    identification
+                };
+                // slice
+                let buffer = header.to_bytes().unwrap();
+                let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+                assert!(slice.is_fragmenting_payload());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in ipv6_fragment_any()) {
+            let buffer = input.to_bytes().unwrap();
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in ipv6_fragment_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = Ipv6FragmentHeaderSlice::from_slice(
+                &bytes
+            ).unwrap();
+            assert_eq!(
+                &format!(
+                    "Ipv6FragmentHeaderSlice {{ slice: {:?} }}",
+                    slice.slice()
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in ipv6_fragment_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = Ipv6FragmentHeaderSlice::from_slice(
+                &bytes
+            ).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
     }
 }

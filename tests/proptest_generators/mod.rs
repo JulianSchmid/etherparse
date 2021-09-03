@@ -15,6 +15,14 @@ pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
     ]
 }
 
+pub fn vlan_ethertype_any() -> impl Strategy<Value = u16> {
+    prop_oneof![
+        Just(ether_type::VLAN_TAGGED_FRAME),
+        Just(ether_type::PROVIDER_BRIDGING),
+        Just(ether_type::VLAN_DOUBLE_TAGGED_FRAME),
+    ]
+}
+
 prop_compose! {
     pub(crate) fn ethernet_2_with(ether_type: u16)(
         source in prop::array::uniform6(any::<u8>()),
@@ -106,6 +114,31 @@ prop_compose! {
         -> SingleVlanHeader
     {
         result
+    }
+}
+
+prop_compose! {
+    pub(crate) fn vlan_double_any()
+        (ether_type in any::<u16>())
+        (result in vlan_double_with(ether_type)) 
+        -> DoubleVlanHeader
+    {
+        result
+    }
+}
+
+prop_compose! {
+    pub(crate) fn vlan_double_with(ether_type: u16)(
+        outer_ethertype in vlan_ethertype_any(),
+        inner_ethertype in proptest::strategy::Just(ether_type)
+    )(
+        outer in vlan_single_with(outer_ethertype),
+        inner in vlan_single_with(inner_ethertype)
+    ) -> DoubleVlanHeader {
+        DoubleVlanHeader {
+            outer,
+            inner
+        }
     }
 }
 
