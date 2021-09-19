@@ -1,7 +1,5 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
@@ -100,22 +98,40 @@ impl<'a> IpAuthenticationHeader {
 
     /// Read an authentication header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpAuthenticationHeader, ReadError> {
-        let next_header = reader.read_u8()?;
-        let payload_len = reader.read_u8()?;
+        
+        let start = {
+            let mut start = [0;4+4+4];
+            reader.read_exact(&mut start)?;
+            start
+        };
+
+        let next_header = start[0];
+        let payload_len = start[1];
 
         // payload len must be at least 1
         if payload_len < 1 {
             use ReadError::*;
             Err(IpAuthenticationHeaderTooSmallPayloadLength(payload_len))
         } else {
-            // skip reserved
-            reader.read_u8()?;
-            reader.read_u8()?;
             // read the rest of the header
             Ok(IpAuthenticationHeader {
                 next_header,
-                spi: reader.read_u32::<BigEndian>()?,
-                sequence_number: reader.read_u32::<BigEndian>()?,
+                spi: u32::from_be_bytes(
+                    [
+                        start[4],
+                        start[5],
+                        start[6],
+                        start[7],
+                    ]
+                ),
+                sequence_number: u32::from_be_bytes(
+                    [
+                        start[8],
+                        start[9],
+                        start[10],
+                        start[11],
+                    ]
+                ),
                 raw_icv_len: payload_len - 1,
                 raw_icv_buffer: {
                     let mut buffer = [0;0xfe*4];
@@ -150,14 +166,27 @@ impl<'a> IpAuthenticationHeader {
 
     /// Writes the given authentication header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_u8(self.next_header)?;
+
+        let spi_be = self.spi.to_be_bytes();
+        let sequence_number_be = self.sequence_number.to_be_bytes();
         debug_assert!(self.raw_icv_len != 0xff);
-        writer.write_u8(self.raw_icv_len + 1)?;
-        //reserved
-        writer.write_u8(0)?;
-        writer.write_u8(0)?;
-        writer.write_u32::<BigEndian>(self.spi)?;
-        writer.write_u32::<BigEndian>(self.sequence_number)?;
+
+        writer.write_all(
+            &[
+                self.next_header,
+                self.raw_icv_len + 1,
+                0,
+                0,
+                spi_be[0],
+                spi_be[1],
+                spi_be[2],
+                spi_be[3],
+                sequence_number_be[0],
+                sequence_number_be[1],
+                sequence_number_be[2],
+                sequence_number_be[3],
+            ]
+        )?;
         writer.write_all(self.raw_icv())?;
         Ok(())
     }

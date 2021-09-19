@@ -124,7 +124,7 @@ mod transport_header {
             //error case
             {
                 let mut transport = TransportHeader::Udp(udp_header.clone());
-                let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+                let len = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
                 let payload = unsafe {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled

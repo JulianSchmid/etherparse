@@ -222,6 +222,8 @@ pub use crate::transport::tcp::*;
 pub use crate::transport::udp::*;
 pub use crate::transport::TransportHeader;
 
+pub mod checksum;
+
 mod packet_builder;
 pub use crate::packet_builder::*;
 

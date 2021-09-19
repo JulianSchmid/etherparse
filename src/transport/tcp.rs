@@ -412,21 +412,11 @@ impl TcpHeader {
         // calculate the checksum
         Ok(
             self.calc_checksum_post_ip(
-                // pseudo header checksum value
-                u64::from(
-                    u16::from_be_bytes([source_ip[0], source_ip[1]]) 
-                ) + 
-                u64::from(
-                    u16::from_be_bytes([source_ip[2], source_ip[3]])
-                ) +
-                u64::from(
-                    u16::from_be_bytes([destination_ip[0], destination_ip[1]])
-                ) +
-                u64::from(
-                    u16::from_be_bytes([destination_ip[2], destination_ip[3]])
-                ) +
-                u64::from( ip_number::TCP ) +
-                tcp_length as u64,
+                checksum::Sum16BitWords::new()
+                .add_4bytes(source_ip)
+                .add_4bytes(destination_ip)
+                .add_2bytes([0, ip_number::TCP])
+                .add_2bytes((tcp_length as u16).to_be_bytes()),
                 payload
             )
         )
@@ -446,57 +436,24 @@ impl TcpHeader {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        fn calc_sum(value: [u8;16]) -> u64 {
-            value[..]
-            .chunks_exact(2)
-            .map(|r| u64::from(
-                u16::from_be_bytes(
-                    [r[0], r[1]]
-                )
-            ))
-            .sum()
-        }
         Ok(self.calc_checksum_post_ip(
-            calc_sum(source) +
-            calc_sum(destination) +
-            u64::from( ip_number::TCP ) +
-            {
-                let buffer: [u8;4] = (tcp_length as u32).to_be_bytes();
-                u64::from(
-                    u16::from_be_bytes(
-                        [
-                            buffer[0],
-                            buffer[1]
-                        ]
-                    )
-                ) +
-                u64::from(
-                    u16::from_be_bytes(
-                        [
-                            buffer[2],
-                            buffer[3]
-                        ]
-                    )
-                )
-            },
+            checksum::Sum16BitWords::new()
+            .add_16bytes(source)
+            .add_16bytes(destination)
+            .add_4bytes((tcp_length as u32).to_be_bytes())
+            .add_2bytes([0, ip_number::TCP]),
             payload))
     }
 
     ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
-        fn calc_u32_checksum(value: u32) -> u64 {
-            let buffer: [u8;4] = value.to_be_bytes();
-            u64::from( u16::from_be_bytes([buffer[0], buffer[1]]) ) + 
-            u64::from( u16::from_be_bytes([buffer[2], buffer[3]]) )
-        }
-
-        let mut sum = {
-            ip_pseudo_header_sum +
-            u64::from( self.source_port ) + //udp header start
-            u64::from( self.destination_port ) +
-            calc_u32_checksum(self.sequence_number) +
-            calc_u32_checksum(self.acknowledgment_number) +
-            u64::from( u16::from_be_bytes([
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+        ip_pseudo_header_sum
+        .add_2bytes(self.source_port.to_be_bytes())
+        .add_2bytes(self.destination_port.to_be_bytes())
+        .add_4bytes(self.sequence_number.to_be_bytes())
+        .add_4bytes(self.acknowledgment_number.to_be_bytes())
+        .add_2bytes(
+            [
                 {
                     let value = (self._data_offset << 4) & 0xF0;
                     if self.ns {
@@ -533,47 +490,14 @@ impl TcpHeader {
                     }
                     value
                 }
-            ]) ) +
-            u64::from( self.window_size ) +
-            u64::from( self.urgent_pointer )
-        };
-
-        //add the options
-        let two_bytes_to_checksum = |r: &[u8]| -> u64 {
-            u64::from(
-                u16::from_be_bytes([r[0], r[1]])
-            )
-        };
-
-        sum += self.options_buffer[..self.options_len()]
-            .chunks_exact(2)
-            .map(two_bytes_to_checksum)
-            .sum::<u64>();
-
-        //payload
-        sum += payload[..payload.len() - (payload.len() % 2)]
-            .chunks_exact(2)
-            .map(two_bytes_to_checksum)
-            .sum::<u64>();
-
-        //pad the last byte with 0
-        if payload.len() % 2 == 1 {
-            sum += u64::from(
-                u16::from_be_bytes(
-                    [
-                        *payload.last().unwrap(),
-                        0
-                    ]
-                )
-            );
-        }
-
-        let carry_add = (sum & 0xffff) + 
-                        ((sum >> 16) & 0xffff) +
-                        ((sum >> 32) & 0xffff) +
-                        ((sum >> 48) & 0xffff);
-        let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
-        !result
+            ]
+        )
+        .add_2bytes(self.window_size.to_be_bytes())
+        .add_2bytes(self.urgent_pointer.to_be_bytes())
+        .add_slice(&self.options_buffer[..self.options_len()])
+        .add_slice(payload)
+        .ones_complement()
+        .to_be()
     }
 }
 
@@ -984,13 +908,11 @@ impl<'a> TcpHeaderSlice<'a> {
         //calculate the checksum
         Ok(
             self.calc_checksum_post_ip(
-                // pseudo header checksum
-                u64::from( u16::from_be_bytes([source_ip[0], source_ip[1]]) ) +
-                u64::from( u16::from_be_bytes([source_ip[2], source_ip[3]]) ) +
-                u64::from( u16::from_be_bytes([destination_ip[0], destination_ip[1]]) ) +
-                u64::from( u16::from_be_bytes([destination_ip[2], destination_ip[3]]) ) +
-                u64::from( ip_number::TCP ) +
-                tcp_length as u64,
+                checksum::Sum16BitWords::new()
+                .add_4bytes(source_ip)
+                .add_4bytes(destination_ip)
+                .add_2bytes([0, ip_number::TCP])
+                .add_2bytes((tcp_length as u16).to_be_bytes()),
                 payload
             )
         )
@@ -1010,74 +932,26 @@ impl<'a> TcpHeaderSlice<'a> {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        fn calc_addr_sum(value: [u8;16]) -> u64 {
-            value[..]
-                .chunks_exact(2)
-                .map(|r| u64::from(
-                    u16::from_be_bytes(
-                        [r[0], r[1]]
-                    )
-                ))
-                .sum()
-        }
-        Ok(self.calc_checksum_post_ip(
-            calc_addr_sum(source) +
-            calc_addr_sum(destination) +
-            u64::from( ip_number::TCP ) +
-            {
-                let buffer: [u8;4] = (tcp_length as u32).to_be_bytes();
-                u64::from( u16::from_be_bytes([buffer[0], buffer[1]]) ) +
-                u64::from( u16::from_be_bytes([buffer[2], buffer[3]]) )
-            },
-            payload))
+        Ok(
+            self.calc_checksum_post_ip(
+                checksum::Sum16BitWords::new()
+                .add_16bytes(source)
+                .add_16bytes(destination)
+                .add_2bytes([0, ip_number::TCP])
+                .add_4bytes((tcp_length as u32).to_be_bytes()),
+                payload
+            )
+        )
     }
 
-    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
-
-        let mut sum = ip_pseudo_header_sum;
-
-        let two_bytes_to_checksum = |r: &[u8]| -> u64 {
-            u64::from(
-                u16::from_be_bytes([r[0], r[1]])
-            )
-        };
-
-        //until checksum
-        sum += self.slice[..16]
-            .chunks_exact(2)
-            .map(two_bytes_to_checksum)
-            .sum::<u64>();
-
-        //after checksum
-        sum += self.slice[18..self.slice.len()]
-            .chunks_exact(2)
-            .map(two_bytes_to_checksum)
-            .sum::<u64>();
-
-        //payload
-        sum += payload[..payload.len() - (payload.len() % 2)]
-            .chunks_exact(2)
-            .map(two_bytes_to_checksum)
-            .sum::<u64>();
-
-        //pad the last byte with 0
-        if payload.len() % 2 == 1 {
-            sum += u64::from(
-                u16::from_be_bytes(
-                    [
-                        *payload.last().unwrap(),
-                        0
-                    ]
-                )
-            );
-        }
-        let carry_add = (sum & 0xffff) + 
-                        ((sum >> 16) & 0xffff) +
-                        ((sum >> 32) & 0xffff) +
-                        ((sum >> 48) & 0xffff);
-        let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
-        !result
+    /// This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+        ip_pseudo_header_sum
+        .add_slice(&self.slice[..16]) //until checksum
+        .add_slice(&self.slice[18..self.slice.len()])
+        .add_slice(payload)
+        .ones_complement()
+        .to_be()
     }
 }
 
