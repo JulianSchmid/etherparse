@@ -20,7 +20,7 @@ pub struct PacketHeaders<'a> {
 }
 
 impl<'a> PacketHeaders<'a> {
-    ///Tries to decode as much as possible of a packet.
+    /// Tries to decode as much as possible of a packet.
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
         let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)?;
@@ -183,7 +183,7 @@ fn read_transport(
 ) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
     use crate::ip_number::*;
     match protocol {
-        UDP => Ok(UdpHeader::read_from_slice(rest)
+        UDP => Ok(UdpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
         TCP => Ok(TcpHeader::read_from_slice(rest)
             .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),

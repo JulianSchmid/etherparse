@@ -2,31 +2,289 @@ use etherparse::*;
 
 use byteorder::{ByteOrder, BigEndian};
 use super::super::*;
-use std::io::Cursor;
+use std::io::{Cursor, ErrorKind};
 
-proptest! {
-    #[test]
-    fn read_write(ref input in udp_any()) {
-        //serialize
-        let buffer = {
-            let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE + 1);
-            input.write(&mut buffer).unwrap();
-            //add some data to test the return slice
-            buffer.push(1);
-            buffer
-        };
+mod udp_header {
+    use super::*;
 
-        //deserialize with read
-        {
-            let result = UdpHeader::read(&mut Cursor::new(&buffer)).unwrap();
-            //check equivalence
-            assert_eq!(input, &result);
+    proptest! {
+        #[test]
+        fn without_ipv4_checksum(input in udp_any()) {
+            // TODO
         }
-        //deserialize from slice
-        {
-            let result = UdpHeader::read_from_slice(&buffer).unwrap();
-            assert_eq!(input, &result.0);
-            assert_eq!(&buffer[buffer.len()-1 .. ], result.1);
+    }
+
+    proptest! {
+        #[test]
+        fn with_ipv4_checksum(input in udp_any()) {
+            // TODO
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn calc_checksum_ipv4_raw(input in udp_any()) {
+            // TODO
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn with_ipv6_checksum(input in udp_any()) {
+            // TODO
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn calc_checksum_ipv6(input in udp_any()) {
+            // TODO
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn calc_checksum_ipv6_raw(input in udp_any()) {
+            // TODO
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in udp_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let (result, rest) = UdpHeader::from_slice(&buffer[..]).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = UdpHeader::read_from_slice(&buffer[..]).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+
+            // call with not enough data in the slice
+            for len in 0..8 {
+                assert_matches!(
+                    UdpHeader::from_slice(&buffer[0..len]),
+                    Err(ReadError::UnexpectedEndOfSlice(_))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_bytes(input in udp_any()) {
+            assert_eq!(
+                input,
+                UdpHeader::from_bytes(
+                    input.to_bytes()
+                )
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            input in udp_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = UdpHeader::read(&mut cursor).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(8, cursor.position());
+            }
+
+            // unexpexted eof
+            for len in 0..8 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    UdpHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write(input in udp_any()) {
+            // normal write
+            {
+                let mut result = Vec::with_capacity(input.header_len());
+                input.write(&mut result).unwrap();
+                assert_eq!(
+                    &result[..],
+                    input.to_bytes()
+                );
+            }
+
+            // unexpected eof
+            for len in 0..8 {
+                let mut writer = TestWriter::with_max_size(len);
+                assert_eq!(
+                    ErrorKind::UnexpectedEof,
+                    input.write(&mut writer)
+                        .unwrap_err()
+                        .io_error()
+                        .unwrap()
+                        .kind()
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_bytes(input in udp_any()) {
+            let s_be = input.source_port.to_be_bytes();
+            let d_be = input.destination_port.to_be_bytes();
+            let l_be = input.length.to_be_bytes();
+            let c_be = input.checksum.to_be_bytes();
+
+            assert_eq!(
+                input.to_bytes(),
+                [
+                    s_be[0],
+                    s_be[1],
+                    d_be[0],
+                    d_be[1],
+                    l_be[0],
+                    l_be[1],
+                    c_be[0],
+                    c_be[1],
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn default() {
+        let actual : UdpHeader = Default::default();
+        assert_eq!(actual.source_port, 0);
+        assert_eq!(actual.destination_port, 0);
+        assert_eq!(actual.length, 0);
+        assert_eq!(actual.checksum, 0);
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in udp_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in udp_any()) {
+            assert_eq!(
+                &format!(
+                    "UdpHeader {{ source_port: {}, destination_port: {}, length: {}, checksum: {} }}",
+                    input.source_port,
+                    input.destination_port,
+                    input.length,
+                    input.checksum,
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}
+
+mod udp_header_slice {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in udp_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let result = UdpHeaderSlice::from_slice(&buffer[..]).unwrap();
+                assert_eq!(&buffer[..8], result.slice());
+            }
+
+            // call with not enough data in the slice
+            for len in 0..8 {
+                assert_matches!(
+                    UdpHeaderSlice::from_slice(&buffer[0..len]),
+                    Err(ReadError::UnexpectedEndOfSlice(_))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(slice.source_port(), input.source_port);
+            assert_eq!(slice.destination_port(), input.destination_port);
+            assert_eq!(slice.length(), input.length);
+            assert_eq!(slice.checksum(), input.checksum);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "UdpHeaderSlice {{ slice: {:?} }}",
+                    slice.slice()
+                ),
+                &format!("{:?}", slice)
+            );
         }
     }
 }
@@ -297,8 +555,6 @@ fn udp_with_ipv6_checksum() {
 
 #[test]
 fn udp_ipv6_errors() {
-    use std;
-
     let ip_header = Ipv6Header {
         traffic_class: 1,
         flow_label: 0x81806,
@@ -309,142 +565,57 @@ fn udp_ipv6_errors() {
         destination: [0xff;16]
     };
 
-    //border still small enough
-    const MAX: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+    // too big payload (u32::MAX)
     {
-        let mut payload = Vec::with_capacity(MAX);
-        payload.resize(MAX, 0);
-
+        // SAFETY: In case the error is not triggered
+        //         a nullptr exception will be triggered.
+        const OVER_MAX: usize = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+        let too_big_slice = unsafe {
+            //NOTE: The pointer must be initialized with a non null value
+            //      otherwise a key constraint of slices is not fullfilled
+            //      which can lead to crashes in release mode.
+            use std::ptr::NonNull;
+            std::slice::from_raw_parts(
+                NonNull::<u8>::dangling().as_ptr(),
+                OVER_MAX
+            )
+        };
         let udp_header = UdpHeader{
             source_port: 37,
             destination_port: 38,
-            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+            length: 0,
             checksum: 0
         };
-        assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &payload), 
-                        Ok(_));
-        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
-                        Ok(_));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &payload), 
-                        Ok(_));
+        //assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &too_big_slice), 
+        //                Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
+        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &too_big_slice), 
+                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
+        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &too_big_slice), 
+                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
     }
-    //border still small enough
+
+    // too big payload (u16::MAX)
     {
-        const OVER_MAX: usize = MAX + 1;
-        let mut payload = Vec::with_capacity(OVER_MAX);
-        payload.resize(OVER_MAX, 0);
+        // SAFETY: In case the error is not triggered
+        //         a nullptr exception will be triggered.
+        const OVER_MAX: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+        let too_big_slice = unsafe {
+            //NOTE: The pointer must be initialized with a non null value
+            //      otherwise a key constraint of slices is not fullfilled
+            //      which can lead to crashes in release mode.
+            use std::ptr::NonNull;
+            std::slice::from_raw_parts(
+                NonNull::<u8>::dangling().as_ptr(),
+                OVER_MAX
+            )
+        };
         let udp_header = UdpHeader{
             source_port: 37,
             destination_port: 38,
-            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+            length: 0,
             checksum: 0
         };
-        assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &payload), 
-                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
-        assert_matches!(udp_header.calc_checksum_ipv6(&ip_header, &payload), 
-                        Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
-        assert_matches!(udp_header.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, &payload), 
+        assert_matches!(UdpHeader::with_ipv6_checksum(0, 0, &ip_header, &too_big_slice), 
                         Err(ValueError::UdpPayloadLengthTooLarge(OVER_MAX)));
     }
-}
-
-#[test]
-fn from_slice() {
-    let header = UdpHeader {
-        source_port: 1234,
-        destination_port: 5678,
-        length: 1356,
-        checksum: 2467
-    };
-    let buffer = {
-        let mut buffer = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
-        header.write(&mut buffer).unwrap();
-        buffer
-    };
-
-    //get the slice
-    let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();
-
-    assert_eq!(slice.slice(), &buffer);
-
-    assert_eq!(slice.source_port(), header.source_port);
-    assert_eq!(slice.destination_port(), header.destination_port);
-    assert_eq!(slice.length(), header.length);
-    assert_eq!(slice.checksum(), header.checksum);
-
-    //check that the to_header method also results in the same header
-    assert_eq!(slice.to_header(), header);
-}
-
-#[test]
-fn read_write_length_error() {
-
-    let header = UdpHeader {
-        source_port: 1234,
-        destination_port: 5678,
-        length: 1356,
-        checksum: 2467
-    };
-
-    // write with an io error (not enough space)
-    for len in 0..UdpHeader::SERIALIZED_SIZE {
-        let mut writer = TestWriter::with_max_size(len);
-        assert_eq!(
-            writer.error_kind(),
-            header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
-        );
-    }
-
-    // serialize
-    let buffer = {
-        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
-        header.write(&mut buffer).unwrap();
-        buffer
-    };
-
-    // read with an length error
-    for len in 0..UdpHeader::SERIALIZED_SIZE {
-        use ReadError::*;
-        // read
-        assert_matches!(
-            UdpHeader::read(&mut Cursor::new(&buffer[..len])),
-            Err(_)
-        );
-
-        // read_from_slice
-        assert_matches!(
-            UdpHeader::read_from_slice(&buffer[..len]),
-            Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
-        );
-
-        // from_slice
-        assert_matches!(
-            UdpHeaderSlice::from_slice(&buffer[..len]),
-            Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE))
-        );
-    }
-}
-
-#[test]
-fn dbg_clone_eq() {
-    let header = UdpHeader {
-        source_port: 1234,
-        destination_port: 5678,
-        length: 1356,
-        checksum: 2467
-    };
-
-    println!("{:?}", header);
-    assert_eq!(header.clone(), header);
-
-    // write with an io error (not enough space)
-    let buffer = {
-        let mut buffer: Vec<u8> = Vec::with_capacity(UdpHeader::SERIALIZED_SIZE);
-        header.write(&mut buffer).unwrap();
-        buffer
-    };
-
-    let slice = UdpHeaderSlice::from_slice(&buffer).unwrap();
-    println!("{:?}", slice);
-    assert_eq!(slice.clone(), slice);
 }

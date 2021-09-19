@@ -10,6 +10,7 @@ extern crate proptest;
 
 use std::io;
 
+mod checksum;
 mod errors;
 mod link;
 mod internet;

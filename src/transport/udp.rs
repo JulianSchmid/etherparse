@@ -1,7 +1,6 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{ByteOrder, BigEndian, ReadBytesExt, WriteBytesExt};
+use std::slice::from_raw_parts;
 
 ///Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -18,7 +17,7 @@ pub struct UdpHeader {
 
 impl UdpHeader {
 
-    ///Returns an udp header for the given parameters
+    /// Returns an udp header for the given parameters
     pub fn without_ipv4_checksum(source_port: u16, destination_port: u16, payload_length: usize) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
@@ -34,7 +33,7 @@ impl UdpHeader {
         })
     }
 
-    ///Calculate an udp header given an ipv4 header and the payload
+    /// Calculate an udp header given an ipv4 header and the payload
     pub fn with_ipv4_checksum(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
 
         //check that the total length fits into the field
@@ -53,12 +52,12 @@ impl UdpHeader {
         Ok(result)
     }
 
-    ///Calculates the upd header checksum based on a ipv4 header.
+    /// Calculates the upd header checksum based on a ipv4 header.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, payload)
     }
 
-    ///Calculates the upd header checksum based on a ipv4 header.
+    /// Calculates the upd header checksum based on a ipv4 header.
     pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
@@ -69,34 +68,26 @@ impl UdpHeader {
         Ok(self.calc_checksum_ipv4_internal(source, destination, protocol, payload))
     }
     
-    ///Calculates the upd header checksum based on a ipv4 header.
+    /// Calculates the upd header checksum based on a ipv4 header.
     fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> u16 {
+
         self.calc_checksum_post_ip(
             //pseudo header
-            u64::from(
-                u16::from_be_bytes([source[0], source[1]])
-            ) +
-            u64::from(
-                u16::from_be_bytes([source[2], source[3]])
-            ) +
-            u64::from(
-                u16::from_be_bytes([destination[0], destination[1]])
-            ) +
-            u64::from(
-                u16::from_be_bytes([destination[2], destination[3]])
-            ) +
-            u64::from( protocol ) +
-            u64::from( self.length ), 
+            checksum::Sum16BitWords::new()
+            .add_4bytes(source)
+            .add_4bytes(destination)
+            .add_2bytes([0, protocol])
+            .add_2bytes(self.length.to_be_bytes()), 
             payload
         )
     }
 
-    ///Calculate an udp header given an ipv6 header and the payload
+    /// Calculate an udp header given an ipv6 header and the payload
     pub fn with_ipv6_checksum(source_port: u16, destination_port: u16, ip_header: &Ipv6Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
 
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
-        if MAX_PAYLOAD_LENGTH < payload.len() {
+        if MAX_PAYLOAD_LENGTH <= payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
 
@@ -110,15 +101,15 @@ impl UdpHeader {
         Ok(result)
     }
 
-    ///Calculates the checksum of the current udp header given an ipv6 header and the payload.
+    /// Calculates the checksum of the current udp header given an ipv6 header and the payload.
     pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
-    ///Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
+    /// Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
     pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -127,95 +118,118 @@ impl UdpHeader {
     }
 
     fn calc_checksum_ipv6_internal(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> u16 {
-        fn calc_sum(value: [u8;16]) -> u64 {
-            let mut result = 0;
-            for i in 0..8 {
-                let index = i*2;
-                result += u64::from(
-                    u16::from_be_bytes(
-                        [
-                            value[index],
-                            value[index + 1]
-                        ]
-                    )
-                );
-            }
-            result
-        }
         self.calc_checksum_post_ip(
-            calc_sum(source) +
-            calc_sum(destination) +
-            ip_number::UDP as u64 +
-            u64::from( self.length ),
+            //pseudo header
+            checksum::Sum16BitWords::new()
+            .add_16bytes(source)
+            .add_16bytes(destination)
+            .add_2bytes([0, ip_number::UDP])
+            .add_2bytes(self.length.to_be_bytes()),
             payload
         )
     }
 
-    ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: u64, payload: &[u8]) -> u16 {
-        let mut sum = ip_pseudo_header_sum +
-                      u64::from( self.source_port ) + //udp header start
-                      u64::from( self.destination_port ) +
-                      u64::from( self.length );
-
-        for i in 0..(payload.len()/2) {
-            sum += u64::from(
-                u16::from_be_bytes(
-                    [
-                        payload[i*2],
-                        payload[i*2 + 1]
-                    ]
-                )
-            );
-        }
-        //pad the last byte with 0
-        if payload.len() % 2 == 1 {
-            sum += u64::from(
-                u16::from_be_bytes(
-                    [
-                        *payload.last().unwrap(),
-                        0
-                    ]
-                )
-            );
-        }
-        let carry_add = (sum & 0xffff) + 
-                        ((sum >> 16) & 0xffff) +
-                        ((sum >> 32) & 0xffff) +
-                        ((sum >> 48) & 0xffff);
-        let result = ((carry_add & 0xffff) + (carry_add >> 16)) as u16;
-        if 0xffff == result {
-            result //avoid the transmition of an all 0 checksum as this value is reserved by "checksum disabled" (see rfc)
-        } else {
-            !result
-        }
+    /// This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+        ip_pseudo_header_sum
+        .add_2bytes(self.source_port.to_be_bytes())
+        .add_2bytes(self.destination_port.to_be_bytes())
+        .add_2bytes(self.length.to_be_bytes())
+        .add_slice(payload)
+        .to_ones_complement_with_no_zero()
+        .to_be()
     }
 
-    ///Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    #[deprecated(
+        since = "0.10.0",
+        note = "Use UdpHeader::from_slice instead."
+    )]
+    #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+        UdpHeader::from_slice(slice)
+    }
+
+    /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
         Ok((
             UdpHeaderSlice::from_slice(slice)?.to_header(),
             &slice[UdpHeader::SERIALIZED_SIZE..]
         ))
     }
 
-    ///Tries to read an udp header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, io::Error> {
-        Ok(UdpHeader{
-            source_port: reader.read_u16::<BigEndian>()?,
-            destination_port: reader.read_u16::<BigEndian>()?,
-            length: reader.read_u16::<BigEndian>()?,
-            checksum: reader.read_u16::<BigEndian>()?
-        })
+    /// Read an UdpHeader from a static sized byte array.
+    #[inline]
+    pub fn from_bytes(bytes: [u8;8]) -> UdpHeader {
+        UdpHeader{
+            source_port: u16::from_be_bytes(
+                [
+                    bytes[0],
+                    bytes[1],
+                ]
+            ),
+            destination_port: u16::from_be_bytes(
+                [
+                    bytes[2],
+                    bytes[3],
+                ]
+            ),
+            length: u16::from_be_bytes(
+                [
+                    bytes[4],
+                    bytes[5],
+                ]
+            ),
+            checksum: u16::from_be_bytes(
+                [
+                    bytes[6],
+                    bytes[7],
+                ]
+            ),
+        }
     }
 
-    ///Write the udp header without recalculating the checksum or length.
+    /// Tries to read an udp header from the current position.
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, io::Error> {
+        let bytes = {
+            let mut bytes : [u8;8] = [0;8];
+            reader.read_exact(&mut bytes)?;
+            bytes
+        };
+        Ok(UdpHeader::from_bytes(bytes))
+    }
+
+    /// Write the udp header without recalculating the checksum or length.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_u16::<BigEndian>(self.source_port)?;
-        writer.write_u16::<BigEndian>(self.destination_port)?;
-        writer.write_u16::<BigEndian>(self.length)?;
-        writer.write_u16::<BigEndian>(self.checksum)?;
+        writer.write_all(&self.to_bytes())?;
         Ok(())
+    }
+
+    /// Length of the serialized header in bytes.
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        8
+    }
+
+    /// Returns the serialized form of the header as a statically
+    /// sized byte array.
+    #[inline]
+    pub fn to_bytes(&self) -> [u8;8] {
+        let source_port_be = self.source_port.to_be_bytes();
+        let destination_port_be = self.destination_port.to_be_bytes();
+        let length_be = self.length.to_be_bytes();
+        let checksum = self.checksum.to_be_bytes();
+        [
+            source_port_be[0],
+            source_port_be[1],
+            destination_port_be[0],
+            destination_port_be[1],
+            length_be[0],
+            length_be[1],
+            checksum[0],
+            checksum[1],
+        ]
     }
 }
 
@@ -232,7 +246,8 @@ pub struct UdpHeaderSlice<'a> {
 
 impl<'a> UdpHeaderSlice<'a> {
 
-    ///Creates a slice containing an udp header.
+    /// Creates a slice containing an udp header.
+    #[inline]
     pub fn from_slice(slice: &'a[u8]) -> Result<UdpHeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
@@ -242,41 +257,70 @@ impl<'a> UdpHeaderSlice<'a> {
 
         //done
         Ok(UdpHeaderSlice{
-            slice: &slice[..UdpHeader::SERIALIZED_SIZE]
+            // SAFETY:
+            // Safe as slice length is checked to be at least
+            // UdpHeader::SERIALIZED_SIZE (8) before this.
+            slice: unsafe {
+                from_raw_parts(
+                    slice.as_ptr(),
+                    UdpHeader::SERIALIZED_SIZE
+                )
+            }
         })
     }
 
-    ///Returns the slice containing the udp header
+    /// Returns the slice containing the udp header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
-    ///Reads the "udp source port" from the slice.
+    /// Reads the "udp source port" from the slice.
     #[inline]
     pub fn source_port(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[..2])
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr())
+        }
     }
 
-    ///Reads the "udp destination port" from the slice.
+    /// Reads the "udp destination port" from the slice.
     #[inline]
     pub fn destination_port(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[2..4])
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(2))
+        }
     }
 
-    ///Reads the "length" from the slice.
+    /// Reads the "length" from the slice.
     #[inline]
     pub fn length(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[4..6])
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(4))
+        }
     }
 
-    ///Reads the "checksum" from the slice.
+    /// Reads the "checksum" from the slice.
     #[inline]
     pub fn checksum(&self) -> u16 {
-        BigEndian::read_u16(&self.slice[6..8])
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        unsafe {
+            get_unchecked_be_u16(self.slice.as_ptr().add(6))
+        }
     }
 
-    ///Decode all the fields and copy the results to a UdpHeader struct
+    /// Decode all the fields and copy the results to a UdpHeader struct
+    #[inline]
     pub fn to_header(&self) -> UdpHeader {
         UdpHeader {
             source_port: self.source_port(),

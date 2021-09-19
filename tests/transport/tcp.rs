@@ -2,7 +2,6 @@ use super::super::*;
 
 use std::io::Cursor;
 use proptest::prelude::*;
-use self::byteorder::{ByteOrder, BigEndian};
 use std::slice;
 
 #[test]
@@ -464,12 +463,11 @@ proptest! {
         assert_eq!(write_options(&[Noop, Noop, MaximumSegmentSize(arg), Noop]).options(), 
            &{
                 use tcp_option::*;
-                let mut options = [
+                let arg_be = arg.to_be_bytes();
+                [
                     KIND_NOOP, KIND_NOOP, KIND_MAXIMUM_SEGMENT_SIZE, 4,
-                    0, 0, KIND_NOOP, KIND_END
-                ];
-                BigEndian::write_u16(&mut options[4..6], arg);
-                options
+                    arg_be[0], arg_be[1], KIND_NOOP, KIND_END
+                ]
             }
         );
     }
@@ -506,120 +504,123 @@ proptest! {
     fn set_options_selective_ack(args in proptest::collection::vec(any::<u32>(), 4*2)) {
         use crate::TcpOptionElement::*;
         use tcp_option::*;
+
+        let args_be : Vec<[u8;4]> = args.iter().map(|v| v.to_be_bytes()).collect();
+
         //1
-        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Noop]).options(), 
-           &{
-                let mut options = [
-                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 10,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    KIND_NOOP, KIND_END, 0, 0
-                ];
-                BigEndian::write_u32(&mut options[4..8], args[0]);
-                BigEndian::write_u32(&mut options[8..12], args[1]);
-                options
-            }
+        assert_eq!(
+            write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), [None, None, None]), Noop]).options(), 
+           &[
+                KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 10,
+                args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                KIND_NOOP, KIND_END, 0, 0
+            ]
         );
 
         //2
-        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
-                                                                      [Some((args[2], args[3])), 
-                                                                       None, None]), 
-                                   Noop]).options(), 
-           &{
-                let mut options = [
-                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 18,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    KIND_NOOP, KIND_END, 0, 0
-                ];
-                BigEndian::write_u32(&mut options[4..8], args[0]);
-                BigEndian::write_u32(&mut options[8..12], args[1]);
-                BigEndian::write_u32(&mut options[12..16], args[2]);
-                BigEndian::write_u32(&mut options[16..20], args[3]);
-                options
-            }
+        assert_eq!(
+            write_options(
+                &[
+                    Noop,
+                    Noop,
+                    SelectiveAcknowledgement(
+                        (args[0], args[1]), 
+                        [Some((args[2], args[3])), None, None]
+                    ), 
+                    Noop
+                ]
+            ).options(),
+            [
+                KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 18,
+                args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                KIND_NOOP, KIND_END, 0, 0
+            ]
         );
 
         //3
-        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
-                                                                      [Some((args[2], args[3])), 
-                                                                       Some((args[4], args[5])), 
-                                                                       None]), 
-                                   Noop]).options(), 
-           &{
-                let mut options = [
-                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 26,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    KIND_NOOP, KIND_END, 0, 0
-                ];
-                BigEndian::write_u32(&mut options[4..8], args[0]);
-                BigEndian::write_u32(&mut options[8..12], args[1]);
-                BigEndian::write_u32(&mut options[12..16], args[2]);
-                BigEndian::write_u32(&mut options[16..20], args[3]);
-                BigEndian::write_u32(&mut options[20..24], args[4]);
-                BigEndian::write_u32(&mut options[24..28], args[5]);
-                options
-            }
+        assert_eq!(
+            write_options(
+                &[
+                    Noop,
+                    Noop,
+                    SelectiveAcknowledgement(
+                        (args[0], args[1]), 
+                        [
+                            Some((args[2], args[3])),
+                            Some((args[4], args[5])),
+                            None
+                        ]
+                    ), 
+                    Noop
+                ]
+            ).options(), 
+           &[
+                KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 26,
+                args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                args_be[4][0], args_be[4][1], args_be[4][2], args_be[4][3],
+                args_be[5][0], args_be[5][1], args_be[5][2], args_be[5][3],
+                KIND_NOOP, KIND_END, 0, 0
+            ]
         );
 
         //4
-        assert_eq!(write_options(&[Noop, Noop, SelectiveAcknowledgement((args[0], args[1]), 
-                                                                      [Some((args[2], args[3])), 
-                                                                       Some((args[4], args[5])), 
-                                                                       Some((args[6], args[7]))]), 
-                                   Noop]).options(), 
-           &{
-                let mut options = [
-                    KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 34,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
-                    KIND_NOOP, KIND_END, 0, 0
-                ];
-                BigEndian::write_u32(&mut options[4..8], args[0]);
-                BigEndian::write_u32(&mut options[8..12], args[1]);
-                BigEndian::write_u32(&mut options[12..16], args[2]);
-                BigEndian::write_u32(&mut options[16..20], args[3]);
-                BigEndian::write_u32(&mut options[20..24], args[4]);
-                BigEndian::write_u32(&mut options[24..28], args[5]);
-                BigEndian::write_u32(&mut options[28..32], args[6]);
-                BigEndian::write_u32(&mut options[32..36], args[7]);
-                options
-            }[..]
+        assert_eq!(
+            write_options(
+                &[
+                    Noop,
+                    Noop,
+                    SelectiveAcknowledgement(
+                        (args[0], args[1]),
+                        [
+                            Some((args[2], args[3])),
+                            Some((args[4], args[5])),
+                            Some((args[6], args[7]))
+                        ]
+                    ),
+                    Noop
+                ]
+            ).options(), 
+           &[
+                KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 34,
+                args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                args_be[4][0], args_be[4][1], args_be[4][2], args_be[4][3],
+                args_be[5][0], args_be[5][1], args_be[5][2], args_be[5][3],
+                args_be[6][0], args_be[6][1], args_be[6][2], args_be[6][3],
+                args_be[7][0], args_be[7][1], args_be[7][2], args_be[7][3],
+                KIND_NOOP, KIND_END, 0, 0
+            ]
         );
     }
 }
 
 proptest! {
     #[test]
-    fn set_options_timestamp(arg0 in any::<u32>(),
-                                        arg1 in any::<u32>()) {
+    fn set_options_timestamp(
+        arg0 in any::<u32>(),
+        arg1 in any::<u32>()
+    ) {
         use crate::TcpOptionElement::*;
         use tcp_option::*;
         assert_eq!(write_options(&[Noop, Noop, Timestamp(arg0, arg1), Noop]).options(), 
            &{
-                let mut options = [
+                let arg0_be = arg0.to_be_bytes();
+                let arg1_be = arg1.to_be_bytes();
+                [
                     KIND_NOOP, KIND_NOOP, KIND_TIMESTAMP, 10,
-                    0, 0, 0, 0,
-                    0, 0, 0, 0,
+                    arg0_be[0], arg0_be[1], arg0_be[2], arg0_be[3],
+                    arg1_be[0], arg1_be[1], arg1_be[2], arg1_be[3],
                     KIND_NOOP, KIND_END, 0, 0
-                ];
-                BigEndian::write_u32(&mut options[4..8], arg0);
-                BigEndian::write_u32(&mut options[8..12], arg1);
-                options
+                ]
             }
         );
     }
