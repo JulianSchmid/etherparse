@@ -1,6 +1,5 @@
 use etherparse::*;
 
-use byteorder::{ByteOrder, BigEndian};
 use super::super::*;
 use std::io::{Cursor, ErrorKind};
 
@@ -311,11 +310,14 @@ fn with_ipv4_checksum() {
 
 #[test]
 fn with_ipv4_checksum_flip() {
-    let mut payload = [0,0,0,0];
     let sum: u16 = u16::from(ip_number::UDP) +
                     (2*(UdpHeader::SERIALIZED_SIZE as u16 + 
-                        payload.len() as u16));
-    BigEndian::write_u16(&mut payload, 0xffff - sum);
+                        4 as u16));
+    let payload = {
+        let sum_be = (0xffff - sum).to_be_bytes();
+        [sum_be[0], sum_be[1], 0, 0]
+    };
+
     let ip_header = Ipv4Header::new(
         (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
         5, 

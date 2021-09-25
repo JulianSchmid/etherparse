@@ -1,7 +1,5 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{WriteBytesExt, ReadBytesExt};
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
@@ -141,8 +139,11 @@ impl Ipv6RawExtensionHeader {
 
     /// Read an fragment header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6RawExtensionHeader, ReadError> {
-        let next_header = reader.read_u8()?;
-        let header_length = reader.read_u8()?;
+        let (next_header, header_length) = {
+            let mut d : [u8;2] = [0;2];
+            reader.read_exact(&mut d)?;
+            (d[0], d[1])
+        };
 
         Ok(Ipv6RawExtensionHeader {
             next_header,
@@ -157,8 +158,7 @@ impl Ipv6RawExtensionHeader {
 
     /// Writes a given IPv6 extension header to the current position.
     pub fn write<W: io::Write + Sized>(&self, writer: &mut W) -> Result<(), WriteError> {
-        writer.write_u8(self.next_header)?;
-        writer.write_u8(self.header_length)?;
+        writer.write_all(&[self.next_header, self.header_length])?;
         writer.write_all(self.payload())?;
         Ok(())
     }

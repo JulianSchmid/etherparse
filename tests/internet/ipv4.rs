@@ -552,13 +552,14 @@ proptest! {
 
         //bad total_length
         for total_length in 0..header.header_len() {
-            use byteorder::{ByteOrder, BigEndian};
 
             let buffer = {
                 let mut buffer: Vec<u8> = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
                 //change the total length to be smaller then the header length
-                BigEndian::write_u16(&mut buffer[2..4], total_length as u16);
+                let total_len_be = (total_length as u16).to_be_bytes();
+                buffer[2] = total_len_be[0];
+                buffer[3] = total_len_be[1];
                 buffer
             };
 

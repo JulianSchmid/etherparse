@@ -3,9 +3,6 @@ use super::super::*;
 use std::net::Ipv6Addr;
 use std::slice::from_raw_parts;
 
-extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-
 ///IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6Header {
@@ -43,12 +40,13 @@ impl Ipv6Header {
 
     ///Reads an IPv6 header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6Header, ReadError> {
-        let value = reader.read_u8()?;
-        let version = value >> 4;
+        let mut value : [u8;1] = [0;1];
+        reader.read_exact(&mut value)?;
+        let version = value[0] >> 4;
         if 6 != version {
             return Err(ReadError::Ipv6UnexpectedVersion(version));
         }
-        match Ipv6Header::read_without_version(reader, value & 0xf) {
+        match Ipv6Header::read_without_version(reader, value[0] & 0xf) {
             Ok(value) => Ok(value),
             Err(err) => Err(ReadError::IoError(err))
         }
@@ -56,35 +54,28 @@ impl Ipv6Header {
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, version_rest: u8) -> Result<Ipv6Header, io::Error> {
-        let (traffic_class, flow_label) = {
-            //read 4 bytes
-            let mut buffer: [u8; 4] = [0;4];
-            reader.read_exact(&mut buffer[1..])?;
 
-            //extract class
-            let traffic_class = (version_rest << 4) | (buffer[1] >> 4);
+        let mut buffer : [u8;8+32-1] = [0;8+32-1];
+        reader.read_exact(&mut buffer[..])?;
 
-            //remove traffic class from buffer & read flow_label
-            buffer[1] &= 0xf;
-            (traffic_class, u32::from_be_bytes(buffer))
-        };
-        
         Ok(Ipv6Header{
-            traffic_class,
-            flow_label,
-            payload_length: reader.read_u16::<BigEndian>()?,
-            next_header: reader.read_u8()?,
-            hop_limit: reader.read_u8()?,
-            source: {
-                let mut buffer: [u8; 16] = [0;16];
-                reader.read_exact(&mut buffer)?;
-                buffer
-            },
-            destination: {
-                let mut buffer: [u8; 16] = [0;16];
-                reader.read_exact(&mut buffer)?;
-                buffer
-            }
+            traffic_class: (version_rest << 4) | (buffer[0] >> 4),
+            flow_label: u32::from_be_bytes([0, buffer[0] & 0xf, buffer[1], buffer[2]]),
+            payload_length: u16::from_be_bytes([buffer[3], buffer[4]]),
+            next_header: buffer[5],
+            hop_limit: buffer[6],
+            source: [
+                buffer[7],  buffer[8],  buffer[9],  buffer[10],
+                buffer[11], buffer[12], buffer[13], buffer[14],
+                buffer[15], buffer[16], buffer[17], buffer[18],
+                buffer[19], buffer[20], buffer[21], buffer[22],
+            ],
+            destination: [
+                buffer[23], buffer[24], buffer[25], buffer[26],
+                buffer[27], buffer[28], buffer[29], buffer[30],
+                buffer[31], buffer[32], buffer[33], buffer[34],
+                buffer[35], buffer[36], buffer[37], buffer[38],
+            ]
         })
     }
 
@@ -159,15 +150,21 @@ impl Ipv6Header {
         use crate::ip_number::*;
 
         let (next_header, rest_length) = match next_header {
-            IPV6_FRAG => (reader.read_u8()?, 7),
-            AUTH => (
-                reader.read_u8()?,
-                i64::from(reader.read_u8()?)*4 + 6
-            ),
-            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => (
-                reader.read_u8()?,
-                i64::from(reader.read_u8()?)*8 + 6
-            ),
+            IPV6_FRAG => {
+                let mut buf = [0; 1];
+                reader.read_exact(&mut buf)?;
+                (buf[0], 7)
+            },
+            AUTH => {
+                let mut buf = [0; 2];
+                reader.read_exact(&mut buf)?;
+                (buf[0], i64::from(buf[1])*4 + 6)
+            },
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
+                let mut buf = [0; 2];
+                reader.read_exact(&mut buf)?;
+                (buf[0],i64::from(buf[1])*8 + 6)
+            },
             // not a ipv6 header extension that can be skipped
             _ => return Ok(next_header)
         };
@@ -181,7 +178,10 @@ impl Ipv6Header {
         //seek offset to one byte before the end and then execute a normal read to
         //trigger an error.
         reader.seek(io::SeekFrom::Current(rest_length - 1))?;
-        reader.read_u8()?;
+        {
+            let mut buf = [0; 1];
+            reader.read_exact(&mut buf)?;
+        }
         Ok(next_header)
     }
 
@@ -219,30 +219,42 @@ impl Ipv6Header {
                         ValueError::U32TooLarge{
                             value, 
                             max, 
-                            field }))
+                            field
+                        }
+                    )
+                )
             }
         }
 
-        //version & traffic class p0
-        writer.write_u8((6 << 4) | (self.traffic_class >> 4))?;
-
-        //flow label
+        // check value ranges
         max_check_u32(self.flow_label, 0xfffff, Ipv6FlowLabel)?;
-        {
-            //write as a u32 to a buffer and write only the "lower bytes"
-            let mut buffer: [u8; 4] = self.flow_label.to_be_bytes();
-            //add the traffic_class
-            buffer[1] |= self.traffic_class << 4;
-            //skip "highest" byte of big endian
-            writer.write_all(&buffer[1..])?;
-        }
 
-        //rest
-        writer.write_u16::<BigEndian>(self.payload_length)?;
-        writer.write_u8(self.next_header)?;
-        writer.write_u8(self.hop_limit)?;
-        writer.write_all(&self.source)?;
-        writer.write_all(&self.destination)?;
+        // serialize header
+        let flow_label_be = self.flow_label.to_be_bytes();
+        let payload_len_be = self.payload_length.to_be_bytes();
+
+        let header_raw = [
+            (6 << 4) | (self.traffic_class >> 4), 
+            (self.traffic_class << 4) | flow_label_be[1],
+            flow_label_be[2],
+            flow_label_be[3],
+
+            payload_len_be[0],
+            payload_len_be[1],
+            self.next_header,
+            self.hop_limit,
+
+            self.source[0], self.source[1], self.source[2], self.source[3],
+            self.source[4], self.source[5], self.source[6], self.source[7],
+            self.source[8], self.source[9], self.source[10], self.source[11],
+            self.source[12], self.source[13], self.source[14], self.source[15],
+
+            self.destination[0], self.destination[1], self.destination[2], self.destination[3],
+            self.destination[4], self.destination[5], self.destination[6], self.destination[7],
+            self.destination[8], self.destination[9], self.destination[10], self.destination[11],
+            self.destination[12], self.destination[13], self.destination[14], self.destination[15],
+        ];
+        writer.write_all(&header_raw)?;
 
         Ok(())
     }
