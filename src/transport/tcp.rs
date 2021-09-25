@@ -1,7 +1,5 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
@@ -292,15 +290,20 @@ impl TcpHeader {
 
     ///Read a tcp header from the current position
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
-        let source_port = reader.read_u16::<BigEndian>()?;
-        let destination_port = reader.read_u16::<BigEndian>()?;
-        let sequence_number = reader.read_u32::<BigEndian>()?;
-        let acknowledgment_number = reader.read_u32::<BigEndian>()?;
+        let raw = {
+            let mut raw : [u8;20] = [0;20];
+            reader.read_exact(&mut raw)?;
+            raw
+        };
+        let source_port = u16::from_be_bytes([raw[0], raw[1]]);
+        let destination_port = u16::from_be_bytes([raw[2], raw[3]]);
+        let sequence_number = u32::from_be_bytes([raw[4], raw[5], raw[6], raw[7]]);
+        let acknowledgment_number = u32::from_be_bytes([raw[8], raw[9], raw[10], raw[11]]);
         let (data_offset, ns) = {
-            let value = reader.read_u8()?;
+            let value = raw[12];
             ((value & 0xf0) >> 4, 0 != value & 1)
         };
-        let flags = reader.read_u8()?;
+        let flags = raw[13];
 
         Ok(TcpHeader{
             source_port,
@@ -316,9 +319,9 @@ impl TcpHeader {
             urg: 0 != flags & 32,
             ece: 0 != flags & 64,
             cwr: 0 != flags & 128,
-            window_size: reader.read_u16::<BigEndian>()?,
-            checksum: reader.read_u16::<BigEndian>()?,
-            urgent_pointer: reader.read_u16::<BigEndian>()?,
+            window_size: u16::from_be_bytes([raw[14], raw[15]]),
+            checksum: u16::from_be_bytes([raw[16], raw[17]]),
+            urgent_pointer: u16::from_be_bytes([raw[18], raw[19]]),
             options_buffer: {
                 if data_offset < TCP_MINIMUM_DATA_OFFSET {
                     return Err(ReadError::TcpDataOffsetTooSmall(data_offset));
@@ -343,49 +346,59 @@ impl TcpHeader {
         debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
         debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
 
-        writer.write_u16::<BigEndian>(self.source_port)?;
-        writer.write_u16::<BigEndian>(self.destination_port)?;
-        writer.write_u32::<BigEndian>(self.sequence_number)?;
-        writer.write_u32::<BigEndian>(self.acknowledgment_number)?;
-        writer.write_u8({
-            let value = (self._data_offset << 4) & 0xF0;
-            if self.ns {
-                value | 1
-            } else {
-                value
-            }
-        })?;
-        writer.write_u8({
-            let mut value = 0;
-            if self.fin {
-                value |= 1;
-            }
-            if self.syn {
-                value |= 2;
-            }
-            if self.rst {
-                value |= 4;
-            }
-            if self.psh {
-                value |= 8;
-            }
-            if self.ack {
-                value |= 16;
-            }
-            if self.urg {
-                value |= 32;
-            }
-            if self.ece {
-                value |= 64;
-            }
-            if self.cwr {
-                value |= 128;
-            }
-            value
-        })?;
-        writer.write_u16::<BigEndian>(self.window_size)?;
-        writer.write_u16::<BigEndian>(self.checksum)?;
-        writer.write_u16::<BigEndian>(self.urgent_pointer)?;
+        let src_be = self.source_port.to_be_bytes();
+        let dst_be = self.destination_port.to_be_bytes();
+        let seq_be = self.sequence_number.to_be_bytes();
+        let ack_be = self.acknowledgment_number.to_be_bytes();
+        let window_be = self.window_size.to_be_bytes();
+        let checksum_be = self.checksum.to_be_bytes();
+        let urg_ptr_be = self.urgent_pointer.to_be_bytes();
+
+        writer.write_all(
+            &[
+                src_be[0], src_be[1], dst_be[0], dst_be[1],
+                seq_be[0], seq_be[1], seq_be[2], seq_be[3],
+                ack_be[0], ack_be[1], ack_be[2], ack_be[3],
+                {
+                    let value = (self._data_offset << 4) & 0xF0;
+                    if self.ns {
+                        value | 1
+                    } else {
+                        value
+                    }
+                },
+                {
+                    let mut value = 0;
+                    if self.fin {
+                        value |= 1;
+                    }
+                    if self.syn {
+                        value |= 2;
+                    }
+                    if self.rst {
+                        value |= 4;
+                    }
+                    if self.psh {
+                        value |= 8;
+                    }
+                    if self.ack {
+                        value |= 16;
+                    }
+                    if self.urg {
+                        value |= 32;
+                    }
+                    if self.ece {
+                        value |= 64;
+                    }
+                    if self.cwr {
+                        value |= 128;
+                    }
+                    value
+                },
+                window_be[0], window_be[1],
+                checksum_be[0], checksum_be[1], urg_ptr_be[0], urg_ptr_be[1]
+            ]
+        )?;
 
         //write options if the data_offset is large enough
         if self._data_offset > TCP_MINIMUM_DATA_OFFSET {

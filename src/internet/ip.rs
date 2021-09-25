@@ -1,8 +1,5 @@
 use super::super::*;
 
-extern crate byteorder;
-use self::byteorder::ReadBytesExt;
-
 ///Internet protocol headers version 4 & 6
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IpHeader {
@@ -39,7 +36,11 @@ impl IpHeader {
 
     ///Reads an IP (v4 or v6) header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<(IpHeader, u8), ReadError> {
-        let value = reader.read_u8()?;
+        let value = {
+            let mut buf = [0;1];
+            reader.read_exact(&mut buf)?;
+            buf[0]
+        };
         match value >> 4 {
             4 => {
                 let header = Ipv4Header::read_without_version(reader, value & 0xf)?;

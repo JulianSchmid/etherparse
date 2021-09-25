@@ -1,6 +1,5 @@
 use super::super::*;
 
-extern crate byteorder;
 use std::slice::from_raw_parts;
 
 /// IPv6 fragment header.

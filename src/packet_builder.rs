@@ -1,6 +1,5 @@
 use super::*;
 
-extern crate byteorder;
 use std::{io, marker};
 
 /// Helper for building packets.

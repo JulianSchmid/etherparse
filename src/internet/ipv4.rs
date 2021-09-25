@@ -4,9 +4,6 @@ use std::net::Ipv4Addr;
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
-extern crate byteorder;
-use self::byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-
 ///IPv4 header without options.
 #[derive(Clone)]
 pub struct Ipv4Header {
@@ -133,43 +130,47 @@ impl Ipv4Header {
 
     ///Reads an IPv4 header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv4Header, ReadError> {
-        let value = reader.read_u8()?;
-        let version = value >> 4;
+        let mut first_byte : [u8;1] = [0;1];
+        reader.read_exact(&mut first_byte)?;
+
+        let version = first_byte[0] >> 4;
         if 4 != version {
             return Err(ReadError::Ipv4UnexpectedVersion(version));
         }
-        Ipv4Header::read_without_version(reader, value & 0xf)
+        Ipv4Header::read_without_version(reader, first_byte[0])
     }
 
     ///Reads an IPv4 header assuming the version & ihl field have already been read.
-    pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, version_rest: u8) -> Result<Ipv4Header, ReadError> {
-        let ihl = version_rest;
+    pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, first_byte: u8) -> Result<Ipv4Header, ReadError> {
+        
+        let mut header_raw : [u8;20] = [0;20];
+        header_raw[0] = first_byte;
+        reader.read_exact(&mut header_raw[1..])?;
+
+        let ihl = header_raw[0] & 0xf;
         if ihl < 5 {
             use crate::ReadError::*;
             return Err(Ipv4HeaderLengthBad(ihl));
         }
+
         let (dscp, ecn) = {
-            let value = reader.read_u8()?;
+            let value = header_raw[1];
             (value >> 2, value & 0x3)
         };
         let header_length = u16::from(ihl)*4;
-        let total_length = reader.read_u16::<BigEndian>()?;
+        let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
         if total_length < header_length {
             use crate::ReadError::*;
             return Err(Ipv4TotalLengthTooSmall(total_length));
         }
-        let identification = reader.read_u16::<BigEndian>()?;
-        let (dont_fragment, more_fragments, fragments_offset) = {
-            let mut values: [u8; 2] = [0;2];
-            reader.read_exact(&mut values)?;
-            (
-                0 != (values[0] & 0b0100_0000),
-                0 != (values[0] & 0b0010_0000),
-                u16::from_be_bytes(
-                    [values[0] & 0b0001_1111, values[1]]
-                )
+        let identification = u16::from_be_bytes([header_raw[4], header_raw[5]]);
+        let (dont_fragment, more_fragments, fragments_offset) = (
+            0 != (header_raw[6] & 0b0100_0000),
+            0 != (header_raw[6] & 0b0010_0000),
+            u16::from_be_bytes(
+                [header_raw[6] & 0b0001_1111, header_raw[7]]
             )
-        };
+        );
         Ok(Ipv4Header{
             differentiated_services_code_point: dscp,
             explicit_congestion_notification: ecn,
@@ -178,19 +179,11 @@ impl Ipv4Header {
             dont_fragment,
             more_fragments,
             fragments_offset,
-            time_to_live: reader.read_u8()?,
-            protocol: reader.read_u8()?,
-            header_checksum: reader.read_u16::<BigEndian>()?,
-            source: {
-                let mut values: [u8;4] = [0;4];
-                reader.read_exact(&mut values)?;
-                values
-            },
-            destination: {
-                let mut values: [u8;4] = [0;4];
-                reader.read_exact(&mut values)?;
-                values
-            },
+            time_to_live: header_raw[8],
+            protocol: header_raw[9],
+            header_checksum: u16::from_be_bytes([header_raw[10], header_raw[11]]),
+            source: [header_raw[12], header_raw[13], header_raw[14], header_raw[15]],
+            destination: [header_raw[16], header_raw[17], header_raw[18], header_raw[19]],
             options_len: (ihl - 5)*4,
             options_buffer: {
                 let mut values: [u8;40] = [0;40];
@@ -243,19 +236,10 @@ impl Ipv4Header {
 
     ///Write the given header with the  checksum and header length specified in the seperate arguments
     fn write_ipv4_header_internal<T: io::Write>(&self, write: &mut T, header_checksum: u16) -> Result<(), WriteError> {
-        //version & header_length
-        write.write_u8((4 << 4) | self.ihl())?;
-
-        //dscp & ecn        
-        write.write_u8((self.differentiated_services_code_point << 2) | self.explicit_congestion_notification)?;
-
-        //total length & id 
-        write.write_u16::<BigEndian>(self.total_len())?;
-        write.write_u16::<BigEndian>(self.identification)?;
-
-        //flags & fragmentation offset
-        {
-            let buf: [u8;2] = self.fragments_offset.to_be_bytes();
+        let total_len_be = self.total_len().to_be_bytes();
+        let id_be = self.identification.to_be_bytes();
+        let frag_and_flags = {
+            let frag_be: [u8;2] = self.fragments_offset.to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -266,21 +250,40 @@ impl Ipv4Header {
                 }
                 result
             };
-            write.write_u8(
-                flags |
-                (buf[0] & 0x1f),
-            )?;
-            write.write_u8(
-                buf[1]
-            )?;
-        }
+            [
+                flags | (frag_be[0] & 0x1f),
+                frag_be[1],
+            ]
+        };
+        let header_checksum_be = header_checksum.to_be_bytes();
 
-        //rest
-        write.write_u8(self.time_to_live)?;
-        write.write_u8(self.protocol)?;
-        write.write_u16::<BigEndian>(header_checksum)?;
-        write.write_all(&self.source)?;
-        write.write_all(&self.destination)?;
+        let header_raw = [
+            (4 << 4) | self.ihl(),
+            (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification,
+            total_len_be[0],
+            total_len_be[1],
+
+            id_be[0],
+            id_be[1],
+            frag_and_flags[0],
+            frag_and_flags[1],
+
+            self.time_to_live,
+            self.protocol,
+            header_checksum_be[0],
+            header_checksum_be[1],
+
+            self.source[0],
+            self.source[1],
+            self.source[2],
+            self.source[3],
+
+            self.destination[0],
+            self.destination[1],
+            self.destination[2],
+            self.destination[3],
+        ];
+        write.write_all(&header_raw)?;
 
         //options
         write.write_all(&self.options())?;
@@ -301,19 +304,18 @@ impl Ipv4Header {
 
     ///Calculate the header checksum under the assumtion that all value ranges in the header are correct
     fn calc_header_checksum_unchecked(&self) -> u16 {
-        //version & header_length
-        let mut sum: u32 = [
-            u16::from_be_bytes(
-                [
-                    (4 << 4) | self.ihl(),
-                    (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification 
-                ]
-            ),
-            self.total_len(),
-            self.identification,
-            //flags & fragmentation offset
+        checksum::Sum16BitWords::new()
+        .add_2bytes(
+            [
+                (4 << 4) | self.ihl(),
+                (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification 
+            ]
+        )
+        .add_2bytes(self.total_len().to_be_bytes())
+        .add_2bytes(self.identification.to_be_bytes())
+        .add_2bytes(
             {
-                let buf: [u8;2] = self.fragments_offset.to_be_bytes();
+                let frag_off_be = self.fragments_offset.to_be_bytes();
                 let flags = {
                     let mut result = 0;
                     if self.dont_fragment {
@@ -324,34 +326,18 @@ impl Ipv4Header {
                     }
                     result
                 };
-                u16::from_be_bytes(
-                    [
-                        flags | (buf[0] & 0x1f),
-                        buf[1]
-                    ]
-                )
-            },
-            u16::from_be_bytes([self.time_to_live, self.protocol]),
-            //skip checksum (for obvious reasons)
-            u16::from_be_bytes([self.source[0], self.source[1]]),
-            u16::from_be_bytes([self.source[2], self.source[3]]),
-            u16::from_be_bytes([self.destination[0], self.destination[1]]),
-            u16::from_be_bytes([self.destination[2], self.destination[3]]),
-        ].iter().map(|x| u32::from(*x)).sum();
-        let options = self.options();
-        for i in 0..(options.len()/2) {
-            sum += u32::from( 
-                u16::from_be_bytes(
-                    [
-                        options[i*2],
-                        options[i*2 + 1]
-                    ]
-                )
-            );
-        }
-
-        let carry_add = (sum & 0xffff) + (sum >> 16);
-        !( ((carry_add & 0xffff) + (carry_add >> 16)) as u16 )
+                [
+                    flags | (frag_off_be[0] & 0x1f),
+                    frag_off_be[1]
+                ]
+            }
+        )
+        .add_2bytes([self.time_to_live, self.protocol])
+        .add_4bytes(self.source)
+        .add_4bytes(self.destination)
+        .add_slice(self.options())
+        .ones_complement()
+        .to_be()
     }
 }
 

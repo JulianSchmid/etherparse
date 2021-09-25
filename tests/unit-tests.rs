@@ -1,8 +1,6 @@
 extern crate etherparse;
 use etherparse::*;
 
-extern crate byteorder;
-
 #[macro_use]
 extern crate assert_matches;
 
