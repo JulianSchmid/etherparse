@@ -6,7 +6,48 @@ It has been 1.5 years since the last update, I think it is fair to say I underes
 
 But I hope the changes overall improve the library and will be worth it in the long run.
 
-### `source()` & `destination()` now return static arrays:
+
+### Extension headers added to `IpHeader` & `InternetSlice`
+
+With the added support for authentification headers (for both IPV4 and IPV6) and additional IPV6 extension headers a place to store the results when parsing headers or slicing them had be chosen. After some though I decided to put the results into the enum values as a second argument. 
+
+So the signature of `IpHeader` has changed from
+
+```rust
+pub enum IpHeader {
+    Version4(Ipv4Header),
+    Version6(Ipv6Header)
+}
+```
+
+to
+
+```rust
+pub enum IpHeader {
+    Version4(Ipv4Header, Ipv4Extensions),
+    Version6(Ipv6Header, Ipv6Extensions)
+}
+```
+
+and the signature of `InternetSlice` has changed from
+
+```rust
+pub enum InternetSlice<'a> {
+    Ipv4(Ipv4HeaderSlice<'a>),
+    Ipv6(Ipv6HeaderSlice<'a>, [Option<(u8, Ipv6ExtensionHeaderSlice<'a>)>; IPV6_MAX_NUM_HEADER_EXTENSIONS]),
+}
+```
+
+to
+
+```rust
+pub enum InternetSlice<'a> {
+    Ipv4(Ipv4HeaderSlice<'a>, Ipv4ExtensionsSlice<'a>),
+    Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionsSlice<'a>),
+}
+```
+
+### `source()` & `destination()` return static arrays:
 
 Previously when slicing packets the the methods for accessing the `source` & `destionation` returned a slice reference:
 
@@ -56,6 +97,45 @@ Ipv4Header::new(
 ```
 
 Not only makes this change it easier to copy address values from a slice to a header, but it also should bring a minor performance improvements (together with other changes). Fixed-sized arrays don't require slice range checks when acessed and the arrays are small enough that they fit in one or two registers on 64bit systems.
+
+### `UdpHeader::calc_checksum_ipv4*` & `UdpHeader::calc_checksum*` now use a constant for the `protocol` field in the pseudo header
+
+Previously checksum calculation functions for udp used a protocol value either given as an argument or taken from the ipv4 headers protocol field in it's checksum calculation. After having a closer look at [RFC 768](https://tools.ietf.org/html/rfc768) and what Wireshark does, this seems to have been a mistake. Specifically when an authentifiction header is present between the ip header and the udp header. In this case `ip_number::UDP` (17) is used and not the value of the ipv4 header `protocol` field (which will be `ip_number::AUTH` (51)).
+
+To resolve this I changed the checksum calculation to always use `ip_number::UDP` and remove all arguments that allow the user to pass in the protocol number from the outside.
+
+Which means 
+
+```rust
+impl UdpHeader {
+    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
+        // ...
+    }
+```
+
+looses the `protocol` argument
+
+```rust
+impl UdpHeader {
+
+    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
+```
+
+and 
+
+```rust
+impl UdpHeader {
+    pub fn with_ipv4_checksum(source_port: u16, destination_port: u16, ip_header: &Ipv4Header, payload: &[u8]) -> Result<UdpHeader, ValueError> {
+        // ...
+    }
+
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
+        // ....
+    }
+
+```
+
+will no longer use `ip_header.protocol` in their checksum calculations.
 
 ### General:
 

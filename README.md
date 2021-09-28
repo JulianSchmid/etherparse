@@ -180,6 +180,7 @@ Read the documentations of the different methods for a more details:
 * Mobility Support in IPv6 [RFC 6275](https://tools.ietf.org/html/rfc6275)
 * Host Identity Protocol Version 2 (HIPv2) [RFC 7401](https://tools.ietf.org/html/rfc7401)
 * Shim6: Level 3 Multihoming Shim Protocol for IPv6 [RFC 5533](https://tools.ietf.org/html/rfc5533)
+* Computing the Internet Checksum [RFC 1071](https://datatracker.ietf.org/doc/html/rfc1071)
 
 ## License
 Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
