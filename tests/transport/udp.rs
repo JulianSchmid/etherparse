@@ -8,15 +8,161 @@ mod udp_header {
 
     proptest! {
         #[test]
-        fn without_ipv4_checksum(input in udp_any()) {
-            // TODO
+        fn without_ipv4_checksum(
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            good_payload_length in 0..=((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE),
+            bad_payload_length in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+        ) {
+
+            // normal working call
+            {
+                let actual = UdpHeader::without_ipv4_checksum(
+                    source_port,
+                    destination_port,
+                    good_payload_length
+                ).unwrap();
+                assert_eq!(
+                    actual,
+                    UdpHeader{
+                        source_port,
+                        destination_port,
+                        length: (UdpHeader::SERIALIZED_SIZE + good_payload_length) as u16,
+                        checksum: 0
+                    }
+                );
+            }
+
+            // length too large
+            {
+                let actual = UdpHeader::without_ipv4_checksum(
+                    source_port,
+                    destination_port,
+                    bad_payload_length
+                ).unwrap_err();
+                assert_eq!(
+                    actual,
+                    ValueError::UdpPayloadLengthTooLarge(bad_payload_length)
+                );
+            }
         }
+    }
+
+    /// Calculat the expected UDP header checksum for the tests.
+    fn expected_udp_ipv4_checksum(source: [u8;4], destination: [u8;4], udp_header: &UdpHeader, payload: &[u8]) -> u16 {
+        ::etherparse::checksum::Sum16BitWords::new()
+        // pseudo header
+        .add_4bytes(source)
+        .add_4bytes(destination)
+        .add_2bytes([0, ip_number::UDP])
+        .add_2bytes(udp_header.length.to_be_bytes())
+        // udp header
+        .add_2bytes(udp_header.source_port.to_be_bytes())
+        .add_2bytes(udp_header.destination_port.to_be_bytes())
+        .add_2bytes(udp_header.length.to_be_bytes())
+        .add_2bytes([0, 0]) // checksum as zero (should have no effect)
+        .add_slice(payload)
+        .to_ones_complement_with_no_zero()
+        .to_be()
     }
 
     proptest! {
         #[test]
-        fn with_ipv4_checksum(input in udp_any()) {
-            // TODO
+        fn with_ipv4_checksum(
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            ipv4 in ipv4_any(),
+            payload in proptest::collection::vec(any::<u8>(), 0..20),
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+        ) {
+            // normal case
+            assert_eq!(
+                UdpHeader::with_ipv4_checksum(
+                    source_port,
+                    destination_port,
+                    &ipv4,
+                    &payload
+                ).unwrap(),
+                {
+                    let mut expected = UdpHeader {
+                        source_port,
+                        destination_port,
+                        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                        checksum: 0,
+                    };
+                    let checksum = expected_udp_ipv4_checksum(
+                        ipv4.source,
+                        ipv4.destination,
+                        &expected,
+                        &payload
+                    );
+                    expected.checksum = checksum;
+                    expected
+                }
+            );
+
+            // case where the 16 bit word results in a checksum of
+            // 0, but gets converted to 0xffff as 0 is reserved.
+            {
+                let base = UdpHeader {
+                    source_port: 0,
+                    destination_port,
+                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    checksum: 0,
+                };
+                // use the source port to force 0 as a result value
+                // for that first calculate the checksum with the source
+                // set to 0
+                let sourceless_checksum = !(expected_udp_ipv4_checksum(
+                    ipv4.source,
+                    ipv4.destination,
+                    &base,
+                    &payload
+                ).to_le());
+
+                
+                assert_eq!(
+                    UdpHeader::with_ipv4_checksum(
+                        // we now need to add a value that results in the value
+                        // 0xffff (which will become 0 via the ones complement rule).
+                        0xffff - sourceless_checksum,
+                        destination_port,
+                        &ipv4,
+                        &payload
+                    ).unwrap(),
+                    UdpHeader{
+                        source_port: 0xffff - sourceless_checksum,
+                        destination_port,
+                        length: base.length,
+                        checksum: 0xffff
+                    }
+                );
+            }
+            
+            // length error case
+            {
+                // SAFETY: In case the error is not triggered
+                //         a nullptr exception will be triggered.
+                let too_big_slice = unsafe {
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    std::slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        bad_len
+                    )
+                };
+                assert_eq!(
+                    ValueError::UdpPayloadLengthTooLarge(bad_len),
+                    UdpHeader::with_ipv4_checksum(
+                        source_port,
+                        destination_port,
+                        &ipv4,
+                        &too_big_slice
+                    ).unwrap_err()
+                );
+            }
         }
     }
 
@@ -367,7 +513,7 @@ fn with_ipv4_payload_size_check() {
                         Ok(_));
 
         //checksum calculation raw
-        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, &payload),
+        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &payload),
                         Ok(_));
     }
 
@@ -391,7 +537,7 @@ fn with_ipv4_payload_size_check() {
                         Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
 
         //checksum calculation raw
-        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, &payload),
+        assert_matches!(header.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &payload),
                         Err(ValueError::UdpPayloadLengthTooLarge(TOO_LARGE)));
     }
 }
@@ -422,7 +568,7 @@ fn udp_calc_checksum_ipv4_raw() {
     };
     let payload = [9,10,11,12, 13,14,15,16];
 
-    assert_eq!(42134, udp.calc_checksum_ipv4_raw([1,2,3,4], [5,6,7,8], ip_number::UDP, &payload).unwrap());
+    assert_eq!(42134, udp.calc_checksum_ipv4_raw([1,2,3,4], [5,6,7,8], &payload).unwrap());
 }
 
 #[test]

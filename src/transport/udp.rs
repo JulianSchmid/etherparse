@@ -48,35 +48,35 @@ impl UdpHeader {
             length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
             checksum: 0
         };
-        result.checksum = result.calc_checksum_ipv4_internal(ip_header.source, ip_header.destination, ip_header.protocol, payload);
+        result.checksum = result.calc_checksum_ipv4_internal(ip_header.source, ip_header.destination, payload);
         Ok(result)
     }
 
     /// Calculates the upd header checksum based on a ipv4 header.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, ip_header.protocol, payload)
+        self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
     /// Calculates the upd header checksum based on a ipv4 header.
-    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
 
-        Ok(self.calc_checksum_ipv4_internal(source, destination, protocol, payload))
+        Ok(self.calc_checksum_ipv4_internal(source, destination, payload))
     }
     
     /// Calculates the upd header checksum based on a ipv4 header.
-    fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], protocol: u8, payload: &[u8]) -> u16 {
+    fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], payload: &[u8]) -> u16 {
 
         self.calc_checksum_post_ip(
             //pseudo header
             checksum::Sum16BitWords::new()
             .add_4bytes(source)
             .add_4bytes(destination)
-            .add_2bytes([0, protocol])
+            .add_2bytes([0, ip_number::UDP])
             .add_2bytes(self.length.to_be_bytes()), 
             payload
         )
