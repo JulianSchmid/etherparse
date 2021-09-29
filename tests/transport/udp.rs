@@ -120,7 +120,6 @@ mod udp_header {
                     &payload
                 ).to_le());
 
-                
                 assert_eq!(
                     UdpHeader::with_ipv4_checksum(
                         // we now need to add a value that results in the value
@@ -142,7 +141,7 @@ mod udp_header {
             // length error case
             {
                 // SAFETY: In case the error is not triggered
-                //         a nullptr exception will be triggered.
+                //         a segmentation fault will be triggered.
                 let too_big_slice = unsafe {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
@@ -168,8 +167,105 @@ mod udp_header {
 
     proptest! {
         #[test]
-        fn calc_checksum_ipv4_raw(input in udp_any()) {
-            // TODO
+        fn calc_checksum_ipv4_raw(
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            dummy_checksum in any::<u16>(),
+            ipv4 in ipv4_any(),
+            payload in proptest::collection::vec(any::<u8>(), 0..20),
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+        ) {
+            // normal case
+            {
+                let header = UdpHeader {
+                    source_port,
+                    destination_port,
+                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    checksum: dummy_checksum,
+                };
+
+                assert_eq!(
+                    header.calc_checksum_ipv4_raw(
+                        ipv4.source,
+                        ipv4.destination,
+                        &payload
+                    ).unwrap(),
+                    expected_udp_ipv4_checksum(
+                        ipv4.source,
+                        ipv4.destination,
+                        &header,
+                        &payload
+                    )
+                );
+            }
+
+            // case where the 16 bit word results in a checksum of
+            // 0, but gets converted to 0xffff as 0 is reserved.
+            {
+                let base = UdpHeader {
+                    source_port: 0,
+                    destination_port,
+                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    checksum: dummy_checksum,
+                };
+                // use the source port to force 0 as a result value
+                // for that first calculate the checksum with the source
+                // set to 0
+                let sourceless_checksum = !(expected_udp_ipv4_checksum(
+                    ipv4.source,
+                    ipv4.destination,
+                    &base,
+                    &payload
+                ).to_le());
+
+                // we now need to add a value that results in the value
+                // 0xffff (which will become 0 via the ones complement rule).
+                let header = {
+                    let mut header = base.clone();
+                    header.source_port = 0xffff - sourceless_checksum;
+                    header
+                };
+
+                assert_eq!(
+                    0xffff,
+                    header.calc_checksum_ipv4_raw(
+                        ipv4.source,
+                        ipv4.destination,
+                        &payload
+                    ).unwrap()
+                );
+            }
+            
+            // length error case
+            {
+                let header = UdpHeader {
+                    source_port,
+                    destination_port,
+                    // udp header length itself is ok, but the payload not
+                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    checksum: dummy_checksum,
+                };
+                // SAFETY: In case the error is not triggered
+                //         a segmentation fault will be triggered.
+                let too_big_slice = unsafe {
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    std::slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        bad_len
+                    )
+                };
+                assert_eq!(
+                    ValueError::UdpPayloadLengthTooLarge(bad_len),
+                    header.calc_checksum_ipv4_raw(
+                        ipv4.source,
+                        ipv4.destination,
+                        too_big_slice
+                    ).unwrap_err()
+                );
+            }
         }
     }
 
