@@ -706,7 +706,7 @@ pub mod u64_16bit_word {
         };
 
         // in case 2 bytes are left add them as an word
-        if slice.len() - end_32 >= 2 { // TODO this is wrooong
+        if slice.len() - end_32 >= 2 {
             sum = add_2bytes(
                 sum,
                 // SAFETY:
@@ -760,18 +760,22 @@ pub mod u64_16bit_word {
     /// Converts summed up words from an u64 to an u16 which can be used in a ipv4.
     #[inline]
     pub fn ones_complement(sum: u64) -> u16 {
-        // Add the upper 16 bits to the lower 16 bits twice.
-        //
-        // Notes: Two carry adds are needed as the first one could
-        //        result in an additional carry add.
         let first =
             ((sum >> 48) & 0xffff) +
             ((sum >> 32) & 0xffff) +
             ((sum >> 16) & 0xffff) +
             (sum & 0xffff);
-        let u16value = (
+        // Add the upper 16 bits to the lower 16 bits twice.
+        //
+        // Notes: Two carry adds are needed as the first one could
+        //        result in an additional carry add.
+        let second =
             ((first >> 16) & 0xffff) +
             (first & 0xffff)
+        ;
+        let u16value = (
+            ((second >> 16) & 0xffff) +
+            (second & 0xffff)
         ) as u16;
         
         // switch back to big endian (allows to use
@@ -1033,6 +1037,13 @@ pub mod u64_16bit_word {
             assert_eq!(
                 !(((0x1234+0xf234u32+0x1456u32+0xf123u32+2u32) & 0xffff) as u16),
                 ones_complement(0x1234_f234_1456_f123),
+            );
+
+            // will result in a first 16bit sum that will have to be
+            // carry added twice
+            assert_eq!(
+                !1,
+                ones_complement(0x02f6_e312_7fd7_9a20),
             );
         }
     }
