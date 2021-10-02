@@ -73,7 +73,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -173,7 +173,7 @@ mod udp_header {
             dummy_checksum in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
         ) {
             // normal case
             {
@@ -294,7 +294,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -393,7 +393,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+            bad_len in ((std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -493,7 +493,7 @@ mod udp_header {
             dummy_checksum in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..usize::MAX,
+            bad_len in ((std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
         ) {
             // normal case
             {
