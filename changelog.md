@@ -100,7 +100,7 @@ Not only makes this change it easier to copy address values from a slice to a he
 
 ### `UdpHeader::calc_checksum_ipv4*` & `UdpHeader::calc_checksum*` now use a constant for the `protocol` field in the pseudo header
 
-Previously checksum calculation functions for udp used a protocol value either given as an argument or taken from the ipv4 headers protocol field in it's checksum calculation. After having a closer look at [RFC 768](https://tools.ietf.org/html/rfc768) and what Wireshark does, this seems to have been a mistake. Specifically when an authentifiction header is present between the ip header and the udp header. In this case `ip_number::UDP` (17) is used and not the value of the ipv4 header `protocol` field (which will be `ip_number::AUTH` (51)).
+Previously checksum calculation functions for udp used a protocol value either given as an argument or taken from the ipv4 headers protocol field in it's checksum calculation. After having a closer look at [RFC 768](https://tools.ietf.org/html/rfc768) and what Wireshark does, this seems to have been a mistake. Specifically when an authentifiction header is present between the ip header and the udp header. In this case `ip_number::UDP` (17) should be used and not the value of the ipv4 header `protocol` field (which will be `ip_number::AUTH` (51)).
 
 To resolve this I changed the checksum calculation to always use `ip_number::UDP` and remove all arguments that allow the user to pass in the protocol number from the outside.
 
