@@ -1,10 +1,17 @@
 use super::super::*;
 
 mod ip_header {
-
     use super::*;
     use crate::ip_number::*;
     use std::io::Cursor;
+
+    const EXTESION_KNOWN_IP_NUMBERS : [u8;5] = [
+        AUTH,
+        IPV6_DEST_OPTIONS,
+        IPV6_HOP_BY_HOP,
+        IPV6_FRAG,
+        IPV6_ROUTE,
+    ];
 
     fn combine_v4(v4: &Ipv4Header, ext: &Ipv4Extensions) -> IpHeader {
         IpHeader::Version4(
@@ -226,24 +233,102 @@ mod ip_header {
         }
     }
 
-    #[test]
-    fn header_len() {
-        // TODO
+    proptest!{
+        #[test]
+        fn header_len(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            assert_eq!(
+                v4.header_len() + v4_exts.header_len(),
+                IpHeader::Version4(v4, v4_exts).header_len()
+            );
+            assert_eq!(
+                Ipv6Header::SERIALIZED_SIZE + v6_exts.header_len(),
+                IpHeader::Version6(v6, v6_exts).header_len()
+            );
+        }
     }
 
-    #[test]
-    fn next_header() {
-        // TODO
+    proptest!{
+        #[test]
+        fn next_header(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+            post_header in any::<u8>()
+                .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
+                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                )
+        ) {
+            {
+                let mut header = v4.clone();
+                let mut exts = v4_exts.clone();
+                header.protocol = exts.set_next_headers(post_header);
+                assert_eq!(
+                    Ok(post_header),
+                    IpHeader::Version4(header, exts).next_header()
+                );
+            }
+            {
+                let mut header = v6.clone();
+                let mut exts = v6_exts.clone();
+                header.next_header = exts.set_next_headers(post_header);
+                assert_eq!(
+                    Ok(post_header),
+                    IpHeader::Version6(header, exts).next_header()
+                );
+            }
+        }
     }
 
-    #[test]
-    fn debug() {
-        // TODO
+    proptest!{
+        #[test]
+        fn debug(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            assert_eq!(
+                format!(
+                    "Version4({:?}, {:?})",
+                    v4,
+                    v4_exts
+                ),
+                format!("{:?}", IpHeader::Version4(v4, v4_exts))
+            );
+            assert_eq!(
+                format!(
+                    "Version6({:?}, {:?})",
+                    v6,
+                    v6_exts
+                ),
+                format!("{:?}", IpHeader::Version6(v6, v6_exts))
+            );
+        }
     }
 
-    #[test]
-    fn clone_eq() {
-        // TODO
+    proptest!{
+        #[test]
+        fn clone_eq(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            {
+                let v4 = IpHeader::Version4(v4, v4_exts);
+                assert_eq!(v4, v4.clone());
+            }
+            {
+                let v6 = IpHeader::Version6(v6, v6_exts);
+                assert_eq!(v6, v6.clone());
+            }
+        }
     }
 
     #[test]
@@ -289,6 +374,7 @@ mod ip_header {
 } // mod ip_header
 
 mod ip_number {
+    use super::*;
 
     #[test]
     fn is_ipv6_ext_header_value() {
@@ -348,12 +434,16 @@ mod ip_number {
 
     #[test]
     fn debug() {
-        // TODO
+        assert_eq!(
+            "IPv6HeaderHopByHop",
+            &format!("{:?}", IpNumber::IPv6HeaderHopByHop)
+        );
     }
 
     #[test]
     fn clone_eq() {
-        // TODO
+        let value = IpNumber::IPv6HeaderHopByHop;
+        assert_eq!(value, value.clone());
     }
 
 } // mod ip_number
