@@ -6,6 +6,42 @@ mod transport_header {
     use std::slice;
     use std::io::Cursor;
 
+    proptest! {
+        #[test]
+        fn debug(
+            ref tcp in tcp_any(),
+            ref udp in udp_any(),
+        ) {
+            use TransportHeader::*;
+            assert_eq!(
+                format!("Udp({:?})", udp),
+                format!("{:?}", Udp(udp.clone())),
+            );
+            assert_eq!(
+                format!("Tcp({:?})", tcp),
+                format!("{:?}", Tcp(tcp.clone())),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(
+            ref tcp in tcp_any(),
+            ref udp in udp_any(),
+        ) {
+            use TransportHeader::*;
+            {
+                let u = Udp(udp.clone());
+                assert_eq!(u.clone(), u);
+            }
+            {
+                let t = Tcp(tcp.clone());
+                assert_eq!(t.clone(), t);
+            }
+        }
+    }
+
     #[test]
     fn udp() {
         let udp: UdpHeader = Default::default();
