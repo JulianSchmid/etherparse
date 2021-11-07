@@ -130,7 +130,7 @@ pub mod header {
             Ipv4Extensions{
                 auth: Some(auth_header.clone()),
             }.write(&mut buffer, AUTH).unwrap();
-            let (read_header, _) = IpAuthenticationHeader::read_from_slice(&buffer).unwrap();
+            let (read_header, _) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
             assert_eq!(auth_header, read_header);
         }
 

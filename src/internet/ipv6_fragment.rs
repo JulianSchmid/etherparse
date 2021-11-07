@@ -24,7 +24,7 @@ impl Ipv6FragmentHeader {
     /// Create a new fragmentation header with the given parameters.
     ///
     /// Note that the `fragment_offset` can only support values between 0 and 0x1fff (inclusive).
-    pub fn new(next_header: u8, fragment_offset: u16, more_fragments: bool, identification: u32) -> Ipv6FragmentHeader {
+    pub const fn new(next_header: u8, fragment_offset: u16, more_fragments: bool, identification: u32) -> Ipv6FragmentHeader {
         Ipv6FragmentHeader{
             next_header,
             fragment_offset,

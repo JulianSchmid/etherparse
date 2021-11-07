@@ -129,7 +129,7 @@ fn slice_from_slice_error() {
             Err(ReadError::UnexpectedEndOfSlice(8))
         );
         assert_matches!(
-            Ipv6RawExtensionHeader::read_from_slice(&[0;7]),
+            Ipv6RawExtensionHeader::from_slice(&[0;7]),
             Err(ReadError::UnexpectedEndOfSlice(8))
         );
     }
@@ -146,7 +146,7 @@ fn slice_from_slice_error() {
             Err(ReadError::UnexpectedEndOfSlice(32))
         );
         assert_matches!(
-            Ipv6RawExtensionHeader::read_from_slice(&data),
+            Ipv6RawExtensionHeader::from_slice(&data),
             Err(ReadError::UnexpectedEndOfSlice(32))
         );
     }
@@ -210,7 +210,7 @@ proptest! {
             assert_eq!(actual, actual.clone());
         }
         {
-            let actual = Ipv6RawExtensionHeader::read_from_slice(&buffer).unwrap();
+            let actual = Ipv6RawExtensionHeader::from_slice(&buffer).unwrap();
             assert_eq!(input, actual.0);
             assert_eq!(&buffer[buffer.len() - 2..], actual.1);
         }

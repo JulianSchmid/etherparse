@@ -57,7 +57,7 @@ impl Ipv6Extensions {
     /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
     /// the hop by hop header is required to be located directly after the IPv6 header according 
     /// to RFC 8200.
-    pub fn read_from_slice(start_ip_number: u8, slice: &[u8]) -> Result<(Ipv6Extensions, u8, &[u8]), ReadError> {
+    pub fn from_slice(start_ip_number: u8, slice: &[u8]) -> Result<(Ipv6Extensions, u8, &[u8]), ReadError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut rest = slice;
         let mut next_header = start_ip_number;
@@ -282,17 +282,6 @@ impl Ipv6Extensions {
             pub final_destination_options: bool
         }
 
-        impl NeedsWrite {
-            fn writes_left(&self) -> bool {
-                self.hop_by_hop_options ||
-                self.destination_options ||
-                self.routing ||
-                self.fragment ||
-                self.auth ||
-                self.final_destination_options
-            }
-        }
-
         let mut needs_write = NeedsWrite {
             hop_by_hop_options: self.hop_by_hop_options.is_some(),
             destination_options: self.destination_options.is_some(),
@@ -311,21 +300,28 @@ impl Ipv6Extensions {
 
         // check if hop by hop header should be written first
         if IPV6_HOP_BY_HOP == next_header {
-            if needs_write.hop_by_hop_options {
-                let header = &self.hop_by_hop_options.as_ref().unwrap();
-                header.write(writer)?;
-                next_header = header.next_header;
-                needs_write.hop_by_hop_options = false;
-            } else {
-                return Err(Ipv6ExtensionNotDefinedReference(IPv6HeaderHopByHop).into());
-            }
+            let header = &self.hop_by_hop_options.as_ref().unwrap();
+            header.write(writer)?;
+            next_header = header.next_header;
+            needs_write.hop_by_hop_options = false;
         }
 
-        while needs_write.writes_left() {
+        loop {
             match next_header {
                 IPV6_HOP_BY_HOP => {
-                    // the hop by hop header is only allowed at the start
-                    return Err(Ipv6ExtensionHopByHopNotAtStart.into());
+                    // Only trigger a "hop by hop not at start" error
+                    // if we actually still have to write a hop by hop header.
+                    //
+                    // The ip number for hop by hop is 0, which could be used
+                    // as a placeholder by user and later replaced. So let's
+                    // not be overzealous and allow a next header with hop
+                    // by hop if it is not part of this extensions struct.
+                    if needs_write.hop_by_hop_options {
+                        // the hop by hop header is only allowed at the start
+                        return Err(Ipv6ExtensionHopByHopNotAtStart.into());
+                    } else {
+                        break;
+                    }
                 },
                 IPV6_DEST_OPTIONS => {
                     // the destination options are allowed to be written twice
@@ -337,7 +333,7 @@ impl Ipv6Extensions {
                             next_header = header.next_header;
                             needs_write.final_destination_options = false;
                         } else {
-                            return Err(Ipv6ExtensionNotDefinedReference(IPv6DestinationOptions).into());
+                            break;
                         }
                     } else if needs_write.destination_options {
                         let header = &self.destination_options.as_ref().unwrap();
@@ -345,7 +341,7 @@ impl Ipv6Extensions {
                         next_header = header.next_header;
                         needs_write.destination_options = false;
                     } else {
-                        return Err(Ipv6ExtensionNotDefinedReference(IPv6DestinationOptions).into());
+                        break;
                     }
                 },
                 IPV6_ROUTE => {
@@ -357,7 +353,7 @@ impl Ipv6Extensions {
                         // for destination options
                         route_written = true;
                     } else {
-                        return Err(Ipv6ExtensionNotDefinedReference(IPv6RouteHeader).into());
+                        break;
                     }
                 },
                 IPV6_FRAG => {
@@ -367,7 +363,7 @@ impl Ipv6Extensions {
                         next_header = header.next_header;
                         needs_write.fragment = false;
                     } else {
-                        return Err(Ipv6ExtensionNotDefinedReference(IPv6FragmentationHeader).into());
+                        break;
                     }
                 },
                 AUTH => {
@@ -377,7 +373,7 @@ impl Ipv6Extensions {
                         next_header = header.next_header;
                         needs_write.auth = false;
                     } else {
-                        return Err(Ipv6ExtensionNotDefinedReference(AuthenticationHeader).into());
+                        break;
                     }
                 },
                 _ => {
@@ -405,7 +401,7 @@ impl Ipv6Extensions {
         }
     }
 
-    ///Length of the all present headers in bytes.
+    /// Length of the all present headers in bytes.
     pub fn header_len(&self) -> usize {
         let mut result = 0;
 
@@ -501,51 +497,7 @@ impl Ipv6Extensions {
             pub final_destination_options: bool
         }
 
-        impl OutstandingRef {
-            fn any_refs_outstanding(&self) -> bool {
-                self.hop_by_hop_options ||
-                self.destination_options ||
-                self.routing ||
-                self.fragment ||
-                self.auth ||
-                self.final_destination_options
-            }
-            fn assume_done(&self) -> Result<(), ValueError> {
-                if self.hop_by_hop_options {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::IPv6HeaderHopByHop)
-                    );
-                }
-                if self.destination_options {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions)
-                    );
-                }
-                if self.routing {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::IPv6RouteHeader)
-                    );
-                }
-                if self.fragment {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::IPv6FragmentationHeader)
-                    );
-                }
-                if self.auth {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::AuthenticationHeader)
-                    );
-                }
-                if self.final_destination_options {
-                    return Err(
-                        Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions)
-                    );
-                }
-                Ok(())
-            }
-        }
-
-        let mut refs = OutstandingRef {
+        let mut outstanding_refs = OutstandingRef {
             hop_by_hop_options: self.hop_by_hop_options.is_some(),
             destination_options: self.destination_options.is_some(),
             routing: self.routing.is_some(),
@@ -565,78 +517,111 @@ impl Ipv6Extensions {
         if IPV6_HOP_BY_HOP == next {
             if let Some(ref header) = self.hop_by_hop_options {
                 next = header.next_header;
-                refs.hop_by_hop_options = false;
-            } else {
-                refs.assume_done()?;
-                return Ok(next);
+                outstanding_refs.hop_by_hop_options = false;
             }
         }
 
-        while refs.any_refs_outstanding() {
+        loop {
             match next {
                 IPV6_HOP_BY_HOP => {
-                    // the hop by hop header is only allowed at the start
-                    return Err(Ipv6ExtensionHopByHopNotAtStart);
+                    // Only trigger a "hop by hop not at start" error
+                    // if we actually still have to write a hop by hop header.
+                    //
+                    // The ip number for hop by hop is 0, which could be used
+                    // as a placeholder by user and later replaced. So let's
+                    // not be overzealous and allow a next header with hop
+                    // by hop if it is not part of this extensions struct.
+                    if outstanding_refs.hop_by_hop_options {
+                        // the hop by hop header is only allowed at the start
+                        return Err(Ipv6ExtensionHopByHopNotAtStart);
+                    } else {
+                        break;
+                    }
                 },
                 IPV6_DEST_OPTIONS => {
                     // the destination options are allowed to be written twice
                     // once before a routing header and once after.
                     if route_refed {
-                        if refs.final_destination_options {
+                        if outstanding_refs.final_destination_options {
                             let header = &self.routing.as_ref().unwrap().final_destination_options.as_ref().unwrap();
                             next = header.next_header;
-                            refs.final_destination_options = false;
+                            outstanding_refs.final_destination_options = false;
                         } else {
-                            refs.assume_done()?;
-                            return Ok(next);
+                            break;
                         }
-                    } else if refs.destination_options {
+                    } else if outstanding_refs.destination_options {
                         let header = &self.destination_options.as_ref().unwrap();
                         next = header.next_header;
-                        refs.destination_options = false;
+                        outstanding_refs.destination_options = false;
                     } else {
-                        refs.assume_done()?;
-                        return Ok(next);
+                        break;
                     }
                 },
                 IPV6_ROUTE => {
-                    if refs.routing {
+                    if outstanding_refs.routing {
                         let header = &self.routing.as_ref().unwrap().routing;
                         next = header.next_header;
-                        refs.routing = false;
+                        outstanding_refs.routing = false;
                         // for destination options
                         route_refed = true;
                     } else {
-                        refs.assume_done()?;
-                        return Ok(next);
+                        break;
                     }
                 },
                 IPV6_FRAG => {
-                    if refs.fragment {
+                    if outstanding_refs.fragment {
                         let header = &self.fragment.as_ref().unwrap();
                         next = header.next_header;
-                        refs.fragment = false;
+                        outstanding_refs.fragment = false;
                     } else {
-                        refs.assume_done()?;
-                        return Ok(next);
+                        break;
                     }
                 },
                 AUTH => {
-                    if refs.auth {
+                    if outstanding_refs.auth {
                         let header = &self.auth.as_ref().unwrap();
                         next = header.next_header;
-                        refs.auth = false;
+                        outstanding_refs.auth = false;
                     } else {
-                        refs.assume_done()?;
-                        return Ok(next);
+                        break;
                     }
                 },
                 _ => break,
             }
         }
 
-        // assume all 
-        refs.assume_done()?;
+        // assume all done
+        if outstanding_refs.hop_by_hop_options {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::IPv6HeaderHopByHop)
+            );
+        }
+        if outstanding_refs.destination_options {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions)
+            );
+        }
+        if outstanding_refs.routing {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::IPv6RouteHeader)
+            );
+        }
+        if outstanding_refs.fragment {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::IPv6FragmentationHeader)
+            );
+        }
+        if outstanding_refs.auth {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::AuthenticationHeader)
+            );
+        }
+        if outstanding_refs.final_destination_options {
+            return Err(
+                Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions)
+            );
+        }
+
         return Ok(next);
     }
 }
@@ -836,10 +821,21 @@ impl<'a> IntoIterator for Ipv6ExtensionsSlice<'a> {
 }
 
 /// Allows iterating over the IPv6 extension headers present in an [Ipv6ExtensionsSlice].
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6ExtensionSliceIter<'a> {
     next_header: u8,
     rest: &'a [u8],
+}
+
+impl<'a> Default for Ipv6ExtensionSliceIter<'a> {
+    fn default() -> Self {
+        Ipv6ExtensionSliceIter {
+            // don't use 0 as this is the reserved value
+            // for the hop by hop header
+            next_header: IpNumber::IPv6NoNextHeader as u8,
+            rest: &[],
+        }
+    }
 }
 
 impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
