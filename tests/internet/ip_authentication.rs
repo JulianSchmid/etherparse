@@ -77,7 +77,7 @@ proptest! {
         );
 
         assert_matches!(
-            IpAuthenticationHeader::read_from_slice(&data[..len]),
+            IpAuthenticationHeader::from_slice(&data[..len]),
             Err(UnexpectedEndOfSlice(12))
         );
     }
@@ -94,7 +94,7 @@ fn from_slice_bad_header_len() {
     );
 
     assert_matches!(
-        IpAuthenticationHeader::read_from_slice(&data[..]),
+        IpAuthenticationHeader::from_slice(&data[..]),
         Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
     );
 }
@@ -139,7 +139,7 @@ proptest! {
         }
         // read_from_slice
         {
-            let (actual, rest) = IpAuthenticationHeader::read_from_slice(&buffer).unwrap();
+            let (actual, rest) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
             assert_eq!(actual, expected);
             assert_eq!(rest, &buffer[buffer.len()-2..]);
         }
@@ -155,7 +155,7 @@ proptest! {
         for len in 0..buffer.len()-3 {
             use ReadError::*;
             assert_matches!(
-                IpAuthenticationHeader::read_from_slice(&buffer[..len]),
+                IpAuthenticationHeader::from_slice(&buffer[..len]),
                 Err(UnexpectedEndOfSlice(_))
             );
             assert_matches!(

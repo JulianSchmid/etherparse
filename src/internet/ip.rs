@@ -24,7 +24,7 @@ impl IpHeader {
                 },
                 6 => {
                     let (header, rest) = Ipv6Header::read_from_slice(slice)?;
-                    Ipv6Extensions::read_from_slice(header.next_header, rest).map(
+                    Ipv6Extensions::from_slice(header.next_header, rest).map(
                         |(ext, next_protocol, rest)| 
                         (IpHeader::Version6(header, ext), next_protocol, rest)
                     )

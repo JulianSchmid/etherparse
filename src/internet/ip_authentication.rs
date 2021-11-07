@@ -86,7 +86,7 @@ impl<'a> IpAuthenticationHeader {
     }
 
     /// Read an  authentication header from a slice and return the header & unused parts of the slice.
-    pub fn read_from_slice(slice: &'a [u8]) -> Result<(IpAuthenticationHeader, &'a[u8]), ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthenticationHeader, &'a[u8]), ReadError> {
         let s = IpAuthenticationHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
