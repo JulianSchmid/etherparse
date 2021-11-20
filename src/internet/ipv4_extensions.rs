@@ -27,7 +27,7 @@ pub struct Ipv4ExtensionsSlice<'a> {
 impl Ipv4Extensions {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
-    pub fn read_from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
+    pub fn from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
         Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(
             |v| (v.0.to_header(), v.1, v.2)
         )

@@ -8,22 +8,33 @@ pub enum IpHeader {
 }
 
 impl IpHeader {
-    ///Read an IpvHeader from a slice and return the header & unused parts of the slice.
+
+    /// Renamed to `IpHeader::from_slice`
+    #[deprecated(
+        since = "0.10.0",
+        note = "Renamed to `IpHeader::from_slice`"
+    )]
+    #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
+        IpHeader::from_slice(slice)
+    }
+
+    /// Read an IpvHeader from a slice and return the header & unused parts of the slice.
+    pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         use crate::ReadError::*;
         if slice.is_empty() {
             Err(UnexpectedEndOfSlice(1))
         } else {
             match slice[0] >> 4 {
                 4 => {
-                    let (header, rest) = Ipv4Header::read_from_slice(slice)?;
-                    Ipv4Extensions::read_from_slice(header.protocol, rest).map(
+                    let (header, rest) = Ipv4Header::from_slice(slice)?;
+                    Ipv4Extensions::from_slice(header.protocol, rest).map(
                         |(ext, next_protocol, rest)|
                         (IpHeader::Version4(header, ext), next_protocol, rest)
                     )
                 },
                 6 => {
-                    let (header, rest) = Ipv6Header::read_from_slice(slice)?;
+                    let (header, rest) = Ipv6Header::from_slice(slice)?;
                     Ipv6Extensions::from_slice(header.next_header, rest).map(
                         |(ext, next_protocol, rest)| 
                         (IpHeader::Version6(header, ext), next_protocol, rest)

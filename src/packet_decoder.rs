@@ -80,8 +80,8 @@ impl<'a> PacketHeaders<'a> {
 
         match ether_type {
             IPV4 => {
-                let (ip, ip_rest) = Ipv4Header::read_from_slice(rest)?;
-                let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::read_from_slice(ip.protocol, ip_rest)?;
+                let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
+                let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
@@ -96,7 +96,7 @@ impl<'a> PacketHeaders<'a> {
                 
             },
             IPV6 => {
-                let (ip, ip_rest) = Ipv6Header::read_from_slice(rest)?;
+                let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
                 let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
 
                 //set the ip result & rest
@@ -159,7 +159,7 @@ impl<'a> PacketHeaders<'a> {
         };
 
         let (transport_proto, rest) = {
-            let (ip, transport_proto, rest) = IpHeader::read_from_slice(packet)?;
+            let (ip, transport_proto, rest) = IpHeader::from_slice(packet)?;
             // update output
             result.ip = Some(ip);
             (transport_proto, rest)
