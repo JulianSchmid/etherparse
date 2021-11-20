@@ -2,9 +2,9 @@
 
 ## 0.10.0: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
 
-It has been 1.5 years since the last update, I think it is fair to say I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes has piled on. Sadly this also means there are some breaking changes in this version.
+It has been 1.5 years since the last update, I think it is fair to say I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes has piled on. This also means there are some breaking changes in this version.
 
-But I hope the changes overall improve the library and will be worth it in the long run.
+But I believe the changes overall improve the library and will be worth it in the long run.
 
 
 ### Extension headers added to `IpHeader` & `InternetSlice`
