@@ -8,7 +8,7 @@ pub mod header {
     use super::*;
 
     #[test]
-    fn read_from_slice() {
+    fn from_slice() {
         let auth_header = IpAuthenticationHeader::new(
             UDP,
             0,
@@ -26,7 +26,7 @@ pub mod header {
 
         // no auth header
         {
-            let (header, next, rest) = Ipv4Extensions::read_from_slice(
+            let (header, next, rest) = Ipv4Extensions::from_slice(
                 TCP,
                 &buffer
             ).unwrap();
@@ -37,7 +37,7 @@ pub mod header {
 
         // with auth header
         {
-            let (actual, next, rest) = Ipv4Extensions::read_from_slice(
+            let (actual, next, rest) = Ipv4Extensions::from_slice(
                 AUTH,
                 &buffer
             ).unwrap();
@@ -48,7 +48,7 @@ pub mod header {
         
         // too small
         {
-            let err = Ipv4Extensions::read_from_slice(
+            let err = Ipv4Extensions::from_slice(
                 AUTH,
                 &buffer[..auth_header.header_len() - 1]
             ).unwrap_err();

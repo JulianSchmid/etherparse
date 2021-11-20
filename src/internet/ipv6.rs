@@ -30,8 +30,19 @@ impl SerializedSize for Ipv6Header {
 
 impl Ipv6Header {
 
-    ///Read an Ipv6Header from a slice and return the header & unused parts of the slice.
+    /// Renamed to `Ipv6Header::from_slice`
+    #[deprecated(
+        since = "0.10.0",
+        note = "Renamed to `Ipv6Header::from_slice`"
+    )]
+    #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
+        Ipv6Header::from_slice(slice)
+    }
+
+    /// Read an Ipv6Header from a slice and return the header & unused parts of the slice.
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
         Ok((
             Ipv6HeaderSlice::from_slice(slice)?.to_header(), 
             &slice[Ipv6Header::SERIALIZED_SIZE..]

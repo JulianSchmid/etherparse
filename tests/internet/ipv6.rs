@@ -46,13 +46,23 @@ fn read_write() {
     //serialize
     let mut buffer: Vec<u8> = Vec::with_capacity(20);
     input.write(&mut buffer).unwrap();
+
     //deserialize (with read)
     {
         let result = Ipv6Header::read(&mut Cursor::new(&buffer)).unwrap();
         //check equivalence
         assert_eq!(input, result);
     }
+
+    //deserialize (with from_slice)
+    {
+        let result = Ipv6Header::from_slice(&buffer).unwrap();
+        assert_eq!(input, result.0);
+        assert_eq!(&buffer[buffer.len()..], result.1);
+    }
+
     //deserialize (with read_from_slice)
+    #[allow(deprecated)]
     {
         let result = Ipv6Header::read_from_slice(&buffer).unwrap();
         assert_eq!(input, result.0);
@@ -129,7 +139,7 @@ fn read_error() {
 
             // read from slice
             assert_matches!(
-                Ipv6Header::read_from_slice(&buffer[0..len]),
+                Ipv6Header::from_slice(&buffer[0..len]),
                 Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE))
             );
         }

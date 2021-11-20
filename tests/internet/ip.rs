@@ -47,7 +47,25 @@ mod ip_header {
 
     proptest!{
         #[test]
+        #[allow(deprecated)]
         fn read_from_slice(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+        ) {
+            let header = combine_v4(&v4, &v4_exts);
+            let mut buffer = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+
+            let actual = IpHeader::read_from_slice(&buffer).unwrap();
+            assert_eq!(actual.0, header);
+            assert_eq!(actual.1, header.next_header().unwrap());
+            assert_eq!(actual.2, &buffer[buffer.len()..]);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(
             v4 in ipv4_any(),
             v4_exts in ipv4_extensions_any(),
             v6 in ipv6_any(),
@@ -62,18 +80,18 @@ mod ip_header {
 
                 // read
                 {
-                    let actual = IpHeader::read_from_slice(&buffer).unwrap();
+                    let actual = IpHeader::from_slice(&buffer).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                     assert_eq!(actual.2, &buffer[buffer.len() - 1..]);
                 }
 
                 // read error ipv4 header
-                IpHeader::read_from_slice(&buffer[..1]).unwrap_err();
+                IpHeader::from_slice(&buffer[..1]).unwrap_err();
 
                 // read error ipv4 extensions
                 if v4_exts.header_len() > 0 {
-                    IpHeader::read_from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
+                    IpHeader::from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
                 }
             }
 
@@ -86,18 +104,18 @@ mod ip_header {
 
                 // read
                 {
-                    let actual = IpHeader::read_from_slice(&buffer).unwrap();
+                    let actual = IpHeader::from_slice(&buffer).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                     assert_eq!(actual.2, &buffer[buffer.len() - 1..]);
                 }
 
                 // read error header
-                IpHeader::read_from_slice(&buffer[..1]).unwrap_err();
+                IpHeader::from_slice(&buffer[..1]).unwrap_err();
 
                 // read error ipv4 extensions
                 if v6_exts.header_len() > 0 {
-                    IpHeader::read_from_slice(&buffer[..Ipv6Header::SERIALIZED_SIZE + 1]).unwrap_err();
+                    IpHeader::from_slice(&buffer[..Ipv6Header::SERIALIZED_SIZE + 1]).unwrap_err();
                 }
             }
         }
@@ -181,7 +199,7 @@ mod ip_header {
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
 
-                let actual = IpHeader::read_from_slice(&buffer).unwrap().0;
+                let actual = IpHeader::from_slice(&buffer).unwrap().0;
                 assert_eq!(header, actual);
 
                 // write error v4 header
@@ -209,7 +227,7 @@ mod ip_header {
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
 
-                let actual = IpHeader::read_from_slice(&buffer).unwrap().0;
+                let actual = IpHeader::from_slice(&buffer).unwrap().0;
                 assert_eq!(header, actual);
 
                 // write error v6 header
@@ -361,13 +379,13 @@ mod ip_header {
 
         //deserialize with read_from_slice
         assert_matches!(
-            IpHeader::read_from_slice(&buffer), 
+            IpHeader::from_slice(&buffer),
             Err(ReadError::IpUnsupportedVersion(0xf))
         );
         //also check that an error is thrown when the slice is too small 
         //to even read the version
         assert_matches!(
-            IpHeader::read_from_slice(&buffer[buffer.len()..]), 
+            IpHeader::from_slice(&buffer[buffer.len()..]),
             Err(ReadError::UnexpectedEndOfSlice(1))
         );
     }
