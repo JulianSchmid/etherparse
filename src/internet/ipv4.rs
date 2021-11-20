@@ -4,16 +4,18 @@ use std::net::Ipv4Addr;
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
-///IPv4 header without options.
+/// IPv4 header without options.
 #[derive(Clone)]
 pub struct Ipv4Header {
     pub differentiated_services_code_point: u8,
     pub explicit_congestion_notification: u8,
-    ///Length of the payload of the ipv4 packet in bytes (does not contain the options).
+    /// Length of the payload of the ipv4 packet in bytes (does not contain the options).
     ///
-    ///This field does not directly exist in an ipv4 header but instead is decoded from
+    /// This field does not directly exist in an ipv4 header but instead is decoded from
     /// & encoded to the total_size field together with the options length (using the ihl).
-    ///If the total_length field in a ipv4 header is smaller then 
+    ///
+    /// Headers where the total length is smaller then then the minimum header size itself
+    /// are not representable in this struct.
     pub payload_len: u16,
     pub identification: u16,
     pub dont_fragment: bool,
@@ -24,13 +26,13 @@ pub struct Ipv4Header {
     pub header_checksum: u16,
     pub source: [u8;4],
     pub destination: [u8;4],
-    ///Length of the options in the options_buffer in bytes.
+    /// Length of the options in the options_buffer in bytes.
     options_len: u8,
     options_buffer: [u8;40]
 }
 
 impl SerializedSize for Ipv4Header {
-    ///Size of the header itself (without options) in bytes.
+    /// Size of the header itself (without options) in bytes.
     const SERIALIZED_SIZE:usize = 20;
 }
 
@@ -118,8 +120,18 @@ impl Ipv4Header {
         }
     }
 
-    ///Read an Ipv4Header from a slice and return the header & unused parts of the slice.
+    /// Renamed to `Ipv4Header::from_slice`
+    #[deprecated(
+        since = "0.10.0",
+        note = "Renamed to `Ipv4Header::from_slice`"
+    )]
+    #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
+        Ipv4Header::from_slice(slice)
+    }
+
+    /// Read an Ipv4Header from a slice and return the header & unused parts of the slice.
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
         let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();
         let rest = &slice[header.header_len()..];
         Ok((
@@ -128,7 +140,7 @@ impl Ipv4Header {
         ))
     }
 
-    ///Reads an IPv4 header from the current position.
+    /// Reads an IPv4 header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv4Header, ReadError> {
         let mut first_byte : [u8;1] = [0;1];
         reader.read_exact(&mut first_byte)?;
@@ -140,7 +152,7 @@ impl Ipv4Header {
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
 
-    ///Reads an IPv4 header assuming the version & ihl field have already been read.
+    /// Reads an IPv4 header assuming the version & ihl field have already been read.
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, first_byte: u8) -> Result<Ipv4Header, ReadError> {
         
         let mut header_raw : [u8;20] = [0;20];
@@ -197,9 +209,9 @@ impl Ipv4Header {
         })
     }
 
-    ///Checks if the values in this header are valid values for an ipv4 header.
+    /// Checks if the values in this header are valid values for an ipv4 header.
     ///
-    ///Specifically it will be checked, that:
+    /// Specifically it will be checked, that:
     /// * payload_len + options_len is not too big to be encoded in the total_size header field
     /// * differentiated_services_code_point is not greater then 0x3f
     /// * explicit_congestion_notification is not greater then 0x3
@@ -216,7 +228,7 @@ impl Ipv4Header {
         Ok(())
     }
 
-    ///Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
+    /// Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
         self.check_ranges()?;
@@ -225,7 +237,7 @@ impl Ipv4Header {
         self.write_ipv4_header_internal(writer, self.calc_header_checksum_unchecked())
     }
 
-    ///Writes a given IPv4 header to the current position (this method just writes the specified checksum and does note compute it).
+    /// Writes a given IPv4 header to the current position (this method just writes the specified checksum and does note compute it).
     pub fn write_raw<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
         self.check_ranges()?;
@@ -234,7 +246,7 @@ impl Ipv4Header {
         self.write_ipv4_header_internal(writer, self.header_checksum)
     }
 
-    ///Write the given header with the  checksum and header length specified in the seperate arguments
+    /// Write the given header with the  checksum and header length specified in the seperate arguments
     fn write_ipv4_header_internal<T: io::Write>(&self, write: &mut T, header_checksum: u16) -> Result<(), WriteError> {
         let total_len_be = self.total_len().to_be_bytes();
         let id_be = self.identification.to_be_bytes();
@@ -292,7 +304,7 @@ impl Ipv4Header {
         Ok(())
     }
 
-    ///Calculate header checksum of the current ipv4 header.
+    /// Calculate header checksum of the current ipv4 header.
     pub fn calc_header_checksum(&self) -> Result<u16, ValueError> {
 
         //check ranges
@@ -302,7 +314,7 @@ impl Ipv4Header {
         Ok(self.calc_header_checksum_unchecked())
     }
 
-    ///Calculate the header checksum under the assumtion that all value ranges in the header are correct
+    /// Calculate the header checksum under the assumtion that all value ranges in the header are correct
     fn calc_header_checksum_unchecked(&self) -> u16 {
         checksum::Sum16BitWords::new()
         .add_2bytes(
@@ -410,7 +422,7 @@ impl std::cmp::PartialEq for Ipv4Header {
 
 impl std::cmp::Eq for Ipv4Header {}
 
-///A slice containing an ipv4 header of a network package.
+/// A slice containing an ipv4 header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv4HeaderSlice<'a> {
     slice: &'a [u8]
@@ -418,7 +430,7 @@ pub struct Ipv4HeaderSlice<'a> {
 
 impl<'a> Ipv4HeaderSlice<'a> {
 
-    ///Creates a slice containing an ipv4 header (including header options).
+    /// Creates a slice containing an ipv4 header (including header options).
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
@@ -477,13 +489,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
         })
     }
 
-    ///Returns the slice containing the ipv4 header
+    /// Returns the slice containing the ipv4 header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
-    ///Read the "version" field of the IPv4 header (should be 4).
+    /// Read the "version" field of the IPv4 header (should be 4).
     #[inline]
     pub fn version(&self) -> u8 {
         // SAFETY:
@@ -494,7 +506,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "ip header length" (length of the ipv4 header + options in multiples of 4 bytes).
+    /// Read the "ip header length" (length of the ipv4 header + options in multiples of 4 bytes).
     #[inline]
     pub fn ihl(&self) -> u8 {
         // SAFETY:
@@ -505,7 +517,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "differentiated_services_code_point" from the slice.
+    /// Read the "differentiated_services_code_point" from the slice.
     #[inline]
     pub fn dcp(&self) -> u8 {
         // SAFETY:
@@ -516,7 +528,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "explicit_congestion_notification" from the slice.
+    /// Read the "explicit_congestion_notification" from the slice.
     #[inline]
     pub fn ecn(&self) -> u8 {
         // SAFETY:
@@ -527,7 +539,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "total length" from the slice (total length of ip header + payload).
+    /// Read the "total length" from the slice (total length of ip header + payload).
     #[inline]
     pub fn total_len(&self) -> u16 {
         // SAFETY:
@@ -538,13 +550,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Determine the payload length based on the ihl & total_length field of the header.
+    /// Determine the payload length based on the ihl & total_length field of the header.
     #[inline]
     pub fn payload_len(&self) -> u16 {
         self.total_len() - u16::from(self.ihl())*4
     }
 
-    ///Read the "identification" field from the slice.
+    /// Read the "identification" field from the slice.
     #[inline]
     pub fn identification(&self) -> u16 {
         // SAFETY:
@@ -555,7 +567,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "dont fragment" flag from the slice.
+    /// Read the "dont fragment" flag from the slice.
     #[inline]
     pub fn dont_fragment(&self) -> bool {
         // SAFETY:
@@ -566,7 +578,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "more fragments" flag from the slice.
+    /// Read the "more fragments" flag from the slice.
     #[inline]
     pub fn more_fragments(&self) -> bool {
         // SAFETY:
@@ -577,7 +589,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "fragment_offset" field from the slice.
+    /// Read the "fragment_offset" field from the slice.
     #[inline]
     pub fn fragments_offset(&self) -> u16 {
         u16::from_be_bytes(
@@ -593,7 +605,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         )
     }
 
-    ///Read the "time_to_live" field from the slice.
+    /// Read the "time_to_live" field from the slice.
     #[inline]
     pub fn ttl(&self) -> u8 {
         // SAFETY:
@@ -604,7 +616,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "protocol" field from the slice.
+    /// Read the "protocol" field from the slice.
     #[inline]
     pub fn protocol(&self) -> u8 {
         // SAFETY:
@@ -615,7 +627,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Read the "header checksum" field from the slice.
+    /// Read the "header checksum" field from the slice.
     #[inline]
     pub fn header_checksum(&self) -> u16 {
         // SAFETY:
@@ -626,7 +638,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
     
-    ///Returns a slice containing the ipv4 source address.
+    /// Returns a slice containing the ipv4 source address.
     #[inline]
     pub fn source(&self) -> [u8;4] {
         // SAFETY:
@@ -637,12 +649,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Return the ipv4 source address as an std::net::Ipv4Addr
+    /// Return the ipv4 source address as an std::net::Ipv4Addr
     pub fn source_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.source())
     }
 
-    ///Returns a slice containing the ipv4 source address.
+    /// Returns a slice containing the ipv4 source address.
     #[inline]
     pub fn destination(&self) -> [u8;4] {
         // SAFETY:
@@ -653,12 +665,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Return the ipv4 destination address as an std::net::Ipv4Addr
+    /// Return the ipv4 destination address as an std::net::Ipv4Addr
     pub fn destination_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.destination())
     }
 
-    ///Returns a slice containing the ipv4 header options (empty when there are no options).
+    /// Returns a slice containing the ipv4 header options (empty when there are no options).
     #[inline]
     pub fn options(&self) -> &'a [u8] {
         // SAFETY:
@@ -672,7 +684,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
     }
 
-    ///Decode all the fields and copy the results to a Ipv4Header struct
+    /// Decode all the fields and copy the results to a Ipv4Header struct
     pub fn to_header(&self) -> Ipv4Header {
         let options = self.options();
         Ipv4Header {
