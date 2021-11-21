@@ -272,15 +272,26 @@ impl TcpHeader {
         }
     }
 
-    ///Returns an iterator that allows to iterate through all known TCP header options.
+    /// Returns an iterator that allows to iterate through all known TCP header options.
     pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator {
             options: &self.options_buffer[..self.options_len()]
         }
     }
 
-    ///Reads a tcp header from a slice
+    /// Renamed to `TcpHeader::from_slice`
+    #[deprecated(
+        since = "0.10.0",
+        note = "Use TcpHeader::from_slice instead."
+    )]
+    #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
+        TcpHeader::from_slice(slice)
+    }
+
+    /// Reads a tcp header from a slice
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
         let h = TcpHeaderSlice::from_slice(slice)?;
         Ok((
             h.to_header(),
@@ -288,7 +299,7 @@ impl TcpHeader {
         ))
     }
 
-    ///Read a tcp header from the current position
+    /// Read a tcp header from the current position
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
         let raw = {
             let mut raw : [u8;20] = [0;20];
@@ -339,7 +350,7 @@ impl TcpHeader {
         })
     }
 
-    ///Write the tcp header to a stream (does NOT calculate the checksum).
+    /// Write the tcp header to a stream (does NOT calculate the checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
 
         //check that the data offset is within range
@@ -408,12 +419,12 @@ impl TcpHeader {
         Ok(())
     }
 
-    ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
+    /// Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
-    ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
+    /// Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4_raw(&self, source_ip: [u8;4], destination_ip: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
         
         //check that the total length fits into the field
@@ -435,12 +446,12 @@ impl TcpHeader {
         )
     }
 
-    ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
+    /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
         self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
-    ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
+    /// Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
 
         //check that the total length fits into the field

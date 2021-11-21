@@ -185,7 +185,7 @@ fn read_transport(
     match protocol {
         UDP => Ok(UdpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
-        TCP => Ok(TcpHeader::read_from_slice(rest)
+        TCP => Ok(TcpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),
         _ => Ok((None, rest)),
     }

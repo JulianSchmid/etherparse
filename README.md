@@ -101,14 +101,14 @@ Have a look at the documentation for the <NAME>Slice.from_slice methods, if you 
 
 And for deserialization into the corresponding header structs have a look at:
 
-* [`Ethernet2Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read_from_slice)
-* [`SingleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read_from_slice)
-* [`DoubleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read_from_slice)
-* [`IpHeader.read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read) & [`IpHeader.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read_from_slice)
-* [`Ipv4Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read_from_slice)
-* [`Ipv6Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [`Ipv6Header.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read_from_slice)
-* [`UdpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [`UdpHeader.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read_from_slice)
-* [`TcpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [`TcpHeader.read_from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read_from_slice)
+* [`Ethernet2Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.from_slice)
+* [`SingleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
+* [`DoubleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
+* [`IpHeader.read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read) & [`IpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.from_slice)
+* [`Ipv4Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
+* [`Ipv6Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [`Ipv6Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.from_slice)
+* [`UdpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [`UdpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.from_slice)
+* [`TcpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [`TcpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.from_slice)
 
 ## How to generate fake packet data?
 ### Packet Builder
