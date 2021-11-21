@@ -237,6 +237,41 @@ pub mod header {
         }
     }
 
+    #[test]
+    fn next_header() {
+        // None
+        {
+            let exts = Ipv4Extensions{
+                auth: None,
+            };
+            assert_eq!(UDP, exts.next_header(UDP).unwrap());
+        }
+        // Some
+        {
+            let exts = Ipv4Extensions{
+                auth: Some(
+                    IpAuthenticationHeader::new(
+                        TCP,
+                        0,
+                        0,
+                        &[]
+                    ).unwrap()
+                ),
+            };
+
+            // auth referenced
+            assert_eq!(TCP, exts.next_header(AUTH).unwrap());
+
+            // auth not referenced (error)
+            assert_eq!(
+                ValueError::Ipv4ExtensionNotReferenced(
+                    IpNumber::AuthenticationHeader
+                ),
+                exts.next_header(TCP).unwrap_err()
+            );
+        }
+    }
+
     proptest! {
         #[test]
         fn debug(auth in ip_authentication_any()) {
