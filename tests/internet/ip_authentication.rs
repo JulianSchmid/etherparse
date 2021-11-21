@@ -137,7 +137,7 @@ proptest! {
             let actual = IpAuthenticationHeaderSlice::from_slice_unchecked(&buffer);
             assert_eq!(actual.slice(), &buffer[..buffer.len()-2]);
         }
-        // read_from_slice
+        // from_slice
         {
             let (actual, rest) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
             assert_eq!(actual, expected);
