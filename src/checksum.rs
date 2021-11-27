@@ -274,6 +274,12 @@ mod sum16_bit_words_tests {
     }
 
     #[test]
+    fn default() {
+        let d: Sum16BitWords = Default::default();
+        assert_eq!(d.sum, 0);
+    }
+
+    #[test]
     fn clone_eq() {
         let value = Sum16BitWords::new();
         assert_eq!(

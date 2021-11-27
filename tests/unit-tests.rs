@@ -14,6 +14,7 @@ mod link;
 mod internet;
 mod transport;
 mod packet_builder;
+mod packet_decoder;
 mod packet_filter;
 mod packet_slicing;
 mod proptest_generators;
