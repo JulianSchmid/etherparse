@@ -211,7 +211,8 @@ prop_compose! {
 
 static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
     ip_number::UDP,
-    ip_number::TCP
+    ip_number::TCP,
+    ip_number::AUTH,
 ];
 
 prop_compose! {
@@ -254,6 +255,22 @@ prop_compose! {
         result
     }
 }
+
+prop_compose! {
+    pub(crate) fn ipv4_extensions_unknown()
+        (
+            next_header in any::<u8>().prop_filter(
+                "next_header must be unknown",
+                |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x)
+            )
+        ) (
+            result in ipv4_extensions_with(next_header)
+        ) -> Ipv4Extensions
+    {
+        result
+    }
+}
+
 
 prop_compose! {
     pub(crate) fn ipv6_with(next_header: u8)
@@ -424,6 +441,21 @@ prop_compose! {
         ) (
             result in ipv6_extensions_with(next_header)
     ) -> Ipv6Extensions
+    {
+        result
+    }
+}
+
+prop_compose! {
+    pub(crate) fn ipv6_extensions_unknown()
+        (
+            next_header in any::<u8>().prop_filter(
+                "next_header must be unknown",
+                |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)
+            )
+        ) (
+            result in ipv6_extensions_with(next_header)
+        ) -> Ipv6Extensions
     {
         result
     }

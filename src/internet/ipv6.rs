@@ -270,6 +270,15 @@ impl Ipv6Header {
         Ok(())
     }
 
+    /// Length of the serialized header in bytes.
+    ///
+    /// The function always returns the constant Ipv6Header::SERIALIZED_SIZE
+    /// and exists to keep the methods consistent with other headers. 
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        Ipv6Header::SERIALIZED_SIZE
+    }
+
     ///Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
     pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueError> {
         //check that the total length fits into the field

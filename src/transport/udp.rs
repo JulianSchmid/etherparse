@@ -207,9 +207,12 @@ impl UdpHeader {
     }
 
     /// Length of the serialized header in bytes.
+    ///
+    /// The function always returns the constant UdpHeader::SERIALIZED_SIZE
+    /// and exists to keep the methods consistent with other headers.
     #[inline]
     pub fn header_len(&self) -> usize {
-        8
+        UdpHeader::SERIALIZED_SIZE
     }
 
     /// Returns the serialized form of the header as a statically

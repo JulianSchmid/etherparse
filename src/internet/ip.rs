@@ -110,6 +110,26 @@ impl IpHeader {
             }
         }
     }
+
+    /// Sets all the next_header fields in the ipv4 & ipv6 header
+    /// as well as in all extension headers and returns the ether
+    /// type number.
+    ///
+    /// The given number will be set as the last "next_header" or
+    /// protocol number.
+    pub fn set_next_headers(&mut self, last_next_header: u8) -> EtherType {
+        use IpHeader::*;
+        match self {
+            Version4(ref mut header, ref mut extensions) => {
+                header.protocol = extensions.set_next_headers(last_next_header);
+                EtherType::Ipv4
+            },
+            Version6(ref mut header, ref mut extensions) => {
+                header.next_header = extensions.set_next_headers(last_next_header);
+                EtherType::Ipv6
+            },
+        }
+    }
 }
 
 /// This type has been deprecated please use [IpNumber] instead.
