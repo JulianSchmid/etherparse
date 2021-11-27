@@ -10,19 +10,13 @@
 //! 
 //! # Usage
 //! 
-//! First, add the following to your `Cargo.toml`:
+//! Add the following to your `Cargo.toml`:
 //! 
 //! ```toml
 //! [dependencies]
-//! etherparse = "0.9.0"
+//! etherparse = "0.10.0"
 //! ```
-//! 
-//! Next, add this to your crate root:
-//! 
-//! ```
-//! extern crate etherparse;
-//! ```
-//! 
+//!
 //! # What is etherparse?
 //! Etherparse is intended to provide the basic network parsing functions that allow for easy analysis, transformation or generation of recorded network data.
 //! 

@@ -13,23 +13,17 @@ Currently supported are:
 * Ethernet II
 * IEEE 802.1Q VLAN Tagging Header
 * IPv4
-* IPv6 (missing extension headers, but supporting skipping them)
+* IPv6 (partially supporting extension headers)
 * UDP
 * TCP
 
 ## Usage
 
-First, add the following to your `Cargo.toml`:
+Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.9.0"
-```
-
-Next, add this to your crate root:
-
-```rust
-extern crate etherparse;
+etherparse = "0.10.0"
 ```
 
 ## What is etherparse?
