@@ -204,6 +204,7 @@ use std::fmt;
 use std::error::Error;
 
 mod link;
+pub use crate::link::*;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
 

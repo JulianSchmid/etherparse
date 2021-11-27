@@ -147,6 +147,12 @@ fn read_error() {
 }
 
 #[test]
+fn header_len() {
+    let header : Ipv6Header = Default::default();
+    assert_eq!(Ipv6Header::SERIALIZED_SIZE, header.header_len());
+}
+
+#[test]
 fn is_skippable_header_extension() {
     use crate::ip_number::*;
 

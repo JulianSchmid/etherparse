@@ -8,12 +8,6 @@ pub struct PacketHeaders<'a> {
     pub link: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
     pub ip: Option<IpHeader>,
-    /// IP Extension headers present after the ip header. 
-    ///
-    /// In case of IPV4 these can be ipsec authentication & encapsulated
-    /// security headers. In case of IPv6 these are the ipv6 extension headers.
-    /// The headers are in the same order as they are written to the packet.
-    //pub ip_extensions: [Option<IpExtensionHeader<'a>>;IP_MAX_NUM_HEADER_EXTENSIONS],
     pub transport: Option<TransportHeader>,
     /// Rest of the packet that could not be decoded as a header (usually the payload).
     pub payload: &'a [u8]

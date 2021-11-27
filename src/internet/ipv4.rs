@@ -298,7 +298,7 @@ impl Ipv4Header {
         write.write_all(&header_raw)?;
 
         //options
-        write.write_all(&self.options())?;
+        write.write_all(self.options())?;
 
         //done
         Ok(())

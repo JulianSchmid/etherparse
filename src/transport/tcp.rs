@@ -1363,8 +1363,7 @@ impl<'a> Debug for TcpOptionsIterator<'a> {
         let mut list = fmt.debug_list();
 
         // create a copy and iterate over all elements
-        let mut clone = self.clone();
-        while let Some(it) = clone.next() {
+        for it in self.clone() {
             match it {
                 Ok(e) => { list.entry(&e); },
                 Err(e) => {

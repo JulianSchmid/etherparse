@@ -1,31 +1,5 @@
 use super::*;
 
-///A slice containing the link layer header (currently only Ethernet II is supported).
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum LinkSlice<'a> {
-    ///A slice containing an Ethernet II header.
-    Ethernet2(Ethernet2HeaderSlice<'a>)
-}
-
-///A slice containing a single or double vlan header.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum VlanSlice<'a> {
-    SingleVlan(SingleVlanHeaderSlice<'a>),
-    DoubleVlan(DoubleVlanHeaderSlice<'a>),
-}
-
-impl<'a> VlanSlice<'a> {
-    ///Decode all the fields and copy the results to a VlanHeader struct
-    pub fn to_header(&self) -> VlanHeader {
-        use crate::VlanHeader::*;
-        use crate::VlanSlice::*;
-        match self {
-            SingleVlan(value) => Single(value.to_header()),
-            DoubleVlan(value) => Double(value.to_header())
-        }
-    }
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
     /// The ipv6 header & the decoded extension headers.

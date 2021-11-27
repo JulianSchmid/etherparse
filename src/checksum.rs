@@ -1,6 +1,6 @@
 /// Helper for calculating the sum of all 16 bit words checksums used in
 /// in checksum fields in TCP and UDP headers.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Sum16BitWords {
     /// Partial sum
     #[cfg(target_pointer_width = "64")]

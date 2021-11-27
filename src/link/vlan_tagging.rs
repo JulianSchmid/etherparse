@@ -3,25 +3,65 @@ use super::super::*;
 use std::io;
 use std::slice::from_raw_parts;
 
-///IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
+/// IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VlanHeader {
-    ///IEEE 802.1Q VLAN Tagging Header
+    /// IEEE 802.1Q VLAN Tagging Header
     Single(SingleVlanHeader),
-    ///IEEE 802.1Q double VLAN Tagging Header
+    /// IEEE 802.1Q double VLAN Tagging Header
     Double(DoubleVlanHeader)
 }
 
 impl VlanHeader {
-    ///All ether types that identify a vlan header.
+    /// All ether types that identify a vlan header.
     pub const VLAN_ETHER_TYPES: [u16;3] = [
         ether_type::VLAN_TAGGED_FRAME,
         ether_type::PROVIDER_BRIDGING,
         ether_type::VLAN_DOUBLE_TAGGED_FRAME,
     ];
+
+    /// Write the IEEE 802.1Q VLAN single or double tagging header
+    #[inline]
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        use VlanHeader::*;
+        match &self {
+            Single(header) => header.write(writer),
+            Double(header) => header.write(writer),
+        }
+    }
+
+    /// Length of the serialized header(s) in bytes.
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        use VlanHeader::*;
+        match &self {
+            Single(_) => SingleVlanHeader::SERIALIZED_SIZE,
+            Double(_) => DoubleVlanHeader::SERIALIZED_SIZE,
+        }
+    }
 }
 
-///IEEE 802.1Q VLAN Tagging Header
+/// A slice containing a single or double vlan header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VlanSlice<'a> {
+    SingleVlan(SingleVlanHeaderSlice<'a>),
+    DoubleVlan(DoubleVlanHeaderSlice<'a>),
+}
+
+impl<'a> VlanSlice<'a> {
+    /// Decode all the fields and copy the results to a VlanHeader struct
+    #[inline]
+    pub fn to_header(&self) -> VlanHeader {
+        use crate::VlanHeader::*;
+        use crate::VlanSlice::*;
+        match self {
+            SingleVlan(value) => Single(value.to_header()),
+            DoubleVlan(value) => Double(value.to_header())
+        }
+    }
+}
+
+/// IEEE 802.1Q VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SingleVlanHeader {
     /// A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
@@ -146,7 +186,7 @@ pub struct DoubleVlanHeader {
 }
 
 impl SerializedSize for DoubleVlanHeader {
-    ///Serialized size of the header in bytes.
+    /// Serialized size of the header in bytes.
     const SERIALIZED_SIZE: usize = 8;
 }
 
@@ -171,7 +211,7 @@ impl DoubleVlanHeader {
         ))
     }
 
-    ///Read a double tagging header from the given source
+    /// Read a double tagging header from the given source
     pub fn read<T: io::Read + io::Seek + Sized >(reader: &mut T) -> Result<DoubleVlanHeader, ReadError> {
         let outer = SingleVlanHeader::read(reader)?;
 
@@ -191,7 +231,7 @@ impl DoubleVlanHeader {
         }
     }
 
-    ///Write the double IEEE 802.1Q VLAN tagging header
+    /// Write the double IEEE 802.1Q VLAN tagging header
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         self.outer.write(writer)?;
         self.inner.write(writer)
@@ -227,10 +267,11 @@ impl DoubleVlanHeader {
 impl Default for DoubleVlanHeader {
     fn default() -> Self {
         DoubleVlanHeader {
-            outer: {
-                let mut outer: SingleVlanHeader = Default::default();
-                outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
-                outer
+            outer: SingleVlanHeader {
+                priority_code_point: 0,
+                drop_eligible_indicator: false,
+                vlan_identifier: 0,
+                ether_type: ether_type::VLAN_TAGGED_FRAME,
             },
             inner: Default::default()
         }
@@ -267,13 +308,13 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         })
     }
 
-    ///Returns the slice containing the single vlan header
+    /// Returns the slice containing the single vlan header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
-    ///Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
+    /// Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     #[inline]
     pub fn priority_code_point(&self) -> u8 {
         // SAFETY:
@@ -283,7 +324,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Read the "drop_eligible_indicator" flag from the slice. Indicates that the frame may be dropped under the presence of congestion.
+    /// Read the "drop_eligible_indicator" flag from the slice. Indicates that the frame may be dropped under the presence of congestion.
     #[inline]
     pub fn drop_eligible_indicator(&self) -> bool {
         // SAFETY:
@@ -293,7 +334,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Reads the 12 bits "vland identifier" field from the slice.
+    /// Reads the 12 bits "vland identifier" field from the slice.
     #[inline]
     pub fn vlan_identifier(&self) -> u16 {
         u16::from_be_bytes(
@@ -308,7 +349,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         )
     }
 
-    ///Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
+    /// Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
     #[inline]
     pub fn ether_type(&self) -> u16 {
         // SAFETY:
@@ -318,7 +359,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Decode all the fields and copy the results to a SingleVlanHeader struct
+    /// Decode all the fields and copy the results to a SingleVlanHeader struct
     #[inline]
     pub fn to_header(&self) -> SingleVlanHeader {
         SingleVlanHeader {
@@ -330,22 +371,22 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     }
 }
 
-///A slice containing an double vlan header of a network package.
+/// A slice containing an double vlan header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DoubleVlanHeaderSlice<'a> {
     slice: &'a [u8]
 }
 
 impl<'a> DoubleVlanHeaderSlice<'a> {
-    ///Creates a double header slice from a slice.
+    /// Creates a double header slice from a slice.
     pub fn from_slice(slice: &'a[u8]) -> Result<DoubleVlanHeaderSlice<'a>, ReadError>{
-        //check length
+        // check length
         use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE));
         }
 
-        //create slice
+        // create slice
         let result = DoubleVlanHeaderSlice {
             // SAFETY:
             // Safe as the slice length is checked is before to have
@@ -375,13 +416,13 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Returns the slice containing the double vlan header
+    /// Returns the slice containing the double vlan header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
-    ///Returns a slice with the outer vlan header
+    /// Returns a slice with the outer vlan header
     #[inline]
     pub fn outer(&self) -> SingleVlanHeaderSlice<'a> {
         SingleVlanHeaderSlice::<'a> {
@@ -398,7 +439,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Returns a slice with the inner vlan header.
+    /// Returns a slice with the inner vlan header.
     #[inline]
     pub fn inner(&self) -> SingleVlanHeaderSlice<'a> {
         SingleVlanHeaderSlice::<'a> {
@@ -415,7 +456,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         }
     }
 
-    ///Decode all the fields and copy the results to a DoubleVlanHeader struct
+    /// Decode all the fields and copy the results to a DoubleVlanHeader struct
     pub fn to_header(&self) -> DoubleVlanHeader {
         DoubleVlanHeader {
             outer: self.outer().to_header(),

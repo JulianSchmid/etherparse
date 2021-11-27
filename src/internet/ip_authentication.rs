@@ -248,6 +248,13 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
     }
 
     /// Creates a ip authentication header slice from a slice (assumes slice size & content was validated before).
+    ///
+    /// # Safety
+    ///
+    /// This method assumes that the length of the given slice is large enough to contain
+    /// payload length described in the length field ((second byte + 2)*4).
+    /// If the slice length is not big enough the behavior of using the resulting
+    /// `IpAuthenticationHeaderSlice` is undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> IpAuthenticationHeaderSlice<'a> {
         IpAuthenticationHeaderSlice{
             slice: from_raw_parts(

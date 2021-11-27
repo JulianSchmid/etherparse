@@ -622,7 +622,7 @@ impl Ipv6Extensions {
             );
         }
 
-        return Ok(next);
+        Ok(next)
     }
 }
 
