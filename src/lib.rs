@@ -4,7 +4,7 @@
 //! * Ethernet II
 //! * IEEE 802.1Q VLAN Tagging Header
 //! * IPv4
-//! * IPv6 (missing extension headers, but supporting skipping them)
+//! * IPv6 (supporting the most common extension headers, but not all)
 //! * UDP
 //! * TCP
 //! 
@@ -115,21 +115,21 @@
 //! * [`TcpHeaderSlice.from_slice`](struct.TcpHeaderSlice.html#method.from_slice)
 //! 
 //! And for deserialization into the corresponding header structs have a look at:
-//! 
-//! * [`Ethernet2Header.read`](struct.Ethernet2Header.html#method.read) & [`Ethernet2Header.from_slice`](struct.Ethernet2Header.html#method.from_slice)
-//! * [`SingleVlanHeader.read`](struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader.from_slice`](struct.SingleVlanHeader.html#method.from_slice)
-//! * [`DoubleVlanHeader.read`](struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader.from_slice`](struct.DoubleVlanHeader.html#method.from_slice)
-//! * [`IpHeader.read`](enum.IpHeader.html#method.read) & [`IpHeader.from_slice`](enum.IpHeader.html#method.from_slice)
-//! * [`Ipv4Header.read`](struct.Ipv4Header.html#method.read) & [`Ipv4Header.from_slice`](struct.Ipv4Header.html#method.from_slice)
-//! * [`Ipv6Header.read`](struct.Ipv6Header.html#method.read) & [`Ipv6Header.from_slice`](struct.Ipv6Header.html#method.from_slice)
-//! * [`UdpHeader.read`](struct.UdpHeader.html#method.read) & [`UdpHeader.from_slice`](struct.UdpHeader.html#method.from_slice)
-//! * [`TcpHeader.read`](struct.TcpHeader.html#method.read) & [`TcpHeader.from_slice`](struct.TcpHeader.html#method.from_slice)
+//!
+//! * [`Ethernet2Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.from_slice)
+//! * [`SingleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
+//! * [`DoubleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
+//! * [`IpHeader.read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read) & [`IpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.from_slice)
+//! * [`Ipv4Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
+//! * [`Ipv6Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [`Ipv6Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.from_slice)
+//! * [`UdpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [`UdpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.from_slice)
+//! * [`TcpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [`TcpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.from_slice)
 //! 
 //! # How to generate fake packet data?
 //! ## Packet Builder
 //! The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 //! 
-//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.8.0/examples/write_udp.rs)
+//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_udp.rs)
 //! ```rust
 //! use etherparse::PacketBuilder;
 //!
@@ -154,12 +154,12 @@
 //! builder.write(&mut result, &payload).unwrap();
 //! ```
 //! 
-//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.8.0/examples/write_tcp.rs) available.
+//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_tcp.rs) available.
 //! 
 //! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more informations.
 //! 
 //! ## Manually serialising each header
-//! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.8.0/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
+//! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
 //! 
 //! Read the documentations of the different methods for a more details:
 //! 
@@ -192,6 +192,10 @@
 //! * The Addition of Explicit Congestion Notification (ECN) to IP [RFC 3168](https://tools.ietf.org/html/rfc3168)
 //! * Robust Explicit Congestion Notification (ECN) Signaling with Nonces [RFC 3540](https://tools.ietf.org/html/rfc3540)
 //! * IP Authentication Header [RFC 4302](https://tools.ietf.org/html/rfc4302)
+//! * Mobility Support in IPv6 [RFC 6275](https://tools.ietf.org/html/rfc6275)
+//! * Host Identity Protocol Version 2 (HIPv2) [RFC 7401](https://tools.ietf.org/html/rfc7401)
+//! * Shim6: Level 3 Multihoming Shim Protocol for IPv6 [RFC 5533](https://tools.ietf.org/html/rfc5533)
+//! * Computing the Internet Checksum [RFC 1071](https://datatracker.ietf.org/doc/html/rfc1071)
 
 use std::io;
 use std::fmt;

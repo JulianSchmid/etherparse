@@ -13,7 +13,7 @@ Currently supported are:
 * Ethernet II
 * IEEE 802.1Q VLAN Tagging Header
 * IPv4
-* IPv6 (partially supporting extension headers)
+* IPv6 (supporting the most common extension headers, but not all)
 * UDP
 * TCP
 
