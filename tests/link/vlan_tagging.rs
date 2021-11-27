@@ -136,11 +136,7 @@ mod vlan_slice {
         ) {
             // single
             {
-                let raw = {
-                    let mut buffer = Vec::with_capacity(single.header_len());
-                    single.write(&mut buffer).unwrap();
-                    buffer
-                };
+                let raw = single.to_bytes().unwrap();
                 let slice = VlanSlice::SingleVlan(
                     SingleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
@@ -152,11 +148,7 @@ mod vlan_slice {
 
             // double
             {
-                let raw = {
-                    let mut buffer = Vec::with_capacity(double.header_len());
-                    double.write(&mut buffer).unwrap();
-                    buffer
-                };
+                let raw = double.to_bytes().unwrap();
                 let slice = VlanSlice::DoubleVlan(
                     DoubleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
@@ -168,6 +160,59 @@ mod vlan_slice {
         }
     }
 
+    proptest!{
+        #[test]
+        fn debug(
+            single in vlan_single_any(),
+            double in vlan_double_any(),
+        ) {
+            // single
+            {
+                let raw = single.to_bytes().unwrap();
+                let s = SingleVlanHeaderSlice::from_slice(&raw).unwrap();
+                assert_eq!(
+                    format!("{:?}", VlanSlice::SingleVlan(s.clone())),
+                    format!("SingleVlan({:?})", s)
+                );
+            }
+
+            // double
+            {
+                let raw = double.to_bytes().unwrap();
+                let d = DoubleVlanHeaderSlice::from_slice(&raw).unwrap();
+                assert_eq!(
+                    format!("{:?}", VlanSlice::DoubleVlan(d.clone())),
+                    format!("DoubleVlan({:?})", d)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(
+            single in vlan_single_any(),
+            double in vlan_double_any(),
+        ) {
+            // single
+            {
+                let raw = single.to_bytes().unwrap();
+                let s = VlanSlice::SingleVlan(
+                    SingleVlanHeaderSlice::from_slice(&raw).unwrap()
+                );
+                assert_eq!(s.clone(), s);
+            }
+
+            // double
+            {
+                let raw = double.to_bytes().unwrap();
+                let d = VlanSlice::DoubleVlan(
+                    DoubleVlanHeaderSlice::from_slice(&raw).unwrap()
+                );
+                assert_eq!(d.clone(), d);
+            }
+        }
+    }
 }
 
 mod single_vlan_header {
