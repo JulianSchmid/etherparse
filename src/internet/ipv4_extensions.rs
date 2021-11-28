@@ -116,6 +116,12 @@ impl Ipv4Extensions {
             Ok(first_next_header)
         }
     }
+
+    /// Returns true if no IPv4 extension header is present (all fields `None`).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.auth.is_none()
+    }
 }
 
 impl<'a> Ipv4ExtensionsSlice<'a> {
@@ -145,5 +151,11 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
         Ipv4Extensions {
             auth: self.auth.as_ref().map(|v| v.to_header())
         }
+    }
+
+    /// Returns true if no IPv4 extension header is present (all fields `None`).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.auth.is_none()
     }
 }
