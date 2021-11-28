@@ -46,10 +46,16 @@ fn main() {
 
             match value.ip {
                 Some(Ipv4(value, extensions)) => {
-                    println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr())
+                    println!("  Ipv4 {:?} => {:?}", value.source_addr(), value.destination_addr());
+                    if false == extensions.is_empty() {
+                        println!("    {:?}", extensions);
+                    }
                 },
                 Some(Ipv6(value, extensions)) => {
-                    println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr())
+                    println!("  Ipv6 {:?} => {:?}", value.source_addr(), value.destination_addr());
+                    if false == extensions.is_empty() {
+                        println!("    {:?}", extensions);
+                    }
                 },
                 None => {}
             }
