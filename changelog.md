@@ -2,14 +2,17 @@
 
 ## 0.10.0: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
 
-It has been 1.5 years since the last update, I think it is fair to say I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes have piled on. This also means there are some breaking changes in this version.
+With this version the support for IPv6 gets extended and bugs in the parsing of fragmented packets as well as authentification headers are fixed. Additionally a bunch of performance improvements are included and new methods have been added (e.g. the method `to_bytes` for headers with static sizes).
 
-But I believe the changes overall improve the library and will be worth it in the long run.
+It has been almost two years since the last update and I think it is fair to say that I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes have piled on. This also means there are some breaking changes in this version.
 
+The next versions will hopefully be smaller and contain some qualitiy of life improvements.
+
+Special thanks to @Bren2010 for reporting the errors with fragmented packets.
 
 ### Extension headers added to `IpHeader` & `InternetSlice`
 
-With the added support for authentification headers (for both IPV4 and IPV6) and additional IPV6 extension headers a place to store the results when parsing headers or slicing them had be chosen. After some though I decided to put the results into the enum values as a second argument. 
+With the added support for authentification headers (for both IPV4 and IPV6) and additional IPV6 extension headers support a place to store the results when parsing headers or slicing them had be chosen. After some though I decided to put the results into the enum values as a second argument. 
 
 So the signature of `IpHeader` has changed from
 
@@ -143,7 +146,6 @@ will no longer use `ip_header.protocol` in their checksum calculations.
 * Added support for authentifaction headers in IPv4 packets.
 * Corrected handling of fragmented packets. `InternetSlice::from_*` & `PacketHeaders::from_*` no longer try to decode packets that have been flaged as fragmented (IPv4 & IPv6). Thanks to @Bren2010 for making a PR & noticing the issue.
 * Added support for parsing "IPv6 Fragment Headers" & "Authentification Headers"
-* `packet_filter` was marked as deprecated and will be removed in a future release. `packet_filter` was never especially well thought out, so I made the decision to remove it. If you still want to use it feel free to copy the source into your project https://github.com/JulianSchmid/etherparse/blob/0.9.0/src/packet_filter.rs directly.
 
 ### Fixed bugs:
 
@@ -179,4 +181,4 @@ This change had been a long time coming. Originally I coupled the IPv6 header ex
 The following changes will cause a deprecation warning:
 
 * Renamed `IpTrafficClass` to `IpNumber`. Traffic class was just the wrong name and confusing as there is a traffic class field in IPv6 headers.
-
+* Renamed `read_from_slice` methods to `from_slice`.
