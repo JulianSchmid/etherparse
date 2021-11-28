@@ -232,10 +232,6 @@ pub use crate::packet_decoder::*;
 mod packet_slicing;
 pub use crate::packet_slicing::*;
 
-#[deprecated(
-    since = "0.10.0",
-    note = "The module packet_filter will be removed."
-)]
 pub mod packet_filter;
 
 ///Contains the size when serialized.

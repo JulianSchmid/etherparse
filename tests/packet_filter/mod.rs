@@ -1,11 +1,9 @@
 use super::*;
-#[allow(deprecated)]
 use etherparse::packet_filter::*;
 use proptest::*;
 
 
 #[test]
-#[allow(deprecated)]
 fn default() {
     let value: ElementFilter<IpFilter> = Default::default();
     assert_eq!(ElementFilter::Any, value);
@@ -13,7 +11,6 @@ fn default() {
 
 ///The packet filter test generates all permutation of packet combinations & filter configurations
 ///and tests that all of them return the correct result.
-#[allow(deprecated)]
 #[derive(Debug, Clone, Default)]
 struct PacketFilterTest {
     link: Option<Ethernet2Header>,
@@ -24,7 +21,6 @@ struct PacketFilterTest {
     filter: Filter
 }
 
-#[allow(deprecated)]
 impl PacketFilterTest {
 
     ///Add all permutations of vlan data types to the test (none, single, double)
@@ -422,7 +418,6 @@ fn test_compositions()
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod link_filter {
     use super::*;
     proptest! {
@@ -474,7 +469,6 @@ mod link_filter {
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod vlan_filter {
     use super::*;
     proptest! {
@@ -545,7 +539,6 @@ mod vlan_filter {
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod ip_filter {
     use super::*;
     proptest! {
@@ -638,7 +631,6 @@ mod ip_filter {
 }
 
 #[cfg(test)]
-#[allow(deprecated)]
 mod transport_filter {
     use super::*;
     proptest! {
@@ -715,7 +707,6 @@ mod transport_filter {
 }
 
 #[test]
-#[allow(deprecated)]
 fn type_derives() {
     println!("{:?}", TransportFilter::Udp{
         source_port: None,
