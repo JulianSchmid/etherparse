@@ -160,6 +160,7 @@ Read the documentations of the different methods for a more details:
 * IEEE 802.3
 
 ## References
+* An Ethernet Address Resolution Protocol or Converting Network Protocol Addresses [RFC 826](https://tools.ietf.org/html/rfc826)
 * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
 * Internet Protocol, Version 6 (IPv6) Specification [RFC 8200](https://tools.ietf.org/html/rfc8200)
 * [IANA Protocol Numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml)
