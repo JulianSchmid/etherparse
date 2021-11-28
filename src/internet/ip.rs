@@ -451,13 +451,11 @@ impl IpNumber {
     /// Returns true if the given number is the internet number of an IPV6 extension header.
     pub fn is_ipv6_ext_header_value(value: u8) -> bool {
         use crate::ip_number::*;
-
-        match value {
+        matches!(
+            value,
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | ENCAP_SEC | AUTH 
             | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 | EXP0 | EXP1
-                => true,
-            _ => false
-        }
+        )
     }
 }
 

@@ -124,10 +124,7 @@ impl Ipv6Header {
     pub fn is_skippable_header_extension(ip_protocol_number: u8) -> bool {
         use crate::ip_number::*;
         //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
-        match ip_protocol_number {
-            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
-            _ => false
-        }
+        matches!(ip_protocol_number, IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6)
     }
 
     ///Takes a slice & ip protocol number (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.

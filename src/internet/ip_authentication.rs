@@ -251,10 +251,13 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
     ///
     /// # Safety
     ///
-    /// This method assumes that the length of the given slice is large enough to contain
-    /// payload length described in the length field ((second byte + 2)*4).
-    /// If the slice length is not big enough the behavior of using the resulting
-    /// `IpAuthenticationHeaderSlice` is undefined.
+    /// This method assumes that the slice was previously validated to contain
+    /// a valid authentification header. This means the slice length must at
+    /// least be at least 8 and `(slice[1] + 2)*4`. The data that the
+    /// slice points must also be valid (meaning no nullptr or alike allowed).
+    ///
+    /// If these precondtions are not fullfilled the behavior of this function
+    /// and the methods of the return IpAuthenticationHeaderSlice will be undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> IpAuthenticationHeaderSlice<'a> {
         IpAuthenticationHeaderSlice{
             slice: from_raw_parts(
