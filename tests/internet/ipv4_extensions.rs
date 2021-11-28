@@ -272,6 +272,24 @@ pub mod header {
         }
     }
 
+    #[test]
+    fn is_empty() {
+        // empty
+        assert!(
+            Ipv4Extensions{
+                auth: None,
+            }.is_empty()
+        );
+
+        // auth
+        assert_eq!(
+            false,
+            Ipv4Extensions{
+                auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
+            }.is_empty()
+        );
+    }
+
     proptest! {
         #[test]
         fn debug(auth in ip_authentication_any()) {
@@ -418,6 +436,32 @@ mod slice {
                     }
                 );
             }
+        }
+    }
+
+    #[test]
+    fn is_empty() {
+        // empty
+        assert!(
+            Ipv4ExtensionsSlice{
+                auth: None,
+            }.is_empty()
+        );
+
+        // auth
+        {
+            let buffer = {
+                let auth = IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap();
+                let mut buffer = Vec::with_capacity(auth.header_len());
+                auth.write(&mut buffer).unwrap();
+                buffer
+            };
+            assert_eq!(
+                false,
+                Ipv4ExtensionsSlice{
+                    auth: Some(IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap()),
+                }.is_empty()
+            );
         }
     }
 
