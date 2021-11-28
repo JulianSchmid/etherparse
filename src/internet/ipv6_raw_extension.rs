@@ -60,10 +60,7 @@ impl Ipv6RawExtensionHeader {
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeader`.
     pub fn header_type_supported(next_header: u8) -> bool {
         use crate::ip_number::*;
-        match next_header {
-            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
-            _ => false
-        }
+        matches!(next_header, IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6)
     }
 
     /// Creates an generic IPv6 extension header with the given data.
@@ -227,7 +224,18 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
         })
     }
 
-    /// Creates a generic ipv6 extension header slice from a slice (assumes slice size & content was validated before).
+    /// Creates a raw ipv6 extension header slice from a slice (assumes slice
+    /// size & content was validated before).
+    ///
+    /// # Safety
+    ///
+    /// This method assumes that the slice was previously validated to contain
+    /// a valid & supported raw ipv6 extension header. This means the slice length
+    /// must at least be at least 8 and `(slice[1] + 1)*8`. The data that the
+    /// slice points must also be valid (meaning no nullptr or alike allowed).
+    ///
+    /// If these precondtions are not fullfilled the behavior of this function
+    /// and the methods of the return IpAuthenticationHeaderSlice will be undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
         Ipv6RawExtensionHeaderSlice {
             slice: from_raw_parts(
