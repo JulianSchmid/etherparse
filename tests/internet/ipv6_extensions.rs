@@ -928,6 +928,44 @@ pub mod header {
     }
 
     #[test]
+    fn is_fragmenting_payload() {
+        // empty
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: None,
+                auth: None,
+            }.is_fragmenting_payload()
+        );
+
+        // non fragmenting frag header
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, false, 0)),
+                auth: None,
+            }.is_fragmenting_payload()
+        );
+
+        // fragmenting frag header
+        assert!(
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)),
+                auth: None,
+            }.is_fragmenting_payload()
+        );
+    }
+
+    #[test]
     fn is_empty() {
         // empty
         assert!(

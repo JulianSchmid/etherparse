@@ -401,6 +401,82 @@ mod header {
             assert_eq!(&buffer[usize::from(input.header_len())..], result.1);
         }
     }
+
+    #[test]
+    fn is_fragmenting_payload() {
+        // not fragmenting
+        {
+            let mut header : Ipv4Header = Default::default();
+            header.fragments_offset = 0;
+            header.more_fragments = false;
+            assert_eq!(false, header.is_fragmenting_payload());
+        }
+
+        // fragmenting based on offset
+        {
+            let mut header : Ipv4Header = Default::default();
+            header.fragments_offset = 1;
+            header.more_fragments = false;
+            assert!(header.is_fragmenting_payload());
+        }
+
+        // fragmenting based on more_fragments
+        {
+            let mut header : Ipv4Header = Default::default();
+            header.fragments_offset = 0;
+            header.more_fragments = true;
+            assert!(header.is_fragmenting_payload());
+        }
+    }
+}
+
+mod slice {
+    use super::*;
+
+    #[test]
+    fn is_fragmenting_payload() {
+        // not fragmenting
+        {
+            let buffer = {
+                let mut header : Ipv4Header = Default::default();
+                header.fragments_offset = 0;
+                header.more_fragments = false;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(false, slice.is_fragmenting_payload());
+        }
+
+        // fragmenting based on offset
+        {
+            let buffer = {
+                let mut header : Ipv4Header = Default::default();
+                header.fragments_offset = 1;
+                header.more_fragments = false;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+
+        // fragmenting based on more_fragments
+        {
+            let buffer = {
+                let mut header : Ipv4Header = Default::default();
+                header.fragments_offset = 0;
+                header.more_fragments = true;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+    }
 }
 
 #[test]

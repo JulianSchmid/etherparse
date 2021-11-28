@@ -351,6 +351,16 @@ impl Ipv4Header {
         .ones_complement()
         .to_be()
     }
+
+    /// Returns true if the payload is fragmented.
+    ///
+    /// Either data is missing (more_fragments set) or there is
+    /// an fragment offset.
+    #[inline]
+    pub fn is_fragmenting_payload(&self) -> bool {
+        self.more_fragments ||
+        (0 != self.fragments_offset)
+    }
 }
 
 //NOTE: I would have prefered to NOT write my own Default, Debug & PartialEq implementation but there are no
@@ -682,6 +692,16 @@ impl<'a> Ipv4HeaderSlice<'a> {
                 self.slice.len() - 20
             )
         }
+    }
+
+    /// Returns true if the payload is fragmented.
+    ///
+    /// Either data is missing (more_fragments set) or there is
+    /// an fragment offset.
+    #[inline]
+    pub fn is_fragmenting_payload(&self) -> bool {
+        self.more_fragments() ||
+        (0 != self.fragments_offset())
     }
 
     /// Decode all the fields and copy the results to a Ipv4Header struct

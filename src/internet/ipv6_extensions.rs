@@ -625,6 +625,23 @@ impl Ipv6Extensions {
         Ok(next)
     }
 
+    /// Returns true if a fragmentation header is present in
+    /// the extensions that fragments the payload.
+    ///
+    /// Note: A fragmentation header can still be present
+    /// even if the return value is false in case the fragmentation
+    /// headers don't fragment the payload. This is the case if
+    /// the offset of all fragmentation header is 0 and the
+    /// more fragment bit is not set.
+    #[inline]
+    pub fn is_fragmenting_payload(&self) -> bool {
+        if let Some(frag) = self.fragment.as_ref() {
+            frag.is_fragmenting_payload()
+        } else {
+            false
+        }
+    }
+
     /// Returns true if no IPv6 extension header is present (all fields `None`).
     #[inline]
     pub fn is_empty(&self) -> bool {
