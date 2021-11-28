@@ -262,6 +262,8 @@ impl<'a> CursorSlice<'a> {
                         .map_err(|err| 
                             err.add_slice_offset(self.offset)
                         )?;
+        let fragmented = ip_header.is_fragmenting_payload();
+
         // move the slice
         self.move_by_slice(ip_header.slice());
 
@@ -271,17 +273,21 @@ impl<'a> CursorSlice<'a> {
                                             err.add_slice_offset(self.offset)
                                        )?;
 
-        // set the new data 
+        // set the new data
         self.move_to_slice(rest);
         self.result.ip = Some(Ipv4(ip_header, ip_ext));
 
-        match protocol {
-            ip_number::UDP => self.slice_udp(),
-            ip_number::TCP => self.slice_tcp(),
-            value => {
-                use TransportSlice::*;
-                self.result.transport = Some(Unknown(value));
-                self.slice_payload()
+        if fragmented {
+            self.slice_payload()
+        } else {
+            match protocol {
+                ip_number::UDP => self.slice_udp(),
+                ip_number::TCP => self.slice_tcp(),
+                value => {
+                    use TransportSlice::*;
+                    self.result.transport = Some(Unknown(value));
+                    self.slice_payload()
+                }
             }
         }
     }
@@ -302,19 +308,26 @@ impl<'a> CursorSlice<'a> {
                                           .map_err(|err| 
                                               err.add_slice_offset(self.offset)
                                           )?;
+        let fragmented = ip_ext.is_fragmenting_payload();
 
         // set the new data 
         self.move_to_slice(rest);
         self.result.ip = Some(Ipv6(ip, ip_ext));
 
-        //parse the data bellow
-        match next_header {
-            ip_number::UDP => self.slice_udp(),
-            ip_number::TCP => self.slice_tcp(),
-            value => {
-                use TransportSlice::*;
-                self.result.transport = Some(Unknown(value));
-                self.slice_payload()
+        // only try to decode the transport layer if the payload
+        // is not fragmented
+        if fragmented {
+            self.slice_payload()
+        } else {
+            //parse the data bellow
+            match next_header {
+                ip_number::UDP => self.slice_udp(),
+                ip_number::TCP => self.slice_tcp(),
+                value => {
+                    use TransportSlice::*;
+                    self.result.transport = Some(Unknown(value));
+                    self.slice_payload()
+                }
             }
         }
     }

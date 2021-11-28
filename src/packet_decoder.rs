@@ -75,33 +75,42 @@ impl<'a> PacketHeaders<'a> {
         match ether_type {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
+                let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
                 result.ip = Some(IpHeader::Version4(ip, ip_ext));
 
-                //parse the transport layer
-                let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
+                // only try to decode the transport layer if the payload
+                // is not fragmented
+                if false == fragmented {
+                    //parse the transport layer
+                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
 
-                //assign to the output
-                rest = transport_rest;
-                result.transport = transport;
-                
+                    //assign to the output
+                    rest = transport_rest;
+                    result.transport = transport;
+                }
             },
             IPV6 => {
                 let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
                 let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
+                let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
                 result.ip = Some(IpHeader::Version6(ip, ip_ext));
 
-                //parse the transport layer
-                let (transport, transport_rest) = read_transport(next_header, rest)?;
-                
-                rest = transport_rest;
-                result.transport = transport;
+                // only try to decode the transport layer if the payload
+                // is not fragmented
+                if false == fragmented {
+                    //parse the transport layer
+                    let (transport, transport_rest) = read_transport(next_header, rest)?;
+
+                    rest = transport_rest;
+                    result.transport = transport;
+                }
 
             },
             _ => {}

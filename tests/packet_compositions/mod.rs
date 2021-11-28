@@ -340,23 +340,72 @@ impl ComponentTest {
     }
 
     fn run_ipv4(&self, ip: &Ipv4Header, ip_exts: &Ipv4Extensions, udp: &UdpHeader, tcp: &TcpHeader) {
-        let mut test = self.clone();
-        test.ip = Some({
-            let mut header = IpHeader::Version4(ip.clone(), ip_exts.clone());
-            header.set_next_headers(ip.protocol);
-            header
-        });
-        test.run_transport(udp, tcp);
+
+        // fragmenting
+        {
+            let mut test = self.clone();
+            test.ip = Some({
+                let mut frag = ip.clone();
+                if false == frag.is_fragmenting_payload() {
+                    frag.more_fragments = true;
+                }
+                let mut header = IpHeader::Version4(frag, ip_exts.clone());
+                header.set_next_headers(ip.protocol);
+                header
+            });
+
+            // run without transport header
+            test.run();
+        }
+
+        // non fragmenting
+        {
+            let mut test = self.clone();
+            test.ip = Some({
+                let mut non_frag = ip.clone();
+                non_frag.more_fragments = false;
+                non_frag.fragments_offset = 0;
+                let mut header = IpHeader::Version4(non_frag, ip_exts.clone());
+                header.set_next_headers(ip.protocol);
+                header
+            });
+            test.run_transport(udp, tcp);
+        }
     }
 
     fn run_ipv6(&self, ip: &Ipv6Header, ip_exts: &Ipv6Extensions, udp: &UdpHeader, tcp: &TcpHeader) {
-        let mut test = self.clone();
-        test.ip = Some({
-            let mut header = IpHeader::Version6(ip.clone(), ip_exts.clone());
-            header.set_next_headers(ip.next_header);
-            header
-        });
-        test.run_transport(udp, tcp);
+
+        // fragmenting
+        {
+            let mut test = self.clone();
+            test.ip = Some({
+                let mut frag = ip_exts.clone();
+                if let Some(frag) = frag.fragment.as_mut() {
+                    if false == frag.is_fragmenting_payload() {
+                        frag.more_fragments = true;
+                    }
+                } else {
+                    frag.fragment = Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0));
+                }
+                let mut header = IpHeader::Version6(ip.clone(), frag);
+                header.set_next_headers(ip.next_header);
+                header
+            });
+            test.run();
+        }
+
+        // non fragmenting
+        {
+            let mut test = self.clone();
+            test.ip = Some({
+                let mut non_frag = ip_exts.clone();
+                non_frag.fragment = None;
+                let mut header = IpHeader::Version6(ip.clone(), non_frag);
+                header.set_next_headers(ip.next_header);
+                header
+            });
+            test.run_transport(udp, tcp);
+        }
     }
 
     fn run_transport(&self, udp: &UdpHeader, tcp: &TcpHeader) {
