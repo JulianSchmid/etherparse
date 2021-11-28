@@ -142,7 +142,7 @@ impl UdpHeader {
 
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Use UdpHeader::from_slice instead."
     )]
     #[inline]

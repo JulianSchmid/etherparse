@@ -122,7 +122,7 @@ impl Ipv4Header {
 
     /// Renamed to `Ipv4Header::from_slice`
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Renamed to `Ipv4Header::from_slice`"
     )]
     #[inline]

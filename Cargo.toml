@@ -1,6 +1,6 @@
 [package]
 name = "etherparse"
-version = "0.10.0"
+version = "0.10.1"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 edition = "2018"
 repository = "https://github.com/JulianSchmid/etherparse"

@@ -5,7 +5,7 @@ use std::slice::from_raw_parts;
 
 /// Deprecated use [IpAuthenticationHeader] instead.
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use the type IpAuthenticationHeader instead"
 )]
 pub type IPv6AuthenticationHeader = IpAuthenticationHeader;

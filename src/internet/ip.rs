@@ -11,7 +11,7 @@ impl IpHeader {
 
     /// Renamed to `IpHeader::from_slice`
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Renamed to `IpHeader::from_slice`"
     )]
     #[inline]
@@ -144,7 +144,7 @@ impl IpHeader {
 /// to [IpNumber], which also closer to the name
 /// "Assigned Internet Protocol Numbers" used on iana.org .
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use the type IpNumber instead"
 )]
 pub type IpTrafficClass = IpNumber;

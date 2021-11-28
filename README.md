@@ -23,7 +23,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.10.0"
+etherparse = "0.10.1"
 ```
 
 ## What is etherparse?

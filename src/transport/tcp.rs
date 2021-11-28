@@ -281,7 +281,7 @@ impl TcpHeader {
 
     /// Renamed to `TcpHeader::from_slice`
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Use TcpHeader::from_slice instead."
     )]
     #[inline]
@@ -1083,49 +1083,49 @@ pub struct TcpOptionsIterator<'a> {
 }
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_END instead"
 )]
 /// Deprecated please use [tcp_option::KIND_END] instead.
 pub const TCP_OPTION_ID_END: u8 = 0;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_NOOP instead"
 )]
 /// Deprecated please use [tcp_option::KIND_NOOP] instead.
 pub const TCP_OPTION_ID_NOP: u8 = 1;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_MAXIMUM_SEGMENT_SIZE instead"
 )]
 /// Deprecated please use [tcp_option::KIND_MAXIMUM_SEGMENT_SIZE] instead.
 pub const TCP_OPTION_ID_MAXIMUM_SEGMENT_SIZE: u8 = 2;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_WINDOW_SCALE instead"
 )]
 /// Deprecated please use [tcp_option::KIND_WINDOW_SCALE] instead.
 pub const TCP_OPTION_ID_WINDOW_SCALE: u8 = 3;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_SELECTIVE_ACK_PERMITTED instead"
 )]
 /// Deprecated please use [tcp_option::KIND_SELECTIVE_ACK_PERMITTED] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK_PERMITTED: u8 = 4;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_SELECTIVE_ACK instead"
 )]
 /// Deprecated please use [tcp_option::KIND_SELECTIVE_ACK] instead.
 pub const TCP_OPTION_ID_SELECTIVE_ACK: u8 = 5;
 
 #[deprecated(
-    since = "0.10.0",
+    since = "0.10.1",
     note = "Please use tcp_option::KIND_TIMESTAMP instead"
 )]
 /// Deprecated please use [tcp_option::KIND_TIMESTAMP] instead.

@@ -32,7 +32,7 @@ impl Ipv6Header {
 
     /// Renamed to `Ipv6Header::from_slice`
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Renamed to `Ipv6Header::from_slice`"
     )]
     #[inline]

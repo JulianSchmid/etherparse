@@ -14,7 +14,7 @@
 //! 
 //! ```toml
 //! [dependencies]
-//! etherparse = "0.10.0"
+//! etherparse = "0.10.1"
 //! ```
 //!
 //! # What is etherparse?
@@ -129,7 +129,7 @@
 //! ## Packet Builder
 //! The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 //! 
-//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_udp.rs)
+//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_udp.rs)
 //! ```rust
 //! use etherparse::PacketBuilder;
 //!
@@ -154,12 +154,12 @@
 //! builder.write(&mut result, &payload).unwrap();
 //! ```
 //! 
-//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_tcp.rs) available.
+//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_tcp.rs) available.
 //! 
 //! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more informations.
 //! 
 //! ## Manually serialising each header
-//! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.10.0/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
+//! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
 //! 
 //! Read the documentations of the different methods for a more details:
 //! 

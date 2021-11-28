@@ -65,7 +65,7 @@ impl Ethernet2Header {
 
     /// Creates a ethernet slice from an other slice.
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Use Ethernet2Header::from_slice instead."
     )]
     #[inline]

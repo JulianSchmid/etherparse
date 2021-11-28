@@ -83,7 +83,7 @@ impl SingleVlanHeader {
 
     /// Read an SingleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Use SingleVlanHeader::from_slice instead."
     )]
     #[inline]
@@ -194,7 +194,7 @@ impl DoubleVlanHeader {
 
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(
-        since = "0.10.0",
+        since = "0.10.1",
         note = "Use SingleVlanHeader::from_slice instead."
     )]
     #[inline]
