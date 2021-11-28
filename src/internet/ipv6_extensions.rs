@@ -624,6 +624,16 @@ impl Ipv6Extensions {
 
         Ok(next)
     }
+
+    /// Returns true if no IPv6 extension header is present (all fields `None`).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.hop_by_hop_options.is_none() &&
+        self.destination_options.is_none() &&
+        self.routing.is_none() &&
+        self.fragment.is_none() &&
+        self.auth.is_none()
+    }
 }
 
 /// In case a route header is present it is also possible
@@ -774,6 +784,12 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     #[inline]
     pub fn slice(&self) -> &'a[u8] {
         self.slice
+    }
+
+    /// Returns true if no IPv6 extension header is present (slice is empty).
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.slice.is_empty()
     }
 }
 
