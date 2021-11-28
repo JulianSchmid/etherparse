@@ -928,6 +928,89 @@ pub mod header {
     }
 
     #[test]
+    fn is_empty() {
+        // empty
+        assert!(
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: None,
+                auth: None,
+            }.is_empty()
+        );
+
+        // hop_by_hop_options
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: Some(
+                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap()
+                ),
+                destination_options: None,
+                routing: None,
+                fragment: None,
+                auth: None,
+            }.is_empty()
+        );
+
+        // destination_options
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: Some(
+                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap()
+                ),
+                routing: None,
+                fragment: None,
+                auth: None,
+            }.is_empty()
+        );
+
+        // routing
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: Some(
+                    Ipv6RoutingExtensions{
+                        routing: Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap(),
+                        final_destination_options: None,
+                    }
+                ),
+                fragment: None,
+                auth: None,
+            }.is_empty()
+        );
+
+        // fragment
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)),
+                auth: None,
+            }.is_empty()
+        );
+
+        // auth
+        assert_eq!(
+            false,
+            Ipv6Extensions{
+                hop_by_hop_options: None,
+                destination_options: None,
+                routing: None,
+                fragment: None,
+                auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
+            }.is_empty()
+        );
+    }
+
+    #[test]
     fn debug() {
         let a : Ipv6Extensions = Default::default();
         assert_eq!(
@@ -1105,6 +1188,31 @@ pub mod slice {
                     );
                 }
             }
+        }
+    }
+
+    #[test]
+    fn is_empty() {
+        // empty
+        {
+            let slice = Ipv6ExtensionsSlice::from_slice(
+                ip_number::UDP,
+                &[]
+            ).unwrap().0;
+            assert!(slice.is_empty());
+        }
+
+        // fragment
+        {
+            let bytes = Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0).to_bytes().unwrap();
+            let slice = Ipv6ExtensionsSlice::from_slice(
+                ip_number::IPV6_FRAG,
+                &bytes
+            ).unwrap().0;
+            assert_eq!(
+                false,
+                slice.is_empty()
+            );
         }
     }
 
