@@ -101,6 +101,41 @@ impl ComponentTest {
                         SlicedPacket::from_ethernet(&buffer[..len]),
                         Err(ReadError::UnexpectedEndOfSlice(_))
                     );
+                    
+                }
+            }
+        }
+
+        // packet data starting right after the link layer (tests from_ether_type functions)
+        {
+            // remove the link layer
+            let ether_down = {
+                let mut ether_down = self.clone();
+                ether_down.link = None;
+                ether_down
+            };
+
+            // serialize to buffer
+            let buffer = ether_down.serialize();
+
+            // SlicedPacket::from_ether_type
+            ether_down.assert_sliced_packet(
+                SlicedPacket::from_ether_type(
+                    self.link.as_ref().unwrap().ether_type,
+                    &buffer[..]
+                ).unwrap()
+            );
+
+            // create unexpected end of slice errors for the different headers
+            for len in ether_down.invalid_ser_lengths() {
+                if let Some(len) = len {
+                    assert_matches!(
+                        SlicedPacket::from_ether_type(
+                            self.link.as_ref().unwrap().ether_type,
+                            &buffer[..len]
+                        ),
+                        Err(ReadError::UnexpectedEndOfSlice(_))
+                    );
                 }
             }
         }

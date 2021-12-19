@@ -88,6 +88,77 @@ impl<'a> SlicedPacket<'a> {
         CursorSlice::new(data).slice_ethernet2()
     }
 
+    /// Seperates a network packet slice into different slices containing the headers using
+    /// the given `ether_type` number to identify the first header.
+    ///
+    /// The result is returned as a SlicerPacket struct. Currently supported
+    /// ether type numbers are:
+    ///
+    /// * `ether_type::IPV4`
+    /// * `ether_type::IPV6`
+    /// * `ether_type::VLAN_TAGGED_FRAME`
+    /// * `ether_type::PROVIDER_BRIDGING`
+    /// * `ether_type::VLAN_DOUBLE_TAGGED_FRAME`
+    ///
+    /// If an unsupported ether type is given the given slice will be set as payload
+    /// and all other fields will be set to `None`.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{Ethernet2Header, SerializedSize, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //desitionation ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut complete_packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut complete_packet, &payload).unwrap();
+    /// #
+    /// # // skip ethernet 2 header so we can parse from there downwards
+    /// # let packet = &complete_packet[Ethernet2Header::SERIALIZED_SIZE..];
+    /// #
+    /// use etherparse::{ether_type, SlicedPacket};
+    ///
+    /// match SlicedPacket::from_ether_type(ether_type::IPV4, packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
+    pub fn from_ether_type(ether_type: u16, data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
+        use ether_type::*;
+        match ether_type {
+            IPV4 => CursorSlice::new(data).slice_ipv4(),
+            IPV6 => CursorSlice::new(data).slice_ipv6(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME =>
+                CursorSlice::new(data).slice_vlan(),
+            _ => Ok(
+                SlicedPacket {
+                    link: None,
+                    vlan: None,
+                    ip: None,
+                    transport: None,
+                    payload: data
+                }
+            ),
+        }
+    }
+
     /// Seperates a network packet slice into different slices containing the headers from the ip header downwards. 
     ///
     /// The result is returned as a SlicerPacket struct. This function assumes the given data starts 
@@ -103,7 +174,7 @@ impl<'a> SlicedPacket<'a> {
     /// #    ipv4([192,168,1,1], //source ip
     /// #         [192,168,1,2], //desitionation ip
     /// #         20)            //time to life
-    /// #    .udp(21,    //source port 
+    /// #    .udp(21,    //source port
     /// #         1234); //desitnation port
     /// #    //payload of the udp packet
     /// #    let payload = [1,2,3,4,5,6,7,8];
