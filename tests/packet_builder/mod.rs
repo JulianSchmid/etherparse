@@ -31,7 +31,7 @@ fn eth_ipv4_udp() {
                Ethernet2Header{
                     source: [1,2,3,4,5,6],
                     destination: [7,8,9,10,11,12],
-                    ether_type: EtherType::Ipv4 as u16
+                    ether_type: ether_type::IPV4
                });
 
     //ip header
@@ -322,7 +322,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
                     priority_code_point: 0,
                     drop_eligible_indicator: false,
                     vlan_identifier: 0x123,
-                    ether_type: EtherType::Ipv4 as u16
+                    ether_type: ether_type::IPV4
                });
 
     //ip header
@@ -670,7 +670,7 @@ proptest! {
                    Ethernet2Header{
                         source: [1,2,3,4,5,6],
                         destination: [7,8,9,10,11,12],
-                        ether_type: EtherType::Ipv4 as u16
+                        ether_type: ether_type::IPV4
                    });
 
         //ip header

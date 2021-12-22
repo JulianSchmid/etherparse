@@ -399,10 +399,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
             }
         };
 
-        use crate::EtherType::*;
-        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
-        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
-        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+        use ether_type::*;
 
         //check that outer ethertype is matching
         match result.outer().ether_type() {

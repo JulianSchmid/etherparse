@@ -593,8 +593,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     let ip_ether_type = {
         use crate::IpHeader::*;
         match builder.state.ip_header {
-            Some(Version4(_,_)) => EtherType::Ipv4 as u16,
-            Some(Version6(_,_)) => EtherType::Ipv6 as u16,
+            Some(Version4(_,_)) => ether_type::IPV4,
+            Some(Version6(_,_)) => ether_type::IPV6,
             None => panic!("Missing ip header")
         }
     };
@@ -606,8 +606,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             use crate::VlanHeader::*;
             //determine the ether type depending on if there is a vlan tagging header
             match builder.state.vlan_header {
-                Some(Single(_)) => EtherType::VlanTaggedFrame as u16,
-                Some(Double(_)) => EtherType::ProviderBridging as u16,
+                Some(Single(_)) => ether_type::VLAN_TAGGED_FRAME,
+                Some(Double(_)) => ether_type::PROVIDER_BRIDGING,
                 //if no vlan header exists, the id is purely defined by the ip type
                 None => ip_ether_type
             }
@@ -626,7 +626,7 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
         },
         Some(Double(mut value)) => {
             //set ether types
-            value.outer.ether_type = EtherType::VlanTaggedFrame as u16;
+            value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
             value.inner.ether_type = ip_ether_type;
             //serialize
             value.write(writer)?;

@@ -1,20 +1,71 @@
 use super::*;
 
-/// Decoded packet headers (data link layer and higher).
-/// You can use PacketHeaders::from_ethernet_slice or PacketHeader::from_ip_slice
-/// to decode and get this struct as a result.
+/// Decoded packet headers (data link layer and lower).
+///
+/// You can use
+///
+/// * [`PacketHeaders::from_ethernet_slice`]
+/// * [`PacketHeaders::from_ether_type`]
+/// * [`PacketHeaders::from_ip_slice`]
+///
+/// depending on your starting header to parse the headers in a slice and get this
+/// struct as a result.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PacketHeaders<'a> {
+    /// Ethernet II header if present.
     pub link: Option<Ethernet2Header>,
+    /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
+    /// IPv4 or IPv6 header and IP extension headers if present.
     pub ip: Option<IpHeader>,
+    /// TCP or UDP header if present.
     pub transport: Option<TransportHeader>,
     /// Rest of the packet that could not be decoded as a header (usually the payload).
     pub payload: &'a [u8]
 }
 
 impl<'a> PacketHeaders<'a> {
-    /// Tries to decode as much as possible of a packet.
+    /// Decodes a network packet into different headers from a slice that starts with an Ethernet II header.
+    ///
+    /// The result is returned as a [`PacketHeaders`] struct.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{Ethernet2Header, SerializedSize, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //desitionation ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut complete_packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut complete_packet, &payload).unwrap();
+    /// #
+    /// # // skip ethernet 2 header so we can parse from there downwards
+    /// # let packet = &complete_packet[Ethernet2Header::SERIALIZED_SIZE..];
+    /// #
+    /// use etherparse::{ether_type, PacketHeaders};
+    ///
+    /// match PacketHeaders::from_ether_type(ether_type::IPV4, packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         
         let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)?;
@@ -29,11 +80,7 @@ impl<'a> PacketHeaders<'a> {
         };
 
         //parse vlan header(s)
-        use crate::EtherType::*;
-
-        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
-        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
-        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+        use ether_type::*;
 
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
@@ -69,9 +116,6 @@ impl<'a> PacketHeaders<'a> {
         };
 
         //parse ip (if present)
-        const IPV4: u16 = Ipv4 as u16;
-        const IPV6: u16 = Ipv6 as u16;
-
         match ether_type {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
@@ -125,7 +169,7 @@ impl<'a> PacketHeaders<'a> {
     /// Tries to decode a network packet into different headers using the
     /// given `ether_type` number to identify the first header.
     ///
-    /// The result is returned as a `PacketHeaders` struct. Currently supported
+    /// The result is returned as a [`PacketHeaders`] struct. Currently supported
     /// ether type numbers are:
     ///
     /// * `ether_type::IPV4`
@@ -185,11 +229,7 @@ impl<'a> PacketHeaders<'a> {
         };
 
         //parse vlan header(s)
-        use crate::EtherType::*;
-
-        const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
-        const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
-        const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+        use ether_type::*;
 
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
@@ -225,9 +265,6 @@ impl<'a> PacketHeaders<'a> {
         };
 
         //parse ip (if present)
-        const IPV4: u16 = Ipv4 as u16;
-        const IPV6: u16 = Ipv6 as u16;
-
         match ether_type {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
@@ -279,35 +316,44 @@ impl<'a> PacketHeaders<'a> {
     }
 
 
-    /// Tries to decode an ip packet and its transport headers.  
-    /// Assumes the given slice starts with the first byte of the IP header
+    /// Tries to decode an ip packet and its transport headers.
+    ///
+    /// Assumes the given slice starts with the first byte of the IP header.
+    ///
     /// # Example
+    ///
+    /// Basic usage:
+    ///
     /// ```
-    /// # use etherparse::*;
-    /// // build a UDP packet
-    /// let payload = [0u8;18];
-    /// let builder = PacketBuilder::
-    ///    ipv4([192,168,1,1], //source ip
-    ///          [192,168,1,2], //desitionation ip
-    ///          20)            //time to life
-    ///    .udp(21,    //source port 
-    ///         1234); //desitnation port
+    /// # use etherparse::PacketBuilder;
+    /// # // build a UDP packet
+    /// # let payload = [0u8;18];
+    /// # let builder = PacketBuilder::
+    /// #    ipv4([192,168,1,1], //source ip
+    /// #         [192,168,1,2], //desitionation ip
+    /// #         20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #        1234); //desitnation port
+    /// #
+    /// # // serialize the packet
+    /// # let packet = {
+    /// #     let mut packet = Vec::<u8>::with_capacity(
+    /// #         builder.size(payload.len())
+    /// #     );
+    /// #     builder.write(&mut packet, &payload).unwrap();
+    /// #     packet
+    /// # };
+    /// use etherparse::PacketHeaders;
     ///
-    /// // serialize the packet
-    /// let packet = {
-    ///     let mut packet = Vec::<u8>::with_capacity(
-    ///                     builder.size(payload.len()));
-    ///     builder.write(&mut packet, &payload).unwrap();
-    ///     packet
-    /// };
-    /// # // should be 64 bytes long (including the ethernet FCS/CRC32) but since 
-    /// # // this is not provided at the moment we're gonna be fine with 46
-    /// # assert_eq!(packet.len(), 46);
-    ///
-    /// // parse the ip packet from a slice
-    /// let p = PacketHeaders::from_ip_slice(&packet)
-    ///     .expect("Failed to decode the packet");
-    /// # assert_eq!(p.payload, payload);
+    /// match PacketHeaders::from_ip_slice(&packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
     /// ```
     pub fn from_ip_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         let mut result = PacketHeaders {

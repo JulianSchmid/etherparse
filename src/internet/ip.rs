@@ -151,7 +151,7 @@ pub type IpTrafficClass = IpNumber;
 
 /// Identifiers for the next_header field in ipv6 headers and protocol field in ipv4 headers.
 ///
-/// `u8` contants of the ip numbers can be found in the module [ip_number].
+/// `u8` contants of the ip numbers can be found in the module [`ip_number`].
 ///
 /// The list was extracted from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -459,10 +459,10 @@ impl IpNumber {
     }
 }
 
-/// Module containing the u8 constants for the most used ip protocol number.
+/// `u8` constants for the most used ip protocol numbers.
 ///
 /// The constants only exist for convenience. You can get equivalent values by 
-/// casting the enum values of [IpNumber] to a u8 value.
+/// casting the enum values of [`IpNumber`] to a u8 value.
 ///
 /// ```
 /// use etherparse::{ip_number, IpNumber};

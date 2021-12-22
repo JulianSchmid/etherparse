@@ -3,7 +3,7 @@ use super::super::*;
 use std::slice::from_raw_parts;
 use std::io;
 
-///Ether type enum present in ethernet II header.
+/// Ether type enum present in ethernet II header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EtherType {
     Ipv4 = 0x0800,
@@ -32,11 +32,19 @@ impl EtherType {
     }
 }
 
-/// Module containing the u16 constants for the most used ether type values
-/// present in ethernet II header.
+/// `u16` constants for the most used `ether_type` values.
 ///
-/// The constants are equivalt if values of the enum type `EtherType` get cast
+/// `ether_type` values are used in the Ethernet II header and the
+/// vlan headers to identify the next header type.
+///
+/// The constants are equivalent if values of the enum type [`EtherType`] get cast
 /// to a u16 value.
+///
+/// ```
+/// use etherparse::{ether_type, EtherType};
+///
+/// assert_eq!(ether_type::IPV4, EtherType::Ipv4 as u16);
+/// ```
 pub mod ether_type {
     use crate::EtherType::*;
     pub const IPV4: u16 = Ipv4 as u16;

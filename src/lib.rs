@@ -62,8 +62,9 @@
 //! 
 //! Depending from which point downward you want to slice a package check out the functions:
 //!
-//! * [`SlicedPacket.from_ethernet`](struct.SlicedPacket.html#method.from_ethernet) for parsing from an Ethernet II header downwards
-//! * [`SlicedPacket.from_ip`](struct.SlicedPacket.html#method.from_ip) for parsing from an IPv4 or IPv6 downwards
+//! * [`SlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
+//! * [`SlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
+//! * [`SlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
 //!
 //! ## Deserializing all headers into structs
 //! This option deserializes all known headers and transferes their contents to header structs.
@@ -97,38 +98,48 @@
 //! 
 //! Depending from which point downward you want to unpack a package check out the functions
 //!
-//! * [`PacketHeaders.from_ethernet_slice`](struct.PacketHeaders.html#method.from_ethernet_slice) for parsing from an Ethernet II header downwards
-//! * [`PacketHeaders.from_ip_slice`](struct.PacketHeaders.html#method.from_ip_slice) for parsing from an IPv4 or IPv6 downwards
+//! * [`PacketHeaders::from_ethernet_slice`] for parsing from an Ethernet II header downwards
+//! * [`PacketHeaders::from_ether_type`] for parsing a slice starting after an Ethernet II header
+//! * [`PacketHeaders::from_ip_slice`] for parsing from an IPv4 or IPv6 downwards
 //!
 //! ## Manually slicing & parsing packets
 //! It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice. 
 //! 
 //! Have a look at the documentation for the <NAME>Slice.from_slice methods, if you want to create your own slices:
 //! 
-//! * [`Ethernet2HeaderSlice.from_slice`](struct.Ethernet2HeaderSlice.html#method.from_slice)
-//! * [`SingleVlanHeaderSlice.from_slice`](struct.SingleVlanHeaderSlice.html#method.from_slice)
-//! * [`DoubleVlanHeaderSlice.from_slice`](struct.DoubleVlanHeaderSlice.html#method.from_slice)
-//! * [`Ipv4HeaderSlice.from_slice`](struct.Ipv4HeaderSlice.html#method.from_slice)
-//! * [`Ipv6HeaderSlice.from_slice`](struct.Ipv6HeaderSlice.html#method.from_slice)
-//! * [`Ipv6ExtensionHeader.from_slice`](struct.Ipv6ExtensionHeader.html)
-//! * [`UdpHeaderSlice.from_slice`](struct.UdpHeaderSlice.html#method.from_slice)
-//! * [`TcpHeaderSlice.from_slice`](struct.TcpHeaderSlice.html#method.from_slice)
-//! 
+//! * [`Ethernet2HeaderSlice::from_slice`]
+//! * [`SingleVlanHeaderSlice::from_slice`]
+//! * [`DoubleVlanHeaderSlice::from_slice`]
+//! * [`Ipv4HeaderSlice::from_slice`]
+//! * [`Ipv4ExtensionsSlice::from_slice`]
+//! * [`Ipv6HeaderSlice::from_slice`]
+//! * [`Ipv6ExtensionsSlice::from_slice`]
+//! * [`Ipv6RawExtensionHeaderSlice::from_slice`]
+//! * [`IpAuthenticationHeaderSlice::from_slice`]
+//! * [`Ipv6FragmentHeaderSlice::from_slice`]
+//! * [`UdpHeaderSlice::from_slice`]
+//! * [`TcpHeaderSlice::from_slice`]
+//!
 //! And for deserialization into the corresponding header structs have a look at:
 //!
-//! * [`Ethernet2Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.from_slice)
-//! * [`SingleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
-//! * [`DoubleVlanHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
-//! * [`IpHeader.read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.read) & [`IpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeader.html#method.from_slice)
-//! * [`Ipv4Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
-//! * [`Ipv6Header.read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [`Ipv6Header.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.from_slice)
-//! * [`UdpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [`UdpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.from_slice)
-//! * [`TcpHeader.read`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [`TcpHeader.from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.from_slice)
-//! 
+//! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
+//! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
+//! * [`DoubleVlanHeader::read`] & [`DoubleVlanHeader::from_slice`]
+//! * [`IpHeader::read`] & [`IpHeader::from_slice`]
+//! * [`Ipv4Header::read`] & [`Ipv4Header::from_slice`]
+//! * [`Ipv4Extensions::read`] & [`Ipv4Extensions::from_slice`]
+//! * [`Ipv6Header::read`] & [`Ipv6Header::from_slice`]
+//! * [`Ipv6Extensions::read`] & [`Ipv6Extensions::from_slice`]
+//! * [`Ipv6RawExtensionHeader::read`] & [`Ipv6RawExtensionHeader::from_slice`]
+//! * [`IpAuthenticationHeader::read`] & [`IpAuthenticationHeader::from_slice`]
+//! * [`Ipv6FragmentHeader::read`] & [`Ipv6FragmentHeader::from_slice`]
+//! * [`UdpHeader::read`] & [`UdpHeader::from_slice`]
+//! * [`TcpHeader::read`] & [`TcpHeader::from_slice`]
+//!
 //! # How to generate fake packet data?
 //! ## Packet Builder
 //! The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
-//! 
+//!
 //! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_udp.rs)
 //! ```rust
 //! use etherparse::PacketBuilder;
@@ -163,14 +174,19 @@
 //! 
 //! Read the documentations of the different methods for a more details:
 //! 
-//! * [`Ethernet2Header.write`](struct.Ethernet2Header.html#method.write)
-//! * [`SingleVlanHeader.write`](struct.SingleVlanHeader.html#method.write)
-//! * [`DoubleVlanHeader.write`](struct.DoubleVlanHeader.html#method.write)
-//! * [`Ipv4Header.write`](struct.Ipv4Header.html#method.write)
-//! * [`Ipv4Header.write_raw`](struct.Ipv4Header.html#method.write_raw)
-//! * [`Ipv6Header.write`](struct.Ipv6Header.html#method.write)
-//! * [`UdpHeader.write`](struct.UdpHeader.html#method.write)
-//! * [`TcpHeader.write`](struct.TcpHeader.html#method.write)
+//! * [`Ethernet2Header::write`]
+//! * [`SingleVlanHeader::write`]
+//! * [`DoubleVlanHeader::write`]
+//! * [`Ipv4Header::write`]
+//! * [`Ipv4Header::write_raw`]
+//! * [`Ipv4Extensions::write`]
+//! * [`Ipv6Header::write`]
+//! * [`Ipv6Extensions::write`]
+//! * [`Ipv6RawExtensionHeader::write`]
+//! * [`IpAuthenticationHeader::write`]
+//! * [`Ipv6FragmentHeader::write`]
+//! * [`UdpHeader::write`]
+//! * [`TcpHeader::write`]
 //!
 //! # Roadmap
 //! * Documentation
@@ -202,7 +218,7 @@ use std::fmt;
 use std::error::Error;
 
 mod link;
-pub use crate::link::*;
+pub use crate::link::LinkSlice;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
 
@@ -221,6 +237,7 @@ pub use crate::transport::tcp::*;
 pub use crate::transport::udp::*;
 pub use crate::transport::TransportHeader;
 
+/// Helpers for calculating checksums.
 pub mod checksum;
 
 mod packet_builder;
