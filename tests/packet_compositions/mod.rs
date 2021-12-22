@@ -118,6 +118,14 @@ impl ComponentTest {
             // serialize to buffer
             let buffer = ether_down.serialize();
 
+            // PacketHeaders::from_ether_type
+            ether_down.assert_headers(
+                PacketHeaders::from_ether_type(
+                    self.link.as_ref().unwrap().ether_type,
+                    &buffer[..]
+                ).unwrap()
+            );
+
             // SlicedPacket::from_ether_type
             ether_down.assert_sliced_packet(
                 SlicedPacket::from_ether_type(
@@ -129,6 +137,13 @@ impl ComponentTest {
             // create unexpected end of slice errors for the different headers
             for len in ether_down.invalid_ser_lengths() {
                 if let Some(len) = len {
+                    assert_matches!(
+                        PacketHeaders::from_ether_type(
+                            self.link.as_ref().unwrap().ether_type,
+                            &buffer[..len]
+                        ),
+                        Err(ReadError::UnexpectedEndOfSlice(_))
+                    );
                     assert_matches!(
                         SlicedPacket::from_ether_type(
                             self.link.as_ref().unwrap().ether_type,
