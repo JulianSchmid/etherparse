@@ -1,5 +1,9 @@
 # Changelog:
 
+## 0.11.0
+
+* Added functions [SlicedPacket::from_ether_type](https://docs.rs/etherparse/0.11.0/etherparse/struct.SlicedPacket.html#method.from_ether_type) & [PacketHeaders::from_ether_type](https://docs.rs/etherparse/0.10.1/etherparse/struct.PacketHeaders.html#method.from_ether_type) to slice & decode messages based on the starting `ether type`
+
 ## 0.10.1: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
 
 With this version the support for IPv6 gets extended and bugs in the parsing of fragmented packets as well as authentification headers are fixed. Additionally a bunch of performance improvements are included and new methods have been added (e.g. the method `to_bytes` for headers with static sizes).

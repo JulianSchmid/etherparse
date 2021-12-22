@@ -10,26 +10,65 @@ pub enum InternetSlice<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
-    ///A slice containing an UDP header.
+    /// A slice containing an UDP header.
     Udp(UdpHeaderSlice<'a>),
-    ///A slice containing a TCP header.
+    /// A slice containing a TCP header.
     Tcp(TcpHeaderSlice<'a>),
-    ///Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
+    /// Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
     Unknown(u8),
 }
 
-///A sliced into its component headers. Everything that could not be parsed is stored in a slice in the field "payload".
+/// Packet slice split into multiple slices containing the different headers & payload.
+///
+/// Everything that could not be parsed is stored in a slice in the field "payload".
+///
+/// You can use
+///
+/// * [`SlicedPacket::from_ethernet`]
+/// * [`SlicedPacket::from_ether_type`]
+/// * [`SlicedPacket::from_ip`]
+///
+/// depending on your starting header to slice a packet.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+///```
+/// # use etherparse::{SlicedPacket, PacketBuilder};
+/// # let builder = PacketBuilder::
+/// #    ethernet2([1,2,3,4,5,6],     //source mac
+/// #               [7,8,9,10,11,12]) //destionation mac
+/// #    .ipv4([192,168,1,1], //source ip
+/// #          [192,168,1,2], //desitionation ip
+/// #          20)            //time to life
+/// #    .udp(21,    //source port
+/// #         1234); //desitnation port
+/// #    //payload of the udp packet
+/// #    let payload = [1,2,3,4,5,6,7,8];
+/// #    //get some memory to store the serialized data
+/// #    let mut packet = Vec::<u8>::with_capacity(
+/// #                            builder.size(payload.len()));
+/// #    builder.write(&mut packet, &payload).unwrap();
+/// match SlicedPacket::from_ethernet(&packet) {
+///     Err(value) => println!("Err {:?}", value),
+///     Ok(value) => {
+///         println!("link: {:?}", value.link);
+///         println!("vlan: {:?}", value.vlan);
+///         println!("ip: {:?}", value.ip);
+///         println!("transport: {:?}", value.transport);
+///     }
+/// }
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SlicedPacket<'a> {
+    /// Ethernet II header if present.
     pub link: Option<LinkSlice<'a>>,
+    /// Single or double vlan headers if present.
     pub vlan: Option<VlanSlice<'a>>,
+    /// IPv4 or IPv6 header and IP extension headers if present.
     pub ip: Option<InternetSlice<'a>>,
-    /// IP Extension headers present after the ip header. 
-    ///
-    /// In case of IPV4 these can be ipsec authentication & encapsulated
-    /// security headers. In case of IPv6 these are the ipv6 extension headers.
-    /// The headers are in the same order as they are written to the packet.
-    //pub ip_extensions: [Option<IpExtensionHeaderSlice<'a>>;IP_MAX_NUM_HEADER_EXTENSIONS],
+    /// TCP or UDP header if present.
     pub transport: Option<TransportSlice<'a>>,
     /// The payload field points to the rest of the packet that could not be parsed by etherparse.
     ///
@@ -42,16 +81,10 @@ pub struct SlicedPacket<'a> {
     pub payload: &'a [u8]
 }
 
-const ETH_IPV4: u16 = EtherType::Ipv4 as u16;
-const ETH_IPV6: u16 = EtherType::Ipv6 as u16;
-const ETH_VLAN: u16 = EtherType::VlanTaggedFrame as u16;
-const ETH_BRIDGE: u16 = EtherType::ProviderBridging as u16;
-const ETH_VLAN_DOUBLE: u16 = EtherType::VlanDoubleTaggedFrame as u16;
-
 impl<'a> SlicedPacket<'a> {
     /// Seperates a network packet slice into different slices containing the headers from the ethernet header downwards. 
     ///
-    /// The result is returned as a SlicerPacket struct. This function assumes the given data starts 
+    /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
     /// with an ethernet II header.
     ///
     /// # Examples
@@ -66,7 +99,7 @@ impl<'a> SlicedPacket<'a> {
     /// #    .ipv4([192,168,1,1], //source ip
     /// #          [192,168,1,2], //desitionation ip
     /// #          20)            //time to life
-    /// #    .udp(21,    //source port 
+    /// #    .udp(21,    //source port
     /// #         1234); //desitnation port
     /// #    //payload of the udp packet
     /// #    let payload = [1,2,3,4,5,6,7,8];
@@ -91,7 +124,7 @@ impl<'a> SlicedPacket<'a> {
     /// Seperates a network packet slice into different slices containing the headers using
     /// the given `ether_type` number to identify the first header.
     ///
-    /// The result is returned as a SlicerPacket struct. Currently supported
+    /// The result is returned as a [`SlicedPacket`] struct. Currently supported
     /// ether type numbers are:
     ///
     /// * `ether_type::IPV4`
@@ -161,7 +194,7 @@ impl<'a> SlicedPacket<'a> {
 
     /// Seperates a network packet slice into different slices containing the headers from the ip header downwards. 
     ///
-    /// The result is returned as a SlicerPacket struct. This function assumes the given data starts 
+    /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
     /// with an IPv4 or IPv6 header.
     ///
     /// # Examples
@@ -240,7 +273,8 @@ impl<'a> CursorSlice<'a> {
     }
 
     pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, ReadError> {
-        use crate::LinkSlice::*;
+        use LinkSlice::*;
+        use ether_type::*;
 
         let result = Ethernet2HeaderSlice::from_slice(self.slice)
                      .map_err(|err| 
@@ -256,15 +290,16 @@ impl<'a> CursorSlice<'a> {
 
         //continue parsing (if required)
         match ether_type {
-            ETH_IPV4 => self.slice_ipv4(),
-            ETH_IPV6 => self.slice_ipv6(),
-            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => self.slice_vlan(),
+            IPV4 => self.slice_ipv4(),
+            IPV6 => self.slice_ipv6(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan(),
             _ => self.slice_payload()
         }
     }
 
     pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, ReadError> {
-        use crate::VlanSlice::*;
+        use VlanSlice::*;
+        use ether_type::*;
 
         let single = SingleVlanHeaderSlice::from_slice(self.slice)
                      .map_err(|err| 
@@ -272,18 +307,17 @@ impl<'a> CursorSlice<'a> {
                      )?;
 
         //check if it is a double vlan header
-        let ether_type = single.ether_type();
-        match ether_type {
+        match single.ether_type() {
             //in case of a double vlan header continue with the inner
-            ETH_VLAN | ETH_BRIDGE | ETH_VLAN_DOUBLE => self.slice_double_vlan(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_double_vlan(),
             value => {
                 //set the vlan header and continue the normal parsing
                 self.move_by_slice(single.slice());
                 self.result.vlan = Some(SingleVlan(single));
 
                 match value {
-                    ETH_IPV4 => self.slice_ipv4(),
-                    ETH_IPV6 => self.slice_ipv6(),
+                    IPV4 => self.slice_ipv4(),
+                    IPV6 => self.slice_ipv6(),
                     _ => self.slice_payload()
                 }
             }
@@ -291,7 +325,8 @@ impl<'a> CursorSlice<'a> {
     }
 
     pub fn slice_double_vlan(mut self) -> Result<SlicedPacket<'a>, ReadError> {
-        use crate::VlanSlice::*;
+        use VlanSlice::*;
+        use ether_type::*;
 
         let result = DoubleVlanHeaderSlice::from_slice(self.slice)
                      .map_err(|err| 
@@ -307,14 +342,15 @@ impl<'a> CursorSlice<'a> {
 
         //continue parsing (if required)
         match ether_type {
-            ETH_IPV4 => self.slice_ipv4(),
-            ETH_IPV6 => self.slice_ipv6(),
+            IPV4 => self.slice_ipv4(),
+            IPV6 => self.slice_ipv6(),
             _ => self.slice_payload()
         }
     }
 
     pub fn slice_ip(self) -> Result<SlicedPacket<'a>, ReadError> {
-        use crate::ReadError::*;
+        use ReadError::*;
+
         if self.slice.is_empty() {
             Err(UnexpectedEndOfSlice(self.offset + 1))
         } else {
@@ -327,7 +363,7 @@ impl<'a> CursorSlice<'a> {
     }
 
     pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, ReadError> {
-        use crate::InternetSlice::*;
+        use InternetSlice::*;
 
         let ip_header = Ipv4HeaderSlice::from_slice(self.slice)
                         .map_err(|err| 

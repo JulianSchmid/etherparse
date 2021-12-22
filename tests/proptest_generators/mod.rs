@@ -49,11 +49,11 @@ prop_compose! {
 }
 
 pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
-    EtherType::Ipv4 as u16,
-    EtherType::Ipv6 as u16,
-    EtherType::VlanTaggedFrame as u16,
-    EtherType::ProviderBridging as u16,
-    EtherType::VlanDoubleTaggedFrame as u16
+    ether_type::IPV4,
+    ether_type::IPV6,
+    ether_type::VLAN_TAGGED_FRAME,
+    ether_type::PROVIDER_BRIDGING,
+    ether_type::VLAN_DOUBLE_TAGGED_FRAME
 ];
 
 prop_compose! {

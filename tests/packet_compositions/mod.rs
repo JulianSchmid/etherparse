@@ -378,14 +378,14 @@ impl ComponentTest {
 
         //single
         setup_single(inner_vlan.ether_type).run();
-        setup_single(EtherType::Ipv4 as u16).run_ipv4(ipv4, ipv4_ext, udp, tcp);
-        setup_single(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp, tcp);
+        setup_single(ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp);
+        setup_single(ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp);
 
         //double 
         for ether_type in VLAN_ETHER_TYPES {
             setup_double(*ether_type, inner_vlan.ether_type).run();
-            setup_double(*ether_type, EtherType::Ipv4 as u16).run_ipv4(ipv4, ipv4_ext, udp, tcp);
-            setup_double(*ether_type, EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_ext, udp, tcp);
+            setup_double(*ether_type, ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp);
+            setup_double(*ether_type, ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp);
         }
     }
 

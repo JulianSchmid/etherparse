@@ -22,7 +22,7 @@ fn main() {
     Ethernet2Header{
         destination: [1,2,3,4,5,6],
         source: [11,12,13,14,15,16],
-        ether_type: EtherType::Ipv4 as u16
+        ether_type: ether_type::IPV4
     }.write(&mut out).unwrap();
 
     //create the ipv4 header with the helper function
