@@ -146,13 +146,13 @@ impl UdpHeader {
         note = "Use UdpHeader::from_slice instead."
     )]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), UnexpectedEndOfSliceError> {
         UdpHeader::from_slice(slice)
     }
 
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), UnexpectedEndOfSliceError> {
         Ok((
             UdpHeaderSlice::from_slice(slice)?.to_header(),
             &slice[UdpHeader::SERIALIZED_SIZE..]
@@ -251,11 +251,14 @@ impl<'a> UdpHeaderSlice<'a> {
 
     /// Creates a slice containing an udp header.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<UdpHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<UdpHeaderSlice<'a>, UnexpectedEndOfSliceError> {
         //check length
-        use crate::ReadError::*;
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE));
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: UdpHeader::SERIALIZED_SIZE
+                }
+            );
         }
 
         //done

@@ -1,32 +1,61 @@
 
 use super::*;
-///Errors that can occur when reading.
+
+/// Error when an unexpected end of a slice was reached even though more data was expected to be present.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct UnexpectedEndOfSliceError {
+    /// The expected minimum amount of datat that should have been present.
+    pub expected_min_len: usize,
+}
+
+impl UnexpectedEndOfSliceError {
+    /// Adds an offset value to the expected_min_len and returns the result as a new UnexpectedEndOfSliceError.
+    pub fn add_slice_offset(self, offset: usize) -> UnexpectedEndOfSliceError {
+        UnexpectedEndOfSliceError {
+            expected_min_len: self.expected_min_len + offset,
+        }
+    }
+}
+
+impl fmt::Display for UnexpectedEndOfSliceError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UnexpectedEndOfSliceError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", self.expected_min_len)
+    }
+}
+
+impl Error for UnexpectedEndOfSliceError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+/// Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
-    ///Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
+    /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
-    ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
-    UnexpectedEndOfSlice(usize),
-    ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
-    ///The value is the unexpected ether type value in the outer vlan header.
+    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
+    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
+    /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
+    /// The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
-    ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
+    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
-    ///Error when the ip header version field is not equal 4. The value is the version that was received.
+    /// Error when the ip header version field is not equal 4. The value is the version that was received.
     Ipv4UnexpectedVersion(u8),
-    ///Error when the ipv4 header length is smaller then the header itself (5).
+    /// Error when the ipv4 header length is smaller then the header itself (5).
     Ipv4HeaderLengthBad(u8),
-    ///Error when the total length field is too small to contain the header itself.
+    /// Error when the total length field is too small to contain the header itself.
     Ipv4TotalLengthTooSmall(u16),
-    ///Error when then ip header version field is not equal 6. The value is the version that was received.
+    /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
-    ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
+    /// Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
     Ipv6TooManyHeaderExtensions,
-    ///Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     Ipv6HopByHopHeaderNotAtStart,
-    ///Error if the header length in the ip authentication header is smaller then the minimum size of 1.
+    /// Error if the header length in the ip authentication header is smaller then the minimum size of 1.
     IpAuthenticationHeaderTooSmallPayloadLength(u8),
-    ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
+    /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
     TcpDataOffsetTooSmall(u8),
 }
 
@@ -35,7 +64,8 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(value + offset),
+            UnexpectedEndOfSlice(err) =>
+                UnexpectedEndOfSlice(err.add_slice_offset(offset)),
             value => value
         }
     }
@@ -51,7 +81,7 @@ impl ReadError {
     /// Returns the expected minimum size if the error is an `UnexpectedEndOfSlice`.
     pub fn unexpected_end_of_slice_min_expected_size(self) -> Option<usize> {
         match self {
-            ReadError::UnexpectedEndOfSlice(value) => Some(value),
+            ReadError::UnexpectedEndOfSlice(value) => Some(value.expected_min_len),
             _ => None
         }
     }
@@ -63,9 +93,7 @@ impl fmt::Display for ReadError {
 
         match self {
             IoError(err) => err.fmt(f),
-            UnexpectedEndOfSlice(expected_minimum_size) => { // usize
-                write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
-            },
+            UnexpectedEndOfSlice(err) => err.fmt(f),
             DoubleVlanOuterNonVlanEtherType(ether_type) => { //u16
                 write!(f, "ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", ether_type)
             },
@@ -104,6 +132,7 @@ impl Error for ReadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             ReadError::IoError(ref err) => Some(err),
+            ReadError::UnexpectedEndOfSlice(ref err) => Some(err),
             _ => None
         }
     }
@@ -112,6 +141,12 @@ impl Error for ReadError {
 impl From<std::io::Error> for ReadError {
     fn from(err: std::io::Error) -> ReadError {
         ReadError::IoError(err)
+    }
+}
+
+impl From<UnexpectedEndOfSliceError> for ReadError {
+    fn from(err: UnexpectedEndOfSliceError) -> ReadError {
+        ReadError::UnexpectedEndOfSlice(err)
     }
 }
 

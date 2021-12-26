@@ -124,13 +124,13 @@ fn slice_from_slice_error() {
     // errors:
     // length smaller then 8
     {
-        assert_matches!(
+        assert_eq!(
             Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]),
-            Err(ReadError::UnexpectedEndOfSlice(8))
+            Err(UnexpectedEndOfSliceError { expected_min_len: 8 })
         );
-        assert_matches!(
+        assert_eq!(
             Ipv6RawExtensionHeader::from_slice(&[0;7]),
-            Err(ReadError::UnexpectedEndOfSlice(8))
+            Err(UnexpectedEndOfSliceError { expected_min_len: 8 })
         );
     }
     // length smaller then spezified size
@@ -143,11 +143,11 @@ fn slice_from_slice_error() {
         };
         assert_matches!(
             Ipv6RawExtensionHeaderSlice::from_slice(&data),
-            Err(ReadError::UnexpectedEndOfSlice(32))
+            Err(UnexpectedEndOfSliceError { expected_min_len: 32 })
         );
         assert_matches!(
             Ipv6RawExtensionHeader::from_slice(&data),
-            Err(ReadError::UnexpectedEndOfSlice(32))
+            Err(UnexpectedEndOfSliceError { expected_min_len: 32 })
         );
     }
 }
@@ -155,17 +155,18 @@ fn slice_from_slice_error() {
 #[test]
 fn extension_from_slice_bad_length() {
     use crate::ip_number::UDP;
-    use self::ReadError::*;
 
-    //smaller then minimum extension header size (8 bytes)
+    // smaller then minimum extension header size (8 bytes)
     {
         let buffer: [u8; 7] = [
             UDP,2,0,0, 0,0,0
         ];
-        assert_matches!(Ipv6RawExtensionHeaderSlice::from_slice(&buffer), 
-                        Err(UnexpectedEndOfSlice(8)));
+        assert_eq!(
+            Ipv6RawExtensionHeaderSlice::from_slice(&buffer), 
+            Err(UnexpectedEndOfSliceError{ expected_min_len: 8 })
+        );
     }
-    //smaller then specified size by length field
+    // smaller then specified size by length field
     {
         let buffer: [u8; 8*3-1] = [
             UDP,2,0,0, 0,0,0,0,
@@ -173,8 +174,12 @@ fn extension_from_slice_bad_length() {
             0,0,0,0,   0,0,0,
         ];
         // should generate an error
-        let slice = Ipv6RawExtensionHeaderSlice::from_slice(&buffer);
-        assert_matches!(slice, Err(UnexpectedEndOfSlice(_)));
+        assert_eq!(
+            Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err(),
+            UnexpectedEndOfSliceError {
+                expected_min_len: (usize::from(buffer[1]) + 1)*8,
+            }
+        );
     }
 }
 

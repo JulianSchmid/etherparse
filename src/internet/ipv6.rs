@@ -91,7 +91,7 @@ impl Ipv6Header {
     }
 
     ///Takes a slice and skips an ipv6 header extensions and returns the next_header ip number & the slice past the header.
-    pub fn skip_header_extension_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), ReadError> {
+    pub fn skip_header_extension_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), UnexpectedEndOfSliceError> {
         use crate::ip_number::*;
 
         if slice.len() >= 2 {
@@ -107,12 +107,20 @@ impl Ipv6Header {
             };
 
             if slice.len() < len {
-                Err(ReadError::UnexpectedEndOfSlice(len))
+                Err(
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: len,
+                    }
+                )
             } else {
                 Ok((slice[0], &slice[len..]))
             }
         } else {
-            Err(ReadError::UnexpectedEndOfSlice(2))
+            Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: 2,
+                }
+            )
         }
     }
 
@@ -303,7 +311,11 @@ impl<'a> Ipv6HeaderSlice<'a, > {
         // check length
         use crate::ReadError::*;
         if slice.len() < Ipv6Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE));
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                }.into()
+            );
         }
 
         // read version & ihl

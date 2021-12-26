@@ -77,13 +77,13 @@ impl Ethernet2Header {
         note = "Use Ethernet2Header::from_slice instead."
     )]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), UnexpectedEndOfSliceError> {
         Ethernet2Header::from_slice(slice)
     }
 
     /// Read an Ethernet2Header from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), UnexpectedEndOfSliceError> {
         Ok((
             Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
             &slice[Ethernet2Header::SERIALIZED_SIZE..]
@@ -190,11 +190,12 @@ pub struct Ethernet2HeaderSlice<'a> {
 impl<'a> Ethernet2HeaderSlice<'a> {
 
     /// Creates a ethernet slice from an other slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<Ethernet2HeaderSlice<'a>, UnexpectedEndOfSliceError>{
         //check length
-        use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Ethernet2Header::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSliceError{
+                expected_min_len: Ethernet2Header::SERIALIZED_SIZE
+            });
         }
 
         //all done

@@ -52,7 +52,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            UnexpectedEndOfSlice(0),
+            UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
@@ -114,11 +114,6 @@ fn test_debug_write() {
             link: None,
             vlan: None,
             ip: None,
-            /*ip_extensions: [
-                None, None, None, None, None,
-                None, None, None, None, None,
-                None, None
-            ],*/
             transport: None,
             payload: &dummy[..]
         };
@@ -144,8 +139,12 @@ mod read_error {
     fn add_slice_offset() {
         use super::*;
         assert_matches!(
-            ReadError::UnexpectedEndOfSlice(2).add_slice_offset(3),
-            ReadError::UnexpectedEndOfSlice(5)
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 2 }
+            ).add_slice_offset(3),
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 5 }
+            )
         );
         assert_matches!(
             ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
@@ -162,8 +161,9 @@ mod read_error {
             .io_error().unwrap().kind()
         );
         assert!(
-            ReadError::UnexpectedEndOfSlice(0)
-            .io_error().is_none()
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 0 }
+            ).io_error().is_none()
         );
     }
 
@@ -176,8 +176,11 @@ mod read_error {
         );
         assert_eq!(
             123,
-            ReadError::UnexpectedEndOfSlice(123)
-            .unexpected_end_of_slice_min_expected_size().unwrap()
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: 123,
+                }
+            ).unexpected_end_of_slice_min_expected_size().unwrap()
         );
     }
 }

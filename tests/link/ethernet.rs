@@ -133,9 +133,9 @@ mod ethernet2_header {
 
             // call with not enough data in the slice
             for len in 0..=13 {
-                assert_matches!(
+                assert_eq!(
                     Ethernet2Header::from_slice(&buffer[0..len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                    Err(UnexpectedEndOfSliceError{ expected_min_len: 14 })
                 );
             }
         }
@@ -305,9 +305,11 @@ mod ethernet2_header_slice {
 
             // call with not enough data in the slice
             for len in 0..=13 {
-                assert_matches!(
-                    Ethernet2HeaderSlice::from_slice(&buffer[0..len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                assert_eq!(
+                    Ethernet2HeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                    }
                 );
             }
         }

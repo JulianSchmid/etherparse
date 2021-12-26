@@ -251,10 +251,8 @@ mod single_vlan_header {
             for len in 0..4 {
                 assert_eq!(
                     SingleVlanHeader::from_slice(&buffer[..len])
-                        .unwrap_err()
-                        .unexpected_end_of_slice_min_expected_size()
-                        .unwrap(),
-                    4
+                        .unwrap_err(),
+                    UnexpectedEndOfSliceError { expected_min_len: 4 }
                 );
             }
         }
@@ -703,8 +701,7 @@ mod single_vlan_header_slice {
                 assert_eq!(
                     SingleVlanHeaderSlice::from_slice(&buffer[..len])
                         .unwrap_err()
-                        .unexpected_end_of_slice_min_expected_size()
-                        .unwrap(),
+                        .expected_min_len,
                     4
                 );
             }

@@ -95,7 +95,7 @@ impl Ipv6RawExtensionHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtensionHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtensionHeader, &[u8]), UnexpectedEndOfSliceError> {
         let s = Ipv6RawExtensionHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -194,12 +194,15 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6RawExtensionHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6RawExtensionHeaderSlice<'a>, UnexpectedEndOfSliceError> {
 
         //check length
-        use crate::ReadError::*;
         if slice.len() < 8 {
-            return Err(UnexpectedEndOfSlice(8));
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: 8,
+                }
+            );
         }
 
         //check length
@@ -207,7 +210,11 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(len));
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: len,
+                }
+            );
         }
 
         //all good

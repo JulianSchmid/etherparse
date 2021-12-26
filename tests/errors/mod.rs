@@ -1,13 +1,72 @@
 use super::*;
 use proptest::prelude::*;
 
+/// Tests for the struct `UnexpectedEndOfSliceError`
+mod unexpected_end_of_slice {
+    use super::*;
+    proptest! {
+        #[test]
+        fn display(expected_min_len in any::<usize>()) {
+            assert_eq!(
+                &format!("UnexpectedEndOfSliceError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_min_len),
+                &format!(
+                    "{}",
+                    UnexpectedEndOfSliceError{
+                        expected_min_len
+                    }
+                )
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn debug(expected_min_len in any::<usize>()) {
+            assert_eq!(
+                &format!("UnexpectedEndOfSliceError {{ expected_min_len: {} }}", expected_min_len),
+                &format!(
+                    "{:?}",
+                    UnexpectedEndOfSliceError{
+                        expected_min_len
+                    }
+                )
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(expected_min_len in any::<usize>()) {
+            let value = UnexpectedEndOfSliceError{
+                expected_min_len
+            };
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn add_slice_offset() {
+        let base = UnexpectedEndOfSliceError{
+            expected_min_len: 1,
+        };
+        assert_eq!(
+            UnexpectedEndOfSliceError{
+                expected_min_len: 4,
+            },
+            base.clone().add_slice_offset(3),
+        );
+        // check the original value is not modified
+        assert_eq!(1, base.expected_min_len);
+    }
+}
+
 proptest! {
     #[test]
     fn read_error_display(
         arg_u8 in any::<u8>(),
         arg_u16 in any::<u16>(),
         arg_usize in any::<usize>()
-    ) { //arg_u16 in any::<u16>()
+    ) {
 
         use super::ReadError::*;
 
@@ -22,8 +81,20 @@ proptest! {
 
         //UnexpectedEndOfSlice
         assert_eq!(
-            &format!("ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", arg_usize),
-            &format!("{}", UnexpectedEndOfSlice(arg_usize))
+            &format!(
+                "{}",
+                UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: arg_usize
+                    }
+                )
+            ),
+            &format!(
+                "{}",
+                UnexpectedEndOfSliceError {
+                    expected_min_len: arg_usize
+                }
+            )
         );
 
         //DoubleVlanOuterNonVlanEtherType
@@ -94,13 +165,19 @@ fn read_error_source() {
     use super::ReadError::*;
     use std::error::Error;
 
-    assert_matches!(
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source(), 
-        Some(_)
+    assert!(
+        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source().is_some()
+    );
+
+    assert!(
+        UnexpectedEndOfSlice(
+            UnexpectedEndOfSliceError {
+                expected_min_len: 0,
+            }
+        ).source().is_some(),
     );
 
     let none_values = [
-        UnexpectedEndOfSlice(0),
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
@@ -114,7 +191,7 @@ fn read_error_source() {
     ];
 
     for value in &none_values {
-        assert_matches!(value.source(), None);
+        assert!(value.source().is_none());
     }
 }
 
@@ -124,7 +201,7 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(0),
+        UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0 }),
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),

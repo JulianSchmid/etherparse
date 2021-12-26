@@ -615,9 +615,9 @@ mod udp_header {
 
             // call with not enough data in the slice
             for len in 0..8 {
-                assert_matches!(
-                    UdpHeader::from_slice(&buffer[0..len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                assert_eq!(
+                    UdpHeader::from_slice(&buffer[0..len]).unwrap_err(),
+                    UnexpectedEndOfSliceError{ expected_min_len: 8 }
                 );
             }
         }
@@ -779,9 +779,13 @@ mod udp_header_slice {
 
             // call with not enough data in the slice
             for len in 0..8 {
-                assert_matches!(
+                assert_eq!(
                     UdpHeaderSlice::from_slice(&buffer[0..len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                    Err(
+                        UnexpectedEndOfSliceError {
+                            expected_min_len: 8,
+                        }
+                    )
                 );
             }
         }

@@ -87,13 +87,13 @@ impl SingleVlanHeader {
         note = "Use SingleVlanHeader::from_slice instead."
     )]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(SingleVlanHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(SingleVlanHeader, &[u8]), UnexpectedEndOfSliceError> {
         SingleVlanHeader::from_slice(slice)
     }
 
     /// Read an SingleVlanHeader from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(SingleVlanHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(SingleVlanHeader, &[u8]), UnexpectedEndOfSliceError> {
         Ok((
             SingleVlanHeaderSlice::from_slice(slice)?.to_header(),
             &slice[SingleVlanHeader::SERIALIZED_SIZE .. ]
@@ -287,11 +287,14 @@ pub struct SingleVlanHeaderSlice<'a> {
 impl<'a> SingleVlanHeaderSlice<'a> {
     ///Creates a vlan header slice from a slice.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<SingleVlanHeaderSlice<'a>, ReadError>{
+    pub fn from_slice(slice: &'a[u8]) -> Result<SingleVlanHeaderSlice<'a>, UnexpectedEndOfSliceError>{
         //check length
-        use crate::ReadError::*;
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE));
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: SingleVlanHeader::SERIALIZED_SIZE
+                }
+            );
         }
 
         //all done
@@ -383,7 +386,13 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         // check length
         use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE));
+            return Err(
+                UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE
+                    }
+                )
+            );
         }
 
         // create slice

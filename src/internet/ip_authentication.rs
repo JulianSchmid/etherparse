@@ -211,7 +211,11 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         // check slice length
         use crate::ReadError::*;
         if slice.len() < 12 {
-            return Err(UnexpectedEndOfSlice(12));
+            return Err(
+                UnexpectedEndOfSliceError{
+                    expected_min_len: 12
+                }.into()
+            );
         }
 
         // SAFETY: 
@@ -231,7 +235,11 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         //       headers the length is in 4 octets.
         let len = ((payload_len_enc as usize) + 2)*4;
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(len));
+            return Err(
+                UnexpectedEndOfSliceError{
+                    expected_min_len: len
+                }.into()
+            );
         }
 
         // all good

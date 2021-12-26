@@ -122,7 +122,13 @@ mod sliced_packet {
         //slice length error
         assert_matches!(
             SlicedPacket::from_ip(&[]),
-            Err(UnexpectedEndOfSlice(1))
+            Err(
+                UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: 1
+                    }
+                )
+            )
         );
 
         //bad protocol number

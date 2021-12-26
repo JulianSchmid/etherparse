@@ -117,11 +117,12 @@ fn write_errors() {
 
 #[test]
 fn read_error() {
+    use ReadError::*;
     //wrong ip version
     {
         let buffer: [u8;20] = [0;20];
         let result = Ipv6Header::read(&mut io::Cursor::new(&buffer));
-        assert_matches!(result, Err(ReadError::Ipv6UnexpectedVersion(0)))
+        assert_matches!(result, Err(Ipv6UnexpectedVersion(0)))
     }
     //io error and unexpected end of slice
     {
@@ -134,13 +135,13 @@ fn read_error() {
             // read
             assert_matches!(
                 Ipv6Header::read(&mut io::Cursor::new(&buffer[0..len])),
-                Err(ReadError::IoError(_))
+                Err(IoError(_))
             );
 
             // read from slice
             assert_matches!(
                 Ipv6Header::from_slice(&buffer[0..len]),
-                Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE))
+                Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE }))
             );
         }
     }
@@ -420,12 +421,17 @@ fn set_payload_lengt() {
 proptest! {
     #[test]
     fn from_slice(ref input in ipv6_any()) {
+        use ReadError::UnexpectedEndOfSlice;
+
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
         input.write(&mut buffer).unwrap();
 
         //check that a too small slice triggers an error
-        assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE)));
+        assert_matches!(
+            Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]),
+            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE }))
+        );
 
         //check that all the values are read correctly
         use std::net::Ipv6Addr;

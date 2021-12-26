@@ -352,7 +352,11 @@ impl<'a> CursorSlice<'a> {
         use ReadError::*;
 
         if self.slice.is_empty() {
-            Err(UnexpectedEndOfSlice(self.offset + 1))
+            Err(
+                UnexpectedEndOfSliceError{
+                    expected_min_len: self.offset + 1
+                }.into()
+            )
         } else {
             match self.slice[0] >> 4 {
                 4 => self.slice_ipv4(),

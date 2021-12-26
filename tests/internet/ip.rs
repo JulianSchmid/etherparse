@@ -386,7 +386,13 @@ mod ip_header {
         //to even read the version
         assert_matches!(
             IpHeader::from_slice(&buffer[buffer.len()..]),
-            Err(ReadError::UnexpectedEndOfSlice(1))
+            Err(
+                ReadError::UnexpectedEndOfSlice(
+                    UnexpectedEndOfSliceError{
+                        expected_min_len: 1,
+                    }
+                )
+            )
         );
     }
 } // mod ip_header

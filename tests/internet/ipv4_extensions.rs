@@ -55,7 +55,7 @@ pub mod header {
             const AUTH_HEADER_LEN: usize = 12;
             assert_matches!(
                 err,
-                UnexpectedEndOfSlice(AUTH_HEADER_LEN)
+                UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: AUTH_HEADER_LEN })
             );
         }
     }
@@ -398,7 +398,7 @@ mod slice {
                 const AUTH_HEADER_LEN: usize = 12;
                 assert_matches!(
                     err,
-                    UnexpectedEndOfSlice(AUTH_HEADER_LEN)
+                    UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: AUTH_HEADER_LEN })
                 );
             }
         }
