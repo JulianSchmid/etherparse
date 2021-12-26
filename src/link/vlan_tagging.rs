@@ -292,7 +292,8 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError {
-                    expected_min_len: SingleVlanHeader::SERIALIZED_SIZE
+                    expected_min_len: SingleVlanHeader::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
                 }
             );
         }
@@ -389,7 +390,8 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
             return Err(
                 UnexpectedEndOfSlice(
                     UnexpectedEndOfSliceError {
-                        expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE
+                        expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE,
+                        actual_len: slice.len(),
                     }
                 )
             );

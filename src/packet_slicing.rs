@@ -353,8 +353,9 @@ impl<'a> CursorSlice<'a> {
 
         if self.slice.is_empty() {
             Err(
-                UnexpectedEndOfSliceError{
-                    expected_min_len: self.offset + 1
+                UnexpectedEndOfSliceError {
+                    expected_min_len: self.offset + 1,
+                    actual_len: self.offset + self.slice.len(),
                 }.into()
             )
         } else {

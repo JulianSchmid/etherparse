@@ -25,8 +25,9 @@ impl IpHeader {
         if slice.is_empty() {
             Err(
                 UnexpectedEndOfSlice(
-                    UnexpectedEndOfSliceError{
-                        expected_min_len: 1
+                    UnexpectedEndOfSliceError {
+                        expected_min_len: 1,
+                        actual_len: slice.len(),
                     }
                 )
             )

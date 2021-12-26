@@ -52,7 +52,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0 }),
+            UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
@@ -140,10 +140,10 @@ mod read_error {
         use super::*;
         assert_matches!(
             ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 2 }
+                UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1 }
             ).add_slice_offset(3),
             ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 5 }
+                UnexpectedEndOfSliceError{ expected_min_len: 5, actual_len: 4 }
             )
         );
         assert_matches!(
@@ -162,7 +162,7 @@ mod read_error {
         );
         assert!(
             ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 0 }
+                UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }
             ).io_error().is_none()
         );
     }
@@ -179,6 +179,7 @@ mod read_error {
             ReadError::UnexpectedEndOfSlice(
                 UnexpectedEndOfSliceError {
                     expected_min_len: 123,
+                    actual_len: 0,
                 }
             ).unexpected_end_of_slice_min_expected_size().unwrap()
         );

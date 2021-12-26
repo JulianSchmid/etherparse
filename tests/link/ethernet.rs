@@ -135,7 +135,7 @@ mod ethernet2_header {
             for len in 0..=13 {
                 assert_eq!(
                     Ethernet2Header::from_slice(&buffer[0..len]),
-                    Err(UnexpectedEndOfSliceError{ expected_min_len: 14 })
+                    Err(UnexpectedEndOfSliceError{ expected_min_len: 14, actual_len: len })
                 );
             }
         }
@@ -309,6 +309,7 @@ mod ethernet2_header_slice {
                     Ethernet2HeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
                     UnexpectedEndOfSliceError {
                         expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                        actual_len: len,
                     }
                 );
             }

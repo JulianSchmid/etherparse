@@ -256,7 +256,8 @@ impl<'a> UdpHeaderSlice<'a> {
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError {
-                    expected_min_len: UdpHeader::SERIALIZED_SIZE
+                    expected_min_len: UdpHeader::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
                 }
             );
         }

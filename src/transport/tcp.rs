@@ -615,6 +615,7 @@ impl<'a> TcpHeaderSlice<'a> {
             return Err(
                 UnexpectedEndOfSliceError{
                     expected_min_len: TCP_MINIMUM_HEADER_SIZE,
+                    actual_len: slice.len(),
                 }.into()
             );
         }
@@ -633,6 +634,7 @@ impl<'a> TcpHeaderSlice<'a> {
             Err(
                 UnexpectedEndOfSliceError{
                     expected_min_len: len,
+                    actual_len: slice.len(),
                 }.into()
             )
         } else {

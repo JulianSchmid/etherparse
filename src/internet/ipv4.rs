@@ -448,7 +448,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError{
-                    expected_min_len: Ipv4Header::SERIALIZED_SIZE
+                    expected_min_len: Ipv4Header::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
                 }.into()
             );
         }
@@ -473,8 +474,10 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check that the slice contains enough data for the entire header + options
         let header_length = (usize::from(ihl))*4;
         if slice.len() < header_length {
-            return Err(UnexpectedEndOfSliceError {
-                    expected_min_len: header_length
+            return Err(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: header_length,
+                    actual_len: slice.len(),
                 }.into()
             );
         }

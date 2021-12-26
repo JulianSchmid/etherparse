@@ -110,6 +110,7 @@ impl Ipv6Header {
                 Err(
                     UnexpectedEndOfSliceError {
                         expected_min_len: len,
+                        actual_len: slice.len(),
                     }
                 )
             } else {
@@ -119,6 +120,7 @@ impl Ipv6Header {
             Err(
                 UnexpectedEndOfSliceError {
                     expected_min_len: 2,
+                    actual_len: slice.len(),
                 }
             )
         }
@@ -314,6 +316,7 @@ impl<'a> Ipv6HeaderSlice<'a, > {
             return Err(
                 UnexpectedEndOfSliceError {
                     expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
                 }.into()
             );
         }

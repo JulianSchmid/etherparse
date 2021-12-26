@@ -190,6 +190,7 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
             Err(
                 UnexpectedEndOfSliceError{
                     expected_min_len: 8,
+                    actual_len: slice.len(),
                 }
             )
         } else {

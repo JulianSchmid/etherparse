@@ -194,7 +194,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         //check length
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSliceError{
-                expected_min_len: Ethernet2Header::SERIALIZED_SIZE
+                expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                actual_len: slice.len(),
             });
         }
 

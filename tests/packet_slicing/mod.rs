@@ -125,7 +125,8 @@ mod sliced_packet {
             Err(
                 UnexpectedEndOfSlice(
                     UnexpectedEndOfSliceError {
-                        expected_min_len: 1
+                        expected_min_len: 1,
+                        actual_len: 0,
                     }
                 )
             )

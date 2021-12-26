@@ -252,7 +252,7 @@ mod single_vlan_header {
                 assert_eq!(
                     SingleVlanHeader::from_slice(&buffer[..len])
                         .unwrap_err(),
-                    UnexpectedEndOfSliceError { expected_min_len: 4 }
+                    UnexpectedEndOfSliceError { expected_min_len: 4, actual_len: len }
                 );
             }
         }

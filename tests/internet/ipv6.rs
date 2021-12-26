@@ -141,7 +141,7 @@ fn read_error() {
             // read from slice
             assert_matches!(
                 Ipv6Header::from_slice(&buffer[0..len]),
-                Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE }))
+                Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE, actual_len: _ }))
             );
         }
     }
@@ -430,7 +430,7 @@ proptest! {
         //check that a too small slice triggers an error
         assert_matches!(
             Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]),
-            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE }))
+            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError { expected_min_len: Ipv6Header::SERIALIZED_SIZE, actual_len: _ }))
         );
 
         //check that all the values are read correctly

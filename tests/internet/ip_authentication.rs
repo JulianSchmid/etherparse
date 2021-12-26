@@ -73,12 +73,12 @@ proptest! {
         let data = [0;12];
         assert_matches!(
             IpAuthenticationHeaderSlice::from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 12 }))
+            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 12, actual_len: _ }))
         );
 
         assert_matches!(
             IpAuthenticationHeader::from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 12 }))
+            Err(UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 12, actual_len: _ }))
         );
     }
 }

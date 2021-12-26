@@ -390,6 +390,7 @@ mod ip_header {
                 ReadError::UnexpectedEndOfSlice(
                     UnexpectedEndOfSliceError{
                         expected_min_len: 1,
+                        actual_len: _,
                     }
                 )
             )

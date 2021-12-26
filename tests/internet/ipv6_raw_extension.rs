@@ -126,11 +126,11 @@ fn slice_from_slice_error() {
     {
         assert_eq!(
             Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]),
-            Err(UnexpectedEndOfSliceError { expected_min_len: 8 })
+            Err(UnexpectedEndOfSliceError { expected_min_len: 8, actual_len: 7 })
         );
         assert_eq!(
             Ipv6RawExtensionHeader::from_slice(&[0;7]),
-            Err(UnexpectedEndOfSliceError { expected_min_len: 8 })
+            Err(UnexpectedEndOfSliceError { expected_min_len: 8, actual_len: 7 })
         );
     }
     // length smaller then spezified size
@@ -143,11 +143,11 @@ fn slice_from_slice_error() {
         };
         assert_matches!(
             Ipv6RawExtensionHeaderSlice::from_slice(&data),
-            Err(UnexpectedEndOfSliceError { expected_min_len: 32 })
+            Err(UnexpectedEndOfSliceError { expected_min_len: 32, actual_len: 31 })
         );
         assert_matches!(
             Ipv6RawExtensionHeader::from_slice(&data),
-            Err(UnexpectedEndOfSliceError { expected_min_len: 32 })
+            Err(UnexpectedEndOfSliceError { expected_min_len: 32, actual_len: 31 })
         );
     }
 }
@@ -163,12 +163,12 @@ fn extension_from_slice_bad_length() {
         ];
         assert_eq!(
             Ipv6RawExtensionHeaderSlice::from_slice(&buffer), 
-            Err(UnexpectedEndOfSliceError{ expected_min_len: 8 })
+            Err(UnexpectedEndOfSliceError{ expected_min_len: 8, actual_len: 7 })
         );
     }
     // smaller then specified size by length field
     {
-        let buffer: [u8; 8*3-1] = [
+        let buffer: [u8; 8*3 - 1] = [
             UDP,2,0,0, 0,0,0,0,
             0,0,0,0,   0,0,0,0,
             0,0,0,0,   0,0,0,
@@ -178,6 +178,7 @@ fn extension_from_slice_bad_length() {
             Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err(),
             UnexpectedEndOfSliceError {
                 expected_min_len: (usize::from(buffer[1]) + 1)*8,
+                actual_len: 8*3 - 1
             }
         );
     }

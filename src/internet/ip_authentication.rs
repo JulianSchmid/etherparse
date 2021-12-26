@@ -213,7 +213,8 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         if slice.len() < 12 {
             return Err(
                 UnexpectedEndOfSliceError{
-                    expected_min_len: 12
+                    expected_min_len: 12,
+                    actual_len: slice.len(),
                 }.into()
             );
         }
@@ -237,7 +238,8 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         if slice.len() < len {
             return Err(
                 UnexpectedEndOfSliceError{
-                    expected_min_len: len
+                    expected_min_len: len,
+                    actual_len: slice.len(),
                 }.into()
             );
         }

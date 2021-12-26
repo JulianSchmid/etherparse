@@ -47,7 +47,7 @@ pub mod header {
             for len in 0..=7 {
                 assert_eq!(
                     Ipv6FragmentHeader::from_slice(&buffer[0..len]).unwrap_err(),
-                    UnexpectedEndOfSliceError{ expected_min_len: 8 }
+                    UnexpectedEndOfSliceError{ expected_min_len: 8, actual_len: len }
                 );
             }
         }

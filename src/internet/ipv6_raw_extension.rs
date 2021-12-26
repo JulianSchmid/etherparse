@@ -201,6 +201,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
             return Err(
                 UnexpectedEndOfSliceError {
                     expected_min_len: 8,
+                    actual_len: slice.len(),
                 }
             );
         }
@@ -213,6 +214,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
             return Err(
                 UnexpectedEndOfSliceError {
                     expected_min_len: len,
+                    actual_len: slice.len(),
                 }
             );
         }

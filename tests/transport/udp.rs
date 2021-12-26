@@ -617,7 +617,7 @@ mod udp_header {
             for len in 0..8 {
                 assert_eq!(
                     UdpHeader::from_slice(&buffer[0..len]).unwrap_err(),
-                    UnexpectedEndOfSliceError{ expected_min_len: 8 }
+                    UnexpectedEndOfSliceError{ expected_min_len: 8, actual_len: len }
                 );
             }
         }
@@ -784,6 +784,7 @@ mod udp_header_slice {
                     Err(
                         UnexpectedEndOfSliceError {
                             expected_min_len: 8,
+                            actual_len: len,
                         }
                     )
                 );

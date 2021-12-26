@@ -6,6 +6,9 @@ use super::*;
 pub struct UnexpectedEndOfSliceError {
     /// The expected minimum amount of datat that should have been present.
     pub expected_min_len: usize,
+
+    /// Actual length of the slice.
+    pub actual_len: usize,
 }
 
 impl UnexpectedEndOfSliceError {
@@ -13,6 +16,7 @@ impl UnexpectedEndOfSliceError {
     pub fn add_slice_offset(self, offset: usize) -> UnexpectedEndOfSliceError {
         UnexpectedEndOfSliceError {
             expected_min_len: self.expected_min_len + offset,
+            actual_len: self.actual_len + offset,
         }
     }
 }
