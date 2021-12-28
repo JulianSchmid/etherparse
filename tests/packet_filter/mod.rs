@@ -359,6 +359,14 @@ impl PacketFilterTest {
                 None => None
             },
             transport: match &self.transport {
+                Some(TransportHeader::Icmp4(header)) => {
+                    header.write(&mut transport_data).unwrap();
+                    Some(TransportSlice::Icmp4(Icmp4HeaderSlice::from_slice(&transport_data[..]).unwrap()))
+                },
+                Some(TransportHeader::Icmp6(header)) => {
+                    header.write(&mut transport_data).unwrap();
+                    Some(TransportSlice::Icmp6(Icmp6HeaderSlice::from_slice(&transport_data[..]).unwrap()))
+                },
                 Some(TransportHeader::Udp(header)) => {
                     header.write(&mut transport_data).unwrap();
                     Some(TransportSlice::Udp(UdpHeaderSlice::from_slice(&transport_data[..]).unwrap()))

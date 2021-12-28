@@ -61,6 +61,8 @@ fn main() {
             }
 
             match value.transport {
+                Some(Icmp4(value)) => println!(" Icmp4 {:?}", value),
+                Some(Icmp6(value)) => println!(" Icmp6 {:?}", value),
                 Some(Udp(value)) => println!("  UDP {:?} -> {:?}", value.source_port(), value.destination_port()),
                 Some(Tcp(value)) => {
                     println!("  TCP {:?} -> {:?}", value.source_port(), value.destination_port());

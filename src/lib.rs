@@ -233,6 +233,8 @@ pub use crate::internet::ipv6_raw_extension::*;
 pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
+pub use crate::transport::icmp4::*;
+pub use crate::transport::icmp6::*;
 pub use crate::transport::tcp::*;
 pub use crate::transport::udp::*;
 pub use crate::transport::TransportHeader;
@@ -482,7 +484,16 @@ pub enum ValueError {
     /// Error when a u16 field in a header has a larger value then supported.
     U16TooLarge{value: u16, max: u16, field: ErrorField},
     /// Error when a u32 field in a header has a larger value then supported.
-    U32TooLarge{value: u32, max: u32, field: ErrorField}
+    U32TooLarge{value: u32, max: u32, field: ErrorField},
+    /// Icmp6 in a IPv4 packet: not allowed
+    Icmp6InIpv4,
+    /// Icmp4 in a IPv6 packet: not allowed
+    Icmp4InIpv6,
+    /// Unknown Icmp4 type
+    Icmp4Unknown{icmp_type: u8},
+    /// Unknown Icmp6 type
+    Icmp6Unknown{icmp_type: u8},
+    
 }
 
 impl Error for ValueError {
@@ -540,7 +551,19 @@ impl fmt::Display for ValueError {
             },
             U32TooLarge{value, max, field} => {
                 write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
-            }
+            },
+            Icmp4InIpv6 => {
+                write!(f, "Trying to put an Icmp4 transport in an IPv6 packet")
+            },
+            Icmp6InIpv4 => {
+                write!(f, "Trying to put an Icmp6 transport in an IPv4 packet")
+            },
+            Icmp4Unknown{icmp_type} => {
+                write!(f, "Failed to parse Icmp4 type {}", icmp_type)
+            },
+            Icmp6Unknown{icmp_type} => {
+                write!(f, "Failed to parse Icmp6 type {}", icmp_type)
+            },
         }
     }
 }

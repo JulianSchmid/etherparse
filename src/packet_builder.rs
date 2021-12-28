@@ -647,6 +647,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             ip.set_payload_len(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
+                Icmp4(_) => {},
+                Icmp6(_) => {},
                 Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
@@ -654,6 +656,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //ip protocol number & next header values of the extension header
             ip.protocol = ext.set_next_headers(
                 match transport {
+                    Icmp4(_) => ip_number::ICMP,
+                    Icmp6(_) => ip_number::IPV6_ICMP,
                     Udp(_) => ip_number::UDP,
                     Tcp(_) => ip_number::TCP
                 }
@@ -672,6 +676,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             ip.set_payload_length(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
+                Icmp4(_) => {},
+                Icmp6(_) => {},
                 Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
@@ -679,6 +685,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //set the protocol
             ip.next_header = ext.set_next_headers(
                 match transport {
+                    Icmp4(_) => ip_number::ICMP as u8,
+                    Icmp6(_) => ip_number::IPV6_ICMP as u8,
                     Udp(_) => ip_number::UDP as u8,
                     Tcp(_) => ip_number::TCP as u8
                 }
@@ -716,6 +724,8 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Version6(_, ref ext)) => Ipv6Header::SERIALIZED_SIZE + ext.header_len(),
         None => 0
     } + match builder.state.transport_header {
+        Some(Icmp4(ref value)) => value.header_len(),
+        Some(Icmp6(ref value)) => value.header_len(),
         Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
         Some(Tcp(ref value)) => value.header_len() as usize,
         None => 0
