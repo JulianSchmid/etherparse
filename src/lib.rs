@@ -214,8 +214,6 @@
 //! * Computing the Internet Checksum [RFC 1071](https://datatracker.ietf.org/doc/html/rfc1071)
 
 use std::io;
-use std::fmt;
-use std::error::Error;
 
 mod errors;
 pub use crate::errors::*;

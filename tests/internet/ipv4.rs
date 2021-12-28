@@ -569,6 +569,7 @@ proptest! {
     #[test]
     fn read_errors(ref header in ipv4_any()) {
         use crate::ReadError::*;
+        use crate::Ipv4DecodeError::*;
 
         // non matching version
         for version in 0..0xf {
@@ -585,19 +586,19 @@ proptest! {
                 // read
                 assert_matches!(
                     Ipv4Header::read(&mut Cursor::new(&buffer)),
-                    Err(Ipv4UnexpectedVersion(_))
+                    Err(Ipv4(Ipv4UnexpectedVersion(_)))
                 );
 
                 // from_slice
                 assert_matches!(
                     Ipv4Header::from_slice(&buffer),
-                    Err(Ipv4UnexpectedVersion(_))
+                    Err(Ipv4(Ipv4UnexpectedVersion(_)))
                 );
 
                 // from_slice
                 assert_matches!(
                     Ipv4HeaderSlice::from_slice(&buffer),
-                    Err(Ipv4UnexpectedVersion(_))
+                    Err(Ipv4(Ipv4UnexpectedVersion(_)))
                 );
             }
         }
@@ -616,7 +617,7 @@ proptest! {
             // read
             assert_matches!(
                 Ipv4Header::read(&mut Cursor::new(&buffer)),
-                Err(Ipv4HeaderLengthBad(_))
+                Err(Ipv4(Ipv4HeaderLengthBad(_)))
             );
 
             // read_without_version
@@ -625,19 +626,19 @@ proptest! {
                     &mut Cursor::new(&buffer[1..]),
                     buffer[0] & 0xf
                 ),
-                Err(Ipv4HeaderLengthBad(_))
+                Err(Ipv4(Ipv4HeaderLengthBad(_)))
             );
             
             // from_slice
             assert_matches!(
                 Ipv4Header::from_slice(&buffer),
-                Err(Ipv4HeaderLengthBad(_))
+                Err(Ipv4(Ipv4HeaderLengthBad(_)))
             );
 
             // from_slice
             assert_matches!(
                 Ipv4HeaderSlice::from_slice(&buffer),
-                Err(Ipv4HeaderLengthBad(_))
+                Err(Ipv4(Ipv4HeaderLengthBad(_)))
             );
         }
 
@@ -657,7 +658,7 @@ proptest! {
             // read
             assert_matches!(
                 Ipv4Header::read(&mut Cursor::new(&buffer)),
-                Err(Ipv4TotalLengthTooSmall(_))
+                Err(Ipv4(Ipv4TotalLengthTooSmall(_)))
             );
 
             // read_without_version
@@ -666,19 +667,19 @@ proptest! {
                     &mut Cursor::new(&buffer[1..]),
                     buffer[0] & 0xf
                 ),
-                Err(Ipv4TotalLengthTooSmall(_))
+                Err(Ipv4(Ipv4TotalLengthTooSmall(_)))
             );
 
             // from_slice
             assert_matches!(
                 Ipv4Header::from_slice(&buffer),
-                Err(Ipv4TotalLengthTooSmall(_))
+                Err(Ipv4(Ipv4TotalLengthTooSmall(_)))
             );
 
             // from_slice
             assert_matches!(
                 Ipv4HeaderSlice::from_slice(&buffer),
-                Err(Ipv4TotalLengthTooSmall(_))
+                Err(Ipv4(Ipv4TotalLengthTooSmall(_)))
             );
         }
 

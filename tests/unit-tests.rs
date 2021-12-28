@@ -50,14 +50,15 @@ fn test_debug_write() {
     //read error
     {
         use crate::ReadError::*;
+        use crate::Ipv4DecodeError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
-            Ipv4UnexpectedVersion(0),
-            Ipv4HeaderLengthBad(0),
-            Ipv4TotalLengthTooSmall(0),
+            Ipv4(Ipv4UnexpectedVersion(0)),
+            Ipv4(Ipv4HeaderLengthBad(0)),
+            Ipv4(Ipv4TotalLengthTooSmall(0)),
             Ipv6UnexpectedVersion(0),
             Ipv6TooManyHeaderExtensions,
             TcpDataOffsetTooSmall(0)

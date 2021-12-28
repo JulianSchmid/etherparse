@@ -147,7 +147,7 @@ impl Ipv4Header {
 
         let version = first_byte[0] >> 4;
         if 4 != version {
-            return Err(ReadError::Ipv4UnexpectedVersion(version));
+            return Err(Ipv4DecodeError::Ipv4UnexpectedVersion(version).into());
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
@@ -161,8 +161,8 @@ impl Ipv4Header {
 
         let ihl = header_raw[0] & 0xf;
         if ihl < 5 {
-            use crate::ReadError::*;
-            return Err(Ipv4HeaderLengthBad(ihl));
+            use crate::Ipv4DecodeError::*;
+            return Err(Ipv4HeaderLengthBad(ihl).into());
         }
 
         let (dscp, ecn) = {
@@ -172,8 +172,8 @@ impl Ipv4Header {
         let header_length = u16::from(ihl)*4;
         let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
         if total_length < header_length {
-            use crate::ReadError::*;
-            return Err(Ipv4TotalLengthTooSmall(total_length));
+            use crate::Ipv4DecodeError::*;
+            return Err(Ipv4TotalLengthTooSmall(total_length).into());
         }
         let identification = u16::from_be_bytes([header_raw[4], header_raw[5]]);
         let (dont_fragment, more_fragments, fragments_offset) = (
@@ -444,7 +444,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
-        use crate::ReadError::*;
+        use crate::Ipv4DecodeError::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError{
@@ -462,13 +462,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
         //check version
         if 4 != version {
-            return Err(Ipv4UnexpectedVersion(version));
+            return Err(Ipv4UnexpectedVersion(version).into());
         }
 
         //check that the ihl is correct
         if ihl < 5 {
-            use crate::ReadError::*;
-            return Err(Ipv4HeaderLengthBad(ihl));
+            return Err(Ipv4HeaderLengthBad(ihl).into());
         }
 
         //check that the slice contains enough data for the entire header + options
@@ -492,7 +491,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         };
 
         if total_length < header_length as u16 {
-            return Err(Ipv4TotalLengthTooSmall(total_length))
+            return Err(Ipv4TotalLengthTooSmall(total_length).into())
         }
 
         //all good

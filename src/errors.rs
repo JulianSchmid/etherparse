@@ -1,6 +1,10 @@
 
 use super::*;
 
+use std::error::Error;
+use std::fmt;
+use std::fmt::{Display, Formatter};
+
 /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnexpectedEndOfSliceError {
@@ -21,13 +25,80 @@ impl UnexpectedEndOfSliceError {
     }
 }
 
-impl fmt::Display for UnexpectedEndOfSliceError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for UnexpectedEndOfSliceError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "UnexpectedEndOfSliceError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", self.expected_min_len)
     }
 }
 
 impl Error for UnexpectedEndOfSliceError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+/// Error when decoding a header or packet from a slice.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum FromSliceError<T : Error + Display> {
+    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
+    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
+
+    /// Error caused by an invalid encoded value.
+    DecodeError(T)
+}
+
+impl<T : Error + Display> Display for FromSliceError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use FromSliceError::*;
+
+        match self {
+            UnexpectedEndOfSlice(ref err) => err.fmt(f),
+            DecodeError(ref err) => Display::fmt(&err, f),
+        }
+    }
+}
+
+impl<T : 'static + Error + Display> Error for FromSliceError<T> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use FromSliceError::*;
+
+        match self {
+            UnexpectedEndOfSlice(ref err) => Some(err),
+            DecodeError(ref err) => Some(err),
+        }
+    }
+}
+
+/// Errors that can be found while decoding ipv4 packets.
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Ipv4DecodeError {
+    /// Error when the ip header version field is not equal 4. The value is the version that was received.
+    Ipv4UnexpectedVersion(u8),
+    /// Error when the ipv4 header length is smaller then the header itself (5).
+    Ipv4HeaderLengthBad(u8),
+    /// Error when the total length field is too small to contain the header itself.
+    Ipv4TotalLengthTooSmall(u16),
+}
+
+impl Display for Ipv4DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use Ipv4DecodeError::*;
+
+        match self {
+            Ipv4UnexpectedVersion(version_number) => { //u8
+                write!(f, "Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
+            },
+            Ipv4HeaderLengthBad(header_length) => { //u8
+                write!(f, "Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
+            },
+            Ipv4TotalLengthTooSmall(total_length_field) => { //u16
+                write!(f, "Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
+            },
+        }
+    }
+}
+
+impl Error for Ipv4DecodeError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
     }
@@ -45,12 +116,7 @@ pub enum ReadError {
     DoubleVlanOuterNonVlanEtherType(u16),
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
-    /// Error when the ip header version field is not equal 4. The value is the version that was received.
-    Ipv4UnexpectedVersion(u8),
-    /// Error when the ipv4 header length is smaller then the header itself (5).
-    Ipv4HeaderLengthBad(u8),
-    /// Error when the total length field is too small to contain the header itself.
-    Ipv4TotalLengthTooSmall(u16),
+    Ipv4(Ipv4DecodeError),
     /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     /// Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
@@ -91,8 +157,8 @@ impl ReadError {
     }
 }
 
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use ReadError::*;
 
         match self {
@@ -104,15 +170,7 @@ impl fmt::Display for ReadError {
             IpUnsupportedVersion(version_number) => { // u8
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
             },
-            Ipv4UnexpectedVersion(version_number) => { //u8
-                write!(f, "ReadError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
-            },
-            Ipv4HeaderLengthBad(header_length) => { //u8
-                write!(f, "ReadError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
-            },
-            Ipv4TotalLengthTooSmall(total_length_field) => { //u16
-                write!(f, "ReadError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
-            },
+            Ipv4(err) => err.fmt(f),
             Ipv6UnexpectedVersion(version_number) => { //u8
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
             },
@@ -137,6 +195,7 @@ impl Error for ReadError {
         match self {
             ReadError::IoError(ref err) => Some(err),
             ReadError::UnexpectedEndOfSlice(ref err) => Some(err),
+            ReadError::Ipv4(ref err) => Some(err),
             _ => None
         }
     }
@@ -151,6 +210,12 @@ impl From<std::io::Error> for ReadError {
 impl From<UnexpectedEndOfSliceError> for ReadError {
     fn from(err: UnexpectedEndOfSliceError) -> ReadError {
         ReadError::UnexpectedEndOfSlice(err)
+    }
+}
+
+impl From<Ipv4DecodeError> for ReadError {
+    fn from(err: Ipv4DecodeError) -> ReadError {
+        ReadError::Ipv4(err)
     }
 }
 
@@ -203,8 +268,8 @@ impl From<std::io::Error> for WriteError {
     }
 }
 
-impl fmt::Display for WriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for WriteError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use WriteError::*;
         match self {
             IoError(err) => err.fmt(f),
@@ -272,8 +337,8 @@ impl Error for ValueError {
 
 }
 
-impl fmt::Display for ValueError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ValueError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use ValueError::*;
         match self {
             Ipv4OptionsLengthBad(options_len) => { //usize
@@ -344,8 +409,8 @@ pub enum ErrorField {
     VlanTagVlanId,
 }
 
-impl fmt::Display for ErrorField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for ErrorField {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use ErrorField::*;
         match self {
             Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
@@ -359,3 +424,71 @@ impl fmt::Display for ErrorField {
         }
     }
 }
+
+
+///Errors that can occour while reading the options of a TCP header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionReadError {
+    ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
+    UnexpectedEndOfSlice{ option_id: u8, expected_len: u8, actual_len: usize },
+
+    ///Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
+    UnexpectedSize{ option_id: u8, size: u8 },
+
+    ///Returned if an unknown tcp header option is encountered.
+    ///
+    ///The first element is the identifier and the slice contains the rest of data left in the options.
+    UnknownId(u8),
+}
+
+impl Error for TcpOptionReadError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl Display for TcpOptionReadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use TcpOptionReadError::*;
+        match self {
+            UnexpectedEndOfSlice{option_id, expected_len, actual_len} => {
+                write!(f, "TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", option_id, expected_len, actual_len)
+            },
+            UnexpectedSize{option_id, size} => {
+                write!(f, "TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", option_id, size)
+            },
+            UnknownId(id) => {
+                write!(f, "TcpOptionReadError: Unknown tcp option kind value {}.", id)
+            }
+        }
+    }
+}
+
+/// Errors that can occour when setting the options of a tcp header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionWriteError {
+    /// There is not enough memory to store all options in the options section of the header (maximum 40 bytes).
+    ///
+    /// The options size is limited by the 4 bit data_offset field in the header which describes
+    /// the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
+    /// part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself). 
+    NotEnoughSpace(usize)
+}
+
+impl Error for TcpOptionWriteError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl Display for TcpOptionWriteError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use TcpOptionWriteError::*;
+        match self {
+            NotEnoughSpace(size) => {
+                write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", size)
+            },
+        }
+    }
+}
+

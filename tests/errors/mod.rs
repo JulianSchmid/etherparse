@@ -74,6 +74,38 @@ mod unexpected_end_of_slice {
     }
 }
 
+mod ipv4_decode_error {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn display(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use Ipv4DecodeError::*;
+
+            //Ipv4UnexpectedVersion
+            assert_eq!(
+                &format!("Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
+                &format!("{}", Ipv4UnexpectedVersion(arg_u8))
+            );
+
+            //Ipv4HeaderLengthBad
+            assert_eq!(
+                &format!("Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
+                &format!("{}", Ipv4HeaderLengthBad(arg_u8))
+            );
+
+            //Ipv4TotalLengthTooSmall
+            assert_eq!(
+                &format!("Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
+                &format!("{}", Ipv4TotalLengthTooSmall(arg_u16))
+            );
+        }
+    }
+}
+
 proptest! {
     #[test]
     fn read_error_display(
@@ -84,6 +116,7 @@ proptest! {
     ) {
 
         use super::ReadError::*;
+        use Ipv4DecodeError::*;
 
         //IoError
         {
@@ -128,20 +161,20 @@ proptest! {
 
         //Ipv4UnexpectedVersion
         assert_eq!(
-            &format!("ReadError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
-            &format!("{}", Ipv4UnexpectedVersion(arg_u8))
+            &format!("Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
+            &format!("{}", Ipv4(Ipv4UnexpectedVersion(arg_u8)))
         );
 
         //Ipv4HeaderLengthBad
         assert_eq!(
-            &format!("ReadError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
-            &format!("{}", Ipv4HeaderLengthBad(arg_u8))
+            &format!("Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
+            &format!("{}", Ipv4(Ipv4HeaderLengthBad(arg_u8)))
         );
 
         //Ipv4TotalLengthTooSmall
         assert_eq!(
-            &format!("ReadError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
-            &format!("{}", Ipv4TotalLengthTooSmall(arg_u16))
+            &format!("Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
+            &format!("{}", Ipv4(Ipv4TotalLengthTooSmall(arg_u16)))
         );
 
         //Ipv6UnexpectedVersion
@@ -180,27 +213,28 @@ proptest! {
 #[test]
 fn read_error_source() {
     use super::ReadError::*;
+    use super::Ipv4DecodeError::*;
     use std::error::Error;
 
-    assert!(
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source().is_some()
-    );
-
-    assert!(
+    let some_values = [
+        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
         UnexpectedEndOfSlice(
             UnexpectedEndOfSliceError {
                 expected_min_len: 0,
                 actual_len: 0,
             }
-        ).source().is_some(),
-    );
+        ),
+        Ipv4(Ipv4UnexpectedVersion(0)),
+        Ipv4(Ipv4HeaderLengthBad(0)),
+        Ipv4(Ipv4TotalLengthTooSmall(0)),
+    ];
+    for value in &some_values {
+        assert!(value.source().is_some());
+    }
 
     let none_values = [
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
-        Ipv4UnexpectedVersion(0),
-        Ipv4HeaderLengthBad(0),
-        Ipv4TotalLengthTooSmall(0),
         Ipv6UnexpectedVersion(0),
         Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
@@ -216,15 +250,16 @@ fn read_error_source() {
 #[test]
 fn read_error_debug() {
     use super::ReadError::*;
+    use super::Ipv4DecodeError::*;
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
         UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
-        Ipv4UnexpectedVersion(0),
-        Ipv4HeaderLengthBad(0),
-        Ipv4TotalLengthTooSmall(0),
+        Ipv4(Ipv4UnexpectedVersion(0)),
+        Ipv4(Ipv4HeaderLengthBad(0)),
+        Ipv4(Ipv4TotalLengthTooSmall(0)),
         Ipv6UnexpectedVersion(0),
         Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
