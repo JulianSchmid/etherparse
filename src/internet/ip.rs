@@ -501,6 +501,8 @@ pub mod ip_number {
     pub const ENCAP_SEC: u8 = EncapsulatingSecurityPayload as u8; //50
     ///Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
     pub const AUTH: u8 = AuthenticationHeader as u8; //51
+    ///IPv6 ICMP next-header type \[[RFC4443]](https://datatracker.ietf.org/doc/html/rfc4443)\]
+    pub const IPV6_ICMP: u8 = IPv6Icmp as u8; // 58
     ///Destination Options for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
     pub const IPV6_DEST_OPTIONS: u8 = IPv6DestinationOptions as u8; //60
     ///MobilityHeader \[[RFC6275](https://datatracker.ietf.org/doc/html/rfc6275)\]

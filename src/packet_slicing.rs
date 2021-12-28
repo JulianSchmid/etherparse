@@ -10,6 +10,10 @@ pub enum InternetSlice<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
+    /// A slice containing an Icmp4 header
+    Icmp4(Icmp4HeaderSlice<'a>),
+    /// A slice containing an Icmp6 header
+    Icmp6(Icmp6HeaderSlice<'a>),
     /// A slice containing an UDP header.
     Udp(UdpHeaderSlice<'a>),
     /// A slice containing a TCP header.
