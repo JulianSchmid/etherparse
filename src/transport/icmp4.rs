@@ -99,9 +99,19 @@ impl IcmpV4Header {
             cksum_be[1],
         ]).map_err(WriteError::from)
     }
-    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError>{
+    pub fn calc_checksum_ipv4(&self, _ip_header: &Ipv4Header, _payload: &[u8]) -> Result<u16, ValueError>{
         // TODO...
         Ok(0u16)
+    }
+
+    /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(IcmpV4Header, &[u8]), ReadError> {
+        Ok((
+            Icmp4HeaderSlice::from_slice(slice)?.to_header()
+                .map_err(|_| { ReadError::UnexpectedEndOfSlice(IcmpV4Header::SERIALIZED_SIZE)})?,
+            &slice[IcmpV4Header::SERIALIZED_SIZE..]
+        ))
     }
 }
 

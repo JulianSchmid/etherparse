@@ -69,9 +69,19 @@ impl IcmpV6Header {
         ]).map_err(WriteError::from)
     }
 
-    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6(&self, _ip_header: &Ipv6Header, _payload: &[u8]) -> Result<u16, ValueError> {
         // TODO...
         Ok(0u16)
+    }
+
+    /// Reads an icmp6 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(IcmpV6Header, &[u8]), ReadError> {
+        Ok((
+            Icmp6HeaderSlice::from_slice(slice)?.to_header()
+                .map_err(|_| { ReadError::UnexpectedEndOfSlice(IcmpV6Header::SERIALIZED_SIZE)})?,
+            &slice[IcmpV6Header::SERIALIZED_SIZE..]
+        ))
     }
 }
 
