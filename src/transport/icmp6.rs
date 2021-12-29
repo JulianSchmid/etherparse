@@ -47,9 +47,10 @@ impl IcmpV6Type {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IcmpV6Header {
-    icmp_type: IcmpV6Type,
-    icmp_code : u8,
+    pub icmp_type: IcmpV6Type,
+    pub icmp_code : u8,
     pub icmp_chksum: u16,
+    pub echo_header: Option<IcmpEchoHeader>,
 }
 
 impl IcmpV6Header {
@@ -121,6 +122,7 @@ impl<'a> Icmp6HeaderSlice<'a> {
             icmp_type: self.icmp_type()?,
             icmp_code: self.icmp_code()?,
             icmp_chksum: self.icmp_chksum()?,
+            echo_header: self.parse_echo_header(),
         })
     }
 
@@ -141,5 +143,20 @@ impl<'a> Icmp6HeaderSlice<'a> {
         unsafe {
             Ok(get_unchecked_be_u16(self.slice.as_ptr().add(2)))
         }
+    }
+
+    fn parse_echo_header(&self) -> Option<IcmpEchoHeader> {
+        use IcmpV6Type::*;
+        if let Ok(icmp_type) = self.icmp_type() {
+            if (icmp_type == EchoReply) || (icmp_type == EchoRequest) {
+                let seq: u16 = u16::from_be_bytes([self.slice[4], self.slice[5]]);
+                let id: u16 = u16::from_be_bytes([self.slice[6], self.slice[7]]);
+                return Some(IcmpEchoHeader{
+                    seq,
+                    id,
+                });
+            }
+        }
+        None
     }
 }

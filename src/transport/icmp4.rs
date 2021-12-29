@@ -11,6 +11,11 @@ pub trait IcmpHeader {
     fn get_raw_code(&self) -> u8;
     fn get_raw_type(&self) -> u8;
     fn get_checksum(&self) -> u16;
+    /// this u32 data has different meaning by the Icmp Message Type
+    /// For example, 
+    /// * with Echo Request/Reply, it's (seq: u16, id: u16)
+    /// * with Dest unreachable, it's reserved
+    fn get_type_dependent_data(&self) -> u32;
 }
 
 
@@ -77,28 +82,43 @@ impl IcmpV4Type {
     }
 }
 
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IcmpEchoHeader {
+    pub seq: u16,
+    pub id: u16,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IcmpV4Header {
-    icmp_type: IcmpV4Type,
-    icmp_code : u8,
+    pub icmp_type: IcmpV4Type,
+    pub icmp_code : u8,
     pub icmp_chksum : u16,
+    pub echo_header : Option<IcmpEchoHeader>,
 }
+
 impl IcmpV4Header {
-    pub const SERIALIZED_SIZE: usize = 16;
+    pub const SERIALIZED_SIZE: usize = 8;
     pub fn header_len(&self) -> usize {
-        8
+        IcmpV4Header::SERIALIZED_SIZE
     }
+
     ///Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        // TODO ... implement the rest
         let cksum_be = self.icmp_chksum.to_be_bytes();
+        let rest_be = self.get_type_dependent_data().to_be_bytes();
         writer.write_all(&[
             self.icmp_type as u8,
             self.icmp_code,
             cksum_be[0],
             cksum_be[1],
+            rest_be[0],
+            rest_be[1],
+            rest_be[2],
+            rest_be[3],
         ]).map_err(WriteError::from)
     }
+
     pub fn calc_checksum_ipv4(&self, _ip_header: &Ipv4Header, _payload: &[u8]) -> Result<u16, ValueError>{
         // TODO...
         Ok(0u16)
@@ -124,6 +144,24 @@ impl IcmpHeader for IcmpV4Header {
     }
     fn get_checksum(&self) -> u16 {
         0u16
+    }
+
+    fn get_type_dependent_data(&self) -> u32 {
+        use IcmpV4Type::*;
+        match self.icmp_type {
+            EchoRequest| EchoReply => {
+                if let Some(echo_header) = &self.echo_header {
+                    let seq_be = echo_header.seq.to_be_bytes();
+                    let id_be = echo_header.id.to_be_bytes();
+                    u32::from_be_bytes([seq_be[0], seq_be[1], id_be[0], id_be[1]])
+                } else {
+                    // caller never setup the IcmpEchoHeader
+                    // just assume seq = id = 0
+                    0
+                }
+            },
+            _ => 0 // TODO: fill out other exceptions for this data...
+        }
     }
 }
 
@@ -156,6 +194,23 @@ impl<'a> Icmp4HeaderSlice<'a> {
             }
         })
     }
+
+
+    fn parse_echo_header(&self) -> Option<IcmpEchoHeader> {
+        use IcmpV4Type::*;
+        if let Ok(icmp_type) = self.icmp_type() {
+            if (icmp_type == EchoReply) || (icmp_type == EchoRequest) {
+                let seq: u16 = u16::from_be_bytes([self.slice[4], self.slice[5]]);
+                let id: u16 = u16::from_be_bytes([self.slice[6], self.slice[7]]);
+                return Some(IcmpEchoHeader{
+                    seq,
+                    id,
+                });
+            }
+        }
+        None
+    }
+
     /// Decode all the fields and copy the results to a UdpHeader struct
     #[inline]
     pub fn to_header(&self) -> Result<IcmpV4Header, ValueError> {
@@ -163,6 +218,7 @@ impl<'a> Icmp4HeaderSlice<'a> {
             icmp_type: self.icmp_type()?,
             icmp_code: self.icmp_code()?,
             icmp_chksum: self.icmp_chksum()?,
+            echo_header: self.parse_echo_header(),
         })
     }
 
