@@ -2,6 +2,7 @@ use super::super::*;
 
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
+use error::de::UnexpectedEndOfSliceError;
 
 ///The minimum size of the tcp header in bytes
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;

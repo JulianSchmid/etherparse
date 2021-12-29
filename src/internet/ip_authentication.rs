@@ -2,6 +2,7 @@ use super::super::*;
 
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
+use error::de::UnexpectedEndOfSliceError;
 
 /// Deprecated use [IpAuthenticationHeader] instead.
 #[deprecated(

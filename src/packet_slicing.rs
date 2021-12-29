@@ -1,5 +1,7 @@
 use super::*;
 
+use error::de::UnexpectedEndOfSliceError;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
     /// The ipv6 header & the decoded extension headers.

@@ -1,6 +1,7 @@
 use super::super::*;
 
 use std::slice::from_raw_parts;
+use error::de::UnexpectedEndOfSliceError;
 
 ///Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]

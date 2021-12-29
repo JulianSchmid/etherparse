@@ -1,5 +1,7 @@
 use super::*;
 
+use error::de::UnexpectedEndOfSliceError;
+
 mod internet_slice {
     use super::*;
 

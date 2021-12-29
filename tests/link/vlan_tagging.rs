@@ -2,6 +2,7 @@ use super::super::*;
 
 use std::io::{Cursor, ErrorKind};
 use proptest::prelude::*;
+use error::de::UnexpectedEndOfSliceError;
 
 mod vlan_header {
     use super::*;

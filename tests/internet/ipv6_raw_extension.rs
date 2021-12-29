@@ -1,6 +1,7 @@
 use super::super::*;
 
 use std::io::ErrorKind;
+use error::de::UnexpectedEndOfSliceError;
 
 #[test]
 fn header_new_raw_and_set_payload() {

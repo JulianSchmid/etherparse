@@ -1,5 +1,7 @@
 use super::super::*;
 
+use error::de::UnexpectedEndOfSliceError;
+
 ///Internet protocol headers version 4 & 6
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum IpHeader {

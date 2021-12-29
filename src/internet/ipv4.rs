@@ -147,22 +147,23 @@ impl Ipv4Header {
 
         let version = first_byte[0] >> 4;
         if 4 != version {
-            return Err(Ipv4DecodeError::Ipv4UnexpectedVersion(version).into());
+            return Err(error::de::Ipv4Error::UnexpectedIpVersion(version).into());
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
 
     /// Reads an IPv4 header assuming the version & ihl field have already been read.
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, first_byte: u8) -> Result<Ipv4Header, ReadError> {
-        
+        use error::de::Ipv4Error::*;
+        use error::de::Ipv4TotalLengthSmallerThanIhlError;
+
         let mut header_raw : [u8;20] = [0;20];
         header_raw[0] = first_byte;
         reader.read_exact(&mut header_raw[1..])?;
 
         let ihl = header_raw[0] & 0xf;
         if ihl < 5 {
-            use crate::Ipv4DecodeError::*;
-            return Err(Ipv4HeaderLengthBad(ihl).into());
+            return Err(IhlTooSmall(ihl).into());
         }
 
         let (dscp, ecn) = {
@@ -172,8 +173,14 @@ impl Ipv4Header {
         let header_length = u16::from(ihl)*4;
         let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
         if total_length < header_length {
-            use crate::Ipv4DecodeError::*;
-            return Err(Ipv4TotalLengthTooSmall(total_length).into());
+            return Err(
+                TotalLengthSmallerThanIhl(
+                    Ipv4TotalLengthSmallerThanIhlError{
+                        header_length,
+                        total_length,
+                    }
+                ).into()
+            );
         }
         let identification = u16::from_be_bytes([header_raw[4], header_raw[5]]);
         let (dont_fragment, more_fragments, fragments_offset) = (
@@ -444,7 +451,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
-        use crate::Ipv4DecodeError::*;
+        use crate::error::de::{UnexpectedEndOfSliceError, Ipv4TotalLengthSmallerThanIhlError};
+        use crate::error::de::Ipv4Error::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError{
@@ -462,20 +470,20 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
         //check version
         if 4 != version {
-            return Err(Ipv4UnexpectedVersion(version).into());
+            return Err(UnexpectedIpVersion(version).into());
         }
 
         //check that the ihl is correct
         if ihl < 5 {
-            return Err(Ipv4HeaderLengthBad(ihl).into());
+            return Err(IhlTooSmall(ihl).into());
         }
 
         //check that the slice contains enough data for the entire header + options
-        let header_length = (usize::from(ihl))*4;
-        if slice.len() < header_length {
+        let header_length = (u16::from(ihl))*4;
+        if slice.len() < header_length.into() {
             return Err(
                 UnexpectedEndOfSliceError {
-                    expected_min_len: header_length,
+                    expected_min_len: header_length.into(),
                     actual_len: slice.len(),
                 }.into()
             );
@@ -490,8 +498,15 @@ impl<'a> Ipv4HeaderSlice<'a> {
             get_unchecked_be_u16(slice.as_ptr().add(2))
         };
 
-        if total_length < header_length as u16 {
-            return Err(Ipv4TotalLengthTooSmall(total_length).into())
+        if total_length < header_length {
+            return Err(
+                TotalLengthSmallerThanIhl(
+                    Ipv4TotalLengthSmallerThanIhlError {
+                        header_length,
+                        total_length,
+                    }
+                ).into()
+            );
         }
 
         //all good
@@ -502,7 +517,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
             slice: unsafe {
                 from_raw_parts(
                     slice.as_ptr(),
-                    header_length
+                    header_length.into()
                 )
             }
         })

@@ -1,6 +1,7 @@
 use super::super::*;
 
 use std::slice::from_raw_parts;
+use error::de::UnexpectedEndOfSliceError;
 
 /// IPv6 fragment header.
 #[derive(Clone, Debug, Eq, PartialEq)]

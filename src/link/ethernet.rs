@@ -2,6 +2,7 @@ use super::super::*;
 
 use std::slice::from_raw_parts;
 use std::io;
+use error::de::UnexpectedEndOfSliceError;
 
 /// Ether type enum present in ethernet II header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

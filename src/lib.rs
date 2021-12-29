@@ -218,6 +218,9 @@ use std::io;
 mod errors;
 pub use crate::errors::*;
 
+/// Contains the error types
+pub mod error;
+
 mod link;
 pub use crate::link::LinkSlice;
 pub use crate::link::ethernet::*;

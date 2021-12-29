@@ -26,6 +26,8 @@ use test_writer::*;
 mod test_reader;
 use test_reader::*;
 
+use crate::error::de::UnexpectedEndOfSliceError;
+
 #[test]
 fn test_eq() {
     assert_eq!(ErrorField::Ipv4PayloadLength, ErrorField::Ipv4PayloadLength);
@@ -50,15 +52,23 @@ fn test_debug_write() {
     //read error
     {
         use crate::ReadError::*;
-        use crate::Ipv4DecodeError::*;
+        use crate::error::de::Ipv4Error::*;
+        use crate::error::de::Ipv4TotalLengthSmallerThanIhlError;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
-            Ipv4(Ipv4UnexpectedVersion(0)),
-            Ipv4(Ipv4HeaderLengthBad(0)),
-            Ipv4(Ipv4TotalLengthTooSmall(0)),
+            Ipv4(UnexpectedIpVersion(0)),
+            Ipv4(IhlTooSmall(0)),
+            Ipv4(
+                TotalLengthSmallerThanIhl(
+                    Ipv4TotalLengthSmallerThanIhlError{
+                        header_length: 0,
+                        total_length: 0
+                    }
+                )
+            ),
             Ipv6UnexpectedVersion(0),
             TcpDataOffsetTooSmall(0)
         ].iter() {

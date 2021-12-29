@@ -5,118 +5,19 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-/// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct UnexpectedEndOfSliceError {
-    /// The expected minimum amount of datat that should have been present.
-    pub expected_min_len: usize,
-
-    /// Actual length of the slice.
-    pub actual_len: usize,
-}
-
-impl UnexpectedEndOfSliceError {
-    /// Adds an offset value to the expected_min_len and returns the result as a new UnexpectedEndOfSliceError.
-    pub fn add_slice_offset(self, offset: usize) -> UnexpectedEndOfSliceError {
-        UnexpectedEndOfSliceError {
-            expected_min_len: self.expected_min_len + offset,
-            actual_len: self.actual_len + offset,
-        }
-    }
-}
-
-impl Display for UnexpectedEndOfSliceError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "UnexpectedEndOfSliceError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", self.expected_min_len)
-    }
-}
-
-impl Error for UnexpectedEndOfSliceError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-/// Error when decoding a header or packet from a slice.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum FromSliceError<T : Error + Display> {
-    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
-
-    /// Error caused by an invalid encoded value.
-    DecodeError(T)
-}
-
-impl<T : Error + Display> Display for FromSliceError<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use FromSliceError::*;
-
-        match self {
-            UnexpectedEndOfSlice(ref err) => err.fmt(f),
-            DecodeError(ref err) => Display::fmt(&err, f),
-        }
-    }
-}
-
-impl<T : 'static + Error + Display> Error for FromSliceError<T> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        use FromSliceError::*;
-
-        match self {
-            UnexpectedEndOfSlice(ref err) => Some(err),
-            DecodeError(ref err) => Some(err),
-        }
-    }
-}
-
-/// Errors that can be found while decoding ipv4 packets.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub enum Ipv4DecodeError {
-    /// Error when the ip header version field is not equal 4. The value is the version that was received.
-    Ipv4UnexpectedVersion(u8),
-    /// Error when the ipv4 header length is smaller then the header itself (5).
-    Ipv4HeaderLengthBad(u8),
-    /// Error when the total length field is too small to contain the header itself.
-    Ipv4TotalLengthTooSmall(u16),
-}
-
-impl Display for Ipv4DecodeError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use Ipv4DecodeError::*;
-
-        match self {
-            Ipv4UnexpectedVersion(version_number) => { //u8
-                write!(f, "Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
-            },
-            Ipv4HeaderLengthBad(header_length) => { //u8
-                write!(f, "Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
-            },
-            Ipv4TotalLengthTooSmall(total_length_field) => { //u16
-                write!(f, "Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
-            },
-        }
-    }
-}
-
-impl Error for Ipv4DecodeError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
 /// Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
     /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
+    UnexpectedEndOfSlice(error::de::UnexpectedEndOfSliceError),
     /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
     /// The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
-    Ipv4(Ipv4DecodeError),
+    Ipv4(error::de::Ipv4Error),
     /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
@@ -202,14 +103,14 @@ impl From<std::io::Error> for ReadError {
     }
 }
 
-impl From<UnexpectedEndOfSliceError> for ReadError {
-    fn from(err: UnexpectedEndOfSliceError) -> ReadError {
+impl From<error::de::UnexpectedEndOfSliceError> for ReadError {
+    fn from(err: error::de::UnexpectedEndOfSliceError) -> ReadError {
         ReadError::UnexpectedEndOfSlice(err)
     }
 }
 
-impl From<Ipv4DecodeError> for ReadError {
-    fn from(err: Ipv4DecodeError) -> ReadError {
+impl From<error::de::Ipv4Error> for ReadError {
+    fn from(err: error::de::Ipv4Error) -> ReadError {
         ReadError::Ipv4(err)
     }
 }

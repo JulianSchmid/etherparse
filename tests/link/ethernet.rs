@@ -1,6 +1,7 @@
 use super::super::*;
 
 use std::io::{Cursor, ErrorKind};
+use error::de::UnexpectedEndOfSliceError;
 
 mod ether_type {
     use super::*;
