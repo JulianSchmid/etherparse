@@ -1,6 +1,8 @@
 use super::*;
 use proptest::prelude::*;
 
+use std::error::Error;
+
 /// Tests for the struct `UnexpectedEndOfSliceError`
 mod unexpected_end_of_slice {
     use super::*;
@@ -56,6 +58,21 @@ mod unexpected_end_of_slice {
         }
     }
 
+    proptest! {
+        #[test]
+        fn error_source(
+            expected_min_len in any::<usize>(),
+            actual_len in any::<usize>(),
+        ) {
+            assert!(
+                UnexpectedEndOfSliceError{
+                    expected_min_len,
+                    actual_len,
+                }.source().is_none()
+            );
+        }
+    }
+
     #[test]
     fn add_slice_offset() {
         let base = UnexpectedEndOfSliceError{
@@ -104,163 +121,287 @@ mod ipv4_decode_error {
             );
         }
     }
-}
 
-proptest! {
-    #[test]
-    fn read_error_display(
-        arg_u8 in any::<u8>(),
-        arg_u16 in any::<u16>(),
-        arg_usize in any::<usize>(),
-        arg_usize2 in any::<usize>(),
-    ) {
+    proptest! {
+        #[test]
+        fn debug(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use Ipv4DecodeError::*;
 
-        use super::ReadError::*;
-        use Ipv4DecodeError::*;
-
-        //IoError
-        {
-            let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
+            //Ipv4UnexpectedVersion
             assert_eq!(
-                &format!("{}", custom_error),
-                &format!("{}", IoError(custom_error))
+                &format!("Ipv4UnexpectedVersion({})", arg_u8),
+                &format!("{:?}", Ipv4UnexpectedVersion(arg_u8))
+            );
+
+            //Ipv4HeaderLengthBad
+            assert_eq!(
+                &format!("Ipv4HeaderLengthBad({})", arg_u8),
+                &format!("{:?}", Ipv4HeaderLengthBad(arg_u8))
+            );
+
+            //Ipv4TotalLengthTooSmall
+            assert_eq!(
+                &format!("Ipv4TotalLengthTooSmall({})", arg_u16),
+                &format!("{:?}", Ipv4TotalLengthTooSmall(arg_u16))
             );
         }
+    }
 
-        //UnexpectedEndOfSlice
-        assert_eq!(
-            &format!(
-                "{}",
-                UnexpectedEndOfSlice(
+    proptest! {
+        #[test]
+        fn clone_eq(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use Ipv4DecodeError::*;
+            let values = [
+                Ipv4UnexpectedVersion(arg_u8),
+                Ipv4HeaderLengthBad(arg_u8),
+                Ipv4TotalLengthTooSmall(arg_u16),
+            ];
+            for value in values {
+                assert_eq!(value.clone(), value);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn error_source(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use Ipv4DecodeError::*;
+            let values = [
+                Ipv4UnexpectedVersion(arg_u8),
+                Ipv4HeaderLengthBad(arg_u8),
+                Ipv4TotalLengthTooSmall(arg_u16),
+            ];
+            for value in values {
+                assert!(value.source().is_none());
+            }
+        }
+    }
+}
+
+mod read_error {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn display(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+            arg_usize in any::<usize>(),
+            arg_usize2 in any::<usize>(),
+        ) {
+
+            use super::ReadError::*;
+            use Ipv4DecodeError::*;
+
+            //IoError
+            {
+                let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
+                assert_eq!(
+                    &format!("{}", custom_error),
+                    &format!("{}", IoError(custom_error))
+                );
+            }
+
+            //UnexpectedEndOfSlice
+            assert_eq!(
+                &format!(
+                    "{}",
+                    UnexpectedEndOfSlice(
+                        UnexpectedEndOfSliceError {
+                            expected_min_len: arg_usize,
+                            actual_len: arg_usize2,
+                        }
+                    )
+                ),
+                &format!(
+                    "{}",
                     UnexpectedEndOfSliceError {
                         expected_min_len: arg_usize,
                         actual_len: arg_usize2,
                     }
                 )
-            ),
-            &format!(
-                "{}",
+            );
+
+            //DoubleVlanOuterNonVlanEtherType
+            assert_eq!(
+                &format!("ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", arg_u16),
+                &format!("{}", DoubleVlanOuterNonVlanEtherType(arg_u16))
+            );
+
+            //IpUnsupportedVersion
+            assert_eq!(
+                &format!("ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", arg_u8),
+                &format!("{}", IpUnsupportedVersion(arg_u8))
+            );
+
+            //Ipv4UnexpectedVersion
+            assert_eq!(
+                &format!("Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
+                &format!("{}", Ipv4(Ipv4UnexpectedVersion(arg_u8)))
+            );
+
+            //Ipv4HeaderLengthBad
+            assert_eq!(
+                &format!("Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
+                &format!("{}", Ipv4(Ipv4HeaderLengthBad(arg_u8)))
+            );
+
+            //Ipv4TotalLengthTooSmall
+            assert_eq!(
+                &format!("Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
+                &format!("{}", Ipv4(Ipv4TotalLengthTooSmall(arg_u16)))
+            );
+
+            //Ipv6UnexpectedVersion
+            assert_eq!(
+                &format!("ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", arg_u8),
+                &format!("{}", Ipv6UnexpectedVersion(arg_u8))
+            );
+
+            //Ipv6HopByHopHeaderNotAtStart
+            assert_eq!(
+                &format!("ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200."),
+                &format!("{}", Ipv6HopByHopHeaderNotAtStart)
+            );
+
+            //IpAuthenticationHeaderTooSmallPayloadLength
+            assert_eq!(
+                &format!("ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", arg_u8),
+                &format!("{}", IpAuthenticationHeaderTooSmallPayloadLength(arg_u8))
+            );
+
+            //TcpDataOffsetTooSmall
+            assert_eq!(
+                &format!("ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", arg_u8),
+                &format!("{}", TcpDataOffsetTooSmall(arg_u8))
+            );
+        }
+    }
+
+    /// Check that only for std::io::Error a source is returned
+    #[test]
+    fn error_source() {
+        use super::ReadError::*;
+        use super::Ipv4DecodeError::*;
+        use std::error::Error;
+
+        let some_values = [
+            IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
+            UnexpectedEndOfSlice(
                 UnexpectedEndOfSliceError {
-                    expected_min_len: arg_usize,
-                    actual_len: arg_usize2,
+                    expected_min_len: 0,
+                    actual_len: 0,
                 }
+            ),
+            Ipv4(Ipv4UnexpectedVersion(0)),
+            Ipv4(Ipv4HeaderLengthBad(0)),
+            Ipv4(Ipv4TotalLengthTooSmall(0)),
+        ];
+        for value in &some_values {
+            assert!(value.source().is_some());
+        }
+
+        let none_values = [
+            DoubleVlanOuterNonVlanEtherType(0),
+            IpUnsupportedVersion(0),
+            Ipv6UnexpectedVersion(0),
+            Ipv6HopByHopHeaderNotAtStart,
+            IpAuthenticationHeaderTooSmallPayloadLength(0),
+            TcpDataOffsetTooSmall(0),
+        ];
+
+        for value in &none_values {
+            assert!(value.source().is_none());
+        }
+    }
+
+    #[test]
+    fn debug() {
+        use super::ReadError::*;
+        use super::Ipv4DecodeError::*;
+
+        let values = [
+            IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
+            UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
+            DoubleVlanOuterNonVlanEtherType(0),
+            IpUnsupportedVersion(0),
+            Ipv4(Ipv4UnexpectedVersion(0)),
+            Ipv4(Ipv4HeaderLengthBad(0)),
+            Ipv4(Ipv4TotalLengthTooSmall(0)),
+            Ipv6UnexpectedVersion(0),
+            Ipv6HopByHopHeaderNotAtStart,
+            IpAuthenticationHeaderTooSmallPayloadLength(0),
+            TcpDataOffsetTooSmall(0),
+        ];
+
+        for value in &values {
+            format!("{:?}", value);
+        }
+    }
+
+    #[test]
+    fn add_slice_offset() {
+        use super::*;
+        assert_matches!(
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1 }
+            ).add_slice_offset(3),
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 5, actual_len: 4 }
             )
         );
-
-        //DoubleVlanOuterNonVlanEtherType
-        assert_eq!(
-            &format!("ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", arg_u16),
-            &format!("{}", DoubleVlanOuterNonVlanEtherType(arg_u16))
-        );
-
-        //IpUnsupportedVersion
-        assert_eq!(
-            &format!("ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", arg_u8),
-            &format!("{}", IpUnsupportedVersion(arg_u8))
-        );
-
-        //Ipv4UnexpectedVersion
-        assert_eq!(
-            &format!("Ipv4DecodeError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
-            &format!("{}", Ipv4(Ipv4UnexpectedVersion(arg_u8)))
-        );
-
-        //Ipv4HeaderLengthBad
-        assert_eq!(
-            &format!("Ipv4DecodeError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
-            &format!("{}", Ipv4(Ipv4HeaderLengthBad(arg_u8)))
-        );
-
-        //Ipv4TotalLengthTooSmall
-        assert_eq!(
-            &format!("Ipv4DecodeError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
-            &format!("{}", Ipv4(Ipv4TotalLengthTooSmall(arg_u16)))
-        );
-
-        //Ipv6UnexpectedVersion
-        assert_eq!(
-            &format!("ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", arg_u8),
-            &format!("{}", Ipv6UnexpectedVersion(arg_u8))
-        );
-
-        //Ipv6HopByHopHeaderNotAtStart
-        assert_eq!(
-            &format!("ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200."),
-            &format!("{}", Ipv6HopByHopHeaderNotAtStart)
-        );
-
-        //IpAuthenticationHeaderTooSmallPayloadLength
-        assert_eq!(
-            &format!("ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", arg_u8),
-            &format!("{}", IpAuthenticationHeaderTooSmallPayloadLength(arg_u8))
-        );
-
-        //TcpDataOffsetTooSmall
-        assert_eq!(
-            &format!("ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", arg_u8),
-            &format!("{}", TcpDataOffsetTooSmall(arg_u8))
+        assert_matches!(
+            ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
+            ReadError::DoubleVlanOuterNonVlanEtherType(2)
         );
     }
-}
 
-/// Check that only for std::io::Error a source is returned
-#[test]
-fn read_error_source() {
-    use super::ReadError::*;
-    use super::Ipv4DecodeError::*;
-    use std::error::Error;
-
-    let some_values = [
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(
-            UnexpectedEndOfSliceError {
-                expected_min_len: 0,
-                actual_len: 0,
-            }
-        ),
-        Ipv4(Ipv4UnexpectedVersion(0)),
-        Ipv4(Ipv4HeaderLengthBad(0)),
-        Ipv4(Ipv4TotalLengthTooSmall(0)),
-    ];
-    for value in &some_values {
-        assert!(value.source().is_some());
+    #[test]
+    fn io_error() {
+        use super::*;
+        assert_eq!(
+            std::io::ErrorKind::Other,
+            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .io_error().unwrap().kind()
+        );
+        assert!(
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }
+            ).io_error().is_none()
+        );
     }
 
-    let none_values = [
-        DoubleVlanOuterNonVlanEtherType(0),
-        IpUnsupportedVersion(0),
-        Ipv6UnexpectedVersion(0),
-        Ipv6HopByHopHeaderNotAtStart,
-        IpAuthenticationHeaderTooSmallPayloadLength(0),
-        TcpDataOffsetTooSmall(0),
-    ];
-
-    for value in &none_values {
-        assert!(value.source().is_none());
+    #[test]
+    fn unexpected_end_of_slice_min_expected_size() {
+        use super::*;
+        assert!(
+            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            .unexpected_end_of_slice_min_expected_size().is_none()
+        );
+        assert_eq!(
+            123,
+            ReadError::UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: 123,
+                    actual_len: 0,
+                }
+            ).unexpected_end_of_slice_min_expected_size().unwrap()
+        );
     }
-}
 
-#[test]
-fn read_error_debug() {
-    use super::ReadError::*;
-    use super::Ipv4DecodeError::*;
-
-    let values = [
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
-        DoubleVlanOuterNonVlanEtherType(0),
-        IpUnsupportedVersion(0),
-        Ipv4(Ipv4UnexpectedVersion(0)),
-        Ipv4(Ipv4HeaderLengthBad(0)),
-        Ipv4(Ipv4TotalLengthTooSmall(0)),
-        Ipv6UnexpectedVersion(0),
-        Ipv6HopByHopHeaderNotAtStart,
-        IpAuthenticationHeaderTooSmallPayloadLength(0),
-        TcpDataOffsetTooSmall(0),
-    ];
-
-    for value in &values {
-        format!("{:?}", value);
+    #[test]
+    fn from_io_error() {
+        assert_matches!(ReadError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
+                        ReadError::IoError(_));
     }
 }
 

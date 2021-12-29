@@ -127,65 +127,6 @@ fn test_io_error_to_write_error() {
                     WriteError::IoError(_));
 }
 
-#[test]
-fn test_io_error_to_read_error() {
-    assert_matches!(ReadError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-                    ReadError::IoError(_));
-}
-
-mod read_error {
-
-    #[test]
-    fn add_slice_offset() {
-        use super::*;
-        assert_matches!(
-            ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1 }
-            ).add_slice_offset(3),
-            ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 5, actual_len: 4 }
-            )
-        );
-        assert_matches!(
-            ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
-            ReadError::DoubleVlanOuterNonVlanEtherType(2)
-        );
-    }
-
-    #[test]
-    fn io_error() {
-        use super::*;
-        assert_eq!(
-            std::io::ErrorKind::Other,
-            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            .io_error().unwrap().kind()
-        );
-        assert!(
-            ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }
-            ).io_error().is_none()
-        );
-    }
-
-    #[test]
-    fn unexpected_end_of_slice_min_expected_size() {
-        use super::*;
-        assert!(
-            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            .unexpected_end_of_slice_min_expected_size().is_none()
-        );
-        assert_eq!(
-            123,
-            ReadError::UnexpectedEndOfSlice(
-                UnexpectedEndOfSliceError {
-                    expected_min_len: 123,
-                    actual_len: 0,
-                }
-            ).unexpected_end_of_slice_min_expected_size().unwrap()
-        );
-    }
-}
-
 mod write_error {
     #[test]
     fn io_error() {
