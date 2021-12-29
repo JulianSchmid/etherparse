@@ -2,6 +2,12 @@
 
 ## 0.11.0
 
+Error rework:
+
+* Removed the `ReadError::Ipv6TooManyHeaderExtensions` error alongside with the `IPV6_MAX_NUM_HEADER_EXTENSIONS` constant. There is no longer an error triggered based on the amount of IPv6 extension headers in a packet.
+
+New parsing functions:
+
 * Added functions [SlicedPacket::from_ether_type](https://docs.rs/etherparse/0.11.0/etherparse/struct.SlicedPacket.html#method.from_ether_type) & [PacketHeaders::from_ether_type](https://docs.rs/etherparse/0.10.1/etherparse/struct.PacketHeaders.html#method.from_ether_type) to slice & decode messages based on the starting `ether type`
 
 ## 0.10.1: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements

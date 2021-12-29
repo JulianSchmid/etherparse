@@ -3,9 +3,6 @@ use super::super::*;
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
-///Maximum number of header extensions allowed (according to the ipv6 rfc8200, & iana protocol numbers).
-pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
-
 /// Raw IPv6 extension header (undecoded payload).
 ///
 /// IPv6 extension header with only minimal data interpretation. NOTE only ipv6 header

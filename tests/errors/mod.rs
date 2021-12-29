@@ -183,12 +183,6 @@ proptest! {
             &format!("{}", Ipv6UnexpectedVersion(arg_u8))
         );
 
-        //Ipv6TooManyHeaderExtensions
-        assert_eq!(
-            &format!("ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported."),
-            &format!("{}", Ipv6TooManyHeaderExtensions)
-        );
-
         //Ipv6HopByHopHeaderNotAtStart
         assert_eq!(
             &format!("ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200."),
@@ -236,7 +230,6 @@ fn read_error_source() {
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv6UnexpectedVersion(0),
-        Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthenticationHeaderTooSmallPayloadLength(0),
         TcpDataOffsetTooSmall(0),
@@ -261,7 +254,6 @@ fn read_error_debug() {
         Ipv4(Ipv4HeaderLengthBad(0)),
         Ipv4(Ipv4TotalLengthTooSmall(0)),
         Ipv6UnexpectedVersion(0),
-        Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthenticationHeaderTooSmallPayloadLength(0),
         TcpDataOffsetTooSmall(0),

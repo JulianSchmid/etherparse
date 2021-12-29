@@ -60,7 +60,6 @@ fn test_debug_write() {
             Ipv4(Ipv4HeaderLengthBad(0)),
             Ipv4(Ipv4TotalLengthTooSmall(0)),
             Ipv6UnexpectedVersion(0),
-            Ipv6TooManyHeaderExtensions,
             TcpDataOffsetTooSmall(0)
         ].iter() {
             println!("{:?}", value);

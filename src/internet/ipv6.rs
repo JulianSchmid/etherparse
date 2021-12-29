@@ -137,16 +137,14 @@ impl Ipv6Header {
         matches!(ip_protocol_number, IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6)
     }
 
-    ///Takes a slice & ip protocol number (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
+    /// Takes a slice & ip protocol number (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
     pub fn skip_all_header_extensions_in_slice(slice: &[u8], next_header: u8) -> Result<(u8, &[u8]), ReadError> {
 
         let mut next_header = next_header;
         let mut rest = slice;
         
-        for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-
+        loop {
             let (n_id, n_rest) = Ipv6Header::skip_header_extension_in_slice(rest, next_header)?;
-
             if n_rest.len() == rest.len() {
                 return Ok((next_header, rest))
             } else {
@@ -154,16 +152,9 @@ impl Ipv6Header {
                 rest = n_rest;
             }
         }
-
-        // final check
-        if Ipv6Header::is_skippable_header_extension(next_header) {
-            Err(ReadError::Ipv6TooManyHeaderExtensions)
-        } else {
-            Ok((next_header, rest))
-        }
     }
 
-    ///Skips the ipv6 header extension and returns the next ip protocol number
+    /// Skips the ipv6 header extension and returns the next ip protocol number
     pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(reader: &mut T, next_header: u8) -> Result<u8, io::Error> {
         use crate::ip_number::*;
 
@@ -203,25 +194,15 @@ impl Ipv6Header {
         Ok(next_header)
     }
 
-    ///Skips all ipv6 header extensions and returns the next ip protocol number
+    /// Skips all ipv6 header extensions and returns the next ip protocol number
     pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(reader: &mut T, next_header: u8) -> Result<u8, ReadError> {
-
         let mut next_header = next_header;
-
-        for _i in 0..IPV6_MAX_NUM_HEADER_EXTENSIONS {
-            if Ipv6Header::is_skippable_header_extension(next_header)
-            {
+        loop {
+            if Ipv6Header::is_skippable_header_extension(next_header) {
                 next_header = Ipv6Header::skip_header_extension(reader, next_header)?;
             } else {
                 return Ok(next_header);
             }
-        }
-
-        //final check
-        if Ipv6Header::is_skippable_header_extension(next_header) {
-            Err(ReadError::Ipv6TooManyHeaderExtensions)
-        } else {
-            Ok(next_header)
         }
     }
 

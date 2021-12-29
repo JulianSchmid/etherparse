@@ -314,14 +314,11 @@ fn skip_all_extensions() {
         result
     }
 
-    //skip maximum number
+    // skip a payload with all extension header ids
     {
         let ids = {
-            let mut ids = Vec::with_capacity(IPV6_MAX_NUM_HEADER_EXTENSIONS);
-            while ids.len() < IPV6_MAX_NUM_HEADER_EXTENSIONS {
-                // fill with extension headers until filled
-                ids.extend_from_slice(&EXTENSION_IDS[..std::cmp::min(EXTENSION_IDS.len(), IPV6_MAX_NUM_HEADER_EXTENSIONS - ids.len())]);
-            }
+            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 1);
+            ids.extend_from_slice(&EXTENSION_IDS);
             ids.push(UDP);
             ids
         };
@@ -340,32 +337,6 @@ fn skip_all_extensions() {
             let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, ids[0]).unwrap();
             assert_eq!(result.0, UDP);
             assert_eq!(result.1, &buffer[buffer.len() - 8 .. ]);
-        }
-    }
-    //trigger "too many" error
-    {
-        let ids = {
-            let mut ids = Vec::with_capacity(EXTENSION_IDS.len() + 5);
-            ids.extend_from_slice(&EXTENSION_IDS);
-            ids.push(EXTENSION_IDS[0]);
-            ids.push(EXTENSION_IDS[0]);
-            ids.push(EXTENSION_IDS[0]);
-            ids.push(EXTENSION_IDS[0]);
-            ids.push(UDP);
-            ids
-        };
-        let buffer = create_buffer(&ids);
-
-        //reader
-        {
-            let mut cursor = Cursor::new(&buffer);
-            let result = Ipv6Header::skip_all_header_extensions(&mut cursor, ids[0]);
-            assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
-        }
-        //slice
-        {
-            let result = Ipv6Header::skip_all_header_extensions_in_slice(&buffer, ids[0]);
-            assert_matches!(result, Err(ReadError::Ipv6TooManyHeaderExtensions));
         }
     }
     //trigger missing unexpected eof

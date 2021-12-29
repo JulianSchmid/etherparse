@@ -119,8 +119,6 @@ pub enum ReadError {
     Ipv4(Ipv4DecodeError),
     /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
-    /// Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
-    Ipv6TooManyHeaderExtensions,
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     Ipv6HopByHopHeaderNotAtStart,
     /// Error if the header length in the ip authentication header is smaller then the minimum size of 1.
@@ -173,9 +171,6 @@ impl Display for ReadError {
             Ipv4(err) => err.fmt(f),
             Ipv6UnexpectedVersion(version_number) => { //u8
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
-            },
-            Ipv6TooManyHeaderExtensions => {
-                write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
             },
             Ipv6HopByHopHeaderNotAtStart => {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
