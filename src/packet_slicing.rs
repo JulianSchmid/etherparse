@@ -1,6 +1,6 @@
 use super::*;
 
-use error::de::UnexpectedEndOfSliceError;
+use de::UnexpectedEndOfSliceError;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {

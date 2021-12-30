@@ -2,7 +2,7 @@ use super::super::*;
 
 use std::io;
 use std::slice::from_raw_parts;
-use error::de::UnexpectedEndOfSliceError;
+use de::UnexpectedEndOfSliceError;
 
 /// IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
 #[derive(Clone, Debug, Eq, PartialEq)]

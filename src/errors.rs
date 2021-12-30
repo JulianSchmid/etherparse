@@ -11,13 +11,13 @@ pub enum ReadError {
     /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(error::de::UnexpectedEndOfSliceError),
+    UnexpectedEndOfSlice(de::UnexpectedEndOfSliceError),
     /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
     /// The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
-    Ipv4(error::de::Ipv4Error),
+    Ipv4(de::Ipv4Error),
     /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
@@ -103,14 +103,14 @@ impl From<std::io::Error> for ReadError {
     }
 }
 
-impl From<error::de::UnexpectedEndOfSliceError> for ReadError {
-    fn from(err: error::de::UnexpectedEndOfSliceError) -> ReadError {
+impl From<de::UnexpectedEndOfSliceError> for ReadError {
+    fn from(err: de::UnexpectedEndOfSliceError) -> ReadError {
         ReadError::UnexpectedEndOfSlice(err)
     }
 }
 
-impl From<error::de::Ipv4Error> for ReadError {
-    fn from(err: error::de::Ipv4Error) -> ReadError {
+impl From<de::Ipv4Error> for ReadError {
+    fn from(err: de::Ipv4Error) -> ReadError {
         ReadError::Ipv4(err)
     }
 }

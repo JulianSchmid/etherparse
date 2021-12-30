@@ -1,7 +1,5 @@
 use super::super::*;
 
-use error::de::UnexpectedEndOfSliceError;
-
 mod ip_header {
     use super::*;
     use crate::ip_number::*;

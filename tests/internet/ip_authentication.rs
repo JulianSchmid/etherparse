@@ -1,7 +1,6 @@
 use super::super::*;
 
 use std::io::Cursor;
-use error::de::UnexpectedEndOfSliceError;
 
 #[test]
 fn new_and_set_icv() {

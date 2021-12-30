@@ -1,10 +1,10 @@
-use super::super::*;
+use super::*;
 use proptest::prelude::*;
 
 use std::error::Error;
-use crate::error::de;
+use etherparse::de;
 
-/// Tests for the struct `error::de::UnexpectedEndOfSliceError`
+/// Tests for the struct `de::UnexpectedEndOfSliceError`
 mod unexpected_end_of_slice {
     use super::*;
     proptest! {
@@ -100,25 +100,34 @@ mod ipv4_error {
         fn display(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
             use de::Ipv4Error::*;
 
-            //Ipv4UnexpectedVersion
+            // Ipv4UnexpectedVersion
             assert_eq!(
                 &format!("de::Ipv4Error: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
-                &format!("{}", Ipv4UnexpectedVersion(arg_u8))
+                &format!("{}", UnexpectedIpVersion(arg_u8))
             );
 
-            //Ipv4HeaderLengthBad
+            // IhlTooSmall
             assert_eq!(
-                &format!("de::Ipv4Error: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", arg_u8),
-                &format!("{}", Ipv4HeaderLengthBad(arg_u8))
+                &format!("de::Ipv4Error: The 'ihl' (Internet Header length) field in the IPv4 header has a value of '{}' which is smaller then minimum size of an IPv4 header (5).", arg_u8),
+                &format!("{}", IhlTooSmall(arg_u8))
             );
 
-            //Ipv4TotalLengthTooSmall
+            // TotalLengthSmallerThanIhl
             assert_eq!(
-                &format!("de::Ipv4Error: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", arg_u16),
-                &format!("{}", Ipv4TotalLengthTooSmall(arg_u16))
+                &format!("de::Ipv4Error: The IPv4 'total_length' of {} octets is smaller then the length of {} octets the header itself (based on ihl).", arg2_u16, arg_u16),
+                &format!(
+                    "{}",
+                    TotalLengthSmallerThanIhl(
+                        de::Ipv4TotalLengthSmallerThanIhlError {
+                            header_length: arg_u16,
+                            total_length: arg2_u16,
+                        }
+                    )
+                )
             );
         }
     }
@@ -128,26 +137,33 @@ mod ipv4_error {
         fn debug(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
-            use Ipv4Error::*;
+            use de::Ipv4Error::*;
 
-            //UnexpectedVersion
+            // UnexpectedIpVersion
             assert_eq!(
-                &format!("UnexpectedVersion({})", arg_u8),
-                &format!("{:?}", UnexpectedVersion(arg_u8))
+                &format!("UnexpectedIpVersion({})", arg_u8),
+                &format!("{:?}", UnexpectedIpVersion(arg_u8))
             );
 
-            //HeaderLengthBad
+            // IhlTooSmall
             assert_eq!(
-                &format!("HeaderLengthBad({})", arg_u8),
-                &format!("{:?}", HeaderLengthBad(arg_u8))
+                &format!("IhlTooSmall({})", arg_u8),
+                &format!("{:?}", IhlTooSmall(arg_u8))
             );
 
-            //TotalLengthTooSmall
-            assert_eq!(
-                &format!("TotalLengthTooSmall({})", arg_u16),
-                &format!("{:?}", TotalLengthTooSmall(arg_u16))
-            );
+            // TotalLengthSmallerThanIhl
+            {
+                let inner = de::Ipv4TotalLengthSmallerThanIhlError{
+                    header_length: arg2_u16,
+                    total_length: arg_u16,
+                };
+                assert_eq!(
+                    &format!("TotalLengthSmallerThanIhl({:?})", inner),
+                    &format!("{:?}", TotalLengthSmallerThanIhl(inner))
+                );
+            }
         }
     }
 
@@ -156,12 +172,18 @@ mod ipv4_error {
         fn clone_eq(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
             use de::Ipv4Error::*;
             let values = [
-                UnexpectedVersion(arg_u8),
-                HeaderLengthBad(arg_u8),
-                TotalLengthTooSmall(arg_u16),
+                UnexpectedIpVersion(arg_u8),
+                IhlTooSmall(arg_u8),
+                TotalLengthSmallerThanIhl(
+                    de::Ipv4TotalLengthSmallerThanIhlError{
+                        header_length: arg2_u16,
+                        total_length: arg_u16,
+                    }
+                ),
             ];
             for value in values {
                 assert_eq!(value.clone(), value);
@@ -174,12 +196,18 @@ mod ipv4_error {
         fn error_source(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
-            use Ipv4Error::*;
+            use de::Ipv4Error::*;
             let values = [
-                UnexpectedVersion(arg_u8),
-                HeaderLengthBad(arg_u8),
-                TotalLengthTooSmall(arg_u16),
+                UnexpectedIpVersion(arg_u8),
+                IhlTooSmall(arg_u8),
+                TotalLengthSmallerThanIhl(
+                    de::Ipv4TotalLengthSmallerThanIhlError{
+                        header_length: arg2_u16,
+                        total_length: arg_u16,
+                    }
+                ),
             ];
             for value in values {
                 assert!(value.source().is_none());
@@ -189,6 +217,7 @@ mod ipv4_error {
 }
 
 mod ipv4_total_length_smaller_than_ihl_error {
+    use super::*;
 
     proptest! {
         #[test]
@@ -197,10 +226,10 @@ mod ipv4_total_length_smaller_than_ihl_error {
             total_length in any::<u16>(),
         ) {
             assert_eq!(
-                &format!("Ipv4TotalLengthSmallerThanIhlError{{ header_length: {}, total_length: {} }}", header_length, total_length),
+                &format!("Ipv4TotalLengthSmallerThanIhlError {{ header_length: {}, total_length: {} }}", header_length, total_length),
                 &format!(
                     "{:?}",
-                    Ipv4TotalLengthSmallerThanIhlError{
+                    de::Ipv4TotalLengthSmallerThanIhlError{
                         header_length,
                         total_length,
                     },
@@ -216,9 +245,7 @@ mod ipv4_total_length_smaller_than_ihl_error {
             header_length in any::<u16>(),
             total_length in any::<u16>(),
         ) {
-            use error::de::Ipv4TotalLengthSmallerThanIhlError;
-
-            let value = Ipv4TotalLengthSmallerThanIhlError{
+            let value = de::Ipv4TotalLengthSmallerThanIhlError{
                 header_length,
                 total_length,
             };
@@ -241,7 +268,7 @@ mod ipv6_error {
             // Ipv6UnexpectedVersion
             assert_eq!(
                 &format!("de::Ipv6Error: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", arg_u8),
-                &format!("{}", Ipv6UnexpectedVersion(arg_u8))
+                &format!("{}", UnexpectedIpVersion(arg_u8))
             );
         }
     }
@@ -251,7 +278,7 @@ mod ipv6_error {
         fn debug(
             arg_u8 in any::<u8>(),
         ) {
-            use Ipv6Error::*;
+            use de::Ipv6Error::*;
 
             // UnexpectedIpVersion
             assert_eq!(
@@ -281,7 +308,7 @@ mod ipv6_error {
         fn error_source(
             arg_u8 in any::<u8>(),
         ) {
-            use Ipv6Error::*;
+            use de::Ipv6Error::*;
             let values = [
                 UnexpectedIpVersion(arg_u8),
             ];
@@ -292,7 +319,7 @@ mod ipv6_error {
     }
 }
 
-mod ipv_error {
+mod ip_error {
     use super::*;
 
     proptest! {
@@ -322,13 +349,14 @@ mod ipv_error {
                 &format!(
                     "{}",
                     Ipv4TotalLengthSmallerThanIhl(
-                        Ipv4TotalLengthSmallerThanIhlError {
+                        de::Ipv4TotalLengthSmallerThanIhlError {
                             header_length: arg2_u16,
                             total_length: arg_u16,
                         }
                     )
                 )
             );
+        
         }
     }
 
@@ -339,7 +367,7 @@ mod ipv_error {
             arg_u16 in any::<u16>(),
             arg2_u16 in any::<u16>(),
         ) {
-            use IpError::*;
+            use de::IpError::*;
 
             // UnsupportedIpVersion
             assert_eq!(
@@ -355,7 +383,7 @@ mod ipv_error {
 
             // Ipv4TotalLengthSmallerThanIhl
             {
-                let inner = Ipv4TotalLengthSmallerThanIhlError{
+                let inner = de::Ipv4TotalLengthSmallerThanIhlError{
                     header_length: arg2_u16,
                     total_length: arg_u16,
                 };
@@ -372,13 +400,14 @@ mod ipv_error {
         fn clone_eq(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
             use de::IpError::*;
             let values = [
                 UnsupportedIpVersion(arg_u8),
                 Ipv4IhlTooSmall(arg_u8),
                 Ipv4TotalLengthSmallerThanIhl(
-                    Ipv4TotalLengthSmallerThanIhlError {
+                    de::Ipv4TotalLengthSmallerThanIhlError {
                         header_length: arg2_u16,
                         total_length: arg_u16,
                     }
@@ -395,13 +424,14 @@ mod ipv_error {
         fn error_source(
             arg_u8 in any::<u8>(),
             arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
         ) {
-            use IpError::*;
+            use de::IpError::*;
             let values = [
                 UnsupportedIpVersion(arg_u8),
                 Ipv4IhlTooSmall(arg_u8),
                 Ipv4TotalLengthSmallerThanIhl(
-                    Ipv4TotalLengthSmallerThanIhlError {
+                    de::Ipv4TotalLengthSmallerThanIhlError {
                         header_length: arg2_u16,
                         total_length: arg_u16,
                     }

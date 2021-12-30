@@ -213,13 +213,30 @@
 //! * Shim6: Level 3 Multihoming Shim Protocol for IPv6 [RFC 5533](https://tools.ietf.org/html/rfc5533)
 //! * Computing the Internet Checksum [RFC 1071](https://datatracker.ietf.org/doc/html/rfc1071)
 
+// # Reason for 'bool_comparison' disable:
+//
+// Clippy triggers triggers errors like the following if the warning stays enabled:
+//
+//   warning: equality checks against false can be replaced by a negation
+//     --> src/packet_decoder.rs:131:20
+//      |
+//  131 |                 if false == fragmented {
+//      |                    ^^^^^^^^^^^^^^^^^^^ help: try simplifying it as shown: `!fragmented`
+//
+//
+// I prefer to write `false == value` instead of `!value` as it
+// is more visually striking and is not as easy to overlook as the single
+// character '!'.
+#![allow(
+  clippy::bool_comparison,
+)]
+
 use std::io;
 
 mod errors;
 pub use crate::errors::*;
 
-/// Contains the error types
-pub mod error;
+pub mod de;
 
 mod link;
 pub use crate::link::LinkSlice;

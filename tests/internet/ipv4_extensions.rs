@@ -3,7 +3,6 @@ use super::super::*;
 use crate::ReadError::UnexpectedEndOfSlice;
 use crate::ip_number::*;
 use std::io::Cursor;
-use crate::error::de::UnexpectedEndOfSliceError;
 
 pub mod header {
     use super::*;

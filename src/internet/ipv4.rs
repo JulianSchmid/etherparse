@@ -147,15 +147,15 @@ impl Ipv4Header {
 
         let version = first_byte[0] >> 4;
         if 4 != version {
-            return Err(error::de::Ipv4Error::UnexpectedIpVersion(version).into());
+            return Err(de::Ipv4Error::UnexpectedIpVersion(version).into());
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
 
     /// Reads an IPv4 header assuming the version & ihl field have already been read.
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(reader: &mut T, first_byte: u8) -> Result<Ipv4Header, ReadError> {
-        use error::de::Ipv4Error::*;
-        use error::de::Ipv4TotalLengthSmallerThanIhlError;
+        use de::Ipv4Error::*;
+        use de::Ipv4TotalLengthSmallerThanIhlError;
 
         let mut header_raw : [u8;20] = [0;20];
         header_raw[0] = first_byte;
@@ -451,8 +451,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
 
         //check length
-        use crate::error::de::{UnexpectedEndOfSliceError, Ipv4TotalLengthSmallerThanIhlError};
-        use crate::error::de::Ipv4Error::*;
+        use crate::de::{UnexpectedEndOfSliceError, Ipv4TotalLengthSmallerThanIhlError};
+        use crate::de::Ipv4Error::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(
                 UnexpectedEndOfSliceError{

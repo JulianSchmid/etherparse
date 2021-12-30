@@ -1,6 +1,6 @@
 use super::*;
 use proptest::prelude::*;
-use error::de::UnexpectedEndOfSliceError;
+use de::UnexpectedEndOfSliceError;
 
 mod read_error {
     use super::*;
@@ -16,8 +16,8 @@ mod read_error {
         ) {
 
             use super::ReadError::*;
-            use error::de::Ipv4Error::*;
-            use error::de::Ipv4TotalLengthSmallerThanIhlError;
+            use de::Ipv4Error::*;
+            use de::Ipv4TotalLengthSmallerThanIhlError;
 
             //IoError
             {
@@ -108,8 +108,8 @@ mod read_error {
     #[test]
     fn error_source() {
         use super::ReadError::*;
-        use super::error::de::Ipv4Error::*;
-        use super::error::de::Ipv4TotalLengthSmallerThanIhlError;
+        use super::de::Ipv4Error::*;
+        use super::de::Ipv4TotalLengthSmallerThanIhlError;
         use std::error::Error;
 
         let some_values = [
@@ -152,8 +152,8 @@ mod read_error {
     #[test]
     fn debug() {
         use super::ReadError::*;
-        use super::error::de::Ipv4Error::*;
-        use super::error::de::Ipv4TotalLengthSmallerThanIhlError;
+        use super::de::Ipv4Error::*;
+        use super::de::Ipv4TotalLengthSmallerThanIhlError;
 
         let values = [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),

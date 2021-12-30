@@ -9,7 +9,7 @@ extern crate proptest;
 use std::io;
 
 mod checksum;
-mod errors;
+mod de;
 mod link;
 mod internet;
 mod transport;
@@ -26,7 +26,7 @@ use test_writer::*;
 mod test_reader;
 use test_reader::*;
 
-use crate::error::de::UnexpectedEndOfSliceError;
+use etherparse::de::UnexpectedEndOfSliceError;
 
 #[test]
 fn test_eq() {
@@ -52,8 +52,8 @@ fn test_debug_write() {
     //read error
     {
         use crate::ReadError::*;
-        use crate::error::de::Ipv4Error::*;
-        use crate::error::de::Ipv4TotalLengthSmallerThanIhlError;
+        use etherparse::de::Ipv4Error::*;
+        use etherparse::de::Ipv4TotalLengthSmallerThanIhlError;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),

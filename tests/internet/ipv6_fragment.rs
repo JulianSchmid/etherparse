@@ -1,7 +1,6 @@
 use super::super::*;
 
 use std::io::{Cursor, ErrorKind};
-use error::de::UnexpectedEndOfSliceError;
 
 pub mod header {
     use super::*;

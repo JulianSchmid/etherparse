@@ -1,7 +1,5 @@
 use super::super::*;
 
-use error::de::UnexpectedEndOfSliceError;
-
 #[test]
 fn read() {
     use std::io::Cursor;

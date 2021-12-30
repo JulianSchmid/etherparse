@@ -569,7 +569,7 @@ proptest! {
     #[test]
     fn read_errors(ref header in ipv4_any()) {
         use crate::ReadError::*;
-        use crate::error::de::Ipv4Error::*;
+        use etherparse::de::Ipv4Error::*;
 
         // non matching version
         for version in 0..0xf {

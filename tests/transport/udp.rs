@@ -2,7 +2,6 @@ use etherparse::*;
 
 use super::super::*;
 use std::io::{Cursor, ErrorKind};
-use error::de::UnexpectedEndOfSliceError;
 
 mod udp_header {
     use super::*;

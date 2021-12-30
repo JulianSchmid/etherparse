@@ -1,9 +1,10 @@
 use super::super::*;
 
-use error::de::UnexpectedEndOfSliceError;
+use de::UnexpectedEndOfSliceError;
 
 ///Internet protocol headers version 4 & 6
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum IpHeader {
     Version4(Ipv4Header, Ipv4Extensions),
     Version6(Ipv6Header, Ipv6Extensions)

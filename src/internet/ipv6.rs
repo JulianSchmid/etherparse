@@ -2,7 +2,7 @@ use super::super::*;
 
 use std::net::Ipv6Addr;
 use std::slice::from_raw_parts;
-use error::de::UnexpectedEndOfSliceError;
+use de::UnexpectedEndOfSliceError;
 
 ///IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
