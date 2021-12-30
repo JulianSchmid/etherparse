@@ -443,3 +443,181 @@ mod ip_error {
         }
     }
 }
+
+mod ipv4_exts_error {
+    use super::*;
+    
+    #[test]
+    fn display() {
+        use de::Ipv4ExtsError::*;
+        use de::IpAuthError::*;
+
+        // Auth
+        assert_eq!(
+            "de::IpAuthError: Authentication header payload size is 0 which is smaller then the minimum size of the header (1 is the minimum allowed value).",
+            &format!("{}", Auth(HeaderLengthZero))
+        );
+    }
+
+    #[test]
+    fn debug() {
+        use de::Ipv4ExtsError::*;
+        use de::IpAuthError::*;
+
+        // Auth
+        assert_eq!(
+            &format!("Auth({:?})", HeaderLengthZero),
+            &format!("{:?}", Auth(HeaderLengthZero))
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        use de::Ipv4ExtsError::*;
+        use de::IpAuthError::*;
+
+        let values = [
+            Auth(HeaderLengthZero),
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn error_source() {
+        use de::Ipv4ExtsError::*;
+        use de::IpAuthError::*;
+
+        let some_values = [
+            Auth(HeaderLengthZero),
+        ];
+        for value in some_values {
+            assert!(value.source().is_some());
+        }
+    }
+}
+
+mod ipv6_exts_error {
+    use super::*;
+    
+    #[test]
+    fn display() {
+        use de::Ipv6ExtsError::*;
+        use de::IpAuthError::*;
+
+        // HopByHopHeaderNotAtStart
+        assert_eq!(
+            "de::Ipv6ExtsError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.",
+            &format!("{}", HopByHopHeaderNotAtStart)
+        );
+
+        // Auth
+        assert_eq!(
+            "de::IpAuthError: Authentication header payload size is 0 which is smaller then the minimum size of the header (1 is the minimum allowed value).",
+            &format!("{}", Auth(HeaderLengthZero))
+        );
+    }
+
+    #[test]
+    fn debug() {
+        use de::Ipv6ExtsError::*;
+        use de::IpAuthError::*;
+
+        assert_eq!(
+            "HopByHopHeaderNotAtStart",
+            &format!("{:?}", HopByHopHeaderNotAtStart)
+        );
+
+        // Auth
+        assert_eq!(
+            &format!("Auth({:?})", HeaderLengthZero),
+            &format!("{:?}", Auth(HeaderLengthZero))
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        use de::Ipv6ExtsError::*;
+        use de::IpAuthError::*;
+
+        let values = [
+            HopByHopHeaderNotAtStart,
+            Auth(HeaderLengthZero),
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn error_source() {
+        use de::Ipv6ExtsError::*;
+        use de::IpAuthError::*;
+
+        {
+            let some_values = [
+                Auth(HeaderLengthZero),
+            ];
+            for value in some_values {
+                assert!(value.source().is_some());
+            }
+        }
+        {
+            let none_values = [
+                HopByHopHeaderNotAtStart,
+            ];
+            for value in none_values {
+                assert!(value.source().is_none());
+            }
+        }
+    }
+}
+
+mod ip_auth_error {
+    use super::*;
+    
+    #[test]
+    fn display() {
+        use de::IpAuthError::*;
+
+        // HeaderLengthZero
+        assert_eq!(
+            "de::IpAuthError: Authentication header payload size is 0 which is smaller then the minimum size of the header (1 is the minimum allowed value).",
+            &format!("{}", HeaderLengthZero)
+        );
+    }
+
+    #[test]
+    fn debug() {
+        use de::IpAuthError::*;
+
+        // HeaderLengthZero
+        assert_eq!(
+            "HeaderLengthZero",
+            &format!("{:?}", HeaderLengthZero)
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        use de::IpAuthError::*;
+        let values = [
+            HeaderLengthZero,
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn error_source() {
+        use de::IpAuthError::*;
+        let values = [
+            HeaderLengthZero,
+        ];
+        for value in values {
+            assert!(value.source().is_none());
+        }
+    }
+}

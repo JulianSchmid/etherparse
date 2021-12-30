@@ -41,12 +41,18 @@
 //! }
 //! ```
 //!
+//! This allows return both types of errors and at the same time
+//! keep the list of returned errors constrained to the possible errors.
+//!
 //! Secondly there are error types that indicate issues in
 //! the read data:
 //!
 //! * [`Ipv4Error`]
 //! * [`Ipv6Error`]
 //! * [`IpError`]
+//! * [`Ipv4ExtsError`]
+//! * [`Ipv6ExtsError`]
+//! * [`IpAuthError`]
 
 use std::error::Error;
 use std::fmt;
@@ -112,6 +118,65 @@ impl<T : 'static + Error + Display> Error for FromSliceError<T> {
         match self {
             UnexpectedEndOfSlice(ref err) => Some(err),
             Content(ref err) => Some(err),
+        }
+    }
+}
+
+/// Errors that can be found while decoding an packet from the ip layer downwards.
+///
+/// This error is only used when parsing starts at the ip layer without prior
+/// knowledge which ip header should be present. If it is known which ip header should
+/// be present [`Ipv4Error`] or [`Ipv6Error`] are triggered instead.
+///
+/// The following functions return [`IpError`] errors:
+///
+/// * [`crate::IpHeader::from_slice`]
+/// * [`crate::IpHeader::read`]
+/// * [`crate::SlicedPacket::from_ip`] (as part of [`IpPacketError`])
+/// * [`crate::PacketHeaders::from_ip_slice`] (as part of [`IpPacketError`])
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum IpError {
+    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
+    UnsupportedIpVersion(u8),
+    /// Error when the ihl (Internet Header Length) header length is smaller then the ipv4 header itself (5).
+    Ipv4IhlTooSmall(u8),
+    /// Error when the total length field is smaller then the 'ihl' (internet header length).
+    Ipv4TotalLengthSmallerThanIhl(Ipv4TotalLengthSmallerThanIhlError),
+    /// Errors in the IPv4 extension headers.
+    Ipv4Exts(Ipv4ExtsError),
+    /// Errors in the IPv6 extension headers.
+    Ipv6Exts(Ipv6ExtsError),
+}
+
+impl Display for IpError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use IpError::*;
+
+        match self {
+            UnsupportedIpVersion(version_number) => { //u8
+                write!(f, "de::IpError: Unsupported IP version number {} found in IP header (only 4 & 6 are supported).", version_number)
+            },
+            Ipv4IhlTooSmall(ihl) => { //u8
+                write!(f, "de::IpError: The 'ihl' (Internet Header length) field in the IPv4 header has a value of '{}' which is smaller then minimum size of an IPv4 header (5).", ihl)
+            },
+            Ipv4TotalLengthSmallerThanIhl(err) => {
+                write!(f, "de::IpError: The IPv4 'total_length' of {} octets is smaller then the length of {} octets the header itself (based on ihl).", err.total_length, err.header_length)
+            },
+            Ipv4Exts(err) => err.fmt(f),
+            Ipv6Exts(err) => err.fmt(f),
+        }
+    }
+}
+
+impl Error for IpError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use IpError::*;
+        match self {
+            UnsupportedIpVersion(_) => None,
+            Ipv4IhlTooSmall(_) => None,
+            Ipv4TotalLengthSmallerThanIhl(_) => None,
+            Ipv4Exts(ref err) => Some(err),
+            Ipv6Exts(ref err) => Some(err),
         }
     }
 }
@@ -199,47 +264,115 @@ impl Error for Ipv6Error {
     }
 }
 
-/// Errors that can be found while decoding an packet from the ip layer downwards.
-///
-/// This error is only used when parsing starts at the ip layer without prior
-/// knowledge which ip header should be present. If it is known which ip header should
-/// be present [`Ipv4Error`] or [`Ipv6Error`] are triggered instead.
-///
-/// The following functions return [`IpError`] errors:
-///
-/// * [`crate::IpHeader::from_slice`]
-/// * [`crate::IpHeader::read`]
-/// * [`crate::SlicedPacket::from_ip`] (as part of [`IpPacketError`])
-/// * [`crate::PacketHeaders::from_ip_slice`] (as part of [`IpPacketError`])
+/// Errors that can be encountered when parsing an [`crate::Ipv4Extensions`] or [`crate::Ipv4ExtensionsSlice`].
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum IpError {
-    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
-    UnsupportedIpVersion(u8),
-    /// Error when the ihl (Internet Header Length) header length is smaller then the ipv4 header itself (5).
-    Ipv4IhlTooSmall(u8),
-    /// Error when the total length field is smaller then the 'ihl' (internet header length).
-    Ipv4TotalLengthSmallerThanIhl(Ipv4TotalLengthSmallerThanIhlError),
+pub enum Ipv4ExtsError {
+    /// Error during the parsing of an ip authentification header.
+    Auth(IpAuthError)
 }
 
-impl Display for IpError {
+impl Display for Ipv4ExtsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use IpError::*;
-
+        use Ipv4ExtsError::*;
         match self {
-            UnsupportedIpVersion(version_number) => { //u8
-                write!(f, "de::IpError: Unsupported IP version number {} found in IP header (only 4 & 6 are supported).", version_number)
+            Auth(err) => err.fmt(f),
+        }
+    }
+}
+
+impl Error for Ipv4ExtsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use Ipv4ExtsError::*;
+        match self {
+            Auth(ref err) => Some(err),
+        }
+    }
+}
+
+/// Errors that can be encountered when parsing an [`crate::Ipv6Extensions`] or [`crate::Ipv6ExtensionsSlice`].
+///
+/// The following functions return [`Ipv6ExtsError`] errors:
+///
+/// * [`crate::Ipv6Extensions::from_slice`]
+/// * [`crate::Ipv6Extensions::read`]
+/// * [`crate::Ipv6ExtensionsSlice::from_slice`]
+/// * [`crate::IpHeader::from_slice`] (as part of [`IpError`])
+/// * [`crate::IpHeader::read`] (as part of [`IpError`])
+/// * [`crate::SlicedPacket::from_ethernet`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ip`] (as part of [`IpPacketError`])
+/// * [`crate::PacketHeaders::from_ethernet_slice`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ip_slice`] (as part of [`IpPacketError`])
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Ipv6ExtsError {
+    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    HopByHopHeaderNotAtStart,
+    /// Error during the parsing of an ip authentification header.
+    Auth(IpAuthError)
+}
+
+impl Display for Ipv6ExtsError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use Ipv6ExtsError::*;
+        match self {
+            HopByHopHeaderNotAtStart => {
+                write!(f, "de::Ipv6ExtsError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
             },
-            Ipv4IhlTooSmall(ihl) => { //u8
-                write!(f, "de::IpError: The 'ihl' (Internet Header length) field in the IPv4 header has a value of '{}' which is smaller then minimum size of an IPv4 header (5).", ihl)
-            },
-            Ipv4TotalLengthSmallerThanIhl(err) => {
-                write!(f, "de::IpError: The IPv4 'total_length' of {} octets is smaller then the length of {} octets the header itself (based on ihl).", err.total_length, err.header_length)
+            Auth(err) => err.fmt(f),
+        }
+    }
+}
+
+impl Error for Ipv6ExtsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        use Ipv6ExtsError::*;
+        match self {
+            HopByHopHeaderNotAtStart => None,
+            Auth(ref err) => Some(err),
+        }
+    }
+}
+
+/// Errors that can be encountered when parsing an [`crate::IpAuthenticationHeader`] or [`crate::IpAuthenticationHeaderSlice`].
+///
+/// The following functions return [`IpAuthError`] errors:
+///
+/// * [`crate::IpAuthenticationHeader::from_slice`]
+/// * [`crate::IpAuthenticationHeader::read`]
+/// * [`crate::IpAuthenticationHeaderSlice::from_slice`]
+/// * [`crate::Ipv4Extensions::from_slice`] (as part of [`Ipv4ExtsError`])
+/// * [`crate::Ipv4Extensions::read`] (as part of [`Ipv4ExtsError`])
+/// * [`crate::Ipv4ExtensionsSlice::from_slice`] (as part of [`Ipv4ExtsError`])
+/// * [`crate::Ipv6Extensions::from_slice`] (as part of [`Ipv6ExtsError`])
+/// * [`crate::Ipv6Extensions::read`] (as part of [`Ipv6ExtsError`])
+/// * [`crate::Ipv6ExtensionsSlice::from_slice`] (as part of [`Ipv6ExtsError`])
+/// * [`crate::IpHeader::from_slice`] (as part of [`IpError`])
+/// * [`crate::IpHeader::read`] (as part of [`IpError`])
+/// * [`crate::SlicedPacket::from_ethernet`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ip`] (as part of [`IpPacketError`])
+/// * [`crate::PacketHeaders::from_ethernet_slice`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ip_slice`] (as part of [`IpPacketError`])
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum IpAuthError {
+    /// Error if the header length in the ip authentication header is zero (the minimum allowed size is 1).
+    HeaderLengthZero
+}
+
+impl Display for IpAuthError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use IpAuthError::*;
+        match self {
+            HeaderLengthZero => {
+                write!(f, "de::IpAuthError: Authentication header payload size is 0 which is smaller then the minimum size of the header (1 is the minimum allowed value).")
             },
         }
     }
 }
 
-impl Error for IpError {
+impl Error for IpAuthError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         None
     }
