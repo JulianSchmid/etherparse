@@ -227,3 +227,189 @@ mod ipv4_total_length_smaller_than_ihl_error {
     }
 
 }
+
+mod ipv6_error {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn display(
+            arg_u8 in any::<u8>(),
+        ) {
+            use de::Ipv6Error::*;
+
+            // Ipv6UnexpectedVersion
+            assert_eq!(
+                &format!("de::Ipv6Error: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", arg_u8),
+                &format!("{}", Ipv6UnexpectedVersion(arg_u8))
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn debug(
+            arg_u8 in any::<u8>(),
+        ) {
+            use Ipv6Error::*;
+
+            // UnexpectedIpVersion
+            assert_eq!(
+                &format!("UnexpectedIpVersion({})", arg_u8),
+                &format!("{:?}", UnexpectedIpVersion(arg_u8))
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(
+            arg_u8 in any::<u8>(),
+        ) {
+            use de::Ipv6Error::*;
+            let values = [
+                UnexpectedIpVersion(arg_u8),
+            ];
+            for value in values {
+                assert_eq!(value.clone(), value);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn error_source(
+            arg_u8 in any::<u8>(),
+        ) {
+            use Ipv6Error::*;
+            let values = [
+                UnexpectedIpVersion(arg_u8),
+            ];
+            for value in values {
+                assert!(value.source().is_none());
+            }
+        }
+    }
+}
+
+mod ipv_error {
+    use super::*;
+
+    proptest! {
+        #[test]
+        fn display(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
+        ) {
+            use de::IpError::*;
+
+            // UnsupportedIpVersion
+            assert_eq!(
+                &format!("de::IpError: Unsupported IP version number {} found in IP header (only 4 & 6 are supported).", arg_u8),
+                &format!("{}", UnsupportedIpVersion(arg_u8))
+            );
+
+            // Ipv4IhlTooSmall
+            assert_eq!(
+                &format!("de::IpError: The 'ihl' (Internet Header length) field in the IPv4 header has a value of '{}' which is smaller then minimum size of an IPv4 header (5).", arg_u8),
+                &format!("{}", Ipv4IhlTooSmall(arg_u8))
+            );
+
+            // Ipv4TotalLengthSmallerThanIhl
+            assert_eq!(
+                &format!("de::IpError: The IPv4 'total_length' of {} octets is smaller then the length of {} octets the header itself (based on ihl).", arg_u16, arg2_u16),
+                &format!(
+                    "{}",
+                    Ipv4TotalLengthSmallerThanIhl(
+                        Ipv4TotalLengthSmallerThanIhlError {
+                            header_length: arg2_u16,
+                            total_length: arg_u16,
+                        }
+                    )
+                )
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn debug(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+            arg2_u16 in any::<u16>(),
+        ) {
+            use IpError::*;
+
+            // UnsupportedIpVersion
+            assert_eq!(
+                &format!("UnsupportedIpVersion({})", arg_u8),
+                &format!("{:?}", UnsupportedIpVersion(arg_u8))
+            );
+
+            // Ipv4IhlTooSmall
+            assert_eq!(
+                &format!("Ipv4IhlTooSmall({})", arg_u8),
+                &format!("{:?}", Ipv4IhlTooSmall(arg_u8))
+            );
+
+            // Ipv4TotalLengthSmallerThanIhl
+            {
+                let inner = Ipv4TotalLengthSmallerThanIhlError{
+                    header_length: arg2_u16,
+                    total_length: arg_u16,
+                };
+                assert_eq!(
+                    &format!("Ipv4TotalLengthSmallerThanIhl({:?})", inner),
+                    &format!("{:?}", Ipv4TotalLengthSmallerThanIhl(inner.clone()))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use de::IpError::*;
+            let values = [
+                UnsupportedIpVersion(arg_u8),
+                Ipv4IhlTooSmall(arg_u8),
+                Ipv4TotalLengthSmallerThanIhl(
+                    Ipv4TotalLengthSmallerThanIhlError {
+                        header_length: arg2_u16,
+                        total_length: arg_u16,
+                    }
+                )
+            ];
+            for value in values {
+                assert_eq!(value.clone(), value);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn error_source(
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+        ) {
+            use IpError::*;
+            let values = [
+                UnsupportedIpVersion(arg_u8),
+                Ipv4IhlTooSmall(arg_u8),
+                Ipv4TotalLengthSmallerThanIhl(
+                    Ipv4TotalLengthSmallerThanIhlError {
+                        header_length: arg2_u16,
+                        total_length: arg_u16,
+                    }
+                )
+            ];
+            for value in values {
+                assert!(value.source().is_none());
+            }
+        }
+    }
+}
