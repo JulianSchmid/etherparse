@@ -53,10 +53,130 @@
 //! * [`Ipv4ExtsError`]
 //! * [`Ipv6ExtsError`]
 //! * [`IpAuthError`]
+//! * [`TcpError`]
 
-use std::error::Error;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+
+/// Collection of all errors that can be triggered during `read`
+/// and `from_slice` function calls.
+#[derive(Debug)]
+pub enum Error {
+    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
+    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
+    /// std::io::Errors triggered during a read.
+    IoError(std::io::Error),
+    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
+    UnsupportedIpVersion(u8),
+    /// Error when the ip header version field is not equal 4 and was expected to be (e.g.
+    /// ether_type indicated an IPv4 header, but the version number in the header was different).
+    /// The value packed in the enum is the version that was received instead of 4.
+    Ipv4UnexpectedIpVersion(u8),
+    /// Error when the ip header version field is not equal 6 and was expected to be (e.g.
+    /// ether_type indicated an IPv6 header, but the version number in the header was different).
+    /// The value packed in the enum is the version that was received instead of 6.
+    Ipv6UnexpectedIpVersion(u8),
+    /// Error when the ihl (Internet Header Length) header length is smaller then the ipv4 header itself (5).
+    Ipv4IhlTooSmall(u8),
+    /// Error when the total length field is smaller then the 'ihl' (internet header length).
+    Ipv4TotalLengthSmallerThanIhl(Ipv4TotalLengthSmallerThanIhlError),
+    /// Error if the header length in the ip authentication header is zero (the minimum allowed size is 1).
+    IpAuthHeaderLengthZero,
+    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    Ipv6HopByHopHeaderNotAtStart,
+    /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
+    TcpDataOffsetTooSmall(u8),
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use Error::*;
+
+        match self {
+            UnexpectedEndOfSlice(err) => err.fmt(f),
+            IoError(err) => err.fmt(f),
+            UnsupportedIpVersion(version_number) => {
+                write!(f, "de::IpError: Unsupported IP version number {} found in IP header (only 4 & 6 are supported).", version_number)
+            },
+            Ipv4UnexpectedIpVersion(version_number) => {
+                write!(f, "de::Ipv4Error: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
+            },
+            Ipv6UnexpectedIpVersion(version_number) => {
+                write!(f, "de::Ipv6Error: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
+            },
+            Ipv4IhlTooSmall(ihl) => {
+                write!(f, "de::Ipv4Error: The 'ihl' (Internet Header length) field in the IPv4 header has a value of '{}' which is smaller then minimum size of an IPv4 header (5).", ihl)
+            },
+            Ipv4TotalLengthSmallerThanIhl(err) => {
+                write!(f, "de::Ipv4Error: The IPv4 'total_length' of {} octets is smaller then the length of {} octets the header itself (based on ihl).", err.total_length, err.header_length)
+            },
+            IpAuthHeaderLengthZero => {
+                write!(f, "de::IpAuthError: Authentication header payload size is 0 which is smaller then the minimum size of the header (1 is the minimum allowed value).")
+            },
+            Ipv6HopByHopHeaderNotAtStart => {
+                write!(f, "de::Ipv6ExtsError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
+            },
+            TcpDataOffsetTooSmall(value) => {
+                write!(f, "de::TcpError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", value)
+            },
+        }
+    }
+}
+
+impl std::error::Error for Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use Error::*;
+        match self {
+            UnexpectedEndOfSlice(ref err) => Some(err),
+            IoError(ref err) => Some(err),
+            _ => None,
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Error { Error::IoError(err) }
+}
+
+impl From<UnexpectedEndOfSliceError> for Error {
+    fn from(err: UnexpectedEndOfSliceError) -> Error { err.de_error() }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> From<FromSliceError<T>> for Error {
+    fn from(err: FromSliceError<T>) -> Error { err.de_error() }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> From<ReadError<T>> for Error {
+    fn from(err: ReadError<T>) -> Error { err.de_error() }
+}
+
+impl From<IpError> for Error {
+    fn from(err: IpError) -> Error { err.de_error() }
+}
+
+impl From<Ipv4Error> for Error {
+    fn from(err: Ipv4Error) -> Error { err.de_error() }
+}
+
+impl From<Ipv6Error> for Error {
+    fn from(err: Ipv6Error) -> Error { err.de_error() }
+}
+
+impl From<Ipv4ExtsError> for Error {
+    fn from(err: Ipv4ExtsError) -> Error { err.de_error() }
+}
+
+impl From<Ipv6ExtsError> for Error {
+    fn from(err: Ipv6ExtsError) -> Error { err.de_error() }
+}
+
+impl From<IpAuthError> for Error {
+    fn from(err: IpAuthError) -> Error { err.de_error() }
+}
+
+impl From<TcpError> for Error {
+    fn from(err: TcpError) -> Error { err.de_error() }
+}
 
 /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -76,6 +196,11 @@ impl UnexpectedEndOfSliceError {
             actual_len: self.actual_len + offset,
         }
     }
+
+    /// Converts the `de::UnexpectedEndOfSliceError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        Error::UnexpectedEndOfSlice(self)
+    }
 }
 
 impl Display for UnexpectedEndOfSliceError {
@@ -84,15 +209,15 @@ impl Display for UnexpectedEndOfSliceError {
     }
 }
 
-impl Error for UnexpectedEndOfSliceError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for UnexpectedEndOfSliceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
 
 /// Error when decoding a header or packet from a slice.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum FromSliceError<T : Error + Display> {
+pub enum FromSliceError<T : std::error::Error + Display + Into<Error>> {
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 
@@ -100,7 +225,18 @@ pub enum FromSliceError<T : Error + Display> {
     Content(T)
 }
 
-impl<T : Error + Display> Display for FromSliceError<T> {
+impl<T : std::error::Error + Display + Into<Error>> FromSliceError<T> {
+    /// Converts the `de::FromSliceError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use FromSliceError::*;
+        match self {
+            UnexpectedEndOfSlice(err) => err.de_error(),
+            Content(value) => Into::<Error>::into(value),
+        }
+    }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> Display for FromSliceError<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use FromSliceError::*;
 
@@ -111,14 +247,67 @@ impl<T : Error + Display> Display for FromSliceError<T> {
     }
 }
 
-impl<T : 'static + Error + Display> Error for FromSliceError<T> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl<T : 'static + std::error::Error + Display + Into<Error>> std::error::Error for FromSliceError<T> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use FromSliceError::*;
 
         match self {
             UnexpectedEndOfSlice(ref err) => Some(err),
             Content(ref err) => Some(err),
         }
+    }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> From<UnexpectedEndOfSliceError> for FromSliceError<T> {
+    fn from(err: UnexpectedEndOfSliceError) -> FromSliceError<T> {
+        FromSliceError::UnexpectedEndOfSlice(err)
+    }
+}
+
+/// Error when decoding a header or packet from a std::io::Read source.
+#[derive(Debug)]
+pub enum ReadError<T : std::error::Error + Display + Into<Error>> {
+    /// std::io::Errors triggered during a read.
+    IoError(std::io::Error),
+
+    /// Error caused by an invalid encoded value.
+    Content(T)
+}
+
+impl<T : std::error::Error + Display + Into<Error>> ReadError<T> {
+    /// Converts the `de::ReadError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use ReadError::*;
+        match self {
+            IoError(err) => Error::IoError(err),
+            Content(value) => Into::<Error>::into(value),
+        }
+    }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> Display for ReadError<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use ReadError::*;
+        match self {
+            IoError(ref err) => err.fmt(f),
+            Content(ref err) => Display::fmt(&err, f),
+        }
+    }
+}
+
+impl<T : 'static + std::error::Error + Display + Into<Error>> std::error::Error for ReadError<T> {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use ReadError::*;
+        match self {
+            IoError(ref err) => Some(err),
+            Content(ref err) => Some(err),
+        }
+    }
+}
+
+impl<T : std::error::Error + Display + Into<Error>> From<std::io::Error> for ReadError<T> {
+    fn from(err: std::io::Error) -> ReadError<T> {
+        ReadError::IoError(err)
     }
 }
 
@@ -148,6 +337,20 @@ pub enum IpError {
     Ipv6Exts(Ipv6ExtsError),
 }
 
+impl IpError {
+    /// Converts the `de::IpError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use IpError::*;
+        match self {
+            UnsupportedIpVersion(value) => Error::UnsupportedIpVersion(value),
+            Ipv4IhlTooSmall(value) => Error::Ipv4IhlTooSmall(value),
+            Ipv4TotalLengthSmallerThanIhl(err) => Error::Ipv4TotalLengthSmallerThanIhl(err),
+            Ipv4Exts(err) => err.de_error(),
+            Ipv6Exts(err) => err.de_error(),
+        }
+    }
+}
+
 impl Display for IpError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use IpError::*;
@@ -168,8 +371,8 @@ impl Display for IpError {
     }
 }
 
-impl Error for IpError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for IpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use IpError::*;
         match self {
             UnsupportedIpVersion(_) => None,
@@ -207,6 +410,18 @@ pub enum Ipv4Error {
     TotalLengthSmallerThanIhl(Ipv4TotalLengthSmallerThanIhlError),
 }
 
+impl Ipv4Error {
+    /// Converts the `de::Ipv4Error` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use Ipv4Error::*;
+        match self {
+            UnexpectedIpVersion(value) => Error::Ipv4UnexpectedIpVersion(value),
+            IhlTooSmall(value) => Error::Ipv4IhlTooSmall(value),
+            TotalLengthSmallerThanIhl(value) => Error::Ipv4TotalLengthSmallerThanIhl(value),
+        }
+    }
+}
+
 impl Display for Ipv4Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Ipv4Error::*;
@@ -225,8 +440,8 @@ impl Display for Ipv4Error {
     }
 }
 
-impl Error for Ipv4Error {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for Ipv4Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
@@ -247,6 +462,16 @@ pub enum Ipv6Error {
     UnexpectedIpVersion(u8),
 }
 
+impl Ipv6Error {
+    /// Converts the `de::Ipv6Error` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use Ipv6Error::*;
+        match self {
+            UnexpectedIpVersion(value) => Error::Ipv6UnexpectedIpVersion(value),
+        }
+    }
+}
+
 impl Display for Ipv6Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Ipv6Error::*;
@@ -258,8 +483,8 @@ impl Display for Ipv6Error {
     }
 }
 
-impl Error for Ipv6Error {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for Ipv6Error {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
@@ -271,6 +496,16 @@ pub enum Ipv4ExtsError {
     Auth(IpAuthError)
 }
 
+impl Ipv4ExtsError {
+    /// Converts the `de::Ipv4ExtsError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use Ipv4ExtsError::*;
+        match self {
+            Auth(err) => err.de_error(),
+        }
+    }
+}
+
 impl Display for Ipv4ExtsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Ipv4ExtsError::*;
@@ -280,8 +515,8 @@ impl Display for Ipv4ExtsError {
     }
 }
 
-impl Error for Ipv4ExtsError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for Ipv4ExtsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use Ipv4ExtsError::*;
         match self {
             Auth(ref err) => Some(err),
@@ -312,6 +547,17 @@ pub enum Ipv6ExtsError {
     Auth(IpAuthError)
 }
 
+impl Ipv6ExtsError {
+    /// Converts the `de::Ipv6ExtsError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use Ipv6ExtsError::*;
+        match self {
+            HopByHopHeaderNotAtStart => Error::Ipv6HopByHopHeaderNotAtStart,
+            Auth(err) => err.de_error(),
+        }
+    }
+}
+
 impl Display for Ipv6ExtsError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Ipv6ExtsError::*;
@@ -324,8 +570,8 @@ impl Display for Ipv6ExtsError {
     }
 }
 
-impl Error for Ipv6ExtsError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for Ipv6ExtsError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use Ipv6ExtsError::*;
         match self {
             HopByHopHeaderNotAtStart => None,
@@ -361,6 +607,16 @@ pub enum IpAuthError {
     HeaderLengthZero
 }
 
+impl IpAuthError {
+    /// Converts the `de::IpAuthError` to the generic `de::Error`.
+    pub fn de_error(self) -> Error {
+        use IpAuthError::*;
+        match self {
+            HeaderLengthZero => Error::IpAuthHeaderLengthZero,
+        }
+    }
+}
+
 impl Display for IpAuthError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use IpAuthError::*;
@@ -372,8 +628,54 @@ impl Display for IpAuthError {
     }
 }
 
-impl Error for IpAuthError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for IpAuthError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+/// Errors that can be encountered when parsing an [`crate::TcpHeader`] or [`crate::TcpHeaderSlice`].
+///
+/// The following functions return [`TcpError`] errors:
+///
+/// * [`crate::TcpHeader::from_slice`]
+/// * [`crate::TcpHeader::read`]
+/// * [`crate::TcpHeaderSlice::from_slice`]
+/// * [`crate::SlicedPacket::from_ethernet`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::SlicedPacket::from_ip`] (as part of [`IpPacketError`])
+/// * [`crate::PacketHeaders::from_ethernet_slice`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ether_type`] (as part of [`PacketError`])
+/// * [`crate::PacketHeaders::from_ip_slice`] (as part of [`IpPacketError`])
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum TcpError {
+    /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
+    DataOffsetTooSmall(u8),
+}
+
+impl TcpError {
+    /// Converts the `de::IpAuthError` to the generic `de::Error`.
+    pub fn de_error(self) -> Error {
+        use TcpError::*;
+        match self {
+            DataOffsetTooSmall(value) => Error::TcpDataOffsetTooSmall(value),
+        }
+    }
+}
+
+impl Display for TcpError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use TcpError::*;
+        match self {
+            DataOffsetTooSmall(value) => {
+                write!(f, "de::TcpError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", value)
+            },
+        }
+    }
+}
+
+impl std::error::Error for TcpError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
