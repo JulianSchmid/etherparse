@@ -59,7 +59,7 @@ fn test_debug_write() {
             UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
-            Ipv4(UnexpectedIpVersion(0)),
+            Ipv4(IpVersionNot4(0)),
             Ipv4(IhlTooSmall(0)),
             Ipv4(
                 TotalLengthSmallerThanIhl(

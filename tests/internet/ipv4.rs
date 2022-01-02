@@ -586,19 +586,19 @@ proptest! {
                 // read
                 assert_matches!(
                     Ipv4Header::read(&mut Cursor::new(&buffer)),
-                    Err(Ipv4(UnexpectedIpVersion(_)))
+                    Err(Ipv4(IpVersionNot4(_)))
                 );
 
                 // from_slice
                 assert_matches!(
                     Ipv4Header::from_slice(&buffer),
-                    Err(Ipv4(UnexpectedIpVersion(_)))
+                    Err(Ipv4(IpVersionNot4(_)))
                 );
 
                 // from_slice
                 assert_matches!(
                     Ipv4HeaderSlice::from_slice(&buffer),
-                    Err(Ipv4(UnexpectedIpVersion(_)))
+                    Err(Ipv4(IpVersionNot4(_)))
                 );
             }
         }

@@ -147,7 +147,7 @@ impl Ipv4Header {
 
         let version = first_byte[0] >> 4;
         if 4 != version {
-            return Err(de::Ipv4Error::UnexpectedIpVersion(version).into());
+            return Err(de::Ipv4Error::IpVersionNot4(version).into());
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
@@ -470,7 +470,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
         //check version
         if 4 != version {
-            return Err(UnexpectedIpVersion(version).into());
+            return Err(IpVersionNot4(version).into());
         }
 
         //check that the ihl is correct

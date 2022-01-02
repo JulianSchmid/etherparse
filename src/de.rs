@@ -6,10 +6,13 @@
 //! function (e.g. an UDP parse function should not return an enum with an 
 //! TCP parse error that can never be triggered).
 //!
-//! In case you want to use one error type instead you can convert all error
-//! types to an [`de::Error`] using the [`de::Error::from`].
+//! # Flat Error Type `de::Error`
 //!
-//! # Error Types & Design
+//! In case you want to use one error type instead you can convert all `de` error
+//! types to an [`crate::de::Error`] using the `de_error()` methods or
+//! alternatively the from & and into traits.
+//!
+//! # Hierarchical Error Types
 //!
 //! The errors are split into two categories:
 //!
@@ -71,11 +74,11 @@ pub enum Error {
     /// Error when the ip header version field is not equal 4 and was expected to be (e.g.
     /// ether_type indicated an IPv4 header, but the version number in the header was different).
     /// The value packed in the enum is the version that was received instead of 4.
-    Ipv4UnexpectedIpVersion(u8),
+    IpVersionNot4(u8),
     /// Error when the ip header version field is not equal 6 and was expected to be (e.g.
     /// ether_type indicated an IPv6 header, but the version number in the header was different).
     /// The value packed in the enum is the version that was received instead of 6.
-    Ipv6UnexpectedIpVersion(u8),
+    IpVersionNot6(u8),
     /// Error when the ihl (Internet Header Length) header length is smaller then the ipv4 header itself (5).
     Ipv4IhlTooSmall(u8),
     /// Error when the total length field is smaller then the 'ihl' (internet header length).
@@ -98,10 +101,10 @@ impl Display for Error {
             UnsupportedIpVersion(version_number) => {
                 write!(f, "de::IpError: Unsupported IP version number {} found in IP header (only 4 & 6 are supported).", version_number)
             },
-            Ipv4UnexpectedIpVersion(version_number) => {
+            IpVersionNot4(version_number) => {
                 write!(f, "de::Ipv4Error: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
             },
-            Ipv6UnexpectedIpVersion(version_number) => {
+            IpVersionNot6(version_number) => {
                 write!(f, "de::Ipv6Error: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
             },
             Ipv4IhlTooSmall(ihl) => {
@@ -148,6 +151,14 @@ impl<T : std::error::Error + Display + Into<Error>> From<FromSliceError<T>> for 
 
 impl<T : std::error::Error + Display + Into<Error>> From<ReadError<T>> for Error {
     fn from(err: ReadError<T>) -> Error { err.de_error() }
+}
+
+impl From<PacketError> for Error {
+    fn from(err: PacketError) -> Error { err.de_error() }
+}
+
+impl From<IpPacketError> for Error {
+    fn from(err: IpPacketError) -> Error { err.de_error() }
 }
 
 impl From<IpError> for Error {
@@ -311,7 +322,120 @@ impl<T : std::error::Error + Display + Into<Error>> From<std::io::Error> for Rea
     }
 }
 
+/// Errors that can be found while decoding an packet from the ethernet layer downwards.
+///
+/// The following functions return [`PacketError`] errors:
+///
+/// * [`crate::SlicedPacket::from_ethernet`]
+/// * [`crate::SlicedPacket::from_ether_type`]
+/// * [`crate::PacketHeaders::from_ethernet_slice`]
+/// * [`crate::PacketHeaders::from_ether_type`]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum PacketError {
+    /// Errors in the IPv4 header.
+    Ipv4(Ipv4Error),
+    /// Errors in the IPv6 header.
+    Ipv6(Ipv6Error),
+    /// Errors in the IPv4 extension headers.
+    Ipv4Exts(Ipv4ExtsError),
+    /// Errors in the IPv6 extension headers.
+    Ipv6Exts(Ipv6ExtsError),
+    /// Error in the TCP header.
+    Tcp(TcpError),
+}
+
+impl PacketError {
+    /// Converts the `de::PacketError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use PacketError::*;
+        match self {
+            Ipv4(err) => err.de_error(),
+            Ipv6(err) => err.de_error(),
+            Ipv4Exts(err) => err.de_error(),
+            Ipv6Exts(err) => err.de_error(),
+            Tcp(err) => err.de_error()
+        }
+    }
+}
+
+impl Display for PacketError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use PacketError::*;
+
+        match self {
+            Ipv4(err) => err.fmt(f),
+            Ipv6(err) => err.fmt(f),
+            Ipv4Exts(err) => err.fmt(f),
+            Ipv6Exts(err) => err.fmt(f),
+            Tcp(err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for PacketError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use PacketError::*;
+        match self {
+            Ipv4(ref err) => Some(err),
+            Ipv6(ref err) => Some(err),
+            Ipv4Exts(ref err) => Some(err),
+            Ipv6Exts(ref err) => Some(err),
+            Tcp(ref err) => Some(err),
+        }
+    }
+}
+
 /// Errors that can be found while decoding an packet from the ip layer downwards.
+///
+/// This error is only used when parsing starts at the ip layer without prior
+/// knowledge which ip header should be present. If it is known which ip header should
+/// be present [`PacketError`] is triggered instead.
+///
+/// The following functions return [`IpPacketError`] errors:
+///
+/// * [`crate::SlicedPacket::from_ip`]
+/// * [`crate::PacketHeaders::from_ip_slice`]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum IpPacketError {
+    /// Errors in the IP header and IP extension headers.
+    Ip(IpError),
+    /// Error in the TCP header.
+    Tcp(TcpError),
+}
+
+impl IpPacketError {
+    /// Converts the `de::IpPacketError` to the generic `de::Error` enum.
+    pub fn de_error(self) -> Error {
+        use IpPacketError::*;
+        match self {
+            Ip(err) => err.de_error(),
+            Tcp(err) => err.de_error()
+        }
+    }
+}
+
+impl Display for IpPacketError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use IpPacketError::*;
+
+        match self {
+            Ip(err) => err.fmt(f),
+            Tcp(err) => err.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for IpPacketError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use IpPacketError::*;
+        match self {
+            Ip(ref err) => Some(err),
+            Tcp(ref err) => Some(err),
+        }
+    }
+}
+
+/// Errors that can be found while decoding ip headers from the ip layer downwards.
 ///
 /// This error is only used when parsing starts at the ip layer without prior
 /// knowledge which ip header should be present. If it is known which ip header should
@@ -403,7 +527,7 @@ impl std::error::Error for IpError {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Ipv4Error {
     /// Error when the ip header version field is not equal 4. The value is the version that was received.
-    UnexpectedIpVersion(u8),
+    IpVersionNot4(u8),
     /// Error when the ihl (Internet Header Length) header length is smaller then the ipv4 header itself (5).
     IhlTooSmall(u8),
     /// Error when the total length field is smaller then the 'ihl' (internet header length).
@@ -415,7 +539,7 @@ impl Ipv4Error {
     pub fn de_error(self) -> Error {
         use Ipv4Error::*;
         match self {
-            UnexpectedIpVersion(value) => Error::Ipv4UnexpectedIpVersion(value),
+            IpVersionNot4(value) => Error::IpVersionNot4(value),
             IhlTooSmall(value) => Error::Ipv4IhlTooSmall(value),
             TotalLengthSmallerThanIhl(value) => Error::Ipv4TotalLengthSmallerThanIhl(value),
         }
@@ -427,7 +551,7 @@ impl Display for Ipv4Error {
         use Ipv4Error::*;
 
         match self {
-            UnexpectedIpVersion(version_number) => { //u8
+            IpVersionNot4(version_number) => { //u8
                 write!(f, "de::Ipv4Error: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
             },
             IhlTooSmall(ihl) => { //u8
@@ -459,7 +583,7 @@ pub struct Ipv4TotalLengthSmallerThanIhlError {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Ipv6Error {
     /// Error when the ip header version field is not equal 6. The value is the version that was received.
-    UnexpectedIpVersion(u8),
+    IpVersionNot6(u8),
 }
 
 impl Ipv6Error {
@@ -467,7 +591,7 @@ impl Ipv6Error {
     pub fn de_error(self) -> Error {
         use Ipv6Error::*;
         match self {
-            UnexpectedIpVersion(value) => Error::Ipv6UnexpectedIpVersion(value),
+            IpVersionNot6(value) => Error::IpVersionNot6(value),
         }
     }
 }
@@ -476,7 +600,7 @@ impl Display for Ipv6Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         use Ipv6Error::*;
         match self {
-            UnexpectedIpVersion(version_number) => { //u8
+            IpVersionNot6(version_number) => { //u8
                 write!(f, "de::Ipv6Error: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
             },
         }
