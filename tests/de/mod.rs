@@ -234,7 +234,7 @@ mod error {
     fn from_slice_error() {
         assert_matches!(
             de::Error::from(
-                de::FromSliceError::Content(
+                de::SliceError::Content(
                     de::IpAuthError::HeaderLengthZero
                 )
             ),
@@ -457,12 +457,12 @@ mod unexpected_end_of_slice {
     }
 }
 
-mod from_slice_error {
+mod slice_error {
     use super::*;
 
     #[test]
     fn display() {
-        use de::FromSliceError::*;
+        use de::SliceError::*;
         use de::IpAuthError::*;
 
         // UnexpectedEndOfSlice
@@ -473,7 +473,7 @@ mod from_slice_error {
             };
             assert_eq!(
                 &format!("{}", value),
-                &format!("{}", de::FromSliceError::<de::IpAuthError>::UnexpectedEndOfSlice(value))
+                &format!("{}", de::SliceError::<de::IpAuthError>::UnexpectedEndOfSlice(value))
             );
         }
 
@@ -486,8 +486,8 @@ mod from_slice_error {
 
     #[test]
     fn debug() {
-        use de::{FromSliceError, IpAuthError};
-        use de::FromSliceError::*;
+        use de::{SliceError, IpAuthError};
+        use de::SliceError::*;
         use de::IpAuthError::*;
 
         // UnexpectedEndOfSlice
@@ -500,7 +500,7 @@ mod from_slice_error {
                 &format!("UnexpectedEndOfSlice({:?})", value),
                 &format!(
                     "{:?}",
-                    FromSliceError::<IpAuthError>::UnexpectedEndOfSlice(value)
+                    SliceError::<IpAuthError>::UnexpectedEndOfSlice(value)
                 )
             );
         }
@@ -514,7 +514,7 @@ mod from_slice_error {
 
     #[test]
     fn clone_eq() {
-        use de::FromSliceError::*;
+        use de::SliceError::*;
         use de::IpAuthError::*;
 
         let values = [
@@ -533,7 +533,7 @@ mod from_slice_error {
 
     #[test]
     fn error_source() {
-        use de::FromSliceError::*;
+        use de::SliceError::*;
         use de::IpAuthError::*;
 
         let some_values = [
@@ -552,14 +552,14 @@ mod from_slice_error {
 
     #[test]
     fn from_unexpected_end_of_slice_error() {
-        use de::{FromSliceError, IpAuthError};
+        use de::{SliceError, IpAuthError};
         let value = UnexpectedEndOfSliceError{
             expected_min_len: 4,
             actual_len: 3,
         };
         assert_eq!(
-            FromSliceError::<IpAuthError>::from(value.clone()),
-            FromSliceError::<IpAuthError>::UnexpectedEndOfSlice(
+            SliceError::<IpAuthError>::from(value.clone()),
+            SliceError::<IpAuthError>::UnexpectedEndOfSlice(
                 value
             )
         );
@@ -567,13 +567,13 @@ mod from_slice_error {
 
     #[test]
     fn de_error() {
-        use de::{FromSliceError, Error, IpAuthError};
-        use de::FromSliceError::*;
+        use de::{SliceError, Error, IpAuthError};
+        use de::SliceError::*;
         use de::IpAuthError::*;
 
         // UnexpectedEndOfSlice
         assert_matches!(
-            FromSliceError::<IpAuthError>::UnexpectedEndOfSlice(
+            SliceError::<IpAuthError>::UnexpectedEndOfSlice(
                 UnexpectedEndOfSliceError{
                     expected_min_len: 4,
                     actual_len: 3,

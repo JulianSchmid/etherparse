@@ -10,6 +10,7 @@ use std::io;
 
 mod checksum;
 mod de;
+mod errors;
 mod link;
 mod internet;
 mod transport;

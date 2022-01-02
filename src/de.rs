@@ -29,7 +29,7 @@
 //! In case content errors can also be triggered one of the following two wrapper
 //! types is returned based on the data source:
 //!
-//! * [`FromSliceError`] is used when decoding from a slice.
+//! * [`SliceError`] is used when decoding from a slice.
 //! * [`ReadError`] is used when data is read from an io::Read source.
 //!
 //! These take a content error type as an argument. For example:
@@ -38,7 +38,7 @@
 //! # use std::error::Error;
 //! # use std::fmt::{Display, Formatter};
 //! # use etherparse::de::UnexpectedEndOfSliceError;
-//! pub enum FromSliceError<T : Error + Display> {
+//! pub enum SliceError<T : Error + Display> {
 //!     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 //!     Content(T)
 //! }
@@ -145,8 +145,8 @@ impl From<UnexpectedEndOfSliceError> for Error {
     fn from(err: UnexpectedEndOfSliceError) -> Error { err.de_error() }
 }
 
-impl<T : std::error::Error + Display + Into<Error>> From<FromSliceError<T>> for Error {
-    fn from(err: FromSliceError<T>) -> Error { err.de_error() }
+impl<T : std::error::Error + Display + Into<Error>> From<SliceError<T>> for Error {
+    fn from(err: SliceError<T>) -> Error { err.de_error() }
 }
 
 impl<T : std::error::Error + Display + Into<Error>> From<ReadError<T>> for Error {
@@ -228,7 +228,7 @@ impl std::error::Error for UnexpectedEndOfSliceError {
 
 /// Error when decoding a header or packet from a slice.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum FromSliceError<T : std::error::Error + Display + Into<Error>> {
+pub enum SliceError<T : std::error::Error + Display + Into<Error>> {
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
     UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
 
@@ -236,10 +236,10 @@ pub enum FromSliceError<T : std::error::Error + Display + Into<Error>> {
     Content(T)
 }
 
-impl<T : std::error::Error + Display + Into<Error>> FromSliceError<T> {
-    /// Converts the `de::FromSliceError` to the generic `de::Error` enum.
+impl<T : std::error::Error + Display + Into<Error>> SliceError<T> {
+    /// Converts the `de::SliceError` to the generic `de::Error` enum.
     pub fn de_error(self) -> Error {
-        use FromSliceError::*;
+        use SliceError::*;
         match self {
             UnexpectedEndOfSlice(err) => err.de_error(),
             Content(value) => Into::<Error>::into(value),
@@ -247,9 +247,9 @@ impl<T : std::error::Error + Display + Into<Error>> FromSliceError<T> {
     }
 }
 
-impl<T : std::error::Error + Display + Into<Error>> Display for FromSliceError<T> {
+impl<T : std::error::Error + Display + Into<Error>> Display for SliceError<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use FromSliceError::*;
+        use SliceError::*;
 
         match self {
             UnexpectedEndOfSlice(ref err) => err.fmt(f),
@@ -258,9 +258,9 @@ impl<T : std::error::Error + Display + Into<Error>> Display for FromSliceError<T
     }
 }
 
-impl<T : 'static + std::error::Error + Display + Into<Error>> std::error::Error for FromSliceError<T> {
+impl<T : 'static + std::error::Error + Display + Into<Error>> std::error::Error for SliceError<T> {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use FromSliceError::*;
+        use SliceError::*;
 
         match self {
             UnexpectedEndOfSlice(ref err) => Some(err),
@@ -269,9 +269,9 @@ impl<T : 'static + std::error::Error + Display + Into<Error>> std::error::Error 
     }
 }
 
-impl<T : std::error::Error + Display + Into<Error>> From<UnexpectedEndOfSliceError> for FromSliceError<T> {
-    fn from(err: UnexpectedEndOfSliceError) -> FromSliceError<T> {
-        FromSliceError::UnexpectedEndOfSlice(err)
+impl<T : std::error::Error + Display + Into<Error>> From<UnexpectedEndOfSliceError> for SliceError<T> {
+    fn from(err: UnexpectedEndOfSliceError) -> SliceError<T> {
+        SliceError::UnexpectedEndOfSlice(err)
     }
 }
 

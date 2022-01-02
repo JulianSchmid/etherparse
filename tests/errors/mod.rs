@@ -1,6 +1,7 @@
 use super::*;
 use proptest::prelude::*;
-use de::UnexpectedEndOfSliceError;
+use etherparse::de::UnexpectedEndOfSliceError;
+use etherparse::de;
 
 mod read_error {
     use super::*;
@@ -63,7 +64,7 @@ mod read_error {
             //Ipv4(UnexpectedIpVersion)
             assert_eq!(
                 &format!("de::Ipv4Error: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", arg_u8),
-                &format!("{}", Ipv4(UnexpectedIpVersion(arg_u8)))
+                &format!("{}", Ipv4(IpVersionNot4(arg_u8)))
             );
 
             //Ipv4(IhlTooSmall)
@@ -120,7 +121,7 @@ mod read_error {
                     actual_len: 0,
                 }
             ),
-            Ipv4(UnexpectedIpVersion(0)),
+            Ipv4(IpVersionNot4(0)),
             Ipv4(IhlTooSmall(0)),
             Ipv4(
                 TotalLengthSmallerThanIhl(
@@ -160,7 +161,7 @@ mod read_error {
             UnexpectedEndOfSlice(UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
-            Ipv4(UnexpectedIpVersion(0)),
+            Ipv4(IpVersionNot4(0)),
             Ipv4(IhlTooSmall(0)),
             Ipv4(TotalLengthSmallerThanIhl(Ipv4TotalLengthSmallerThanIhlError{ header_length: 0, total_length: 0 })),
             Ipv6UnexpectedVersion(0),
