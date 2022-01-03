@@ -1,13 +1,13 @@
 
 
-mod icmp4_hdr {
+mod icmp6_hdr {
     use etherparse::*;
     // use super::super::*;
 
     #[test]
-    fn icmp4_echo_marshall_unmarshall() {
-        let icmp4 = Icmp4Header {
-            icmp_type: Icmp4Type::EchoRequest(IcmpEchoHeader{
+    fn icmp6_echo_marshall_unmarshall() {
+        let icmp6 = Icmp6Header {
+            icmp_type: Icmp6Type::EchoRequest(IcmpEchoHeader{
                 seq: 1,
                 id: 2,
             }),
@@ -15,19 +15,20 @@ mod icmp4_hdr {
         };
         // serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(256);
-        icmp4.write(&mut buffer).unwrap();
-        let (new_icmp4, rest) = Icmp4Header::from_slice(&buffer).unwrap();
-        assert_eq!(icmp4, new_icmp4);
+        icmp6.write(&mut buffer).unwrap();
+        let (new_icmp6, rest) = Icmp6Header::from_slice(&buffer).unwrap();
+        assert_eq!(icmp6, new_icmp6);
         assert_eq!(rest.len(), 0);
     }
 
     #[test]
-    fn ip4_echo_marshall_unmarshall() {
+    fn ip6_echo_marshall_unmarshall() {
         let builder = PacketBuilder::
-            ipv4(   [192,168,1,1],  //source ip
-                [192,168,1,2], //desitionation ip
+            ipv6(   
+                [0xfe,0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],  //source ip
+                [0xfe,0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114],  //dst ip
                 20)            //time to life
-            .icmp4_echo_request(1,2);
+            .icmp6_echo_request(1,2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
         let mut result = Vec::<u8>::with_capacity(
@@ -37,8 +38,8 @@ mod icmp4_hdr {
         builder.write(&mut result, &payload).unwrap();
 
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
-        if let Some(TransportHeader::Icmp4(hdr)) = new_ip.transport {
-            if let Icmp4Type::EchoRequest(echo) = hdr.icmp_type {
+        if let Some(TransportHeader::Icmp6(hdr)) = new_ip.transport {
+            if let Icmp6Type::EchoRequest(echo) = hdr.icmp_type {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 2);
             } else {

@@ -1,5 +1,7 @@
 use super::super::*;
 
+use crate::transport::icmp4;
+
 use std::slice::from_raw_parts;
 
 pub const ICMP6_DST_UNREACH: u8 =       1;
@@ -12,61 +14,134 @@ pub const ICMP6_ECHO_REPLY: u8 =    129;
 pub const MLD_LISTENER_QUERY: u8 =  130;
 pub const MLD_LISTENER_REPORT: u8 =  131;
 pub const MLD_LISTENER_REDUCTION: u8 =  132;
-pub const ICMPV6_EXT_ECHO_REQUEST: u8 =  160;
-pub const ICMPV6_EXT_ECHO_REPLY: u8 =  161;
+pub const ICMP6_EXT_ECHO_REQUEST: u8 =  160;
+pub const ICMP6_EXT_ECHO_REPLY: u8 =  161;
+
+
+pub const ICMP6_DST_UNREACH_NOROUTE:u8 =0; /* no route to destination */
+pub const ICMP6_DST_UNREACH_ADMIN:u8 =  1; /* communication with destination */
+                                        /* administratively prohibited */
+pub const ICMP6_DST_UNREACH_BEYONDSCOPE: u8= 2; /* beyond scope of source address */
+pub const ICMP6_DST_UNREACH_ADDR:u8 =   3; /* address unreachable */
+pub const ICMP6_DST_UNREACH_NOPORT:u8 = 4; /* bad port */
 
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum IcmpV6Type {
-    DestinationUnreachable = ICMP6_DST_UNREACH as isize,
-    PacketTooBig = ICMP6_PACKET_TOO_BIG as isize,
-    TimeExceeded = ICMP6_TIME_EXCEEDED as isize,
-    ParameterProblem = ICMP6_PARAM_PROB as isize,
-    EchoRequest = ICMP6_ECHO_REQUEST as isize,
-    EchoReply = ICMP6_ECHO_REPLY as isize,
+pub enum Icmp6DestinationUnreachable {
+    Unknown{code:u8}, // unparsed
+    NoRoute,
+    Admin,
+    BeyondScope,
+    Address,
+    NoPort,
+}
+
+impl Icmp6DestinationUnreachable {
+    pub fn from(icmp_code: u8) -> Icmp6DestinationUnreachable {
+        use Icmp6DestinationUnreachable::*;
+        match icmp_code {
+            ICMP6_DST_UNREACH_NOROUTE => NoRoute,
+            ICMP6_DST_UNREACH_ADMIN => Admin,
+            ICMP6_DST_UNREACH_BEYONDSCOPE => BeyondScope,
+            ICMP6_DST_UNREACH_ADDR => Address,
+            ICMP6_DST_UNREACH_NOPORT => NoPort,
+            _ => Unknown{code: icmp_code},
+        }
+    }
+
+    pub fn to_wire(&self) -> u8 {
+        use Icmp6DestinationUnreachable::*;
+        match self {
+            Unknown{code} => *code,
+            NoRoute => ICMP6_DST_UNREACH_NOROUTE,
+            Admin => ICMP6_DST_UNREACH_ADMIN,
+            BeyondScope => ICMP6_DST_UNREACH_BEYONDSCOPE,
+            Address => ICMP6_DST_UNREACH_ADDR,
+            NoPort => ICMP6_DST_UNREACH_NOPORT,
+        }
+    }
+}
+
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Icmp6Type {
+    Raw{icmp_type: u8, icmp_code: u8, four_bytes: u32},
+    DestinationUnreachable(Icmp6DestinationUnreachable),
+    PacketTooBig,
+    TimeExceeded,
+    ParameterProblem,
+    EchoRequest(icmp4::IcmpEchoHeader),
+    EchoReply(icmp4::IcmpEchoHeader),
     // implement the rest later
 }
 
-impl IcmpV6Type {
+impl Icmp6Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    fn from(val: u8) -> Result<IcmpV6Type, ValueError> {
-        use IcmpV6Type::*;
-        match val {
-            ICMP6_DST_UNREACH => Ok(DestinationUnreachable),
-            ICMP6_PACKET_TOO_BIG => Ok(PacketTooBig),
-            ICMP6_TIME_EXCEEDED => Ok(TimeExceeded),
-            ICMP6_PARAM_PROB => Ok(ParameterProblem),
-            ICMP6_ECHO_REQUEST => Ok(EchoRequest),
-            ICMP6_ECHO_REPLY => Ok(EchoReply),
-            _ => Err(ValueError::Icmp6Unknown{icmp_type: val}),
+    fn from(icmp_type: u8, icmp_code: u8, four_bytes: u32) -> Icmp6Type {
+        use Icmp6Type::*;
+        match icmp_type {
+            ICMP6_DST_UNREACH => 
+                DestinationUnreachable(Icmp6DestinationUnreachable::from(icmp_code)),
+            ICMP6_PACKET_TOO_BIG => PacketTooBig,
+            ICMP6_TIME_EXCEEDED => TimeExceeded,
+            ICMP6_PARAM_PROB => ParameterProblem,
+            ICMP6_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from(four_bytes)),
+            ICMP6_ECHO_REPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
+            _ => Raw{icmp_type, icmp_code, four_bytes},
+        }
+    }
+
+    fn to_be_wire(&self) -> (u8, u8, u32) {
+        use Icmp6Type::*;
+        match self {
+            Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
+            DestinationUnreachable(icmp_code) => 
+            (ICMP6_DST_UNREACH, (icmp_code.to_wire()), 0),
+            PacketTooBig => (ICMP6_PACKET_TOO_BIG, 0, 0),
+            TimeExceeded => (ICMP6_TIME_EXCEEDED, 0, 0),
+            ParameterProblem => (ICMP6_PARAM_PROB, 0, 0),
+            EchoRequest(echo) => (ICMP6_ECHO_REQUEST, 0, echo.to_be_wire()),
+            EchoReply(echo) => (ICMP6_ECHO_REPLY, 0, echo.to_be_wire()),
         }
     }
 }
 
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct IcmpV6Header {
-    pub icmp_type: IcmpV6Type,
-    pub icmp_code : u8,
+pub struct Icmp6Header {
+    pub icmp_type: Icmp6Type,
     pub icmp_chksum: u16,
-    pub echo_header: Option<IcmpEchoHeader>,
 }
 
-impl IcmpV6Header {
+impl Icmp6Header {
     pub const SERIALIZED_SIZE: usize = 8;
     pub fn header_len(&self) -> usize {
         8
     }
+
+    pub fn new(icmp_type: Icmp6Type) -> Icmp6Header {
+        Icmp6Header{
+            icmp_type,
+            icmp_chksum: 0, // will be filled in later
+        }
+    }
+
     ///Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         // TODO ... implement the rest
         let cksum_be = self.icmp_chksum.to_be_bytes();
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        let four_bytes_arr = four_bytes.to_be_bytes();
         writer.write_all(&[
-            self.icmp_type as u8,
-            self.icmp_code,
+            icmp_type,
+            icmp_code,
             cksum_be[0],
             cksum_be[1],
+            four_bytes_arr[0],
+            four_bytes_arr[1],
+            four_bytes_arr[2],
+            four_bytes_arr[3],
         ]).map_err(WriteError::from)
     }
 
@@ -77,11 +152,10 @@ impl IcmpV6Header {
 
     /// Reads an icmp6 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(IcmpV6Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmp6Header, &[u8]), ReadError> {
         Ok((
-            Icmp6HeaderSlice::from_slice(slice)?.to_header()
-                .map_err(|_| { ReadError::UnexpectedEndOfSlice(IcmpV6Header::SERIALIZED_SIZE)})?,
-            &slice[IcmpV6Header::SERIALIZED_SIZE..]
+            Icmp6HeaderSlice::from_slice(slice)?.to_header(),
+            &slice[Icmp6Header::SERIALIZED_SIZE..]
         ))
     }
 }
@@ -98,65 +172,55 @@ impl<'a> Icmp6HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Icmp6HeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < IcmpV6Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(IcmpV6Header::SERIALIZED_SIZE));
+        if slice.len() < Icmp6Header::SERIALIZED_SIZE {
+            return Err(UnexpectedEndOfSlice(Icmp6Header::SERIALIZED_SIZE));
         }
 
         //done
         Ok(Icmp6HeaderSlice{
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // IcmpV6Header::SERIALIZED_SIZE (8) before this.
+            // Icmp6Header::SERIALIZED_SIZE (8) before this.
             slice: unsafe {
                 from_raw_parts(
                     slice.as_ptr(),
-                    IcmpV6Header::SERIALIZED_SIZE
+                    Icmp6Header::SERIALIZED_SIZE
                 )
             }
         })
     }
     /// Decode all the fields and copy the results to a UdpHeader struct
     #[inline]
-    pub fn to_header(&self) -> Result<IcmpV6Header, ValueError> {
-        Ok(IcmpV6Header {
-            icmp_type: self.icmp_type()?,
-            icmp_code: self.icmp_code()?,
-            icmp_chksum: self.icmp_chksum()?,
-            echo_header: self.parse_echo_header(),
-        })
+    pub fn to_header(&self) -> Icmp6Header {
+        let icmp_type =  self.icmp_type();
+        Icmp6Header {
+            icmp_type,
+            icmp_chksum: self.icmp_chksum(),
+        }
     }
 
-    pub fn icmp_type(&self) -> Result<IcmpV6Type, ValueError> {
+    pub fn icmp_type(&self) -> Icmp6Type {
         // already checked slice len in ::from_slice()
-        IcmpV6Type::from(self.slice[0])
+        let four_bytes = 
+        unsafe {
+            get_unchecked_be_u32(self.slice.as_ptr().add(4))
+        };
+        Icmp6Type::from(self.slice[0], self.slice[1], four_bytes)
     }
 
-    pub fn icmp_code(&self) -> Result<u8, ValueError> {
+    #[inline]
+    pub fn icmp_code(&self) -> u8 {
         // already checked slice len in ::from_slice()
-        Ok(self.slice[1])
+        self.slice[1]
     }
 
-    pub fn icmp_chksum(&self) -> Result<u16, ValueError> {
+    #[inline]
+    pub fn icmp_chksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of UdpHeader::SERIALIZED_SIZE (8).
         unsafe {
-            Ok(get_unchecked_be_u16(self.slice.as_ptr().add(2)))
+            get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
-    }
-
-    fn parse_echo_header(&self) -> Option<IcmpEchoHeader> {
-        use IcmpV6Type::*;
-        if let Ok(icmp_type) = self.icmp_type() {
-            if (icmp_type == EchoReply) || (icmp_type == EchoRequest) {
-                let seq: u16 = u16::from_be_bytes([self.slice[4], self.slice[5]]);
-                let id: u16 = u16::from_be_bytes([self.slice[6], self.slice[7]]);
-                return Some(IcmpEchoHeader{
-                    seq,
-                    id,
-                });
-            }
-        }
-        None
     }
 }

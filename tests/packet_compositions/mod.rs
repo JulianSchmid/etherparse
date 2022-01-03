@@ -323,8 +323,8 @@ impl ComponentTest {
         assert_eq!(
             self.transport,
             match result.transport.as_ref() {
-                Some(TransportSlice::Icmp4(actual)) => Some(TransportHeader::Icmp4(actual.to_header().unwrap())),
-                Some(TransportSlice::Icmp6(actual)) => Some(TransportHeader::Icmp6(actual.to_header().unwrap())),
+                Some(TransportSlice::Icmp4(actual)) => Some(TransportHeader::Icmp4(actual.to_header())),
+                Some(TransportSlice::Icmp6(actual)) => Some(TransportHeader::Icmp6(actual.to_header())),
                 Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
                 Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),
                 Some(TransportSlice::Unknown(_)) => None,
