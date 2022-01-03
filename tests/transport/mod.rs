@@ -1,4 +1,5 @@
 pub mod icmp4;
+pub mod icmp6;
 pub mod udp;
 pub mod tcp;
 

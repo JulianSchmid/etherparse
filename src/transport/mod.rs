@@ -10,8 +10,8 @@ use std::io;
 ///The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportHeader {
-    Icmp4(icmp4::IcmpV4Header),
-    Icmp6(icmp6::IcmpV6Header),
+    Icmp4(icmp4::Icmp4Header),
+    Icmp6(icmp6::Icmp6Header),
     Udp(udp::UdpHeader),
     Tcp(tcp::TcpHeader)
 
@@ -19,7 +19,7 @@ pub enum TransportHeader {
 
 impl TransportHeader {
 
-    pub fn icmp4(self) -> Option<icmp4::IcmpV4Header> {
+    pub fn icmp4(self) -> Option<icmp4::Icmp4Header> {
         use crate::TransportHeader::*;
         if let Icmp4(value) = self {
             Some(value)
@@ -28,7 +28,7 @@ impl TransportHeader {
         }
     }
 
-    pub fn icmp6(self) -> Option<icmp6::IcmpV6Header> {
+    pub fn icmp6(self) -> Option<icmp6::Icmp6Header> {
         use crate::TransportHeader::*;
         if let Icmp6(value) = self {
             Some(value)
