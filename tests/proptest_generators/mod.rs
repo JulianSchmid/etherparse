@@ -210,6 +210,7 @@ prop_compose! {
 }
 
 static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
+    ip_number::ICMP,
     ip_number::UDP,
     ip_number::TCP,
     ip_number::AUTH,
@@ -310,6 +311,7 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
     ip_number::UDP,
     ip_number::TCP,
     ip_number::IPV6_HOP_BY_HOP,
+    ip_number::IPV6_ICMP,
     ip_number::IPV6_ROUTE,
     ip_number::IPV6_FRAG,
     ip_number::AUTH,
