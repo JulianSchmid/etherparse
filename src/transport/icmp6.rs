@@ -145,9 +145,27 @@ impl Icmp6Header {
         ]).map_err(WriteError::from)
     }
 
-    pub fn calc_checksum_ipv6(&self, _ip_header: &Ipv6Header, _payload: &[u8]) -> Result<u16, ValueError> {
-        // TODO...
-        Ok(0u16)
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmp4Header::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
+        }
+
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        //calculate the checksum; icmp4 will always take an ip4 header
+        Ok(
+                checksum::Sum16BitWords::new()
+                .add_16bytes(ip_header.source)
+                .add_16bytes(ip_header.destination)
+                .add_2bytes([0, ip_number::IPV6_ICMP])
+                .add_2bytes((payload.len() as u16).to_be_bytes())
+                .add_2bytes([icmp_type, icmp_code])
+                .add_4bytes(four_bytes.to_be_bytes())
+                .add_slice(payload)
+                .ones_complement()
+                .to_be()
+        )
     }
 
     /// Reads an icmp6 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
