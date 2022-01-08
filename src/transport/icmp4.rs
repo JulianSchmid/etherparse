@@ -6,23 +6,23 @@ use super::super::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IcmpEchoHeader {
-    pub seq: u16,
     pub id: u16,
+    pub seq: u16,
 }
 
 impl IcmpEchoHeader {
     // return the seq + id in Network Byte Order as a u32
     pub fn to_be_wire(&self) -> u32 {
-        let seq_be = self.seq.to_be_bytes();
         let id_be = self.id.to_be_bytes();
-        u32::from_be_bytes([seq_be[0], seq_be[1], id_be[0], id_be[1]])
+        let seq_be = self.seq.to_be_bytes();
+        u32::from_be_bytes([id_be[0], id_be[1], seq_be[0], seq_be[1]])
     }
 
     pub fn from(four_bytes: u32) -> IcmpEchoHeader {
         let arr = four_bytes.to_be_bytes();
         IcmpEchoHeader{
-            seq: u16::from_be_bytes([arr[0], arr[1]]),
-            id: u16::from_be_bytes([arr[2], arr[3]]),
+            id: u16::from_be_bytes([arr[0], arr[1]]),
+            seq: u16::from_be_bytes([arr[2], arr[3]]),
         }
     }
 }
