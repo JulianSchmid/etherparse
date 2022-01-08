@@ -130,7 +130,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
+                    let (transport, transport_rest) = read_transport(ip_protocol, rest, true)?;
 
                     //assign to the output
                     rest = transport_rest;
@@ -150,7 +150,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(next_header, rest)?;
+                    let (transport, transport_rest) = read_transport(next_header, rest, false)?;
 
                     rest = transport_rest;
                     result.transport = transport;
