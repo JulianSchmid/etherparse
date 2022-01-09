@@ -153,13 +153,16 @@ impl Icmp6Header {
         }
 
         let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        let msg_len = payload.len() + Icmp6Header::SERIALIZED_SIZE;
         //calculate the checksum; icmp4 will always take an ip4 header
         Ok(
+                // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader, 
+                // unlike Icmp4
                 checksum::Sum16BitWords::new()
                 .add_16bytes(ip_header.source)
                 .add_16bytes(ip_header.destination)
                 .add_2bytes([0, ip_number::IPV6_ICMP])
-                .add_2bytes((payload.len() as u16).to_be_bytes())
+                .add_2bytes((msg_len as u16).to_be_bytes())
                 .add_2bytes([icmp_type, icmp_code])
                 .add_4bytes(four_bytes.to_be_bytes())
                 .add_slice(payload)
