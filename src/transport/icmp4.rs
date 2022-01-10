@@ -2,8 +2,6 @@ use std::slice::from_raw_parts;
 
 use super::super::*;
 
-
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IcmpEchoHeader {
     pub id: u16,
@@ -11,18 +9,17 @@ pub struct IcmpEchoHeader {
 }
 
 impl IcmpEchoHeader {
-    // return the seq + id in Network Byte Order as a u32
-    pub fn to_be_wire(&self) -> u32 {
+    // Return the seq + id encoded to the on the wire format.
+    pub fn to_bytes(&self) -> [u8;4] {
         let id_be = self.id.to_be_bytes();
         let seq_be = self.seq.to_be_bytes();
-        u32::from_be_bytes([id_be[0], id_be[1], seq_be[0], seq_be[1]])
+        [id_be[0], id_be[1], seq_be[0], seq_be[1]]
     }
 
-    pub fn from(four_bytes: u32) -> IcmpEchoHeader {
-        let arr = four_bytes.to_be_bytes();
+    pub fn from(four_bytes: [u8;4]) -> IcmpEchoHeader {
         IcmpEchoHeader{
-            id: u16::from_be_bytes([arr[0], arr[1]]),
-            seq: u16::from_be_bytes([arr[2], arr[3]]),
+            id: u16::from_be_bytes([four_bytes[0], four_bytes[1]]),
+            seq: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
         }
     }
 }
@@ -59,20 +56,77 @@ pub const ICMP4_UNREACH_PRECEDENCE_CUTOFF: u8= 15;      /* prec cutoff */
 /// but ultimately it's up to the router and not all routers in the Internet
 /// are RFC compliant.  Be careful when parsing this struct as the packet
 /// may truncate arbitrarily
-/// 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp4DestinationUnreachable {
-    Network = ICMP4_UNREACH_NET as isize,
-    Host = ICMP4_UNREACH_HOST_UNKNOWN as isize,
-    Port = ICMP4_UNREACH_PORT as isize,
-    Protocol = ICMP4_UNREACH_PROTOCOL as isize,
+    /// In case of an unknown icmp code is received the header elements are stored raw.
+    Raw{
+        /// ICMP code (present in the 2nd byte of the ICMP packet).
+        code: u8,
+        /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
+        four_bytes: [u8;4],
+    },
+    /// Network unreachable error.
+    Network,
+    /// Host unreachable error.
+    Host,
+    /// Transport protocol not supported error.
+    Protocol,
+    /// Port unreachable error.
+    Port,
+    /// Fragmentation would be needed but the don't fragment bit is set.
+    FragmentationNeeded{ next_hop_mtu: u16 }
     // TODO, fill in more
 }
 
 impl Icmp4DestinationUnreachable {
-    pub fn from(_icmp_code: u8) -> Icmp4DestinationUnreachable {
-        // TODO ... fill in the map
-        Icmp4DestinationUnreachable::Host
+
+    /// Decode destination unreachable icmp packet from the code (2nd byte)
+    /// and the 5th-8th bytes (inclusive) of the raw packet data.
+    #[inline]
+    pub fn from_bytes(code: u8, four_bytes: [u8;4]) -> Icmp4DestinationUnreachable {
+        use Icmp4DestinationUnreachable::*;
+
+        match code {
+            ICMP4_UNREACH_NET => Network,
+            ICMP4_UNREACH_HOST_UNKNOWN => Host,
+            ICMP4_UNREACH_PROTOCOL => Protocol,
+            ICMP4_UNREACH_PORT => Port,
+            ICMP4_UNREACH_NEEDFRAG => FragmentationNeeded {
+                next_hop_mtu: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
+            },
+            code => Raw{
+                code,
+                four_bytes
+            },
+        }
+    }
+
+    /// Returns the icmp code value of the destination unreachable packet.
+    #[inline]
+    pub fn code(&self) -> u8 {
+        use Icmp4DestinationUnreachable::*;
+        match self {
+            Raw{ code, four_bytes: _ } => *code,
+            Network => ICMP4_UNREACH_NET,
+            Host => ICMP4_UNREACH_HOST_UNKNOWN,
+            Protocol => ICMP4_UNREACH_PROTOCOL,
+            Port => ICMP4_UNREACH_PORT,
+            FragmentationNeeded{ next_hop_mtu: _} => ICMP4_UNREACH_NEEDFRAG,
+        }
+    }
+
+    /// Returns the 5th-8th bytes (inclusive) of the raw icmp packet data
+    pub fn four_bytes(&self) -> [u8;4] {
+        use Icmp4DestinationUnreachable::*;
+
+        match self {
+            Network | Host | Protocol | Port => [0;4],
+            FragmentationNeeded{ next_hop_mtu } => {
+                let be = next_hop_mtu.to_be_bytes();
+                [0, 0, be[0], be[1]]
+            },
+            Raw{ code: _, four_bytes } => *four_bytes,
+        }
     }
 }
 
@@ -93,7 +147,8 @@ pub const ICMP_V4_ADDRESSREPLY: u8 =   18; /* Address Mask Reply           */
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp4Type {
-    Raw{icmp_type: u8, icmp_code: u8, four_bytes: u32},  // used to encode unparsed/unknown ICMP headers
+    /// Used to encode unparsed/unknown ICMP headers
+    Raw{icmp_type: u8, icmp_code: u8, four_bytes: [u8;4] },
     EchoReply(IcmpEchoHeader),
     DestinationUnreachable(Icmp4DestinationUnreachable),
     SourceQuench,
@@ -112,11 +167,11 @@ pub enum Icmp4Type {
 impl Icmp4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    fn from(icmp_type: u8, icmp_code: u8, four_bytes: u32) -> Icmp4Type {
+    fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
             ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
-            ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from(icmp_code)),
+            ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from_bytes(icmp_code, four_bytes)),
             ICMP_V4_SOURCE_QUENCH => SourceQuench,
             ICMP_V4_REDIRECT => Redirect,
             ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from(four_bytes)),
@@ -135,27 +190,27 @@ impl Icmp4Type {
 
     /// Return the icmp_type, icmp_code, and the second 4 bytes
     /// of the ICMP payload, in big endian format
-    fn to_be_wire(&self) -> (u8, u8, u32) {
+    fn to_be_wire(&self) -> (u8, u8, [u8;4]) {
         use Icmp4Type::*;
         match &self {
             Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
             EchoReply(echo) => {
-                (ICMP_V4_ECHOREPLY, 0, echo.to_be_wire())
+                (ICMP_V4_ECHOREPLY, 0, echo.to_bytes())
             },
-            DestinationUnreachable(code) => (ICMP_V4_DEST_UNREACH, *code as u8, 0),
-            SourceQuench => (ICMP_V4_SOURCE_QUENCH, 0, 0),
-            Redirect => (ICMP_V4_REDIRECT, 0, 0),
+            DestinationUnreachable(value) => (ICMP_V4_DEST_UNREACH, value.code(), value.four_bytes()),
+            SourceQuench => (ICMP_V4_SOURCE_QUENCH, 0, [0;4]),
+            Redirect => (ICMP_V4_REDIRECT, 0, [0;4]),
             EchoRequest(echo) => {
-                (ICMP_V4_ECHO, 0, echo.to_be_wire())
+                (ICMP_V4_ECHO, 0, echo.to_bytes())
             },
-            TimeExceeded => (ICMP_V4_TIME_EXCEEDED, 0, 0),
-            ParameterProblem => (ICMP_V4_PARAMETERPROB, 0, 0),
-            TimestampRequest => (ICMP_V4_TIMESTAMP, 0, 0),
-            TimestampReply => (ICMP_V4_TIMESTAMPREPLY, 0, 0),
-            InfoRequest => (ICMP_V4_INFO_REQUEST, 0, 0),
-            InfoReply => (ICMP_V4_INFO_REPLY, 0, 0),
-            AddressRequest => (ICMP_V4_ADDRESS, 0, 0),
-            AddressReply => (ICMP_V4_ADDRESSREPLY, 0, 0),
+            TimeExceeded => (ICMP_V4_TIME_EXCEEDED, 0, [0;4]),
+            ParameterProblem => (ICMP_V4_PARAMETERPROB, 0, [0;4]),
+            TimestampRequest => (ICMP_V4_TIMESTAMP, 0, [0;4]),
+            TimestampReply => (ICMP_V4_TIMESTAMPREPLY, 0, [0;4]),
+            InfoRequest => (ICMP_V4_INFO_REQUEST, 0, [0;4]),
+            InfoReply => (ICMP_V4_INFO_REPLY, 0, [0;4]),
+            AddressRequest => (ICMP_V4_ADDRESS, 0, [0;4]),
+            AddressReply => (ICMP_V4_ADDRESSREPLY, 0, [0;4]),
         }
     }
 }
@@ -178,20 +233,19 @@ impl Icmp4Header {
         Icmp4Header { icmp_type, icmp_chksum: 0 }
     }
 
-    ///Write the transport header to the given writer.
+    /// Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         let cksum_be = self.icmp_chksum.to_be_bytes();
         let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
-        let four_bytes_arr = four_bytes.to_be_bytes();
         writer.write_all(&[
             icmp_type as u8,
             icmp_code,
             cksum_be[0],
             cksum_be[1],
-            four_bytes_arr[0],
-            four_bytes_arr[1],
-            four_bytes_arr[2],
-            four_bytes_arr[3],
+            four_bytes[0],
+            four_bytes[1],
+            four_bytes[2],
+            four_bytes[3],
         ]).map_err(WriteError::from)
     }
 
@@ -209,7 +263,7 @@ impl Icmp4Header {
                 // NOTE: RFC792 - ICMP4 checksum does not use a pseudo-header
                 // for the checksum; only the message itself
                 .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(four_bytes.to_be_bytes())
+                .add_4bytes(four_bytes)
                 .add_slice(payload)
                 .ones_complement()
                 .to_be()
@@ -262,31 +316,44 @@ impl<'a> Icmp4HeaderSlice<'a> {
     pub fn to_header(&self) -> Icmp4Header  {
         let icmp_type = self.icmp_type();
         Icmp4Header {
-            icmp_type: icmp_type,
+            icmp_type,
             icmp_chksum: self.icmp_chksum(),
         }
     }
 
     pub fn icmp_type(&self) -> Icmp4Type  {
-        // already checked slice len in ::from_slice()
-        let four_bytes = 
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
         unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(4))
-        };
-        Icmp4Type::from(self.slice[0], self.slice[1], four_bytes)
+            Icmp4Type::from(
+                *self.slice.get_unchecked(0),
+                *self.slice.get_unchecked(1),
+                [
+                    *self.slice.get_unchecked(4),
+                    *self.slice.get_unchecked(5),
+                    *self.slice.get_unchecked(6),
+                    *self.slice.get_unchecked(7),
+                ]
+            )
+        }
     }
 
     #[inline]
     pub fn icmp_code(&self) -> u8 {
-        // already checked slice len in ::from_slice()
-        self.slice[1]
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
+        unsafe {
+            *self.slice.get_unchecked(1)
+        }
     }
 
     #[inline]
     pub fn icmp_chksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
