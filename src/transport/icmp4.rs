@@ -38,10 +38,11 @@ pub const ICMP4_UNREACH_ISOLATED : u8 =     8;       /* src host isolated */
 pub const ICMP4_UNREACH_NET_PROHIB : u8 =   9;       /* net denied */
 pub const ICMP4_UNREACH_HOST_PROHIB : u8 =  10;      /* host denied */
 pub const ICMP4_UNREACH_TOSNET : u8 =       11;      /* bad tos for net */
-pub const ICMP4_UNREACH_TOSHOST : u8 =      12;     /* bad tos for host */
-pub const ICMP4_UNREACH_FILTER_PROHIB: u8 = 13;     /* admin prohib */
-pub const ICMP4_UNREACH_HOST_PRECEDENCE:u8= 14;     /* host prec vio. */
-pub const ICMP4_UNREACH_PRECEDENCE_CUTOFF: u8= 15;      /* prec cutoff */
+pub const ICMP4_UNREACH_TOSHOST : u8 =      12;      /* bad tos for host */
+pub const ICMP4_UNREACH_FILTER_PROHIB: u8 = 13;      /* admin prohib */
+pub const ICMP4_UNREACH_HOST_PRECEDENCE:u8= 14;      /* host prec vio. */
+pub const ICMP4_UNREACH_PRECEDENCE_CUTOFF: u8= 15;   /* prec cutoff */
+pub const ICMP4_UNREACH_UNKNOWN: u8 =       255;
 
 
 /// Icmp Dest Unreachables, Time Exceeded, and other Icmp packet types
@@ -74,8 +75,29 @@ pub enum Icmp4DestinationUnreachable {
     /// Port unreachable error.
     Port,
     /// Fragmentation would be needed but the don't fragment bit is set.
-    FragmentationNeeded{ next_hop_mtu: u16 }
-    // TODO, fill in more
+    FragmentationNeeded{ next_hop_mtu: u16 },
+    /// Source Routing Failed
+    SourceFail,
+    /// No path to network
+    NetworkUnknown,
+    /// No path to host
+    HostUnknown,
+    /// RFC1122 : Network/Host Isolated - obsolete
+    Isolated,
+    /// RFC1122 : Network Prohibitive 
+    NetworkProhibited,
+    /// RFC1122 : Host Prohibitive 
+    HostProhibitive,
+    /// RFC1122 : Network unreachable for this type of service
+    TosNetwork,
+    /// RFC1122 : Host unreachable for this type of service
+    TosHost,
+    /// RFC1812 : Cannot forward because packet administratively filtered
+    FilterProhibited,
+    /// RFC1812 : Required level of precidence not supported
+    HostPrecidence,
+    /// RFC1812 : Packet was below minimum precidence
+    PrecedenceCutoff,
 }
 
 impl Icmp4DestinationUnreachable {
@@ -94,6 +116,17 @@ impl Icmp4DestinationUnreachable {
             ICMP4_UNREACH_NEEDFRAG => FragmentationNeeded {
                 next_hop_mtu: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
             },
+            ICMP4_UNREACH_SRCFAIL => SourceFail,
+            ICMP4_UNREACH_NET_UNKNOWN => NetworkUnknown,
+            ICMP4_UNREACH_ISOLATED => Isolated,
+            ICMP4_UNREACH_NET_PROHIB => NetworkProhibited,
+            ICMP4_UNREACH_HOST_PROHIB => HostProhibitive,
+            ICMP4_UNREACH_TOSNET => TosNetwork,
+            ICMP4_UNREACH_TOSHOST => TosHost,
+            ICMP4_UNREACH_FILTER_PROHIB => FilterProhibited,
+            ICMP4_UNREACH_HOST_PRECEDENCE => HostPrecidence,
+            ICMP4_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
+            // default to Raw
             code => Raw{
                 code,
                 four_bytes
@@ -112,6 +145,17 @@ impl Icmp4DestinationUnreachable {
             Protocol => ICMP4_UNREACH_PROTOCOL,
             Port => ICMP4_UNREACH_PORT,
             FragmentationNeeded{ next_hop_mtu: _} => ICMP4_UNREACH_NEEDFRAG,
+            SourceFail => ICMP4_UNREACH_SRCFAIL,
+            NetworkUnknown => ICMP4_UNREACH_NET_UNKNOWN,
+            HostUnknown => ICMP4_UNREACH_HOST_UNKNOWN,
+            Isolated => ICMP4_UNREACH_ISOLATED,
+            NetworkProhibited => ICMP4_UNREACH_NET_PROHIB,
+            HostProhibitive => ICMP4_UNREACH_HOST_PROHIB,
+            TosNetwork => ICMP4_UNREACH_TOSNET,
+            TosHost => ICMP4_UNREACH_TOSHOST,
+            FilterProhibited => ICMP4_UNREACH_FILTER_PROHIB,
+            HostPrecidence => ICMP4_UNREACH_HOST_PRECEDENCE,
+            PrecedenceCutoff => ICMP4_UNREACH_PRECEDENCE_CUTOFF,
         }
     }
 
@@ -126,9 +170,38 @@ impl Icmp4DestinationUnreachable {
                 [0, 0, be[0], be[1]]
             },
             Raw{ code: _, four_bytes } => *four_bytes,
+            // everything else doesn't use the four bytes
+            _ => [0,0,0,0],
         }
     }
 }
+
+/* 
+impl Icmp4DestinationUnreachable {
+    pub fn from(icmp_code: u8) -> Icmp4DestinationUnreachable {
+        use Icmp4DestinationUnreachable::*;
+        match icmp_code {
+            ICMP4_UNREACH_NET => Network,
+            ICMP4_UNREACH_HOST => Host,
+            ICMP4_UNREACH_PROTOCOL => Protocol,
+            ICMP4_UNREACH_PORT => Port,
+            ICMP4_UNREACH_NEEDFRAG => FragmentationNeeded,
+            ICMP4_UNREACH_SRCFAIL => SourceFail,
+            ICMP4_UNREACH_NET_UNKNOWN => NetworkUnknown,
+            ICMP4_UNREACH_HOST_UNKNOWN => HostUnknown,
+            ICMP4_UNREACH_ISOLATED => Isolated,
+            ICMP4_UNREACH_NET_PROHIB => NetworkProhibited,
+            ICMP4_UNREACH_HOST_PROHIB => HostProhibitive,
+            ICMP4_UNREACH_TOSNET => TosNetwork,
+            ICMP4_UNREACH_TOSHOST => TosHost,
+            ICMP4_UNREACH_FILTER_PROHIB => FilterProhibited,
+            ICMP4_UNREACH_HOST_PRECEDENCE => HostPrecidence,
+            ICMP4_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
+            _ => Raw{code: icmp_code, four_bytes: [0, 0, 0, 0]},
+        }
+    }
+}
+*/
 
 // for simplicity + muscle memory, pattern against libc consts
 pub const ICMP_V4_ECHOREPLY: u8 =       0; /* Echo Reply                   */
@@ -190,7 +263,7 @@ impl Icmp4Type {
 
     /// Return the icmp_type, icmp_code, and the second 4 bytes
     /// of the ICMP payload, in big endian format
-    fn to_be_wire(&self) -> (u8, u8, [u8;4]) {
+    pub fn to_be_wire(&self) -> (u8, u8, [u8;4]) {
         use Icmp4Type::*;
         match &self {
             Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
