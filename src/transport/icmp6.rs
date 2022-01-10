@@ -49,7 +49,8 @@ impl Icmp6DestinationUnreachable {
         }
     }
 
-    pub fn to_wire(&self) -> u8 {
+    /// Returns the code value of the destination unreachable
+    pub fn code(&self) -> u8 {
         use Icmp6DestinationUnreachable::*;
         match self {
             Unknown{code} => *code,
@@ -65,7 +66,7 @@ impl Icmp6DestinationUnreachable {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp6Type {
-    Raw{icmp_type: u8, icmp_code: u8, four_bytes: u32},
+    Raw{icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]},
     DestinationUnreachable(Icmp6DestinationUnreachable),
     PacketTooBig,
     TimeExceeded,
@@ -78,7 +79,7 @@ pub enum Icmp6Type {
 impl Icmp6Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    fn from(icmp_type: u8, icmp_code: u8, four_bytes: u32) -> Icmp6Type {
+    fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp6Type {
         use Icmp6Type::*;
         match icmp_type {
             ICMP6_DST_UNREACH => 
@@ -92,17 +93,17 @@ impl Icmp6Type {
         }
     }
 
-    fn to_be_wire(&self) -> (u8, u8, u32) {
+    fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmp6Type::*;
         match self {
             Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
             DestinationUnreachable(icmp_code) => 
-            (ICMP6_DST_UNREACH, (icmp_code.to_wire()), 0),
-            PacketTooBig => (ICMP6_PACKET_TOO_BIG, 0, 0),
-            TimeExceeded => (ICMP6_TIME_EXCEEDED, 0, 0),
-            ParameterProblem => (ICMP6_PARAM_PROB, 0, 0),
-            EchoRequest(echo) => (ICMP6_ECHO_REQUEST, 0, echo.to_be_wire()),
-            EchoReply(echo) => (ICMP6_ECHO_REPLY, 0, echo.to_be_wire()),
+            (ICMP6_DST_UNREACH, (icmp_code.code()), [0;4]),
+            PacketTooBig => (ICMP6_PACKET_TOO_BIG, 0, [0;4]),
+            TimeExceeded => (ICMP6_TIME_EXCEEDED, 0, [0;4]),
+            ParameterProblem => (ICMP6_PARAM_PROB, 0, [0;4]),
+            EchoRequest(echo) => (ICMP6_ECHO_REQUEST, 0, echo.to_bytes()),
+            EchoReply(echo) => (ICMP6_ECHO_REPLY, 0, echo.to_bytes()),
         }
     }
 }
@@ -131,17 +132,16 @@ impl Icmp6Header {
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         // TODO ... implement the rest
         let cksum_be = self.icmp_chksum.to_be_bytes();
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
-        let four_bytes_arr = four_bytes.to_be_bytes();
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
         writer.write_all(&[
             icmp_type,
             icmp_code,
             cksum_be[0],
             cksum_be[1],
-            four_bytes_arr[0],
-            four_bytes_arr[1],
-            four_bytes_arr[2],
-            four_bytes_arr[3],
+            four_bytes[0],
+            four_bytes[1],
+            four_bytes[2],
+            four_bytes[3],
         ]).map_err(WriteError::from)
     }
 
@@ -152,7 +152,7 @@ impl Icmp6Header {
             return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
         }
 
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
         let msg_len = payload.len() + Icmp6Header::SERIALIZED_SIZE;
         //calculate the checksum; icmp4 will always take an ip4 header
         Ok(
@@ -164,7 +164,7 @@ impl Icmp6Header {
                 .add_2bytes([0, ip_number::IPV6_ICMP])
                 .add_2bytes((msg_len as u16).to_be_bytes())
                 .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(four_bytes.to_be_bytes())
+                .add_4bytes(four_bytes)
                 .add_slice(payload)
                 .ones_complement()
                 .to_be()
@@ -213,26 +213,38 @@ impl<'a> Icmp6HeaderSlice<'a> {
     /// Decode all the fields and copy the results to a UdpHeader struct
     #[inline]
     pub fn to_header(&self) -> Icmp6Header {
-        let icmp_type =  self.icmp_type();
         Icmp6Header {
-            icmp_type,
+            icmp_type: self.icmp_type(),
             icmp_chksum: self.icmp_chksum(),
         }
     }
 
     pub fn icmp_type(&self) -> Icmp6Type {
-        // already checked slice len in ::from_slice()
-        let four_bytes = 
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmp6Header::SERIALIZED_SIZE (8).
         unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(4))
-        };
-        Icmp6Type::from(self.slice[0], self.slice[1], four_bytes)
+            Icmp6Type::from(
+                *self.slice.get_unchecked(0),
+                *self.slice.get_unchecked(1),
+                [
+                    *self.slice.get_unchecked(4),
+                    *self.slice.get_unchecked(5),
+                    *self.slice.get_unchecked(6),
+                    *self.slice.get_unchecked(7),
+                ]
+            )
+        }
     }
 
     #[inline]
     pub fn icmp_code(&self) -> u8 {
-        // already checked slice len in ::from_slice()
-        self.slice[1]
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmp6Header::SERIALIZED_SIZE (8).
+        unsafe {
+            *self.slice.get_unchecked(0)
+        }
     }
 
     #[inline]
