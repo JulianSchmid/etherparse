@@ -128,4 +128,66 @@ mod icmp4_hdr {
                 Ok(valid_checksum));
         }
     }
+
+    // TTL unreachable from 'traceroute google.com'
+    const ICMP4_TTL_EXCEEDED_BYTES: [u8;94] = [
+        0x98, 0x8d, 0x46, 0xc5, 0x03, 0x82, 0x60, 0xa4, 0xb7, 0x25, 0x4b, 0x84, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x50, 0x00, 0x00, 0x00, 0x00, 0xfe, 0x01, 0x5c, 0x87, 0xd4, 0x9c, 0xc9, 0x72, 0xc0, 0xa8,
+        0x01, 0x6e, 0x0b, 0x00, 0x24, 0x29, 0x00, 0x00, 0x00, 0x00, 0x45, 0x00, 0x00, 0x3c, 0xe3, 0xaf,
+        0x00, 0x00, 0x01, 0x11, 0x14, 0x84, 0xc0, 0xa8, 0x01, 0x6e, 0xd8, 0xef, 0x26, 0x78, 0xc2, 0x8e,
+        0x82, 0x9f, 0x00, 0x28, 0x03, 0xed, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49,
+        0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x50, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
+    ];
+    #[test]
+    fn parse_icmp4_ttl_exceeded() {
+        let ttl_exceeded = PacketHeaders::from_ethernet_slice(&ICMP4_TTL_EXCEEDED_BYTES).unwrap();
+        let ip_header = match ttl_exceeded.ip.unwrap() {
+            IpHeader::Version4(ip4, _) => ip4,
+            _ => panic!("Didn't parse inner v4 IP header!?"),
+        };
+        assert_eq!(Ipv4Addr::from(ip_header.source), "212.156.201.114".parse::<Ipv4Addr>().unwrap());
+        let icmp4 = ttl_exceeded.transport.unwrap().icmp4().unwrap();
+        let (icmp_type, icmp_code, four_bytes) = icmp4.icmp_type.to_be_wire();
+        assert_eq!(icmp_type, ICMP_V4_TIME_EXCEEDED);
+        assert_eq!(icmp_code, 0);
+        assert_eq!(four_bytes, [0;4]);  // TTL exceeded doesn't use this field
+        // now unpack the bounced packet in the payload
+        let embedded_pkt = PacketHeaders::from_ip_slice(ttl_exceeded.payload).unwrap();
+        let ip_header = match embedded_pkt.ip.unwrap() {
+            IpHeader::Version4(ip4, _) => ip4,
+            _ => panic!("Didn't parse inner v4 IP header!?"),
+        };
+        use std::net::Ipv4Addr;
+        assert_eq!(Ipv4Addr::from(ip_header.source), "192.168.1.110".parse::<Ipv4Addr>().unwrap());
+        assert_eq!(Ipv4Addr::from(ip_header.destination), "216.239.38.120".parse::<Ipv4Addr>().unwrap());
+        let tcp_header = embedded_pkt.transport.unwrap().udp().unwrap();
+        assert_eq!(tcp_header.source_port, 49806);  // numbers read from wireshark
+        assert_eq!(tcp_header.destination_port, 33439);
+    }
+
+    const ICMP4_PORT_UNREACHABLE_BYTES: [u8; 70] = [
+        0x98, 0x8d, 0x46, 0xc5, 0x03, 0x82, 0x60, 0xa4, 0xb7, 0x25, 0x4b, 0x84, 0x08, 0x00, 0x45, 0x00,
+        0x00, 0x38, 0x00, 0x00, 0x00, 0x00, 0x39, 0x01, 0xc0, 0x47, 0xd8, 0xef, 0x26, 0x78, 0xc0, 0xa8,
+        0x01, 0x6e, 0x03, 0x03, 0xb3, 0xb9, 0x00, 0x00, 0x00, 0x00, 0x45, 0x80, 0x00, 0x3c, 0xe3, 0xd2,
+        0x00, 0x00, 0x01, 0x11, 0x13, 0xe1, 0xc0, 0xa8, 0x01, 0x6e, 0xd8, 0xef, 0x26, 0x78, 0xb3, 0x4e,
+        0x82, 0xb2, 0x00, 0x28, 0x13, 0x1a,
+    ];
+    #[test]
+    fn icmp4_dst_unreachable() {
+        let offset = 14 + 20 + 1;   // ethernet + iphdr + icmp_type
+        // test all of the unreachable codes to make sure the maps are right
+        for code_val in 0..ICMP4_UNREACH_PRECEDENCE_CUTOFF {
+            let code = Icmp4DestinationUnreachable::from_bytes(code_val, [0;4]);
+            let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
+            pkt[offset] = code_val;  // over write the code
+            let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
+            let icmp4 = parsed.transport.unwrap().icmp4().unwrap();
+            if let Icmp4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
+                assert_eq!(icmp_code, code);
+                assert_eq!(code_val, icmp_code.code() );
+            } else {
+                panic!("Not destination unreachable!?");
+            }
+        }
+    }
 }
