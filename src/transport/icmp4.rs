@@ -176,33 +176,6 @@ impl Icmp4DestinationUnreachable {
     }
 }
 
-/* 
-impl Icmp4DestinationUnreachable {
-    pub fn from(icmp_code: u8) -> Icmp4DestinationUnreachable {
-        use Icmp4DestinationUnreachable::*;
-        match icmp_code {
-            ICMP4_UNREACH_NET => Network,
-            ICMP4_UNREACH_HOST => Host,
-            ICMP4_UNREACH_PROTOCOL => Protocol,
-            ICMP4_UNREACH_PORT => Port,
-            ICMP4_UNREACH_NEEDFRAG => FragmentationNeeded,
-            ICMP4_UNREACH_SRCFAIL => SourceFail,
-            ICMP4_UNREACH_NET_UNKNOWN => NetworkUnknown,
-            ICMP4_UNREACH_HOST_UNKNOWN => HostUnknown,
-            ICMP4_UNREACH_ISOLATED => Isolated,
-            ICMP4_UNREACH_NET_PROHIB => NetworkProhibited,
-            ICMP4_UNREACH_HOST_PROHIB => HostProhibitive,
-            ICMP4_UNREACH_TOSNET => TosNetwork,
-            ICMP4_UNREACH_TOSHOST => TosHost,
-            ICMP4_UNREACH_FILTER_PROHIB => FilterProhibited,
-            ICMP4_UNREACH_HOST_PRECEDENCE => HostPrecidence,
-            ICMP4_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
-            _ => Raw{code: icmp_code, four_bytes: [0, 0, 0, 0]},
-        }
-    }
-}
-*/
-
 // for simplicity + muscle memory, pattern against libc consts
 pub const ICMP_V4_ECHOREPLY: u8 =       0; /* Echo Reply                   */
 pub const ICMP_V4_DEST_UNREACH: u8 =    3; /* Destination Unreachable      */
