@@ -160,9 +160,9 @@ mod icmp4_hdr {
         use std::net::Ipv4Addr;
         assert_eq!(Ipv4Addr::from(ip_header.source), "192.168.1.110".parse::<Ipv4Addr>().unwrap());
         assert_eq!(Ipv4Addr::from(ip_header.destination), "216.239.38.120".parse::<Ipv4Addr>().unwrap());
-        let tcp_header = embedded_pkt.transport.unwrap().udp().unwrap();
-        assert_eq!(tcp_header.source_port, 49806);  // numbers read from wireshark
-        assert_eq!(tcp_header.destination_port, 33439);
+        let udp_header = embedded_pkt.transport.unwrap().udp().unwrap();
+        assert_eq!(udp_header.source_port, 49806);  // numbers read from wireshark
+        assert_eq!(udp_header.destination_port, 33439);
     }
 
     const ICMP4_PORT_UNREACHABLE_BYTES: [u8; 70] = [
