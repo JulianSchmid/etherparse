@@ -159,7 +159,7 @@ mod icmp4_hdr {
         };
         assert_eq!(Ipv4Addr::from(ip_header.source), "212.156.201.114".parse::<Ipv4Addr>().unwrap());
         let icmp4 = ttl_exceeded.transport.unwrap().icmp4().unwrap();
-        let (icmp_type, icmp_code, four_bytes) = icmp4.icmp_type.to_be_wire();
+        let (icmp_type, icmp_code, four_bytes) = icmp4.icmp_type.to_bytes();
         assert_eq!(icmp_type, ICMP_V4_TIME_EXCEEDED);
         assert_eq!(icmp_code, 0);
         assert_eq!(four_bytes, [0;4]);  // TTL exceeded doesn't use this field

@@ -1,5 +1,40 @@
 
 
+#[test]
+fn constants() {
+    use etherparse::icmpv6::*;
+    // type values according to
+    // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-16
+    assert_eq!(  1, TYPE_DST_UNREACH);
+    assert_eq!(  2, TYPE_PACKET_TOO_BIG);
+    assert_eq!(  3, TYPE_TIME_EXCEEDED);
+    assert_eq!(  4, TYPE_PARAM_PROB);
+    assert_eq!(128, TYPE_ECHO_REQUEST);
+    assert_eq!(129, TYPE_ECHO_REPLY);
+    assert_eq!(130, TYPE_MULTICAST_LISTENER_QUERY);
+    assert_eq!(131, TYPE_MULTICAST_LISTENER_REPORT);
+    assert_eq!(132, TYPE_MULTICAST_LISTENER_REDUCTION);
+    assert_eq!(133, TYPE_ROUTER_SOLICITATION);
+    assert_eq!(134, TYPE_ROUTER_ADVERTISEMENT);
+    assert_eq!(135, TYPE_NEIGHBOR_SOLICITATION);
+    assert_eq!(136, TYPE_NEIGHBOR_ADVERTISEMENT);
+    assert_eq!(137, TYPE_REDIRECT_MESSAGE);
+    assert_eq!(138, TYPE_ROUTER_RENUMBERING);
+    assert_eq!(141, TYPE_INVERSE_NEIGHBOR_DISCOVERY_SOLICITATION);
+    assert_eq!(142, TYPE_INVERSE_NEIGHBOR_DISCOVERY_ADVERTISEMENT);
+    assert_eq!(160, TYPE_EXT_ECHO_REQUEST);
+    assert_eq!(161, TYPE_EXT_ECHO_REPLY);
+
+    // destination unreachable code values according to
+    // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-2
+    assert_eq!(0, CODE_DST_UNREACH_NOROUTE);
+    assert_eq!(1, CODE_DST_UNREACH_PROHIBITED);
+    assert_eq!(2, CODE_DST_UNREACH_BEYONDSCOPE);
+    assert_eq!(3, CODE_DST_UNREACH_ADDR);
+    assert_eq!(4, CODE_DST_UNREACH_PORT);
+}
+
+
 mod icmp6_hdr {
     use etherparse::*;
     // use super::super::*;

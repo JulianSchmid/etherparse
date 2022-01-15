@@ -191,6 +191,7 @@ pub const ICMP_V4_INFO_REPLY: u8 =     16; /* Information Reply            */
 pub const ICMP_V4_ADDRESS: u8 =        17; /* Address Mask Request         */
 pub const ICMP_V4_ADDRESSREPLY: u8 =   18; /* Address Mask Reply           */
 
+/// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp4Type {
     /// Used to encode unparsed/unknown ICMP headers
@@ -213,7 +214,7 @@ pub enum Icmp4Type {
 impl Icmp4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp4Type {
+    pub fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
             ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
@@ -235,8 +236,8 @@ impl Icmp4Type {
     }
 
     /// Return the icmp_type, icmp_code, and the second 4 bytes
-    /// of the ICMP payload, in big endian format
-    pub fn to_be_wire(&self) -> (u8, u8, [u8;4]) {
+    /// of the ICMP payload.
+    pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmp4Type::*;
         match &self {
             Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
@@ -282,7 +283,7 @@ impl Icmp4Header {
     /// Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         let cksum_be = self.icmp_chksum.to_be_bytes();
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
         writer.write_all(&[
             icmp_type as u8,
             icmp_code,
@@ -302,7 +303,7 @@ impl Icmp4Header {
             return Err(ValueError::Ipv4PayloadLengthTooLarge(payload.len()));
         }
 
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_be_wire();
+        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
         //calculate the checksum; icmp4 will always take an ip4 header
         Ok(
                 checksum::Sum16BitWords::new()
