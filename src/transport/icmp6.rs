@@ -4,27 +4,85 @@ use crate::transport::icmp4;
 
 use std::slice::from_raw_parts;
 
-pub const ICMP6_DST_UNREACH: u8 =       1;
-pub const ICMP6_PACKET_TOO_BIG: u8 =    2;
-pub const ICMP6_TIME_EXCEEDED: u8 =     3;
-pub const ICMP6_PARAM_PROB: u8 =        4;   
-// silly spec, intentially gap
-pub const ICMP6_ECHO_REQUEST: u8 =  128;
-pub const ICMP6_ECHO_REPLY: u8 =    129;
-pub const MLD_LISTENER_QUERY: u8 =  130;
-pub const MLD_LISTENER_REPORT: u8 =  131;
-pub const MLD_LISTENER_REDUCTION: u8 =  132;
-pub const ICMP6_EXT_ECHO_REQUEST: u8 =  160;
-pub const ICMP6_EXT_ECHO_REPLY: u8 =  161;
+/// Module containing ICMPv6 related constants
+pub mod icmpv6 {
 
+    /// ICMPv6 type value indicating a "Destination Unreachable" message.
+    pub const TYPE_DST_UNREACH: u8 = 1;
 
-pub const ICMP6_DST_UNREACH_NOROUTE:u8 =0; /* no route to destination */
-pub const ICMP6_DST_UNREACH_ADMIN:u8 =  1; /* communication with destination */
-                                        /* administratively prohibited */
-pub const ICMP6_DST_UNREACH_BEYONDSCOPE: u8= 2; /* beyond scope of source address */
-pub const ICMP6_DST_UNREACH_ADDR:u8 =   3; /* address unreachable */
-pub const ICMP6_DST_UNREACH_NOPORT:u8 = 4; /* bad port */
+    /// ICMPv6 type value indicating a "Packet Too Big" message.
+    pub const TYPE_PACKET_TOO_BIG: u8 = 2;
 
+    /// ICMPv6 type value indicating a "Time Exceeded" message.
+    pub const TYPE_TIME_EXCEEDED: u8 = 3;
+
+    /// ICMPv6 type value indicating a "Parameter Problem" message.
+    pub const TYPE_PARAM_PROB: u8 = 4;
+
+    /// ICMPv6 type value indicating an "Echo Request" message.
+    pub const TYPE_ECHO_REQUEST: u8 = 128;
+
+    /// ICMPv6 type value indicating an "Echo Reply" message.
+    pub const TYPE_ECHO_REPLY: u8 = 129;
+
+    /// ICMPv6 type value indicating a "Multicast Listener Query" message.
+    pub const TYPE_MULTICAST_LISTENER_QUERY: u8 = 130;
+
+    /// ICMPv6 type value indicating a "Multicast Listener Report" message.
+    pub const TYPE_MULTICAST_LISTENER_REPORT: u8 = 131;
+
+    /// ICMPv6 type value indicating a "Multicast Listener Done" message.
+    pub const TYPE_MULTICAST_LISTENER_REDUCTION: u8 = 132;
+
+    /// ICMPv6 type value indicating a "Router Solicitation" message.
+    pub const TYPE_ROUTER_SOLICITATION: u8 = 133;
+
+    /// ICMPv6 type value indicating a "Router Advertisement" message.
+    pub const TYPE_ROUTER_ADVERTISEMENT: u8 = 134;
+
+    /// ICMPv6 type value indicating a "Neighbor Solicitation" message.
+    pub const TYPE_NEIGHBOR_SOLICITATION: u8 = 135;
+
+    /// ICMPv6 type value indicating a "Neighbor Advertisement" message.
+    pub const TYPE_NEIGHBOR_ADVERTISEMENT: u8 = 136;
+
+    /// ICMPv6 type value indicating a "Redirect Message" message.
+    pub const TYPE_REDIRECT_MESSAGE: u8 = 137;
+
+    /// ICMPv6 type value indicating a "Router Renumbering" message.
+    pub const TYPE_ROUTER_RENUMBERING: u8 = 138;
+
+    /// ICMPv6 type value indicating a "Inverse Neighbor Discovery Solicitation" message.
+    pub const TYPE_INVERSE_NEIGHBOR_DISCOVERY_SOLICITATION: u8 = 141;
+
+    /// ICMPv6 type value indicating a "Inverse Neighbor Discovery Advertisement" message.
+    pub const TYPE_INVERSE_NEIGHBOR_DISCOVERY_ADVERTISEMENT: u8 = 142;
+
+    /// ICMPv6 type value indicating a "" message.
+    pub const TYPE_EXT_ECHO_REQUEST: u8 = 160;
+
+    /// ICMPv6 type value indicating a "" message.
+    pub const TYPE_EXT_ECHO_REPLY: u8 = 161;
+
+    /// ICMPv6 destination unreachable code for "no route to destination".
+    pub const CODE_DST_UNREACH_NOROUTE: u8 = 0;
+
+    /// ICMPv6 destination unreachable code for "communication
+    /// with destination administratively prohibited".
+    pub const CODE_DST_UNREACH_PROHIBITED: u8 = 1;
+
+    /// ICMPv6 destination unreachable code for "beyond scope
+    /// of source address".
+    pub const CODE_DST_UNREACH_BEYONDSCOPE: u8 = 2;
+
+    /// ICMPv6 destination unreachable code for "address unreachable".
+    pub const CODE_DST_UNREACH_ADDR: u8 = 3;
+
+    /// ICMPv6 destination unreachable code for "port unreachable".
+    pub const CODE_DST_UNREACH_PORT: u8 = 4;
+}
+
+use icmpv6::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp6DestinationUnreachable {
@@ -40,11 +98,11 @@ impl Icmp6DestinationUnreachable {
     pub fn from(icmp_code: u8) -> Icmp6DestinationUnreachable {
         use Icmp6DestinationUnreachable::*;
         match icmp_code {
-            ICMP6_DST_UNREACH_NOROUTE => NoRoute,
-            ICMP6_DST_UNREACH_ADMIN => Admin,
-            ICMP6_DST_UNREACH_BEYONDSCOPE => BeyondScope,
-            ICMP6_DST_UNREACH_ADDR => Address,
-            ICMP6_DST_UNREACH_NOPORT => NoPort,
+            CODE_DST_UNREACH_NOROUTE => NoRoute,
+            CODE_DST_UNREACH_PROHIBITED => Admin,
+            CODE_DST_UNREACH_BEYONDSCOPE => BeyondScope,
+            CODE_DST_UNREACH_ADDR => Address,
+            CODE_DST_UNREACH_PORT => NoPort,
             _ => Unknown{code: icmp_code},
         }
     }
@@ -54,11 +112,11 @@ impl Icmp6DestinationUnreachable {
         use Icmp6DestinationUnreachable::*;
         match self {
             Unknown{code} => *code,
-            NoRoute => ICMP6_DST_UNREACH_NOROUTE,
-            Admin => ICMP6_DST_UNREACH_ADMIN,
-            BeyondScope => ICMP6_DST_UNREACH_BEYONDSCOPE,
-            Address => ICMP6_DST_UNREACH_ADDR,
-            NoPort => ICMP6_DST_UNREACH_NOPORT,
+            NoRoute => CODE_DST_UNREACH_NOROUTE,
+            Admin => CODE_DST_UNREACH_PROHIBITED,
+            BeyondScope => CODE_DST_UNREACH_BEYONDSCOPE,
+            Address => CODE_DST_UNREACH_ADDR,
+            NoPort => CODE_DST_UNREACH_PORT,
         }
     }
 }
@@ -82,13 +140,13 @@ impl Icmp6Type {
     fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp6Type {
         use Icmp6Type::*;
         match icmp_type {
-            ICMP6_DST_UNREACH => 
+            TYPE_DST_UNREACH => 
                 DestinationUnreachable(Icmp6DestinationUnreachable::from(icmp_code)),
-            ICMP6_PACKET_TOO_BIG => PacketTooBig,
-            ICMP6_TIME_EXCEEDED => TimeExceeded,
-            ICMP6_PARAM_PROB => ParameterProblem,
-            ICMP6_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from(four_bytes)),
-            ICMP6_ECHO_REPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
+            TYPE_PACKET_TOO_BIG => PacketTooBig,
+            TYPE_TIME_EXCEEDED => TimeExceeded,
+            TYPE_PARAM_PROB => ParameterProblem,
+            TYPE_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from(four_bytes)),
+            TYPE_ECHO_REPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
             _ => Raw{icmp_type, icmp_code, four_bytes},
         }
     }
@@ -98,12 +156,12 @@ impl Icmp6Type {
         match self {
             Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
             DestinationUnreachable(icmp_code) => 
-            (ICMP6_DST_UNREACH, (icmp_code.code()), [0;4]),
-            PacketTooBig => (ICMP6_PACKET_TOO_BIG, 0, [0;4]),
-            TimeExceeded => (ICMP6_TIME_EXCEEDED, 0, [0;4]),
-            ParameterProblem => (ICMP6_PARAM_PROB, 0, [0;4]),
-            EchoRequest(echo) => (ICMP6_ECHO_REQUEST, 0, echo.to_bytes()),
-            EchoReply(echo) => (ICMP6_ECHO_REPLY, 0, echo.to_bytes()),
+            (TYPE_DST_UNREACH, (icmp_code.code()), [0;4]),
+            PacketTooBig => (TYPE_PACKET_TOO_BIG, 0, [0;4]),
+            TimeExceeded => (TYPE_TIME_EXCEEDED, 0, [0;4]),
+            ParameterProblem => (TYPE_PARAM_PROB, 0, [0;4]),
+            EchoRequest(echo) => (TYPE_ECHO_REQUEST, 0, echo.to_bytes()),
+            EchoReply(echo) => (TYPE_ECHO_REPLY, 0, echo.to_bytes()),
         }
     }
 }
@@ -130,7 +188,6 @@ impl Icmp6Header {
 
     ///Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        // TODO ... implement the rest
         let cksum_be = self.icmp_chksum.to_be_bytes();
         let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
         writer.write_all(&[
