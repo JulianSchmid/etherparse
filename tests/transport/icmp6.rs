@@ -1,5 +1,4 @@
 
-
 #[test]
 fn constants() {
     use etherparse::icmpv6::*;
@@ -32,12 +31,123 @@ fn constants() {
     assert_eq!(2, CODE_DST_UNREACH_BEYONDSCOPE);
     assert_eq!(3, CODE_DST_UNREACH_ADDR);
     assert_eq!(4, CODE_DST_UNREACH_PORT);
+    assert_eq!(5, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
+    assert_eq!(6, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
 }
 
+mod icmp6_dest_unreachable {
+    use etherparse::Icmp6DestUnreachable;
+    use etherparse::Icmp6DestUnreachable::*;
+    use etherparse::icmpv6::*;
+
+    #[test]
+    fn from_bytes() {
+        for code in 7u8..=0xff {
+            assert_eq!(
+                Raw{
+                    code,
+                    four_bytes: [1,2,3,4],
+                },
+                Icmp6DestUnreachable::from_bytes(
+                    code,
+                    [1,2,3,4]
+                )
+            );
+        }
+        assert_eq!(
+            NoRoute,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_NOROUTE,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            Prohibited,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_PROHIBITED,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            BeyondScope,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_BEYONDSCOPE,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            Address,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_ADDR,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            Port,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_PORT,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            SourceAddressFailedPolicy,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
+                [0;4]
+            )
+        );
+        assert_eq!(
+            RejectRoute,
+            Icmp6DestUnreachable::from_bytes(
+                CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
+                [0;4]
+            )
+        );
+    }
+
+    #[test]
+    fn code() {
+        for code in 0u8..=0xff {
+            assert_eq!(
+                code,
+                Raw{
+                    code,
+                    four_bytes: [1,2,3,4],
+                }.code(),
+            );
+        }
+        assert_eq!(NoRoute.code(), CODE_DST_UNREACH_NOROUTE);
+        assert_eq!(Prohibited.code(), CODE_DST_UNREACH_PROHIBITED);
+        assert_eq!(BeyondScope.code(), CODE_DST_UNREACH_BEYONDSCOPE);
+        assert_eq!(Address.code(), CODE_DST_UNREACH_ADDR);
+        assert_eq!(Port.code(), CODE_DST_UNREACH_PORT);
+        assert_eq!(SourceAddressFailedPolicy.code(), CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
+        assert_eq!(RejectRoute.code(), CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
+    }
+
+    #[test]
+    fn to_bytes() {
+        for code in 0u8..=0xff {
+            assert_eq!(
+                (code, [1,2,3,4]),
+                Raw{
+                    code,
+                    four_bytes: [1,2,3,4],
+                }.to_bytes(),
+            );
+        }
+        assert_eq!(NoRoute.to_bytes(), (CODE_DST_UNREACH_NOROUTE, [0;4]));
+        assert_eq!(Prohibited.to_bytes(), (CODE_DST_UNREACH_PROHIBITED, [0;4]));
+        assert_eq!(BeyondScope.to_bytes(), (CODE_DST_UNREACH_BEYONDSCOPE, [0;4]));
+        assert_eq!(Address.to_bytes(), (CODE_DST_UNREACH_ADDR, [0;4]));
+        assert_eq!(Port.to_bytes(), (CODE_DST_UNREACH_PORT, [0;4]));
+        assert_eq!(SourceAddressFailedPolicy.to_bytes(), (CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY, [0;4]));
+        assert_eq!(RejectRoute.to_bytes(), (CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST, [0;4]));
+    }
+}
 
 mod icmp6_hdr {
     use etherparse::*;
-    // use super::super::*;
 
     #[test]
     fn icmp6_echo_marshall_unmarshall() {
