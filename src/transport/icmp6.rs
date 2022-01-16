@@ -58,21 +58,20 @@ pub mod icmpv6 {
     /// ICMPv6 type value indicating a "Inverse Neighbor Discovery Advertisement" message.
     pub const TYPE_INVERSE_NEIGHBOR_DISCOVERY_ADVERTISEMENT: u8 = 142;
 
-    /// ICMPv6 type value indicating a "" message.
+    /// ICMPv6 type value indicating a "Extended Echo Request" message.
     pub const TYPE_EXT_ECHO_REQUEST: u8 = 160;
 
-    /// ICMPv6 type value indicating a "" message.
+    /// ICMPv6 type value indicating a "Extended Echo Reply" message.
     pub const TYPE_EXT_ECHO_REPLY: u8 = 161;
 
     /// ICMPv6 destination unreachable code for "no route to destination".
     pub const CODE_DST_UNREACH_NOROUTE: u8 = 0;
 
-    /// ICMPv6 destination unreachable code for "communication
-    /// with destination administratively prohibited".
+    /// ICMPv6 destination unreachable code for "communication with
+    /// destination administratively prohibited".
     pub const CODE_DST_UNREACH_PROHIBITED: u8 = 1;
 
-    /// ICMPv6 destination unreachable code for "beyond scope
-    /// of source address".
+    /// ICMPv6 destination unreachable code for "beyond scope of source address".
     pub const CODE_DST_UNREACH_BEYONDSCOPE: u8 = 2;
 
     /// ICMPv6 destination unreachable code for "address unreachable".
@@ -80,43 +79,110 @@ pub mod icmpv6 {
 
     /// ICMPv6 destination unreachable code for "port unreachable".
     pub const CODE_DST_UNREACH_PORT: u8 = 4;
+
+    /// ICMPv6 destination unreachable code for "source address failed ingress/egress policy".
+    pub const CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY: u8 = 5;
+
+    /// ICMPv6 destination unreachable code for "reject route to destination".
+    pub const CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST: u8 = 6;
 }
 
 use icmpv6::*;
 
+/// "Destination Unreachable" ICMPv6 package (without the invoking packet).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Icmp6DestinationUnreachable {
-    Unknown{code:u8}, // unparsed
+pub enum Icmp6DestUnreachable {
+    /// In case of an unknown icmp code is received the header elements are stored raw.
+    Raw{
+        /// ICMP code (present in the 2nd byte of the ICMP packet).
+        code: u8,
+        /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
+        four_bytes: [u8;4],
+    },
+    /// No route to destination
     NoRoute,
-    Admin,
+    /// Communication with destination administratively prohibited
+    Prohibited,
+    /// Beyond scope of source address
     BeyondScope,
+    /// Address unreachable
     Address,
-    NoPort,
+    /// Port unreachable
+    Port,
+    /// Source address failed ingress/egress policy
+    SourceAddressFailedPolicy,
+    /// Reject route to destination
+    RejectRoute,
 }
 
-impl Icmp6DestinationUnreachable {
-    pub fn from(icmp_code: u8) -> Icmp6DestinationUnreachable {
-        use Icmp6DestinationUnreachable::*;
-        match icmp_code {
+impl Icmp6DestUnreachable {
+    /// Converts the raw values from an ICMPv6 "destination unreachable"
+    /// packet to an `Icmp6DestUnreachable` enum.
+    ///
+    /// `from_bytes` expects the second byte as first argument and 5th-8th
+    /// bytes as second argument.
+    ///
+    /// # Example Usage:
+    ///
+    /// ```
+    /// use etherparse::{icmpv6, Icmp6DestUnreachable};
+    /// let icmp_packet: [u8;8] = [
+    ///     icmpv6::TYPE_DST_UNREACH, icmpv6::CODE_DST_UNREACH_PORT, 0, 0,
+    ///     0, 0, 0, 0,
+    /// ];
+    ///
+    /// if icmpv6::TYPE_DST_UNREACH == icmp_packet[0] {
+    ///     let dst = Icmp6DestUnreachable::from_bytes(
+    ///         icmp_packet[1],
+    ///         [icmp_packet[4], icmp_packet[5], icmp_packet[6], icmp_packet[7]],
+    ///     );
+    ///     assert_eq!(dst, Icmp6DestUnreachable::Port);
+    /// }
+    /// ```
+    pub fn from_bytes(code: u8, four_bytes: [u8;4]) -> Icmp6DestUnreachable {
+        use Icmp6DestUnreachable::*;
+        match code {
             CODE_DST_UNREACH_NOROUTE => NoRoute,
-            CODE_DST_UNREACH_PROHIBITED => Admin,
+            CODE_DST_UNREACH_PROHIBITED => Prohibited,
             CODE_DST_UNREACH_BEYONDSCOPE => BeyondScope,
             CODE_DST_UNREACH_ADDR => Address,
-            CODE_DST_UNREACH_PORT => NoPort,
-            _ => Unknown{code: icmp_code},
+            CODE_DST_UNREACH_PORT => Port,
+            CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY => SourceAddressFailedPolicy,
+            CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST => RejectRoute,
+            _ => Raw{code, four_bytes},
         }
     }
 
-    /// Returns the code value of the destination unreachable
+    /// Returns the code value of the destination unreachable packet.
+    ///
+    /// This is the second byte of an ICMPv6 packet.
     pub fn code(&self) -> u8 {
-        use Icmp6DestinationUnreachable::*;
+        use Icmp6DestUnreachable::*;
         match self {
-            Unknown{code} => *code,
+            Raw{code, four_bytes: _} => *code,
             NoRoute => CODE_DST_UNREACH_NOROUTE,
-            Admin => CODE_DST_UNREACH_PROHIBITED,
+            Prohibited => CODE_DST_UNREACH_PROHIBITED,
             BeyondScope => CODE_DST_UNREACH_BEYONDSCOPE,
             Address => CODE_DST_UNREACH_ADDR,
-            NoPort => CODE_DST_UNREACH_PORT,
+            Port => CODE_DST_UNREACH_PORT,
+            SourceAddressFailedPolicy => CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
+            RejectRoute => CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
+        }
+    }
+
+    /// Returns second and and 5th-8th bytes (inclusive) of
+    /// the destination unreachable ICMPv6 packet.
+    pub fn to_bytes(&self) -> (u8, [u8;4]) {
+        use Icmp6DestUnreachable::*;
+        match self {
+            Raw{ code, four_bytes } => (*code, *four_bytes),
+            NoRoute => (CODE_DST_UNREACH_NOROUTE, [0;4]),
+            Prohibited => (CODE_DST_UNREACH_PROHIBITED, [0;4]),
+            BeyondScope => (CODE_DST_UNREACH_BEYONDSCOPE, [0;4]),
+            Address => (CODE_DST_UNREACH_ADDR, [0;4]),
+            Port => (CODE_DST_UNREACH_PORT, [0;4]),
+            SourceAddressFailedPolicy => (CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY, [0;4]),
+            RejectRoute => (CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST, [0;4]),
         }
     }
 }
@@ -125,7 +191,8 @@ impl Icmp6DestinationUnreachable {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp6Type {
     Raw{icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]},
-    DestinationUnreachable(Icmp6DestinationUnreachable),
+    /// "Destination Unreachable" message
+    DestinationUnreachable(Icmp6DestUnreachable),
     PacketTooBig,
     TimeExceeded,
     ParameterProblem,
@@ -141,7 +208,7 @@ impl Icmp6Type {
         use Icmp6Type::*;
         match icmp_type {
             TYPE_DST_UNREACH => 
-                DestinationUnreachable(Icmp6DestinationUnreachable::from(icmp_code)),
+                DestinationUnreachable(Icmp6DestUnreachable::from_bytes(icmp_code, four_bytes)),
             TYPE_PACKET_TOO_BIG => PacketTooBig,
             TYPE_TIME_EXCEEDED => TimeExceeded,
             TYPE_PARAM_PROB => ParameterProblem,
