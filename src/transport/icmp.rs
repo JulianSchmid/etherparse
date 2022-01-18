@@ -1,6 +1,6 @@
 /// Echo Request & Response common parts between ICMPv4 and ICMPv6.
 ///
-/// # Description from RFC 4443:
+/// # RFC 4443 Description (ICMPv6)
 ///
 /// Every node MUST implement an ICMPv6 Echo responder function that
 /// receives Echo Requests and originates corresponding Echo Replies.  A
