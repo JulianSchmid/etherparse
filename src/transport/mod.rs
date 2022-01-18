@@ -14,7 +14,6 @@ pub enum TransportHeader {
     Icmp6(icmp6::Icmp6Header),
     Udp(udp::UdpHeader),
     Tcp(tcp::TcpHeader)
-
 }
 
 impl TransportHeader {
