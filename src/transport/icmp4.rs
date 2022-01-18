@@ -1,29 +1,5 @@
 use std::slice::from_raw_parts;
-
 use super::super::*;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct IcmpEchoHeader {
-    pub id: u16,
-    pub seq: u16,
-}
-
-impl IcmpEchoHeader {
-    // Return the seq + id encoded to the on the wire format.
-    pub fn to_bytes(&self) -> [u8;4] {
-        let id_be = self.id.to_be_bytes();
-        let seq_be = self.seq.to_be_bytes();
-        [id_be[0], id_be[1], seq_be[0], seq_be[1]]
-    }
-
-    pub fn from(four_bytes: [u8;4]) -> IcmpEchoHeader {
-        IcmpEchoHeader{
-            id: u16::from_be_bytes([four_bytes[0], four_bytes[1]]),
-            seq: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
-        }
-    }
-}
-
 
 /* UNREACH codes */
 pub const ICMP4_UNREACH_NET : u8 =          0;       /* bad net */
@@ -217,11 +193,11 @@ impl Icmp4Type {
     pub fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
-            ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
+            ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(four_bytes)),
             ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from_bytes(icmp_code, four_bytes)),
             ICMP_V4_SOURCE_QUENCH => SourceQuench,
             ICMP_V4_REDIRECT => Redirect,
-            ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from(four_bytes)),
+            ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from_bytes(four_bytes)),
             ICMP_V4_TIME_EXCEEDED => TimeExceeded,
             ICMP_V4_PARAMETERPROB => ParameterProblem,
             ICMP_V4_TIMESTAMP => TimestampRequest,
