@@ -1,7 +1,5 @@
 use super::super::*;
 
-use crate::transport::icmp4;
-
 use std::slice::from_raw_parts;
 
 /// Module containing ICMPv6 related constants
@@ -329,8 +327,8 @@ pub enum Icmp6Type {
         /// in the maximum size of an ICMPv6 error message.
         pointer: u32,
     },
-    EchoRequest(icmp4::IcmpEchoHeader),
-    EchoReply(icmp4::IcmpEchoHeader),
+    EchoRequest(IcmpEchoHeader),
+    EchoReply(IcmpEchoHeader),
 }
 
 impl Icmp6Type {
@@ -351,8 +349,8 @@ impl Icmp6Type {
                 code: icmp_code.into(),
                 pointer: u32::from_be_bytes(four_bytes),
             },
-            TYPE_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from(four_bytes)),
-            TYPE_ECHO_REPLY => EchoReply(IcmpEchoHeader::from(four_bytes)),
+            TYPE_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from_bytes(four_bytes)),
+            TYPE_ECHO_REPLY => EchoReply(IcmpEchoHeader::from_bytes(four_bytes)),
             _ => Raw{icmp_type, icmp_code, four_bytes},
         }
     }
