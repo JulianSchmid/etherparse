@@ -394,6 +394,7 @@ impl<'a> CursorSlice<'a> {
             match protocol {
                 ip_number::UDP => self.slice_udp(),
                 ip_number::TCP => self.slice_tcp(),
+                ip_number::ICMP => self.slice_icmp4(),
                 value => {
                     use TransportSlice::*;
                     self.result.transport = Some(Unknown(value));
@@ -434,6 +435,7 @@ impl<'a> CursorSlice<'a> {
             match next_header {
                 ip_number::UDP => self.slice_udp(),
                 ip_number::TCP => self.slice_tcp(),
+                ip_number::IPV6_ICMP => self.slice_icmp6(),
                 value => {
                     use TransportSlice::*;
                     self.result.transport = Some(Unknown(value));
@@ -441,6 +443,38 @@ impl<'a> CursorSlice<'a> {
                 }
             }
         }
+    }
+
+    pub fn slice_icmp4(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::TransportSlice::*;
+
+        let result = Icmp4HeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.transport = Some(Icmp4(result));
+
+        //done
+        self.slice_payload()
+    }
+
+    pub fn slice_icmp6(mut self) -> Result<SlicedPacket<'a>, ReadError> {
+        use crate::TransportSlice::*;
+
+        let result = Icmp6HeaderSlice::from_slice(self.slice)
+                     .map_err(|err| 
+                        err.add_slice_offset(self.offset)
+                     )?;
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.transport = Some(Icmp6(result));
+
+        //done
+        self.slice_payload()
     }
 
     pub fn slice_udp(mut self) -> Result<SlicedPacket<'a>, ReadError> {

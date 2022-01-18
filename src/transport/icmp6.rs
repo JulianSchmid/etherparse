@@ -256,4 +256,10 @@ impl<'a> Icmp6HeaderSlice<'a> {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
     }
+
+    /// Returns the slice containing the icmp6 header
+    #[inline]
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
+    }
 }

@@ -94,4 +94,17 @@ mod icmp6_hdr {
         }
     }
 
+    #[test]
+    fn echo_request_slice() {
+        let echo = SlicedPacket::from_ethernet(&ICMP6_ECHO_REQUEST_BYTES).unwrap();
+        use TransportSlice::*;
+        let icmp6 = match echo.transport.unwrap() {
+            Icmp6(icmp6) => icmp6,
+            Icmp4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+        };
+        assert!(matches!(icmp6.icmp_type(), Icmp6Type::EchoRequest(_)));
+
+    }
+
+
 }
