@@ -12,7 +12,7 @@ use std::io;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportHeader {
     Icmp4(icmp4::Icmp4Header),
-    Icmp6(icmp6::Icmp6Header),
+    Icmp6(icmp6::Icmpv6Header),
     Udp(udp::UdpHeader),
     Tcp(tcp::TcpHeader)
 }
@@ -28,7 +28,7 @@ impl TransportHeader {
         }
     }
 
-    pub fn icmp6(self) -> Option<icmp6::Icmp6Header> {
+    pub fn icmp6(self) -> Option<icmp6::Icmpv6Header> {
         use crate::TransportHeader::*;
         if let Icmp6(value) = self {
             Some(value)
@@ -118,9 +118,7 @@ impl TransportHeader {
         use crate::TransportHeader::*;
         match self {
             Icmp4(_) => Err(ValueError::Icmp4InIpv6)?,
-            Icmp6(header) => {
-                header.icmp_chksum = header.calc_checksum_ipv6(ip_header, payload)?;
-            },
+            Icmp6(header) => header.update_checksum(ip_header, payload)?,
             Udp(header) => {
                 header.checksum = header.calc_checksum_ipv6(ip_header, payload)?;
             },

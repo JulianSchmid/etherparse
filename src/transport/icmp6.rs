@@ -259,16 +259,97 @@ impl From<Icmp6ParameterProblemCode> for u8 {
     }
 }
 
-/// Contains the starting data of an ICMPv6 packet (without the checksum).
+/// Different kinds of ICMPv6 messages.
+///
+/// The data stored in this enum corresponds to the statically sized data
+/// at the start of an ICMPv6 packet without the checksum. If you also need
+/// the checksum you can package and [`Icmp6Type`] value in an [`Icmpv6Header`]
+/// struct.
+///
+/// # Decoding Example (complete packet):
+///
+/// ```
+/// # use etherparse::{PacketBuilder};
+/// # let mut builder = PacketBuilder::
+/// #   ethernet2([0;6], [0;6])
+/// #   .ipv6([0;16], [0;16], 20)
+/// #   .icmp6_echo_request(1, 2);
+/// # let payload = [1,2,3,4];
+/// # let mut packet = Vec::<u8>::with_capacity(builder.size(payload.len()));
+/// # builder.write(&mut packet, &payload);
+/// use etherparse::PacketHeaders;
+///
+/// let headers = PacketHeaders::from_ethernet_slice(&packet).unwrap();
+///
+/// use etherparse::TransportHeader::*;
+/// match headers.transport {
+///     Some(Icmp6(icmp)) => {
+///         use etherparse::Icmp6Type::*;
+///         match icmp.icmp_type {
+///             // Raw is used when further decoding is currently not supported for the icmp type & code.
+///             // You can still further decode the packet on your own by using the raw data in this enum
+///             // together with `headers.payload` (contains the packet data after the 8th byte)
+///             Raw{ icmp_type, icmp_code, four_bytes } => println!("Raw{{ icmp_type: {}, icmp_code: {}, four_bytes: {:?} }}", icmp_type, icmp_code, four_bytes),
+///             DestinationUnreachable(header) => println!("{:?}", header),
+///             PacketTooBig { mtu } => println!("TimeExceeded{{ mtu: {} }}", mtu),
+///             TimeExceeded{ code } => println!("TimeExceeded{{ code: {:?} }}", code),
+///             ParameterProblem{ code, pointer } => println!("ParameterProblem{{ code: {:?}, pointer: {} }}", code, pointer),
+///             EchoRequest(header) => println!("{:?}", header),
+///             EchoReply(header) => println!("{:?}", header),
+///         }
+///     },
+///     _ => {},
+/// }
+/// ```
+///
+/// # Encoding Example (only ICMPv6 part)
+///
+/// To get the on wire bytes of an Icmp6Type it needs to get packaged
+/// into a [`Icmpv6Header`] so the checksum gets calculated.
+///
+/// ```
+/// # use etherparse::Ipv6Header;
+/// # let ip_header: Ipv6Header = Default::default();
+/// # let invoking_packet : [u8;0] = [];
+///
+/// use etherparse::{Icmp6Type, Icmp6DestUnreachable};
+/// let t = Icmp6Type::DestinationUnreachable(
+///     Icmp6DestUnreachable::Address
+/// );
+///
+/// // to calculate the checksum the ip header and the payload
+/// // (in case of dest unreachable the invoking packet) are needed
+/// let header = t.to_header(&ip_header, &invoking_packet).unwrap();
+/// 
+/// // an ICMPv6 packet is composed of the header and payload
+/// let mut packet = Vec::with_capacity(header.header_len() + invoking_packet.len());
+/// packet.extend_from_slice(&header.to_bytes());
+/// packet.extend_from_slice(&invoking_packet);
+/// #
+/// # {
+/// #   let checksum_be = header.checksum.to_be_bytes();
+/// #   assert_eq!(
+/// #       &packet,
+/// #       &[
+/// #           header.icmp_type.type_value(),
+/// #           header.icmp_type.code_value(),
+/// #           checksum_be[0],
+/// #           checksum_be[1],
+/// #           0,0,0,0
+/// #       ]
+/// #   );
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp6Type {
-    /// In case of an unknown icmp type is received the header elements are stored raw.
+    /// In case of an unknown icmp type is received the header elements of
+    /// the first 8 bytes/octets are stored raw.
     Raw{
         icmp_type: u8,
         icmp_code: u8,
         four_bytes: [u8;4]
     },
-    /// Destination Unreachable Message.
+    /// Start of "Destination Unreachable Message".
     ///
     /// # RFC 4443 Description
     ///
@@ -278,7 +359,7 @@ pub enum Icmp6Type {
     /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
     /// packet is dropped due to congestion.)
     DestinationUnreachable(Icmp6DestUnreachable),
-    /// Packet Too Big Message
+    /// Start of "Packet Too Big Message"
     ///
     /// # RFC 4443 Description
     ///
@@ -290,7 +371,7 @@ pub enum Icmp6Type {
         /// The Maximum Transmission Unit of the next-hop link.
         mtu: u32
     },
-    /// Time Exceeded Message
+    /// Start of "Time Exceeded Message"
     ///
     /// # RFC 4443 Description
     ///
@@ -306,7 +387,7 @@ pub enum Icmp6Type {
         /// Code identifying which time as exceeded.
         code: Icmp6TimeExceededCode,
     },
-    /// Parameter Problem Message
+    /// Start of "Parameter Problem Message"
     ///
     /// # RFC 4443 Description
     ///
@@ -327,7 +408,7 @@ pub enum Icmp6Type {
         /// in the maximum size of an ICMPv6 error message.
         pointer: u32,
     },
-    /// Echo Request Message
+    /// Start of "Echo Request Message"
     ///
     /// # RFC 4443 Description
     ///
@@ -337,7 +418,7 @@ pub enum Icmp6Type {
     /// originating Echo Requests and receiving Echo Replies, for diagnostic
     /// purposes.
     EchoRequest(IcmpEchoHeader),
-    /// Echo Reply Message
+    /// Start of "Echo Reply Message"
     ///
     /// # RFC 4443 Description
     ///
@@ -359,6 +440,9 @@ pub enum Icmp6Type {
     /// The data received in the ICMPv6 Echo Request message MUST be returned
     /// entirely and unmodified in the ICMPv6 Echo Reply message.
     EchoReply(IcmpEchoHeader),
+}
+
+impl Icmp6Type {
 }
 
 impl Icmp6Type {
@@ -385,6 +469,63 @@ impl Icmp6Type {
         }
     }
 
+    /// Returns the type value (first byte of the ICMPv6 header) of this type.
+    #[inline]
+    pub fn type_value(&self) -> u8 {
+        use Icmp6Type::*;
+        match self {
+            Raw{icmp_type, icmp_code: _, four_bytes: _} => *icmp_type,
+            DestinationUnreachable(_) => TYPE_DST_UNREACH,
+            PacketTooBig{ mtu: _ } => TYPE_PACKET_TOO_BIG,
+            TimeExceeded{ code: _ } => TYPE_TIME_EXCEEDED,
+            ParameterProblem{ code: _, pointer: _ } => TYPE_PARAM_PROB,
+            EchoRequest(_) => TYPE_ECHO_REQUEST,
+            EchoReply(_) => TYPE_ECHO_REPLY,
+        }
+    }
+
+    /// Returns the code value (second byte of the ICMPv6 header) of this type.
+    #[inline]
+    pub fn code_value(&self) -> u8 {
+        use Icmp6Type::*;
+        match self {
+            Raw{icmp_type: _, icmp_code, four_bytes: _} => *icmp_code,
+            DestinationUnreachable(icmp_code) => icmp_code.code(),
+            PacketTooBig{ mtu: _ } => 0,
+            TimeExceeded{ code } => u8::from(*code),
+            ParameterProblem{ code, pointer: _ } => u8::from(*code),
+            EchoRequest(_) => 0,
+            EchoReply(_) => 0,
+        }
+    }
+
+    /// Calculates the checksum of the ICMPv6 header.
+    pub fn calc_checksum(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        let max_payload_len: usize = (std::u32::MAX as usize) - self.header_len();
+        if max_payload_len < payload.len() {
+            return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
+        }
+
+        let (icmp_type, icmp_code, four_bytes) = self.to_bytes();
+        let msg_len = payload.len() + self.header_len();
+        //calculate the checksum; icmp4 will always take an ip4 header
+        Ok(
+            // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader, 
+            // unlike Icmp4
+            checksum::Sum16BitWords::new()
+            .add_16bytes(ip_header.source)
+            .add_16bytes(ip_header.destination)
+            .add_2bytes([0, ip_number::IPV6_ICMP])
+            .add_2bytes((msg_len as u16).to_be_bytes())
+            .add_2bytes([icmp_type, icmp_code])
+            .add_4bytes(four_bytes)
+            .add_slice(payload)
+            .ones_complement()
+            .to_be()
+        )
+    }
+
     /// Encode the enum to the on wire format.
     ///
     /// It returns the icmp type, code and reserved bytes (5th till and
@@ -402,17 +543,34 @@ impl Icmp6Type {
             EchoReply(echo) => (TYPE_ECHO_REPLY, 0, echo.to_bytes()),
         }
     }
+
+    /// Creates a header with the correct checksum.
+    pub fn to_header(self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
+        Ok(Icmpv6Header {
+            checksum: self.calc_checksum(ip_header, payload)?,
+            icmp_type: self,
+        })
+    }
+
+    /// Serialized length of the header in bytes/octets.
+    ///
+    /// Note that this size is not the size of the entire
+    /// ICMPv6 packet but only the header.
+    pub fn header_len(&self) -> usize {
+        8
+    }
 }
 
-
+/// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Icmp6Header {
+pub struct Icmpv6Header {
     pub icmp_type: Icmp6Type,
-    pub icmp_chksum: u16,
+    /// Checksum in the ICMPv6 header.
+    pub checksum: u16,
 }
 
-impl Icmp6Header {
-    pub const SERIALIZED_SIZE: usize = 8;
+impl Icmpv6Header {
+    pub const MIN_SERIALIZED_SIZE: usize = 8;
 
     /// Serialized length of the header in bytes/octets.
     ///
@@ -422,128 +580,131 @@ impl Icmp6Header {
         8
     }
 
-    pub fn new(icmp_type: Icmp6Type) -> Icmp6Header {
-        Icmp6Header{
+    /// Setups a new header with the checksum beeing set to 0.
+    pub fn new(icmp_type: Icmp6Type) -> Icmpv6Header {
+        Icmpv6Header{
             icmp_type,
-            icmp_chksum: 0, // will be filled in later
+            checksum: 0, // will be filled in later
         }
     }
 
-    ///Write the transport header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        let cksum_be = self.icmp_chksum.to_be_bytes();
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
-        writer.write_all(&[
-            icmp_type,
-            icmp_code,
-            cksum_be[0],
-            cksum_be[1],
-            four_bytes[0],
-            four_bytes[1],
-            four_bytes[2],
-            four_bytes[3],
-        ]).map_err(WriteError::from)
-    }
-
-    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
-        //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmp4Header::SERIALIZED_SIZE;
-        if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
-        }
-
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
-        let msg_len = payload.len() + Icmp6Header::SERIALIZED_SIZE;
-        //calculate the checksum; icmp4 will always take an ip4 header
+    /// Creates a [`Icmpv6Header`] with a valid checksum.
+    pub fn with_checksum(icmp_type: Icmp6Type, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
+        let checksum = icmp_type.calc_checksum(ip_header, payload)?;
         Ok(
-                // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader, 
-                // unlike Icmp4
-                checksum::Sum16BitWords::new()
-                .add_16bytes(ip_header.source)
-                .add_16bytes(ip_header.destination)
-                .add_2bytes([0, ip_number::IPV6_ICMP])
-                .add_2bytes((msg_len as u16).to_be_bytes())
-                .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(four_bytes)
-                .add_slice(payload)
-                .ones_complement()
-                .to_be()
+            Icmpv6Header{
+                icmp_type,
+                checksum,
+            }
         )
+    }
+
+    /// Write the transport header to the given writer.
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
+    }
+
+    /// Validates the checksum givene the IPv6 header and payload (parts after the Icmpv6Header) of the packet.
+    pub fn is_checksum_valid(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<bool, ValueError> {
+        Ok(self.checksum == self.icmp_type.calc_checksum(ip_header, payload)?)
+    }
+
+    /// Updates the checksum of the header.
+    pub fn update_checksum(&mut self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<(), ValueError> {
+        self.checksum = self.icmp_type.calc_checksum(ip_header, payload)?;
+        Ok(())
     }
 
     /// Reads an icmp6 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Icmp6Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv6Header, &[u8]), ReadError> {
+        let header = Icmpv6HeaderSlice::from_slice(slice)?.to_header();
+        let len = header.header_len();
         Ok((
-            Icmp6HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Icmp6Header::SERIALIZED_SIZE..]
+            header,
+            &slice[len..]
         ))
+    }
+
+    /// Returns the header on the wire bytes.
+    #[inline]
+    pub fn to_bytes(&self) -> [u8;8] {
+        let (type_value, code_value, four_bytes) = self.icmp_type.to_bytes();
+        let checksum_be = self.checksum.to_be_bytes();
+        [
+            type_value, code_value, checksum_be[0], checksum_be[1],
+            four_bytes[0], four_bytes[1], four_bytes[2], four_bytes[3],
+        ]
     }
 }
 
 /// A slice containing an icmp6 header of a network package. Struct allows the selective read of fields in the header.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Icmp6HeaderSlice<'a> {
+pub struct Icmpv6HeaderSlice<'a> {
     slice: &'a [u8]
 }
 
-impl<'a> Icmp6HeaderSlice<'a> {
+impl<'a> Icmpv6HeaderSlice<'a> {
     /// Creates a slice containing an icmp6 header.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<Icmp6HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv6HeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < Icmp6Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Icmp6Header::SERIALIZED_SIZE));
+        if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
+            return Err(UnexpectedEndOfSlice(Icmpv6Header::MIN_SERIALIZED_SIZE));
         }
 
         //done
-        Ok(Icmp6HeaderSlice{
+        Ok(Icmpv6HeaderSlice{
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // Icmp6Header::SERIALIZED_SIZE (8) before this.
+            // Icmpv6Header::MIN_SERIALIZED_SIZE (8) before this.
             slice: unsafe {
                 from_raw_parts(
                     slice.as_ptr(),
-                    Icmp6Header::SERIALIZED_SIZE
+                    Icmpv6Header::MIN_SERIALIZED_SIZE
                 )
             }
         })
     }
 
-    /// Decode all the fields and copy the results to a [`Icmp6Header`] struct
+    /// Decode all the fields and copy the results to a [`Icmpv6Header`] struct
     #[inline]
-    pub fn to_header(&self) -> Icmp6Header {
-        Icmp6Header {
-            icmp_type: self.icmp_type(),
-            icmp_chksum: self.icmp_chksum(),
+    pub fn to_header(&self) -> Icmpv6Header {
+        Icmpv6Header {
+            icmp_type: unsafe {
+                Icmp6Type::from_bytes(
+                    *self.slice.get_unchecked(0),
+                    *self.slice.get_unchecked(1),
+                    [
+                        *self.slice.get_unchecked(4),
+                        *self.slice.get_unchecked(5),
+                        *self.slice.get_unchecked(6),
+                        *self.slice.get_unchecked(7),
+                    ]
+                )
+            },
+            checksum: self.checksum(),
         }
     }
 
-    pub fn icmp_type(&self) -> Icmp6Type {
+    /// Returns "type" value in the ICMPv6 header.
+    #[inline]
+    pub fn type_value(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmp6Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
-            Icmp6Type::from_bytes(
-                *self.slice.get_unchecked(0),
-                *self.slice.get_unchecked(1),
-                [
-                    *self.slice.get_unchecked(4),
-                    *self.slice.get_unchecked(5),
-                    *self.slice.get_unchecked(6),
-                    *self.slice.get_unchecked(7),
-                ]
-            )
+            *self.slice.get_unchecked(0)
         }
     }
 
     /// Returns "code" value in the ICMPv6 header.
     #[inline]
-    pub fn icmp_code(&self) -> u8 {
+    pub fn code_value(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmp6Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
             *self.slice.get_unchecked(0)
         }
@@ -551,10 +712,10 @@ impl<'a> Icmp6HeaderSlice<'a> {
 
     /// Returns "checksum" value in the ICMPv6 header.
     #[inline]
-    pub fn icmp_chksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of UdpHeader::MIN_SERIALIZED_SIZE (8).
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }

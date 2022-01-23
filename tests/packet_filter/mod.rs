@@ -365,7 +365,7 @@ impl PacketFilterTest {
                 },
                 Some(TransportHeader::Icmp6(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmp6(Icmp6HeaderSlice::from_slice(&transport_data[..]).unwrap()))
+                    Some(TransportSlice::Icmp6(Icmpv6HeaderSlice::from_slice(&transport_data[..]).unwrap()))
                 },
                 Some(TransportHeader::Udp(header)) => {
                     header.write(&mut transport_data).unwrap();
