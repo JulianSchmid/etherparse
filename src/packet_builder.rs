@@ -505,44 +505,44 @@ impl PacketBuilderStep<IpHeader> {
         }
     }
 
-    pub fn icmp6_raw(mut self, icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> PacketBuilderStep<Icmp6Header> {
+    pub fn icmp6_raw(mut self, icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> PacketBuilderStep<Icmpv6Header> {
         let icmp_type = Icmp6Type::Raw{icmp_type, icmp_code, four_bytes};
-        self.state.transport_header = Some(TransportHeader::Icmp6(Icmp6Header{
+        self.state.transport_header = Some(TransportHeader::Icmp6(Icmpv6Header{
             icmp_type,
-            icmp_chksum: 0, // calculated later
+            checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header>{}
         }
     }
 
-    pub fn icmp6_echo_request(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmp6Header> {
+    pub fn icmp6_echo_request(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmpv6Header> {
         let echo_header = IcmpEchoHeader{
             seq,
             id,
         };
-        let icmp6_echo = Icmp6Header::new(Icmp6Type::EchoRequest(echo_header));
+        let icmp6_echo = Icmpv6Header::new(Icmp6Type::EchoRequest(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmp6(icmp6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header>{}
         }
     }
 
-    pub fn icmp6_echo_reply(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmp6Header> {
+    pub fn icmp6_echo_reply(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmpv6Header> {
         let echo_header = IcmpEchoHeader{
             seq,
             id,
         };
-        let icmp6_echo = Icmp6Header::new(Icmp6Type::EchoReply(echo_header));
+        let icmp6_echo = Icmpv6Header::new(Icmp6Type::EchoReply(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmp6(icmp6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header>{}
         }
     }
 
@@ -585,7 +585,7 @@ impl PacketBuilderStep<Icmp4Header> {
 
 }
 
-impl PacketBuilderStep<Icmp6Header> {
+impl PacketBuilderStep<Icmpv6Header> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
         final_write(self, writer, payload)

@@ -151,17 +151,17 @@ mod icmp6_hdr {
 
     #[test]
     fn icmp6_echo_marshall_unmarshall() {
-        let icmp6 = Icmp6Header {
+        let icmp6 = Icmpv6Header {
             icmp_type: Icmp6Type::EchoRequest(IcmpEchoHeader{
                 seq: 1,
                 id: 2,
             }),
-            icmp_chksum: 0,
+            checksum: 0,
         };
         // serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(256);
         icmp6.write(&mut buffer).unwrap();
-        let (new_icmp6, rest) = Icmp6Header::from_slice(&buffer).unwrap();
+        let (new_icmp6, rest) = Icmpv6Header::from_slice(&buffer).unwrap();
         assert_eq!(icmp6, new_icmp6);
         assert_eq!(rest.len(), 0);
     }
@@ -225,16 +225,16 @@ mod icmp6_hdr {
             // make sure we can unmarshall the correct checksum
             let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let mut icmp6 = request.transport.unwrap().icmp6().unwrap();
-            let valid_checksum =  icmp6.icmp_chksum;
+            let valid_checksum =  icmp6.checksum;
             assert_ne!(valid_checksum, 0);  
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
-            icmp6.icmp_chksum = 0;
+            icmp6.checksum = 0;
             let iph = match request.ip {
                 Some(IpHeader::Version6(ipv6, _)) => ipv6,
                 _ => panic!("Failed to parse ipv6 part of packet?!"),
             };
-            assert_eq!(icmp6.calc_checksum_ipv6(&iph, request.payload),
+            assert_eq!(icmp6.icmp_type.calc_checksum(&iph, request.payload),
                 Ok(valid_checksum));
         }
     }
@@ -247,7 +247,7 @@ mod icmp6_hdr {
             Icmp6(icmp6) => icmp6,
             Icmp4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
         };
-        assert!(matches!(icmp6.icmp_type(), Icmp6Type::EchoRequest(_)));
+        assert!(matches!(icmp6.to_header().icmp_type, Icmp6Type::EchoRequest(_)));
 
     }
 
