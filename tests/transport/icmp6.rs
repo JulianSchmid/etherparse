@@ -46,7 +46,7 @@ mod icmp6_dest_unreachable {
             assert_eq!(
                 Raw{
                     code,
-                    four_bytes: [1,2,3,4],
+                    reserved: [1,2,3,4],
                 },
                 Icmp6DestUnreachable::from_bytes(
                     code,
@@ -112,7 +112,7 @@ mod icmp6_dest_unreachable {
                 code,
                 Raw{
                     code,
-                    four_bytes: [1,2,3,4],
+                    reserved: [1,2,3,4],
                 }.code(),
             );
         }
@@ -132,7 +132,7 @@ mod icmp6_dest_unreachable {
                 (code, [1,2,3,4]),
                 Raw{
                     code,
-                    four_bytes: [1,2,3,4],
+                    reserved: [1,2,3,4],
                 }.to_bytes(),
             );
         }
