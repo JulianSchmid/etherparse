@@ -36,8 +36,8 @@ fn constants() {
 }
 
 mod icmp6_dest_unreachable {
-    use etherparse::Icmp6DestUnreachable;
-    use etherparse::Icmp6DestUnreachable::*;
+    use etherparse::icmpv6::DestUnreachableHeader;
+    use etherparse::icmpv6::DestUnreachableHeader::*;
     use etherparse::icmpv6::*;
 
     #[test]
@@ -48,7 +48,7 @@ mod icmp6_dest_unreachable {
                     code,
                     reserved: [1,2,3,4],
                 },
-                Icmp6DestUnreachable::from_bytes(
+                DestUnreachableHeader::from_bytes(
                     code,
                     [1,2,3,4]
                 )
@@ -56,49 +56,49 @@ mod icmp6_dest_unreachable {
         }
         assert_eq!(
             NoRoute,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_NOROUTE,
                 [0;4]
             )
         );
         assert_eq!(
             Prohibited,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_PROHIBITED,
                 [0;4]
             )
         );
         assert_eq!(
             BeyondScope,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_BEYONDSCOPE,
                 [0;4]
             )
         );
         assert_eq!(
             Address,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_ADDR,
                 [0;4]
             )
         );
         assert_eq!(
             Port,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_PORT,
                 [0;4]
             )
         );
         assert_eq!(
             SourceAddressFailedPolicy,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
                 [0;4]
             )
         );
         assert_eq!(
             RejectRoute,
-            Icmp6DestUnreachable::from_bytes(
+            DestUnreachableHeader::from_bytes(
                 CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
                 [0;4]
             )
