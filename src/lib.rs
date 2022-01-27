@@ -243,8 +243,8 @@ pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
 pub use crate::transport::icmp::*;
-pub use crate::transport::icmp4::*;
-pub use crate::transport::icmp6::*;
+pub use crate::transport::icmpv4::*;
+pub use crate::transport::icmpv6::*;
 pub use crate::transport::tcp::*;
 pub use crate::transport::udp::*;
 pub use crate::transport::TransportHeader;

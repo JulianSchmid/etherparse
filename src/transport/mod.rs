@@ -1,6 +1,6 @@
 pub mod icmp;
-pub mod icmp4;
-pub mod icmp6;
+pub mod icmpv4;
+pub mod icmpv6;
 pub mod udp;
 pub mod tcp;
 
@@ -11,15 +11,15 @@ use std::io;
 ///The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportHeader {
-    Icmp4(icmp4::Icmp4Header),
-    Icmp6(icmp6::Icmpv6Header),
+    Icmp4(icmpv4::Icmp4Header),
+    Icmp6(icmpv6::Icmpv6Header),
     Udp(udp::UdpHeader),
     Tcp(tcp::TcpHeader)
 }
 
 impl TransportHeader {
 
-    pub fn icmp4(self) -> Option<icmp4::Icmp4Header> {
+    pub fn icmp4(self) -> Option<icmpv4::Icmp4Header> {
         use crate::TransportHeader::*;
         if let Icmp4(value) = self {
             Some(value)
@@ -28,7 +28,7 @@ impl TransportHeader {
         }
     }
 
-    pub fn icmp6(self) -> Option<icmp6::Icmpv6Header> {
+    pub fn icmp6(self) -> Option<icmpv6::Icmpv6Header> {
         use crate::TransportHeader::*;
         if let Icmp6(value) = self {
             Some(value)
