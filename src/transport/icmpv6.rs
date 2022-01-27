@@ -444,9 +444,6 @@ pub enum Icmp6Type {
 }
 
 impl Icmp6Type {
-}
-
-impl Icmp6Type {
     /// Decode the enum from the icmp type, code and reserved bytes (5th till and
     /// including 8th byte of the the ICMPv6 header).
     fn from_bytes(icmp_type: u8, icmp_code: u8, reserved: [u8;4]) -> Icmp6Type {
