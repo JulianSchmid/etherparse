@@ -84,12 +84,6 @@ pub mod icmpv6 {
     /// ICMPv6 destination unreachable code for "reject route to destination".
     pub const CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST: u8 = 6;
 
-    /// ICMPv6 time exceeded code for "hop limit exceeded in transit"
-    pub const CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED: u8 = 0;
-
-    /// ICMPv6 time exceeded code for "fragment reassembly time exceeded"
-    pub const CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED: u8 = 1;
-
     /// "Destination Unreachable" ICMPv6 header (without the invoking packet).
     ///
     /// # RFC 4443 Description:
@@ -196,6 +190,12 @@ pub mod icmpv6 {
         }
     }
 
+    /// ICMPv6 time exceeded code for "hop limit exceeded in transit"
+    pub const CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED: u8 = 0;
+
+    /// ICMPv6 time exceeded code for "fragment reassembly time exceeded"
+    pub const CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED: u8 = 1;
+
     /// Code values for ICMPv6 time exceeded message.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum TimeExceededCode {
@@ -229,18 +229,85 @@ pub mod icmpv6 {
         }
     }
 
+    /// ICMPv6 parameter problem code for "erroneous header field encountered" (from [RFC 4443](https://tools.ietf.org/html/rfc4443)).
+    pub const CODE_PARAM_PROBLEM_ERR_HEADER_FIELD: u8 = 0;
+
+    /// ICMPv6 parameter problem code for "unrecognized Next Header type encountered" (from [RFC 4443](https://tools.ietf.org/html/rfc4443)).
+    pub const CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER: u8 = 1;
+
+    /// ICMPv6 parameter problem code for "unrecognized IPv6 option encountered" (from [RFC 4443](https://tools.ietf.org/html/rfc4443)).
+    pub const CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION: u8 = 2;
+
+    /// ICMPv6 parameter problem code for "IPv6 First Fragment has incomplete IPv6 Header Chain" (from [RFC 7112](https://tools.ietf.org/html/rfc7112)).
+    pub const CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN: u8 = 3;
+
+    /// ICMPv6 parameter problem code for "SR Upper-layer Header Error" (from [RFC 8754](https://tools.ietf.org/html/rfc8754)).
+    pub const CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR: u8 = 4;
+
+    /// ICMPv6 parameter problem code for "Unrecognized Next Header type encountered by intermediate node" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE: u8 = 5;
+
+    /// ICMPv6 parameter problem code for "Extension header too big" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG: u8 = 6;
+
+    /// ICMPv6 parameter problem code for "Extension header chain too long" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG: u8 = 7;
+
+    /// ICMPv6 parameter problem code for "Too many extension headers" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS: u8 = 8;
+
+    /// ICMPv6 parameter problem code for "Too many options in extension header" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER: u8 = 9;
+
+    /// ICMPv6 parameter problem code for "Option too big" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
+    pub const CODE_PARAM_PROBLEM_OPTION_TOO_BIG: u8 = 10;
+
     /// Code values for ICMPv6 parameter problem messages.
+    ///
+    /// Source: https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum ParameterProblemCode {
         /// In case of an unknown icmp code is received the header elements are stored raw.
         Raw{ code: u8 },
-
+        /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
+        ErroneousHeaderField,
+        /// Unrecognized Next Header type encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
+        UnrecognizedNextHeader,
+        /// Unrecognized IPv6 option encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
+        UnrecognizedIpv6Option,
+        /// IPv6 First Fragment has incomplete IPv6 Header Chain (from [RFC 7112](https://tools.ietf.org/html/rfc7112))
+        Ipv6FirstFragmentIncompleteHeaderChain,
+        /// SR Upper-layer Header Error (from [RFC 8754](https://tools.ietf.org/html/rfc8754)).
+        SrUpperLayerHeaderError,
+        /// Unrecognized Next Header type encountered by intermediate node (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        UnrecognizedNextHeaderByIntermediateNode,
+        /// Extension header too big (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        ExtensionHeaderTooBig,
+        /// Extension header chain too long (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        ExtensionHeaderChainTooLong,
+        /// Too many extension headers (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        TooManyExtensionHeaders,
+        /// Too many options in extension header (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        TooManyOptionsInExtensionHeader,
+        /// Option too big (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
+        OptionTooBig,
     }
 
     impl From<u8> for ParameterProblemCode {
         fn from(code: u8) -> ParameterProblemCode {
             use ParameterProblemCode::*;
             match code {
+                CODE_PARAM_PROBLEM_ERR_HEADER_FIELD => ErroneousHeaderField,
+                CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER => UnrecognizedNextHeader,
+                CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION => UnrecognizedIpv6Option,
+                CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN => Ipv6FirstFragmentIncompleteHeaderChain,
+                CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR => SrUpperLayerHeaderError,
+                CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE => UnrecognizedNextHeaderByIntermediateNode,
+                CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG => ExtensionHeaderTooBig,
+                CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG => ExtensionHeaderChainTooLong,
+                CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => TooManyExtensionHeaders,
+                CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => TooManyOptionsInExtensionHeader,
+                CODE_PARAM_PROBLEM_OPTION_TOO_BIG => OptionTooBig,
                 code => Raw { code },
             }
         }
@@ -251,6 +318,17 @@ pub mod icmpv6 {
             use ParameterProblemCode::*;
             match code {
                 Raw{ code } => code,
+                ErroneousHeaderField => CODE_PARAM_PROBLEM_ERR_HEADER_FIELD,
+                UnrecognizedNextHeader => CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
+                UnrecognizedIpv6Option => CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
+                Ipv6FirstFragmentIncompleteHeaderChain => CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN,
+                SrUpperLayerHeaderError => CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
+                UnrecognizedNextHeaderByIntermediateNode => CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE,
+                ExtensionHeaderTooBig => CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG,
+                ExtensionHeaderChainTooLong => CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
+                TooManyExtensionHeaders => CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
+                TooManyOptionsInExtensionHeader => CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
+                OptionTooBig => CODE_PARAM_PROBLEM_OPTION_TOO_BIG,
             }
         }
     }
