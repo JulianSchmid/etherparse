@@ -33,6 +33,25 @@ fn constants() {
     assert_eq!(4, CODE_DST_UNREACH_PORT);
     assert_eq!(5, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
     assert_eq!(6, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
+
+    // time exceeded code values according to
+    // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-4
+    assert_eq!(0, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED);
+    assert_eq!(1, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED);
+
+    // parameter problem codes according to
+    // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5
+    assert_eq!(0, CODE_PARAM_PROBLEM_ERR_HEADER_FIELD);
+    assert_eq!(1, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER);
+    assert_eq!(2, CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION);
+    assert_eq!(3, CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN);
+    assert_eq!(4, CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR);
+    assert_eq!(5, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE);
+    assert_eq!(6, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG);
+    assert_eq!(7, CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG);
+    assert_eq!(8, CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS);
+    assert_eq!(9, CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER);
+    assert_eq!(10, CODE_PARAM_PROBLEM_OPTION_TOO_BIG);
 }
 
 mod icmp6_dest_unreachable {
@@ -143,6 +162,173 @@ mod icmp6_dest_unreachable {
         assert_eq!(Port.to_bytes(), (CODE_DST_UNREACH_PORT, [0;4]));
         assert_eq!(SourceAddressFailedPolicy.to_bytes(), (CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY, [0;4]));
         assert_eq!(RejectRoute.to_bytes(), (CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST, [0;4]));
+    }
+
+    #[test]
+    fn clone_eq() {
+        let values = [
+            Raw{ code: 8, bytes5to8: [1,2,3,4] },
+            NoRoute,
+            Prohibited,
+            BeyondScope,
+            Address,
+            Port,
+            SourceAddressFailedPolicy,
+            RejectRoute,
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (Raw{ code: 8, bytes5to8: [1,2,3,4] }, "Raw { code: 8, bytes5to8: [1, 2, 3, 4] }"),
+            (NoRoute, "NoRoute"),
+            (Prohibited, "Prohibited"),
+            (BeyondScope, "BeyondScope"),
+            (Address, "Address"),
+            (Port, "Port"),
+            (SourceAddressFailedPolicy, "SourceAddressFailedPolicy"),
+            (RejectRoute, "RejectRoute"),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
+    }
+}
+
+mod time_exceeded_code {
+    use etherparse::icmpv6::TimeExceededCode::*;
+    use etherparse::icmpv6::*;
+
+    #[test]
+    fn from_u8() {
+        assert_eq!(HopLimitExceeded, TimeExceededCode::from(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED));
+        assert_eq!(FragmentReassemblyTimeExceeded, TimeExceededCode::from(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED));
+        for code in 2..=u8::MAX {
+            assert_eq!(Raw{ code }, TimeExceededCode::from(code));
+        }
+    }
+
+    #[test]
+    fn from_enum() {
+        assert_eq!(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED, u8::from(HopLimitExceeded));
+        assert_eq!(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED, u8::from(FragmentReassemblyTimeExceeded));
+        for code in 0..=u8::MAX {
+            assert_eq!(code, u8::from(Raw{ code }));
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let values = [
+            Raw{ code: 8},
+            HopLimitExceeded,
+            FragmentReassemblyTimeExceeded
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (Raw{ code: 8}, "Raw { code: 8 }"),
+            (HopLimitExceeded, "HopLimitExceeded"),
+            (FragmentReassemblyTimeExceeded, "FragmentReassemblyTimeExceeded"),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
+    }
+}
+
+mod parameter_problem_code {
+    use etherparse::icmpv6::ParameterProblemCode::*;
+    use etherparse::icmpv6::*;
+
+    #[test]
+    fn from_u8() {
+        assert_eq!(ErroneousHeaderField, ParameterProblemCode::from(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD));
+        assert_eq!(UnrecognizedNextHeader, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER));
+        assert_eq!(UnrecognizedIpv6Option, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION));
+        assert_eq!(Ipv6FirstFragmentIncompleteHeaderChain, ParameterProblemCode::from(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN));
+        assert_eq!(SrUpperLayerHeaderError, ParameterProblemCode::from(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR));
+        assert_eq!(UnrecognizedNextHeaderByIntermediateNode, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE));
+        assert_eq!(ExtensionHeaderTooBig, ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG));
+        assert_eq!(ExtensionHeaderChainTooLong, ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG));
+        assert_eq!(TooManyExtensionHeaders, ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS));
+        assert_eq!(TooManyOptionsInExtensionHeader, ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER));
+        assert_eq!(OptionTooBig, ParameterProblemCode::from(CODE_PARAM_PROBLEM_OPTION_TOO_BIG));
+        for code in 11..=u8::MAX {
+            assert_eq!(Raw{ code }, ParameterProblemCode::from(code));
+        }
+    }
+
+    #[test]
+    fn from_enum() {
+        assert_eq!(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD, u8::from(ErroneousHeaderField));
+        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER, u8::from(UnrecognizedNextHeader));
+        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION, u8::from(UnrecognizedIpv6Option));
+        assert_eq!(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN, u8::from(Ipv6FirstFragmentIncompleteHeaderChain));
+        assert_eq!(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR, u8::from(SrUpperLayerHeaderError));
+        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE, u8::from(UnrecognizedNextHeaderByIntermediateNode));
+        assert_eq!(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, u8::from(ExtensionHeaderTooBig));
+        assert_eq!(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG, u8::from(ExtensionHeaderChainTooLong));
+        assert_eq!(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS, u8::from(TooManyExtensionHeaders));
+        assert_eq!(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER, u8::from(TooManyOptionsInExtensionHeader));
+        assert_eq!(CODE_PARAM_PROBLEM_OPTION_TOO_BIG, u8::from(OptionTooBig));
+        for code in 0..=u8::MAX {
+            assert_eq!(code, u8::from(Raw{ code }));
+        }
+    }
+    #[test]
+    fn clone_eq() {
+        let values = [
+            Raw{ code: 8},
+            ErroneousHeaderField,
+            UnrecognizedNextHeader,
+            UnrecognizedIpv6Option,
+            UnrecognizedNextHeader,
+            UnrecognizedIpv6Option,
+            Ipv6FirstFragmentIncompleteHeaderChain,
+            SrUpperLayerHeaderError,
+            UnrecognizedNextHeaderByIntermediateNode,
+            ExtensionHeaderTooBig,
+            ExtensionHeaderChainTooLong,
+            TooManyExtensionHeaders,
+            TooManyOptionsInExtensionHeader,
+            OptionTooBig,
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (Raw{ code: 8}, "Raw { code: 8 }"),
+            (ErroneousHeaderField, "ErroneousHeaderField"),
+            (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
+            (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
+            (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
+            (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
+            (Ipv6FirstFragmentIncompleteHeaderChain, "Ipv6FirstFragmentIncompleteHeaderChain"),
+            (SrUpperLayerHeaderError, "SrUpperLayerHeaderError"),
+            (UnrecognizedNextHeaderByIntermediateNode, "UnrecognizedNextHeaderByIntermediateNode"),
+            (ExtensionHeaderTooBig, "ExtensionHeaderTooBig"),
+            (ExtensionHeaderChainTooLong, "ExtensionHeaderChainTooLong"),
+            (TooManyExtensionHeaders, "TooManyExtensionHeaders"),
+            (TooManyOptionsInExtensionHeader, "TooManyOptionsInExtensionHeader"),
+            (OptionTooBig, "OptionTooBig"),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
     }
 }
 
