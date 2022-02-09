@@ -8,6 +8,16 @@ pub enum InternetSlice<'a> {
     Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionsSlice<'a>),
 }
 
+impl<'a> InternetSlice<'a> {
+    /// Returns true if the payload is fragmented.
+    pub fn is_fragmenting_payload(&self) -> bool {
+        match self {
+            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.is_fragmenting_payload(),
+            InternetSlice::Ipv6(_, v6_ext) => v6_ext.is_fragmenting_payload(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
     /// A slice containing an UDP header.
