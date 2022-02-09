@@ -130,6 +130,15 @@ impl IpHeader {
             },
         }
     }
+
+    /// Sets the payload length if the value is not too big. Otherwise an error
+    /// is returned.
+    pub fn set_payload_length(&mut self, len: usize) -> Result<(), ValueError> {
+        match self {
+            IpHeader::Version4(ipv4_hdr, _) => ipv4_hdr.set_payload_len(len),
+            IpHeader::Version6(ipv6_hdr, _) => ipv6_hdr.set_payload_length(len),
+        }
+    }
 }
 
 /// This type has been deprecated please use [IpNumber] instead.
