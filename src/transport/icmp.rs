@@ -26,10 +26,10 @@ impl IcmpEchoHeader {
 
     /// Decodes the seq + id from the on the wire format.
     #[inline]
-    pub fn from_bytes(four_bytes: [u8;4]) -> IcmpEchoHeader {
+    pub fn from_bytes(bytes5to8: [u8;4]) -> IcmpEchoHeader {
         IcmpEchoHeader{
-            id: u16::from_be_bytes([four_bytes[0], four_bytes[1]]),
-            seq: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
+            id: u16::from_be_bytes([bytes5to8[0], bytes5to8[1]]),
+            seq: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]]),
         }
     }
 }
