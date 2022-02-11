@@ -13,7 +13,7 @@ pub enum TransportSlice<'a> {
     /// A slice containing an Icmp4 header
     Icmp4(Icmp4HeaderSlice<'a>),
     /// A slice containing an Icmp6 header
-    Icmp6(Icmpv6HeaderSlice<'a>),
+    Icmp6(Icmpv6Slice<'a>),
     /// A slice containing an UDP header.
     Udp(UdpHeaderSlice<'a>),
     /// A slice containing a TCP header.
@@ -464,7 +464,7 @@ impl<'a> CursorSlice<'a> {
     pub fn slice_icmp6(mut self) -> Result<SlicedPacket<'a>, ReadError> {
         use crate::TransportSlice::*;
 
-        let result = Icmpv6HeaderSlice::from_slice(self.slice)
+        let result = Icmpv6Slice::from_slice(self.slice)
                      .map_err(|err| 
                         err.add_slice_offset(self.offset)
                      )?;

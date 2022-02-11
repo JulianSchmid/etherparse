@@ -264,7 +264,7 @@ pub mod icmpv6 {
 
     /// Code values for ICMPv6 parameter problem messages.
     ///
-    /// Source: https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5
+    /// Source: <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5>
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum ParameterProblemCode {
         /// In case of an unknown icmp code is received the header elements are stored raw.
@@ -341,7 +341,7 @@ use icmpv6::*;
 ///
 /// The data stored in this enum corresponds to the statically sized data
 /// at the start of an ICMPv6 packet without the checksum. If you also need
-/// the checksum you can package and [`Icmp6Type`] value in an [`Icmpv6Header`]
+/// the checksum you can package and [`Icmpv6Type`] value in an [`Icmpv6Header`]
 /// struct.
 ///
 /// # Decoding Example (complete packet):
@@ -362,7 +362,7 @@ use icmpv6::*;
 /// use etherparse::TransportHeader::*;
 /// match headers.transport {
 ///     Some(Icmp6(icmp)) => {
-///         use etherparse::Icmp6Type::*;
+///         use etherparse::Icmpv6Type::*;
 ///         match icmp.icmp_type {
 ///             // Raw is used when further decoding is currently not supported for the icmp type & code.
 ///             // You can still further decode the packet on your own by using the raw data in this enum
@@ -382,7 +382,7 @@ use icmpv6::*;
 ///
 /// # Encoding Example (only ICMPv6 part)
 ///
-/// To get the on wire bytes of an Icmp6Type it needs to get packaged
+/// To get the on wire bytes of an Icmpv6Type it needs to get packaged
 /// into a [`Icmpv6Header`] so the checksum gets calculated.
 ///
 /// ```
@@ -390,8 +390,8 @@ use icmpv6::*;
 /// # let ip_header: Ipv6Header = Default::default();
 /// # let invoking_packet : [u8;0] = [];
 ///
-/// use etherparse::{Icmp6Type, icmpv6::DestUnreachableHeader};
-/// let t = Icmp6Type::DestinationUnreachable(
+/// use etherparse::{Icmpv6Type, icmpv6::DestUnreachableHeader};
+/// let t = Icmpv6Type::DestinationUnreachable(
 ///     DestUnreachableHeader::Address
 /// );
 ///
@@ -419,7 +419,7 @@ use icmpv6::*;
 /// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Icmp6Type {
+pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw.
     Raw{
@@ -521,11 +521,11 @@ pub enum Icmp6Type {
     EchoReply(IcmpEchoHeader),
 }
 
-impl Icmp6Type {
+impl Icmpv6Type {
     /// Decode the enum from the icmp type, code and bytes5to8 bytes (5th till and
     /// including 8th byte of the the ICMPv6 header).
-    fn from_bytes(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmp6Type {
-        use Icmp6Type::*;
+    fn from_bytes(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv6Type {
+        use Icmpv6Type::*;
         match icmp_type {
             TYPE_DST_UNREACH => 
                 DestinationUnreachable(icmpv6::DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
@@ -548,7 +548,7 @@ impl Icmp6Type {
     /// Returns the type value (first byte of the ICMPv6 header) of this type.
     #[inline]
     pub fn type_value(&self) -> u8 {
-        use Icmp6Type::*;
+        use Icmpv6Type::*;
         match self {
             Raw{icmp_type, icmp_code: _, bytes5to8: _} => *icmp_type,
             DestinationUnreachable(_) => TYPE_DST_UNREACH,
@@ -563,7 +563,7 @@ impl Icmp6Type {
     /// Returns the code value (second byte of the ICMPv6 header) of this type.
     #[inline]
     pub fn code_value(&self) -> u8 {
-        use Icmp6Type::*;
+        use Icmpv6Type::*;
         match self {
             Raw{icmp_type: _, icmp_code, bytes5to8: _} => *icmp_code,
             DestinationUnreachable(icmp_code) => icmp_code.code(),
@@ -607,7 +607,7 @@ impl Icmp6Type {
     /// It returns the icmp type, code and bytes5to8 bytes (5th till and
     /// including 8th byte of the the ICMPv6 header).
     fn to_bytes(&self) -> (u8, u8, [u8;4]) {
-        use Icmp6Type::*;
+        use Icmpv6Type::*;
         match self {
             Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
             DestinationUnreachable(icmp_code) => 
@@ -640,7 +640,7 @@ impl Icmp6Type {
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Icmpv6Header {
-    pub icmp_type: Icmp6Type,
+    pub icmp_type: Icmpv6Type,
     /// Checksum in the ICMPv6 header.
     pub checksum: u16,
 }
@@ -657,7 +657,7 @@ impl Icmpv6Header {
     }
 
     /// Setups a new header with the checksum beeing set to 0.
-    pub fn new(icmp_type: Icmp6Type) -> Icmpv6Header {
+    pub fn new(icmp_type: Icmpv6Type) -> Icmpv6Header {
         Icmpv6Header{
             icmp_type,
             checksum: 0, // will be filled in later
@@ -665,7 +665,7 @@ impl Icmpv6Header {
     }
 
     /// Creates a [`Icmpv6Header`] with a valid checksum.
-    pub fn with_checksum(icmp_type: Icmp6Type, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
+    pub fn with_checksum(icmp_type: Icmpv6Type, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
         let checksum = icmp_type.calc_checksum(ip_header, payload)?;
         Ok(
             Icmpv6Header{
@@ -694,7 +694,7 @@ impl Icmpv6Header {
     /// Reads an icmp6 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(Icmpv6Header, &[u8]), ReadError> {
-        let header = Icmpv6HeaderSlice::from_slice(slice)?.to_header();
+        let header = Icmpv6Slice::from_slice(slice)?.header();
         let len = header.header_len();
         Ok((
             header,
@@ -714,16 +714,19 @@ impl Icmpv6Header {
     }
 }
 
-/// A slice containing an icmp6 header of a network package. Struct allows the selective read of fields in the header.
+/// A slice containing an icmpv6 network package.
+/// 
+/// Struct allows the selective read of fields in the ICMPv6
+/// packet.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Icmpv6HeaderSlice<'a> {
+pub struct Icmpv6Slice<'a> {
     slice: &'a [u8]
 }
 
-impl<'a> Icmpv6HeaderSlice<'a> {
+impl<'a> Icmpv6Slice<'a> {
     /// Creates a slice containing an icmp6 header.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv6HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv6Slice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
@@ -731,7 +734,7 @@ impl<'a> Icmpv6HeaderSlice<'a> {
         }
 
         //done
-        Ok(Icmpv6HeaderSlice{
+        Ok(Icmpv6Slice{
             // SAFETY:
             // Safe as slice length is checked to be at least
             // Icmpv6Header::MIN_SERIALIZED_SIZE (8) before this.
@@ -746,10 +749,10 @@ impl<'a> Icmpv6HeaderSlice<'a> {
 
     /// Decode all the fields and copy the results to a [`Icmpv6Header`] struct
     #[inline]
-    pub fn to_header(&self) -> Icmpv6Header {
+    pub fn header(&self) -> Icmpv6Header {
         Icmpv6Header {
             icmp_type: unsafe {
-                Icmp6Type::from_bytes(
+                Icmpv6Type::from_bytes(
                     *self.slice.get_unchecked(0),
                     *self.slice.get_unchecked(1),
                     [
@@ -817,9 +820,23 @@ impl<'a> Icmpv6HeaderSlice<'a> {
         }
     }
 
-    /// Returns the slice containing the icmp6 header
+    /// Returns the slice containing the ICMPv6 packet.
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
+    }
+
+    /// Returns the message body of the ICMPv6 packet (data after the 4th byte).
+    #[inline]
+    pub fn message_body(&self) -> &'a [u8] {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::MIN_SERIALIZED_SIZE (8).
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(4),
+                self.slice.len() - 4,
+            )
+        }
     }
 }

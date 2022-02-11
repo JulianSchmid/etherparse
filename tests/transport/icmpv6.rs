@@ -338,7 +338,7 @@ mod icmp6_hdr {
     #[test]
     fn icmp6_echo_marshall_unmarshall() {
         let icmp6 = Icmpv6Header {
-            icmp_type: Icmp6Type::EchoRequest(IcmpEchoHeader{
+            icmp_type: Icmpv6Type::EchoRequest(IcmpEchoHeader{
                 seq: 1,
                 id: 2,
             }),
@@ -370,7 +370,7 @@ mod icmp6_hdr {
 
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
         if let Some(TransportHeader::Icmp6(hdr)) = new_ip.transport {
-            if let Icmp6Type::EchoRequest(echo) = hdr.icmp_type {
+            if let Icmpv6Type::EchoRequest(echo) = hdr.icmp_type {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 2);
             } else {
@@ -433,7 +433,7 @@ mod icmp6_hdr {
             Icmp6(icmp6) => icmp6,
             Icmp4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
         };
-        assert!(matches!(icmp6.to_header().icmp_type, Icmp6Type::EchoRequest(_)));
+        assert!(matches!(icmp6.header().icmp_type, Icmpv6Type::EchoRequest(_)));
 
     }
 
