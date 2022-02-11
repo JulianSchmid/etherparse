@@ -75,7 +75,7 @@ pub enum Icmp4DestinationUnreachable {
         /// ICMP code (present in the 2nd byte of the ICMP packet).
         code: u8,
         /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
-        four_bytes: [u8;4],
+        bytes5to8: [u8;4],
     },
     /// Network unreachable error.
     Network,
@@ -116,7 +116,7 @@ impl Icmp4DestinationUnreachable {
     /// Decode destination unreachable icmp packet from the code (2nd byte)
     /// and the 5th-8th bytes (inclusive) of the raw packet data.
     #[inline]
-    pub fn from_bytes(code: u8, four_bytes: [u8;4]) -> Icmp4DestinationUnreachable {
+    pub fn from_bytes(code: u8, bytes5to8: [u8;4]) -> Icmp4DestinationUnreachable {
         use Icmp4DestinationUnreachable::*;
 
         match code {
@@ -125,7 +125,7 @@ impl Icmp4DestinationUnreachable {
             CODE_DST_UNREACH_PROTOCOL => Protocol,
             CODE_DST_UNREACH_PORT => Port,
             CODE_DST_UNREACH_NEEDFRAG => FragmentationNeeded {
-                next_hop_mtu: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
+                next_hop_mtu: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]]),
             },
             CODE_DST_UNREACH_SRCFAIL => SourceFail,
             CODE_DST_UNREACH_NET_UNKNOWN => NetworkUnknown,
@@ -140,7 +140,7 @@ impl Icmp4DestinationUnreachable {
             // default to Raw
             code => Raw{
                 code,
-                four_bytes
+                bytes5to8
             },
         }
     }
@@ -150,7 +150,7 @@ impl Icmp4DestinationUnreachable {
     pub fn code(&self) -> u8 {
         use Icmp4DestinationUnreachable::*;
         match self {
-            Raw{ code, four_bytes: _ } => *code,
+            Raw{ code, bytes5to8: _ } => *code,
             Network => CODE_DST_UNREACH_NET,
             Host => CODE_DST_UNREACH_HOST_UNKNOWN,
             Protocol => CODE_DST_UNREACH_PROTOCOL,
@@ -171,7 +171,7 @@ impl Icmp4DestinationUnreachable {
     }
 
     /// Returns the 5th-8th bytes (inclusive) of the raw icmp packet data
-    pub fn four_bytes(&self) -> [u8;4] {
+    pub fn bytes5to8(&self) -> [u8;4] {
         use Icmp4DestinationUnreachable::*;
 
         match self {
@@ -180,7 +180,7 @@ impl Icmp4DestinationUnreachable {
                 let be = next_hop_mtu.to_be_bytes();
                 [0, 0, be[0], be[1]]
             },
-            Raw{ code: _, four_bytes } => *four_bytes,
+            Raw{ code: _, bytes5to8 } => *bytes5to8,
             // everything else doesn't use the four bytes
             _ => [0,0,0,0],
         }
@@ -206,7 +206,7 @@ pub const ICMP_V4_ADDRESSREPLY: u8 =   18; /* Address Mask Reply           */
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmp4Type {
     /// Used to encode unparsed/unknown ICMP headers
-    Raw{icmp_type: u8, icmp_code: u8, four_bytes: [u8;4] },
+    Raw{icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4] },
     EchoReply(IcmpEchoHeader),
     DestinationUnreachable(Icmp4DestinationUnreachable),
     SourceQuench,
@@ -225,14 +225,14 @@ pub enum Icmp4Type {
 impl Icmp4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    pub fn from(icmp_type: u8, icmp_code: u8, four_bytes: [u8;4]) -> Icmp4Type {
+    pub fn from(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
-            ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(four_bytes)),
-            ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from_bytes(icmp_code, four_bytes)),
+            ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from_bytes(icmp_code, bytes5to8)),
             ICMP_V4_SOURCE_QUENCH => SourceQuench,
             ICMP_V4_REDIRECT => Redirect,
-            ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from_bytes(four_bytes)),
+            ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
             ICMP_V4_TIME_EXCEEDED => TimeExceeded,
             ICMP_V4_PARAMETERPROB => ParameterProblem,
             ICMP_V4_TIMESTAMP => TimestampRequest,
@@ -242,7 +242,7 @@ impl Icmp4Type {
             ICMP_V4_ADDRESS => AddressRequest,
             ICMP_V4_ADDRESSREPLY => AddressReply,
             // unknown/unparsed type - just return as Raw
-            _ => Raw{icmp_type, icmp_code, four_bytes}
+            _ => Raw{icmp_type, icmp_code, bytes5to8}
         }
     }
 
@@ -251,11 +251,11 @@ impl Icmp4Type {
     pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmp4Type::*;
         match &self {
-            Raw{icmp_type, icmp_code, four_bytes} => (*icmp_type, *icmp_code, *four_bytes),
+            Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
             EchoReply(echo) => {
                 (ICMP_V4_ECHOREPLY, 0, echo.to_bytes())
             },
-            DestinationUnreachable(value) => (ICMP_V4_DEST_UNREACH, value.code(), value.four_bytes()),
+            DestinationUnreachable(value) => (ICMP_V4_DEST_UNREACH, value.code(), value.bytes5to8()),
             SourceQuench => (ICMP_V4_SOURCE_QUENCH, 0, [0;4]),
             Redirect => (ICMP_V4_REDIRECT, 0, [0;4]),
             EchoRequest(echo) => {
@@ -294,16 +294,16 @@ impl Icmp4Header {
     /// Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         let cksum_be = self.icmp_chksum.to_be_bytes();
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
+        let (icmp_type, icmp_code, bytes5to8) = self.icmp_type.to_bytes();
         writer.write_all(&[
             icmp_type as u8,
             icmp_code,
             cksum_be[0],
             cksum_be[1],
-            four_bytes[0],
-            four_bytes[1],
-            four_bytes[2],
-            four_bytes[3],
+            bytes5to8[0],
+            bytes5to8[1],
+            bytes5to8[2],
+            bytes5to8[3],
         ]).map_err(WriteError::from)
     }
 
@@ -314,14 +314,14 @@ impl Icmp4Header {
             return Err(ValueError::Ipv4PayloadLengthTooLarge(payload.len()));
         }
 
-        let (icmp_type, icmp_code, four_bytes) = self.icmp_type.to_bytes();
+        let (icmp_type, icmp_code, bytes5to8) = self.icmp_type.to_bytes();
         //calculate the checksum; icmp4 will always take an ip4 header
         Ok(
                 checksum::Sum16BitWords::new()
                 // NOTE: RFC792 - ICMP4 checksum does not use a pseudo-header
                 // for the checksum; only the message itself
                 .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(four_bytes)
+                .add_4bytes(bytes5to8)
                 .add_slice(payload)
                 .ones_complement()
                 .to_be()
