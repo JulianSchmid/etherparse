@@ -188,7 +188,7 @@ mod icmp4_hdr {
     fn icmp4_dst_unreachable() {
         let offset = 14 + 20 + 1;   // ethernet + iphdr + icmp_type
         // test all of the unreachable codes to make sure the maps are right
-        for code_val in 0..ICMP4_UNREACH_PRECEDENCE_CUTOFF {
+        for code_val in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
             let code = Icmp4DestinationUnreachable::from_bytes(code_val, [0;4]);
             let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
             pkt[offset] = code_val;  // over write the code

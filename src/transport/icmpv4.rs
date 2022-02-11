@@ -1,28 +1,63 @@
 use std::slice::from_raw_parts;
 use super::super::*;
 
-/* UNREACH codes */
-pub const ICMP4_UNREACH_NET : u8 =          0;       /* bad net */
-pub const ICMP4_UNREACH_HOST : u8 =         1;       /* bad host */
-pub const ICMP4_UNREACH_PROTOCOL : u8 =     2;       /* bad protocol */
-pub const ICMP4_UNREACH_PORT : u8 =         3;       /* bad port */
-pub const ICMP4_UNREACH_NEEDFRAG : u8 =     4;       /* IP_DF caused drop */
-pub const ICMP4_UNREACH_SRCFAIL : u8 =      5;       /* src route failed */
-pub const ICMP4_UNREACH_NET_UNKNOWN : u8 =  6;       /* unknown net */
-pub const ICMP4_UNREACH_HOST_UNKNOWN : u8 = 7;       /* unknown host */
-pub const ICMP4_UNREACH_ISOLATED : u8 =     8;       /* src host isolated */
-pub const ICMP4_UNREACH_NET_PROHIB : u8 =   9;       /* net denied */
-pub const ICMP4_UNREACH_HOST_PROHIB : u8 =  10;      /* host denied */
-pub const ICMP4_UNREACH_TOSNET : u8 =       11;      /* bad tos for net */
-pub const ICMP4_UNREACH_TOSHOST : u8 =      12;      /* bad tos for host */
-pub const ICMP4_UNREACH_FILTER_PROHIB: u8 = 13;      /* admin prohib */
-pub const ICMP4_UNREACH_HOST_PRECEDENCE:u8= 14;      /* host prec vio. */
-pub const ICMP4_UNREACH_PRECEDENCE_CUTOFF: u8= 15;   /* prec cutoff */
-pub const ICMP4_UNREACH_UNKNOWN: u8 =       255;
+/// Module containing ICMPv6 related types and constants
+pub mod icmpv4 {
 
+    /// ICMP destination unreachable code for "Net Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_NET: u8 = 0;
+
+    /// ICMP destination unreachable code for "Host Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_HOST: u8 = 1;
+
+    /// ICMP destination unreachable code for "Protocol Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_PROTOCOL: u8 = 2;
+
+    /// ICMP destination unreachable code for "Port Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_PORT: u8 = 3;
+
+    /// ICMP destination unreachable code for "Fragmentation Needed and Don't Fragment was Set" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_NEEDFRAG: u8 = 4;
+
+    /// ICMP destination unreachable code for "Source Route Failed" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    pub const CODE_DST_UNREACH_SRCFAIL: u8 = 5;
+
+    /// ICMP destination unreachable code for "Destination Network Unknown" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_NET_UNKNOWN: u8 =  6;
+
+    /// ICMP destination unreachable code for "Destination Host Unknown" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_HOST_UNKNOWN: u8 = 7;
+
+    /// ICMP destination unreachable code for "Source Host Isolated" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_ISOLATED: u8 = 8;
+
+    /// ICMP destination unreachable code for "Communication with Destination Network is Administratively Prohibited" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_NET_PROHIB: u8 = 9;
+
+    /// ICMP destination unreachable code for "Communication with Destination Host is Administratively Prohibited" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_HOST_PROHIB: u8 = 10;
+
+    /// ICMP destination unreachable code for "Destination Network Unreachable for Type of Service" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_TOSNET: u8 = 11;
+
+    /// ICMP destination unreachable code for "Destination Host Unreachable for Type of Service" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    pub const CODE_DST_UNREACH_TOSHOST: u8 = 12;
+
+    /// ICMP destination unreachable code for "Communication Administratively Prohibited" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    pub const CODE_DST_UNREACH_FILTER_PROHIB: u8 = 13;
+
+    /// ICMP destination unreachable code for "Host Precedence Violation" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    pub const CODE_DST_UNREACH_HOST_PRECEDENCE: u8 = 14;
+
+    /// ICMP destination unreachable code for "Precedence cutoff in effect" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    pub const CODE_DST_UNREACH_PRECEDENCE_CUTOFF: u8 = 15;
+
+} // mod icmpv4
+
+use icmpv4::*;
 
 /// Icmp Dest Unreachables, Time Exceeded, and other Icmp packet types
-/// included an Encapsulated packet as payload.  
+/// included an Encapsulated packet as payload.
 /// 
 /// Note that we cannot guarantee that this is a complete packet.
 /// * IPv4/RFC791 says this the encapsulated packet is the full IP header \
@@ -85,23 +120,23 @@ impl Icmp4DestinationUnreachable {
         use Icmp4DestinationUnreachable::*;
 
         match code {
-            ICMP4_UNREACH_NET => Network,
-            ICMP4_UNREACH_HOST_UNKNOWN => Host,
-            ICMP4_UNREACH_PROTOCOL => Protocol,
-            ICMP4_UNREACH_PORT => Port,
-            ICMP4_UNREACH_NEEDFRAG => FragmentationNeeded {
+            CODE_DST_UNREACH_NET => Network,
+            CODE_DST_UNREACH_HOST_UNKNOWN => Host,
+            CODE_DST_UNREACH_PROTOCOL => Protocol,
+            CODE_DST_UNREACH_PORT => Port,
+            CODE_DST_UNREACH_NEEDFRAG => FragmentationNeeded {
                 next_hop_mtu: u16::from_be_bytes([four_bytes[2], four_bytes[3]]),
             },
-            ICMP4_UNREACH_SRCFAIL => SourceFail,
-            ICMP4_UNREACH_NET_UNKNOWN => NetworkUnknown,
-            ICMP4_UNREACH_ISOLATED => Isolated,
-            ICMP4_UNREACH_NET_PROHIB => NetworkProhibited,
-            ICMP4_UNREACH_HOST_PROHIB => HostProhibitive,
-            ICMP4_UNREACH_TOSNET => TosNetwork,
-            ICMP4_UNREACH_TOSHOST => TosHost,
-            ICMP4_UNREACH_FILTER_PROHIB => FilterProhibited,
-            ICMP4_UNREACH_HOST_PRECEDENCE => HostPrecidence,
-            ICMP4_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
+            CODE_DST_UNREACH_SRCFAIL => SourceFail,
+            CODE_DST_UNREACH_NET_UNKNOWN => NetworkUnknown,
+            CODE_DST_UNREACH_ISOLATED => Isolated,
+            CODE_DST_UNREACH_NET_PROHIB => NetworkProhibited,
+            CODE_DST_UNREACH_HOST_PROHIB => HostProhibitive,
+            CODE_DST_UNREACH_TOSNET => TosNetwork,
+            CODE_DST_UNREACH_TOSHOST => TosHost,
+            CODE_DST_UNREACH_FILTER_PROHIB => FilterProhibited,
+            CODE_DST_UNREACH_HOST_PRECEDENCE => HostPrecidence,
+            CODE_DST_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
             // default to Raw
             code => Raw{
                 code,
@@ -116,22 +151,22 @@ impl Icmp4DestinationUnreachable {
         use Icmp4DestinationUnreachable::*;
         match self {
             Raw{ code, four_bytes: _ } => *code,
-            Network => ICMP4_UNREACH_NET,
-            Host => ICMP4_UNREACH_HOST_UNKNOWN,
-            Protocol => ICMP4_UNREACH_PROTOCOL,
-            Port => ICMP4_UNREACH_PORT,
-            FragmentationNeeded{ next_hop_mtu: _} => ICMP4_UNREACH_NEEDFRAG,
-            SourceFail => ICMP4_UNREACH_SRCFAIL,
-            NetworkUnknown => ICMP4_UNREACH_NET_UNKNOWN,
-            HostUnknown => ICMP4_UNREACH_HOST_UNKNOWN,
-            Isolated => ICMP4_UNREACH_ISOLATED,
-            NetworkProhibited => ICMP4_UNREACH_NET_PROHIB,
-            HostProhibitive => ICMP4_UNREACH_HOST_PROHIB,
-            TosNetwork => ICMP4_UNREACH_TOSNET,
-            TosHost => ICMP4_UNREACH_TOSHOST,
-            FilterProhibited => ICMP4_UNREACH_FILTER_PROHIB,
-            HostPrecidence => ICMP4_UNREACH_HOST_PRECEDENCE,
-            PrecedenceCutoff => ICMP4_UNREACH_PRECEDENCE_CUTOFF,
+            Network => CODE_DST_UNREACH_NET,
+            Host => CODE_DST_UNREACH_HOST_UNKNOWN,
+            Protocol => CODE_DST_UNREACH_PROTOCOL,
+            Port => CODE_DST_UNREACH_PORT,
+            FragmentationNeeded{ next_hop_mtu: _} => CODE_DST_UNREACH_NEEDFRAG,
+            SourceFail => CODE_DST_UNREACH_SRCFAIL,
+            NetworkUnknown => CODE_DST_UNREACH_NET_UNKNOWN,
+            HostUnknown => CODE_DST_UNREACH_HOST_UNKNOWN,
+            Isolated => CODE_DST_UNREACH_ISOLATED,
+            NetworkProhibited => CODE_DST_UNREACH_NET_PROHIB,
+            HostProhibitive => CODE_DST_UNREACH_HOST_PROHIB,
+            TosNetwork => CODE_DST_UNREACH_TOSNET,
+            TosHost => CODE_DST_UNREACH_TOSHOST,
+            FilterProhibited => CODE_DST_UNREACH_FILTER_PROHIB,
+            HostPrecidence => CODE_DST_UNREACH_HOST_PRECEDENCE,
+            PrecedenceCutoff => CODE_DST_UNREACH_PRECEDENCE_CUTOFF,
         }
     }
 
