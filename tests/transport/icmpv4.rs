@@ -84,24 +84,142 @@ mod dest_unreachable_header {
         }
     }
 
-    #[test]
-    fn code() {
-        // TODO
+    proptest! {
+        #[test]
+        fn code(
+            mtu in any::<u16>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            use DestUnreachableHeader::*;
+            {
+                let trivial = [
+                    (CODE_DST_UNREACH_NET, Network),
+                    (CODE_DST_UNREACH_HOST, Host),
+                    (CODE_DST_UNREACH_PROTOCOL, Protocol),
+                    (CODE_DST_UNREACH_PORT, Port),
+                    (CODE_DST_UNREACH_NEEDFRAG, FragmentationNeeded{ next_hop_mtu: mtu }),
+                    (CODE_DST_UNREACH_SRCFAIL, SourceFail),
+                    (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
+                    (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
+                    (CODE_DST_UNREACH_ISOLATED, Isolated),
+                    (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
+                    (CODE_DST_UNREACH_HOST_PROHIB, HostProhibitive),
+                    (CODE_DST_UNREACH_TOSNET, TosNetwork),
+                    (CODE_DST_UNREACH_TOSHOST, TosHost),
+                    (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
+                    (CODE_DST_UNREACH_HOST_PRECEDENCE, HostPrecidence),
+                    (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
+                ];
+                for t in trivial {
+                    assert_eq!(t.0, t.1.code());
+                }
+            }
+            for code in 0..u8::MAX {
+                assert_eq!(code, Raw{ code, bytes5to8 }.code());
+            }
+        }
     }
 
-    #[test]
-    fn bytes5to8() {
-        // TODO
+    proptest!{
+        #[test]
+        fn bytes5to8(
+            mtu in any::<u16>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            use DestUnreachableHeader::*;
+            // codes that return 0 bytes
+            {
+                let trivial = [
+                    Network,
+                    Host,
+                    Protocol,
+                    Port,
+                    // frag uses bytes5to8
+                    SourceFail,
+                    NetworkUnknown,
+                    HostUnknown,
+                    Isolated,
+                    NetworkProhibited,
+                    HostProhibitive,
+                    TosNetwork,
+                    TosHost,
+                    FilterProhibited,
+                    HostPrecidence,
+                    PrecedenceCutoff,
+                ];
+                for t in trivial {
+                    assert_eq!([0;4], t.bytes5to8());
+                }
+            }
+            // codes where additional bytes get used
+            {
+                let mtu_be = mtu.to_be_bytes();
+                assert_eq!(
+                    FragmentationNeeded{ next_hop_mtu: mtu }.bytes5to8(),
+                    [0, 0, mtu_be[0], mtu_be[1]]
+                );
+            }
+            for code in 0..u8::MAX {
+                assert_eq!(
+                    bytes5to8,
+                    Raw{ code, bytes5to8 }.bytes5to8()
+                );
+            }
+        }
     }
 
     #[test]
     fn clone_eq() {
-        // TODO
+        use DestUnreachableHeader::*;
+        let values = [
+            Raw{ code: 0, bytes5to8: [0;4] },
+            Network,
+            Host,
+            Protocol,
+            Port,
+            FragmentationNeeded{ next_hop_mtu: 0 },
+            SourceFail,
+            NetworkUnknown,
+            HostUnknown,
+            Isolated,
+            NetworkProhibited,
+            HostProhibitive,
+            TosNetwork,
+            TosHost,
+            FilterProhibited,
+            HostPrecidence,
+            PrecedenceCutoff,
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
     }
 
     #[test]
     fn debug() {
-        // TODO
+        use DestUnreachableHeader::*;
+        let tests = [
+            ("Raw { code: 0, bytes5to8: [0, 0, 0, 0] }", Raw{ code: 0, bytes5to8: [0;4] }),
+            ("Network", Network),
+            ("Host", Host),
+            ("Protocol", Protocol),
+            ("Port", Port),
+            ("FragmentationNeeded { next_hop_mtu: 0 }", FragmentationNeeded{ next_hop_mtu: 0 }),
+            ("SourceFail", SourceFail),
+            ("NetworkUnknown", NetworkUnknown),
+            ("HostUnknown", HostUnknown),
+            ("Isolated", Isolated),
+            ("NetworkProhibited", NetworkProhibited),
+            ("HostProhibitive", HostProhibitive),
+            ("TosNetwork", TosNetwork),
+            ("TosHost", TosHost),
+            ("FilterProhibited", FilterProhibited),
+            ("HostPrecidence", HostPrecidence),
+            ("PrecedenceCutoff", PrecedenceCutoff),
+        ];
+        for t in tests {
+            assert_eq!(t.0, format!("{:?}", t.1));
+        }
     }
 }
 

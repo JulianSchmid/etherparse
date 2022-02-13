@@ -78,7 +78,7 @@ pub mod icmpv4 {
     ///
     /// Codes 0, 1, 4, and 5 may be received from a gateway.  Codes 2 and
     /// 3 may be received from a host.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum DestUnreachableHeader {
         /// In case of an unknown icmp code is received the header elements are stored raw.
         Raw{
@@ -186,14 +186,16 @@ pub mod icmpv4 {
             use DestUnreachableHeader::*;
 
             match self {
+                Raw{ code: _, bytes5to8 } => *bytes5to8,
                 Network | Host | Protocol | Port => [0;4],
                 FragmentationNeeded{ next_hop_mtu } => {
                     let be = next_hop_mtu.to_be_bytes();
                     [0, 0, be[0], be[1]]
                 },
-                Raw{ code: _, bytes5to8 } => *bytes5to8,
-                // everything else doesn't use the four bytes
-                _ => [0,0,0,0],
+                SourceFail | NetworkUnknown | HostUnknown |
+                Isolated | NetworkProhibited | HostProhibitive |
+                TosNetwork | TosHost | FilterProhibited |
+                HostPrecidence | PrecedenceCutoff => [0;4],
             }
         }
     }
@@ -218,7 +220,7 @@ pub const ICMP_V4_ADDRESS: u8 =        17; /* Address Mask Request         */
 pub const ICMP_V4_ADDRESSREPLY: u8 =   18; /* Address Mask Reply           */
 
 /// Starting contents of an ICMPv4 packet without the checksum.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Icmp4Type {
     /// Used to encode unparsed/unknown ICMP headers
     Raw{icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4] },
