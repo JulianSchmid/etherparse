@@ -1,4 +1,109 @@
+use proptest::prelude::*;
 
+#[test]
+fn constants() {
+    use etherparse::icmpv4::*;
+    // destination unreachable code values according to
+    // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-3
+    assert_eq!(0, CODE_DST_UNREACH_NET);
+    assert_eq!(1, CODE_DST_UNREACH_HOST);
+    assert_eq!(2, CODE_DST_UNREACH_PROTOCOL);
+    assert_eq!(3, CODE_DST_UNREACH_PORT);
+    assert_eq!(4, CODE_DST_UNREACH_NEEDFRAG);
+    assert_eq!(5, CODE_DST_UNREACH_SRCFAIL);
+    assert_eq!(6, CODE_DST_UNREACH_NET_UNKNOWN);
+    assert_eq!(7, CODE_DST_UNREACH_HOST_UNKNOWN);
+    assert_eq!(8, CODE_DST_UNREACH_ISOLATED);
+    assert_eq!(9, CODE_DST_UNREACH_NET_PROHIB);
+    assert_eq!(10, CODE_DST_UNREACH_HOST_PROHIB);
+    assert_eq!(11, CODE_DST_UNREACH_TOSNET);
+    assert_eq!(12, CODE_DST_UNREACH_TOSHOST);
+    assert_eq!(13, CODE_DST_UNREACH_FILTER_PROHIB);
+    assert_eq!(14, CODE_DST_UNREACH_HOST_PRECEDENCE);
+    assert_eq!(15, CODE_DST_UNREACH_PRECEDENCE_CUTOFF);
+
+}
+
+mod dest_unreachable_header {
+    use super::*;
+    use etherparse::icmpv4::*;
+
+    proptest! {
+        #[test]
+        fn from_bytes(
+            mtu in any::<u16>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            use DestUnreachableHeader::*;
+
+            // types where only the code is relevant
+            {
+                let trivial = [
+                    (CODE_DST_UNREACH_NET, Network),
+                    (CODE_DST_UNREACH_HOST, Host),
+                    (CODE_DST_UNREACH_PROTOCOL, Protocol),
+                    (CODE_DST_UNREACH_PORT, Port),
+                    // frag uses bytes5to8
+                    (CODE_DST_UNREACH_SRCFAIL, SourceFail),
+                    (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
+                    (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
+                    (CODE_DST_UNREACH_ISOLATED, Isolated),
+                    (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
+                    (CODE_DST_UNREACH_HOST_PROHIB, HostProhibitive),
+                    (CODE_DST_UNREACH_TOSNET, TosNetwork),
+                    (CODE_DST_UNREACH_TOSHOST, TosHost),
+                    (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
+                    (CODE_DST_UNREACH_HOST_PRECEDENCE, HostPrecidence),
+                    (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
+                ];
+                for t in trivial {
+                    assert_eq!(t.1, DestUnreachableHeader::from_bytes(t.0, bytes5to8));
+                }
+            }
+            
+
+            // codes where additional bytes get interpreted
+            {
+                let mtu_be = mtu.to_be_bytes();
+                assert_eq!(
+                    FragmentationNeeded{ next_hop_mtu: mtu },
+                    DestUnreachableHeader::from_bytes(
+                        CODE_DST_UNREACH_NEEDFRAG,
+                        [bytes5to8[0], bytes5to8[1], mtu_be[0], mtu_be[1]]
+                    )
+                );
+            }
+
+            // raw
+            for code in 16..=u8::MAX {
+                assert_eq!(
+                    Raw{ code, bytes5to8 },
+                    DestUnreachableHeader::from_bytes(code, bytes5to8)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn code() {
+        // TODO
+    }
+
+    #[test]
+    fn bytes5to8() {
+        // TODO
+    }
+
+    #[test]
+    fn clone_eq() {
+        // TODO
+    }
+
+    #[test]
+    fn debug() {
+        // TODO
+    }
+}
 
 mod icmp4_hdr {
     use etherparse::*;
@@ -189,7 +294,7 @@ mod icmp4_hdr {
         let offset = 14 + 20 + 1;   // ethernet + iphdr + icmp_type
         // test all of the unreachable codes to make sure the maps are right
         for code_val in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
-            let code = Icmp4DestinationUnreachable::from_bytes(code_val, [0;4]);
+            let code = icmpv4::DestUnreachableHeader::from_bytes(code_val, [0;4]);
             let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
             pkt[offset] = code_val;  // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();

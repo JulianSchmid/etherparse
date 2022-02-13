@@ -1,7 +1,7 @@
 use std::slice::from_raw_parts;
 use super::super::*;
 
-/// Module containing ICMPv6 related types and constants
+/// Module containing ICMPv4 related types and constants
 pub mod icmpv4 {
 
     /// ICMP destination unreachable code for "Net Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
@@ -52,140 +52,155 @@ pub mod icmpv4 {
     /// ICMP destination unreachable code for "Precedence cutoff in effect" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
     pub const CODE_DST_UNREACH_PRECEDENCE_CUTOFF: u8 = 15;
 
+    /// "Destination Unreachable" ICMP header for IPv4 (without the invoking packet).
+    ///
+    /// # Description in RFC 792:
+    ///
+    /// If, according to the information in the gateway's routing tables,
+    /// the network specified in the internet destination field of a
+    /// datagram is unreachable, e.g., the distance to the network is
+    /// infinity, the gateway may send a destination unreachable message
+    /// to the internet source host of the datagram.  In addition, in some
+    /// networks, the gateway may be able to determine if the internet
+    /// destination host is unreachable.  Gateways in these networks may
+    /// send destination unreachable messages to the source host when the
+    /// destination host is unreachable.
+    ///
+    /// If, in the destination host, the IP module cannot deliver the
+    /// datagram  because the indicated protocol module or process port is
+    /// not active, the destination host may send a destination
+    /// unreachable message to the source host.
+    ///
+    /// Another case is when a datagram must be fragmented to be forwarded
+    /// by a gateway yet the Don't Fragment flag is on.  In this case the
+    /// gateway must discard the datagram and may return a destination
+    /// unreachable message.
+    ///
+    /// Codes 0, 1, 4, and 5 may be received from a gateway.  Codes 2 and
+    /// 3 may be received from a host.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub enum DestUnreachableHeader {
+        /// In case of an unknown icmp code is received the header elements are stored raw.
+        Raw{
+            /// ICMP code (present in the 2nd byte of the ICMP packet).
+            code: u8,
+            /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
+            bytes5to8: [u8;4],
+        },
+        /// Network unreachable error.
+        Network,
+        /// Host unreachable error.
+        Host,
+        /// Transport protocol not supported error.
+        Protocol,
+        /// Port unreachable error.
+        Port,
+        /// Fragmentation would be needed but the don't fragment bit is set.
+        FragmentationNeeded{ next_hop_mtu: u16 },
+        /// Source Route Failed
+        SourceFail,
+        /// Destination Network Unknown (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        NetworkUnknown,
+        /// Destination Host Unknown (no route to host known) (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        HostUnknown,
+        /// Source Host Isolated - obsolete (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        Isolated,
+        /// Communication with Destination Network is Administratively Prohibited (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        NetworkProhibited,
+        /// Communication with Destination Host is Administratively Prohibited (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        HostProhibitive,
+        /// Destination Network Unreachable for Type of Service (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        TosNetwork,
+        /// Destination Host Unreachable for Type of Service (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+        TosHost,
+        /// Cannot forward because packet administratively filtered (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+        FilterProhibited,
+        /// Required level of precidence not supported (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+        HostPrecidence,
+        /// Packet was below minimum precidence (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+        PrecedenceCutoff,
+    }
+
+    impl DestUnreachableHeader {
+
+        /// Decode destination unreachable icmp packet from the code (2nd byte)
+        /// and the 5th-8th bytes (inclusive) of the raw packet data.
+        #[inline]
+        pub fn from_bytes(code: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
+            use DestUnreachableHeader::*;
+
+            match code {
+                CODE_DST_UNREACH_NET => Network,
+                CODE_DST_UNREACH_HOST => Host,
+                CODE_DST_UNREACH_PROTOCOL => Protocol,
+                CODE_DST_UNREACH_PORT => Port,
+                CODE_DST_UNREACH_NEEDFRAG => FragmentationNeeded {
+                    next_hop_mtu: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]]),
+                },
+                CODE_DST_UNREACH_SRCFAIL => SourceFail,
+                CODE_DST_UNREACH_NET_UNKNOWN => NetworkUnknown,
+                CODE_DST_UNREACH_HOST_UNKNOWN => HostUnknown,
+                CODE_DST_UNREACH_ISOLATED => Isolated,
+                CODE_DST_UNREACH_NET_PROHIB => NetworkProhibited,
+                CODE_DST_UNREACH_HOST_PROHIB => HostProhibitive,
+                CODE_DST_UNREACH_TOSNET => TosNetwork,
+                CODE_DST_UNREACH_TOSHOST => TosHost,
+                CODE_DST_UNREACH_FILTER_PROHIB => FilterProhibited,
+                CODE_DST_UNREACH_HOST_PRECEDENCE => HostPrecidence,
+                CODE_DST_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
+                // default to Raw
+                code => Raw{
+                    code,
+                    bytes5to8
+                },
+            }
+        }
+
+        /// Returns the icmp code value of the destination unreachable packet.
+        #[inline]
+        pub fn code(&self) -> u8 {
+            use DestUnreachableHeader::*;
+            match self {
+                Raw{ code, bytes5to8: _ } => *code,
+                Network => CODE_DST_UNREACH_NET,
+                Host => CODE_DST_UNREACH_HOST,
+                Protocol => CODE_DST_UNREACH_PROTOCOL,
+                Port => CODE_DST_UNREACH_PORT,
+                FragmentationNeeded{ next_hop_mtu: _} => CODE_DST_UNREACH_NEEDFRAG,
+                SourceFail => CODE_DST_UNREACH_SRCFAIL,
+                NetworkUnknown => CODE_DST_UNREACH_NET_UNKNOWN,
+                HostUnknown => CODE_DST_UNREACH_HOST_UNKNOWN,
+                Isolated => CODE_DST_UNREACH_ISOLATED,
+                NetworkProhibited => CODE_DST_UNREACH_NET_PROHIB,
+                HostProhibitive => CODE_DST_UNREACH_HOST_PROHIB,
+                TosNetwork => CODE_DST_UNREACH_TOSNET,
+                TosHost => CODE_DST_UNREACH_TOSHOST,
+                FilterProhibited => CODE_DST_UNREACH_FILTER_PROHIB,
+                HostPrecidence => CODE_DST_UNREACH_HOST_PRECEDENCE,
+                PrecedenceCutoff => CODE_DST_UNREACH_PRECEDENCE_CUTOFF,
+            }
+        }
+
+        /// Returns the 5th-8th bytes (inclusive) of the raw icmp packet data
+        pub fn bytes5to8(&self) -> [u8;4] {
+            use DestUnreachableHeader::*;
+
+            match self {
+                Network | Host | Protocol | Port => [0;4],
+                FragmentationNeeded{ next_hop_mtu } => {
+                    let be = next_hop_mtu.to_be_bytes();
+                    [0, 0, be[0], be[1]]
+                },
+                Raw{ code: _, bytes5to8 } => *bytes5to8,
+                // everything else doesn't use the four bytes
+                _ => [0,0,0,0],
+            }
+        }
+    }
+
 } // mod icmpv4
 
 use icmpv4::*;
-
-/// Icmp Dest Unreachables, Time Exceeded, and other Icmp packet types
-/// included an Encapsulated packet as payload.
-/// 
-/// Note that we cannot guarantee that this is a complete packet.
-/// * IPv4/RFC791 says this the encapsulated packet is the full IP header \
-///     and "at least" 8 bytes of the the IP payload, e.g., the src+dst ports \
-///     if the protocol is UDP/TCP/SCTP
-/// * IPv6/RFC4443 S3.1 says this is "As much of invoking packet as possible \
-///     without the ICMPv6 packet exceeding the minimum IPv6 MTU"
-/// but ultimately it's up to the router and not all routers in the Internet
-/// are RFC compliant.  Be careful when parsing this struct as the packet
-/// may truncate arbitrarily
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Icmp4DestinationUnreachable {
-    /// In case of an unknown icmp code is received the header elements are stored raw.
-    Raw{
-        /// ICMP code (present in the 2nd byte of the ICMP packet).
-        code: u8,
-        /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
-        bytes5to8: [u8;4],
-    },
-    /// Network unreachable error.
-    Network,
-    /// Host unreachable error.
-    Host,
-    /// Transport protocol not supported error.
-    Protocol,
-    /// Port unreachable error.
-    Port,
-    /// Fragmentation would be needed but the don't fragment bit is set.
-    FragmentationNeeded{ next_hop_mtu: u16 },
-    /// Source Routing Failed
-    SourceFail,
-    /// No path to network
-    NetworkUnknown,
-    /// No path to host
-    HostUnknown,
-    /// RFC1122 : Network/Host Isolated - obsolete
-    Isolated,
-    /// RFC1122 : Network Prohibitive 
-    NetworkProhibited,
-    /// RFC1122 : Host Prohibitive 
-    HostProhibitive,
-    /// RFC1122 : Network unreachable for this type of service
-    TosNetwork,
-    /// RFC1122 : Host unreachable for this type of service
-    TosHost,
-    /// RFC1812 : Cannot forward because packet administratively filtered
-    FilterProhibited,
-    /// RFC1812 : Required level of precidence not supported
-    HostPrecidence,
-    /// RFC1812 : Packet was below minimum precidence
-    PrecedenceCutoff,
-}
-
-impl Icmp4DestinationUnreachable {
-
-    /// Decode destination unreachable icmp packet from the code (2nd byte)
-    /// and the 5th-8th bytes (inclusive) of the raw packet data.
-    #[inline]
-    pub fn from_bytes(code: u8, bytes5to8: [u8;4]) -> Icmp4DestinationUnreachable {
-        use Icmp4DestinationUnreachable::*;
-
-        match code {
-            CODE_DST_UNREACH_NET => Network,
-            CODE_DST_UNREACH_HOST_UNKNOWN => Host,
-            CODE_DST_UNREACH_PROTOCOL => Protocol,
-            CODE_DST_UNREACH_PORT => Port,
-            CODE_DST_UNREACH_NEEDFRAG => FragmentationNeeded {
-                next_hop_mtu: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]]),
-            },
-            CODE_DST_UNREACH_SRCFAIL => SourceFail,
-            CODE_DST_UNREACH_NET_UNKNOWN => NetworkUnknown,
-            CODE_DST_UNREACH_ISOLATED => Isolated,
-            CODE_DST_UNREACH_NET_PROHIB => NetworkProhibited,
-            CODE_DST_UNREACH_HOST_PROHIB => HostProhibitive,
-            CODE_DST_UNREACH_TOSNET => TosNetwork,
-            CODE_DST_UNREACH_TOSHOST => TosHost,
-            CODE_DST_UNREACH_FILTER_PROHIB => FilterProhibited,
-            CODE_DST_UNREACH_HOST_PRECEDENCE => HostPrecidence,
-            CODE_DST_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
-            // default to Raw
-            code => Raw{
-                code,
-                bytes5to8
-            },
-        }
-    }
-
-    /// Returns the icmp code value of the destination unreachable packet.
-    #[inline]
-    pub fn code(&self) -> u8 {
-        use Icmp4DestinationUnreachable::*;
-        match self {
-            Raw{ code, bytes5to8: _ } => *code,
-            Network => CODE_DST_UNREACH_NET,
-            Host => CODE_DST_UNREACH_HOST_UNKNOWN,
-            Protocol => CODE_DST_UNREACH_PROTOCOL,
-            Port => CODE_DST_UNREACH_PORT,
-            FragmentationNeeded{ next_hop_mtu: _} => CODE_DST_UNREACH_NEEDFRAG,
-            SourceFail => CODE_DST_UNREACH_SRCFAIL,
-            NetworkUnknown => CODE_DST_UNREACH_NET_UNKNOWN,
-            HostUnknown => CODE_DST_UNREACH_HOST_UNKNOWN,
-            Isolated => CODE_DST_UNREACH_ISOLATED,
-            NetworkProhibited => CODE_DST_UNREACH_NET_PROHIB,
-            HostProhibitive => CODE_DST_UNREACH_HOST_PROHIB,
-            TosNetwork => CODE_DST_UNREACH_TOSNET,
-            TosHost => CODE_DST_UNREACH_TOSHOST,
-            FilterProhibited => CODE_DST_UNREACH_FILTER_PROHIB,
-            HostPrecidence => CODE_DST_UNREACH_HOST_PRECEDENCE,
-            PrecedenceCutoff => CODE_DST_UNREACH_PRECEDENCE_CUTOFF,
-        }
-    }
-
-    /// Returns the 5th-8th bytes (inclusive) of the raw icmp packet data
-    pub fn bytes5to8(&self) -> [u8;4] {
-        use Icmp4DestinationUnreachable::*;
-
-        match self {
-            Network | Host | Protocol | Port => [0;4],
-            FragmentationNeeded{ next_hop_mtu } => {
-                let be = next_hop_mtu.to_be_bytes();
-                [0, 0, be[0], be[1]]
-            },
-            Raw{ code: _, bytes5to8 } => *bytes5to8,
-            // everything else doesn't use the four bytes
-            _ => [0,0,0,0],
-        }
-    }
-}
 
 // for simplicity + muscle memory, pattern against libc consts
 pub const ICMP_V4_ECHOREPLY: u8 =       0; /* Echo Reply                   */
@@ -208,7 +223,7 @@ pub enum Icmp4Type {
     /// Used to encode unparsed/unknown ICMP headers
     Raw{icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4] },
     EchoReply(IcmpEchoHeader),
-    DestinationUnreachable(Icmp4DestinationUnreachable),
+    DestinationUnreachable(icmpv4::DestUnreachableHeader),
     SourceQuench,
     Redirect,
     EchoRequest(IcmpEchoHeader),
@@ -229,7 +244,7 @@ impl Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
             ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
-            ICMP_V4_DEST_UNREACH => DestinationUnreachable(Icmp4DestinationUnreachable::from_bytes(icmp_code, bytes5to8)),
+            ICMP_V4_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
             ICMP_V4_SOURCE_QUENCH => SourceQuench,
             ICMP_V4_REDIRECT => Redirect,
             ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
