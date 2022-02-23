@@ -3,7 +3,27 @@ use proptest::prelude::*;
 #[test]
 fn constants() {
     use etherparse::icmpv4::*;
-    // destination unreachable code values according to
+
+    // icmp type numbers according to
+    // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-types
+    assert_eq!(TYPE_ECHOREPLY, 0);
+    assert_eq!(TYPE_DEST_UNREACH, 3);
+    assert_eq!(TYPE_SOURCE_QUENCH, 4);
+    assert_eq!(TYPE_REDIRECT, 5);
+    assert_eq!(TYPE_ALTERNATE_HOST_ADDRESS, 6);
+    assert_eq!(TYPE_ECHO_REQUEST, 8);
+    assert_eq!(TYPE_ROUTER_ADVERTISEMENT, 9);
+    assert_eq!(TYPE_ROUTER_SOLICITATION, 10);
+    assert_eq!(TYPE_TIME_EXCEEDED, 11);
+    assert_eq!(TYPE_PARAMETERPROB, 12);
+    assert_eq!(TYPE_TIMESTAMP, 13);
+    assert_eq!(TYPE_TIMESTAMPREPLY, 14);
+    assert_eq!(TYPE_INFO_REQUEST, 15);
+    assert_eq!(TYPE_INFO_REPLY, 16);
+    assert_eq!(TYPE_ADDRESS, 17);
+    assert_eq!(TYPE_ADDRESSREPLY, 18);
+
+    // destination unreachable code numbers according to
     // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-3
     assert_eq!(0, CODE_DST_UNREACH_NET);
     assert_eq!(1, CODE_DST_UNREACH_HOST);
@@ -383,7 +403,7 @@ mod icmp4_hdr {
         assert_eq!(Ipv4Addr::from(ip_header.source), "212.156.201.114".parse::<Ipv4Addr>().unwrap());
         let icmp4 = ttl_exceeded.transport.unwrap().icmp4().unwrap();
         let (icmp_type, icmp_code, bytes5to8) = icmp4.icmp_type.to_bytes();
-        assert_eq!(icmp_type, ICMP_V4_TIME_EXCEEDED);
+        assert_eq!(icmp_type, icmpv4::TYPE_TIME_EXCEEDED);
         assert_eq!(icmp_code, 0);
         assert_eq!(bytes5to8, [0;4]);  // TTL exceeded doesn't use this field
         // now unpack the bounced packet in the payload

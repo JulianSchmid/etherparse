@@ -4,52 +4,100 @@ use super::super::*;
 /// Module containing ICMPv4 related types and constants
 pub mod icmpv4 {
 
-    /// ICMP destination unreachable code for "Net Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMPv4 type value indicating a "Echo Reply" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_ECHOREPLY: u8 = 0;
+
+    /// ICMPv4 type value indicating a "Destination Unreachable" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_DEST_UNREACH: u8 = 3;
+
+    /// ICMPv4 type value indicating a "Source Quench (Deprecated)" message (defined in in [RFC 792](https://tools.ietf.org/html/rfc792), deprecated in [RFC 6633](https://tools.ietf.org/html/rfc6633)).
+    pub const TYPE_SOURCE_QUENCH: u8 = 4;
+
+    /// ICMPv4 type value indicating a "Redirect" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_REDIRECT: u8 = 5;
+
+    /// ICMPv4 type value indicating a "Alternate Host Address (Deprecated)" message (deprecated in [RFC 6918](https://tools.ietf.org/html/rfc6918)).
+    pub const TYPE_ALTERNATE_HOST_ADDRESS: u8 = 6;
+
+    /// ICMPv4 type value indicating a "Echo Request" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_ECHO_REQUEST: u8 = 8;
+
+    /// ICMPv4 type value indicating a "Router Advertisement" message (defined in [RFC 1256](https://tools.ietf.org/html/rfc1256)).
+    pub const TYPE_ROUTER_ADVERTISEMENT: u8 = 9;
+
+    /// ICMPv4 type value indicating a "Router Solicitation" message (defined in [RFC 1256](https://tools.ietf.org/html/rfc1256)).
+    pub const TYPE_ROUTER_SOLICITATION: u8 = 10;
+
+    /// ICMPv4 type value indicating a "Time Exceeded" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_TIME_EXCEEDED: u8 = 11;
+
+    /// ICMPv4 type value indicating a "Parameter Problem" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_PARAMETERPROB: u8 = 12;
+
+    /// ICMPv4 type value indicating a "Timestamp" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_TIMESTAMP: u8 = 13;
+
+    /// ICMPv4 type value indicating a "Timestamp Reply" message (defined in [RFC 792](https://tools.ietf.org/html/rfc792)).
+    pub const TYPE_TIMESTAMPREPLY: u8 = 14;
+
+    /// ICMPv4 type value indicating a "Information Request (Deprecated)" message (defined in in [RFC 792](https://tools.ietf.org/html/rfc792), deprecated in [RFC 6918](https://tools.ietf.org/html/rfc6918)).
+    pub const TYPE_INFO_REQUEST: u8 = 15;
+
+    /// ICMPv4 type value indicating a "Information Reply (Deprecated)" message (defined in in [RFC 792](https://tools.ietf.org/html/rfc792), deprecated in [RFC 6918](https://tools.ietf.org/html/rfc6918)).
+    pub const TYPE_INFO_REPLY: u8 = 16;
+
+    /// ICMPv4 type value indicating a "Address Mask Request (Deprecated)" message (defined in in [RFC 950](https://tools.ietf.org/html/rfc950), deprecated in [RFC 6918](https://tools.ietf.org/html/rfc6918)).
+    pub const TYPE_ADDRESS: u8 = 17;
+
+    /// ICMPv4 type value indicating a "Address Mask Reply (Deprecated)" message (defined in in [RFC 950](https://tools.ietf.org/html/rfc950), deprecated in [RFC 6918](https://tools.ietf.org/html/rfc6918)).
+    pub const TYPE_ADDRESSREPLY: u8 = 18;
+
+    /// ICMP destination unreachable code for "Net Unreachable" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_NET: u8 = 0;
 
-    /// ICMP destination unreachable code for "Host Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMP destination unreachable code for "Host Unreachable" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_HOST: u8 = 1;
 
-    /// ICMP destination unreachable code for "Protocol Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMP destination unreachable code for "Protocol Unreachable" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_PROTOCOL: u8 = 2;
 
-    /// ICMP destination unreachable code for "Port Unreachable" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMP destination unreachable code for "Port Unreachable" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_PORT: u8 = 3;
 
-    /// ICMP destination unreachable code for "Fragmentation Needed and Don't Fragment was Set" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMP destination unreachable code for "Fragmentation Needed and Don't Fragment was Set" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_NEEDFRAG: u8 = 4;
 
-    /// ICMP destination unreachable code for "Source Route Failed" (from [RFC 792](https://tools.ietf.org/html/rfc792))
+    /// ICMP destination unreachable code for "Source Route Failed" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
     pub const CODE_DST_UNREACH_SRCFAIL: u8 = 5;
 
-    /// ICMP destination unreachable code for "Destination Network Unknown" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Destination Network Unknown" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_NET_UNKNOWN: u8 =  6;
 
-    /// ICMP destination unreachable code for "Destination Host Unknown" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Destination Host Unknown" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_HOST_UNKNOWN: u8 = 7;
 
-    /// ICMP destination unreachable code for "Source Host Isolated" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Source Host Isolated" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_ISOLATED: u8 = 8;
 
-    /// ICMP destination unreachable code for "Communication with Destination Network is Administratively Prohibited" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Communication with Destination Network is Administratively Prohibited" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_NET_PROHIB: u8 = 9;
 
-    /// ICMP destination unreachable code for "Communication with Destination Host is Administratively Prohibited" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Communication with Destination Host is Administratively Prohibited" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_HOST_PROHIB: u8 = 10;
 
-    /// ICMP destination unreachable code for "Destination Network Unreachable for Type of Service" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Destination Network Unreachable for Type of Service" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_TOSNET: u8 = 11;
 
-    /// ICMP destination unreachable code for "Destination Host Unreachable for Type of Service" (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
+    /// ICMP destination unreachable code for "Destination Host Unreachable for Type of Service" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_TOSHOST: u8 = 12;
 
-    /// ICMP destination unreachable code for "Communication Administratively Prohibited" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    /// ICMP destination unreachable code for "Communication Administratively Prohibited" (defined in [RFC 1812](https://tools.ietf.org/html/rfc1812))
     pub const CODE_DST_UNREACH_FILTER_PROHIB: u8 = 13;
 
-    /// ICMP destination unreachable code for "Host Precedence Violation" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    /// ICMP destination unreachable code for "Host Precedence Violation" (defined in [RFC 1812](https://tools.ietf.org/html/rfc1812))
     pub const CODE_DST_UNREACH_HOST_PRECEDENCE: u8 = 14;
 
-    /// ICMP destination unreachable code for "Precedence cutoff in effect" (from [RFC 1812](https://tools.ietf.org/html/rfc1812))
+    /// ICMP destination unreachable code for "Precedence cutoff in effect" (defined in [RFC 1812](https://tools.ietf.org/html/rfc1812))
     pub const CODE_DST_UNREACH_PRECEDENCE_CUTOFF: u8 = 15;
 
     /// "Destination Unreachable" ICMP header for IPv4 (without the invoking packet).
@@ -199,25 +247,10 @@ pub mod icmpv4 {
             }
         }
     }
-
 } // mod icmpv4
 
 use icmpv4::*;
 
-// for simplicity + muscle memory, pattern against libc consts
-pub const ICMP_V4_ECHOREPLY: u8 =       0; /* Echo Reply                   */
-pub const ICMP_V4_DEST_UNREACH: u8 =    3; /* Destination Unreachable      */
-pub const ICMP_V4_SOURCE_QUENCH: u8 =   4; /* Source Quench                */
-pub const ICMP_V4_REDIRECT: u8 =        5; /* Redirect (change route)      */
-pub const ICMP_V4_ECHO: u8 =            8; /* Echo Request                 */
-pub const ICMP_V4_TIME_EXCEEDED: u8 =  11; /* Time Exceeded                */
-pub const ICMP_V4_PARAMETERPROB: u8 =  12; /* Parameter Problem            */
-pub const ICMP_V4_TIMESTAMP: u8 =      13; /* Timestamp Request            */
-pub const ICMP_V4_TIMESTAMPREPLY: u8 = 14; /* Timestamp Reply              */
-pub const ICMP_V4_INFO_REQUEST: u8 =   15; /* Information Request          */
-pub const ICMP_V4_INFO_REPLY: u8 =     16; /* Information Reply            */
-pub const ICMP_V4_ADDRESS: u8 =        17; /* Address Mask Request         */
-pub const ICMP_V4_ADDRESSREPLY: u8 =   18; /* Address Mask Reply           */
 
 /// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -245,19 +278,19 @@ impl Icmp4Type {
     pub fn from(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmp4Type {
         use Icmp4Type::*;
         match icmp_type {
-            ICMP_V4_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
-            ICMP_V4_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
-            ICMP_V4_SOURCE_QUENCH => SourceQuench,
-            ICMP_V4_REDIRECT => Redirect,
-            ICMP_V4_ECHO=> EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
-            ICMP_V4_TIME_EXCEEDED => TimeExceeded,
-            ICMP_V4_PARAMETERPROB => ParameterProblem,
-            ICMP_V4_TIMESTAMP => TimestampRequest,
-            ICMP_V4_TIMESTAMPREPLY => TimestampReply,
-            ICMP_V4_INFO_REQUEST => InfoRequest,
-            ICMP_V4_INFO_REPLY => InfoReply,
-            ICMP_V4_ADDRESS => AddressRequest,
-            ICMP_V4_ADDRESSREPLY => AddressReply,
+            TYPE_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            TYPE_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
+            TYPE_SOURCE_QUENCH => SourceQuench,
+            TYPE_REDIRECT => Redirect,
+            TYPE_ECHO_REQUEST=> EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+            TYPE_TIME_EXCEEDED => TimeExceeded,
+            TYPE_PARAMETERPROB => ParameterProblem,
+            TYPE_TIMESTAMP => TimestampRequest,
+            TYPE_TIMESTAMPREPLY => TimestampReply,
+            TYPE_INFO_REQUEST => InfoRequest,
+            TYPE_INFO_REPLY => InfoReply,
+            TYPE_ADDRESS => AddressRequest,
+            TYPE_ADDRESSREPLY => AddressReply,
             // unknown/unparsed type - just return as Raw
             _ => Raw{icmp_type, icmp_code, bytes5to8}
         }
@@ -270,22 +303,22 @@ impl Icmp4Type {
         match &self {
             Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
             EchoReply(echo) => {
-                (ICMP_V4_ECHOREPLY, 0, echo.to_bytes())
+                (TYPE_ECHOREPLY, 0, echo.to_bytes())
             },
-            DestinationUnreachable(value) => (ICMP_V4_DEST_UNREACH, value.code(), value.bytes5to8()),
-            SourceQuench => (ICMP_V4_SOURCE_QUENCH, 0, [0;4]),
-            Redirect => (ICMP_V4_REDIRECT, 0, [0;4]),
+            DestinationUnreachable(value) => (TYPE_DEST_UNREACH, value.code(), value.bytes5to8()),
+            SourceQuench => (TYPE_SOURCE_QUENCH, 0, [0;4]),
+            Redirect => (TYPE_REDIRECT, 0, [0;4]),
             EchoRequest(echo) => {
-                (ICMP_V4_ECHO, 0, echo.to_bytes())
+                (TYPE_ECHO_REQUEST, 0, echo.to_bytes())
             },
-            TimeExceeded => (ICMP_V4_TIME_EXCEEDED, 0, [0;4]),
-            ParameterProblem => (ICMP_V4_PARAMETERPROB, 0, [0;4]),
-            TimestampRequest => (ICMP_V4_TIMESTAMP, 0, [0;4]),
-            TimestampReply => (ICMP_V4_TIMESTAMPREPLY, 0, [0;4]),
-            InfoRequest => (ICMP_V4_INFO_REQUEST, 0, [0;4]),
-            InfoReply => (ICMP_V4_INFO_REPLY, 0, [0;4]),
-            AddressRequest => (ICMP_V4_ADDRESS, 0, [0;4]),
-            AddressReply => (ICMP_V4_ADDRESSREPLY, 0, [0;4]),
+            TimeExceeded => (TYPE_TIME_EXCEEDED, 0, [0;4]),
+            ParameterProblem => (TYPE_PARAMETERPROB, 0, [0;4]),
+            TimestampRequest => (TYPE_TIMESTAMP, 0, [0;4]),
+            TimestampReply => (TYPE_TIMESTAMPREPLY, 0, [0;4]),
+            InfoRequest => (TYPE_INFO_REQUEST, 0, [0;4]),
+            InfoReply => (TYPE_INFO_REPLY, 0, [0;4]),
+            AddressRequest => (TYPE_ADDRESS, 0, [0;4]),
+            AddressReply => (TYPE_ADDRESSREPLY, 0, [0;4]),
         }
     }
 }
