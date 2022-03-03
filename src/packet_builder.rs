@@ -1415,7 +1415,6 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
                         Icmpv6(_) => {},
                         Udp(ref mut udp) => { udp.length = transport_size as u16; }
                         Tcp(_) => {},
-                        
                     }
         
                     //ip protocol number & next header values of the extension header
@@ -1450,10 +1449,10 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
                     //set the protocol
                     ip.next_header = ext.set_next_headers(
                         match transport {
-                            Icmpv4(_) => ip_number::ICMP as u8,
-                            Icmpv6(_) => ip_number::IPV6_ICMP as u8,
-                            Udp(_) => ip_number::UDP as u8,
-                            Tcp(_) => ip_number::TCP as u8
+                            Icmpv4(_) => ip_number::ICMP,
+                            Icmpv6(_) => ip_number::IPV6_ICMP,
+                            Udp(_) => ip_number::UDP,
+                            Tcp(_) => ip_number::TCP
                         }
                     );
         
