@@ -1200,6 +1200,16 @@ impl PacketBuilderStep<IpHeader> {
             _marker: marker::PhantomData::<TcpHeader>{}
         }
     }
+
+    ///Write all the headers and the payload.
+    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+        final_write(self, writer, payload)
+    }
+
+    ///Returns the size of the packet when it is serialized
+    pub fn size(&self, payload_size: usize) -> usize {
+        final_size(self, payload_size)
+    }
 }
 
 impl PacketBuilderStep<Icmpv4Header> {
@@ -1373,75 +1383,93 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
         None => {}
     }
 
-    //unpack the transport header
-    let mut transport = builder.state.transport_header.unwrap();
 
     //ip header
     use crate::IpHeader::*;
     let ip_header = builder.state.ip_header.unwrap();
-    match ip_header {
-        Version4(mut ip, mut ext) => {
-            //set total length & udp payload length (ip checks that the payload length is ok)
-            let transport_size = transport.header_len() + payload.len();
-            ip.set_payload_len(ext.header_len() + transport_size)?;
-            use crate::TransportHeader::*;
-            match transport {
-                Icmpv4(_) => {},
-                Icmpv6(_) => {},
-                Udp(ref mut udp) => { udp.length = transport_size as u16; }
-                Tcp(_) => {}
-            }
 
-            //ip protocol number & next header values of the extension header
-            ip.protocol = ext.set_next_headers(
-                match transport {
-                    Icmpv4(_) => ip_number::ICMP,
-                    Icmpv6(_) => ip_number::IPV6_ICMP,
-                    Udp(_) => ip_number::UDP,
-                    Tcp(_) => ip_number::TCP
+    //transport header
+    let transport = builder.state.transport_header;
+    match transport {
+        None => {
+            match ip_header {
+                Version4(mut ip, _) => {
+                    ip.set_payload_len(payload.len())?;
+                    ip.write(writer)?;
+                },
+                Version6(mut ip, _) => {
+                    ip.set_payload_length(payload.len())?;
+                    ip.write(writer)?;
                 }
-            );
-
-            //calculate the udp checksum
-            transport.update_checksum_ipv4(&ip, payload)?;
-
-            //write (will automatically calculate the checksum)
-            ip.write(writer)?;
-            ext.write(writer, ip.protocol)?
+            }
         },
-        Version6(mut ip, mut ext) => {
-            //set total length
-            let transport_size = transport.header_len() + payload.len();
-            ip.set_payload_length(ext.header_len() + transport_size)?;
-            use crate::TransportHeader::*;
-            match transport {
-                Icmpv4(_) => {},
-                Icmpv6(_) => {},
-                Udp(ref mut udp) => { udp.length = transport_size as u16; }
-                Tcp(_) => {}
-            }
-
-            //set the protocol
-            ip.next_header = ext.set_next_headers(
-                match transport {
-                    Icmpv4(_) => ip_number::ICMP as u8,
-                    Icmpv6(_) => ip_number::IPV6_ICMP as u8,
-                    Udp(_) => ip_number::UDP as u8,
-                    Tcp(_) => ip_number::TCP as u8
+        Some(mut transport) => {
+            match ip_header {
+                Version4(mut ip, mut ext) => {
+                    //set total length & udp payload length (ip checks that the payload length is ok)
+                    let transport_size = transport.header_len() + payload.len();
+                    ip.set_payload_len(ext.header_len() + transport_size)?;
+                    use crate::TransportHeader::*;
+                    match transport {
+                        Icmpv4(_) => {},
+                        Icmpv6(_) => {},
+                        Udp(ref mut udp) => { udp.length = transport_size as u16; }
+                        Tcp(_) => {},
+                        
+                    }
+        
+                    //ip protocol number & next header values of the extension header
+                    ip.protocol = ext.set_next_headers(
+                        match transport {
+                            Icmpv4(_) => ip_number::ICMP,
+                            Icmpv6(_) => ip_number::IPV6_ICMP,
+                            Udp(_) => ip_number::UDP,
+                            Tcp(_) => ip_number::TCP
+                        }
+                    );
+        
+                    //calculate the udp checksum
+                    transport.update_checksum_ipv4(&ip, payload)?;
+        
+                    //write (will automatically calculate the checksum)
+                    ip.write(writer)?;
+                    ext.write(writer, ip.protocol)?;
+                },
+                Version6(mut ip, mut ext) => {
+                    //set total length
+                    let transport_size = transport.header_len() + payload.len();
+                    ip.set_payload_length(ext.header_len() + transport_size)?;
+                    use crate::TransportHeader::*;
+                    match transport {
+                        Icmpv4(_) => {},
+                        Icmpv6(_) => {},
+                        Udp(ref mut udp) => { udp.length = transport_size as u16; }
+                        Tcp(_) => {}
+                    }
+        
+                    //set the protocol
+                    ip.next_header = ext.set_next_headers(
+                        match transport {
+                            Icmpv4(_) => ip_number::ICMP as u8,
+                            Icmpv6(_) => ip_number::IPV6_ICMP as u8,
+                            Udp(_) => ip_number::UDP as u8,
+                            Tcp(_) => ip_number::TCP as u8
+                        }
+                    );
+        
+                    //calculate the udp checksum
+                    transport.update_checksum_ipv6(&ip, payload)?;
+        
+                    //write (will automatically calculate the checksum)
+                    ip.write(writer)?;
+                    ext.write(writer, ip.next_header)?;
                 }
-            );
-
-            //calculate the udp checksum
-            transport.update_checksum_ipv6(&ip, payload)?;
-
-            //write (will automatically calculate the checksum)
-            ip.write(writer)?;
-            ext.write(writer, ip.next_header)?
-        }
+            }
+        
+            //finaly write the udp header & payload
+            transport.write(writer)?;
+        },
     }
-
-    //finaly write the udp header & payload
-    transport.write(writer)?;
     writer.write_all(payload)?;
     Ok(())
 }
