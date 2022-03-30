@@ -334,8 +334,8 @@ impl<'a> UdpHeaderSlice<'a> {
     }
 
     /// Calculates the upd header checksum based on a ipv4 header.
-    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     /// Calculates the upd header checksum based on a ipv4 header.
@@ -364,8 +364,8 @@ impl<'a> UdpHeaderSlice<'a> {
     }
 
     /// Calculates the checksum of the current udp header given an ipv6 header and the payload.
-    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
-        self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     /// Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
