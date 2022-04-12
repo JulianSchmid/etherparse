@@ -249,8 +249,8 @@ mod icmp4_hdr {
 
     #[test]
     fn icmp4_echo_marshall_unmarshall() {
-        let icmp4 = Icmp4Header {
-            icmp_type: Icmp4Type::EchoRequest(IcmpEchoHeader{
+        let icmp4 = Icmpv4Header {
+            icmp_type: Icmpv4Type::EchoRequest(IcmpEchoHeader{
                 seq: 1,
                 id: 2,
             }),
@@ -259,7 +259,7 @@ mod icmp4_hdr {
         // serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(256);
         icmp4.write(&mut buffer).unwrap();
-        let (new_icmp4, rest) = Icmp4Header::from_slice(&buffer).unwrap();
+        let (new_icmp4, rest) = Icmpv4Header::from_slice(&buffer).unwrap();
         assert_eq!(icmp4, new_icmp4);
         assert_eq!(rest.len(), 0);
     }
@@ -280,8 +280,8 @@ mod icmp4_hdr {
         builder.write(&mut result, &payload).unwrap();
 
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
-        if let Some(TransportHeader::Icmp4(hdr)) = new_ip.transport {
-            if let Icmp4Type::EchoRequest(echo) = hdr.icmp_type {
+        if let Some(TransportHeader::Icmpv4(hdr)) = new_ip.transport {
+            if let Icmpv4Type::EchoRequest(echo) = hdr.icmp_type {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 2);
             } else {
@@ -319,7 +319,7 @@ mod icmp4_hdr {
         let request = PacketHeaders::from_ethernet_slice(&ICMP4_ECHO_REQUEST_BYTES).unwrap();
         let request_icmp4 = request.transport.unwrap().icmp4().unwrap();
         match request_icmp4.icmp_type {
-            Icmp4Type::EchoRequest(echo) => {
+            Icmpv4Type::EchoRequest(echo) => {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 3); // arbitrarily assigned by OS
             },
@@ -329,7 +329,7 @@ mod icmp4_hdr {
         let reply  = PacketHeaders::from_ethernet_slice(&ICMP4_ECHO_REPLY_BYTES).unwrap();
         let reply_icmp4 = reply.transport.unwrap().icmp4().unwrap();
         match reply_icmp4.icmp_type {
-            Icmp4Type::EchoReply(echo) => {
+            Icmpv4Type::EchoReply(echo) => {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 3); // arbitrarily assigned by OS
             },
@@ -354,10 +354,10 @@ mod icmp4_hdr {
         let echo = SlicedPacket::from_ethernet(&ICMP4_ECHO_REQUEST_BYTES).unwrap();
         use TransportSlice::*;
         let icmp4 = match echo.transport.unwrap() {
-            Icmp4(icmp4) => icmp4,
-            Icmp6(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+            Icmpv4(icmp4) => icmp4,
+            Icmpv6(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
         };
-        assert!(matches!(icmp4.icmp_type(), Icmp4Type::EchoRequest(_)));
+        assert!(matches!(icmp4.icmp_type(), Icmpv4Type::EchoRequest(_)));
 
     }
 
@@ -437,7 +437,7 @@ mod icmp4_hdr {
             pkt[offset] = code_val;  // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let icmp4 = parsed.transport.unwrap().icmp4().unwrap();
-            if let Icmp4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
+            if let Icmpv4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
                 assert_eq!(icmp_code, code);
                 assert_eq!(code_val, icmp_code.code() );
             } else {

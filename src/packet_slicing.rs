@@ -11,9 +11,9 @@ pub enum InternetSlice<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
     /// A slice containing an Icmp4 header
-    Icmp4(Icmp4HeaderSlice<'a>),
+    Icmpv4(Icmpv4HeaderSlice<'a>),
     /// A slice containing an Icmp6 header
-    Icmp6(Icmpv6Slice<'a>),
+    Icmpv6(Icmpv6Slice<'a>),
     /// A slice containing an UDP header.
     Udp(UdpHeaderSlice<'a>),
     /// A slice containing a TCP header.
@@ -448,14 +448,14 @@ impl<'a> CursorSlice<'a> {
     pub fn slice_icmp4(mut self) -> Result<SlicedPacket<'a>, ReadError> {
         use crate::TransportSlice::*;
 
-        let result = Icmp4HeaderSlice::from_slice(self.slice)
+        let result = Icmpv4HeaderSlice::from_slice(self.slice)
                      .map_err(|err| 
                         err.add_slice_offset(self.offset)
                      )?;
 
         //set the new data
         self.move_by_slice(result.slice());
-        self.result.transport = Some(Icmp4(result));
+        self.result.transport = Some(Icmpv4(result));
 
         //done
         self.slice_payload()
@@ -471,7 +471,7 @@ impl<'a> CursorSlice<'a> {
 
         //set the new data
         self.move_by_slice(result.slice());
-        self.result.transport = Some(Icmp6(result));
+        self.result.transport = Some(Icmpv6(result));
 
         //done
         self.slice_payload()

@@ -464,50 +464,50 @@ impl PacketBuilderStep<VlanHeader> {
 }
 
 impl PacketBuilderStep<IpHeader> {
-    pub fn icmp4_raw(mut self, icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmp4Header> {
-        let icmp4_raw = Icmp4Type::Raw{icmp_type, icmp_code, bytes5to8};
-        self.state.transport_header = Some(TransportHeader::Icmp4(Icmp4Header{
+    pub fn icmp4_raw(mut self, icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv4Header> {
+        let icmp4_raw = Icmpv4Type::Raw{icmp_type, icmp_code, bytes5to8};
+        self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header{
             icmp_type: icmp4_raw,
             icmp_chksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header>{}
         }
     }
 
-    pub fn icmp4_echo_request(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmp4Header> {
+    pub fn icmp4_echo_request(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmpv4Header> {
         let echo_header = IcmpEchoHeader{
             seq,
             id,
         };
-        let icmp4_echo = Icmp4Header::new(Icmp4Type::EchoRequest(echo_header));
-        self.state.transport_header = Some(TransportHeader::Icmp4(icmp4_echo));
+        let icmp4_echo = Icmpv4Header::new(Icmpv4Type::EchoRequest(echo_header));
+        self.state.transport_header = Some(TransportHeader::Icmpv4(icmp4_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header>{}
         }
     }
 
-    pub fn icmp4_echo_reply(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmp4Header> {
+    pub fn icmp4_echo_reply(mut self, seq: u16, id: u16) -> PacketBuilderStep<Icmpv4Header> {
         let echo_header = IcmpEchoHeader{
             seq,
             id,
         };
-        let icmp4_echo = Icmp4Header::new(Icmp4Type::EchoReply(echo_header));
-        self.state.transport_header = Some(TransportHeader::Icmp4(icmp4_echo));
+        let icmp4_echo = Icmpv4Header::new(Icmpv4Type::EchoReply(echo_header));
+        self.state.transport_header = Some(TransportHeader::Icmpv4(icmp4_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmp4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header>{}
         }
     }
 
     pub fn icmp6_raw(mut self, type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv6Header> {
         let icmp_type = Icmpv6Type::Raw{type_u8, code_u8, bytes5to8};
-        self.state.transport_header = Some(TransportHeader::Icmp6(Icmpv6Header{
+        self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header{
             icmp_type,
             checksum: 0, // calculated later
         }));
@@ -524,7 +524,7 @@ impl PacketBuilderStep<IpHeader> {
             id,
         };
         let icmp6_echo = Icmpv6Header::new(Icmpv6Type::EchoRequest(echo_header));
-        self.state.transport_header = Some(TransportHeader::Icmp6(icmp6_echo));
+        self.state.transport_header = Some(TransportHeader::Icmpv6(icmp6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
@@ -538,7 +538,7 @@ impl PacketBuilderStep<IpHeader> {
             id,
         };
         let icmp6_echo = Icmpv6Header::new(Icmpv6Type::EchoReply(echo_header));
-        self.state.transport_header = Some(TransportHeader::Icmp6(icmp6_echo));
+        self.state.transport_header = Some(TransportHeader::Icmpv6(icmp6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
@@ -572,7 +572,7 @@ impl PacketBuilderStep<IpHeader> {
     }
 }
 
-impl PacketBuilderStep<Icmp4Header> {
+impl PacketBuilderStep<Icmpv4Header> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
         final_write(self, writer, payload)
@@ -756,8 +756,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             ip.set_payload_len(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
-                Icmp4(_) => {},
-                Icmp6(_) => {},
+                Icmpv4(_) => {},
+                Icmpv6(_) => {},
                 Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
@@ -765,8 +765,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //ip protocol number & next header values of the extension header
             ip.protocol = ext.set_next_headers(
                 match transport {
-                    Icmp4(_) => ip_number::ICMP,
-                    Icmp6(_) => ip_number::IPV6_ICMP,
+                    Icmpv4(_) => ip_number::ICMP,
+                    Icmpv6(_) => ip_number::IPV6_ICMP,
                     Udp(_) => ip_number::UDP,
                     Tcp(_) => ip_number::TCP
                 }
@@ -785,8 +785,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             ip.set_payload_length(ext.header_len() + transport_size)?;
             use crate::TransportHeader::*;
             match transport {
-                Icmp4(_) => {},
-                Icmp6(_) => {},
+                Icmpv4(_) => {},
+                Icmpv6(_) => {},
                 Udp(ref mut udp) => { udp.length = transport_size as u16; }
                 Tcp(_) => {}
             }
@@ -794,8 +794,8 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             //set the protocol
             ip.next_header = ext.set_next_headers(
                 match transport {
-                    Icmp4(_) => ip_number::ICMP as u8,
-                    Icmp6(_) => ip_number::IPV6_ICMP as u8,
+                    Icmpv4(_) => ip_number::ICMP as u8,
+                    Icmpv6(_) => ip_number::IPV6_ICMP as u8,
                     Udp(_) => ip_number::UDP as u8,
                     Tcp(_) => ip_number::TCP as u8
                 }
@@ -833,8 +833,8 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Version6(_, ref ext)) => Ipv6Header::SERIALIZED_SIZE + ext.header_len(),
         None => 0
     } + match builder.state.transport_header {
-        Some(Icmp4(ref value)) => value.header_len(),
-        Some(Icmp6(ref value)) => value.header_len(),
+        Some(Icmpv4(ref value)) => value.header_len(),
+        Some(Icmpv6(ref value)) => value.header_len(),
         Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
         Some(Tcp(ref value)) => value.header_len() as usize,
         None => 0

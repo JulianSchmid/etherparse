@@ -503,14 +503,10 @@ pub enum ValueError {
     U16TooLarge{value: u16, max: u16, field: ErrorField},
     /// Error when a u32 field in a header has a larger value then supported.
     U32TooLarge{value: u32, max: u32, field: ErrorField},
-    /// Icmp6 in a IPv4 packet: not allowed
-    Icmp6InIpv4,
-    /// Icmp4 in a IPv6 packet: not allowed
-    Icmp4InIpv6,
-    /// Unknown Icmp4 type
-    Icmp4Unknown{icmp_type: u8},
-    /// Unknown Icmp6 type
-    Icmp6Unknown{icmp_type: u8},
+    /// Error when an Icmpv6 payload is found in an IPv4 packet.
+    Icmpv6InIpv4,
+    /// Error when an Icmpv4 payload is found in a IPv6 packet.
+    Icmpv4InIpv6,
     
 }
 
@@ -570,17 +566,11 @@ impl fmt::Display for ValueError {
             U32TooLarge{value, max, field} => {
                 write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
             },
-            Icmp4InIpv6 => {
-                write!(f, "Trying to put an Icmp4 transport in an IPv6 packet")
+            Icmpv4InIpv6 => {
+                write!(f, "Trying to put an Icmpv4 transport in an IPv6 packet")
             },
-            Icmp6InIpv4 => {
-                write!(f, "Trying to put an Icmp6 transport in an IPv4 packet")
-            },
-            Icmp4Unknown{icmp_type} => {
-                write!(f, "Failed to parse Icmp4 type {}", icmp_type)
-            },
-            Icmp6Unknown{icmp_type} => {
-                write!(f, "Failed to parse Icmp6 type {}", icmp_type)
+            Icmpv6InIpv4 => {
+                write!(f, "Trying to put an Icmpv6 transport in an IPv4 packet")
             },
         }
     }

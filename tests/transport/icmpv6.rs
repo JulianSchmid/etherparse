@@ -1051,7 +1051,7 @@ mod icmpv6_header {
         builder.write(&mut result, &payload).unwrap();
 
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
-        if let Some(TransportHeader::Icmp6(hdr)) = new_ip.transport {
+        if let Some(TransportHeader::Icmpv6(hdr)) = new_ip.transport {
             if let Icmpv6Type::EchoRequest(echo) = hdr.icmp_type {
                 assert_eq!(echo.seq, 1);
                 assert_eq!(echo.id, 2);
@@ -1112,8 +1112,8 @@ mod icmpv6_header {
         let echo = SlicedPacket::from_ethernet(&ICMP6_ECHO_REQUEST_BYTES).unwrap();
         use TransportSlice::*;
         let icmp6 = match echo.transport.unwrap() {
-            Icmp6(icmp6) => icmp6,
-            Icmp4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+            Icmpv6(icmp6) => icmp6,
+            Icmpv4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
         };
         assert!(matches!(icmp6.header().icmp_type, Icmpv6Type::EchoRequest(_)));
 

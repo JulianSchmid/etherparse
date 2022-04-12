@@ -397,8 +397,8 @@ fn read_transport(
     match protocol {
         ICMP => {
             if is_ipv4 {
-                Ok(Icmp4Header::from_slice(rest)?)
-                .map( |value| (Some(TransportHeader::Icmp4(value.0)), value.1))
+                Ok(Icmpv4Header::from_slice(rest)?)
+                .map( |value| (Some(TransportHeader::Icmpv4(value.0)), value.1))
             } else {
                 // Icmp4 in a non-IPv4 packet?; just give up
                 Ok((None, rest))
@@ -410,7 +410,7 @@ fn read_transport(
                 Ok((None, rest))
             } else {
                 Ok(Icmpv6Header::from_slice(rest)?)
-                .map( |value| (Some(TransportHeader::Icmp6(value.0)), value.1))
+                .map( |value| (Some(TransportHeader::Icmpv6(value.0)), value.1))
             }
         },
         UDP => Ok(UdpHeader::from_slice(rest)

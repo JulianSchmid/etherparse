@@ -57,8 +57,8 @@ impl ComponentTest {
             None => {},
         }
         match &self.transport {
-            Some(TransportHeader::Icmp6(header)) => header.write(&mut buffer).unwrap(),
-            Some(TransportHeader::Icmp4(header)) => header.write(&mut buffer).unwrap(),
+            Some(TransportHeader::Icmpv6(header)) => header.write(&mut buffer).unwrap(),
+            Some(TransportHeader::Icmpv4(header)) => header.write(&mut buffer).unwrap(),
             Some(TransportHeader::Udp(header)) => header.write(&mut buffer).unwrap(),
             Some(TransportHeader::Tcp(header)) => header.write(&mut buffer).unwrap(),
             None => {}
@@ -323,8 +323,8 @@ impl ComponentTest {
         assert_eq!(
             self.transport,
             match result.transport.as_ref() {
-                Some(TransportSlice::Icmp4(actual)) => Some(TransportHeader::Icmp4(actual.to_header())),
-                Some(TransportSlice::Icmp6(actual)) => Some(TransportHeader::Icmp6(actual.header())),
+                Some(TransportSlice::Icmpv4(actual)) => Some(TransportHeader::Icmpv4(actual.to_header())),
+                Some(TransportSlice::Icmpv6(actual)) => Some(TransportHeader::Icmpv6(actual.header())),
                 Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
                 Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),
                 Some(TransportSlice::Unknown(_)) => None,
