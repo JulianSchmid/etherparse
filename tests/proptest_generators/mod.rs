@@ -730,3 +730,15 @@ pub fn ip_number_any() -> impl Strategy<Value = IpNumber> {
         Just(ExperimentalAndTesting1)
     ]
 }
+
+prop_compose! {
+    pub fn icmpv6_type_any()
+        (
+            type_u8 in any::<u8>(),
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) -> Icmpv6Type
+    {
+        Icmpv6Type::from_bytes(type_u8, code_u8, bytes5to8)
+    }
+}
