@@ -359,13 +359,13 @@ impl PacketFilterTest {
                 None => None
             },
             transport: match &self.transport {
-                Some(TransportHeader::Icmp4(header)) => {
+                Some(TransportHeader::Icmpv4(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmp4(Icmp4HeaderSlice::from_slice(&transport_data[..]).unwrap()))
+                    Some(TransportSlice::Icmpv4(Icmpv4HeaderSlice::from_slice(&transport_data[..]).unwrap()))
                 },
-                Some(TransportHeader::Icmp6(header)) => {
+                Some(TransportHeader::Icmpv6(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmp6(Icmpv6Slice::from_slice(&transport_data[..]).unwrap()))
+                    Some(TransportSlice::Icmpv6(Icmpv6Slice::from_slice(&transport_data[..]).unwrap()))
                 },
                 Some(TransportHeader::Udp(header)) => {
                     header.write(&mut transport_data).unwrap();

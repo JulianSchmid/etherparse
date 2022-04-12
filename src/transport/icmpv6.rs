@@ -385,7 +385,7 @@ use icmpv6::*;
 ///
 /// use etherparse::TransportHeader::*;
 /// match headers.transport {
-///     Some(Icmp6(icmp)) => {
+///     Some(Icmpv6(icmp)) => {
 ///         use etherparse::Icmpv6Type::*;
 ///         match icmp.icmp_type {
 ///             // Raw is used when further decoding is currently not supported for the icmp type & code.

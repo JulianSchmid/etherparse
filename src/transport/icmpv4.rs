@@ -254,7 +254,7 @@ use icmpv4::*;
 
 /// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Icmp4Type {
+pub enum Icmpv4Type {
     /// Used to encode unparsed/unknown ICMP headers
     Raw{icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4] },
     EchoReply(IcmpEchoHeader),
@@ -272,11 +272,11 @@ pub enum Icmp4Type {
     AddressReply,
 }
 
-impl Icmp4Type {
+impl Icmpv4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    pub fn from(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmp4Type {
-        use Icmp4Type::*;
+    pub fn from(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv4Type {
+        use Icmpv4Type::*;
         match icmp_type {
             TYPE_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             TYPE_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
@@ -299,7 +299,7 @@ impl Icmp4Type {
     /// Return the icmp_type, icmp_code, and the second 4 bytes
     /// of the ICMP payload.
     pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
-        use Icmp4Type::*;
+        use Icmpv4Type::*;
         match &self {
             Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
             EchoReply(echo) => {
@@ -323,22 +323,22 @@ impl Icmp4Type {
     }
 }
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Icmp4Header {
-    pub icmp_type: Icmp4Type,
+pub struct Icmpv4Header {
+    pub icmp_type: Icmpv4Type,
     pub icmp_chksum : u16,
 }
 
-impl Icmp4Header {
+impl Icmpv4Header {
     pub const SERIALIZED_SIZE: usize = 8;
 
     #[inline]
     pub fn header_len(&self) -> usize {
-        Icmp4Header::SERIALIZED_SIZE
+        Icmpv4Header::SERIALIZED_SIZE
     }
 
-    pub fn new(icmp_type: Icmp4Type) -> Icmp4Header {
+    pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
         // Note: will calculate checksum on send
-        Icmp4Header { icmp_type, icmp_chksum: 0 }
+        Icmpv4Header { icmp_type, icmp_chksum: 0 }
     }
 
     /// Write the transport header to the given writer.
@@ -359,7 +359,7 @@ impl Icmp4Header {
 
     pub fn calc_checksum_ipv4(&self, _ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError>{
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmp4Header::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmpv4Header::SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::Ipv4PayloadLengthTooLarge(payload.len()));
         }
@@ -380,61 +380,61 @@ impl Icmp4Header {
 
     /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Icmp4Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
         Ok((
-            Icmp4HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Icmp4Header::SERIALIZED_SIZE..]
+            Icmpv4HeaderSlice::from_slice(slice)?.to_header(),
+            &slice[Icmpv4Header::SERIALIZED_SIZE..]
         ))
     }
 }
 
 ///A slice containing an icmp4 header of a network package. Struct allows the selective read of fields in the header.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Icmp4HeaderSlice<'a> {
+pub struct Icmpv4HeaderSlice<'a> {
     slice: &'a [u8]
 }
 
-impl<'a> Icmp4HeaderSlice<'a> {
+impl<'a> Icmpv4HeaderSlice<'a> {
     /// Creates a slice containing an icmp4 header.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<Icmp4HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4HeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < Icmp4Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Icmp4Header::SERIALIZED_SIZE));
+        if slice.len() < Icmpv4Header::SERIALIZED_SIZE {
+            return Err(UnexpectedEndOfSlice(Icmpv4Header::SERIALIZED_SIZE));
         }
 
         //done
-        Ok(Icmp4HeaderSlice{
+        Ok(Icmpv4HeaderSlice{
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // Icmp4Header::SERIALIZED_SIZE (8) before this.
+            // Icmpv4Header::SERIALIZED_SIZE (8) before this.
             slice: unsafe {
                 from_raw_parts(
                     slice.as_ptr(),
-                    Icmp4Header::SERIALIZED_SIZE
+                    Icmpv4Header::SERIALIZED_SIZE
                 )
             }
         })
     }
 
 
-    /// Decode all the fields and copy the results to a Icmp4Header struct
+    /// Decode all the fields and copy the results to a Icmpv4Header struct
     #[inline]
-    pub fn to_header(&self) -> Icmp4Header  {
+    pub fn to_header(&self) -> Icmpv4Header  {
         let icmp_type = self.icmp_type();
-        Icmp4Header {
+        Icmpv4Header {
             icmp_type,
             icmp_chksum: self.icmp_chksum(),
         }
     }
 
-    pub fn icmp_type(&self) -> Icmp4Type  {
+    pub fn icmp_type(&self) -> Icmpv4Type  {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
         unsafe {
-            Icmp4Type::from(
+            Icmpv4Type::from(
                 *self.slice.get_unchecked(0),
                 *self.slice.get_unchecked(1),
                 [
@@ -451,7 +451,7 @@ impl<'a> Icmp4HeaderSlice<'a> {
     pub fn icmp_code(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
         unsafe {
             *self.slice.get_unchecked(1)
         }
@@ -461,7 +461,7 @@ impl<'a> Icmp4HeaderSlice<'a> {
     pub fn icmp_chksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmp4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
