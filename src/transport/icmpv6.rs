@@ -841,7 +841,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
@@ -856,7 +856,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn bytes5to8(&self) -> [u8;4] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
         unsafe {
             [
                 *self.slice.get_unchecked(4),
@@ -878,7 +878,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn message_body(&self) -> &'a [u8] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
         unsafe {
             from_raw_parts(
                 self.slice.as_ptr().add(4),

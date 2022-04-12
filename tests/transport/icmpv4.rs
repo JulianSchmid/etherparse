@@ -95,10 +95,10 @@ mod dest_unreachable_header {
             }
 
             // raw
-            for code in 16..=u8::MAX {
+            for code_u8 in 16..=u8::MAX {
                 assert_eq!(
-                    Raw{ code, bytes5to8 },
-                    DestUnreachableHeader::from_bytes(code, bytes5to8)
+                    Raw{ code_u8, bytes5to8 },
+                    DestUnreachableHeader::from_bytes(code_u8, bytes5to8)
                 );
             }
         }
@@ -106,7 +106,7 @@ mod dest_unreachable_header {
 
     proptest! {
         #[test]
-        fn code(
+        fn code_u8(
             mtu in any::<u16>(),
             bytes5to8 in any::<[u8;4]>(),
         ) {
@@ -131,11 +131,11 @@ mod dest_unreachable_header {
                     (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
                 ];
                 for t in trivial {
-                    assert_eq!(t.0, t.1.code());
+                    assert_eq!(t.0, t.1.code_u8());
                 }
             }
-            for code in 0..u8::MAX {
-                assert_eq!(code, Raw{ code, bytes5to8 }.code());
+            for code_u8 in 0..u8::MAX {
+                assert_eq!(code_u8, Raw{ code_u8, bytes5to8 }.code_u8());
             }
         }
     }
@@ -179,10 +179,10 @@ mod dest_unreachable_header {
                     [0, 0, mtu_be[0], mtu_be[1]]
                 );
             }
-            for code in 0..u8::MAX {
+            for code_u8 in 0..u8::MAX {
                 assert_eq!(
                     bytes5to8,
-                    Raw{ code, bytes5to8 }.bytes5to8()
+                    Raw{ code_u8, bytes5to8 }.bytes5to8()
                 );
             }
         }
@@ -192,7 +192,7 @@ mod dest_unreachable_header {
     fn clone_eq() {
         use DestUnreachableHeader::*;
         let values = [
-            Raw{ code: 0, bytes5to8: [0;4] },
+            Raw{ code_u8: 0, bytes5to8: [0;4] },
             Network,
             Host,
             Protocol,
@@ -219,7 +219,7 @@ mod dest_unreachable_header {
     fn debug() {
         use DestUnreachableHeader::*;
         let tests = [
-            ("Raw { code: 0, bytes5to8: [0, 0, 0, 0] }", Raw{ code: 0, bytes5to8: [0;4] }),
+            ("Raw { code_u8: 0, bytes5to8: [0, 0, 0, 0] }", Raw{ code_u8: 0, bytes5to8: [0;4] }),
             ("Network", Network),
             ("Host", Host),
             ("Protocol", Protocol),
@@ -431,15 +431,15 @@ mod icmp4_hdr {
     fn icmp4_dst_unreachable() {
         let offset = 14 + 20 + 1;   // ethernet + iphdr + icmp_type
         // test all of the unreachable codes to make sure the maps are right
-        for code_val in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
-            let code = icmpv4::DestUnreachableHeader::from_bytes(code_val, [0;4]);
+        for code_u8 in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
+            let code = icmpv4::DestUnreachableHeader::from_bytes(code_u8, [0;4]);
             let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
-            pkt[offset] = code_val;  // over write the code
+            pkt[offset] = code_u8;  // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let icmp4 = parsed.transport.unwrap().icmp4().unwrap();
             if let Icmpv4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
                 assert_eq!(icmp_code, code);
-                assert_eq!(code_val, icmp_code.code() );
+                assert_eq!(code_u8, icmp_code.code_u8() );
             } else {
                 panic!("Not destination unreachable!?");
             }
