@@ -131,7 +131,7 @@ pub mod icmpv4 {
         /// In case of an unknown icmp code is received the header elements are stored raw.
         Raw{
             /// ICMP code (present in the 2nd byte of the ICMP packet).
-            code: u8,
+            code_u8: u8,
             /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
             bytes5to8: [u8;4],
         },
@@ -174,10 +174,10 @@ pub mod icmpv4 {
         /// Decode destination unreachable icmp packet from the code (2nd byte)
         /// and the 5th-8th bytes (inclusive) of the raw packet data.
         #[inline]
-        pub fn from_bytes(code: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
+        pub fn from_bytes(code_u8: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
             use DestUnreachableHeader::*;
 
-            match code {
+            match code_u8 {
                 CODE_DST_UNREACH_NET => Network,
                 CODE_DST_UNREACH_HOST => Host,
                 CODE_DST_UNREACH_PROTOCOL => Protocol,
@@ -197,8 +197,8 @@ pub mod icmpv4 {
                 CODE_DST_UNREACH_HOST_PRECEDENCE => HostPrecidence,
                 CODE_DST_UNREACH_PRECEDENCE_CUTOFF => PrecedenceCutoff,
                 // default to Raw
-                code => Raw{
-                    code,
+                code_u8 => Raw{
+                    code_u8,
                     bytes5to8
                 },
             }
@@ -206,10 +206,10 @@ pub mod icmpv4 {
 
         /// Returns the icmp code value of the destination unreachable packet.
         #[inline]
-        pub fn code(&self) -> u8 {
+        pub fn code_u8(&self) -> u8 {
             use DestUnreachableHeader::*;
             match self {
-                Raw{ code, bytes5to8: _ } => *code,
+                Raw{ code_u8, bytes5to8: _ } => *code_u8,
                 Network => CODE_DST_UNREACH_NET,
                 Host => CODE_DST_UNREACH_HOST,
                 Protocol => CODE_DST_UNREACH_PROTOCOL,
@@ -234,7 +234,7 @@ pub mod icmpv4 {
             use DestUnreachableHeader::*;
 
             match self {
-                Raw{ code: _, bytes5to8 } => *bytes5to8,
+                Raw{ code_u8: _, bytes5to8 } => *bytes5to8,
                 Network | Host | Protocol | Port => [0;4],
                 FragmentationNeeded{ next_hop_mtu } => {
                     let be = next_hop_mtu.to_be_bytes();
@@ -256,7 +256,7 @@ use icmpv4::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Icmpv4Type {
     /// Used to encode unparsed/unknown ICMP headers
-    Raw{type_u8: u8, icmp_code: u8, bytes5to8: [u8;4] },
+    Raw{type_u8: u8, code_u8: u8, bytes5to8: [u8;4] },
     EchoReply(IcmpEchoHeader),
     DestinationUnreachable(icmpv4::DestUnreachableHeader),
     SourceQuench,
@@ -275,11 +275,11 @@ pub enum Icmpv4Type {
 impl Icmpv4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    pub fn from(type_u8: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv4Type {
+    pub fn from(type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> Icmpv4Type {
         use Icmpv4Type::*;
         match type_u8 {
             TYPE_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
-            TYPE_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
+            TYPE_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(code_u8, bytes5to8)),
             TYPE_SOURCE_QUENCH => SourceQuench,
             TYPE_REDIRECT => Redirect,
             TYPE_ECHO_REQUEST=> EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
@@ -292,7 +292,7 @@ impl Icmpv4Type {
             TYPE_ADDRESS => AddressRequest,
             TYPE_ADDRESSREPLY => AddressReply,
             // unknown/unparsed type - just return as Raw
-            _ => Raw{type_u8, icmp_code, bytes5to8}
+            _ => Raw{type_u8, code_u8, bytes5to8}
         }
     }
 
@@ -301,11 +301,11 @@ impl Icmpv4Type {
     pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmpv4Type::*;
         match &self {
-            Raw{type_u8, icmp_code, bytes5to8} => (*type_u8, *icmp_code, *bytes5to8),
+            Raw{type_u8, code_u8, bytes5to8} => (*type_u8, *code_u8, *bytes5to8),
             EchoReply(echo) => {
                 (TYPE_ECHOREPLY, 0, echo.to_bytes())
             },
-            DestinationUnreachable(value) => (TYPE_DEST_UNREACH, value.code(), value.bytes5to8()),
+            DestinationUnreachable(value) => (TYPE_DEST_UNREACH, value.code_u8(), value.bytes5to8()),
             SourceQuench => (TYPE_SOURCE_QUENCH, 0, [0;4]),
             Redirect => (TYPE_REDIRECT, 0, [0;4]),
             EchoRequest(echo) => {
@@ -329,11 +329,11 @@ pub struct Icmpv4Header {
 }
 
 impl Icmpv4Header {
-    pub const SERIALIZED_SIZE: usize = 8;
+    pub const MIN_SERIALIZED_SIZE: usize = 8;
 
     #[inline]
     pub fn header_len(&self) -> usize {
-        Icmpv4Header::SERIALIZED_SIZE
+        Icmpv4Header::MIN_SERIALIZED_SIZE
     }
 
     pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
@@ -359,7 +359,7 @@ impl Icmpv4Header {
 
     pub fn calc_checksum_ipv4(&self, _ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError>{
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmpv4Header::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmpv4Header::MIN_SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::Ipv4PayloadLengthTooLarge(payload.len()));
         }
@@ -383,7 +383,7 @@ impl Icmpv4Header {
     pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
         Ok((
             Icmpv4HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Icmpv4Header::SERIALIZED_SIZE..]
+            &slice[Icmpv4Header::MIN_SERIALIZED_SIZE..]
         ))
     }
 }
@@ -400,19 +400,19 @@ impl<'a> Icmpv4HeaderSlice<'a> {
     pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4HeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < Icmpv4Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Icmpv4Header::SERIALIZED_SIZE));
+        if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
+            return Err(UnexpectedEndOfSlice(Icmpv4Header::MIN_SERIALIZED_SIZE));
         }
 
         //done
         Ok(Icmpv4HeaderSlice{
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // Icmpv4Header::SERIALIZED_SIZE (8) before this.
+            // Icmpv4Header::MIN_SERIALIZED_SIZE (8) before this.
             slice: unsafe {
                 from_raw_parts(
                     slice.as_ptr(),
-                    Icmpv4Header::SERIALIZED_SIZE
+                    Icmpv4Header::MIN_SERIALIZED_SIZE
                 )
             }
         })
@@ -432,7 +432,7 @@ impl<'a> Icmpv4HeaderSlice<'a> {
     pub fn icmp_type(&self) -> Icmpv4Type  {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
             Icmpv4Type::from(
                 *self.slice.get_unchecked(0),
@@ -452,29 +452,51 @@ impl<'a> Icmpv4HeaderSlice<'a> {
     pub fn type_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
             *self.slice.get_unchecked(0)
         }
     }
 
+    /// Returns "code" value in the ICMPv4 header.
     #[inline]
-    pub fn icmp_code(&self) -> u8 {
+    pub fn code_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
             *self.slice.get_unchecked(1)
         }
     }
 
+    /// Returns "checksum" value in the ICMPv4 header.
     #[inline]
     pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
+        }
+    }
+
+    /// Returns the bytes from position 4 till and including the 8th position
+    /// in the ICMPv6 header.
+    ///
+    /// These bytes located at th 5th, 6th, 7th and 8th position of the ICMP
+    /// packet can depending on the ICMPv6 type and code contain additional data.
+    #[inline]
+    pub fn bytes5to8(&self) -> [u8;4] {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        unsafe {
+            [
+                *self.slice.get_unchecked(4),
+                *self.slice.get_unchecked(5),
+                *self.slice.get_unchecked(6),
+                *self.slice.get_unchecked(7),
+            ]
         }
     }
 
