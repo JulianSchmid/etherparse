@@ -468,7 +468,7 @@ impl PacketBuilderStep<IpHeader> {
         let icmp4_raw = Icmpv4Type::Raw{icmp_type, icmp_code, bytes5to8};
         self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header{
             icmp_type: icmp4_raw,
-            icmp_chksum: 0, // calculated later
+            checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {

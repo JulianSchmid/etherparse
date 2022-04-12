@@ -254,7 +254,7 @@ mod icmp4_hdr {
                 seq: 1,
                 id: 2,
             }),
-            icmp_chksum: 0,
+            checksum: 0,
         };
         // serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(256);
@@ -370,11 +370,11 @@ mod icmp4_hdr {
             // make sure we can unmarshall the correct checksum
             let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let mut icmp4 = request.transport.unwrap().icmp4().unwrap();
-            let valid_checksum =  icmp4.icmp_chksum;
+            let valid_checksum =  icmp4.checksum;
             assert_ne!(valid_checksum, 0);  
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
-            icmp4.icmp_chksum = 0;
+            icmp4.checksum = 0;
             let iph = match request.ip {
                 Some(IpHeader::Version4(ipv4, _)) => ipv4,
                 _ => panic!("Failed to parse ipv4 part of packet?!"),

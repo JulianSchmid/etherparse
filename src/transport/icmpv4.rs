@@ -325,7 +325,7 @@ impl Icmpv4Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Icmpv4Header {
     pub icmp_type: Icmpv4Type,
-    pub icmp_chksum : u16,
+    pub checksum : u16,
 }
 
 impl Icmpv4Header {
@@ -338,12 +338,12 @@ impl Icmpv4Header {
 
     pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
         // Note: will calculate checksum on send
-        Icmpv4Header { icmp_type, icmp_chksum: 0 }
+        Icmpv4Header { icmp_type, checksum: 0 }
     }
 
     /// Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        let cksum_be = self.icmp_chksum.to_be_bytes();
+        let cksum_be = self.checksum.to_be_bytes();
         let (icmp_type, icmp_code, bytes5to8) = self.icmp_type.to_bytes();
         writer.write_all(&[
             icmp_type as u8,
@@ -425,7 +425,7 @@ impl<'a> Icmpv4HeaderSlice<'a> {
         let icmp_type = self.icmp_type();
         Icmpv4Header {
             icmp_type,
-            icmp_chksum: self.icmp_chksum(),
+            checksum: self.checksum(),
         }
     }
 
@@ -458,7 +458,7 @@ impl<'a> Icmpv4HeaderSlice<'a> {
     }
 
     #[inline]
-    pub fn icmp_chksum(&self) -> u16 {
+    pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
