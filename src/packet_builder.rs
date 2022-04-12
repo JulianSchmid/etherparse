@@ -464,8 +464,8 @@ impl PacketBuilderStep<VlanHeader> {
 }
 
 impl PacketBuilderStep<IpHeader> {
-    pub fn icmp4_raw(mut self, icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv4Header> {
-        let icmp4_raw = Icmpv4Type::Raw{icmp_type, icmp_code, bytes5to8};
+    pub fn icmp4_raw(mut self, type_u8: u8, icmp_code: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv4Header> {
+        let icmp4_raw = Icmpv4Type::Raw{type_u8, icmp_code, bytes5to8};
         self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header{
             icmp_type: icmp4_raw,
             checksum: 0, // calculated later

@@ -256,7 +256,7 @@ use icmpv4::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Icmpv4Type {
     /// Used to encode unparsed/unknown ICMP headers
-    Raw{icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4] },
+    Raw{type_u8: u8, icmp_code: u8, bytes5to8: [u8;4] },
     EchoReply(IcmpEchoHeader),
     DestinationUnreachable(icmpv4::DestUnreachableHeader),
     SourceQuench,
@@ -275,9 +275,9 @@ pub enum Icmpv4Type {
 impl Icmpv4Type {
     // could just use 'num-derive' package, but this lib has no deps, so keeping
     // with that tradition; see https://enodev.fr/posts/rusticity-convert-an-integer-to-an-enum.html
-    pub fn from(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv4Type {
+    pub fn from(type_u8: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv4Type {
         use Icmpv4Type::*;
-        match icmp_type {
+        match type_u8 {
             TYPE_ECHOREPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             TYPE_DEST_UNREACH => DestinationUnreachable(DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
             TYPE_SOURCE_QUENCH => SourceQuench,
@@ -292,7 +292,7 @@ impl Icmpv4Type {
             TYPE_ADDRESS => AddressRequest,
             TYPE_ADDRESSREPLY => AddressReply,
             // unknown/unparsed type - just return as Raw
-            _ => Raw{icmp_type, icmp_code, bytes5to8}
+            _ => Raw{type_u8, icmp_code, bytes5to8}
         }
     }
 
@@ -301,7 +301,7 @@ impl Icmpv4Type {
     pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmpv4Type::*;
         match &self {
-            Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
+            Raw{type_u8, icmp_code, bytes5to8} => (*type_u8, *icmp_code, *bytes5to8),
             EchoReply(echo) => {
                 (TYPE_ECHOREPLY, 0, echo.to_bytes())
             },
@@ -444,6 +444,17 @@ impl<'a> Icmpv4HeaderSlice<'a> {
                     *self.slice.get_unchecked(7),
                 ]
             )
+        }
+    }
+
+    /// Returns "type" value in the ICMPv4 header.
+    #[inline]
+    pub fn type_u8(&self) -> u8 {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of Icmpv4Header::SERIALIZED_SIZE (8).
+        unsafe {
+            *self.slice.get_unchecked(0)
         }
     }
 
