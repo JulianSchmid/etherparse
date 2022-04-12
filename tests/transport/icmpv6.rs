@@ -1125,10 +1125,7 @@ mod icmpv6_slice {
 
     proptest!{
         #[test]
-        fn from_slice(
-            slice in proptest::collection::vec(any::<u8>(), 8..1024),
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
-        ) {
+        fn from_slice(slice in proptest::collection::vec(any::<u8>(), 8..1024)) {
             // ok case
             assert_eq!(Icmpv6Slice::from_slice(&slice[..]).unwrap().slice(), &slice[..]);
 
@@ -1139,7 +1136,17 @@ mod icmpv6_slice {
                     Err(ReadError::UnexpectedEndOfSlice(Icmpv6Header::MIN_SERIALIZED_SIZE))
                 );
             }
+        }
+    }
 
+    proptest!{
+        /// This error can only occur on systems with a pointer size
+        /// bigger then 64 bits.
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
+        #[test]
+        fn from_slice_too_big_error(
+            bad_len in ((std::u32::MAX as usize) + 1)..=std::usize::MAX,
+        ) {
             // too large packet error case
             {
                 // SAFETY: In case the error is not triggered
