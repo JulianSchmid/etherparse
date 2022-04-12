@@ -5,6 +5,21 @@ use std::slice::from_raw_parts;
 /// Module containing ICMPv6 related types and constants
 pub mod icmpv6 {
 
+    /// The maximum number of bytes/octets the ICMPv6 part of a packet can contain.
+    ///
+    /// The value is determined by the maximum value of the "Upper-Layer Packet Length"
+    /// field. This field is not directly part of the packet but used during the checksum
+    /// calculation in the pseudo header.
+    ///
+    /// The "Upper-Layer Packet Length" is represented as an `u32` and defined as
+    /// "...the Payload Length from the IPv6 header, minus the length of any
+    /// extension headers present between the IPv6 header and the upper-layer
+    /// header" (according to RFC 2460 Section 8.1). In other words, the length of the
+    /// ICMPv6 part of the packet.
+    ///
+    /// Therefor the maximum size of an ICMPv6 packet is `u32::MAX`.
+    pub const MAX_ICMPV6_BYTE_LEN: usize = u32::MAX as usize;
+
     /// ICMPv6 type value indicating a "Destination Unreachable" message.
     pub const TYPE_DST_UNREACH: u8 = 1;
 
@@ -98,7 +113,7 @@ pub mod icmpv6 {
         /// In case of an unknown icmp code is received the header elements are stored raw.
         Raw{
             /// ICMP code (present in the 2nd byte of the ICMP packet).
-            code: u8,
+            code_u8: u8,
             /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
             bytes5to8: [u8;4],
         },
@@ -142,9 +157,9 @@ pub mod icmpv6 {
         ///     assert_eq!(dst, icmpv6::DestUnreachableHeader::Port);
         /// }
         /// ```
-        pub fn from_bytes(code: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
+        pub fn from_bytes(code_u8: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
             use DestUnreachableHeader::*;
-            match code {
+            match code_u8 {
                 CODE_DST_UNREACH_NOROUTE => NoRoute,
                 CODE_DST_UNREACH_PROHIBITED => Prohibited,
                 CODE_DST_UNREACH_BEYONDSCOPE => BeyondScope,
@@ -152,17 +167,17 @@ pub mod icmpv6 {
                 CODE_DST_UNREACH_PORT => Port,
                 CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY => SourceAddressFailedPolicy,
                 CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST => RejectRoute,
-                _ => Raw{code, bytes5to8},
+                _ => Raw{code_u8, bytes5to8},
             }
         }
 
         /// Returns the code value of the destination unreachable packet.
         ///
         /// This is the second byte of an ICMPv6 packet.
-        pub fn code(&self) -> u8 {
+        pub fn code_u8(&self) -> u8 {
             use DestUnreachableHeader::*;
             match self {
-                Raw{code, bytes5to8: _} => *code,
+                Raw{code_u8, bytes5to8: _} => *code_u8,
                 NoRoute => CODE_DST_UNREACH_NOROUTE,
                 Prohibited => CODE_DST_UNREACH_PROHIBITED,
                 BeyondScope => CODE_DST_UNREACH_BEYONDSCOPE,
@@ -173,12 +188,21 @@ pub mod icmpv6 {
             }
         }
 
+        /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
+        pub fn bytes5to8(&self) -> [u8;4] {
+            use DestUnreachableHeader::*;
+            match self {
+                Raw{code_u8: _, bytes5to8} => *bytes5to8,
+                _ => [0;4],
+            }
+        }
+
         /// Returns second and and 5th-8th bytes (inclusive) of
         /// the destination unreachable ICMPv6 packet.
         pub fn to_bytes(&self) -> (u8, [u8;4]) {
             use DestUnreachableHeader::*;
             match self {
-                Raw{ code, bytes5to8 } => (*code, *bytes5to8),
+                Raw{ code_u8, bytes5to8 } => (*code_u8, *bytes5to8),
                 NoRoute => (CODE_DST_UNREACH_NOROUTE, [0;4]),
                 Prohibited => (CODE_DST_UNREACH_PROHIBITED, [0;4]),
                 BeyondScope => (CODE_DST_UNREACH_BEYONDSCOPE, [0;4]),
@@ -200,7 +224,7 @@ pub mod icmpv6 {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum TimeExceededCode {
         /// In case of an unknown icmp code is received the header elements are stored raw.
-        Raw{ code: u8 },
+        Raw{ code_u8: u8 },
         /// "hop limit exceeded in transit"
         HopLimitExceeded,
         /// "fragment reassembly time exceeded"
@@ -208,12 +232,12 @@ pub mod icmpv6 {
     }
 
     impl From<u8> for TimeExceededCode {
-        fn from(code: u8) -> TimeExceededCode {
+        fn from(code_u8: u8) -> TimeExceededCode {
             use TimeExceededCode::*;
-            match code {
+            match code_u8 {
                 CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED => HopLimitExceeded,
                 CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED => FragmentReassemblyTimeExceeded,
-                code => Raw { code },
+                code_u8 => Raw { code_u8 },
             }
         }
     }
@@ -222,7 +246,7 @@ pub mod icmpv6 {
         fn from(code: TimeExceededCode) -> u8 {
             use TimeExceededCode::*;
             match code {
-                Raw{ code } => code,
+                Raw{ code_u8 } => code_u8,
                 HopLimitExceeded => CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED,
                 FragmentReassemblyTimeExceeded => CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
             }
@@ -268,7 +292,7 @@ pub mod icmpv6 {
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum ParameterProblemCode {
         /// In case of an unknown icmp code is received the header elements are stored raw.
-        Raw{ code: u8 },
+        Raw{ code_u8: u8 },
         /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
         ErroneousHeaderField,
         /// Unrecognized Next Header type encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
@@ -294,9 +318,9 @@ pub mod icmpv6 {
     }
 
     impl From<u8> for ParameterProblemCode {
-        fn from(code: u8) -> ParameterProblemCode {
+        fn from(code_u8: u8) -> ParameterProblemCode {
             use ParameterProblemCode::*;
-            match code {
+            match code_u8 {
                 CODE_PARAM_PROBLEM_ERR_HEADER_FIELD => ErroneousHeaderField,
                 CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER => UnrecognizedNextHeader,
                 CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION => UnrecognizedIpv6Option,
@@ -308,7 +332,7 @@ pub mod icmpv6 {
                 CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => TooManyExtensionHeaders,
                 CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => TooManyOptionsInExtensionHeader,
                 CODE_PARAM_PROBLEM_OPTION_TOO_BIG => OptionTooBig,
-                code => Raw { code },
+                code_u8 => Raw { code_u8 },
             }
         }
     }
@@ -317,7 +341,7 @@ pub mod icmpv6 {
         fn from(code: ParameterProblemCode) -> u8 {
             use ParameterProblemCode::*;
             match code {
-                Raw{ code } => code,
+                Raw{ code_u8 } => code_u8,
                 ErroneousHeaderField => CODE_PARAM_PROBLEM_ERR_HEADER_FIELD,
                 UnrecognizedNextHeader => CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
                 UnrecognizedIpv6Option => CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
@@ -367,7 +391,7 @@ use icmpv6::*;
 ///             // Raw is used when further decoding is currently not supported for the icmp type & code.
 ///             // You can still further decode the packet on your own by using the raw data in this enum
 ///             // together with `headers.payload` (contains the packet data after the 8th byte)
-///             Raw{ icmp_type, icmp_code, bytes5to8 } => println!("Raw{{ icmp_type: {}, icmp_code: {}, bytes5to8: {:?} }}", icmp_type, icmp_code, bytes5to8),
+///             Raw{ type_u8, code_u8, bytes5to8 } => println!("Raw{{ type_u8: {}, code_u8: {}, bytes5to8: {:?} }}", type_u8, code_u8, bytes5to8),
 ///             DestinationUnreachable(header) => println!("{:?}", header),
 ///             PacketTooBig { mtu } => println!("TimeExceeded{{ mtu: {} }}", mtu),
 ///             TimeExceeded{ code } => println!("TimeExceeded{{ code: {:?} }}", code),
@@ -409,8 +433,8 @@ use icmpv6::*;
 /// #   assert_eq!(
 /// #       &packet,
 /// #       &[
-/// #           header.icmp_type.type_value(),
-/// #           header.icmp_type.code_value(),
+/// #           header.icmp_type.type_u8(),
+/// #           header.icmp_type.code_u8(),
 /// #           checksum_be[0],
 /// #           checksum_be[1],
 /// #           0,0,0,0
@@ -423,8 +447,8 @@ pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw.
     Raw{
-        icmp_type: u8,
-        icmp_code: u8,
+        type_u8: u8,
+        code_u8: u8,
         /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
         bytes5to8: [u8;4]
     },
@@ -524,33 +548,45 @@ pub enum Icmpv6Type {
 impl Icmpv6Type {
     /// Decode the enum from the icmp type, code and bytes5to8 bytes (5th till and
     /// including 8th byte of the the ICMPv6 header).
-    fn from_bytes(icmp_type: u8, icmp_code: u8, bytes5to8: [u8;4]) -> Icmpv6Type {
+    pub fn from_bytes(type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> Icmpv6Type {
         use Icmpv6Type::*;
-        match icmp_type {
+        match type_u8 {
             TYPE_DST_UNREACH => 
-                DestinationUnreachable(icmpv6::DestUnreachableHeader::from_bytes(icmp_code, bytes5to8)),
-            TYPE_PACKET_TOO_BIG => PacketTooBig {
-                mtu: u32::from_be_bytes(bytes5to8),
+                DestinationUnreachable(icmpv6::DestUnreachableHeader::from_bytes(code_u8, bytes5to8)),
+            TYPE_PACKET_TOO_BIG => if 0 == code_u8 {
+                PacketTooBig {
+                    mtu: u32::from_be_bytes(bytes5to8),
+                }
+            } else {
+                Raw{type_u8, code_u8, bytes5to8}
             },
             TYPE_TIME_EXCEEDED => TimeExceeded{
-                code: icmp_code.into()
+                code: code_u8.into()
             },
             TYPE_PARAM_PROB => ParameterProblem{
-                code: icmp_code.into(),
+                code: code_u8.into(),
                 pointer: u32::from_be_bytes(bytes5to8),
             },
-            TYPE_ECHO_REQUEST => EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
-            TYPE_ECHO_REPLY => EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
-            _ => Raw{icmp_type, icmp_code, bytes5to8},
+            TYPE_ECHO_REQUEST => if 0 == code_u8 {
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
+            } else {
+                Raw{type_u8, code_u8, bytes5to8}
+            },
+            TYPE_ECHO_REPLY => if 0 == code_u8 {
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
+            } else {
+                Raw{type_u8, code_u8, bytes5to8}
+            },
+            _ => Raw{type_u8, code_u8, bytes5to8},
         }
     }
 
     /// Returns the type value (first byte of the ICMPv6 header) of this type.
     #[inline]
-    pub fn type_value(&self) -> u8 {
+    pub fn type_u8(&self) -> u8 {
         use Icmpv6Type::*;
         match self {
-            Raw{icmp_type, icmp_code: _, bytes5to8: _} => *icmp_type,
+            Raw{type_u8, code_u8: _, bytes5to8: _} => *type_u8,
             DestinationUnreachable(_) => TYPE_DST_UNREACH,
             PacketTooBig{ mtu: _ } => TYPE_PACKET_TOO_BIG,
             TimeExceeded{ code: _ } => TYPE_TIME_EXCEEDED,
@@ -562,11 +598,11 @@ impl Icmpv6Type {
 
     /// Returns the code value (second byte of the ICMPv6 header) of this type.
     #[inline]
-    pub fn code_value(&self) -> u8 {
+    pub fn code_u8(&self) -> u8 {
         use Icmpv6Type::*;
         match self {
-            Raw{icmp_type: _, icmp_code, bytes5to8: _} => *icmp_code,
-            DestinationUnreachable(icmp_code) => icmp_code.code(),
+            Raw{type_u8: _, code_u8, bytes5to8: _} => *code_u8,
+            DestinationUnreachable(code) => code.code_u8(),
             PacketTooBig{ mtu: _ } => 0,
             TimeExceeded{ code } => u8::from(*code),
             ParameterProblem{ code, pointer: _ } => u8::from(*code),
@@ -577,7 +613,13 @@ impl Icmpv6Type {
 
     /// Calculates the checksum of the ICMPv6 header.
     pub fn calc_checksum(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
-        //check that the total length fits into the field
+        // check that the total length fits into the field
+        //
+        // Note according to RFC 2460 the "Upper-Layer Packet Length" used
+        // in the checksum calculation, for protocols that don't contain
+        // their own length information (like ICMPv6), is "the Payload Length
+        // from the IPv6 header, minus the length of any extension headers present
+        // between the IPv6 header and the upper-layer header."
         let max_payload_len: usize = (std::u32::MAX as usize) - self.header_len();
         if max_payload_len < payload.len() {
             return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
@@ -606,12 +648,12 @@ impl Icmpv6Type {
     ///
     /// It returns the icmp type, code and bytes5to8 bytes (5th till and
     /// including 8th byte of the the ICMPv6 header).
-    fn to_bytes(&self) -> (u8, u8, [u8;4]) {
+    pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmpv6Type::*;
         match self {
-            Raw{icmp_type, icmp_code, bytes5to8} => (*icmp_type, *icmp_code, *bytes5to8),
-            DestinationUnreachable(icmp_code) => 
-            (TYPE_DST_UNREACH, (icmp_code.code()), [0;4]),
+            Raw{type_u8, code_u8, bytes5to8} => (*type_u8, *code_u8, *bytes5to8),
+            DestinationUnreachable(header) => 
+            (TYPE_DST_UNREACH, (header.code_u8()), header.bytes5to8()),
             PacketTooBig{ mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
             TimeExceeded{ code } => (TYPE_TIME_EXCEEDED, u8::from(*code), [0;4]),
             ParameterProblem{ code, pointer } => (TYPE_PARAM_PROB, u8::from(*code), pointer.to_be_bytes()),
@@ -646,6 +688,10 @@ pub struct Icmpv6Header {
 }
 
 impl Icmpv6Header {
+    /// Minimum number of bytes an ICMP header needs to have.
+    ///
+    /// Note that minimum size can be larger depending on
+    /// the type and code.
     pub const MIN_SERIALIZED_SIZE: usize = 8;
 
     /// Serialized length of the header in bytes/octets.
@@ -724,7 +770,13 @@ pub struct Icmpv6Slice<'a> {
 }
 
 impl<'a> Icmpv6Slice<'a> {
-    /// Creates a slice containing an icmp6 header.
+    /// Creates a slice containing an icmp6 packet.
+    ///
+    /// # Errors
+    ///
+    /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
+    /// if the given slice is too small (smaller then `Icmpv6Header::MIN_SERIALIZED_SIZE`) or
+    /// too large (bigger then ``)
     #[inline]
     pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv6Slice<'a>, ReadError> {
         //check length
@@ -732,18 +784,13 @@ impl<'a> Icmpv6Slice<'a> {
         if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(Icmpv6Header::MIN_SERIALIZED_SIZE));
         }
+        if slice.len() > icmpv6::MAX_ICMPV6_BYTE_LEN {
+            return Err(Icmpv6PacketTooBig(slice.len()));
+        }
 
         //done
         Ok(Icmpv6Slice{
-            // SAFETY:
-            // Safe as slice length is checked to be at least
-            // Icmpv6Header::MIN_SERIALIZED_SIZE (8) before this.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    Icmpv6Header::MIN_SERIALIZED_SIZE
-                )
-            }
+            slice,
         })
     }
 
@@ -769,7 +816,7 @@ impl<'a> Icmpv6Slice<'a> {
 
     /// Returns "type" value in the ICMPv6 header.
     #[inline]
-    pub fn type_value(&self) -> u8 {
+    pub fn type_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
@@ -780,12 +827,12 @@ impl<'a> Icmpv6Slice<'a> {
 
     /// Returns "code" value in the ICMPv6 header.
     #[inline]
-    pub fn code_value(&self) -> u8 {
+    pub fn code_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
         unsafe {
-            *self.slice.get_unchecked(0)
+            *self.slice.get_unchecked(1)
         }
     }
 

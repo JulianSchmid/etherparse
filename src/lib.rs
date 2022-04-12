@@ -296,6 +296,11 @@ pub enum ReadError {
     IpAuthenticationHeaderTooSmallPayloadLength(u8),
     ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
     TcpDataOffsetTooSmall(u8),
+    /// Error when the packet size is too big (e.g larger then can be represendted in a length field).
+    ///
+    /// This error can be triggered by
+    /// * `Icmpv6Slice::from_slice`
+    Icmpv6PacketTooBig(usize),
 }
 
 impl ReadError {
@@ -364,6 +369,9 @@ impl fmt::Display for ReadError {
             TcpDataOffsetTooSmall(data_offset) => { //u8
                 write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
             },
+            Icmpv6PacketTooBig(size) => {
+                write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
+            }
         }
     }
 }

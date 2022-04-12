@@ -85,6 +85,12 @@ proptest! {
             &format!("ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", arg_u8),
             &format!("{}", TcpDataOffsetTooSmall(arg_u8))
         );
+
+        //TcpDataOffsetTooSmall
+        assert_eq!(
+            &format!("ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", arg_usize),
+            &format!("{}", Icmpv6PacketTooBig(arg_usize))
+        );
     }
 }
 
@@ -111,6 +117,7 @@ fn read_error_source() {
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthenticationHeaderTooSmallPayloadLength(0),
         TcpDataOffsetTooSmall(0),
+        Icmpv6PacketTooBig(0),
     ];
 
     for value in &none_values {
@@ -135,6 +142,7 @@ fn read_error_debug() {
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthenticationHeaderTooSmallPayloadLength(0),
         TcpDataOffsetTooSmall(0),
+        Icmpv6PacketTooBig(0),
     ];
 
     for value in &values {
