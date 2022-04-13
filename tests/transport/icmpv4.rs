@@ -375,11 +375,7 @@ mod icmp4_hdr {
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
             icmp4.checksum = 0;
-            let iph = match request.ip {
-                Some(IpHeader::Version4(ipv4, _)) => ipv4,
-                _ => panic!("Failed to parse ipv4 part of packet?!"),
-            };
-            assert_eq!(icmp4.calc_checksum_ipv4(&iph, request.payload),
+            assert_eq!(icmp4.calc_checksum_ipv4(request.payload),
                 Ok(valid_checksum));
         }
     }
