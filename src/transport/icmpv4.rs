@@ -357,7 +357,7 @@ impl Icmpv4Header {
         ]).map_err(WriteError::from)
     }
 
-    pub fn calc_checksum_ipv4(&self, _ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError>{
+    pub fn calc_checksum_ipv4(&self, payload: &[u8]) -> Result<u16, ValueError>{
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - Icmpv4Header::MIN_SERIALIZED_SIZE;
         if MAX_PAYLOAD_LENGTH < payload.len() {
@@ -367,14 +367,14 @@ impl Icmpv4Header {
         let (icmp_type, icmp_code, bytes5to8) = self.icmp_type.to_bytes();
         //calculate the checksum; icmp4 will always take an ip4 header
         Ok(
-                checksum::Sum16BitWords::new()
-                // NOTE: RFC792 - ICMP4 checksum does not use a pseudo-header
-                // for the checksum; only the message itself
-                .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(bytes5to8)
-                .add_slice(payload)
-                .ones_complement()
-                .to_be()
+            checksum::Sum16BitWords::new()
+            // NOTE: RFC792 - ICMP4 checksum does not use a pseudo-header
+            // for the checksum; only the message itself
+            .add_2bytes([icmp_type, icmp_code])
+            .add_4bytes(bytes5to8)
+            .add_slice(payload)
+            .ones_complement()
+            .to_be()
         )
     }
 

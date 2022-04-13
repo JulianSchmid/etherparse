@@ -99,7 +99,7 @@ impl TransportHeader {
         use crate::TransportHeader::*;
         match self {
             Icmpv4(header) => {
-                header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
+                header.checksum = header.calc_checksum_ipv4(payload)?;
             },
             Icmpv6(_) => Err(ValueError::Icmpv6InIpv4)?,
             Udp(header) => {
