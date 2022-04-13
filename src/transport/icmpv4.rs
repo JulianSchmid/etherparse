@@ -381,20 +381,28 @@ impl Icmpv4Header {
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
         Ok((
-            Icmpv4Slice::from_slice(slice)?.to_header(),
+            Icmpv4Slice::from_slice(slice)?.header(),
             &slice[Icmpv4Header::MIN_SERIALIZED_SIZE..]
         ))
     }
 }
 
-///A slice containing an icmp4 header of a network package. Struct allows the selective read of fields in the header.
+/// A slice containing an ICMPv4 network package.
+///
+/// Struct allows the selective read of fields in the ICMPv4
+/// packet.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Icmpv4Slice<'a> {
     slice: &'a [u8]
 }
 
 impl<'a> Icmpv4Slice<'a> {
-    /// Creates a slice containing an icmp4 header.
+    /// Creates a slice containing an ICMPv4 packet.
+    ///
+    /// # Errors
+    ///
+    /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
+    /// if the given slice is too small.
     #[inline]
     pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
         //check length
@@ -410,9 +418,9 @@ impl<'a> Icmpv4Slice<'a> {
     }
 
 
-    /// Decode all the fields and copy the results to a Icmpv4Header struct
+    /// Decode the header values into an [`Icmpv4Header`] struct.
     #[inline]
-    pub fn to_header(&self) -> Icmpv4Header  {
+    pub fn header(&self) -> Icmpv4Header  {
         let icmp_type = self.icmp_type();
         Icmpv4Header {
             icmp_type,
@@ -420,6 +428,8 @@ impl<'a> Icmpv4Slice<'a> {
         }
     }
 
+    /// Decode the header values (excluding the checksum) into an [`Icmpv4Type`] enum.
+    #[inline]
     pub fn icmp_type(&self) -> Icmpv4Type  {
         // SAFETY:
         // Safe as the contructor checks that the slice has
@@ -472,10 +482,10 @@ impl<'a> Icmpv4Slice<'a> {
     }
 
     /// Returns the bytes from position 4 till and including the 8th position
-    /// in the ICMPv6 header.
+    /// in the ICMPv4 header.
     ///
     /// These bytes located at th 5th, 6th, 7th and 8th position of the ICMP
-    /// packet can depending on the ICMPv6 type and code contain additional data.
+    /// packet can depending on the ICMPv4 type and code contain additional data.
     #[inline]
     pub fn bytes5to8(&self) -> [u8;4] {
         // SAFETY:
@@ -491,7 +501,7 @@ impl<'a> Icmpv4Slice<'a> {
         }
     }
 
-    /// Returns the slice containing the icmp4 header
+    /// Returns the slice containing the ICMPv4 packet.
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
