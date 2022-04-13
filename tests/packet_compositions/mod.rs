@@ -323,7 +323,7 @@ impl ComponentTest {
         assert_eq!(
             self.transport,
             match result.transport.as_ref() {
-                Some(TransportSlice::Icmpv4(actual)) => Some(TransportHeader::Icmpv4(actual.to_header())),
+                Some(TransportSlice::Icmpv4(actual)) => Some(TransportHeader::Icmpv4(actual.header())),
                 Some(TransportSlice::Icmpv6(actual)) => Some(TransportHeader::Icmpv6(actual.header())),
                 Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
                 Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),

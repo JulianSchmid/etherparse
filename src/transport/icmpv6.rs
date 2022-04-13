@@ -760,7 +760,7 @@ impl Icmpv6Header {
     }
 }
 
-/// A slice containing an icmpv6 network package.
+/// A slice containing an ICMPv6 network package.
 /// 
 /// Struct allows the selective read of fields in the ICMPv6
 /// packet.
@@ -770,13 +770,13 @@ pub struct Icmpv6Slice<'a> {
 }
 
 impl<'a> Icmpv6Slice<'a> {
-    /// Creates a slice containing an icmp6 packet.
+    /// Creates a slice containing an ICMPv6 packet.
     ///
     /// # Errors
     ///
     /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
     /// if the given slice is too small (smaller then `Icmpv6Header::MIN_SERIALIZED_SIZE`) or
-    /// too large (bigger then ``)
+    /// too large (bigger then `icmpv6::MAX_ICMPV6_BYTE_LEN`).
     #[inline]
     pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv6Slice<'a>, ReadError> {
         //check length
@@ -794,7 +794,7 @@ impl<'a> Icmpv6Slice<'a> {
         })
     }
 
-    /// Decode all the fields and copy the results to a [`Icmpv6Header`] struct
+    /// Decode the header fields and copy the results to a [`Icmpv6Header`] struct.
     #[inline]
     pub fn header(&self) -> Icmpv6Header {
         Icmpv6Header {
