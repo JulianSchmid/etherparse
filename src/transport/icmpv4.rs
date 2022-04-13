@@ -1,4 +1,3 @@
-use std::slice::from_raw_parts;
 use super::super::*;
 
 /// Module containing ICMPv4 related types and constants
@@ -382,7 +381,7 @@ impl Icmpv4Header {
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
         Ok((
-            Icmpv4HeaderSlice::from_slice(slice)?.to_header(),
+            Icmpv4Slice::from_slice(slice)?.to_header(),
             &slice[Icmpv4Header::MIN_SERIALIZED_SIZE..]
         ))
     }
@@ -390,14 +389,14 @@ impl Icmpv4Header {
 
 ///A slice containing an icmp4 header of a network package. Struct allows the selective read of fields in the header.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Icmpv4HeaderSlice<'a> {
+pub struct Icmpv4Slice<'a> {
     slice: &'a [u8]
 }
 
-impl<'a> Icmpv4HeaderSlice<'a> {
+impl<'a> Icmpv4Slice<'a> {
     /// Creates a slice containing an icmp4 header.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
@@ -405,16 +404,8 @@ impl<'a> Icmpv4HeaderSlice<'a> {
         }
 
         //done
-        Ok(Icmpv4HeaderSlice{
-            // SAFETY:
-            // Safe as slice length is checked to be at least
-            // Icmpv4Header::MIN_SERIALIZED_SIZE (8) before this.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    Icmpv4Header::MIN_SERIALIZED_SIZE
-                )
-            }
+        Ok(Icmpv4Slice{
+            slice
         })
     }
 

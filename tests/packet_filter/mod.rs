@@ -361,7 +361,7 @@ impl PacketFilterTest {
             transport: match &self.transport {
                 Some(TransportHeader::Icmpv4(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmpv4(Icmpv4HeaderSlice::from_slice(&transport_data[..]).unwrap()))
+                    Some(TransportSlice::Icmpv4(Icmpv4Slice::from_slice(&transport_data[..]).unwrap()))
                 },
                 Some(TransportHeader::Icmpv6(header)) => {
                     header.write(&mut transport_data).unwrap();
