@@ -506,7 +506,7 @@ impl PacketBuilderStep<IpHeader> {
     }
 
     pub fn icmp6_raw(mut self, type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv6Header> {
-        let icmp_type = Icmpv6Type::Raw{type_u8, code_u8, bytes5to8};
+        let icmp_type = Icmpv6Type::Unknown{type_u8, code_u8, bytes5to8};
         self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header{
             icmp_type,
             checksum: 0, // calculated later

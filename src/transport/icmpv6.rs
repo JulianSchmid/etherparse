@@ -388,10 +388,10 @@ use icmpv6::*;
 ///     Some(Icmpv6(icmp)) => {
 ///         use etherparse::Icmpv6Type::*;
 ///         match icmp.icmp_type {
-///             // Raw is used when further decoding is currently not supported for the icmp type & code.
+///             // Unknown is used when further decoding is currently not supported for the icmp type & code.
 ///             // You can still further decode the packet on your own by using the raw data in this enum
 ///             // together with `headers.payload` (contains the packet data after the 8th byte)
-///             Raw{ type_u8, code_u8, bytes5to8 } => println!("Raw{{ type_u8: {}, code_u8: {}, bytes5to8: {:?} }}", type_u8, code_u8, bytes5to8),
+///             Unknown{ type_u8, code_u8, bytes5to8 } => println!("Unknown{{ type_u8: {}, code_u8: {}, bytes5to8: {:?} }}", type_u8, code_u8, bytes5to8),
 ///             DestinationUnreachable(header) => println!("{:?}", header),
 ///             PacketTooBig { mtu } => println!("TimeExceeded{{ mtu: {} }}", mtu),
 ///             TimeExceeded{ code } => println!("TimeExceeded{{ code: {:?} }}", code),
@@ -446,7 +446,7 @@ use icmpv6::*;
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw.
-    Raw{
+    Unknown{
         type_u8: u8,
         code_u8: u8,
         /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
@@ -558,7 +558,7 @@ impl Icmpv6Type {
                     mtu: u32::from_be_bytes(bytes5to8),
                 }
             } else {
-                Raw{type_u8, code_u8, bytes5to8}
+                Unknown{type_u8, code_u8, bytes5to8}
             },
             TYPE_TIME_EXCEEDED => TimeExceeded{
                 code: code_u8.into()
@@ -570,14 +570,14 @@ impl Icmpv6Type {
             TYPE_ECHO_REQUEST => if 0 == code_u8 {
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
             } else {
-                Raw{type_u8, code_u8, bytes5to8}
+                Unknown{type_u8, code_u8, bytes5to8}
             },
             TYPE_ECHO_REPLY => if 0 == code_u8 {
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
             } else {
-                Raw{type_u8, code_u8, bytes5to8}
+                Unknown{type_u8, code_u8, bytes5to8}
             },
-            _ => Raw{type_u8, code_u8, bytes5to8},
+            _ => Unknown{type_u8, code_u8, bytes5to8},
         }
     }
 
@@ -586,7 +586,7 @@ impl Icmpv6Type {
     pub fn type_u8(&self) -> u8 {
         use Icmpv6Type::*;
         match self {
-            Raw{type_u8, code_u8: _, bytes5to8: _} => *type_u8,
+            Unknown{type_u8, code_u8: _, bytes5to8: _} => *type_u8,
             DestinationUnreachable(_) => TYPE_DST_UNREACH,
             PacketTooBig{ mtu: _ } => TYPE_PACKET_TOO_BIG,
             TimeExceeded{ code: _ } => TYPE_TIME_EXCEEDED,
@@ -601,7 +601,7 @@ impl Icmpv6Type {
     pub fn code_u8(&self) -> u8 {
         use Icmpv6Type::*;
         match self {
-            Raw{type_u8: _, code_u8, bytes5to8: _} => *code_u8,
+            Unknown{type_u8: _, code_u8, bytes5to8: _} => *code_u8,
             DestinationUnreachable(code) => code.code_u8(),
             PacketTooBig{ mtu: _ } => 0,
             TimeExceeded{ code } => u8::from(*code),
@@ -651,7 +651,7 @@ impl Icmpv6Type {
     pub fn to_bytes(&self) -> (u8, u8, [u8;4]) {
         use Icmpv6Type::*;
         match self {
-            Raw{type_u8, code_u8, bytes5to8} => (*type_u8, *code_u8, *bytes5to8),
+            Unknown{type_u8, code_u8, bytes5to8} => (*type_u8, *code_u8, *bytes5to8),
             DestinationUnreachable(header) => 
             (TYPE_DST_UNREACH, (header.code_u8()), header.bytes5to8()),
             PacketTooBig{ mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
