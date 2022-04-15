@@ -500,7 +500,7 @@ mod icmpv6_type {
                     )
                 };
                 assert_matches!(
-                    icmpv6_type.calc_checksum(&ip_header, too_big_slice),
+                    icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, too_big_slice),
                     Err(ValueError::Ipv6PayloadLengthTooLarge(_))
                 );
             }
@@ -508,7 +508,7 @@ mod icmpv6_type {
             // normal case
             {
                 assert_eq!(
-                    icmpv6_type.calc_checksum(&ip_header, &payload).unwrap(),
+                    icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                     {
                         let (type_u8, code_u8 , bytes5to8) = icmpv6_type.to_bytes();
                         etherparse::checksum::Sum16BitWords::new()
@@ -608,15 +608,15 @@ mod icmpv6_type {
                     )
                 };
                 assert_matches!(
-                    icmpv6_type.to_header(&ip_header, too_big_slice),
+                    icmpv6_type.to_header(ip_header.source, ip_header.destination, too_big_slice),
                     Err(ValueError::Ipv6PayloadLengthTooLarge(_))
                 );
             }
             // normal case
             assert_eq!(
-                icmpv6_type.to_header(&ip_header, &payload).unwrap(),
+                icmpv6_type.to_header(ip_header.source, ip_header.destination, &payload).unwrap(),
                 Icmpv6Header {
-                    checksum: icmpv6_type.calc_checksum(&ip_header, &payload).unwrap(),
+                    checksum: icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                     icmp_type: icmpv6_type,
                 }
             );
@@ -732,17 +732,17 @@ mod icmpv6_header {
                     )
                 };
                 assert_matches!(
-                    Icmpv6Header::with_checksum(icmp_type.clone(), &ip_header, too_big_slice),
+                    Icmpv6Header::with_checksum(icmp_type.clone(), ip_header.source, ip_header.destination, too_big_slice),
                     Err(ValueError::Ipv6PayloadLengthTooLarge(_))
                 );
             }
 
             // non error case
             assert_eq!(
-                Icmpv6Header::with_checksum(icmp_type.clone(), &ip_header, &payload).unwrap(),
+                Icmpv6Header::with_checksum(icmp_type.clone(), ip_header.source, ip_header.destination, &payload).unwrap(),
                 Icmpv6Header {
                     icmp_type,
-                    checksum: icmp_type.calc_checksum(&ip_header, &payload).unwrap(),
+                    checksum: icmp_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                 }
             );
         }
@@ -786,59 +786,6 @@ mod icmpv6_header {
 
     proptest!{
         #[test]
-        fn is_checksum_valid(
-            ip_header in ipv6_any(),
-            icmp_type in icmpv6_type_any(),
-            start_checksum in any::<u16>(),
-            // max length is u32::MAX - header_len (7)
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
-            payload in proptest::collection::vec(any::<u8>(), 0..1024)
-        ) {
-
-            // matching case
-            assert!(
-                Icmpv6Header{
-                    icmp_type,
-                    checksum: icmp_type.calc_checksum(&ip_header, &payload).unwrap(),
-                }.is_checksum_valid(&ip_header, &payload).unwrap()
-            );
-
-            // (potentially) non matching case
-            assert_eq!(
-                Icmpv6Header{
-                    icmp_type,
-                    checksum: start_checksum,
-                }.is_checksum_valid(&ip_header, &payload).unwrap(),
-                start_checksum == icmp_type.calc_checksum(&ip_header, &payload).unwrap()
-            );
-
-            // error case
-            {
-                // SAFETY: In case the error is not triggered
-                //         a segmentation fault will be triggered.
-                let too_big_slice = unsafe {
-                    //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
-                    //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
-                        NonNull::<u8>::dangling().as_ptr(),
-                        bad_len
-                    )
-                };
-                assert_matches!(
-                    Icmpv6Header{
-                        icmp_type,
-                        checksum: 0
-                    }.is_checksum_valid(&ip_header, too_big_slice),
-                    Err(ValueError::Ipv6PayloadLengthTooLarge(_))
-                );
-            }
-        }
-    }
-
-    proptest!{
-        #[test]
         fn update_checksum(
             ip_header in ipv6_any(),
             icmp_type in icmpv6_type_any(),
@@ -866,7 +813,7 @@ mod icmpv6_header {
                     Icmpv6Header{
                         icmp_type,
                         checksum: 0
-                    }.update_checksum(&ip_header, too_big_slice),
+                    }.update_checksum(ip_header.source, ip_header.destination, too_big_slice),
                     Err(ValueError::Ipv6PayloadLengthTooLarge(_))
                 );
             }
@@ -878,12 +825,12 @@ mod icmpv6_header {
                         icmp_type,
                         checksum: start_checksum,
                     };
-                    header.update_checksum(&ip_header, &payload).unwrap();
+                    header.update_checksum(ip_header.source, ip_header.destination, &payload).unwrap();
                     header
                 },
                 Icmpv6Header{
                     icmp_type,
-                    checksum: icmp_type.calc_checksum(&ip_header, &payload).unwrap(),
+                    checksum: icmp_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                 }
             );
         }
@@ -1056,7 +1003,7 @@ mod icmpv6_header {
                 Some(IpHeader::Version6(ipv6, _)) => ipv6,
                 _ => panic!("Failed to parse ipv6 part of packet?!"),
             };
-            assert_eq!(icmp6.icmp_type.calc_checksum(&iph, request.payload),
+            assert_eq!(icmp6.icmp_type.calc_checksum(iph.source, iph.destination, request.payload),
                 Ok(valid_checksum));
         }
     }
@@ -1167,6 +1114,78 @@ mod icmpv6_slice {
                 Icmpv6Slice::from_slice(&slice[..]).unwrap().checksum(),
                 u16::from_be_bytes([slice[2], slice[3]])
             );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn is_checksum_valid(
+            ip_header in ipv6_any(),
+            icmp_type in icmpv6_type_any(),
+            payload in proptest::collection::vec(any::<u8>(), 0..1024),
+            flip_byte in 0usize..1032,
+        ) {
+            // generate slice with a correct checksum
+            let header = Icmpv6Header::with_checksum(icmp_type, ip_header.source, ip_header.destination, &payload).unwrap();
+            let bytes = {
+                let mut bytes = Vec::with_capacity(header.header_len() + payload.len());
+                header.write(&mut bytes).unwrap();
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+
+            // check that the checksum gets reported as ok
+            assert!(
+                Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+            );
+
+            // corrupt icmp packet
+            {
+                let mut corrupted_bytes = bytes.clone();
+                let i = flip_byte % corrupted_bytes.len();
+                corrupted_bytes[i] = !corrupted_bytes[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&corrupted_bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+                );
+            }
+
+            // corrupt ip source
+            {
+                let mut corrupted_source = ip_header.source;
+                let i = flip_byte % corrupted_source.len();
+                corrupted_source[i] = !corrupted_source[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(corrupted_source, ip_header.destination)
+                );
+            }
+
+            // corrupt ip destination
+            {
+                let mut corrupted_dest = ip_header.destination;
+                let i = flip_byte % corrupted_dest.len();
+                corrupted_dest[i] = !corrupted_dest[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(ip_header.source, corrupted_dest)
+                );
+            }
+
+            // corrupt length
+            {
+                let mut larger_bytes = bytes.clone();
+                larger_bytes.push(0);
+                larger_bytes.push(0);
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&larger_bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+                );
+            }
         }
     }
 

@@ -377,7 +377,7 @@ use icmpv6::*;
 ///
 /// // to calculate the checksum the ip header and the payload
 /// // (in case of dest unreachable the invoking packet) are needed
-/// let header = t.to_header(&ip_header, &invoking_packet).unwrap();
+/// let header = t.to_header(ip_header.source, ip_header.destination, &invoking_packet).unwrap();
 /// 
 /// // an ICMPv6 packet is composed of the header and payload
 /// let mut packet = Vec::with_capacity(header.header_len() + invoking_packet.len());
@@ -577,7 +577,17 @@ impl Icmpv6Type {
     }
 
     /// Calculates the checksum of the ICMPv6 header.
-    pub fn calc_checksum(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+    ///
+    /// <p style="background:rgba(255,181,77,0.16);padding:0.75em;">
+    /// <strong>Warning:</strong> Don't use this method to verfy if a checksum of a
+    /// received packet is correct. This method assumes that all unused bytes are
+    /// filled with zeros. If this is not the case the computed checksum value will 
+    /// will be incorrect for a received packet.
+    ///
+    /// If you want to verify that a received packet has a correct checksum use
+    /// [`Icmpv6Slice::is_checksum_valid`] instead.
+    /// </p>
+    pub fn calc_checksum(&self, source_ip: [u8;16], destination_ip: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
         // check that the total length fits into the field
         //
         // Note according to RFC 2460 the "Upper-Layer Packet Length" used
@@ -597,10 +607,10 @@ impl Icmpv6Type {
             // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader, 
             // unlike Icmp4
             checksum::Sum16BitWords::new()
-            .add_16bytes(ip_header.source)
-            .add_16bytes(ip_header.destination)
+            .add_16bytes(source_ip)
+            .add_16bytes(destination_ip)
             .add_2bytes([0, ip_number::IPV6_ICMP])
-            .add_2bytes((msg_len as u16).to_be_bytes())
+            .add_4bytes((msg_len as u32).to_be_bytes())
             .add_2bytes([icmp_type, icmp_code])
             .add_4bytes(bytes5to8)
             .add_slice(payload)
@@ -628,9 +638,9 @@ impl Icmpv6Type {
     }
 
     /// Creates a header with the correct checksum.
-    pub fn to_header(self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
+    pub fn to_header(self, source_ip: [u8;16], destination_ip: [u8;16], payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
         Ok(Icmpv6Header {
-            checksum: self.calc_checksum(ip_header, payload)?,
+            checksum: self.calc_checksum(source_ip, destination_ip, payload)?,
             icmp_type: self,
         })
     }
@@ -676,8 +686,8 @@ impl Icmpv6Header {
     }
 
     /// Creates a [`Icmpv6Header`] with a valid checksum.
-    pub fn with_checksum(icmp_type: Icmpv6Type, ip_header: &Ipv6Header, payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
-        let checksum = icmp_type.calc_checksum(ip_header, payload)?;
+    pub fn with_checksum(icmp_type: Icmpv6Type, source_ip: [u8;16], destination_ip: [u8;16], payload: &[u8]) -> Result<Icmpv6Header, ValueError> {
+        let checksum = icmp_type.calc_checksum(source_ip, destination_ip, payload)?;
         Ok(
             Icmpv6Header{
                 icmp_type,
@@ -691,14 +701,9 @@ impl Icmpv6Header {
         writer.write_all(&self.to_bytes()).map_err(WriteError::from)
     }
 
-    /// Validates the checksum givene the IPv6 header and payload (parts after the Icmpv6Header) of the packet.
-    pub fn is_checksum_valid(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<bool, ValueError> {
-        Ok(self.checksum == self.icmp_type.calc_checksum(ip_header, payload)?)
-    }
-
     /// Updates the checksum of the header.
-    pub fn update_checksum(&mut self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<(), ValueError> {
-        self.checksum = self.icmp_type.calc_checksum(ip_header, payload)?;
+    pub fn update_checksum(&mut self, source_ip: [u8;16], destination_ip: [u8;16], payload: &[u8]) -> Result<(), ValueError> {
+        self.checksum = self.icmp_type.calc_checksum(source_ip, destination_ip, payload)?;
         Ok(())
     }
 
@@ -810,6 +815,24 @@ impl<'a> Icmpv6Slice<'a> {
         unsafe {
             get_unchecked_be_u16(self.slice.as_ptr().add(2))
         }
+    }
+
+    /// Returns if the checksum in the slice is correct.
+    pub fn is_checksum_valid(&self, source_ip: [u8;16], destination_ip: [u8;16]) -> bool {
+        // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader, 
+        // unlike Icmp4
+        checksum::Sum16BitWords::new()
+        .add_16bytes(source_ip)
+        .add_16bytes(destination_ip)
+        .add_4bytes((self.slice().len() as u32).to_be_bytes())
+        .add_2bytes([0, ip_number::IPV6_ICMP])
+        // NOTE: From RFC 1071
+        // To check a checksum, the 1's complement sum is computed over the
+        // same set of octets, including the checksum field.  If the result
+        // is all 1 bits (-0 in 1's complement arithmetic), the check
+        // succeeds.
+        .add_slice(self.slice)
+        .ones_complement() == 0
     }
 
     /// Returns the bytes from position 4 till and including the 8th position
