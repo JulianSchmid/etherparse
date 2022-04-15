@@ -6,7 +6,7 @@ fn constants() {
 
     // icmp type numbers according to
     // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-types
-    assert_eq!(TYPE_ECHOREPLY, 0);
+    assert_eq!(TYPE_ECHO_REPLY, 0);
     assert_eq!(TYPE_DEST_UNREACH, 3);
     assert_eq!(TYPE_SOURCE_QUENCH, 4);
     assert_eq!(TYPE_REDIRECT, 5);
@@ -15,9 +15,9 @@ fn constants() {
     assert_eq!(TYPE_ROUTER_ADVERTISEMENT, 9);
     assert_eq!(TYPE_ROUTER_SOLICITATION, 10);
     assert_eq!(TYPE_TIME_EXCEEDED, 11);
-    assert_eq!(TYPE_PARAMETERPROB, 12);
+    assert_eq!(TYPE_PARAMETER_PROBLEM, 12);
     assert_eq!(TYPE_TIMESTAMP, 13);
-    assert_eq!(TYPE_TIMESTAMPREPLY, 14);
+    assert_eq!(TYPE_TIMESTAMP_REPLY, 14);
     assert_eq!(TYPE_INFO_REQUEST, 15);
     assert_eq!(TYPE_INFO_REPLY, 16);
     assert_eq!(TYPE_ADDRESS, 17);
@@ -36,10 +36,10 @@ fn constants() {
     assert_eq!(8, CODE_DST_UNREACH_ISOLATED);
     assert_eq!(9, CODE_DST_UNREACH_NET_PROHIB);
     assert_eq!(10, CODE_DST_UNREACH_HOST_PROHIB);
-    assert_eq!(11, CODE_DST_UNREACH_TOSNET);
-    assert_eq!(12, CODE_DST_UNREACH_TOSHOST);
+    assert_eq!(11, CODE_DST_UNREACH_TOS_NET);
+    assert_eq!(12, CODE_DST_UNREACH_TOS_HOST);
     assert_eq!(13, CODE_DST_UNREACH_FILTER_PROHIB);
-    assert_eq!(14, CODE_DST_UNREACH_HOST_PRECEDENCE);
+    assert_eq!(14, CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION);
     assert_eq!(15, CODE_DST_UNREACH_PRECEDENCE_CUTOFF);
 
 }
@@ -50,65 +50,8 @@ mod dest_unreachable_header {
 
     proptest! {
         #[test]
-        fn from_bytes(
-            mtu in any::<u16>(),
-            bytes5to8 in any::<[u8;4]>(),
-        ) {
-            use DestUnreachableHeader::*;
-
-            // types where only the code is relevant
-            {
-                let trivial = [
-                    (CODE_DST_UNREACH_NET, Network),
-                    (CODE_DST_UNREACH_HOST, Host),
-                    (CODE_DST_UNREACH_PROTOCOL, Protocol),
-                    (CODE_DST_UNREACH_PORT, Port),
-                    // frag uses bytes5to8
-                    (CODE_DST_UNREACH_SRCFAIL, SourceFail),
-                    (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
-                    (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
-                    (CODE_DST_UNREACH_ISOLATED, Isolated),
-                    (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
-                    (CODE_DST_UNREACH_HOST_PROHIB, HostProhibitive),
-                    (CODE_DST_UNREACH_TOSNET, TosNetwork),
-                    (CODE_DST_UNREACH_TOSHOST, TosHost),
-                    (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
-                    (CODE_DST_UNREACH_HOST_PRECEDENCE, HostPrecidence),
-                    (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
-                ];
-                for t in trivial {
-                    assert_eq!(t.1, DestUnreachableHeader::from_bytes(t.0, bytes5to8));
-                }
-            }
-            
-
-            // codes where additional bytes get interpreted
-            {
-                let mtu_be = mtu.to_be_bytes();
-                assert_eq!(
-                    FragmentationNeeded{ next_hop_mtu: mtu },
-                    DestUnreachableHeader::from_bytes(
-                        CODE_DST_UNREACH_NEEDFRAG,
-                        [bytes5to8[0], bytes5to8[1], mtu_be[0], mtu_be[1]]
-                    )
-                );
-            }
-
-            // raw
-            for code_u8 in 16..=u8::MAX {
-                assert_eq!(
-                    Raw{ code_u8, bytes5to8 },
-                    DestUnreachableHeader::from_bytes(code_u8, bytes5to8)
-                );
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
         fn code_u8(
             mtu in any::<u16>(),
-            bytes5to8 in any::<[u8;4]>(),
         ) {
             use DestUnreachableHeader::*;
             {
@@ -123,67 +66,16 @@ mod dest_unreachable_header {
                     (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
                     (CODE_DST_UNREACH_ISOLATED, Isolated),
                     (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
-                    (CODE_DST_UNREACH_HOST_PROHIB, HostProhibitive),
-                    (CODE_DST_UNREACH_TOSNET, TosNetwork),
-                    (CODE_DST_UNREACH_TOSHOST, TosHost),
+                    (CODE_DST_UNREACH_HOST_PROHIB, HostProhibited),
+                    (CODE_DST_UNREACH_TOS_NET, TosNetwork),
+                    (CODE_DST_UNREACH_TOS_HOST, TosHost),
                     (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
-                    (CODE_DST_UNREACH_HOST_PRECEDENCE, HostPrecidence),
+                    (CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION, HostPrecedenceViolation),
                     (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
                 ];
                 for t in trivial {
                     assert_eq!(t.0, t.1.code_u8());
                 }
-            }
-            for code_u8 in 0..u8::MAX {
-                assert_eq!(code_u8, Raw{ code_u8, bytes5to8 }.code_u8());
-            }
-        }
-    }
-
-    proptest!{
-        #[test]
-        fn bytes5to8(
-            mtu in any::<u16>(),
-            bytes5to8 in any::<[u8;4]>(),
-        ) {
-            use DestUnreachableHeader::*;
-            // codes that return 0 bytes
-            {
-                let trivial = [
-                    Network,
-                    Host,
-                    Protocol,
-                    Port,
-                    // frag uses bytes5to8
-                    SourceFail,
-                    NetworkUnknown,
-                    HostUnknown,
-                    Isolated,
-                    NetworkProhibited,
-                    HostProhibitive,
-                    TosNetwork,
-                    TosHost,
-                    FilterProhibited,
-                    HostPrecidence,
-                    PrecedenceCutoff,
-                ];
-                for t in trivial {
-                    assert_eq!([0;4], t.bytes5to8());
-                }
-            }
-            // codes where additional bytes get used
-            {
-                let mtu_be = mtu.to_be_bytes();
-                assert_eq!(
-                    FragmentationNeeded{ next_hop_mtu: mtu }.bytes5to8(),
-                    [0, 0, mtu_be[0], mtu_be[1]]
-                );
-            }
-            for code_u8 in 0..u8::MAX {
-                assert_eq!(
-                    bytes5to8,
-                    Raw{ code_u8, bytes5to8 }.bytes5to8()
-                );
             }
         }
     }
@@ -192,7 +84,6 @@ mod dest_unreachable_header {
     fn clone_eq() {
         use DestUnreachableHeader::*;
         let values = [
-            Raw{ code_u8: 0, bytes5to8: [0;4] },
             Network,
             Host,
             Protocol,
@@ -203,11 +94,11 @@ mod dest_unreachable_header {
             HostUnknown,
             Isolated,
             NetworkProhibited,
-            HostProhibitive,
+            HostProhibited,
             TosNetwork,
             TosHost,
             FilterProhibited,
-            HostPrecidence,
+            HostPrecedenceViolation,
             PrecedenceCutoff,
         ];
         for value in values {
@@ -219,7 +110,6 @@ mod dest_unreachable_header {
     fn debug() {
         use DestUnreachableHeader::*;
         let tests = [
-            ("Raw { code_u8: 0, bytes5to8: [0, 0, 0, 0] }", Raw{ code_u8: 0, bytes5to8: [0;4] }),
             ("Network", Network),
             ("Host", Host),
             ("Protocol", Protocol),
@@ -230,11 +120,11 @@ mod dest_unreachable_header {
             ("HostUnknown", HostUnknown),
             ("Isolated", Isolated),
             ("NetworkProhibited", NetworkProhibited),
-            ("HostProhibitive", HostProhibitive),
+            ("HostProhibited", HostProhibited),
             ("TosNetwork", TosNetwork),
             ("TosHost", TosHost),
             ("FilterProhibited", FilterProhibited),
-            ("HostPrecidence", HostPrecidence),
+            ("HostPrecedenceViolation", HostPrecedenceViolation),
             ("PrecedenceCutoff", PrecedenceCutoff),
         ];
         for t in tests {
@@ -375,8 +265,10 @@ mod icmp4_hdr {
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
             icmp4.checksum = 0;
-            assert_eq!(icmp4.calc_checksum_ipv4(request.payload),
-                Ok(valid_checksum));
+            assert_eq!(
+                icmp4.calc_checksum(request.payload),
+                valid_checksum
+            );
         }
     }
 
@@ -398,10 +290,11 @@ mod icmp4_hdr {
         };
         assert_eq!(Ipv4Addr::from(ip_header.source), "212.156.201.114".parse::<Ipv4Addr>().unwrap());
         let icmp4 = ttl_exceeded.transport.unwrap().icmp4().unwrap();
-        let (icmp_type, icmp_code, bytes5to8) = icmp4.icmp_type.to_bytes();
-        assert_eq!(icmp_type, icmpv4::TYPE_TIME_EXCEEDED);
-        assert_eq!(icmp_code, 0);
-        assert_eq!(bytes5to8, [0;4]);  // TTL exceeded doesn't use this field
+        let icmp_bytes = icmp4.to_bytes();
+        assert_eq!(8, icmp_bytes.len());
+        assert_eq!(icmp_bytes[0], icmpv4::TYPE_TIME_EXCEEDED);
+        assert_eq!(icmp_bytes[1], 0); // code
+        assert_eq!(&icmp_bytes[4..], &[0;4]);  // TTL exceeded doesn't use this field
         // now unpack the bounced packet in the payload
         let embedded_pkt = PacketHeaders::from_ip_slice(ttl_exceeded.payload).unwrap();
         let ip_header = match embedded_pkt.ip.unwrap() {
@@ -428,13 +321,11 @@ mod icmp4_hdr {
         let offset = 14 + 20 + 1;   // ethernet + iphdr + icmp_type
         // test all of the unreachable codes to make sure the maps are right
         for code_u8 in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
-            let code = icmpv4::DestUnreachableHeader::from_bytes(code_u8, [0;4]);
             let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
             pkt[offset] = code_u8;  // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let icmp4 = parsed.transport.unwrap().icmp4().unwrap();
             if let Icmpv4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
-                assert_eq!(icmp_code, code);
                 assert_eq!(code_u8, icmp_code.code_u8() );
             } else {
                 panic!("Not destination unreachable!?");

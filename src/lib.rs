@@ -275,6 +275,8 @@ pub enum ReadError {
     IoError(std::io::Error),
     ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
     UnexpectedEndOfSlice(usize),
+    ///Error when a slice has a different size then expected.
+    UnexpectedLenOfSlice{ expected: usize, actual: usize },
     ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
     ///The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
@@ -309,6 +311,7 @@ impl ReadError {
         use crate::ReadError::*;
         match self {
             UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(value + offset),
+            UnexpectedLenOfSlice{ expected, actual } => UnexpectedLenOfSlice{ expected: expected + offset, actual: actual + offset },
             value => value
         }
     }
@@ -338,6 +341,9 @@ impl fmt::Display for ReadError {
             IoError(err) => err.fmt(f),
             UnexpectedEndOfSlice(expected_minimum_size) => { // usize
                 write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
+            },
+            UnexpectedLenOfSlice{ expected, actual } => {
+                write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
             },
             DoubleVlanOuterNonVlanEtherType(ether_type) => { //u16
                 write!(f, "ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", ether_type)

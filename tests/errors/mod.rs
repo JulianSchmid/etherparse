@@ -6,7 +6,8 @@ proptest! {
     fn read_error_display(
         arg_u8 in any::<u8>(),
         arg_u16 in any::<u16>(),
-        arg_usize in any::<usize>()
+        arg_usize in any::<usize>(),
+        arg2_usize in any::<usize>(),
     ) { //arg_u16 in any::<u16>()
 
         use super::ReadError::*;
@@ -24,6 +25,12 @@ proptest! {
         assert_eq!(
             &format!("ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", arg_usize),
             &format!("{}", UnexpectedEndOfSlice(arg_usize))
+        );
+
+        //UnexpectedLenOfSlice
+        assert_eq!(
+            &format!("ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", arg2_usize, arg_usize),
+            &format!("{}", UnexpectedLenOfSlice{ expected: arg_usize, actual: arg2_usize })
         );
 
         //DoubleVlanOuterNonVlanEtherType
@@ -107,6 +114,7 @@ fn read_error_source() {
 
     let none_values = [
         UnexpectedEndOfSlice(0),
+        UnexpectedLenOfSlice{ expected: 0, actual: 0 },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
@@ -132,6 +140,7 @@ fn read_error_debug() {
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
         UnexpectedEndOfSlice(0),
+        UnexpectedLenOfSlice{ expected: 0, actual: 0 },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
