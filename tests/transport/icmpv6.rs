@@ -57,86 +57,65 @@ fn constants() {
 }
 
 mod icmp6_dest_unreachable {
-    use etherparse::icmpv6::DestUnreachableHeader;
-    use etherparse::icmpv6::DestUnreachableHeader::*;
+    use etherparse::icmpv6::DestUnreachableCode;
+    use etherparse::icmpv6::DestUnreachableCode::*;
     use etherparse::icmpv6::*;
 
     #[test]
-    fn from_bytes() {
+    fn from_u8() {
         for code_u8 in 7u8..=0xff {
-            assert_eq!(
-                Raw{
-                    code_u8,
-                    bytes5to8: [1,2,3,4],
-                },
-                DestUnreachableHeader::from_bytes(
-                    code_u8,
-                    [1,2,3,4]
-                )
+            assert!(
+                DestUnreachableCode::from_u8(
+                    code_u8
+                ).is_none()
             );
         }
         assert_eq!(
             NoRoute,
-            DestUnreachableHeader::from_bytes(
-                CODE_DST_UNREACH_NOROUTE,
-                [0;4]
-            )
+            DestUnreachableCode::from_u8(
+                CODE_DST_UNREACH_NOROUTE
+            ).unwrap()
         );
         assert_eq!(
             Prohibited,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_PROHIBITED,
-                [0;4]
-            )
+            ).unwrap()
         );
         assert_eq!(
             BeyondScope,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_BEYONDSCOPE,
-                [0;4]
-            )
+            ).unwrap()
         );
         assert_eq!(
             Address,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_ADDR,
-                [0;4]
-            )
+            ).unwrap()
         );
         assert_eq!(
             Port,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_PORT,
-                [0;4]
-            )
+            ).unwrap()
         );
         assert_eq!(
             SourceAddressFailedPolicy,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
-                [0;4]
-            )
+            ).unwrap()
         );
         assert_eq!(
             RejectRoute,
-            DestUnreachableHeader::from_bytes(
+            DestUnreachableCode::from_u8(
                 CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
-                [0;4]
-            )
+            ).unwrap()
         );
     }
 
     #[test]
     fn code_u8() {
-        for code_u8 in 0u8..=0xff {
-            assert_eq!(
-                code_u8,
-                Raw{
-                    code_u8,
-                    bytes5to8: [1,2,3,4],
-                }.code_u8(),
-            );
-        }
         assert_eq!(NoRoute.code_u8(), CODE_DST_UNREACH_NOROUTE);
         assert_eq!(Prohibited.code_u8(), CODE_DST_UNREACH_PROHIBITED);
         assert_eq!(BeyondScope.code_u8(), CODE_DST_UNREACH_BEYONDSCOPE);
@@ -147,52 +126,8 @@ mod icmp6_dest_unreachable {
     }
 
     #[test]
-    fn bytes5to8() {
-        assert_eq!(
-            [1,2,3,4],
-            Raw{
-                code_u8: 0,
-                bytes5to8: [1,2,3,4],
-            }.bytes5to8(),
-        );
-        let zero_bytes5to8 = [
-            NoRoute,
-            Prohibited,
-            BeyondScope,
-            Address,
-            Port,
-            SourceAddressFailedPolicy,
-            RejectRoute
-        ];
-        for hdr in zero_bytes5to8 {
-            assert_eq!([0u8;4], hdr.bytes5to8());
-        }
-    }
-
-    #[test]
-    fn to_bytes() {
-        for code_u8 in 0u8..=0xff {
-            assert_eq!(
-                (code_u8, [1,2,3,4]),
-                Raw{
-                    code_u8,
-                    bytes5to8: [1,2,3,4],
-                }.to_bytes(),
-            );
-        }
-        assert_eq!(NoRoute.to_bytes(), (CODE_DST_UNREACH_NOROUTE, [0;4]));
-        assert_eq!(Prohibited.to_bytes(), (CODE_DST_UNREACH_PROHIBITED, [0;4]));
-        assert_eq!(BeyondScope.to_bytes(), (CODE_DST_UNREACH_BEYONDSCOPE, [0;4]));
-        assert_eq!(Address.to_bytes(), (CODE_DST_UNREACH_ADDR, [0;4]));
-        assert_eq!(Port.to_bytes(), (CODE_DST_UNREACH_PORT, [0;4]));
-        assert_eq!(SourceAddressFailedPolicy.to_bytes(), (CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY, [0;4]));
-        assert_eq!(RejectRoute.to_bytes(), (CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST, [0;4]));
-    }
-
-    #[test]
     fn clone_eq() {
         let values = [
-            Raw{ code_u8: 8, bytes5to8: [1,2,3,4] },
             NoRoute,
             Prohibited,
             BeyondScope,
@@ -209,7 +144,6 @@ mod icmp6_dest_unreachable {
     #[test]
     fn debug() {
         let tests = [
-            (Raw{ code_u8: 8, bytes5to8: [1,2,3,4] }, "Raw { code_u8: 8, bytes5to8: [1, 2, 3, 4] }"),
             (NoRoute, "NoRoute"),
             (Prohibited, "Prohibited"),
             (BeyondScope, "BeyondScope"),
@@ -369,10 +303,22 @@ mod icmpv6_type {
             use etherparse::Icmpv6Type::*;
             use etherparse::{IcmpEchoHeader, Icmpv6Type, icmpv6::*};
 
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
-                DestinationUnreachable(DestUnreachableHeader::from_bytes(code_u8, bytes5to8))
-            );
+            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
+                assert_eq!(
+                    Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
+                    DestinationUnreachable(code)
+                );
+            } else {
+                assert_eq!(
+                    Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
+                    Unknown{
+                        type_u8: TYPE_DST_UNREACH,
+                        code_u8,
+                        bytes5to8,
+                    }
+                );
+            }
+            
             assert_eq!(
                 Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, 0, bytes5to8),
                 PacketTooBig{
@@ -464,7 +410,7 @@ mod icmpv6_type {
             use etherparse::{IcmpEchoHeader, icmpv6::*};
             {
                 let type_u8_type_pair = [
-                    (TYPE_DST_UNREACH, DestinationUnreachable(DestUnreachableHeader::from_bytes(code_u8, bytes5to8))),
+                    (TYPE_DST_UNREACH, DestinationUnreachable(DestUnreachableCode::SourceAddressFailedPolicy)),
                     (TYPE_PACKET_TOO_BIG, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (TYPE_TIME_EXCEEDED, TimeExceeded{ code: code_u8.into(), }),
                     (TYPE_PARAM_PROB, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
@@ -501,7 +447,6 @@ mod icmpv6_type {
             // types which include code
             {
                 let code_type_pair = [
-                    (code_u8, DestinationUnreachable(DestUnreachableHeader::from_bytes(code_u8, bytes5to8))),
                     (0, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (code_u8, TimeExceeded{ code: code_u8.into(), }),
                     (code_u8, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
@@ -511,6 +456,11 @@ mod icmpv6_type {
                 for test in code_type_pair {
                     assert_eq!(test.0, test.1.code_u8());
                 }
+            }
+
+            // destination unreachable (skip non existing codes)
+            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
+                assert_eq!(code_u8, DestinationUnreachable(code).code_u8());
             }
 
             for t in 0..=u8::MAX {
@@ -594,13 +544,17 @@ mod icmpv6_type {
                 Unknown{type_u8, code_u8, bytes5to8}.to_bytes(),
                 (type_u8, code_u8, bytes5to8)
             );
-            assert_eq!(
-                DestinationUnreachable(DestUnreachableHeader::Raw {
-                    code_u8,
-                    bytes5to8
-                }).to_bytes(),
-                (TYPE_DST_UNREACH, code_u8, bytes5to8)
-            );
+            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
+                assert_eq!(
+                    DestinationUnreachable(code).to_bytes(),
+                    (TYPE_DST_UNREACH, code_u8, [0;4])
+                );
+            } else {
+                assert_eq!(
+                    DestinationUnreachable(DestUnreachableCode::NoRoute).to_bytes(),
+                    (TYPE_DST_UNREACH, CODE_DST_UNREACH_NOROUTE, [0;4])
+                );
+            }
             assert_eq!(
                 PacketTooBig{ mtu }.to_bytes(),
                 (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes())
@@ -679,7 +633,7 @@ mod icmpv6_type {
             use etherparse::{IcmpEchoHeader, icmpv6::*};
 
             let len_8_hdrs = [
-                DestinationUnreachable(DestUnreachableHeader::from_bytes(code_u8, bytes5to8)),
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
                 TimeExceeded{ code: code_u8.into(), },
                 ParameterProblem{

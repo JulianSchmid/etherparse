@@ -99,7 +99,8 @@ pub mod icmpv6 {
     /// ICMPv6 destination unreachable code for "reject route to destination".
     pub const CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST: u8 = 6;
 
-    /// "Destination Unreachable" ICMPv6 header (without the invoking packet).
+    /// "Destination Unreachable" ICMPv6 code containing a reason why a
+    /// destination could not be reached.
     ///
     /// # RFC 4443 Description:
     ///
@@ -109,108 +110,63 @@ pub mod icmpv6 {
     /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
     /// packet is dropped due to congestion.)
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub enum DestUnreachableHeader {
-        /// In case of an unknown icmp code is received the header elements are stored raw.
-        Raw{
-            /// ICMP code (present in the 2nd byte of the ICMP packet).
-            code_u8: u8,
-            /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
-            bytes5to8: [u8;4],
-        },
+    pub enum DestUnreachableCode {
         /// No route to destination
-        NoRoute,
+        NoRoute = 0,
         /// Communication with destination administratively prohibited
-        Prohibited,
+        Prohibited = 1,
         /// Beyond scope of source address
-        BeyondScope,
+        BeyondScope = 2,
         /// Address unreachable
-        Address,
+        Address = 3,
         /// Port unreachable
-        Port,
+        Port = 4,
         /// Source address failed ingress/egress policy
-        SourceAddressFailedPolicy,
+        SourceAddressFailedPolicy = 5,
         /// Reject route to destination
-        RejectRoute,
+        RejectRoute = 6,
     }
 
-    impl DestUnreachableHeader {
-        /// Converts the raw values from an ICMPv6 "destination unreachable"
-        /// packet to an `icmpv6::DestUnreachableHeader` enum.
-        ///
-        /// `from_bytes` expects the second byte as first argument and 5th-8th
-        /// bytes as second argument.
+    impl DestUnreachableCode {
+        /// Converts the u8 code value from an ICMPv6 "destination unreachable"
+        /// packet to an `icmpv6::DestUnreachableCode` enum.
         ///
         /// # Example Usage:
         ///
         /// ```
-        /// use etherparse::{icmpv6, icmpv6::DestUnreachableHeader};
+        /// use etherparse::{icmpv6, icmpv6::DestUnreachableCode};
         /// let icmp_packet: [u8;8] = [
         ///     icmpv6::TYPE_DST_UNREACH, icmpv6::CODE_DST_UNREACH_PORT, 0, 0,
         ///     0, 0, 0, 0,
         /// ];
         ///
         /// if icmpv6::TYPE_DST_UNREACH == icmp_packet[0] {
-        ///     let dst = icmpv6::DestUnreachableHeader::from_bytes(
-        ///         icmp_packet[1],
-        ///         [icmp_packet[4], icmp_packet[5], icmp_packet[6], icmp_packet[7]],
+        ///     let dst = icmpv6::DestUnreachableCode::from_u8(
+        ///         icmp_packet[1]
         ///     );
-        ///     assert_eq!(dst, icmpv6::DestUnreachableHeader::Port);
+        ///     assert_eq!(dst, Some(icmpv6::DestUnreachableCode::Port));
         /// }
         /// ```
-        pub fn from_bytes(code_u8: u8, bytes5to8: [u8;4]) -> DestUnreachableHeader {
-            use DestUnreachableHeader::*;
+        pub fn from_u8(code_u8: u8) -> Option<DestUnreachableCode> {
+            use DestUnreachableCode::*;
             match code_u8 {
-                CODE_DST_UNREACH_NOROUTE => NoRoute,
-                CODE_DST_UNREACH_PROHIBITED => Prohibited,
-                CODE_DST_UNREACH_BEYONDSCOPE => BeyondScope,
-                CODE_DST_UNREACH_ADDR => Address,
-                CODE_DST_UNREACH_PORT => Port,
-                CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY => SourceAddressFailedPolicy,
-                CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST => RejectRoute,
-                _ => Raw{code_u8, bytes5to8},
+                CODE_DST_UNREACH_NOROUTE => Some(NoRoute),
+                CODE_DST_UNREACH_PROHIBITED => Some(Prohibited),
+                CODE_DST_UNREACH_BEYONDSCOPE => Some(BeyondScope),
+                CODE_DST_UNREACH_ADDR => Some(Address),
+                CODE_DST_UNREACH_PORT => Some(Port),
+                CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY => Some(SourceAddressFailedPolicy),
+                CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST => Some(RejectRoute),
+                _ => None,
             }
         }
 
         /// Returns the code value of the destination unreachable packet.
         ///
         /// This is the second byte of an ICMPv6 packet.
+        #[inline]
         pub fn code_u8(&self) -> u8 {
-            use DestUnreachableHeader::*;
-            match self {
-                Raw{code_u8, bytes5to8: _} => *code_u8,
-                NoRoute => CODE_DST_UNREACH_NOROUTE,
-                Prohibited => CODE_DST_UNREACH_PROHIBITED,
-                BeyondScope => CODE_DST_UNREACH_BEYONDSCOPE,
-                Address => CODE_DST_UNREACH_ADDR,
-                Port => CODE_DST_UNREACH_PORT,
-                SourceAddressFailedPolicy => CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
-                RejectRoute => CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
-            }
-        }
-
-        /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
-        pub fn bytes5to8(&self) -> [u8;4] {
-            use DestUnreachableHeader::*;
-            match self {
-                Raw{code_u8: _, bytes5to8} => *bytes5to8,
-                _ => [0;4],
-            }
-        }
-
-        /// Returns second and and 5th-8th bytes (inclusive) of
-        /// the destination unreachable ICMPv6 packet.
-        pub fn to_bytes(&self) -> (u8, [u8;4]) {
-            use DestUnreachableHeader::*;
-            match self {
-                Raw{ code_u8, bytes5to8 } => (*code_u8, *bytes5to8),
-                NoRoute => (CODE_DST_UNREACH_NOROUTE, [0;4]),
-                Prohibited => (CODE_DST_UNREACH_PROHIBITED, [0;4]),
-                BeyondScope => (CODE_DST_UNREACH_BEYONDSCOPE, [0;4]),
-                Address => (CODE_DST_UNREACH_ADDR, [0;4]),
-                Port => (CODE_DST_UNREACH_PORT, [0;4]),
-                SourceAddressFailedPolicy => (CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY, [0;4]),
-                RejectRoute => (CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST, [0;4]),
-            }
+            *self as u8
         }
     }
 
@@ -414,9 +370,9 @@ use icmpv6::*;
 /// # let ip_header: Ipv6Header = Default::default();
 /// # let invoking_packet : [u8;0] = [];
 ///
-/// use etherparse::{Icmpv6Type, icmpv6::DestUnreachableHeader};
+/// use etherparse::{Icmpv6Type, icmpv6::DestUnreachableCode};
 /// let t = Icmpv6Type::DestinationUnreachable(
-///     DestUnreachableHeader::Address
+///     DestUnreachableCode::Address
 /// );
 ///
 /// // to calculate the checksum the ip header and the payload
@@ -461,7 +417,7 @@ pub enum Icmpv6Type {
     /// that cannot be delivered to its destination address for reasons other
     /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
     /// packet is dropped due to congestion.)
-    DestinationUnreachable(icmpv6::DestUnreachableHeader),
+    DestinationUnreachable(icmpv6::DestUnreachableCode),
     /// Start of "Packet Too Big Message"
     ///
     /// # RFC 4443 Description
@@ -551,34 +507,43 @@ impl Icmpv6Type {
     pub fn from_bytes(type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> Icmpv6Type {
         use Icmpv6Type::*;
         match type_u8 {
-            TYPE_DST_UNREACH => 
-                DestinationUnreachable(icmpv6::DestUnreachableHeader::from_bytes(code_u8, bytes5to8)),
-            TYPE_PACKET_TOO_BIG => if 0 == code_u8 {
-                PacketTooBig {
-                    mtu: u32::from_be_bytes(bytes5to8),
+            TYPE_DST_UNREACH => {
+                let code = icmpv6::DestUnreachableCode::from_u8(code_u8);
+                if let Some(code) = code {
+                    return DestinationUnreachable(code);
                 }
-            } else {
-                Unknown{type_u8, code_u8, bytes5to8}
+            }
+            TYPE_PACKET_TOO_BIG => {
+                if 0 == code_u8 {
+                    return PacketTooBig {
+                        mtu: u32::from_be_bytes(bytes5to8),
+                    };
+                }
+            }
+            TYPE_TIME_EXCEEDED => {
+                return TimeExceeded{
+                    code: code_u8.into()
+                };
+            }
+            TYPE_PARAM_PROB => {
+                return ParameterProblem{
+                    code: code_u8.into(),
+                    pointer: u32::from_be_bytes(bytes5to8),
+                }
             },
-            TYPE_TIME_EXCEEDED => TimeExceeded{
-                code: code_u8.into()
-            },
-            TYPE_PARAM_PROB => ParameterProblem{
-                code: code_u8.into(),
-                pointer: u32::from_be_bytes(bytes5to8),
-            },
-            TYPE_ECHO_REQUEST => if 0 == code_u8 {
-                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
-            } else {
-                Unknown{type_u8, code_u8, bytes5to8}
-            },
-            TYPE_ECHO_REPLY => if 0 == code_u8 {
-                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
-            } else {
-                Unknown{type_u8, code_u8, bytes5to8}
-            },
-            _ => Unknown{type_u8, code_u8, bytes5to8},
+            TYPE_ECHO_REQUEST => {
+                if 0 == code_u8 {
+                    return EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
+                }
+            }
+            TYPE_ECHO_REPLY => {
+                if 0 == code_u8 {
+                    return EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
+                }
+            }
+            _ => {}
         }
+        Unknown{type_u8, code_u8, bytes5to8}
     }
 
     /// Returns the type value (first byte of the ICMPv6 header) of this type.
@@ -653,7 +618,7 @@ impl Icmpv6Type {
         match self {
             Unknown{type_u8, code_u8, bytes5to8} => (*type_u8, *code_u8, *bytes5to8),
             DestinationUnreachable(header) => 
-            (TYPE_DST_UNREACH, (header.code_u8()), header.bytes5to8()),
+            (TYPE_DST_UNREACH, (header.code_u8()), [0;4]),
             PacketTooBig{ mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
             TimeExceeded{ code } => (TYPE_TIME_EXCEEDED, u8::from(*code), [0;4]),
             ParameterProblem{ code, pointer } => (TYPE_PARAM_PROB, u8::from(*code), pointer.to_be_bytes()),
