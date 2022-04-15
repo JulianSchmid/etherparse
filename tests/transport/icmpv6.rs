@@ -382,7 +382,7 @@ mod icmpv6_type {
             if 0 != code_u8 {
                 assert_eq!(
                     Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, code_u8, bytes5to8),
-                    Raw{
+                    Unknown{
                         type_u8: TYPE_PACKET_TOO_BIG,
                         code_u8,
                         bytes5to8,
@@ -409,7 +409,7 @@ mod icmpv6_type {
             if 0 != code_u8 {
                 assert_eq!(
                     Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, code_u8, bytes5to8),
-                    Raw{
+                    Unknown{
                         type_u8: TYPE_ECHO_REQUEST,
                         code_u8,
                         bytes5to8,
@@ -423,7 +423,7 @@ mod icmpv6_type {
             if 0 != code_u8 {
                 assert_eq!(
                     Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, code_u8, bytes5to8),
-                    Raw{
+                    Unknown{
                         type_u8: TYPE_ECHO_REPLY,
                         code_u8,
                         bytes5to8,
@@ -443,7 +443,7 @@ mod icmpv6_type {
                 if false == known.contains(&t) {
                     assert_eq!(
                         Icmpv6Type::from_bytes(t, code_u8, bytes5to8),
-                        Raw{
+                        Unknown{
                             type_u8: t,
                             code_u8,
                             bytes5to8,
@@ -479,7 +479,7 @@ mod icmpv6_type {
             for t in 0..=u8::MAX {
                 assert_eq!(
                     t,
-                    Raw{
+                    Unknown{
                         type_u8: t,
                         code_u8,
                         bytes5to8,
@@ -516,7 +516,7 @@ mod icmpv6_type {
             for t in 0..=u8::MAX {
                 assert_eq!(
                     code_u8,
-                    Raw{
+                    Unknown{
                         type_u8: t,
                         code_u8,
                         bytes5to8,
@@ -591,7 +591,7 @@ mod icmpv6_type {
             use Icmpv6Type::*;
             use icmpv6::*;
             assert_eq!(
-                Raw{type_u8, code_u8, bytes5to8}.to_bytes(),
+                Unknown{type_u8, code_u8, bytes5to8}.to_bytes(),
                 (type_u8, code_u8, bytes5to8)
             );
             assert_eq!(
@@ -697,7 +697,7 @@ mod icmpv6_type {
             for t in 0..=u8::MAX {
                 assert_eq!(
                     8,
-                    Raw{
+                    Unknown{
                         type_u8: t,
                         code_u8,
                         bytes5to8,
@@ -710,8 +710,8 @@ mod icmpv6_type {
     #[test]
     fn debug() {
         assert_eq!(
-            format!("{:?}", Icmpv6Type::Raw{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5]}),
-            "Raw { type_u8: 0, code_u8: 1, bytes5to8: [2, 3, 4, 5] }"
+            format!("{:?}", Icmpv6Type::Unknown{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5]}),
+            "Unknown { type_u8: 0, code_u8: 1, bytes5to8: [2, 3, 4, 5] }"
         )
     }
 
@@ -1002,7 +1002,7 @@ mod icmpv6_header {
 
     #[test]
     fn debug() {
-        let t = Icmpv6Type::Raw{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5] };
+        let t = Icmpv6Type::Unknown{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5] };
         assert_eq!(
             format!("{:?}", Icmpv6Header{ icmp_type: t.clone(), checksum: 7}),
             format!("Icmpv6Header {{ icmp_type: {:?}, checksum: {:?} }}", t, 7)
