@@ -148,6 +148,10 @@ mod read_error {
             ReadError::UnexpectedEndOfSlice(5)
         );
         assert_matches!(
+            ReadError::UnexpectedLenOfSlice{ expected: 7, actual: 10 }.add_slice_offset(2),
+            ReadError::UnexpectedLenOfSlice{ expected: 9, actual: 12 }
+        );
+        assert_matches!(
             ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
             ReadError::DoubleVlanOuterNonVlanEtherType(2)
         );
