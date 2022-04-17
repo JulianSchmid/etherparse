@@ -1,15 +1,15 @@
-use proptest::prelude::*;
 use super::super::*;
+use proptest::prelude::*;
 
 #[test]
 fn constants() {
     use etherparse::icmpv6::*;
     // type values according to
     // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-16
-    assert_eq!(  1, TYPE_DST_UNREACH);
-    assert_eq!(  2, TYPE_PACKET_TOO_BIG);
-    assert_eq!(  3, TYPE_TIME_EXCEEDED);
-    assert_eq!(  4, TYPE_PARAM_PROB);
+    assert_eq!(1, TYPE_DST_UNREACH);
+    assert_eq!(2, TYPE_PACKET_TOO_BIG);
+    assert_eq!(3, TYPE_TIME_EXCEEDED);
+    assert_eq!(4, TYPE_PARAM_PROB);
     assert_eq!(128, TYPE_ECHO_REQUEST);
     assert_eq!(129, TYPE_ECHO_REPLY);
     assert_eq!(130, TYPE_MULTICAST_LISTENER_QUERY);
@@ -48,7 +48,10 @@ fn constants() {
     assert_eq!(2, CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION);
     assert_eq!(3, CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN);
     assert_eq!(4, CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR);
-    assert_eq!(5, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE);
+    assert_eq!(
+        5,
+        CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE
+    );
     assert_eq!(6, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG);
     assert_eq!(7, CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG);
     assert_eq!(8, CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS);
@@ -64,53 +67,35 @@ mod icmp6_dest_unreachable {
     #[test]
     fn from_u8() {
         for code_u8 in 7u8..=0xff {
-            assert!(
-                DestUnreachableCode::from_u8(
-                    code_u8
-                ).is_none()
-            );
+            assert!(DestUnreachableCode::from_u8(code_u8).is_none());
         }
         assert_eq!(
             NoRoute,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_NOROUTE
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_NOROUTE).unwrap()
         );
         assert_eq!(
             Prohibited,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_PROHIBITED,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_PROHIBITED,).unwrap()
         );
         assert_eq!(
             BeyondScope,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_BEYONDSCOPE,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_BEYONDSCOPE,).unwrap()
         );
         assert_eq!(
             Address,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_ADDR,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_ADDR,).unwrap()
         );
         assert_eq!(
             Port,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_PORT,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_PORT,).unwrap()
         );
         assert_eq!(
             SourceAddressFailedPolicy,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,).unwrap()
         );
         assert_eq!(
             RejectRoute,
-            DestUnreachableCode::from_u8(
-                CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,
-            ).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,).unwrap()
         );
     }
 
@@ -121,7 +106,10 @@ mod icmp6_dest_unreachable {
         assert_eq!(BeyondScope.code_u8(), CODE_DST_UNREACH_BEYONDSCOPE);
         assert_eq!(Address.code_u8(), CODE_DST_UNREACH_ADDR);
         assert_eq!(Port.code_u8(), CODE_DST_UNREACH_PORT);
-        assert_eq!(SourceAddressFailedPolicy.code_u8(), CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
+        assert_eq!(
+            SourceAddressFailedPolicy.code_u8(),
+            CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY
+        );
         assert_eq!(RejectRoute.code_u8(), CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
     }
 
@@ -164,28 +152,40 @@ mod time_exceeded_code {
 
     #[test]
     fn from_u8() {
-        assert_eq!(HopLimitExceeded, TimeExceededCode::from(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED));
-        assert_eq!(FragmentReassemblyTimeExceeded, TimeExceededCode::from(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED));
+        assert_eq!(
+            HopLimitExceeded,
+            TimeExceededCode::from(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED)
+        );
+        assert_eq!(
+            FragmentReassemblyTimeExceeded,
+            TimeExceededCode::from(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED)
+        );
         for code_u8 in 2..=u8::MAX {
-            assert_eq!(Raw{ code_u8 }, TimeExceededCode::from(code_u8));
+            assert_eq!(Raw { code_u8 }, TimeExceededCode::from(code_u8));
         }
     }
 
     #[test]
     fn from_enum() {
-        assert_eq!(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED, u8::from(HopLimitExceeded));
-        assert_eq!(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED, u8::from(FragmentReassemblyTimeExceeded));
+        assert_eq!(
+            CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED,
+            u8::from(HopLimitExceeded)
+        );
+        assert_eq!(
+            CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
+            u8::from(FragmentReassemblyTimeExceeded)
+        );
         for code_u8 in 0..=u8::MAX {
-            assert_eq!(code_u8, u8::from(Raw{ code_u8 }));
+            assert_eq!(code_u8, u8::from(Raw { code_u8 }));
         }
     }
 
     #[test]
     fn clone_eq() {
         let values = [
-            Raw{ code_u8: 8},
+            Raw { code_u8: 8 },
             HopLimitExceeded,
-            FragmentReassemblyTimeExceeded
+            FragmentReassemblyTimeExceeded,
         ];
         for value in values {
             assert_eq!(value.clone(), value);
@@ -195,9 +195,12 @@ mod time_exceeded_code {
     #[test]
     fn debug() {
         let tests = [
-            (Raw{ code_u8: 8}, "Raw { code_u8: 8 }"),
+            (Raw { code_u8: 8 }, "Raw { code_u8: 8 }"),
             (HopLimitExceeded, "HopLimitExceeded"),
-            (FragmentReassemblyTimeExceeded, "FragmentReassemblyTimeExceeded"),
+            (
+                FragmentReassemblyTimeExceeded,
+                "FragmentReassemblyTimeExceeded",
+            ),
         ];
         for test in tests {
             assert_eq!(format!("{:?}", test.0), test.1);
@@ -211,43 +214,106 @@ mod parameter_problem_code {
 
     #[test]
     fn from_u8() {
-        assert_eq!(ErroneousHeaderField, ParameterProblemCode::from(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD));
-        assert_eq!(UnrecognizedNextHeader, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER));
-        assert_eq!(UnrecognizedIpv6Option, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION));
-        assert_eq!(Ipv6FirstFragmentIncompleteHeaderChain, ParameterProblemCode::from(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN));
-        assert_eq!(SrUpperLayerHeaderError, ParameterProblemCode::from(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR));
-        assert_eq!(UnrecognizedNextHeaderByIntermediateNode, ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE));
-        assert_eq!(ExtensionHeaderTooBig, ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG));
-        assert_eq!(ExtensionHeaderChainTooLong, ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG));
-        assert_eq!(TooManyExtensionHeaders, ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS));
-        assert_eq!(TooManyOptionsInExtensionHeader, ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER));
-        assert_eq!(OptionTooBig, ParameterProblemCode::from(CODE_PARAM_PROBLEM_OPTION_TOO_BIG));
+        assert_eq!(
+            ErroneousHeaderField,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD)
+        );
+        assert_eq!(
+            UnrecognizedNextHeader,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER)
+        );
+        assert_eq!(
+            UnrecognizedIpv6Option,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION)
+        );
+        assert_eq!(
+            Ipv6FirstFragmentIncompleteHeaderChain,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN)
+        );
+        assert_eq!(
+            SrUpperLayerHeaderError,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR)
+        );
+        assert_eq!(
+            UnrecognizedNextHeaderByIntermediateNode,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE)
+        );
+        assert_eq!(
+            ExtensionHeaderTooBig,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG)
+        );
+        assert_eq!(
+            ExtensionHeaderChainTooLong,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG)
+        );
+        assert_eq!(
+            TooManyExtensionHeaders,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS)
+        );
+        assert_eq!(
+            TooManyOptionsInExtensionHeader,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER)
+        );
+        assert_eq!(
+            OptionTooBig,
+            ParameterProblemCode::from(CODE_PARAM_PROBLEM_OPTION_TOO_BIG)
+        );
         for code_u8 in 11..=u8::MAX {
-            assert_eq!(Raw{ code_u8 }, ParameterProblemCode::from(code_u8));
+            assert_eq!(Raw { code_u8 }, ParameterProblemCode::from(code_u8));
         }
     }
 
     #[test]
     fn from_enum() {
-        assert_eq!(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD, u8::from(ErroneousHeaderField));
-        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER, u8::from(UnrecognizedNextHeader));
-        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION, u8::from(UnrecognizedIpv6Option));
-        assert_eq!(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN, u8::from(Ipv6FirstFragmentIncompleteHeaderChain));
-        assert_eq!(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR, u8::from(SrUpperLayerHeaderError));
-        assert_eq!(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE, u8::from(UnrecognizedNextHeaderByIntermediateNode));
-        assert_eq!(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, u8::from(ExtensionHeaderTooBig));
-        assert_eq!(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG, u8::from(ExtensionHeaderChainTooLong));
-        assert_eq!(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS, u8::from(TooManyExtensionHeaders));
-        assert_eq!(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER, u8::from(TooManyOptionsInExtensionHeader));
+        assert_eq!(
+            CODE_PARAM_PROBLEM_ERR_HEADER_FIELD,
+            u8::from(ErroneousHeaderField)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
+            u8::from(UnrecognizedNextHeader)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
+            u8::from(UnrecognizedIpv6Option)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN,
+            u8::from(Ipv6FirstFragmentIncompleteHeaderChain)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
+            u8::from(SrUpperLayerHeaderError)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE,
+            u8::from(UnrecognizedNextHeaderByIntermediateNode)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG,
+            u8::from(ExtensionHeaderTooBig)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
+            u8::from(ExtensionHeaderChainTooLong)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
+            u8::from(TooManyExtensionHeaders)
+        );
+        assert_eq!(
+            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
+            u8::from(TooManyOptionsInExtensionHeader)
+        );
         assert_eq!(CODE_PARAM_PROBLEM_OPTION_TOO_BIG, u8::from(OptionTooBig));
         for code_u8 in 0..=u8::MAX {
-            assert_eq!(code_u8, u8::from(Raw{ code_u8 }));
+            assert_eq!(code_u8, u8::from(Raw { code_u8 }));
         }
     }
     #[test]
     fn clone_eq() {
         let values = [
-            Raw{ code_u8: 8},
+            Raw { code_u8: 8 },
             ErroneousHeaderField,
             UnrecognizedNextHeader,
             UnrecognizedIpv6Option,
@@ -270,19 +336,28 @@ mod parameter_problem_code {
     #[test]
     fn debug() {
         let tests = [
-            (Raw{ code_u8: 8}, "Raw { code_u8: 8 }"),
+            (Raw { code_u8: 8 }, "Raw { code_u8: 8 }"),
             (ErroneousHeaderField, "ErroneousHeaderField"),
             (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
             (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
             (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
             (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
-            (Ipv6FirstFragmentIncompleteHeaderChain, "Ipv6FirstFragmentIncompleteHeaderChain"),
+            (
+                Ipv6FirstFragmentIncompleteHeaderChain,
+                "Ipv6FirstFragmentIncompleteHeaderChain",
+            ),
             (SrUpperLayerHeaderError, "SrUpperLayerHeaderError"),
-            (UnrecognizedNextHeaderByIntermediateNode, "UnrecognizedNextHeaderByIntermediateNode"),
+            (
+                UnrecognizedNextHeaderByIntermediateNode,
+                "UnrecognizedNextHeaderByIntermediateNode",
+            ),
             (ExtensionHeaderTooBig, "ExtensionHeaderTooBig"),
             (ExtensionHeaderChainTooLong, "ExtensionHeaderChainTooLong"),
             (TooManyExtensionHeaders, "TooManyExtensionHeaders"),
-            (TooManyOptionsInExtensionHeader, "TooManyOptionsInExtensionHeader"),
+            (
+                TooManyOptionsInExtensionHeader,
+                "TooManyOptionsInExtensionHeader",
+            ),
             (OptionTooBig, "OptionTooBig"),
         ];
         for test in tests {
@@ -294,7 +369,7 @@ mod parameter_problem_code {
 mod icmpv6_type {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_bytes(
             code_u8 in any::<u8>(),
@@ -318,7 +393,7 @@ mod icmpv6_type {
                     }
                 );
             }
-            
+
             assert_eq!(
                 Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, 0, bytes5to8),
                 PacketTooBig{
@@ -400,7 +475,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn type_u8(
             code_u8 in any::<u8>(),
@@ -435,7 +510,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn code_u8(
             code_u8 in any::<u8>(),
@@ -476,7 +551,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn calc_checksum(
             ip_header in ipv6_any(),
@@ -530,7 +605,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(
             type_u8 in any::<u8>(),
@@ -584,7 +659,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(
             ip_header in ipv6_any(),
@@ -623,7 +698,7 @@ mod icmpv6_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             code_u8 in any::<u8>(),
@@ -664,12 +739,19 @@ mod icmpv6_type {
     #[test]
     fn debug() {
         assert_eq!(
-            format!("{:?}", Icmpv6Type::Unknown{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5]}),
+            format!(
+                "{:?}",
+                Icmpv6Type::Unknown {
+                    type_u8: 0,
+                    code_u8: 1,
+                    bytes5to8: [2, 3, 4, 5]
+                }
+            ),
             "Unknown { type_u8: 0, code_u8: 1, bytes5to8: [2, 3, 4, 5] }"
         )
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(t in icmpv6_type_any()) {
             assert_eq!(t, t.clone());
@@ -680,7 +762,7 @@ mod icmpv6_type {
 mod icmpv6_header {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
             assert_eq!(
@@ -693,7 +775,7 @@ mod icmpv6_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn new(icmp_type in icmpv6_type_any()) {
             assert_eq!(
@@ -706,8 +788,7 @@ mod icmpv6_header {
         }
     }
 
-
-    proptest!{
+    proptest! {
         #[test]
         fn with_checksum(
             ip_header in ipv6_any(),
@@ -748,7 +829,7 @@ mod icmpv6_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(
             icmp_type in icmpv6_type_any(),
@@ -784,7 +865,7 @@ mod icmpv6_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn update_checksum(
             ip_header in ipv6_any(),
@@ -836,7 +917,7 @@ mod icmpv6_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             icmp_type in icmpv6_type_any(),
@@ -864,7 +945,7 @@ mod icmpv6_header {
                 );
                 assert_eq!(&bytes[8..], result.1);
             }
-            
+
 
             // size error case
             for length in 0..8 {
@@ -876,7 +957,7 @@ mod icmpv6_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(
             icmp_type in icmpv6_type_any(),
@@ -903,14 +984,24 @@ mod icmpv6_header {
 
     #[test]
     fn debug() {
-        let t = Icmpv6Type::Unknown{ type_u8: 0, code_u8: 1, bytes5to8: [2,3,4,5] };
+        let t = Icmpv6Type::Unknown {
+            type_u8: 0,
+            code_u8: 1,
+            bytes5to8: [2, 3, 4, 5],
+        };
         assert_eq!(
-            format!("{:?}", Icmpv6Header{ icmp_type: t.clone(), checksum: 7}),
+            format!(
+                "{:?}",
+                Icmpv6Header {
+                    icmp_type: t.clone(),
+                    checksum: 7
+                }
+            ),
             format!("Icmpv6Header {{ icmp_type: {:?}, checksum: {:?} }}", t, 7)
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
             let header = Icmpv6Header{ icmp_type, checksum };
@@ -921,10 +1012,7 @@ mod icmpv6_header {
     #[test]
     fn icmp6_echo_marshall_unmarshall() {
         let icmp6 = Icmpv6Header {
-            icmp_type: Icmpv6Type::EchoRequest(IcmpEchoHeader{
-                seq: 1,
-                id: 2,
-            }),
+            icmp_type: Icmpv6Type::EchoRequest(IcmpEchoHeader { seq: 1, id: 2 }),
             checksum: 0,
         };
         // serialize
@@ -937,17 +1025,16 @@ mod icmpv6_header {
 
     #[test]
     fn ip6_echo_marshall_unmarshall() {
-        let builder = PacketBuilder::
-            ipv6(   
-                [0xfe,0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],  //source ip
-                [0xfe,0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114],  //dst ip
-                20)            //time to life
-            .icmp6_echo_request(1,2);
+        let builder = PacketBuilder::ipv6(
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], //source ip
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
+            20,
+        ) //time to life
+        .icmp6_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
-        let mut result = Vec::<u8>::with_capacity(
-                            builder.size(payload.len()));
-            
+        let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
+
         //serialize
         builder.write(&mut result, &payload).unwrap();
 
@@ -959,43 +1046,42 @@ mod icmpv6_header {
             } else {
                 panic!("Not an EchoRequest!?");
             }
-
         } else {
             panic!("No transport header found!?")
         }
     }
     const ICMP6_ECHO_REQUEST_BYTES: [u8; 118] = [
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60, 0x00,
-        0xf3, 0xc2, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0xd5, 0x2f, 0x00, 0x05, 0x00, 0x01, 0xe3, 0x58,
-        0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11,
-        0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
-        0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31,
-        0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
+        0x00, 0xf3, 0xc2, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0xd5, 0x2f, 0x00, 0x05,
+        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
+        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
     ];
     const ICMP6_ECHO_REPLY_BYTES: [u8; 118] = [
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60, 0x00,
-        0xa3, 0xde, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x81, 0x00, 0xd4, 0x2f, 0x00, 0x05, 0x00, 0x01, 0xe3, 0x58,
-        0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x11,
-        0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21,
-        0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31,
-        0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
+        0x00, 0xa3, 0xde, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x81, 0x00, 0xd4, 0x2f, 0x00, 0x05,
+        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
+        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
     ];
 
     #[test]
     fn verify_icmp6_checksum() {
         for (pkt, checksum) in [
-                    (ICMP6_ECHO_REQUEST_BYTES, 0xd52f), 
-                    (ICMP6_ECHO_REPLY_BYTES, 0xd42f)
-                ] {
+            (ICMP6_ECHO_REQUEST_BYTES, 0xd52f),
+            (ICMP6_ECHO_REPLY_BYTES, 0xd42f),
+        ] {
             // make sure we can unmarshall the correct checksum
             let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let mut icmp6 = request.transport.unwrap().icmp6().unwrap();
-            let valid_checksum =  icmp6.checksum;
-            assert_ne!(valid_checksum, 0);  
+            let valid_checksum = icmp6.checksum;
+            assert_ne!(valid_checksum, 0);
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
             icmp6.checksum = 0;
@@ -1003,8 +1089,12 @@ mod icmpv6_header {
                 Some(IpHeader::Version6(ipv6, _)) => ipv6,
                 _ => panic!("Failed to parse ipv6 part of packet?!"),
             };
-            assert_eq!(icmp6.icmp_type.calc_checksum(iph.source, iph.destination, request.payload),
-                Ok(valid_checksum));
+            assert_eq!(
+                icmp6
+                    .icmp_type
+                    .calc_checksum(iph.source, iph.destination, request.payload),
+                Ok(valid_checksum)
+            );
         }
     }
 
@@ -1016,15 +1106,17 @@ mod icmpv6_header {
             Icmpv6(icmp6) => icmp6,
             Icmpv4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
         };
-        assert!(matches!(icmp6.header().icmp_type, Icmpv6Type::EchoRequest(_)));
-
+        assert!(matches!(
+            icmp6.header().icmp_type,
+            Icmpv6Type::EchoRequest(_)
+        ));
     }
 }
 
 mod icmpv6_slice {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(slice in proptest::collection::vec(any::<u8>(), 8..1024)) {
             // ok case
@@ -1040,7 +1132,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         /// This error can only occur on systems with a pointer size
         /// bigger then 64 bits.
         #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
@@ -1070,7 +1162,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header(
             icmp_type in icmpv6_type_any(),
@@ -1087,7 +1179,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn type_u8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1097,7 +1189,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn code_u8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1107,7 +1199,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn checksum(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1117,7 +1209,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn is_checksum_valid(
             ip_header in ipv6_any(),
@@ -1189,7 +1281,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn bytes5to8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1199,7 +1291,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn slice(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1209,7 +1301,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn message_body(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(
@@ -1221,14 +1313,14 @@ mod icmpv6_slice {
 
     #[test]
     fn debug() {
-        let data = [0u8;8];
+        let data = [0u8; 8];
         assert_eq!(
             format!("{:?}", Icmpv6Slice::from_slice(&data).unwrap()),
             format!("Icmpv6Slice {{ slice: {:?} }}", &data)
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
             assert_eq!(

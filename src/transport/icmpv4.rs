@@ -66,13 +66,13 @@ pub mod icmpv4 {
     pub const CODE_DST_UNREACH_PORT: u8 = 3;
 
     /// ICMP destination unreachable code for "Fragmentation Needed and Don't Fragment was Set" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
-    pub const CODE_DST_UNREACH_NEEDFRAG: u8 = 4;
+    pub const CODE_DST_UNREACH_NEED_FRAG: u8 = 4;
 
     /// ICMP destination unreachable code for "Source Route Failed" (defined in [RFC 792](https://tools.ietf.org/html/rfc792))
-    pub const CODE_DST_UNREACH_SRCFAIL: u8 = 5;
+    pub const CODE_DST_UNREACH_SOURCE_ROUTE_FAILED: u8 = 5;
 
     /// ICMP destination unreachable code for "Destination Network Unknown" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
-    pub const CODE_DST_UNREACH_NET_UNKNOWN: u8 =  6;
+    pub const CODE_DST_UNREACH_NET_UNKNOWN: u8 = 6;
 
     /// ICMP destination unreachable code for "Destination Host Unknown" (defined in [RFC 1122](https://tools.ietf.org/html/rfc1122))
     pub const CODE_DST_UNREACH_HOST_UNKNOWN: u8 = 7;
@@ -138,9 +138,9 @@ pub mod icmpv4 {
         /// Port unreachable error.
         Port,
         /// Fragmentation would be needed but the don't fragment bit is set.
-        FragmentationNeeded{ next_hop_mtu: u16 },
+        FragmentationNeeded { next_hop_mtu: u16 },
         /// Source Route Failed
-        SourceFail,
+        SourceRouteFailed,
         /// Destination Network Unknown (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
         NetworkUnknown,
         /// Destination Host Unknown (no route to host known) (from [RFC 1122](https://tools.ietf.org/html/rfc1122))
@@ -165,6 +165,32 @@ pub mod icmpv4 {
 
     impl DestUnreachableHeader {
 
+        /// Tries to convert the code [`u8`] value and next_hop_mtu to a [`DestUnreachableHeader`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a destination unreachable code.
+        pub fn from_values(code_u8: u8, next_hop_mtu: u16) -> Option<DestUnreachableHeader> {
+            use DestUnreachableHeader::*;
+            match code_u8 {
+                CODE_DST_UNREACH_NET => Some(Network),
+                CODE_DST_UNREACH_HOST => Some(Host),
+                CODE_DST_UNREACH_PROTOCOL => Some(Protocol),
+                CODE_DST_UNREACH_PORT => Some(Port),
+                CODE_DST_UNREACH_NEED_FRAG => Some(FragmentationNeeded { next_hop_mtu }),
+                CODE_DST_UNREACH_SOURCE_ROUTE_FAILED => Some(SourceRouteFailed),
+                CODE_DST_UNREACH_NET_UNKNOWN => Some(NetworkUnknown),
+                CODE_DST_UNREACH_HOST_UNKNOWN => Some(HostUnknown),
+                CODE_DST_UNREACH_ISOLATED => Some(Isolated),
+                CODE_DST_UNREACH_NET_PROHIB => Some(NetworkProhibited),
+                CODE_DST_UNREACH_HOST_PROHIB => Some(HostProhibited),
+                CODE_DST_UNREACH_TOS_NET => Some(TosNetwork),
+                CODE_DST_UNREACH_TOS_HOST => Some(TosHost),
+                CODE_DST_UNREACH_FILTER_PROHIB => Some(FilterProhibited),
+                CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION => Some(HostPrecedenceViolation),
+                CODE_DST_UNREACH_PRECEDENCE_CUTOFF => Some(PrecedenceCutoff),
+                _ => None,
+            }
+        }
+
         /// Returns the icmp code value of the destination unreachable packet.
         #[inline]
         pub fn code_u8(&self) -> u8 {
@@ -174,8 +200,8 @@ pub mod icmpv4 {
                 Host => CODE_DST_UNREACH_HOST,
                 Protocol => CODE_DST_UNREACH_PROTOCOL,
                 Port => CODE_DST_UNREACH_PORT,
-                FragmentationNeeded{ next_hop_mtu: _} => CODE_DST_UNREACH_NEEDFRAG,
-                SourceFail => CODE_DST_UNREACH_SRCFAIL,
+                FragmentationNeeded { next_hop_mtu: _ } => CODE_DST_UNREACH_NEED_FRAG,
+                SourceRouteFailed => CODE_DST_UNREACH_SOURCE_ROUTE_FAILED,
                 NetworkUnknown => CODE_DST_UNREACH_NET_UNKNOWN,
                 HostUnknown => CODE_DST_UNREACH_HOST_UNKNOWN,
                 Isolated => CODE_DST_UNREACH_ISOLATED,
@@ -215,10 +241,33 @@ pub mod icmpv4 {
         RedirectForTypeOfServiceAndHost = 3,
     }
 
+    impl RedirectCode {
+        /// Tries to convert a code [`u8`] value to a [`RedirectCode`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a redirect code.
+        #[inline]
+        pub fn from_u8(code_u8: u8) -> Option<RedirectCode> {
+            use RedirectCode::*;
+            match code_u8 {
+                CODE_REDIRECT_FOR_NETWORK => Some(RedirectForNetwork),
+                CODE_REDIRECT_FOR_HOST => Some(RedirectForHost),
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => Some(RedirectForTypeOfServiceAndNetwork),
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST => Some(RedirectForTypeOfServiceAndHost),
+                _ => None,
+            }
+        }
+
+        /// Returns the [`u8`] value of the code.
+        #[inline]
+        pub fn code_u8(&self) -> u8 {
+            *self as u8
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct RedirectHeader {
         pub code: RedirectCode,
-        pub gateway_internet_address: [u8;4],
+        pub gateway_internet_address: [u8; 4],
     }
 
     /// ICMPv4 "Time Exceeded" code value for "Time to Live exceeded in Transit".
@@ -236,6 +285,27 @@ pub mod icmpv4 {
         FragmentReassemblyTimeExceeded = 1,
     }
 
+    impl TimeExceededCode {
+        /// Tries to convert a code [`u8`] value to a [`TimeExceededCode`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a time exceeded code.
+        #[inline]
+        pub fn from_u8(code_u8: u8) -> Option<TimeExceededCode> {
+            use TimeExceededCode::*;
+            match code_u8 {
+                CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT => Some(TtlExceededInTransit),
+                CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED => Some(FragmentReassemblyTimeExceeded),
+                _ => None
+            }
+        }
+
+        /// Returns the [`u8`] value of the code.
+        #[inline]
+        pub fn code_u8(&self) -> u8 {
+            *self as u8
+        }
+    }
+
     /// A ICMPv4 timestamp or timestamp response message.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct TimestampMessage {
@@ -249,6 +319,17 @@ pub mod icmpv4 {
     impl TimestampMessage {
         /// The size in bytes/octets of a timestamp request or timestamp response message.
         pub const SERIALIZED_SIZE: usize = 20;
+
+        /// Decodes the timestamp message part of an ICMPv4 message.
+        pub fn from_bytes(bytes: [u8;16]) -> TimestampMessage {
+            TimestampMessage{
+                id: u16::from_be_bytes([bytes[0], bytes[1]]),
+                seq: u16::from_be_bytes([bytes[2], bytes[3]]),
+                originate_timestamp: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
+                receive_timestamp: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
+                transmit_timestamp: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
+            }
+        }
     }
 
     /// ICMPv4 "Parameter Problem" code value for "Pointer indicates the error".
@@ -275,6 +356,21 @@ pub mod icmpv4 {
         BadLength,
     }
 
+    impl ParameterProblemHeader {
+        /// Tries to convert the code [`u8`] value and pointer to a [`ParameterProblemHeader`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a parameter problem code.
+        pub fn from_values(code_u8: u8, pointer: u8) -> Option<ParameterProblemHeader> {
+            use ParameterProblemHeader::*;
+            match code_u8 {
+                CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR => Some(PointerIndicatesError(pointer)),
+                CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION => Some(MissingRequiredOption),
+                CODE_PARAMETER_PROBLEM_BAD_LENGTH => Some(BadLength),
+                _ => None,
+            }
+        }
+    }
+
 } // mod icmpv4
 
 use icmpv4::*;
@@ -286,19 +382,23 @@ pub enum Icmpv4Type {
     ///
     /// In case of an unknown ICMP type and code combination is received the
     /// header elements are stored raw.
-    Unknown{
+    Unknown {
         /// ICMP type (present in the first byte of the ICMP packet).
         type_u8: u8,
         /// ICMP code (present in the 2nd byte of the ICMP packet).
         code_u8: u8,
         /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
-        bytes5to8: [u8;4],
+        bytes5to8: [u8; 4],
     },
 
     /// Echo Reply (defined in RFC792)
     EchoReply(IcmpEchoHeader),
+    
     DestinationUnreachable(DestUnreachableHeader),
+
     Redirect(RedirectHeader),
+
+    /// Echo Request (defined in RFC792)
     EchoRequest(IcmpEchoHeader),
     TimeExceeded(TimeExceededCode),
     ParameterProblem(ParameterProblemHeader),
@@ -307,20 +407,23 @@ pub enum Icmpv4Type {
 }
 
 impl Icmpv4Type {
-
     /// Returns the length in bytes/octets of the header of
     /// this ICMPv4 message type.
     #[inline]
     pub fn header_len(&self) -> usize {
         use Icmpv4Type::*;
         match self {
-            Unknown{type_u8: _, code_u8: _, bytes5to8: _} |
-            EchoReply(_) |
-            DestinationUnreachable(_) |
-            Redirect(_) |
-            EchoRequest(_) |
-            TimeExceeded(_) |
-            ParameterProblem(_) => 8,
+            Unknown {
+                type_u8: _,
+                code_u8: _,
+                bytes5to8: _,
+            }
+            | EchoReply(_)
+            | DestinationUnreachable(_)
+            | Redirect(_)
+            | EchoRequest(_)
+            | TimeExceeded(_)
+            | ParameterProblem(_) => 8,
             TimestampRequest(_) | TimestampReply(_) => TimestampMessage::SERIALIZED_SIZE,
         }
     }
@@ -329,138 +432,98 @@ impl Icmpv4Type {
     pub fn calc_checksum(&self, payload: &[u8]) -> u16 {
         use Icmpv4Type::*;
         match self {
-            Unknown { type_u8, code_u8, bytes5to8 } => {
-                checksum::Sum16BitWords::new()
+            Unknown {
+                type_u8,
+                code_u8,
+                bytes5to8,
+            } => checksum::Sum16BitWords::new()
                 .add_2bytes([*type_u8, *code_u8])
-                .add_4bytes(*bytes5to8)
-            }
-            EchoReply(header) => {
-                checksum::Sum16BitWords::new()
+                .add_4bytes(*bytes5to8),
+            EchoReply(header) => checksum::Sum16BitWords::new()
                 .add_2bytes([TYPE_ECHO_REPLY, 0])
                 .add_2bytes(header.id.to_be_bytes())
-                .add_2bytes(header.seq.to_be_bytes())
-            }
+                .add_2bytes(header.seq.to_be_bytes()),
             DestinationUnreachable(ref header) => {
                 use DestUnreachableHeader::*;
                 match header {
-                    Network => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET])
-                    }
-                    Host => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST])
-                    }
-                    Protocol => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PROTOCOL])
-                    }
-                    Port => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PORT])
-                    }
-                    FragmentationNeeded { next_hop_mtu } => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NEEDFRAG])
-                        .add_2bytes(next_hop_mtu.to_be_bytes())
-                    }
-                    SourceFail => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_SRCFAIL])
-                    }
-                    NetworkUnknown => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_UNKNOWN])
-                    }
-                    HostUnknown => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_UNKNOWN])
-                    }
-                    Isolated => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_ISOLATED])
-                    }
-                    NetworkProhibited => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_PROHIB])
-                    }
-                    HostProhibited => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PROHIB])
-                    }
-                    TosNetwork => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_NET])
-                    }
-                    TosHost => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_HOST])
-                    }
-                    FilterProhibited => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_FILTER_PROHIB])
-                    }
-                    HostPrecedenceViolation => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION])
-                    }
-                    PrecedenceCutoff => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PRECEDENCE_CUTOFF])
-                    }
+                    Network => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET]),
+                    Host => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST]),
+                    Protocol => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PROTOCOL]),
+                    Port => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PORT]),
+                    FragmentationNeeded { next_hop_mtu } => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NEED_FRAG])
+                        .add_2bytes(next_hop_mtu.to_be_bytes()),
+                    SourceRouteFailed => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_SOURCE_ROUTE_FAILED]),
+                    NetworkUnknown => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_UNKNOWN]),
+                    HostUnknown => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_UNKNOWN]),
+                    Isolated => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_ISOLATED]),
+                    NetworkProhibited => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_PROHIB]),
+                    HostProhibited => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PROHIB]),
+                    TosNetwork => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_NET]),
+                    TosHost => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_HOST]),
+                    FilterProhibited => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_FILTER_PROHIB]),
+                    HostPrecedenceViolation => checksum::Sum16BitWords::new().add_2bytes([
+                        TYPE_DEST_UNREACH,
+                        CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION,
+                    ]),
+                    PrecedenceCutoff => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_DEST_UNREACH, CODE_DST_UNREACH_PRECEDENCE_CUTOFF]),
                 }
             }
-            Redirect(header) => {
-                checksum::Sum16BitWords::new()
+            Redirect(header) => checksum::Sum16BitWords::new()
                 .add_2bytes([TYPE_REDIRECT, header.code as u8])
-                .add_4bytes(header.gateway_internet_address)
-            }
-            EchoRequest(header) => {
-                checksum::Sum16BitWords::new()
+                .add_4bytes(header.gateway_internet_address),
+            EchoRequest(header) => checksum::Sum16BitWords::new()
                 .add_2bytes([TYPE_ECHO_REQUEST, 0])
                 .add_2bytes(header.id.to_be_bytes())
-                .add_2bytes(header.seq.to_be_bytes())
-            }
+                .add_2bytes(header.seq.to_be_bytes()),
             TimeExceeded(code) => {
-                checksum::Sum16BitWords::new()
-                .add_2bytes([TYPE_TIME_EXCEEDED, *code as u8])
+                checksum::Sum16BitWords::new().add_2bytes([TYPE_TIME_EXCEEDED, *code as u8])
             }
             ParameterProblem(header) => {
                 use ParameterProblemHeader::*;
                 match header {
-                    PointerIndicatesError(pointer) => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR])
-                        .add_2bytes([*pointer, 0])
-                    }
-                    MissingRequiredOption => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION])
-                    }
-                    BadLength => {
-                        checksum::Sum16BitWords::new()
-                        .add_2bytes([TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_BAD_LENGTH])
-                    }
+                    PointerIndicatesError(pointer) => checksum::Sum16BitWords::new()
+                        .add_2bytes([
+                            TYPE_PARAMETER_PROBLEM,
+                            CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR,
+                        ])
+                        .add_2bytes([*pointer, 0]),
+                    MissingRequiredOption => checksum::Sum16BitWords::new().add_2bytes([
+                        TYPE_PARAMETER_PROBLEM,
+                        CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION,
+                    ]),
+                    BadLength => checksum::Sum16BitWords::new()
+                        .add_2bytes([TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_BAD_LENGTH]),
                 }
             }
-            TimestampRequest(msg) => {
-                checksum::Sum16BitWords::new()
+            TimestampRequest(msg) => checksum::Sum16BitWords::new()
                 .add_2bytes([TYPE_TIMESTAMP, 0])
                 .add_2bytes(msg.id.to_be_bytes())
                 .add_2bytes(msg.seq.to_be_bytes())
                 .add_4bytes(msg.originate_timestamp.to_be_bytes())
                 .add_4bytes(msg.receive_timestamp.to_be_bytes())
-                .add_4bytes(msg.transmit_timestamp.to_be_bytes())
-            }
-            TimestampReply(msg) => {
-                checksum::Sum16BitWords::new()
+                .add_4bytes(msg.transmit_timestamp.to_be_bytes()),
+            TimestampReply(msg) => checksum::Sum16BitWords::new()
                 .add_2bytes([TYPE_TIMESTAMP_REPLY, 0])
                 .add_2bytes(msg.id.to_be_bytes())
                 .add_2bytes(msg.seq.to_be_bytes())
                 .add_4bytes(msg.originate_timestamp.to_be_bytes())
                 .add_4bytes(msg.receive_timestamp.to_be_bytes())
-                .add_4bytes(msg.transmit_timestamp.to_be_bytes())
-            }
+                .add_4bytes(msg.transmit_timestamp.to_be_bytes()),
         }
         .add_slice(payload)
         .ones_complement()
@@ -476,7 +539,7 @@ impl Icmpv4Type {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Icmpv4Header {
     pub icmp_type: Icmpv4Type,
-    pub checksum : u16,
+    pub checksum: u16,
 }
 
 impl Icmpv4Header {
@@ -499,7 +562,10 @@ impl Icmpv4Header {
 
     pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
         // Note: will calculate checksum on send
-        Icmpv4Header { icmp_type, checksum: 0 }
+        Icmpv4Header {
+            icmp_type,
+            checksum: 0,
+        }
     }
 
     /// Write the transport header to the given writer.
@@ -507,12 +573,12 @@ impl Icmpv4Header {
         writer.write_all(&self.to_bytes()).map_err(WriteError::from)
     }
 
-    /// Returns the expected checksum of an ICMPv4 header.
+    /// Calculates & updates the checksum in the header.
     ///
     /// Note this method assumes that all unused bytes/octets
     /// are filled with zeroes.
-    pub fn calc_checksum(&self, payload: &[u8]) -> u16 {
-        self.icmp_type.calc_checksum(payload)
+    pub fn update_checksum(&mut self, payload: &[u8]) {
+        self.checksum = self.icmp_type.calc_checksum(payload);
     }
 
     /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
@@ -525,30 +591,39 @@ impl Icmpv4Header {
 
     pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
         let checksum_be = self.checksum.to_be_bytes();
-        let re_zero = |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
-            let mut re = ArrayVec::from([
-                type_u8, code_u8, checksum_be[0], checksum_be[1],
-                0,0,0,0,
-                0,0,0,0,
-                0,0,0,0,
-                0,0,0,0,
-            ]);
-            // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
-            unsafe {
-                re.set_len(8);
-            }
-            re
-        };
+        let re_zero =
+            |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
 
-        let re_2u16 = |type_u8: u8, code_u8: u8, a_u16: u16, b_u16: u16| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }>{
+                #[cfg_attr(rustfmt, rustfmt_skip)]
+                let mut re = ArrayVec::from([
+                    type_u8, code_u8, checksum_be[0], checksum_be[1],
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                    0, 0, 0, 0,
+                ]);
+                // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
+                unsafe {
+                    re.set_len(8);
+                }
+                re
+            };
+
+        let re_2u16 = |type_u8: u8,
+                       code_u8: u8,
+                       a_u16: u16,
+                       b_u16: u16|
+         -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
             let a = a_u16.to_be_bytes();
             let b = b_u16.to_be_bytes();
+
+            #[cfg_attr(rustfmt, rustfmt_skip)]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
                 a[0], a[1], b[0], b[1],
-                0,0,0,0,
-                0,0,0,0,
-                0,0,0,0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
             ]);
             // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
             unsafe {
@@ -557,13 +632,18 @@ impl Icmpv4Header {
             re
         };
 
-        let re_4u8 = |type_u8: u8, code_u8: u8, bytes5to8: [u8;4]| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }>{
+        let re_4u8 = |type_u8: u8,
+                      code_u8: u8,
+                      bytes5to8: [u8; 4]|
+         -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
+
+            #[cfg_attr(rustfmt, rustfmt_skip)]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
                 bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3],
-                0,0,0,0,
-                0,0,0,0,
-                0,0,0,0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
             ]);
             // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
             unsafe {
@@ -572,13 +652,16 @@ impl Icmpv4Header {
             re
         };
 
-        let re_timestamp_msg = |type_u8: u8, msg: &TimestampMessage| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
+        let re_timestamp_msg = |type_u8: u8,
+                                msg: &TimestampMessage|
+         -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
             let id = msg.id.to_be_bytes();
             let seq = msg.seq.to_be_bytes();
             let o = msg.originate_timestamp.to_be_bytes();
             let r = msg.receive_timestamp.to_be_bytes();
             let t = msg.transmit_timestamp.to_be_bytes();
 
+            #[cfg_attr(rustfmt, rustfmt_skip)]
             ArrayVec::from([
                 type_u8, 0, checksum_be[0], checksum_be[1],
                 id[0], id[1], seq[0], seq[1],
@@ -587,62 +670,43 @@ impl Icmpv4Header {
                 t[0], t[1], t[2], t[3],
             ])
         };
-        
+
         use Icmpv4Type::*;
         match self.icmp_type {
-            Unknown { type_u8, code_u8, bytes5to8 } =>
-                re_4u8(type_u8, code_u8, bytes5to8),
-            EchoReply(echo) =>
-                re_2u16(TYPE_ECHO_REPLY, 0, echo.id, echo.seq),
+            Unknown {
+                type_u8,
+                code_u8,
+                bytes5to8,
+            } => re_4u8(type_u8, code_u8, bytes5to8),
+            EchoReply(echo) => re_2u16(TYPE_ECHO_REPLY, 0, echo.id, echo.seq),
             DestinationUnreachable(ref dest) => {
                 use DestUnreachableHeader::*;
                 match dest {
-                    Network => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET)
-                    }
-                    Host => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST)
-                    }
-                    Protocol => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_PROTOCOL)
-                    }
-                    Port => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_PORT)
-                    }
+                    Network => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET),
+                    Host => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST),
+                    Protocol => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_PROTOCOL),
+                    Port => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_PORT),
                     FragmentationNeeded { next_hop_mtu } => {
                         let m_be = next_hop_mtu.to_be_bytes();
-                        re_4u8(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NEEDFRAG, [0, 0, m_be[0], m_be[1]])
+                        re_4u8(
+                            TYPE_DEST_UNREACH,
+                            CODE_DST_UNREACH_NEED_FRAG,
+                            [0, 0, m_be[0], m_be[1]],
+                        )
                     }
-                    SourceFail => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_SRCFAIL)
-                    }
-                    NetworkUnknown => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_UNKNOWN)
-                    }
-                    HostUnknown => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_UNKNOWN)
-                    }
-                    Isolated => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_ISOLATED)
-                    }
-                    NetworkProhibited => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_PROHIB)
-                    }
-                    HostProhibited => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PROHIB)
-                    }
-                    TosNetwork => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_NET)
-                    }
-                    TosHost => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_HOST)
-                    }
-                    FilterProhibited => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_FILTER_PROHIB)
-                    }
-                    HostPrecedenceViolation => {
-                        re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION)
-                    }
+                    SourceRouteFailed => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_SOURCE_ROUTE_FAILED),
+                    NetworkUnknown => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_UNKNOWN),
+                    HostUnknown => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_UNKNOWN),
+                    Isolated => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_ISOLATED),
+                    NetworkProhibited => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NET_PROHIB),
+                    HostProhibited => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_HOST_PROHIB),
+                    TosNetwork => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_NET),
+                    TosHost => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_TOS_HOST),
+                    FilterProhibited => re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_FILTER_PROHIB),
+                    HostPrecedenceViolation => re_zero(
+                        TYPE_DEST_UNREACH,
+                        CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION,
+                    ),
                     PrecedenceCutoff => {
                         re_zero(TYPE_DEST_UNREACH, CODE_DST_UNREACH_PRECEDENCE_CUTOFF)
                     }
@@ -651,32 +715,25 @@ impl Icmpv4Header {
             Redirect(ref msg) => {
                 re_4u8(TYPE_REDIRECT, msg.code as u8, msg.gateway_internet_address)
             }
-            EchoRequest(echo) => {
-                re_2u16(TYPE_ECHO_REQUEST, 0, echo.id, echo.seq)
-            }
-            TimeExceeded(code) => {
-                re_zero(TYPE_TIME_EXCEEDED, code as u8)
-            }
+            EchoRequest(echo) => re_2u16(TYPE_ECHO_REQUEST, 0, echo.id, echo.seq),
+            TimeExceeded(code) => re_zero(TYPE_TIME_EXCEEDED, code as u8),
             ParameterProblem(ref header) => {
                 use ParameterProblemHeader::*;
                 match header {
-                    PointerIndicatesError(pointer) => {
-                        re_4u8(TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR, [*pointer, 0, 0, 0])
-                    }
-                    MissingRequiredOption => {
-                        re_zero(TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION)
-                    }
-                    BadLength => {
-                        re_zero(TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_BAD_LENGTH)
-                    }
+                    PointerIndicatesError(pointer) => re_4u8(
+                        TYPE_PARAMETER_PROBLEM,
+                        CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR,
+                        [*pointer, 0, 0, 0],
+                    ),
+                    MissingRequiredOption => re_zero(
+                        TYPE_PARAMETER_PROBLEM,
+                        CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION,
+                    ),
+                    BadLength => re_zero(TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_BAD_LENGTH),
                 }
             }
-            TimestampRequest(ref msg) => {
-                re_timestamp_msg(TYPE_TIMESTAMP, msg)
-            }
-            TimestampReply(ref msg) => {
-                re_timestamp_msg(TYPE_TIMESTAMP_REPLY, msg)
-            }
+            TimestampRequest(ref msg) => re_timestamp_msg(TYPE_TIMESTAMP, msg),
+            TimestampReply(ref msg) => re_timestamp_msg(TYPE_TIMESTAMP_REPLY, msg),
         }
     }
 }
@@ -687,7 +744,7 @@ impl Icmpv4Header {
 /// packet.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Icmpv4Slice<'a> {
-    slice: &'a [u8]
+    slice: &'a [u8],
 }
 
 impl<'a> Icmpv4Slice<'a> {
@@ -698,7 +755,7 @@ impl<'a> Icmpv4Slice<'a> {
     /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
     /// if the given slice is too small.
     #[inline]
-    pub fn from_slice(slice: &'a[u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
         // check length
         use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
@@ -708,36 +765,31 @@ impl<'a> Icmpv4Slice<'a> {
         // SAFETY:
         // Safe as it is previously checked that the slice has
         // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-        let icmp_type: u8 = unsafe {
-            *slice.get_unchecked(0)
-        };
-        let icmp_code: u8 = unsafe {
-            *slice.get_unchecked(1)
-        };
+        let icmp_type: u8 = unsafe { *slice.get_unchecked(0) };
+        let icmp_code: u8 = unsafe { *slice.get_unchecked(1) };
 
         // check type specific length
         match icmp_type {
-            TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => if 0 == icmp_code {
-                if TimestampMessage::SERIALIZED_SIZE != slice.len() {
-                    return Err(UnexpectedLenOfSlice{
-                        expected: TimestampMessage::SERIALIZED_SIZE,
-                        actual: slice.len()
-                    });
+            TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
+                if 0 == icmp_code {
+                    if TimestampMessage::SERIALIZED_SIZE != slice.len() {
+                        return Err(UnexpectedLenOfSlice {
+                            expected: TimestampMessage::SERIALIZED_SIZE,
+                            actual: slice.len(),
+                        });
+                    }
                 }
             }
             _ => {}
         }
 
         //done
-        Ok(Icmpv4Slice{
-            slice
-        })
+        Ok(Icmpv4Slice { slice })
     }
-
 
     /// Decode the header values into an [`Icmpv4Header`] struct.
     #[inline]
-    pub fn header(&self) -> Icmpv4Header  {
+    pub fn header(&self) -> Icmpv4Header {
         let icmp_type = self.icmp_type();
         Icmpv4Header {
             icmp_type,
@@ -746,12 +798,11 @@ impl<'a> Icmpv4Slice<'a> {
     }
 
     /// Decode the header values (excluding the checksum) into an [`Icmpv4Type`] enum.
-    pub fn icmp_type(&self) -> Icmpv4Type  {
-
+    pub fn icmp_type(&self) -> Icmpv4Type {
         use Icmpv4Type::*;
 
         unsafe fn timestamp_message(ptr: *const u8) -> TimestampMessage {
-            TimestampMessage{
+            TimestampMessage {
                 id: get_unchecked_be_u16(ptr.add(4)),
                 seq: get_unchecked_be_u16(ptr.add(6)),
                 originate_timestamp: get_unchecked_be_u32(ptr.add(8)),
@@ -763,60 +814,36 @@ impl<'a> Icmpv4Slice<'a> {
         match self.type_u8() {
             TYPE_ECHO_REPLY => {
                 if 0 == self.code_u8() {
-                    return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()))
+                    return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
                 }
             }
             TYPE_DEST_UNREACH => {
                 use DestUnreachableHeader::*;
                 match self.code_u8() {
-                    CODE_DST_UNREACH_NET => {
-                        return DestinationUnreachable(Network)
+                    CODE_DST_UNREACH_NET => return DestinationUnreachable(Network),
+                    CODE_DST_UNREACH_HOST => return DestinationUnreachable(Host),
+                    CODE_DST_UNREACH_PROTOCOL => return DestinationUnreachable(Protocol),
+                    CODE_DST_UNREACH_PORT => return DestinationUnreachable(Port),
+                    CODE_DST_UNREACH_NEED_FRAG => {
+                        return DestinationUnreachable(FragmentationNeeded {
+                            // SAFETY:
+                            // Safe as the contructor checks that the slice has
+                            // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+                            next_hop_mtu: unsafe {
+                                get_unchecked_be_u16(self.slice.as_ptr().add(6))
+                            },
+                        });
                     }
-                    CODE_DST_UNREACH_HOST => {
-                        return DestinationUnreachable(Host)
-                    }
-                    CODE_DST_UNREACH_PROTOCOL => {
-                        return DestinationUnreachable(Protocol)
-                    }
-                    CODE_DST_UNREACH_PORT => {
-                        return DestinationUnreachable(Port)
-                    }
-                    CODE_DST_UNREACH_NEEDFRAG => {
-                        return DestinationUnreachable(
-                            FragmentationNeeded{
-                                // SAFETY:
-                                // Safe as the contructor checks that the slice has
-                                // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-                                next_hop_mtu: unsafe {
-                                    get_unchecked_be_u16(self.slice.as_ptr().add(6))
-                                } 
-                            }
-                        )
-                    }
-                    CODE_DST_UNREACH_SRCFAIL => {
-                        return DestinationUnreachable(SourceFail)
-                    }
-                    CODE_DST_UNREACH_NET_UNKNOWN => {
-                        return DestinationUnreachable(NetworkUnknown)
-                    }
-                    CODE_DST_UNREACH_HOST_UNKNOWN => {
-                        return DestinationUnreachable(HostUnknown)
-                    }
-                    CODE_DST_UNREACH_ISOLATED => {
-                        return DestinationUnreachable(Isolated)
-                    }
+                    CODE_DST_UNREACH_SOURCE_ROUTE_FAILED => return DestinationUnreachable(SourceRouteFailed),
+                    CODE_DST_UNREACH_NET_UNKNOWN => return DestinationUnreachable(NetworkUnknown),
+                    CODE_DST_UNREACH_HOST_UNKNOWN => return DestinationUnreachable(HostUnknown),
+                    CODE_DST_UNREACH_ISOLATED => return DestinationUnreachable(Isolated),
                     CODE_DST_UNREACH_NET_PROHIB => {
                         return DestinationUnreachable(NetworkProhibited)
                     }
-                    CODE_DST_UNREACH_HOST_PROHIB => {
-                        return DestinationUnreachable(HostProhibited)
-                    }
-                    CODE_DST_UNREACH_TOS_NET => {
-                        return DestinationUnreachable(TosNetwork)
-                    }
-                    CODE_DST_UNREACH_TOS_HOST => {
-                        return DestinationUnreachable(TosHost)
-                    }
+                    CODE_DST_UNREACH_HOST_PROHIB => return DestinationUnreachable(HostProhibited),
+                    CODE_DST_UNREACH_TOS_NET => return DestinationUnreachable(TosNetwork),
+                    CODE_DST_UNREACH_TOS_HOST => return DestinationUnreachable(TosHost),
                     CODE_DST_UNREACH_FILTER_PROHIB => {
                         return DestinationUnreachable(FilterProhibited)
                     }
@@ -834,20 +861,22 @@ impl<'a> Icmpv4Slice<'a> {
                 let code = match self.code_u8() {
                     CODE_REDIRECT_FOR_NETWORK => Some(RedirectForNetwork),
                     CODE_REDIRECT_FOR_HOST => Some(RedirectForHost),
-                    CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => Some(RedirectForTypeOfServiceAndNetwork),
+                    CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => {
+                        Some(RedirectForTypeOfServiceAndNetwork)
+                    }
                     CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST => Some(RedirectForTypeOfServiceAndHost),
                     _ => None,
                 };
                 if let Some(code) = code {
-                    return Redirect(RedirectHeader{
+                    return Redirect(RedirectHeader {
                         code,
                         gateway_internet_address: self.bytes5to8(),
-                    })
+                    });
                 }
             }
             TYPE_ECHO_REQUEST => {
                 if 0 == self.code_u8() {
-                    return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()))
+                    return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()));
                 }
             }
             TYPE_TIME_EXCEEDED => {
@@ -866,16 +895,12 @@ impl<'a> Icmpv4Slice<'a> {
                 use ParameterProblemHeader::*;
                 match self.code_u8() {
                     CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR => {
-                        return ParameterProblem(
-                            PointerIndicatesError(
-                                // SAFETY:
-                                // Safe as the contructor checks that the slice has
-                                // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-                                unsafe {
-                                    *self.slice.get_unchecked(4)
-                                }
-                            )
-                        )
+                        return ParameterProblem(PointerIndicatesError(
+                            // SAFETY:
+                            // Safe as the contructor checks that the slice has
+                            // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+                            unsafe { *self.slice.get_unchecked(4) },
+                        ));
                     }
                     CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION => {
                         return ParameterProblem(MissingRequiredOption);
@@ -902,7 +927,7 @@ impl<'a> Icmpv4Slice<'a> {
                     // Safe as the contructor checks that the slice has
                     // the length of TimestampMessage::SERIALIZED_SIZE (20).
                     unsafe {
-                        return TimestampRequest(timestamp_message(self.slice.as_ptr()));
+                        return TimestampReply(timestamp_message(self.slice.as_ptr()));
                     }
                 }
             }
@@ -922,9 +947,7 @@ impl<'a> Icmpv4Slice<'a> {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-        unsafe {
-            *self.slice.get_unchecked(0)
-        }
+        unsafe { *self.slice.get_unchecked(0) }
     }
 
     /// Returns "code" value in the ICMPv4 header.
@@ -933,9 +956,7 @@ impl<'a> Icmpv4Slice<'a> {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-        unsafe {
-            *self.slice.get_unchecked(1)
-        }
+        unsafe { *self.slice.get_unchecked(1) }
     }
 
     /// Returns "checksum" value in the ICMPv4 header.
@@ -944,9 +965,7 @@ impl<'a> Icmpv4Slice<'a> {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
-        unsafe {
-            get_unchecked_be_u16(self.slice.as_ptr().add(2))
-        }
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
     /// Returns the bytes from position 4 till and including the 8th position
@@ -955,7 +974,7 @@ impl<'a> Icmpv4Slice<'a> {
     /// These bytes located at th 5th, 6th, 7th and 8th position of the ICMP
     /// packet can depending on the ICMPv4 type and code contain additional data.
     #[inline]
-    pub fn bytes5to8(&self) -> [u8;4] {
+    pub fn bytes5to8(&self) -> [u8; 4] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).

@@ -742,3 +742,13 @@ prop_compose! {
         Icmpv6Type::from_bytes(type_u8, code_u8, bytes5to8)
     }
 }
+
+prop_compose! {
+    pub fn icmpv4_type_any()
+        (
+            bytes in any::<[u8;20]>(),
+        ) -> Icmpv4Type
+    {
+        Icmpv4Header::from_slice(&bytes).unwrap().0.icmp_type
+    }
+}
