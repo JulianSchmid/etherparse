@@ -18,7 +18,7 @@ pub struct IcmpEchoHeader {
 impl IcmpEchoHeader {
     /// Return the seq + id encoded to the on the wire format.
     #[inline]
-    pub fn to_bytes(&self) -> [u8;4] {
+    pub fn to_bytes(&self) -> [u8; 4] {
         let id_be = self.id.to_be_bytes();
         let seq_be = self.seq.to_be_bytes();
         [id_be[0], id_be[1], seq_be[0], seq_be[1]]
@@ -26,8 +26,8 @@ impl IcmpEchoHeader {
 
     /// Decodes the seq + id from the on the wire format.
     #[inline]
-    pub fn from_bytes(bytes5to8: [u8;4]) -> IcmpEchoHeader {
-        IcmpEchoHeader{
+    pub fn from_bytes(bytes5to8: [u8; 4]) -> IcmpEchoHeader {
+        IcmpEchoHeader {
             id: u16::from_be_bytes([bytes5to8[0], bytes5to8[1]]),
             seq: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]]),
         }
