@@ -691,7 +691,40 @@ impl Icmpv6Type {
     /// Note that this size is not the size of the entire
     /// ICMPv6 packet but only the header.
     pub fn header_len(&self) -> usize {
-        8
+        use Icmpv6Type::*;
+        match self {
+            Unknown {
+                type_u8: _,
+                code_u8: _,
+                bytes5to8: _,
+            }
+            | DestinationUnreachable(_)
+            | PacketTooBig{ mtu: _ }
+            | TimeExceeded{ code: _ }
+            | ParameterProblem{ code: _, pointer: _ }
+            | EchoRequest(_)
+            | EchoReply(_) => 8,
+        }
+    }
+
+    /// If the ICMP type has a fixed size returns the number of
+    /// bytes that should be present after the header of this type.
+    #[inline]
+    pub fn fixed_payload_size(&self) -> Option<usize> {
+        use Icmpv6Type::*;
+        match self {
+            Unknown {
+                type_u8: _,
+                code_u8: _,
+                bytes5to8: _,
+            }
+            | DestinationUnreachable(_)
+            | PacketTooBig{ mtu: _ }
+            | TimeExceeded{ code: _ }
+            | ParameterProblem{ code: _, pointer: _ }
+            | EchoRequest(_)
+            | EchoReply(_) => None,
+        }
     }
 }
 
@@ -714,8 +747,16 @@ impl Icmpv6Header {
     ///
     /// Note that this size is not the size of the entire
     /// ICMPv6 packet but only the header.
+    #[inline]
     pub fn header_len(&self) -> usize {
-        8
+        self.icmp_type.header_len()
+    }
+
+    /// If the ICMP type has a fixed size returns the number of
+    /// bytes that should be present after the header of this type.
+    #[inline]
+    pub fn fixed_payload_size(&self) -> Option<usize> {
+        self.icmp_type.fixed_payload_size()
     }
 
     /// Setups a new header with the checksum beeing set to 0.
@@ -836,6 +877,13 @@ impl<'a> Icmpv6Slice<'a> {
         }
     }
 
+    /// Number of bytes/octets that will be converted into a
+    /// [`Icmpv6Header`] when [`Icmpv6Slice::header`] gets called.
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        8
+    }
+
     /// Returns "type" value in the ICMPv6 header.
     #[inline]
     pub fn type_u8(&self) -> u8 {
@@ -908,12 +956,12 @@ impl<'a> Icmpv6Slice<'a> {
         self.slice
     }
 
-    /// Returns the message body of the ICMPv6 packet (data after the 4th byte).
+    /// Returns a slice to the bytes not covered by `.header()`.
     #[inline]
-    pub fn message_body(&self) -> &'a [u8] {
+    pub fn payload(&self) -> &'a [u8] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
-        unsafe { from_raw_parts(self.slice.as_ptr().add(4), self.slice.len() - 4) }
+        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE(8).
+        unsafe { from_raw_parts(self.slice.as_ptr().add(8), self.slice.len() - 8) }
     }
 }

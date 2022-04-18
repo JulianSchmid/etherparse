@@ -1,6 +1,7 @@
 use super::super::*;
 
 use arrayvec::ArrayVec;
+use std::slice::from_raw_parts;
 
 /// Module containing ICMPv4 related types and constants
 pub mod icmpv4 {
@@ -428,6 +429,27 @@ impl Icmpv4Type {
         }
     }
 
+    /// If the ICMP type has a fixed size returns the number of
+    /// bytes that should be present after the header of this type.
+    #[inline]
+    pub fn fixed_payload_size(&self) -> Option<usize> {
+        use Icmpv4Type::*;
+        match self {
+            Unknown {
+                type_u8: _,
+                code_u8: _,
+                bytes5to8: _,
+            }
+            | EchoReply(_)
+            | DestinationUnreachable(_)
+            | Redirect(_)
+            | EchoRequest(_)
+            | TimeExceeded(_)
+            | ParameterProblem(_) => None,
+            TimestampRequest(_) | TimestampReply(_) => Some(0),
+        }
+    }
+
     /// Calculate the ICMP checksum value.
     pub fn calc_checksum(&self, payload: &[u8]) -> u16 {
         use Icmpv4Type::*;
@@ -555,11 +577,21 @@ impl Icmpv4Header {
     /// "Timestamp" and "Timestamp Reply Message".
     pub const MAX_SERIALIZED_SIZE: usize = 20;
 
+    /// Length in bytes/octets of this header type.
     #[inline]
     pub fn header_len(&self) -> usize {
         self.icmp_type.header_len()
     }
 
+    /// If the ICMP type has a fixed size returns the number of
+    /// bytes that should be present after the header of this type.
+    #[inline]
+    pub fn fixed_payload_size(&self) -> Option<usize> {
+        self.icmp_type.fixed_payload_size()
+    }
+
+    /// Constructs an [`Icmpv4Header`] using the given type
+    /// and the checksum set to 0.
     pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
         // Note: will calculate checksum on send
         Icmpv4Header {
@@ -589,6 +621,7 @@ impl Icmpv4Header {
         Ok((header, rest))
     }
 
+    /// Converts the header to the on the wire bytes.
     pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
         let checksum_be = self.checksum.to_be_bytes();
         let re_zero =
@@ -797,6 +830,20 @@ impl<'a> Icmpv4Slice<'a> {
         }
     }
 
+    /// Number of bytes/octets that will be converted into a
+    /// [`Icmpv4Header`] when [`Icmpv4Slice::header`] gets called.
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        match self.type_u8() {
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => if 0 == self.code_u8() {
+                TimestampMessage::SERIALIZED_SIZE
+            } else {
+                8
+            },
+            _ => 8,
+        }
+    }
+
     /// Decode the header values (excluding the checksum) into an [`Icmpv4Type`] enum.
     pub fn icmp_type(&self) -> Icmpv4Type {
         use Icmpv4Type::*;
@@ -986,6 +1033,34 @@ impl<'a> Icmpv4Slice<'a> {
                 *self.slice.get_unchecked(7),
             ]
         }
+    }
+
+    /// Returns a slice to the bytes not covered by `.header()`.
+    #[inline]
+    pub fn payload(&self) -> &'a [u8] {
+        // explicitly inlined the code to determine the
+        // length of the payload to make the cecking of the
+        // usafe code easier.
+        let header_len = match self.type_u8() {
+            // SAFETY:
+            // Lenght safe as the contructor checks that the slice has
+            // the length of TimestampMessage::SERIALIZED_SIZE (20)
+            // for the messages types TYPE_TIMESTAMP and TYPE_TIMESTAMP_REPLY.
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => if 0 == self.code_u8() {
+                TimestampMessage::SERIALIZED_SIZE
+            } else {
+                8
+            },
+            // SAFETY:
+            // Lneght safe as the contructor checks that the slice has
+            // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE(8) for
+            // all message types.
+            _ => 8,
+        };
+        // SAFETY:
+        // Lenghts have been depending on type in the constructor of the
+        // ICMPv4Slice.
+        unsafe { from_raw_parts(self.slice.as_ptr().add(header_len), self.slice.len() - header_len) }
     }
 
     /// Returns the slice containing the ICMPv4 packet.

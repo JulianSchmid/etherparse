@@ -130,7 +130,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(ip_protocol, rest, true)?;
+                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
 
                     //assign to the output
                     rest = transport_rest;
@@ -150,7 +150,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(next_header, rest, false)?;
+                    let (transport, transport_rest) = read_transport(next_header, rest)?;
 
                     rest = transport_rest;
                     result.transport = transport;
@@ -279,7 +279,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(ip_protocol, rest, true)?;
+                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
 
                     //assign to the output
                     rest = transport_rest;
@@ -299,7 +299,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(next_header, rest, false)?;
+                    let (transport, transport_rest) = read_transport(next_header, rest)?;
 
                     rest = transport_rest;
                     result.transport = transport;
@@ -371,13 +371,8 @@ impl<'a> PacketHeaders<'a> {
             (transport_proto, rest)
         };
 
-        let is_ipv4 = match result.ip {
-            Some(IpHeader::Version4(..)) => true,
-            _ => false,
-        };
-
         // try to parse the transport header
-        let (transport, rest) = read_transport(transport_proto, rest, is_ipv4)?;
+        let (transport, rest) = read_transport(transport_proto, rest)?;
 
         // update output
         result.transport = transport;
@@ -391,27 +386,16 @@ impl<'a> PacketHeaders<'a> {
 fn read_transport(
     protocol: u8,
     rest: &[u8],
-    is_ipv4: bool,
 ) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
     use crate::ip_number::*;
     match protocol {
         ICMP => {
-            if is_ipv4 {
-                Ok(Icmpv4Header::from_slice(rest)?)
-                .map( |value| (Some(TransportHeader::Icmpv4(value.0)), value.1))
-            } else {
-                // Icmp4 in a non-IPv4 packet?; just give up
-                Ok((None, rest))
-            }
+            Ok(Icmpv4Header::from_slice(rest)?)
+            .map( |value| (Some(TransportHeader::Icmpv4(value.0)), value.1))
         },
         IPV6_ICMP => {
-            if is_ipv4 {
-                // Icmp6 in a non-IPv6 packet?; just give up
-                Ok((None, rest))
-            } else {
-                Ok(Icmpv6Header::from_slice(rest)?)
-                .map( |value| (Some(TransportHeader::Icmpv6(value.0)), value.1))
-            }
+            Ok(Icmpv6Header::from_slice(rest)?)
+            .map( |value| (Some(TransportHeader::Icmpv6(value.0)), value.1))
         },
         UDP => Ok(UdpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),

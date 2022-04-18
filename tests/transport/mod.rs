@@ -11,8 +11,10 @@ mod transport_header {
     proptest! {
         #[test]
         fn debug(
-            ref tcp in tcp_any(),
-            ref udp in udp_any(),
+            tcp in tcp_any(),
+            udp in udp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
         ) {
             use TransportHeader::*;
             assert_eq!(
@@ -23,23 +25,34 @@ mod transport_header {
                 format!("Tcp({:?})", tcp),
                 format!("{:?}", Tcp(tcp.clone())),
             );
+            assert_eq!(
+                format!("Icmpv4({:?})", icmpv4),
+                format!("{:?}", Icmpv4(icmpv4.clone())),
+            );
+            assert_eq!(
+                format!("Icmpv6({:?})", icmpv6),
+                format!("{:?}", Icmpv6(icmpv6.clone())),
+            );
         }
     }
 
     proptest! {
         #[test]
         fn clone_eq(
-            ref tcp in tcp_any(),
-            ref udp in udp_any(),
+            tcp in tcp_any(),
+            udp in udp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
         ) {
             use TransportHeader::*;
-            {
-                let u = Udp(udp.clone());
-                assert_eq!(u.clone(), u);
-            }
-            {
-                let t = Tcp(tcp.clone());
-                assert_eq!(t.clone(), t);
+            let values = [
+                Udp(udp),
+                Tcp(tcp),
+                Icmpv4(icmpv4),
+                Icmpv6(icmpv6),
+            ];
+            for value in values {
+                assert_eq!(value.clone(), value);
             }
         }
     }
@@ -70,192 +83,368 @@ mod transport_header {
     }
     proptest! {
         #[test]
-        fn header_size_tcp(ref input in tcp_any()) {
-            assert_eq!(TransportHeader::Tcp(input.clone()).header_len(), 
-                       input.header_len() as usize);
-        }
-        
-    }
-    proptest! {
-        #[test]
-        fn header_size_udp(ref input in udp_any()) {
-            assert_eq!(TransportHeader::Udp(input.clone()).header_len(), 
-                       UdpHeader::SERIALIZED_SIZE);
+        fn icmpv4(icmpv4 in icmpv4_header_any()) {
+            assert_eq!(Some(icmpv4.clone()), TransportHeader::Icmpv4(icmpv4).icmpv4());
+            assert_eq!(None, TransportHeader::Udp(Default::default()).icmpv4());
         }
     }
     proptest! {
         #[test]
-        fn update_checksum_ipv4_udp(ref ip_header in ipv4_with(ip_number::UDP),
-                                    ref udp_header in udp_any())
-        {
-            //ok case
+        fn mut_icmpv4(icmpv4 in icmpv4_header_any()) {
+            assert_eq!(Some(&mut icmpv4.clone()), TransportHeader::Icmpv4(icmpv4).mut_icmpv4());
+            assert_eq!(None, TransportHeader::Udp(Default::default()).mut_icmpv4());
+        }
+    }
+    proptest! {
+        #[test]
+        fn icmpv6(icmpv6 in icmpv6_header_any()) {
+            assert_eq!(Some(icmpv6.clone()), TransportHeader::Icmpv6(icmpv6).icmpv6());
+            assert_eq!(None, TransportHeader::Udp(Default::default()).icmpv6());
+        }
+    }
+    proptest! {
+        #[test]
+        fn mut_icmpv6(icmpv6 in icmpv6_header_any()) {
+            assert_eq!(Some(&mut icmpv6.clone()), TransportHeader::Icmpv6(icmpv6).mut_icmpv6());
+            assert_eq!(None, TransportHeader::Udp(Default::default()).mut_icmpv6());
+        }
+    }
+    proptest! {
+        #[test]
+        fn header_size(
+            udp in udp_any(),
+            tcp in tcp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
+        ) {
+            assert_eq!(
+                TransportHeader::Udp(udp).header_len(), 
+                UdpHeader::SERIALIZED_SIZE
+            );
+            assert_eq!(
+                TransportHeader::Tcp(tcp.clone()).header_len(), 
+                tcp.header_len() as usize
+            );
+            assert_eq!(
+                TransportHeader::Icmpv4(icmpv4.clone()).header_len(), 
+                icmpv4.header_len()
+            );
+            assert_eq!(
+                TransportHeader::Icmpv6(icmpv6.clone()).header_len(), 
+                icmpv6.header_len()
+            );
+        }
+    }
+    proptest! {
+        #[test]
+        fn update_checksum_ipv4(
+            ipv4 in ipv4_any(),
+            udp in udp_any(),
+            tcp in tcp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
+        ) {
+            use TransportHeader::*;
+
+            // udp
             {
-                let mut transport = TransportHeader::Udp(udp_header.clone());
+                // ok case
+                {
+                    let mut transport = Udp(udp.clone());
+                    let payload = Vec::new();
+                    transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
+                    assert_eq!(transport.udp().unwrap().checksum, 
+                               udp.calc_checksum_ipv4(&ipv4, &payload).unwrap());
+                }
+                // error case
+                {
+                    let mut transport = Udp(udp.clone());
+                    let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+                    let tcp_payload = unsafe {
+                        //NOTE: The pointer must be initialized with a non null value
+                        //      otherwise a key constraint of slices is not fullfilled
+                        //      which can lead to crashes in release mode.
+                        use std::ptr::NonNull;
+                        slice::from_raw_parts(
+                            NonNull::<u8>::dangling().as_ptr(),
+                            len
+                        )
+                    };
+                    assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
+                }
+            }
+            // tcp
+            {
+                //ok case
+                {
+                    let mut transport = Tcp(tcp.clone());
+                    let payload = Vec::new();
+                    transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
+                    assert_eq!(transport.tcp().unwrap().checksum, 
+                               tcp.calc_checksum_ipv4(&ipv4, &payload).unwrap());
+                }
+                //error case
+                {
+                    let mut transport = Tcp(tcp.clone());
+                    let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+                    let tcp_payload = unsafe {
+                        //NOTE: The pointer must be initialized with a non null value
+                        //      otherwise a key constraint of slices is not fullfilled
+                        //      which can lead to crashes in release mode.
+                        use std::ptr::NonNull;
+                        slice::from_raw_parts(
+                            NonNull::<u8>::dangling().as_ptr(),
+                            len
+                        )
+                    };
+                    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
+                }
+            }
+
+            // icmpv4
+            {
+                let mut transport = Icmpv4(icmpv4.clone());
                 let payload = Vec::new();
-                transport.update_checksum_ipv4(&ip_header, &payload).unwrap();
-                assert_eq!(transport.udp().unwrap().checksum, 
-                           udp_header.calc_checksum_ipv4(&ip_header, &payload).unwrap());
+                transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
+                assert_eq!(
+                    transport.icmpv4().unwrap().checksum, 
+                    icmpv4.icmp_type.calc_checksum(&payload)
+                );
             }
-            //error case
-            {
-                let mut transport = TransportHeader::Udp(udp_header.clone());
-                let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
-                let tcp_payload = unsafe {
-                    //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
-                    //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    slice::from_raw_parts(
-                        NonNull::<u8>::dangling().as_ptr(),
-                        len
-                    )
-                };
-                assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ip_header, &tcp_payload));
-            }
+
+            // icmpv6 (error)
+            assert_eq!(
+                Icmpv6(icmpv6).update_checksum_ipv4(&ipv4, &[]),
+                Err(ValueError::Icmpv6InIpv4)
+            );
         }
     }
-    proptest! {
-        #[test]
-        fn update_checksum_ipv4_tcp(ref ip_header in ipv4_with(ip_number::TCP),
-                                    ref tcp_header in tcp_any())
-        {
-            //ok case
-            {
-                let mut transport = TransportHeader::Tcp(tcp_header.clone());
-                let payload = Vec::new();
-                transport.update_checksum_ipv4(&ip_header, &payload).unwrap();
-                assert_eq!(transport.tcp().unwrap().checksum, 
-                           tcp_header.calc_checksum_ipv4(&ip_header, &payload).unwrap());
-            }
-            //error case
-            {
-                let mut transport = TransportHeader::Tcp(tcp_header.clone());
-                let len = (std::u16::MAX - tcp_header.header_len()) as usize + 1;
-                let tcp_payload = unsafe {
-                    //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
-                    //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    slice::from_raw_parts(
-                        NonNull::<u8>::dangling().as_ptr(),
-                        len
-                    )
-                };
-                assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ip_header, &tcp_payload));
-            }
-        }
-    }
+
     proptest! {
         #[test]
         #[cfg(target_pointer_width = "64")] 
-        fn update_checksum_ipv6_udp(ref ip_header in ipv6_with(ip_number::UDP),
-                                    ref udp_header in udp_any())
-        {
-            //ok case
+        fn update_checksum_ipv6(
+            ipv6 in ipv6_any(),
+            udp in udp_any(),
+            tcp in tcp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
+        ) {
+            use TransportHeader::*;
+
+            // udp
             {
-                let mut transport = TransportHeader::Udp(udp_header.clone());
+                //ok case
+                {
+                    let mut transport = Udp(udp.clone());
+                    let payload = Vec::new();
+                    transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
+                    assert_eq!(transport.udp().unwrap().checksum, 
+                               udp.calc_checksum_ipv6(&ipv6, &payload).unwrap());
+                }
+                //error case
+                {
+                    let mut transport = Udp(udp.clone());
+                    let len = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+                    let payload = unsafe {
+                        //NOTE: The pointer must be initialized with a non null value
+                        //      otherwise a key constraint of slices is not fullfilled
+                        //      which can lead to crashes in release mode.
+                        use std::ptr::NonNull;
+                        slice::from_raw_parts(
+                            NonNull::<u8>::dangling().as_ptr(),
+                            len
+                        )
+                    };
+                    assert_eq!(
+                        Err(ValueError::UdpPayloadLengthTooLarge(len)),
+                        transport.update_checksum_ipv6(&ipv6, &payload)
+                    );
+                }
+            }
+            // tcp
+            {
+                //ok case
+                {
+                    let mut transport = Tcp(tcp.clone());
+                    let payload = Vec::new();
+                    transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
+                    assert_eq!(transport.tcp().unwrap().checksum, 
+                               tcp.calc_checksum_ipv6(&ipv6, &payload).unwrap());
+                }
+                //error case
+                {
+                    let mut transport = Tcp(tcp.clone());
+                    let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+                    let tcp_payload = unsafe {
+                        //NOTE: The pointer must be initialized with a non null value
+                        //      otherwise a key constraint of slices is not fullfilled
+                        //      which can lead to crashes in release mode.
+                        use std::ptr::NonNull;
+                        slice::from_raw_parts(
+                            NonNull::<u8>::dangling().as_ptr(),
+                            len
+                        )
+                    };
+                    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ipv6, &tcp_payload));
+                }
+            }
+
+            // icmpv4
+            {
+                let mut transport = Icmpv4(icmpv4.clone());
                 let payload = Vec::new();
-                transport.update_checksum_ipv6(&ip_header, &payload).unwrap();
-                assert_eq!(transport.udp().unwrap().checksum, 
-                           udp_header.calc_checksum_ipv6(&ip_header, &payload).unwrap());
+                transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
+                assert_eq!(
+                    transport.icmpv4().unwrap().checksum, 
+                    icmpv4.icmp_type.calc_checksum(&payload)
+                );
             }
-            //error case
+
+            // icmpv6
             {
-                let mut transport = TransportHeader::Udp(udp_header.clone());
-                let len = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
-                let payload = unsafe {
-                    //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
-                    //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    slice::from_raw_parts(
-                        NonNull::<u8>::dangling().as_ptr(),
-                        len
-                    )
-                };
-                assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv6(&ip_header, &payload));
-            }
-        }
-    }
-    proptest! {
-        #[test]
-        #[cfg(target_pointer_width = "64")] 
-        fn update_checksum_ipv6_tcp(ref ip_header in ipv6_with(ip_number::TCP),
-                                    ref tcp_header in tcp_any())
-        {
-            //ok case
-            {
-                let mut transport = TransportHeader::Tcp(tcp_header.clone());
-                let payload = Vec::new();
-                transport.update_checksum_ipv6(&ip_header, &payload).unwrap();
-                assert_eq!(transport.tcp().unwrap().checksum, 
-                           tcp_header.calc_checksum_ipv6(&ip_header, &payload).unwrap());
-            }
-            //error case
-            {
-                let mut transport = TransportHeader::Tcp(tcp_header.clone());
-                let len = (std::u32::MAX - tcp_header.header_len() as u32) as usize + 1;
-                let tcp_payload = unsafe {
-                    //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
-                    //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    slice::from_raw_parts(
-                        NonNull::<u8>::dangling().as_ptr(),
-                        len
-                    )
-                };
-                assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ip_header, &tcp_payload));
+                // normal case
+                {
+                    let mut transport = Icmpv6(icmpv6.clone());
+                    let payload = Vec::new();
+                    transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
+                    assert_eq!(
+                        transport.icmpv6().unwrap().checksum, 
+                        icmpv6.icmp_type.calc_checksum(ipv6.source, ipv6.destination, &payload).unwrap()
+                    );
+                }
+
+                // error case
+                {
+                    let mut transport = Icmpv6(icmpv6.clone());
+                    // SAFETY: In case the error is not triggered
+                    //         a segmentation fault will be triggered.
+                    let too_big_slice = unsafe {
+                        //NOTE: The pointer must be initialized with a non null value
+                        //      otherwise a key constraint of slices is not fullfilled
+                        //      which can lead to crashes in release mode.
+                        use std::ptr::NonNull;
+                        std::slice::from_raw_parts(
+                            NonNull::<u8>::dangling().as_ptr(),
+                            (std::u32::MAX - 7) as usize
+                        )
+                    };
+                    assert_matches!(
+                        transport.update_checksum_ipv6(&ipv6, too_big_slice),
+                        Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                    );
+                }
             }
         }
     }
+
     proptest! {
         #[test]
-        fn write_udp(ref input in udp_any()) {
-            //write
+        fn write(
+            udp in udp_any(),
+            tcp in tcp_any(),
+            icmpv4 in icmpv4_header_any(),
+            icmpv6 in icmpv6_header_any(),
+        ) {
+            // udp
             {
-                let result_input = {
-                    let mut buffer = Vec::new();
-                    input.write(&mut buffer).unwrap();
-                    buffer
-                };
-                let result_transport = {
-                    let mut buffer = Vec::new();
-                    TransportHeader::Udp(input.clone()).write(&mut buffer).unwrap();
-                    buffer
-                };
-                assert_eq!(result_input, result_transport);
+                //write
+                {
+                    let result_input = {
+                        let mut buffer = Vec::new();
+                        udp.write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    let result_transport = {
+                        let mut buffer = Vec::new();
+                        TransportHeader::Udp(udp.clone()).write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    assert_eq!(result_input, result_transport);
+                }
+                //trigger an error
+                {
+                    let mut a: [u8;0] = [];
+                    assert_matches!(TransportHeader::Udp(udp.clone()).write(&mut Cursor::new(&mut a[..])),
+                                    Err(WriteError::IoError(_)));
+                }
             }
-            //trigger an error
+            // tcp
             {
-                let mut a: [u8;0] = [];
-                assert_matches!(TransportHeader::Udp(input.clone()).write(&mut Cursor::new(&mut a[..])),
-                                Err(WriteError::IoError(_)));
+                //write
+                {
+                    let result_input = {
+                        let mut buffer = Vec::new();
+                        tcp.write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    let result_transport = {
+                        let mut buffer = Vec::new();
+                        TransportHeader::Tcp(tcp.clone()).write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    assert_eq!(result_input, result_transport);
+                }
+                //trigger an error
+                {
+                    let mut a: [u8;0] = [];
+                    assert_matches!(TransportHeader::Tcp(tcp.clone()).write(&mut Cursor::new(&mut a[..])),
+                                    Err(WriteError::IoError(_)));
+                }
             }
-        }
-    }
-    proptest! {
-        #[test]
-        fn write_tcp(ref input in tcp_any()) {
-            //write
+
+            // icmpv4
             {
-                let result_input = {
-                    let mut buffer = Vec::new();
-                    input.write(&mut buffer).unwrap();
-                    buffer
-                };
-                let result_transport = {
-                    let mut buffer = Vec::new();
-                    TransportHeader::Tcp(input.clone()).write(&mut buffer).unwrap();
-                    buffer
-                };
-                assert_eq!(result_input, result_transport);
+                // normal write
+                {
+                    let result_input = {
+                        let mut buffer = Vec::new();
+                        icmpv4.write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    let result_transport = {
+                        let mut buffer = Vec::new();
+                        TransportHeader::Icmpv4(icmpv4.clone()).write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    assert_eq!(result_input, result_transport);
+                }
+
+                // error during write
+                {
+                    let mut a: [u8;0] = [];
+                    assert_matches!(
+                        TransportHeader::Icmpv4(icmpv4.clone()).write(&mut Cursor::new(&mut a[..])),
+                        Err(WriteError::IoError(_))
+                    );
+                }
             }
-            //trigger an error
+
+            // icmpv6
             {
-                let mut a: [u8;0] = [];
-                assert_matches!(TransportHeader::Tcp(input.clone()).write(&mut Cursor::new(&mut a[..])),
-                                Err(WriteError::IoError(_)));
+                // normal write
+                {
+                    let result_input = {
+                        let mut buffer = Vec::new();
+                        icmpv6.write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    let result_transport = {
+                        let mut buffer = Vec::new();
+                        TransportHeader::Icmpv6(icmpv6.clone()).write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    assert_eq!(result_input, result_transport);
+                }
+
+                // error during write
+                {
+                    let mut a: [u8;0] = [];
+                    assert_matches!(
+                        TransportHeader::Icmpv6(icmpv6.clone()).write(&mut Cursor::new(&mut a[..])),
+                        Err(WriteError::IoError(_))
+                    );
+                }
             }
         }
     }

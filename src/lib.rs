@@ -511,9 +511,6 @@ pub enum ValueError {
     U32TooLarge{value: u32, max: u32, field: ErrorField},
     /// Error when an Icmpv6 payload is found in an IPv4 packet.
     Icmpv6InIpv4,
-    /// Error when an Icmpv4 payload is found in a IPv6 packet.
-    Icmpv4InIpv6,
-    
 }
 
 impl Error for ValueError {
@@ -572,11 +569,8 @@ impl fmt::Display for ValueError {
             U32TooLarge{value, max, field} => {
                 write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
             },
-            Icmpv4InIpv6 => {
-                write!(f, "Trying to put an Icmpv4 transport in an IPv6 packet")
-            },
             Icmpv6InIpv4 => {
-                write!(f, "Trying to put an Icmpv6 transport in an IPv4 packet")
+                write!(f, "ICMPv6 packet can not be combined with IPv4 headers.")
             },
         }
     }

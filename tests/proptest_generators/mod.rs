@@ -214,6 +214,7 @@ static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
     ip_number::UDP,
     ip_number::TCP,
     ip_number::AUTH,
+    ip_number::IPV6_ICMP,
 ];
 
 prop_compose! {
@@ -308,6 +309,7 @@ prop_compose! {
 }
 
 static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
+    ip_number::ICMP,
     ip_number::UDP,
     ip_number::TCP,
     ip_number::IPV6_HOP_BY_HOP,
@@ -732,6 +734,30 @@ pub fn ip_number_any() -> impl Strategy<Value = IpNumber> {
 }
 
 prop_compose! {
+    pub fn icmpv4_type_any()
+        (
+            bytes in any::<[u8;20]>(),
+        ) -> Icmpv4Type
+    {
+        Icmpv4Header::from_slice(&bytes).unwrap().0.icmp_type
+    }
+}
+
+prop_compose! {
+    pub fn icmpv4_header_any()
+        (
+            icmp_type in icmpv4_type_any(),
+            checksum in any::<u16>()
+        ) -> Icmpv4Header
+    {
+        Icmpv4Header {
+            icmp_type,
+            checksum
+        }
+    }
+}
+
+prop_compose! {
     pub fn icmpv6_type_any()
         (
             type_u8 in any::<u8>(),
@@ -744,11 +770,15 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn icmpv4_type_any()
+    pub fn icmpv6_header_any()
         (
-            bytes in any::<[u8;20]>(),
-        ) -> Icmpv4Type
+            icmp_type in icmpv6_type_any(),
+            checksum in any::<u16>()
+        ) -> Icmpv6Header
     {
-        Icmpv4Header::from_slice(&bytes).unwrap().0.icmp_type
+        Icmpv6Header {
+            icmp_type,
+            checksum
+        }
     }
 }

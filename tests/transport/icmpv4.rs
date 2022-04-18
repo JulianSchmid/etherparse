@@ -456,6 +456,41 @@ mod icmpv4_type {
         }
     }
 
+    #[test]
+    fn fixed_payload_size() {
+        use Icmpv4Type::*;
+
+        let dummy_ts = TimestampMessage{
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader{
+            id: 0,
+            seq: 0,
+        };
+        let dummy_redirect = RedirectHeader{
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0;4],
+        };
+        let tests = [
+            (None, Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]}),
+            (None, EchoReply(dummy_echo)),
+            (None, DestinationUnreachable(DestUnreachableHeader::Network)),
+            (None, Redirect(dummy_redirect)),
+            (None, EchoRequest(dummy_echo)),
+            (None, TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            (None, ParameterProblem(ParameterProblemHeader::BadLength)),
+            (Some(0), TimestampRequest(dummy_ts.clone())),
+            (Some(0), TimestampReply(dummy_ts)),
+        ];
+        for t in tests {
+            assert_eq!(t.0, t.1.fixed_payload_size());
+        }
+    }
+
     proptest!{
         #[test]
         fn calc_checksum(
@@ -639,6 +674,20 @@ mod icmpv4_header {
                 checksum,
             };
             assert_eq!(header.header_len(), icmpv4_type.header_len());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fixed_payload_size(
+            checksum in any::<u16>(),
+            icmpv4_type in icmpv4_type_any()
+        ) {
+            let header = Icmpv4Header{
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            assert_eq!(header.fixed_payload_size(), icmpv4_type.fixed_payload_size());
         }
     }
 
@@ -1081,6 +1130,50 @@ mod icmpv4_slice {
         }
     }
 
+    #[test]
+    fn header_len() {
+        use Icmpv4Type::*;
+        let dummy_ts = TimestampMessage{
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader{
+            id: 0,
+            seq: 0,
+        };
+        let dummy_redirect = RedirectHeader{
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0;4],
+        };
+        let tests = [
+            (Unknown{type_u8: u8::MAX, code_u8: 0, bytes5to8: [0;4]}),
+            (EchoReply(dummy_echo)),
+            (DestinationUnreachable(DestUnreachableHeader::Network)),
+            (Redirect(dummy_redirect)),
+            (EchoRequest(dummy_echo)),
+
+            (TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            (ParameterProblem(ParameterProblemHeader::BadLength)),
+            (TimestampRequest(dummy_ts.clone())),
+            // check that a non zero code value return 8
+            (Unknown{type_u8: TYPE_TIMESTAMP, code_u8: 1, bytes5to8: [0;4]}),
+            (TimestampReply(dummy_ts)),
+            // check that a non zero code value return 8
+            (Unknown{type_u8: TYPE_TIMESTAMP_REPLY, code_u8: 1, bytes5to8: [0;4]}),
+        ];
+        for t in tests {
+            assert_eq!(
+                t.header_len(),
+                Icmpv4Slice::from_slice(
+                    &Icmpv4Header::new(t).to_bytes()
+                ).unwrap().header_len()
+            );
+        }
+    }
+
     proptest!{
         #[test]
         fn icmp_type(base_bytes in any::<[u8;20]>()) {
@@ -1390,6 +1483,73 @@ mod icmpv4_slice {
 
     proptest!{
         #[test]
+        fn payload(
+            payload in proptest::collection::vec(any::<u8>(), 8..26)
+        ) {
+            use Icmpv4Type::*;
+            let dummy_ts = TimestampMessage{
+                id: 0,
+                seq: 0,
+                originate_timestamp: 0,
+                receive_timestamp: 0,
+                transmit_timestamp: 0,
+            };
+            let dummy_echo = IcmpEchoHeader{
+                id: 0,
+                seq: 0,
+            };
+            let dummy_redirect = RedirectHeader{
+                code: RedirectCode::RedirectForNetwork,
+                gateway_internet_address: [0;4],
+            };
+            // tests with variable payloads
+            {
+                let var_tests = [
+                    Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]},
+                    EchoReply(dummy_echo),
+                    DestinationUnreachable(DestUnreachableHeader::Network),
+                    Redirect(dummy_redirect),
+                    EchoRequest(dummy_echo),
+                    TimeExceeded(TimeExceededCode::TtlExceededInTransit),
+                    ParameterProblem(ParameterProblemHeader::BadLength),
+                    // timestamps with non-zero code values
+                    Unknown{type_u8: TYPE_TIMESTAMP, code_u8: 1, bytes5to8: [0;4]},
+                    Unknown{type_u8: TYPE_TIMESTAMP_REPLY, code_u8: 1, bytes5to8: [0;4]},
+                ];
+                for t in var_tests {
+
+                    let mut bytes = Vec::with_capacity(t.header_len() + payload.len());
+                    Icmpv4Header::new(t.clone()).write(&mut bytes).unwrap();
+                    bytes.extend_from_slice(&payload);
+
+                    assert_eq!(
+                        &payload[..],
+                        Icmpv4Slice::from_slice(&bytes).unwrap().payload()
+                    );
+                }
+            }
+            // tests with fixed payload sizes
+            {
+                let fixed_tests = [
+                    (0, TimestampRequest(dummy_ts.clone())),
+                    (0, TimestampReply(dummy_ts)),
+                ];
+                for t in fixed_tests {
+                    let mut bytes = Vec::with_capacity(t.1.header_len() + t.0);
+                    Icmpv4Header::new(t.1.clone()).write(&mut bytes).unwrap();
+                    bytes.extend_from_slice(&payload[..t.0]);
+
+                    assert_eq!(
+                        &payload[..t.0],
+                        Icmpv4Slice::from_slice(&bytes).unwrap().payload()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
         fn slice(bytes in proptest::collection::vec(any::<u8>(), 20..1024)) {
             let slice = if bytes[0] == TYPE_TIMESTAMP || bytes[0] == TYPE_TIMESTAMP_REPLY {
                 &bytes[..20]
@@ -1492,7 +1652,7 @@ mod icmpv4_regression {
     #[test]
     fn pcap_echo_session() {
         let request = PacketHeaders::from_ethernet_slice(&ICMP4_ECHO_REQUEST_BYTES).unwrap();
-        let request_icmp4 = request.transport.unwrap().icmp4().unwrap();
+        let request_icmp4 = request.transport.unwrap().icmpv4().unwrap();
         match request_icmp4.icmp_type {
             Icmpv4Type::EchoRequest(echo) => {
                 assert_eq!(echo.seq, 1);
@@ -1502,7 +1662,7 @@ mod icmpv4_regression {
         }
 
         let reply = PacketHeaders::from_ethernet_slice(&ICMP4_ECHO_REPLY_BYTES).unwrap();
-        let reply_icmp4 = reply.transport.unwrap().icmp4().unwrap();
+        let reply_icmp4 = reply.transport.unwrap().icmpv4().unwrap();
         match reply_icmp4.icmp_type {
             Icmpv4Type::EchoReply(echo) => {
                 assert_eq!(echo.seq, 1);
@@ -1543,7 +1703,7 @@ mod icmpv4_regression {
         ] {
             // make sure we can unmarshall the correct checksum
             let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
-            let mut icmp4 = request.transport.unwrap().icmp4().unwrap();
+            let mut icmp4 = request.transport.unwrap().icmpv4().unwrap();
             let valid_checksum = icmp4.checksum;
             assert_ne!(valid_checksum, 0);
             assert_eq!(valid_checksum, checksum);
@@ -1574,7 +1734,7 @@ mod icmpv4_regression {
             Ipv4Addr::from(ip_header.source),
             "212.156.201.114".parse::<Ipv4Addr>().unwrap()
         );
-        let icmp4 = ttl_exceeded.transport.unwrap().icmp4().unwrap();
+        let icmp4 = ttl_exceeded.transport.unwrap().icmpv4().unwrap();
         let icmp_bytes = icmp4.to_bytes();
         assert_eq!(8, icmp_bytes.len());
         assert_eq!(icmp_bytes[0], icmpv4::TYPE_TIME_EXCEEDED);
@@ -1615,7 +1775,7 @@ mod icmpv4_regression {
             let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
             pkt[offset] = code_u8; // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
-            let icmp4 = parsed.transport.unwrap().icmp4().unwrap();
+            let icmp4 = parsed.transport.unwrap().icmpv4().unwrap();
             if let Icmpv4Type::DestinationUnreachable(icmp_code) = icmp4.icmp_type {
                 assert_eq!(code_u8, icmp_code.code_u8());
             } else {

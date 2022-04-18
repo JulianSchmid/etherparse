@@ -736,6 +736,44 @@ mod icmpv6_type {
         }
     }
 
+    proptest! {
+        #[test]
+        fn fixed_payload_size(
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            use etherparse::Icmpv6Type::*;
+            use etherparse::{IcmpEchoHeader, icmpv6::*};
+
+            let variable_payload_headers = [
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
+                PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
+                TimeExceeded{ code: code_u8.into(), },
+                ParameterProblem{
+                    code: code_u8.into(),
+                    pointer: u32::from_be_bytes(bytes5to8),
+                },
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ];
+
+            for hdr in variable_payload_headers {
+                assert_eq!(None, hdr.fixed_payload_size());
+            }
+
+            for t in 0..=u8::MAX {
+                assert_eq!(
+                    None,
+                    Unknown{
+                        type_u8: t,
+                        code_u8,
+                        bytes5to8,
+                    }.fixed_payload_size()
+                );
+            }
+        }
+    }
+
     #[test]
     fn debug() {
         assert_eq!(
@@ -766,11 +804,24 @@ mod icmpv6_header {
         #[test]
         fn header_len(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
             assert_eq!(
-                8,
+                icmp_type.header_len(),
                 Icmpv6Header{
                     icmp_type,
                     checksum
                 }.header_len()
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn fixed_payload_size(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
+            assert_eq!(
+                icmp_type.fixed_payload_size(),
+                Icmpv6Header{
+                    icmp_type,
+                    checksum
+                }.fixed_payload_size()
             );
         }
     }
@@ -1079,7 +1130,7 @@ mod icmpv6_header {
         ] {
             // make sure we can unmarshall the correct checksum
             let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
-            let mut icmp6 = request.transport.unwrap().icmp6().unwrap();
+            let mut icmp6 = request.transport.unwrap().icmpv6().unwrap();
             let valid_checksum = icmp6.checksum;
             assert_ne!(valid_checksum, 0);
             assert_eq!(valid_checksum, checksum);
@@ -1176,6 +1227,54 @@ mod icmpv6_slice {
                 Icmpv6Slice::from_slice(&expected.to_bytes()).unwrap().header(),
                 expected
             );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            use etherparse::Icmpv6Type::*;
+            use etherparse::{IcmpEchoHeader, icmpv6::*};
+
+            let len_8_types = [
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
+                PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
+                TimeExceeded{ code: code_u8.into(), },
+                ParameterProblem{
+                    code: code_u8.into(),
+                    pointer: u32::from_be_bytes(bytes5to8),
+                },
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ];
+
+            for t in len_8_types {
+                assert_eq!(
+                    t.header_len(),
+                    Icmpv6Slice::from_slice(
+                        &Icmpv6Header::new(t).to_bytes()
+                    ).unwrap().header_len()
+                );
+            }
+
+            for t in 0..=u8::MAX {
+                let header = Icmpv6Header::new(
+                    Unknown{
+                        type_u8: t,
+                        code_u8,
+                        bytes5to8,
+                    }
+                );
+                assert_eq!(
+                    8,
+                    Icmpv6Slice::from_slice(
+                        &header.to_bytes()
+                    ).unwrap().header_len()
+                );
+            }
         }
     }
 
@@ -1303,11 +1402,42 @@ mod icmpv6_slice {
 
     proptest! {
         #[test]
-        fn message_body(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
-            assert_eq!(
-                Icmpv6Slice::from_slice(&slice[..]).unwrap().message_body(),
-                &slice[4..]
-            );
+        fn payload(
+            type_u8 in any::<u8>(),
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+            payload in proptest::collection::vec(any::<u8>(), 8..16)
+        ) {
+            use etherparse::Icmpv6Type::*;
+            use etherparse::{IcmpEchoHeader, icmpv6::*};
+
+            let len_8_types = [
+                Unknown{
+                    type_u8,
+                    code_u8,
+                    bytes5to8,
+                },
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
+                PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
+                TimeExceeded{ code: code_u8.into(), },
+                ParameterProblem{
+                    code: code_u8.into(),
+                    pointer: u32::from_be_bytes(bytes5to8),
+                },
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ];
+
+            for t in len_8_types {
+                let mut bytes = Vec::with_capacity(t.header_len() + payload.len());
+                Icmpv6Header::new(t.clone()).write(&mut bytes).unwrap();
+                bytes.extend_from_slice(&payload);
+
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&bytes[..]).unwrap().payload(),
+                    &payload[..]
+                );
+            }
         }
     }
 
