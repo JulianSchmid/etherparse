@@ -28,9 +28,9 @@ fn constants() {
 
     // destination unreachable code values according to
     // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-2
-    assert_eq!(0, CODE_DST_UNREACH_NOROUTE);
+    assert_eq!(0, CODE_DST_UNREACH_NO_ROUTE);
     assert_eq!(1, CODE_DST_UNREACH_PROHIBITED);
-    assert_eq!(2, CODE_DST_UNREACH_BEYONDSCOPE);
+    assert_eq!(2, CODE_DST_UNREACH_BEYOND_SCOPE);
     assert_eq!(3, CODE_DST_UNREACH_ADDR);
     assert_eq!(4, CODE_DST_UNREACH_PORT);
     assert_eq!(5, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
@@ -71,7 +71,7 @@ mod icmp6_dest_unreachable {
         }
         assert_eq!(
             NoRoute,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_NOROUTE).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_NO_ROUTE).unwrap()
         );
         assert_eq!(
             Prohibited,
@@ -79,7 +79,7 @@ mod icmp6_dest_unreachable {
         );
         assert_eq!(
             BeyondScope,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_BEYONDSCOPE,).unwrap()
+            DestUnreachableCode::from_u8(CODE_DST_UNREACH_BEYOND_SCOPE,).unwrap()
         );
         assert_eq!(
             Address,
@@ -101,9 +101,9 @@ mod icmp6_dest_unreachable {
 
     #[test]
     fn code_u8() {
-        assert_eq!(NoRoute.code_u8(), CODE_DST_UNREACH_NOROUTE);
+        assert_eq!(NoRoute.code_u8(), CODE_DST_UNREACH_NO_ROUTE);
         assert_eq!(Prohibited.code_u8(), CODE_DST_UNREACH_PROHIBITED);
-        assert_eq!(BeyondScope.code_u8(), CODE_DST_UNREACH_BEYONDSCOPE);
+        assert_eq!(BeyondScope.code_u8(), CODE_DST_UNREACH_BEYOND_SCOPE);
         assert_eq!(Address.code_u8(), CODE_DST_UNREACH_ADDR);
         assert_eq!(Port.code_u8(), CODE_DST_UNREACH_PORT);
         assert_eq!(
@@ -153,15 +153,15 @@ mod time_exceeded_code {
     #[test]
     fn from_u8() {
         assert_eq!(
-            HopLimitExceeded,
-            TimeExceededCode::from(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED)
+            Some(HopLimitExceeded),
+            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED)
         );
         assert_eq!(
-            FragmentReassemblyTimeExceeded,
-            TimeExceededCode::from(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED)
+            Some(FragmentReassemblyTimeExceeded),
+            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED)
         );
         for code_u8 in 2..=u8::MAX {
-            assert_eq!(Raw { code_u8 }, TimeExceededCode::from(code_u8));
+            assert_eq!(None, TimeExceededCode::from_u8(code_u8));
         }
     }
 
@@ -169,21 +169,17 @@ mod time_exceeded_code {
     fn from_enum() {
         assert_eq!(
             CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED,
-            u8::from(HopLimitExceeded)
+            HopLimitExceeded.code_u8()
         );
         assert_eq!(
             CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
-            u8::from(FragmentReassemblyTimeExceeded)
+            FragmentReassemblyTimeExceeded.code_u8()
         );
-        for code_u8 in 0..=u8::MAX {
-            assert_eq!(code_u8, u8::from(Raw { code_u8 }));
-        }
     }
 
     #[test]
     fn clone_eq() {
         let values = [
-            Raw { code_u8: 8 },
             HopLimitExceeded,
             FragmentReassemblyTimeExceeded,
         ];
@@ -195,7 +191,6 @@ mod time_exceeded_code {
     #[test]
     fn debug() {
         let tests = [
-            (Raw { code_u8: 8 }, "Raw { code_u8: 8 }"),
             (HopLimitExceeded, "HopLimitExceeded"),
             (
                 FragmentReassemblyTimeExceeded,
@@ -378,44 +373,96 @@ mod icmpv6_type {
             use etherparse::Icmpv6Type::*;
             use etherparse::{IcmpEchoHeader, Icmpv6Type, icmpv6::*};
 
-            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
-                    DestinationUnreachable(code)
-                );
-            } else {
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
-                    Unknown{
-                        type_u8: TYPE_DST_UNREACH,
-                        code_u8,
-                        bytes5to8,
+            // destination unreachable
+            {
+                use DestUnreachableCode::*;
+                
+                // known codes
+                {
+                    let tests = [
+                        (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
+                        (Prohibited, CODE_DST_UNREACH_PROHIBITED),
+                        (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
+                        (Address, CODE_DST_UNREACH_ADDR),
+                        (Port, CODE_DST_UNREACH_PORT),
+                        (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
+                        (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
+                    ];
+                    for t in tests {
+                        assert_eq!(
+                            Icmpv6Type::from_bytes(TYPE_DST_UNREACH, t.1, bytes5to8),
+                            DestinationUnreachable(t.0)
+                        );
                     }
-                );
+                }
+
+                // unknown codes
+                for code_u8 in 7..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
+                        Unknown{
+                            type_u8: TYPE_DST_UNREACH,
+                            code_u8,
+                            bytes5to8,
+                        }
+                    );
+                }
             }
 
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, 0, bytes5to8),
-                PacketTooBig{
-                    mtu: u32::from_be_bytes(bytes5to8),
-                }
-            );
-            if 0 != code_u8 {
+            // packet too big
+            {
+                // known code
                 assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, code_u8, bytes5to8),
-                    Unknown{
-                        type_u8: TYPE_PACKET_TOO_BIG,
-                        code_u8,
-                        bytes5to8,
+                    Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, 0, bytes5to8),
+                    PacketTooBig{
+                        mtu: u32::from_be_bytes(bytes5to8),
                     }
                 );
-            }
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_TIME_EXCEEDED, code_u8, bytes5to8),
-                TimeExceeded{
-                    code: code_u8.into(),
+                // unknown code
+                for code_u8 in 1..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, code_u8, bytes5to8),
+                        Unknown{
+                            type_u8: TYPE_PACKET_TOO_BIG,
+                            code_u8,
+                            bytes5to8,
+                        }
+                    );
                 }
-            );
+            }
+            
+            // time exceeded
+            {
+                // known codes
+                {
+                    use TimeExceededCode::*;
+                    let tests = [
+                        (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
+                        (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
+                    ];
+                
+                    for t in tests {
+                        assert_eq!(
+                            Icmpv6Type::from_bytes(TYPE_TIME_EXCEEDED, t.1, bytes5to8),
+                            TimeExceeded{
+                                code: t.0,
+                            }
+                        );
+                    }
+                }
+
+                // unknown codes
+                for code_u8 in 2..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_TIME_EXCEEDED, code_u8, bytes5to8),
+                        Unknown{
+                            type_u8: TYPE_TIME_EXCEEDED,
+                            code_u8,
+                            bytes5to8,
+                        }
+                    );
+                }
+            }
             assert_eq!(
                 Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
                 ParameterProblem{
@@ -487,7 +534,7 @@ mod icmpv6_type {
                 let type_u8_type_pair = [
                     (TYPE_DST_UNREACH, DestinationUnreachable(DestUnreachableCode::SourceAddressFailedPolicy)),
                     (TYPE_PACKET_TOO_BIG, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
-                    (TYPE_TIME_EXCEEDED, TimeExceeded{ code: code_u8.into(), }),
+                    (TYPE_TIME_EXCEEDED, TimeExceeded{ code: TimeExceededCode::HopLimitExceeded, }),
                     (TYPE_PARAM_PROB, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
                     (TYPE_ECHO_REQUEST, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (TYPE_ECHO_REPLY, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
@@ -519,11 +566,10 @@ mod icmpv6_type {
             use etherparse::Icmpv6Type::*;
             use etherparse::{IcmpEchoHeader, icmpv6::*};
 
-            // types which include code
+            // types with 0 as code
             {
                 let code_type_pair = [
                     (0, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
-                    (code_u8, TimeExceeded{ code: code_u8.into(), }),
                     (code_u8, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
                     (0, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (0, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
@@ -533,11 +579,36 @@ mod icmpv6_type {
                 }
             }
 
-            // destination unreachable (skip non existing codes)
-            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
-                assert_eq!(code_u8, DestinationUnreachable(code).code_u8());
+            // destination unreachable
+            {
+                use DestUnreachableCode::*;
+                let tests = [
+                    (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
+                    (Prohibited, CODE_DST_UNREACH_PROHIBITED),
+                    (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
+                    (Address, CODE_DST_UNREACH_ADDR),
+                    (Port, CODE_DST_UNREACH_PORT),
+                    (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
+                    (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
+                ];
+                for t in tests {
+                    assert_eq!(t.1, DestinationUnreachable(t.0).code_u8());
+                }
             }
 
+            // time exceeded
+            {
+                use TimeExceededCode::*;
+                let tests = [
+                    (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
+                    (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
+                ];
+                for t in tests {
+                    assert_eq!(t.1, TimeExceeded{ code: t.0 }.code_u8());
+                }
+            }
+
+            // unknown
             for t in 0..=u8::MAX {
                 assert_eq!(
                     code_u8,
@@ -627,7 +698,7 @@ mod icmpv6_type {
             } else {
                 assert_eq!(
                     DestinationUnreachable(DestUnreachableCode::NoRoute).to_bytes(),
-                    (TYPE_DST_UNREACH, CODE_DST_UNREACH_NOROUTE, [0;4])
+                    (TYPE_DST_UNREACH, CODE_DST_UNREACH_NO_ROUTE, [0;4])
                 );
             }
             assert_eq!(
@@ -635,8 +706,8 @@ mod icmpv6_type {
                 (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes())
             );
             assert_eq!(
-                TimeExceeded{ code: TimeExceededCode::Raw{ code_u8 }}.to_bytes(),
-                (TYPE_TIME_EXCEEDED, code_u8, [0u8;4])
+                TimeExceeded{ code: TimeExceededCode::HopLimitExceeded }.to_bytes(),
+                (TYPE_TIME_EXCEEDED, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED, [0u8;4])
             );
             assert_eq!(
                 ParameterProblem{ code: ParameterProblemCode::Raw{ code_u8 }, pointer: mtu}.to_bytes(),
@@ -710,7 +781,7 @@ mod icmpv6_type {
             let len_8_hdrs = [
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
-                TimeExceeded{ code: code_u8.into(), },
+                TimeExceeded{ code: TimeExceededCode::FragmentReassemblyTimeExceeded, },
                 ParameterProblem{
                     code: code_u8.into(),
                     pointer: u32::from_be_bytes(bytes5to8),
@@ -748,7 +819,7 @@ mod icmpv6_type {
             let variable_payload_headers = [
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
-                TimeExceeded{ code: code_u8.into(), },
+                TimeExceeded{ code: TimeExceededCode::HopLimitExceeded, },
                 ParameterProblem{
                     code: code_u8.into(),
                     pointer: u32::from_be_bytes(bytes5to8),
@@ -1242,7 +1313,7 @@ mod icmpv6_slice {
             let len_8_types = [
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
-                TimeExceeded{ code: code_u8.into(), },
+                TimeExceeded{ code: TimeExceededCode::HopLimitExceeded, },
                 ParameterProblem{
                     code: code_u8.into(),
                     pointer: u32::from_be_bytes(bytes5to8),
@@ -1419,7 +1490,7 @@ mod icmpv6_slice {
                 },
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
-                TimeExceeded{ code: code_u8.into(), },
+                TimeExceeded{ code: TimeExceededCode::HopLimitExceeded, },
                 ParameterProblem{
                     code: code_u8.into(),
                     pointer: u32::from_be_bytes(bytes5to8),
