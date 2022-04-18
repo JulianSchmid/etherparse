@@ -357,7 +357,7 @@ use icmpv6::*;
 ///             Unknown{ type_u8, code_u8, bytes5to8 } => println!("Unknown{{ type_u8: {}, code_u8: {}, bytes5to8: {:?} }}", type_u8, code_u8, bytes5to8),
 ///             DestinationUnreachable(header) => println!("{:?}", header),
 ///             PacketTooBig { mtu } => println!("TimeExceeded{{ mtu: {} }}", mtu),
-///             TimeExceeded{ code } => println!("TimeExceeded{{ code: {:?} }}", code),
+///             TimeExceeded(code) => println!("{:?}", code),
 ///             ParameterProblem{ code, pointer } => println!("ParameterProblem{{ code: {:?}, pointer: {} }}", code, pointer),
 ///             EchoRequest(header) => println!("{:?}", header),
 ///             EchoReply(header) => println!("{:?}", header),
@@ -449,10 +449,7 @@ pub enum Icmpv6Type {
     ///
     /// An ICMPv6 Time Exceeded message with Code 1 is used to report
     /// fragment reassembly timeout, as specified in [IPv6, Section 4.5].
-    TimeExceeded {
-        /// Code identifying which time as exceeded.
-        code: icmpv6::TimeExceededCode,
-    },
+    TimeExceeded(icmpv6::TimeExceededCode),
     /// Start of "Parameter Problem Message"
     ///
     /// # RFC 4443 Description
@@ -530,9 +527,7 @@ impl Icmpv6Type {
             TYPE_TIME_EXCEEDED => {
                 let code = TimeExceededCode::from_u8(code_u8);
                 if let Some(code) = code {
-                    return TimeExceeded {
-                        code,
-                    };
+                    return TimeExceeded(code);
                 }
             }
             TYPE_PARAM_PROB => {
@@ -572,7 +567,7 @@ impl Icmpv6Type {
             } => *type_u8,
             DestinationUnreachable(_) => TYPE_DST_UNREACH,
             PacketTooBig { mtu: _ } => TYPE_PACKET_TOO_BIG,
-            TimeExceeded { code: _ } => TYPE_TIME_EXCEEDED,
+            TimeExceeded(_) => TYPE_TIME_EXCEEDED,
             ParameterProblem {
                 code: _,
                 pointer: _,
@@ -594,7 +589,7 @@ impl Icmpv6Type {
             } => *code_u8,
             DestinationUnreachable(code) => code.code_u8(),
             PacketTooBig { mtu: _ } => 0,
-            TimeExceeded { code } => code.code_u8(),
+            TimeExceeded(code) => code.code_u8(),
             ParameterProblem { code, pointer: _ } => u8::from(*code),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
@@ -663,7 +658,7 @@ impl Icmpv6Type {
             } => (*type_u8, *code_u8, *bytes5to8),
             DestinationUnreachable(header) => (TYPE_DST_UNREACH, (header.code_u8()), [0; 4]),
             PacketTooBig { mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
-            TimeExceeded { code } => (TYPE_TIME_EXCEEDED, code.code_u8(), [0; 4]),
+            TimeExceeded(code) => (TYPE_TIME_EXCEEDED, code.code_u8(), [0; 4]),
             ParameterProblem { code, pointer } => {
                 (TYPE_PARAM_PROB, u8::from(*code), pointer.to_be_bytes())
             }
@@ -699,7 +694,7 @@ impl Icmpv6Type {
             }
             | DestinationUnreachable(_)
             | PacketTooBig{ mtu: _ }
-            | TimeExceeded{ code: _ }
+            | TimeExceeded(_)
             | ParameterProblem{ code: _, pointer: _ }
             | EchoRequest(_)
             | EchoReply(_) => 8,
@@ -719,7 +714,7 @@ impl Icmpv6Type {
             }
             | DestinationUnreachable(_)
             | PacketTooBig{ mtu: _ }
-            | TimeExceeded{ code: _ }
+            | TimeExceeded(_)
             | ParameterProblem{ code: _, pointer: _ }
             | EchoRequest(_)
             | EchoReply(_) => None,
