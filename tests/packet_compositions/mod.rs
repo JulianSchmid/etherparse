@@ -341,7 +341,19 @@ impl ComponentTest {
         }
 
         //payload
-        assert_eq!(self.payload[..], result.payload[..]);
+        match result.transport.as_ref() {
+            // icmp slices contain the complete payload, the payload itself will be empty
+            Some(TransportSlice::Icmpv4(icmpv4)) => {
+                assert_eq!(&self.payload[..], icmpv4.payload());
+                assert_eq!(0, result.payload.len());
+            }
+            Some(TransportSlice::Icmpv6(icmpv6)) => {
+                assert_eq!(&self.payload[..], icmpv6.payload());
+                assert_eq!(0, result.payload.len());
+            }
+            // for other cases
+            _ => assert_eq!(&self.payload[..], &result.payload[..])
+        }
     }
 
     fn run_vlan(
@@ -353,7 +365,9 @@ impl ComponentTest {
         ipv6: &Ipv6Header,
         ipv6_ext: &Ipv6Extensions,
         udp: &UdpHeader,
-        tcp: &TcpHeader
+        tcp: &TcpHeader,
+        icmpv4: &Icmpv4Header,
+        icmpv6: &Icmpv6Header,
     ) {
         let setup_single = | ether_type: u16| -> ComponentTest {
             let mut result = self.clone();
@@ -382,18 +396,26 @@ impl ComponentTest {
 
         //single
         setup_single(inner_vlan.ether_type).run();
-        setup_single(ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp);
-        setup_single(ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp);
+        setup_single(ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
+        setup_single(ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
 
         //double 
         for ether_type in VLAN_ETHER_TYPES {
             setup_double(*ether_type, inner_vlan.ether_type).run();
-            setup_double(*ether_type, ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp);
-            setup_double(*ether_type, ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp);
+            setup_double(*ether_type, ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
+            setup_double(*ether_type, ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
         }
     }
 
-    fn run_ipv4(&self, ip: &Ipv4Header, ip_exts: &Ipv4Extensions, udp: &UdpHeader, tcp: &TcpHeader) {
+    fn run_ipv4(
+        &self,
+        ip: &Ipv4Header,
+        ip_exts: &Ipv4Extensions,
+        udp: &UdpHeader,
+        tcp: &TcpHeader,
+        icmpv4: &Icmpv4Header,
+        icmpv6: &Icmpv6Header,
+    ) {
 
         // fragmenting
         {
@@ -423,11 +445,19 @@ impl ComponentTest {
                 header.set_next_headers(ip.protocol);
                 header
             });
-            test.run_transport(udp, tcp);
+            test.run_transport(udp, tcp, icmpv4, icmpv6);
         }
     }
 
-    fn run_ipv6(&self, ip: &Ipv6Header, ip_exts: &Ipv6Extensions, udp: &UdpHeader, tcp: &TcpHeader) {
+    fn run_ipv6(
+        &self,
+        ip: &Ipv6Header,
+        ip_exts: &Ipv6Extensions,
+        udp: &UdpHeader,
+        tcp: &TcpHeader,
+        icmpv4: &Icmpv4Header,
+        icmpv6: &Icmpv6Header,
+    ) {
 
         // fragmenting
         {
@@ -458,11 +488,17 @@ impl ComponentTest {
                 header.set_next_headers(ip.next_header);
                 header
             });
-            test.run_transport(udp, tcp);
+            test.run_transport(udp, tcp, icmpv4, icmpv6);
         }
     }
 
-    fn run_transport(&self, udp: &UdpHeader, tcp: &TcpHeader) {
+    fn run_transport(
+        &self,
+        udp: &UdpHeader,
+        tcp: &TcpHeader,
+        icmpv4: &Icmpv4Header,
+        icmpv6: &Icmpv6Header,
+    ) {
         // unknown transport layer
         self.run();
 
@@ -481,6 +517,36 @@ impl ComponentTest {
             test.transport = Some(TransportHeader::Tcp(tcp.clone()));
             test.run()
         }
+
+        // icmpv4
+        if let Some(payload_size) = icmpv4.fixed_payload_size() {
+            let mut test = self.clone();
+            test.ip.as_mut().unwrap().set_next_headers(ip_number::ICMP);
+            test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
+            // resize the payload in case it does not have to be as big
+            test.payload.resize(payload_size, 0);
+            test.run()
+        } else {
+            let mut test = self.clone();
+            test.ip.as_mut().unwrap().set_next_headers(ip_number::ICMP);
+            test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
+            test.run()
+        }
+
+        // icmpv6
+        if let Some(payload_size) = icmpv6.fixed_payload_size() {
+            let mut test = self.clone();
+            test.ip.as_mut().unwrap().set_next_headers(ip_number::IPV6_ICMP);
+            test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
+            // resize the payload in case it does not have to be as big
+            test.payload.resize(payload_size, 0);
+            test.run()
+        } else {
+            let mut test = self.clone();
+            test.ip.as_mut().unwrap().set_next_headers(ip_number::IPV6_ICMP);
+            test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
+            test.run()
+        }
     }
 }
 
@@ -496,6 +562,8 @@ proptest! {
                          ref ipv6_exts in ipv6_extensions_unknown(),
                          ref udp in udp_any(),
                          ref tcp in tcp_any(),
+                         ref icmpv4 in icmpv4_header_any(),
+                         ref icmpv6 in icmpv6_header_any(),
                          ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
         let setup_eth = | ether_type: u16 | -> ComponentTest {
@@ -514,12 +582,12 @@ proptest! {
 
         //ethernet 2: standalone, ipv4, ipv6
         setup_eth(eth.ether_type).run();
-        setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, ipv4_exts, udp, tcp);
-        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_exts, udp, tcp);
+        setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
+        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
 
         //vlans
         for ether_type in VLAN_ETHER_TYPES {
-            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp);
+            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
         }
     }
 }

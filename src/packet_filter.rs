@@ -196,7 +196,6 @@ impl TransportFilter {
 impl Filter {
     ///Returns true if a given sliced network package fullfills all conditions of this filter.
     pub fn applies_to_slice(&self, slice: &SlicedPacket) -> bool {
-        //TODO link
          (match &self.link {
             ElementFilter::Any => true,
             ElementFilter::No => slice.link.is_none(),

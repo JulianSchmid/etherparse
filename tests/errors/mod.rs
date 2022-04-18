@@ -236,6 +236,7 @@ fn value_error_source() {
         U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
         U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
         U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        Icmpv6InIpv4,
     ];
 
     for value in &none_values {
@@ -261,6 +262,7 @@ fn value_error_debug() {
         U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
         U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
         U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        Icmpv6InIpv4,
     ];
 
     for value in &values {
@@ -389,6 +391,12 @@ proptest! {
                 max: max_u32,
                 field: field.clone()
             })
+        );
+
+        // Icmpv6InIpv4
+        assert_eq!(
+            &format!("ICMPv6 packet can not be combined with IPv4 headers."),
+            &format!("{}", Icmpv6InIpv4)
         );
     }
 }

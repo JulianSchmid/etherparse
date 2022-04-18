@@ -395,6 +395,7 @@ impl<'a> CursorSlice<'a> {
                 ip_number::UDP => self.slice_udp(),
                 ip_number::TCP => self.slice_tcp(),
                 ip_number::ICMP => self.slice_icmp4(),
+                ip_number::IPV6_ICMP => self.slice_icmp6(),
                 value => {
                     use TransportSlice::*;
                     self.result.transport = Some(Unknown(value));
@@ -433,6 +434,7 @@ impl<'a> CursorSlice<'a> {
         } else {
             //parse the data bellow
             match next_header {
+                ip_number::ICMP => self.slice_icmp4(),
                 ip_number::UDP => self.slice_udp(),
                 ip_number::TCP => self.slice_tcp(),
                 ip_number::IPV6_ICMP => self.slice_icmp6(),
