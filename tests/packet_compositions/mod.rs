@@ -540,7 +540,7 @@ impl ComponentTest {
             test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
             // resize the payload in case it does not have to be as big
             test.payload.resize(payload_size, 0);
-            test.run();
+            test.run()
         } else {
             let mut test = self.clone();
             test.ip.as_mut().unwrap().set_next_headers(ip_number::IPV6_ICMP);
