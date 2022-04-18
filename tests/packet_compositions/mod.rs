@@ -97,11 +97,11 @@ impl ComponentTest {
                 if let Some(len) = len {
                     assert_matches!(
                         PacketHeaders::from_ethernet_slice(&buffer[..len]),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                     assert_matches!(
                         SlicedPacket::from_ethernet(&buffer[..len]),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                     
                 }
@@ -144,14 +144,14 @@ impl ComponentTest {
                             self.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
                         ),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                     assert_matches!(
                         SlicedPacket::from_ether_type(
                             self.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
                         ),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                 }
             }
@@ -186,11 +186,11 @@ impl ComponentTest {
                 if let Some(len) = len {
                     assert_matches!(
                         PacketHeaders::from_ip_slice(&buffer[..len]),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                     assert_matches!(
                         SlicedPacket::from_ip(&buffer[..len]),
-                        Err(ReadError::UnexpectedEndOfSlice(_))
+                        Err(_)
                     );
                 }
             }
@@ -540,7 +540,7 @@ impl ComponentTest {
             test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
             // resize the payload in case it does not have to be as big
             test.payload.resize(payload_size, 0);
-            test.run()
+            test.run();
         } else {
             let mut test = self.clone();
             test.ip.as_mut().unwrap().set_next_headers(ip_number::IPV6_ICMP);
