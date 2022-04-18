@@ -78,14 +78,14 @@ pub mod icmpv6 {
     pub const TYPE_EXT_ECHO_REPLY: u8 = 161;
 
     /// ICMPv6 destination unreachable code for "no route to destination".
-    pub const CODE_DST_UNREACH_NOROUTE: u8 = 0;
+    pub const CODE_DST_UNREACH_NO_ROUTE: u8 = 0;
 
     /// ICMPv6 destination unreachable code for "communication with
     /// destination administratively prohibited".
     pub const CODE_DST_UNREACH_PROHIBITED: u8 = 1;
 
     /// ICMPv6 destination unreachable code for "beyond scope of source address".
-    pub const CODE_DST_UNREACH_BEYONDSCOPE: u8 = 2;
+    pub const CODE_DST_UNREACH_BEYOND_SCOPE: u8 = 2;
 
     /// ICMPv6 destination unreachable code for "address unreachable".
     pub const CODE_DST_UNREACH_ADDR: u8 = 3;
@@ -150,9 +150,9 @@ pub mod icmpv6 {
         pub fn from_u8(code_u8: u8) -> Option<DestUnreachableCode> {
             use DestUnreachableCode::*;
             match code_u8 {
-                CODE_DST_UNREACH_NOROUTE => Some(NoRoute),
+                CODE_DST_UNREACH_NO_ROUTE => Some(NoRoute),
                 CODE_DST_UNREACH_PROHIBITED => Some(Prohibited),
-                CODE_DST_UNREACH_BEYONDSCOPE => Some(BeyondScope),
+                CODE_DST_UNREACH_BEYOND_SCOPE => Some(BeyondScope),
                 CODE_DST_UNREACH_ADDR => Some(Address),
                 CODE_DST_UNREACH_PORT => Some(Port),
                 CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY => Some(SourceAddressFailedPolicy),
@@ -179,37 +179,33 @@ pub mod icmpv6 {
     /// Code values for ICMPv6 time exceeded message.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum TimeExceededCode {
-        /// In case of an unknown icmp code is received the header elements are stored raw.
-        Raw { code_u8: u8 },
         /// "hop limit exceeded in transit"
-        HopLimitExceeded,
+        HopLimitExceeded = 0,
         /// "fragment reassembly time exceeded"
-        FragmentReassemblyTimeExceeded,
+        FragmentReassemblyTimeExceeded = 1,
     }
 
-    impl From<u8> for TimeExceededCode {
-        fn from(code_u8: u8) -> TimeExceededCode {
+    impl TimeExceededCode {
+
+        /// Tries to convert a code [`u8`] value to a [`TimeExceededCode`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a time exceeded code.
+        #[inline]
+        pub fn from_u8(code_u8: u8) -> Option<TimeExceededCode> {
             use TimeExceededCode::*;
             match code_u8 {
-                CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED => HopLimitExceeded,
+                CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED => Some(HopLimitExceeded),
                 CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED => {
-                    FragmentReassemblyTimeExceeded
+                    Some(FragmentReassemblyTimeExceeded)
                 }
-                code_u8 => Raw { code_u8 },
+                _ => None,
             }
         }
-    }
 
-    impl From<TimeExceededCode> for u8 {
-        fn from(code: TimeExceededCode) -> u8 {
-            use TimeExceededCode::*;
-            match code {
-                Raw { code_u8 } => code_u8,
-                HopLimitExceeded => CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED,
-                FragmentReassemblyTimeExceeded => {
-                    CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED
-                }
-            }
+        /// Returns the [`u8`] value of the code.
+        #[inline]
+        pub fn code_u8(&self) -> u8 {
+            *self as u8
         }
     }
 
@@ -532,9 +528,12 @@ impl Icmpv6Type {
                 }
             }
             TYPE_TIME_EXCEEDED => {
-                return TimeExceeded {
-                    code: code_u8.into(),
-                };
+                let code = TimeExceededCode::from_u8(code_u8);
+                if let Some(code) = code {
+                    return TimeExceeded {
+                        code,
+                    };
+                }
             }
             TYPE_PARAM_PROB => {
                 return ParameterProblem {
@@ -595,7 +594,7 @@ impl Icmpv6Type {
             } => *code_u8,
             DestinationUnreachable(code) => code.code_u8(),
             PacketTooBig { mtu: _ } => 0,
-            TimeExceeded { code } => u8::from(*code),
+            TimeExceeded { code } => code.code_u8(),
             ParameterProblem { code, pointer: _ } => u8::from(*code),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
@@ -664,7 +663,7 @@ impl Icmpv6Type {
             } => (*type_u8, *code_u8, *bytes5to8),
             DestinationUnreachable(header) => (TYPE_DST_UNREACH, (header.code_u8()), [0; 4]),
             PacketTooBig { mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
-            TimeExceeded { code } => (TYPE_TIME_EXCEEDED, u8::from(*code), [0; 4]),
+            TimeExceeded { code } => (TYPE_TIME_EXCEEDED, code.code_u8(), [0; 4]),
             ParameterProblem { code, pointer } => {
                 (TYPE_PARAM_PROB, u8::from(*code), pointer.to_be_bytes())
             }
