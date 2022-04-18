@@ -301,7 +301,7 @@ pub mod icmpv6 {
         /// Returns the [`u8`] value of the code.
         #[inline]
         pub fn code_u8(&self) -> u8 {
-            return *self as u8;
+            *self as u8
         }
     }
 

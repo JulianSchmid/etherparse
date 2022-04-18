@@ -1,6 +1,6 @@
 pub mod icmp;
-pub mod icmpv4;
-pub mod icmpv6;
+pub mod icmpv4_impl;
+pub mod icmpv6_impl;
 pub mod udp;
 pub mod tcp;
 
@@ -13,8 +13,8 @@ use std::io;
 pub enum TransportHeader {
     Udp(udp::UdpHeader),
     Tcp(tcp::TcpHeader),
-    Icmpv4(icmpv4::Icmpv4Header),
-    Icmpv6(icmpv6::Icmpv6Header),
+    Icmpv4(Icmpv4Header),
+    Icmpv6(Icmpv6Header),
 }
 
 impl TransportHeader {
@@ -133,7 +133,7 @@ impl TransportHeader {
             Icmpv4(header) => {
                 header.update_checksum(payload);
             },
-            Icmpv6(_) => Err(ValueError::Icmpv6InIpv4)?,
+            Icmpv6(_) => return Err(ValueError::Icmpv6InIpv4),
         }
         Ok(())
     }

@@ -222,6 +222,24 @@
 //! * Multicast Listener Discovery (MLD) for IPv6 [RFC 2710](https://datatracker.ietf.org/doc/html/rfc2710)
 //! * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 
+// # Reason for 'bool_comparison' disable:
+ //
+ // Clippy triggers triggers errors like the following if the warning stays enabled:
+ //
+ //   warning: equality checks against false can be replaced by a negation
+ //     --> src/packet_decoder.rs:131:20
+ //      |
+ //  131 |                 if false == fragmented {
+ //      |                    ^^^^^^^^^^^^^^^^^^^ help: try simplifying it as shown: `!fragmented`
+ //
+ //
+ // I prefer to write `false == value` instead of `!value` as it
+ // is more visually striking and is not as easy to overlook as the single
+ // character '!'.
+ #![allow(
+   clippy::bool_comparison,
+ )]
+
 use std::io;
 use std::fmt;
 use std::error::Error;
@@ -243,8 +261,8 @@ pub use crate::internet::ipv6_fragment::*;
 
 mod transport;
 pub use crate::transport::icmp::*;
-pub use crate::transport::icmpv4::*;
-pub use crate::transport::icmpv6::*;
+pub use crate::transport::icmpv4_impl::*;
+pub use crate::transport::icmpv6_impl::*;
 pub use crate::transport::tcp::*;
 pub use crate::transport::udp::*;
 pub use crate::transport::TransportHeader;

@@ -622,12 +622,13 @@ impl Icmpv4Header {
     }
 
     /// Converts the header to the on the wire bytes.
+    #[rustfmt::skip]
     pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
         let checksum_be = self.checksum.to_be_bytes();
         let re_zero =
             |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
 
-                #[cfg_attr(rustfmt, rustfmt_skip)]
+                #[rustfmt::skip]
                 let mut re = ArrayVec::from([
                     type_u8, code_u8, checksum_be[0], checksum_be[1],
                     0, 0, 0, 0,
@@ -650,7 +651,7 @@ impl Icmpv4Header {
             let a = a_u16.to_be_bytes();
             let b = b_u16.to_be_bytes();
 
-            #[cfg_attr(rustfmt, rustfmt_skip)]
+            #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
                 a[0], a[1], b[0], b[1],
@@ -670,7 +671,7 @@ impl Icmpv4Header {
                       bytes5to8: [u8; 4]|
          -> ArrayVec<u8, { Icmpv4Header::MAX_SERIALIZED_SIZE }> {
 
-            #[cfg_attr(rustfmt, rustfmt_skip)]
+            #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
                 bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3],
@@ -694,7 +695,6 @@ impl Icmpv4Header {
             let r = msg.receive_timestamp.to_be_bytes();
             let t = msg.transmit_timestamp.to_be_bytes();
 
-            #[cfg_attr(rustfmt, rustfmt_skip)]
             ArrayVec::from([
                 type_u8, 0, checksum_be[0], checksum_be[1],
                 id[0], id[1], seq[0], seq[1],
@@ -804,13 +804,11 @@ impl<'a> Icmpv4Slice<'a> {
         // check type specific length
         match icmp_type {
             TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
-                if 0 == icmp_code {
-                    if TimestampMessage::SERIALIZED_SIZE != slice.len() {
-                        return Err(UnexpectedLenOfSlice {
-                            expected: TimestampMessage::SERIALIZED_SIZE,
-                            actual: slice.len(),
-                        });
-                    }
+                if 0 == icmp_code  && TimestampMessage::SERIALIZED_SIZE != slice.len() {
+                    return Err(UnexpectedLenOfSlice {
+                        expected: TimestampMessage::SERIALIZED_SIZE,
+                        actual: slice.len(),
+                    });
                 }
             }
             _ => {}

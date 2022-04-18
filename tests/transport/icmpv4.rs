@@ -792,7 +792,7 @@ mod icmpv4_header {
 
     proptest!{
         #[test]
-        #[cfg_attr(rustfmt, rustfmt_skip)]
+        #[rustfmt::skip]
         fn to_bytes(
             checksum in any::<u16>(),
             next_hop_mtu in any::<u16>(),
