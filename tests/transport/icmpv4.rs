@@ -784,7 +784,7 @@ mod icmpv4_header {
             for bad_len in 0..header.header_len() {
                 assert_matches!(
                     Icmpv4Header::from_slice(&buffer[..bad_len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                    Err(_)
                 );
             }
         }

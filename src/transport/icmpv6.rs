@@ -247,79 +247,79 @@ pub mod icmpv6 {
     /// Source: <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5>
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
     pub enum ParameterProblemCode {
-        /// In case of an unknown icmp code is received the header elements are stored raw.
-        Raw { code_u8: u8 },
         /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
-        ErroneousHeaderField,
+        ErroneousHeaderField = 0,
         /// Unrecognized Next Header type encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
-        UnrecognizedNextHeader,
+        UnrecognizedNextHeader = 1,
         /// Unrecognized IPv6 option encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
-        UnrecognizedIpv6Option,
+        UnrecognizedIpv6Option = 2,
         /// IPv6 First Fragment has incomplete IPv6 Header Chain (from [RFC 7112](https://tools.ietf.org/html/rfc7112))
-        Ipv6FirstFragmentIncompleteHeaderChain,
+        Ipv6FirstFragmentIncompleteHeaderChain = 3,
         /// SR Upper-layer Header Error (from [RFC 8754](https://tools.ietf.org/html/rfc8754)).
-        SrUpperLayerHeaderError,
+        SrUpperLayerHeaderError = 4,
         /// Unrecognized Next Header type encountered by intermediate node (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        UnrecognizedNextHeaderByIntermediateNode,
+        UnrecognizedNextHeaderByIntermediateNode = 5,
         /// Extension header too big (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        ExtensionHeaderTooBig,
+        ExtensionHeaderTooBig = 6,
         /// Extension header chain too long (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        ExtensionHeaderChainTooLong,
+        ExtensionHeaderChainTooLong = 7,
         /// Too many extension headers (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        TooManyExtensionHeaders,
+        TooManyExtensionHeaders = 8,
         /// Too many options in extension header (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        TooManyOptionsInExtensionHeader,
+        TooManyOptionsInExtensionHeader = 9,
         /// Option too big (from [RFC 8883](https://tools.ietf.org/html/rfc8883))
-        OptionTooBig,
+        OptionTooBig = 10,
     }
 
-    impl From<u8> for ParameterProblemCode {
-        fn from(code_u8: u8) -> ParameterProblemCode {
+    impl ParameterProblemCode {
+
+        /// Tries to convert a code [`u8`] value to a [`ParameterProblemCode`] value.
+        ///
+        /// Returns [`None`] in case the code value is not known as a parameter problem code.
+        pub fn from_u8(code_u8: u8) -> Option<ParameterProblemCode> {
             use ParameterProblemCode::*;
             match code_u8 {
-                CODE_PARAM_PROBLEM_ERR_HEADER_FIELD => ErroneousHeaderField,
-                CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER => UnrecognizedNextHeader,
-                CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION => UnrecognizedIpv6Option,
+                CODE_PARAM_PROBLEM_ERR_HEADER_FIELD => Some(ErroneousHeaderField),
+                CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER => Some(UnrecognizedNextHeader),
+                CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION => Some(UnrecognizedIpv6Option),
                 CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN => {
-                    Ipv6FirstFragmentIncompleteHeaderChain
+                    Some(Ipv6FirstFragmentIncompleteHeaderChain)
                 }
-                CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR => SrUpperLayerHeaderError,
+                CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR => Some(SrUpperLayerHeaderError),
                 CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE => {
-                    UnrecognizedNextHeaderByIntermediateNode
+                    Some(UnrecognizedNextHeaderByIntermediateNode)
                 }
-                CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG => ExtensionHeaderTooBig,
-                CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG => ExtensionHeaderChainTooLong,
-                CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => TooManyExtensionHeaders,
-                CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => TooManyOptionsInExtensionHeader,
-                CODE_PARAM_PROBLEM_OPTION_TOO_BIG => OptionTooBig,
-                code_u8 => Raw { code_u8 },
+                CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG => Some(ExtensionHeaderTooBig),
+                CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG => Some(ExtensionHeaderChainTooLong),
+                CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => Some(TooManyExtensionHeaders),
+                CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => Some(TooManyOptionsInExtensionHeader),
+                CODE_PARAM_PROBLEM_OPTION_TOO_BIG => Some(OptionTooBig),
+                _ => None,
             }
+        }
+
+        /// Returns the [`u8`] value of the code.
+        #[inline]
+        pub fn code_u8(&self) -> u8 {
+            return *self as u8;
         }
     }
 
-    impl From<ParameterProblemCode> for u8 {
-        fn from(code: ParameterProblemCode) -> u8 {
-            use ParameterProblemCode::*;
-            match code {
-                Raw { code_u8 } => code_u8,
-                ErroneousHeaderField => CODE_PARAM_PROBLEM_ERR_HEADER_FIELD,
-                UnrecognizedNextHeader => CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
-                UnrecognizedIpv6Option => CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
-                Ipv6FirstFragmentIncompleteHeaderChain => {
-                    CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN
-                }
-                SrUpperLayerHeaderError => CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
-                UnrecognizedNextHeaderByIntermediateNode => {
-                    CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE
-                }
-                ExtensionHeaderTooBig => CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG,
-                ExtensionHeaderChainTooLong => CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
-                TooManyExtensionHeaders => CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
-                TooManyOptionsInExtensionHeader => CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
-                OptionTooBig => CODE_PARAM_PROBLEM_OPTION_TOO_BIG,
-            }
-        }
+    /// ICMPv6 parameter problem header.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    pub struct ParameterProblemHeader {
+        /// The code can offer additional informations about what kind of parameter
+        /// problem caused the error.
+        pub code: ParameterProblemCode,
+        /// Identifies the octet offset within the
+        /// invoking packet where the error was detected.
+        ///
+        /// The pointer will point beyond the end of the ICMPv6
+        /// packet if the field in error is beyond what can fit
+        /// in the maximum size of an ICMPv6 error message.
+        pub pointer: u32,
     }
+
 } // mod icmpv6
 
 use icmpv6::*;
@@ -358,7 +358,7 @@ use icmpv6::*;
 ///             DestinationUnreachable(header) => println!("{:?}", header),
 ///             PacketTooBig { mtu } => println!("TimeExceeded{{ mtu: {} }}", mtu),
 ///             TimeExceeded(code) => println!("{:?}", code),
-///             ParameterProblem{ code, pointer } => println!("ParameterProblem{{ code: {:?}, pointer: {} }}", code, pointer),
+///             ParameterProblem(header) => println!("{:?}", header),
 ///             EchoRequest(header) => println!("{:?}", header),
 ///             EchoReply(header) => println!("{:?}", header),
 ///         }
@@ -459,18 +459,7 @@ pub enum Icmpv6Type {
     /// processing the packet, it MUST discard the packet and SHOULD
     /// originate an ICMPv6 Parameter Problem message to the packet's source,
     /// indicating the type and location of the problem.
-    ParameterProblem {
-        /// The code can offer additional informations about what kind of parameter
-        /// problem caused the error.
-        code: icmpv6::ParameterProblemCode,
-        /// Identifies the octet offset within the
-        /// invoking packet where the error was detected.
-        ///
-        /// The pointer will point beyond the end of the ICMPv6
-        /// packet if the field in error is beyond what can fit
-        /// in the maximum size of an ICMPv6 error message.
-        pointer: u32,
-    },
+    ParameterProblem(icmpv6::ParameterProblemHeader),
     /// Start of "Echo Request Message"
     ///
     /// # RFC 4443 Description
@@ -531,9 +520,12 @@ impl Icmpv6Type {
                 }
             }
             TYPE_PARAM_PROB => {
-                return ParameterProblem {
-                    code: code_u8.into(),
-                    pointer: u32::from_be_bytes(bytes5to8),
+                let code = icmpv6::ParameterProblemCode::from_u8(code_u8);
+                if let Some(code) = code {
+                    return ParameterProblem( ParameterProblemHeader{
+                        code,
+                        pointer: u32::from_be_bytes(bytes5to8),
+                    });
                 }
             }
             TYPE_ECHO_REQUEST => {
@@ -568,10 +560,7 @@ impl Icmpv6Type {
             DestinationUnreachable(_) => TYPE_DST_UNREACH,
             PacketTooBig { mtu: _ } => TYPE_PACKET_TOO_BIG,
             TimeExceeded(_) => TYPE_TIME_EXCEEDED,
-            ParameterProblem {
-                code: _,
-                pointer: _,
-            } => TYPE_PARAM_PROB,
+            ParameterProblem(_) => TYPE_PARAM_PROB,
             EchoRequest(_) => TYPE_ECHO_REQUEST,
             EchoReply(_) => TYPE_ECHO_REPLY,
         }
@@ -590,7 +579,7 @@ impl Icmpv6Type {
             DestinationUnreachable(code) => code.code_u8(),
             PacketTooBig { mtu: _ } => 0,
             TimeExceeded(code) => code.code_u8(),
-            ParameterProblem { code, pointer: _ } => u8::from(*code),
+            ParameterProblem(header) => header.code.code_u8(),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
         }
@@ -659,8 +648,8 @@ impl Icmpv6Type {
             DestinationUnreachable(header) => (TYPE_DST_UNREACH, (header.code_u8()), [0; 4]),
             PacketTooBig { mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
             TimeExceeded(code) => (TYPE_TIME_EXCEEDED, code.code_u8(), [0; 4]),
-            ParameterProblem { code, pointer } => {
-                (TYPE_PARAM_PROB, u8::from(*code), pointer.to_be_bytes())
+            ParameterProblem(header) => {
+                (TYPE_PARAM_PROB, header.code.code_u8(), header.pointer.to_be_bytes())
             }
             EchoRequest(echo) => (TYPE_ECHO_REQUEST, 0, echo.to_bytes()),
             EchoReply(echo) => (TYPE_ECHO_REPLY, 0, echo.to_bytes()),
@@ -695,7 +684,7 @@ impl Icmpv6Type {
             | DestinationUnreachable(_)
             | PacketTooBig{ mtu: _ }
             | TimeExceeded(_)
-            | ParameterProblem{ code: _, pointer: _ }
+            | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_) => 8,
         }
@@ -715,7 +704,7 @@ impl Icmpv6Type {
             | DestinationUnreachable(_)
             | PacketTooBig{ mtu: _ }
             | TimeExceeded(_)
-            | ParameterProblem{ code: _, pointer: _ }
+            | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_) => None,
         }

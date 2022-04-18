@@ -1,9 +1,10 @@
 use super::super::*;
 use proptest::prelude::*;
 
+use etherparse::icmpv6::*;
+
 #[test]
 fn constants() {
-    use etherparse::icmpv6::*;
     // type values according to
     // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-16
     assert_eq!(1, TYPE_DST_UNREACH);
@@ -60,9 +61,8 @@ fn constants() {
 }
 
 mod icmp6_dest_unreachable {
-    use etherparse::icmpv6::DestUnreachableCode;
+    use super::*;
     use etherparse::icmpv6::DestUnreachableCode::*;
-    use etherparse::icmpv6::*;
 
     #[test]
     fn from_u8() {
@@ -147,8 +147,8 @@ mod icmp6_dest_unreachable {
 }
 
 mod time_exceeded_code {
+    use super::*;
     use etherparse::icmpv6::TimeExceededCode::*;
-    use etherparse::icmpv6::*;
 
     #[test]
     fn from_u8() {
@@ -204,126 +204,44 @@ mod time_exceeded_code {
 }
 
 mod parameter_problem_code {
-    use etherparse::icmpv6::ParameterProblemCode::*;
-    use etherparse::icmpv6::*;
+    use super::*;
+    use ParameterProblemCode::*;
+
+    pub const VALID_VALUES: [(ParameterProblemCode, u8);11] = [
+        (ErroneousHeaderField, CODE_PARAM_PROBLEM_ERR_HEADER_FIELD),
+        (UnrecognizedNextHeader, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER),
+        (UnrecognizedIpv6Option, CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION),
+        (Ipv6FirstFragmentIncompleteHeaderChain, CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN),
+        (SrUpperLayerHeaderError, CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR),
+        (UnrecognizedNextHeaderByIntermediateNode, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE),
+        (ExtensionHeaderTooBig, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG),
+        (ExtensionHeaderChainTooLong, CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG),
+        (TooManyExtensionHeaders, CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS),
+        (TooManyOptionsInExtensionHeader, CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER),
+        (OptionTooBig, CODE_PARAM_PROBLEM_OPTION_TOO_BIG)
+    ];
 
     #[test]
     fn from_u8() {
-        assert_eq!(
-            ErroneousHeaderField,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_ERR_HEADER_FIELD)
-        );
-        assert_eq!(
-            UnrecognizedNextHeader,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER)
-        );
-        assert_eq!(
-            UnrecognizedIpv6Option,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION)
-        );
-        assert_eq!(
-            Ipv6FirstFragmentIncompleteHeaderChain,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN)
-        );
-        assert_eq!(
-            SrUpperLayerHeaderError,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR)
-        );
-        assert_eq!(
-            UnrecognizedNextHeaderByIntermediateNode,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE)
-        );
-        assert_eq!(
-            ExtensionHeaderTooBig,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG)
-        );
-        assert_eq!(
-            ExtensionHeaderChainTooLong,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG)
-        );
-        assert_eq!(
-            TooManyExtensionHeaders,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS)
-        );
-        assert_eq!(
-            TooManyOptionsInExtensionHeader,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER)
-        );
-        assert_eq!(
-            OptionTooBig,
-            ParameterProblemCode::from(CODE_PARAM_PROBLEM_OPTION_TOO_BIG)
-        );
+
+        for t in VALID_VALUES {
+            assert_eq!(Some(t.0), ParameterProblemCode::from_u8(t.1));
+        }
+
         for code_u8 in 11..=u8::MAX {
-            assert_eq!(Raw { code_u8 }, ParameterProblemCode::from(code_u8));
+            assert_eq!(None, ParameterProblemCode::from_u8(code_u8));
         }
     }
 
     #[test]
-    fn from_enum() {
-        assert_eq!(
-            CODE_PARAM_PROBLEM_ERR_HEADER_FIELD,
-            u8::from(ErroneousHeaderField)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
-            u8::from(UnrecognizedNextHeader)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
-            u8::from(UnrecognizedIpv6Option)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN,
-            u8::from(Ipv6FirstFragmentIncompleteHeaderChain)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
-            u8::from(SrUpperLayerHeaderError)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE,
-            u8::from(UnrecognizedNextHeaderByIntermediateNode)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG,
-            u8::from(ExtensionHeaderTooBig)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
-            u8::from(ExtensionHeaderChainTooLong)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
-            u8::from(TooManyExtensionHeaders)
-        );
-        assert_eq!(
-            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
-            u8::from(TooManyOptionsInExtensionHeader)
-        );
-        assert_eq!(CODE_PARAM_PROBLEM_OPTION_TOO_BIG, u8::from(OptionTooBig));
-        for code_u8 in 0..=u8::MAX {
-            assert_eq!(code_u8, u8::from(Raw { code_u8 }));
+    fn code_u8() {
+        for t in VALID_VALUES {
+            assert_eq!(t.0.code_u8(), t.1);
         }
     }
     #[test]
     fn clone_eq() {
-        let values = [
-            Raw { code_u8: 8 },
-            ErroneousHeaderField,
-            UnrecognizedNextHeader,
-            UnrecognizedIpv6Option,
-            UnrecognizedNextHeader,
-            UnrecognizedIpv6Option,
-            Ipv6FirstFragmentIncompleteHeaderChain,
-            SrUpperLayerHeaderError,
-            UnrecognizedNextHeaderByIntermediateNode,
-            ExtensionHeaderTooBig,
-            ExtensionHeaderChainTooLong,
-            TooManyExtensionHeaders,
-            TooManyOptionsInExtensionHeader,
-            OptionTooBig,
-        ];
-        for value in values {
+        for (value, _) in VALID_VALUES {
             assert_eq!(value.clone(), value);
         }
     }
@@ -331,7 +249,6 @@ mod parameter_problem_code {
     #[test]
     fn debug() {
         let tests = [
-            (Raw { code_u8: 8 }, "Raw { code_u8: 8 }"),
             (ErroneousHeaderField, "ErroneousHeaderField"),
             (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
             (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
@@ -361,13 +278,38 @@ mod parameter_problem_code {
     }
 }
 
+mod parameter_problem_header {
+    use super::*;
+
+    #[test]
+    fn clone_eq() {
+        let value = ParameterProblemHeader{
+            code: ParameterProblemCode::ErroneousHeaderField,
+            pointer: 0,
+        };
+        assert_eq!(value.clone(), value);
+    }
+
+    #[test]
+    fn debug() {
+        let value = ParameterProblemHeader{
+            code: ParameterProblemCode::ErroneousHeaderField,
+            pointer: 0,
+        };
+
+        assert_eq!(
+            format!("{:?}", value),
+            format!("ParameterProblemHeader {{ code: {:?}, pointer: {:?} }}", value.code, value.pointer)
+        );
+    }
+}
+
 mod icmpv6_type {
     use super::*;
 
     proptest! {
         #[test]
         fn from_bytes(
-            code_u8 in any::<u8>(),
             bytes5to8 in any::<[u8;4]>(),
         ) {
             use etherparse::Icmpv6Type::*;
@@ -461,60 +403,98 @@ mod icmpv6_type {
                     );
                 }
             }
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
-                ParameterProblem{
-                    code: code_u8.into(),
-                    pointer: u32::from_be_bytes(bytes5to8),
-                }
-            );
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, 0, bytes5to8),
-                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
-            );
-            if 0 != code_u8 {
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, code_u8, bytes5to8),
-                    Unknown{
-                        type_u8: TYPE_ECHO_REQUEST,
-                        code_u8,
-                        bytes5to8,
-                    }
-                );
-            }
-            assert_eq!(
-                Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, 0, bytes5to8),
-                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
-            );
-            if 0 != code_u8 {
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, code_u8, bytes5to8),
-                    Unknown{
-                        type_u8: TYPE_ECHO_REPLY,
-                        code_u8,
-                        bytes5to8,
-                    }
-                );
-            }
 
-            let known = [
-                TYPE_DST_UNREACH,
-                TYPE_PACKET_TOO_BIG,
-                TYPE_TIME_EXCEEDED,
-                TYPE_PARAM_PROB,
-                TYPE_ECHO_REQUEST,
-                TYPE_ECHO_REPLY
-            ];
-            for t in 0..=u8::MAX {
-                if false == known.contains(&t) {
+            // parameter problem
+            {
+                // known values
+                for (code, code_u8) in parameter_problem_code::VALID_VALUES {
                     assert_eq!(
-                        Icmpv6Type::from_bytes(t, code_u8, bytes5to8),
+                        Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
+                        ParameterProblem(ParameterProblemHeader{
+                            code,
+                            pointer: u32::from_be_bytes(bytes5to8),
+                        })
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 11..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
                         Unknown{
-                            type_u8: t,
+                            type_u8: TYPE_PARAM_PROB,
                             code_u8,
                             bytes5to8,
                         }
                     );
+                }
+            }
+            
+            // echo request
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, 0, bytes5to8),
+                    EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, code_u8, bytes5to8),
+                        Unknown{
+                            type_u8: TYPE_ECHO_REQUEST,
+                            code_u8,
+                            bytes5to8,
+                        }
+                    );
+                }
+            }
+
+            // echo reply
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, 0, bytes5to8),
+                    EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+                
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, code_u8, bytes5to8),
+                        Unknown{
+                            type_u8: TYPE_ECHO_REPLY,
+                            code_u8,
+                            bytes5to8,
+                        }
+                    );
+                }
+            }
+
+            // unknown types
+            {
+                let known = [
+                    TYPE_DST_UNREACH,
+                    TYPE_PACKET_TOO_BIG,
+                    TYPE_TIME_EXCEEDED,
+                    TYPE_PARAM_PROB,
+                    TYPE_ECHO_REQUEST,
+                    TYPE_ECHO_REPLY
+                ];
+                for t in 0..=u8::MAX {
+                    if false == known.contains(&t) {
+                        for code_u8 in 0..=u8::MAX {
+                            assert_eq!(
+                                Icmpv6Type::from_bytes(t, code_u8, bytes5to8),
+                                Unknown{
+                                    type_u8: t,
+                                    code_u8,
+                                    bytes5to8,
+                                }
+                            );
+                        }
+                    }
                 }
             }
         }
@@ -533,7 +513,7 @@ mod icmpv6_type {
                     (TYPE_DST_UNREACH, DestinationUnreachable(DestUnreachableCode::SourceAddressFailedPolicy)),
                     (TYPE_PACKET_TOO_BIG, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (TYPE_TIME_EXCEEDED, TimeExceeded(TimeExceededCode::HopLimitExceeded)),
-                    (TYPE_PARAM_PROB, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
+                    (TYPE_PARAM_PROB, ParameterProblem(ParameterProblemHeader{ code: ParameterProblemCode::UnrecognizedNextHeader, pointer: u32::from_be_bytes(bytes5to8)})),
                     (TYPE_ECHO_REQUEST, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (TYPE_ECHO_REPLY, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
                 ];
@@ -568,7 +548,6 @@ mod icmpv6_type {
             {
                 let code_type_pair = [
                     (0, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
-                    (code_u8, ParameterProblem{ code: code_u8.into(), pointer: u32::from_be_bytes(bytes5to8)}),
                     (0, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (0, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
                 ];
@@ -604,6 +583,19 @@ mod icmpv6_type {
                 for t in tests {
                     assert_eq!(t.1, TimeExceeded(t.0).code_u8());
                 }
+            }
+
+            // parameter problem
+            for (code, code_u8) in parameter_problem_code::VALID_VALUES {
+                assert_eq!(
+                    code_u8,
+                    ParameterProblem(
+                        ParameterProblemHeader{
+                            code,
+                            pointer: u32::from_be_bytes(bytes5to8),
+                        }
+                    ).code_u8()
+                );
             }
 
             // unknown
@@ -708,8 +700,13 @@ mod icmpv6_type {
                 (TYPE_TIME_EXCEEDED, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED, [0u8;4])
             );
             assert_eq!(
-                ParameterProblem{ code: ParameterProblemCode::Raw{ code_u8 }, pointer: mtu}.to_bytes(),
-                (TYPE_PARAM_PROB, code_u8, mtu.to_be_bytes())
+                ParameterProblem(
+                    ParameterProblemHeader{
+                        code: ParameterProblemCode::ExtensionHeaderTooBig,
+                        pointer: mtu
+                    }
+                ).to_bytes(),
+                (TYPE_PARAM_PROB, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, mtu.to_be_bytes())
             );
             assert_eq!(
                 EchoRequest(IcmpEchoHeader{
@@ -780,10 +777,10 @@ mod icmpv6_type {
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
                 TimeExceeded(TimeExceededCode::FragmentReassemblyTimeExceeded),
-                ParameterProblem{
-                    code: code_u8.into(),
+                ParameterProblem(ParameterProblemHeader{
+                    code: ParameterProblemCode::UnrecognizedIpv6Option,
                     pointer: u32::from_be_bytes(bytes5to8),
-                },
+                }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             ];
@@ -818,10 +815,10 @@ mod icmpv6_type {
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
                 TimeExceeded(TimeExceededCode::HopLimitExceeded),
-                ParameterProblem{
-                    code: code_u8.into(),
+                ParameterProblem(ParameterProblemHeader{
+                    code: ParameterProblemCode::SrUpperLayerHeaderError,
                     pointer: u32::from_be_bytes(bytes5to8),
-                },
+                }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             ];
@@ -1312,10 +1309,12 @@ mod icmpv6_slice {
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
                 TimeExceeded(TimeExceededCode::HopLimitExceeded),
-                ParameterProblem{
-                    code: code_u8.into(),
-                    pointer: u32::from_be_bytes(bytes5to8),
-                },
+                ParameterProblem(
+                    ParameterProblemHeader{
+                        code: ParameterProblemCode::OptionTooBig,
+                        pointer: u32::from_be_bytes(bytes5to8),
+                    }
+                ),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             ];
@@ -1489,10 +1488,12 @@ mod icmpv6_slice {
                 DestinationUnreachable(DestUnreachableCode::Prohibited),
                 PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
                 TimeExceeded(TimeExceededCode::HopLimitExceeded),
-                ParameterProblem{
-                    code: code_u8.into(),
-                    pointer: u32::from_be_bytes(bytes5to8),
-                },
+                ParameterProblem(
+                    ParameterProblemHeader{
+                        code: ParameterProblemCode::ExtensionHeaderChainTooLong,
+                        pointer: u32::from_be_bytes(bytes5to8),
+                    }
+                ),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
             ];
