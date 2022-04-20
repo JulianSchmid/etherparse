@@ -10,7 +10,7 @@ fn constants() {
     assert_eq!(1, TYPE_DST_UNREACH);
     assert_eq!(2, TYPE_PACKET_TOO_BIG);
     assert_eq!(3, TYPE_TIME_EXCEEDED);
-    assert_eq!(4, TYPE_PARAM_PROB);
+    assert_eq!(4, TYPE_PARAMETER_PROBLEM);
     assert_eq!(128, TYPE_ECHO_REQUEST);
     assert_eq!(129, TYPE_ECHO_REPLY);
     assert_eq!(130, TYPE_MULTICAST_LISTENER_QUERY);
@@ -64,68 +64,40 @@ mod icmp6_dest_unreachable {
     use super::*;
     use etherparse::icmpv6::DestUnreachableCode::*;
 
+    pub const VALID_VALUES: [(DestUnreachableCode, u8);7] = [
+        (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
+        (Prohibited, CODE_DST_UNREACH_PROHIBITED),
+        (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
+        (Address, CODE_DST_UNREACH_ADDR),
+        (Port, CODE_DST_UNREACH_PORT),
+        (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
+        (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
+    ];
+
     #[test]
     fn from_u8() {
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(
+                code,
+                DestUnreachableCode::from_u8(code_u8).unwrap()
+            );
+        }
         for code_u8 in 7u8..=0xff {
             assert!(DestUnreachableCode::from_u8(code_u8).is_none());
         }
-        assert_eq!(
-            NoRoute,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_NO_ROUTE).unwrap()
-        );
-        assert_eq!(
-            Prohibited,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_PROHIBITED,).unwrap()
-        );
-        assert_eq!(
-            BeyondScope,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_BEYOND_SCOPE,).unwrap()
-        );
-        assert_eq!(
-            Address,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_ADDR,).unwrap()
-        );
-        assert_eq!(
-            Port,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_PORT,).unwrap()
-        );
-        assert_eq!(
-            SourceAddressFailedPolicy,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,).unwrap()
-        );
-        assert_eq!(
-            RejectRoute,
-            DestUnreachableCode::from_u8(CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST,).unwrap()
-        );
     }
 
     #[test]
     fn code_u8() {
-        assert_eq!(NoRoute.code_u8(), CODE_DST_UNREACH_NO_ROUTE);
-        assert_eq!(Prohibited.code_u8(), CODE_DST_UNREACH_PROHIBITED);
-        assert_eq!(BeyondScope.code_u8(), CODE_DST_UNREACH_BEYOND_SCOPE);
-        assert_eq!(Address.code_u8(), CODE_DST_UNREACH_ADDR);
-        assert_eq!(Port.code_u8(), CODE_DST_UNREACH_PORT);
-        assert_eq!(
-            SourceAddressFailedPolicy.code_u8(),
-            CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY
-        );
-        assert_eq!(RejectRoute.code_u8(), CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(code.code_u8(), code_u8);
+        }
     }
 
     #[test]
     fn clone_eq() {
-        let values = [
-            NoRoute,
-            Prohibited,
-            BeyondScope,
-            Address,
-            Port,
-            SourceAddressFailedPolicy,
-            RejectRoute,
-        ];
-        for value in values {
-            assert_eq!(value.clone(), value);
+        for (code, _) in VALID_VALUES {
+            assert_eq!(code.clone(), code);
         }
     }
 
@@ -150,16 +122,19 @@ mod time_exceeded_code {
     use super::*;
     use etherparse::icmpv6::TimeExceededCode::*;
 
+    pub const VALID_VALUES: [(TimeExceededCode, u8);2] = [
+        (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
+        (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
+    ];
+
     #[test]
     fn from_u8() {
-        assert_eq!(
-            Some(HopLimitExceeded),
-            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED)
-        );
-        assert_eq!(
-            Some(FragmentReassemblyTimeExceeded),
-            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED)
-        );
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(
+                Some(code),
+                TimeExceededCode::from_u8(code_u8)
+            );
+        }
         for code_u8 in 2..=u8::MAX {
             assert_eq!(None, TimeExceededCode::from_u8(code_u8));
         }
@@ -167,24 +142,18 @@ mod time_exceeded_code {
 
     #[test]
     fn from_enum() {
-        assert_eq!(
-            CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED,
-            HopLimitExceeded.code_u8()
-        );
-        assert_eq!(
-            CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
-            FragmentReassemblyTimeExceeded.code_u8()
-        );
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(
+                code.code_u8(),
+                code_u8
+            );
+        }
     }
 
     #[test]
     fn clone_eq() {
-        let values = [
-            HopLimitExceeded,
-            FragmentReassemblyTimeExceeded,
-        ];
-        for value in values {
-            assert_eq!(value.clone(), value);
+        for (code, _) in VALID_VALUES {
+            assert_eq!(code.clone(), code);
         }
     }
 
@@ -309,199 +278,6 @@ mod icmpv6_type {
 
     proptest! {
         #[test]
-        fn from_bytes(
-            bytes5to8 in any::<[u8;4]>(),
-        ) {
-            use etherparse::Icmpv6Type::*;
-            use etherparse::{IcmpEchoHeader, Icmpv6Type, icmpv6::*};
-
-            // destination unreachable
-            {
-                use DestUnreachableCode::*;
-                
-                // known codes
-                {
-                    let tests = [
-                        (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
-                        (Prohibited, CODE_DST_UNREACH_PROHIBITED),
-                        (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
-                        (Address, CODE_DST_UNREACH_ADDR),
-                        (Port, CODE_DST_UNREACH_PORT),
-                        (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
-                        (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
-                    ];
-                    for t in tests {
-                        assert_eq!(
-                            Icmpv6Type::from_bytes(TYPE_DST_UNREACH, t.1, bytes5to8),
-                            DestinationUnreachable(t.0)
-                        );
-                    }
-                }
-
-                // unknown codes
-                for code_u8 in 7..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_DST_UNREACH, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_DST_UNREACH,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-
-            // packet too big
-            {
-                // known code
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, 0, bytes5to8),
-                    PacketTooBig{
-                        mtu: u32::from_be_bytes(bytes5to8),
-                    }
-                );
-                // unknown code
-                for code_u8 in 1..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_PACKET_TOO_BIG, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_PACKET_TOO_BIG,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-            
-            // time exceeded
-            {
-                // known codes
-                {
-                    use TimeExceededCode::*;
-                    let tests = [
-                        (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
-                        (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
-                    ];
-                
-                    for t in tests {
-                        assert_eq!(
-                            Icmpv6Type::from_bytes(TYPE_TIME_EXCEEDED, t.1, bytes5to8),
-                            TimeExceeded(t.0)
-                        );
-                    }
-                }
-
-                // unknown codes
-                for code_u8 in 2..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_TIME_EXCEEDED, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_TIME_EXCEEDED,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-
-            // parameter problem
-            {
-                // known values
-                for (code, code_u8) in parameter_problem_code::VALID_VALUES {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
-                        ParameterProblem(ParameterProblemHeader{
-                            code,
-                            pointer: u32::from_be_bytes(bytes5to8),
-                        })
-                    );
-                }
-
-                // unknown codes
-                for code_u8 in 11..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_PARAM_PROB, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_PARAM_PROB,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-            
-            // echo request
-            {
-                // known code
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, 0, bytes5to8),
-                    EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
-                );
-
-                // unknown codes
-                for code_u8 in 1..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_ECHO_REQUEST, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_ECHO_REQUEST,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-
-            // echo reply
-            {
-                // known code
-                assert_eq!(
-                    Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, 0, bytes5to8),
-                    EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
-                );
-                
-                // unknown codes
-                for code_u8 in 1..=u8::MAX {
-                    assert_eq!(
-                        Icmpv6Type::from_bytes(TYPE_ECHO_REPLY, code_u8, bytes5to8),
-                        Unknown{
-                            type_u8: TYPE_ECHO_REPLY,
-                            code_u8,
-                            bytes5to8,
-                        }
-                    );
-                }
-            }
-
-            // unknown types
-            {
-                let known = [
-                    TYPE_DST_UNREACH,
-                    TYPE_PACKET_TOO_BIG,
-                    TYPE_TIME_EXCEEDED,
-                    TYPE_PARAM_PROB,
-                    TYPE_ECHO_REQUEST,
-                    TYPE_ECHO_REPLY
-                ];
-                for t in 0..=u8::MAX {
-                    if false == known.contains(&t) {
-                        for code_u8 in 0..=u8::MAX {
-                            assert_eq!(
-                                Icmpv6Type::from_bytes(t, code_u8, bytes5to8),
-                                Unknown{
-                                    type_u8: t,
-                                    code_u8,
-                                    bytes5to8,
-                                }
-                            );
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
         fn type_u8(
             code_u8 in any::<u8>(),
             bytes5to8 in any::<[u8;4]>(),
@@ -513,7 +289,7 @@ mod icmpv6_type {
                     (TYPE_DST_UNREACH, DestinationUnreachable(DestUnreachableCode::SourceAddressFailedPolicy)),
                     (TYPE_PACKET_TOO_BIG, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (TYPE_TIME_EXCEEDED, TimeExceeded(TimeExceededCode::HopLimitExceeded)),
-                    (TYPE_PARAM_PROB, ParameterProblem(ParameterProblemHeader{ code: ParameterProblemCode::UnrecognizedNextHeader, pointer: u32::from_be_bytes(bytes5to8)})),
+                    (TYPE_PARAMETER_PROBLEM, ParameterProblem(ParameterProblemHeader{ code: ParameterProblemCode::UnrecognizedNextHeader, pointer: u32::from_be_bytes(bytes5to8)})),
                     (TYPE_ECHO_REQUEST, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (TYPE_ECHO_REPLY, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
                 ];
@@ -706,7 +482,7 @@ mod icmpv6_type {
                         pointer: mtu
                     }
                 ).to_bytes(),
-                (TYPE_PARAM_PROB, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, mtu.to_be_bytes())
+                (TYPE_PARAMETER_PROBLEM, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, mtu.to_be_bytes())
             );
             assert_eq!(
                 EchoRequest(IcmpEchoHeader{
@@ -1295,6 +1071,130 @@ mod icmpv6_slice {
             );
         }
     }
+
+    proptest!{
+        #[test]
+        fn icmp_type(
+            checksum in any::<[u8;2]>(),
+            bytes5to8 in any::<[u8;4]>()
+        ) {
+            use Icmpv6Type::*;
+
+            let gen_bytes = |type_u8: u8, code_u8: u8| -> [u8;8] {
+                [
+                    type_u8, code_u8, checksum[0], checksum[1],
+                    bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3]
+                ]
+            };
+
+            let assert_unknown = |type_u8: u8, code_u8: u8| {
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(type_u8, code_u8)).unwrap().icmp_type(),
+                    Unknown{
+                        type_u8,
+                        code_u8,
+                        bytes5to8,
+                    }
+                );
+            };
+
+            // destination unreachable
+            {
+                // known codes
+                for (code, code_u8) in icmp6_dest_unreachable::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_DST_UNREACH, code_u8)).unwrap().icmp_type(),
+                        DestinationUnreachable(code)
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 7..=u8::MAX {
+                    assert_unknown(TYPE_DST_UNREACH, code_u8);
+                }
+            }
+
+            // packet too big
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_PACKET_TOO_BIG, 0)).unwrap().icmp_type(),
+                    PacketTooBig {
+                        mtu: u32::from_be_bytes(bytes5to8)
+                    }
+                );
+
+                // unknown code
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_PACKET_TOO_BIG, code_u8);
+                }
+            }
+
+            // time exceeded
+            {
+                // known codes
+                for (code, code_u8) in time_exceeded_code::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_TIME_EXCEEDED, code_u8)).unwrap().icmp_type(),
+                        TimeExceeded(code)
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 2..=u8::MAX {
+                    assert_unknown(TYPE_TIME_EXCEEDED, code_u8);
+                }
+            }
+
+            // parameter problem
+            {
+                // known codes
+                for (code, code_u8) in parameter_problem_code::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_PARAMETER_PROBLEM, code_u8)).unwrap().icmp_type(),
+                        ParameterProblem(ParameterProblemHeader{
+                            code,
+                            pointer: u32::from_be_bytes(bytes5to8),
+                        })
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 11..=u8::MAX {
+                    assert_unknown(TYPE_PARAMETER_PROBLEM, code_u8);
+                }
+            }
+
+            // echo request
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_ECHO_REQUEST, 0)).unwrap().icmp_type(),
+                    EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, code_u8);
+                }
+            }
+
+            // echo reply
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_ECHO_REPLY, 0)).unwrap().icmp_type(),
+                    EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, code_u8);
+                }
+            }
+        }
+    }
+
 
     proptest! {
         #[test]
