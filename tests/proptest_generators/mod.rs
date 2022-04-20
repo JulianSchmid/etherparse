@@ -746,39 +746,29 @@ prop_compose! {
 prop_compose! {
     pub fn icmpv4_header_any()
         (
-            icmp_type in icmpv4_type_any(),
-            checksum in any::<u16>()
+            bytes in any::<[u8;20]>(),
         ) -> Icmpv4Header
     {
-        Icmpv4Header {
-            icmp_type,
-            checksum
-        }
+        Icmpv4Header::from_slice(&bytes).unwrap().0
     }
 }
 
 prop_compose! {
     pub fn icmpv6_type_any()
         (
-            type_u8 in any::<u8>(),
-            code_u8 in any::<u8>(),
-            bytes5to8 in any::<[u8;4]>(),
+            bytes in any::<[u8;8]>(),
         ) -> Icmpv6Type
     {
-        Icmpv6Type::from_bytes(type_u8, code_u8, bytes5to8)
+        Icmpv6Header::from_slice(&bytes).unwrap().0.icmp_type
     }
 }
 
 prop_compose! {
     pub fn icmpv6_header_any()
         (
-            icmp_type in icmpv6_type_any(),
-            checksum in any::<u16>()
+            bytes in any::<[u8;8]>(),
         ) -> Icmpv6Header
     {
-        Icmpv6Header {
-            icmp_type,
-            checksum
-        }
+        Icmpv6Header::from_slice(&bytes).unwrap().0
     }
 }
