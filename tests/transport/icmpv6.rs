@@ -2,6 +2,7 @@ use super::super::*;
 use proptest::prelude::*;
 
 use etherparse::icmpv6::*;
+use arrayvec::ArrayVec;
 
 #[test]
 fn constants() {
@@ -60,7 +61,7 @@ fn constants() {
     assert_eq!(10, CODE_PARAM_PROBLEM_OPTION_TOO_BIG);
 }
 
-mod icmp6_dest_unreachable {
+mod dest_unreachable_code {
     use super::*;
     use etherparse::icmpv6::DestUnreachableCode::*;
 
@@ -422,16 +423,19 @@ mod icmpv6_type {
                 assert_eq!(
                     icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                     {
-                        let (type_u8, code_u8 , bytes5to8) = icmpv6_type.to_bytes();
                         etherparse::checksum::Sum16BitWords::new()
                         .add_16bytes(ip_header.source)
                         .add_16bytes(ip_header.destination)
-                        .add_4bytes((
-                            payload.len() as u32 + 8
-                        ).to_be_bytes())
                         .add_2bytes([0, ip_number::IPV6_ICMP])
-                        .add_2bytes([type_u8, code_u8])
-                        .add_4bytes(bytes5to8)
+                        .add_4bytes((
+                            payload.len() as u32 + icmpv6_type.header_len() as u32
+                        ).to_be_bytes())
+                        .add_slice(
+                            &Icmpv6Header {
+                                icmp_type: icmpv6_type.clone(),
+                                checksum: 0 // use zero so the checksum gets correct calculated
+                            }.to_bytes()
+                        )
                         .add_slice(&payload)
                         .ones_complement()
                         .to_be()
@@ -853,25 +857,112 @@ mod icmpv6_header {
     proptest! {
         #[test]
         fn to_bytes(
-            icmp_type in icmpv6_type_any(),
             checksum in any::<u16>(),
+            rand_u32 in any::<u32>(),
+            rand_4bytes in any::<[u8;4]>(),
         ) {
-            let bytes = {
-                let (b0, b1, b5to8) = icmp_type.to_bytes();
-                let checksum_be = checksum.to_be_bytes();
-                [
-                    b0, b1, checksum_be[0], checksum_be[1],
-                    b5to8[0], b5to8[1], b5to8[2], b5to8[3],
-                ]
+            use Icmpv6Type::*;
+
+            let with_5to8_bytes = |type_u8: u8, code_u8: u8, bytes5to8: [u8;4]| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+                let mut bytes = ArrayVec::<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }>::new();
+                bytes.push(type_u8);
+                bytes.push(code_u8);
+                bytes.try_extend_from_slice(&checksum.to_be_bytes()).unwrap();
+                bytes.try_extend_from_slice(&bytes5to8).unwrap();
+                bytes
             };
 
+            let simple_bytes = |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+                with_5to8_bytes(type_u8, code_u8, [0;4])
+            };
+
+            // destination unreachable
+            for (code, code_u8) in dest_unreachable_code::VALID_VALUES {
+                assert_eq!(
+                    Icmpv6Header{
+                        icmp_type: DestinationUnreachable(code),
+                        checksum
+                    }.to_bytes(),
+                    simple_bytes(TYPE_DST_UNREACH, code_u8)
+                );
+            }
+
+            // packet too big
             assert_eq!(
                 Icmpv6Header{
-                    icmp_type,
-                    checksum,
+                    icmp_type: PacketTooBig{ mtu: rand_u32 },
+                    checksum
                 }.to_bytes(),
-                bytes,
+                with_5to8_bytes(TYPE_PACKET_TOO_BIG, 0, rand_u32.to_be_bytes())
             );
+
+            // time exceeded
+            for (code, code_u8) in time_exceeded_code::VALID_VALUES {
+                assert_eq!(
+                    Icmpv6Header{
+                        icmp_type: TimeExceeded(code),
+                        checksum
+                    }.to_bytes(),
+                    simple_bytes(TYPE_TIME_EXCEEDED, code_u8)
+                );
+            }
+
+            // parameter problem
+            for (code, code_u8) in parameter_problem_code::VALID_VALUES {
+                assert_eq!(
+                    Icmpv6Header{
+                        icmp_type: ParameterProblem(
+                            ParameterProblemHeader{
+                                code,
+                                pointer: rand_u32,
+                            }
+                        ),
+                        checksum
+                    }.to_bytes(),
+                    with_5to8_bytes(TYPE_PARAMETER_PROBLEM, code_u8, rand_u32.to_be_bytes())
+                );
+            }
+
+            // echo request
+            assert_eq!(
+                Icmpv6Header{
+                    icmp_type: EchoRequest(IcmpEchoHeader {
+                        id: u16::from_be_bytes([rand_4bytes[0], rand_4bytes[1]]),
+                        seq: u16::from_be_bytes([rand_4bytes[2], rand_4bytes[3]]),
+                    }),
+                    checksum
+                }.to_bytes(),
+                with_5to8_bytes(TYPE_ECHO_REQUEST, 0, rand_4bytes)
+            );
+
+            // echo reply
+            assert_eq!(
+                Icmpv6Header{
+                    icmp_type: EchoReply(IcmpEchoHeader {
+                        id: u16::from_be_bytes([rand_4bytes[0], rand_4bytes[1]]),
+                        seq: u16::from_be_bytes([rand_4bytes[2], rand_4bytes[3]]),
+                    }),
+                    checksum
+                }.to_bytes(),
+                with_5to8_bytes(TYPE_ECHO_REPLY, 0, rand_4bytes)
+            );
+
+            // unknown
+            for type_u8 in 0..=u8::MAX {
+                for code_u8 in 0..=u8::MAX {
+                    assert_eq!(
+                        Icmpv6Header{
+                            icmp_type: Unknown {
+                                type_u8,
+                                code_u8,
+                                bytes5to8: rand_4bytes,
+                            },
+                            checksum
+                        }.to_bytes(),
+                        with_5to8_bytes(type_u8, code_u8, rand_4bytes)
+                    );
+                }
+            }
         }
     }
 
@@ -900,109 +991,6 @@ mod icmpv6_header {
             let header = Icmpv6Header{ icmp_type, checksum };
             assert_eq!(header, header.clone());
         }
-    }
-
-    #[test]
-    fn icmp6_echo_marshall_unmarshall() {
-        let icmp6 = Icmpv6Header {
-            icmp_type: Icmpv6Type::EchoRequest(IcmpEchoHeader { seq: 1, id: 2 }),
-            checksum: 0,
-        };
-        // serialize
-        let mut buffer: Vec<u8> = Vec::with_capacity(256);
-        icmp6.write(&mut buffer).unwrap();
-        let (new_icmp6, rest) = Icmpv6Header::from_slice(&buffer).unwrap();
-        assert_eq!(icmp6, new_icmp6);
-        assert_eq!(rest.len(), 0);
-    }
-
-    #[test]
-    fn ip6_echo_marshall_unmarshall() {
-        let builder = PacketBuilder::ipv6(
-            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], //source ip
-            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
-            20,
-        ) //time to life
-        .icmp6_echo_request(1, 2);
-        let payload = [0xde, 0xad, 0xbe, 0xef];
-        //get some memory to store the result
-        let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
-
-        //serialize
-        builder.write(&mut result, &payload).unwrap();
-
-        let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
-        if let Some(TransportHeader::Icmpv6(hdr)) = new_ip.transport {
-            if let Icmpv6Type::EchoRequest(echo) = hdr.icmp_type {
-                assert_eq!(echo.seq, 1);
-                assert_eq!(echo.id, 2);
-            } else {
-                panic!("Not an EchoRequest!?");
-            }
-        } else {
-            panic!("No transport header found!?")
-        }
-    }
-    const ICMP6_ECHO_REQUEST_BYTES: [u8; 118] = [
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
-        0x00, 0xf3, 0xc2, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0xd5, 0x2f, 0x00, 0x05,
-        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
-        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-    ];
-    const ICMP6_ECHO_REPLY_BYTES: [u8; 118] = [
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
-        0x00, 0xa3, 0xde, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x81, 0x00, 0xd4, 0x2f, 0x00, 0x05,
-        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
-        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
-    ];
-
-    #[test]
-    fn verify_icmp6_checksum() {
-        for (pkt, checksum) in [
-            (ICMP6_ECHO_REQUEST_BYTES, 0xd52f),
-            (ICMP6_ECHO_REPLY_BYTES, 0xd42f),
-        ] {
-            // make sure we can unmarshall the correct checksum
-            let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
-            let mut icmp6 = request.transport.unwrap().icmpv6().unwrap();
-            let valid_checksum = icmp6.checksum;
-            assert_ne!(valid_checksum, 0);
-            assert_eq!(valid_checksum, checksum);
-            // reset it and recalculate
-            icmp6.checksum = 0;
-            let iph = match request.ip {
-                Some(IpHeader::Version6(ipv6, _)) => ipv6,
-                _ => panic!("Failed to parse ipv6 part of packet?!"),
-            };
-            assert_eq!(
-                icmp6
-                    .icmp_type
-                    .calc_checksum(iph.source, iph.destination, request.payload),
-                Ok(valid_checksum)
-            );
-        }
-    }
-
-    #[test]
-    fn echo_request_slice() {
-        let echo = SlicedPacket::from_ethernet(&ICMP6_ECHO_REQUEST_BYTES).unwrap();
-        use TransportSlice::*;
-        let icmp6 = match echo.transport.unwrap() {
-            Icmpv6(icmp6) => icmp6,
-            Icmpv4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
-        };
-        assert!(matches!(
-            icmp6.header().icmp_type,
-            Icmpv6Type::EchoRequest(_)
-        ));
     }
 }
 
@@ -1101,7 +1089,7 @@ mod icmpv6_slice {
             // destination unreachable
             {
                 // known codes
-                for (code, code_u8) in icmp6_dest_unreachable::VALID_VALUES {
+                for (code, code_u8) in dest_unreachable_code::VALID_VALUES {
                     assert_eq!(
                         Icmpv6Slice::from_slice(&gen_bytes(TYPE_DST_UNREACH, code_u8)).unwrap().icmp_type(),
                         DestinationUnreachable(code)
@@ -1428,5 +1416,112 @@ mod icmpv6_slice {
                 Icmpv6Slice::from_slice(&slice).unwrap()
             );
         }
+    }
+}
+
+mod regression {
+    use super::*;
+
+    #[test]
+    fn icmp6_echo_marshall_unmarshall() {
+        let icmp6 = Icmpv6Header {
+            icmp_type: Icmpv6Type::EchoRequest(IcmpEchoHeader { seq: 1, id: 2 }),
+            checksum: 0,
+        };
+        // serialize
+        let mut buffer: Vec<u8> = Vec::with_capacity(256);
+        icmp6.write(&mut buffer).unwrap();
+        let (new_icmp6, rest) = Icmpv6Header::from_slice(&buffer).unwrap();
+        assert_eq!(icmp6, new_icmp6);
+        assert_eq!(rest.len(), 0);
+    }
+
+    #[test]
+    fn ip6_echo_marshall_unmarshall() {
+        let builder = PacketBuilder::ipv6(
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], //source ip
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
+            20,
+        ) //time to life
+        .icmp6_echo_request(1, 2);
+        let payload = [0xde, 0xad, 0xbe, 0xef];
+        //get some memory to store the result
+        let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
+
+        //serialize
+        builder.write(&mut result, &payload).unwrap();
+
+        let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
+        if let Some(TransportHeader::Icmpv6(hdr)) = new_ip.transport {
+            if let Icmpv6Type::EchoRequest(echo) = hdr.icmp_type {
+                assert_eq!(echo.seq, 1);
+                assert_eq!(echo.id, 2);
+            } else {
+                panic!("Not an EchoRequest!?");
+            }
+        } else {
+            panic!("No transport header found!?")
+        }
+    }
+    const ICMP6_ECHO_REQUEST_BYTES: [u8; 118] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
+        0x00, 0xf3, 0xc2, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x80, 0x00, 0xd5, 0x2f, 0x00, 0x05,
+        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
+        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+    ];
+    const ICMP6_ECHO_REPLY_BYTES: [u8; 118] = [
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x86, 0xdd, 0x60,
+        0x00, 0xa3, 0xde, 0x00, 0x40, 0x3a, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x81, 0x00, 0xd4, 0x2f, 0x00, 0x05,
+        0x00, 0x01, 0xe3, 0x58, 0xdb, 0x61, 0x00, 0x00, 0x00, 0x00, 0x1f, 0xc0, 0x0d, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+        0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a,
+        0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+    ];
+
+    #[test]
+    fn verify_icmp6_checksum() {
+        for (pkt, checksum) in [
+            (ICMP6_ECHO_REQUEST_BYTES, 0xd52f),
+            (ICMP6_ECHO_REPLY_BYTES, 0xd42f),
+        ] {
+            // make sure we can unmarshall the correct checksum
+            let request = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
+            let mut icmp6 = request.transport.unwrap().icmpv6().unwrap();
+            let valid_checksum = icmp6.checksum;
+            assert_ne!(valid_checksum, 0);
+            assert_eq!(valid_checksum, checksum);
+            // reset it and recalculate
+            icmp6.checksum = 0;
+            let iph = match request.ip {
+                Some(IpHeader::Version6(ipv6, _)) => ipv6,
+                _ => panic!("Failed to parse ipv6 part of packet?!"),
+            };
+            assert_eq!(
+                icmp6
+                    .icmp_type
+                    .calc_checksum(iph.source, iph.destination, request.payload),
+                Ok(valid_checksum)
+            );
+        }
+    }
+
+    #[test]
+    fn echo_request_slice() {
+        let echo = SlicedPacket::from_ethernet(&ICMP6_ECHO_REQUEST_BYTES).unwrap();
+        use TransportSlice::*;
+        let icmp6 = match echo.transport.unwrap() {
+            Icmpv6(icmp6) => icmp6,
+            Icmpv4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+        };
+        assert!(matches!(
+            icmp6.header().icmp_type,
+            Icmpv6Type::EchoRequest(_)
+        ));
     }
 }
