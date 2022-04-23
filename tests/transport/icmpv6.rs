@@ -334,32 +334,13 @@ mod icmpv6_type {
             }
 
             // destination unreachable
-            {
-                use DestUnreachableCode::*;
-                let tests = [
-                    (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
-                    (Prohibited, CODE_DST_UNREACH_PROHIBITED),
-                    (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
-                    (Address, CODE_DST_UNREACH_ADDR),
-                    (Port, CODE_DST_UNREACH_PORT),
-                    (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
-                    (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
-                ];
-                for t in tests {
-                    assert_eq!(t.1, DestinationUnreachable(t.0).code_u8());
-                }
+            for (code, code_u8) in dest_unreachable_code::VALID_VALUES {
+                assert_eq!(code_u8, DestinationUnreachable(code).code_u8());
             }
 
             // time exceeded
-            {
-                use TimeExceededCode::*;
-                let tests = [
-                    (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
-                    (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
-                ];
-                for t in tests {
-                    assert_eq!(t.1, TimeExceeded(t.0).code_u8());
-                }
+            for (code, code_u8) in time_exceeded_code::VALID_VALUES {
+                assert_eq!(code_u8, TimeExceeded(code).code_u8());
             }
 
             // parameter problem
@@ -394,10 +375,15 @@ mod icmpv6_type {
         fn calc_checksum(
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
+            type_u8 in any::<u8>(),
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
             // max length is u32::MAX - header_len (7)
             bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
-            payload in proptest::collection::vec(any::<u8>(), 0..1024)
+            payload in proptest::collection::vec(any::<u8>(), 0..64)
         ) {
+            use Icmpv6Type::*;
+
             // size error case
             {
                 // SAFETY: In case the error is not triggered
@@ -418,11 +404,10 @@ mod icmpv6_type {
                 );
             }
 
-            // normal case
+            // normal cases
             {
-                assert_eq!(
-                    icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
-                    {
+                let test_checksum_calc = |icmp_type: Icmpv6Type| {
+                    let expected_checksum = {
                         etherparse::checksum::Sum16BitWords::new()
                         .add_16bytes(ip_header.source)
                         .add_16bytes(ip_header.destination)
@@ -430,19 +415,66 @@ mod icmpv6_type {
                         .add_4bytes((
                             payload.len() as u32 + icmpv6_type.header_len() as u32
                         ).to_be_bytes())
-                        .add_slice(
-                            &Icmpv6Header {
-                                icmp_type: icmpv6_type.clone(),
-                                checksum: 0 // use zero so the checksum gets correct calculated
-                            }.to_bytes()
-                        )
+                        .add_slice(&Icmpv6Header {
+                            icmp_type: icmp_type.clone(),
+                            checksum: 0 // use zero so the checksum gets correct calculated
+                        }.to_bytes())
                         .add_slice(&payload)
                         .ones_complement()
                         .to_be()
+                    };
+                    assert_eq!(
+                        expected_checksum,
+                        icmp_type.calc_checksum(
+                            ip_header.source,
+                            ip_header.destination,
+                            &payload
+                        ).unwrap()
+                    );
+                };
+
+                // unknown
+                test_checksum_calc(
+                    Unknown{
+                        type_u8, code_u8, bytes5to8
                     }
                 );
-            }
 
+                // destination unreachable
+                for (code, _) in dest_unreachable_code::VALID_VALUES {
+                    test_checksum_calc(DestinationUnreachable(code));
+                }
+
+                // packet too big
+                test_checksum_calc(PacketTooBig{
+                    mtu: u32::from_be_bytes(bytes5to8)
+                });
+
+                // time exceeded
+                for (code, _) in time_exceeded_code::VALID_VALUES {
+                    test_checksum_calc(TimeExceeded(code));
+                }
+
+                // parameter problem
+                for (code, _) in parameter_problem_code::VALID_VALUES {
+                    test_checksum_calc(ParameterProblem(
+                        ParameterProblemHeader{
+                            code,
+                            pointer: u32::from_be_bytes(bytes5to8)
+                        }
+                    ));
+                }
+
+                // echo request
+                test_checksum_calc(EchoRequest(
+                    IcmpEchoHeader::from_bytes(bytes5to8)
+                ));
+
+                // echo reply
+                test_checksum_calc(EchoReply(
+                    IcmpEchoHeader::from_bytes(bytes5to8)
+                ));
+            }
         }
     }
 
