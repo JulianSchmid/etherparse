@@ -615,29 +615,6 @@ impl Icmpv6Type {
         )
     }
 
-    /// Encode the enum to the on wire format.
-    ///
-    /// It returns the icmp type, code and bytes5to8 bytes (5th till and
-    /// including 8th byte of the the ICMPv6 header).
-    pub fn to_bytes(&self) -> (u8, u8, [u8; 4]) {
-        use Icmpv6Type::*;
-        match self {
-            Unknown {
-                type_u8,
-                code_u8,
-                bytes5to8,
-            } => (*type_u8, *code_u8, *bytes5to8),
-            DestinationUnreachable(header) => (TYPE_DST_UNREACH, (header.code_u8()), [0; 4]),
-            PacketTooBig { mtu } => (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
-            TimeExceeded(code) => (TYPE_TIME_EXCEEDED, code.code_u8(), [0; 4]),
-            ParameterProblem(header) => {
-                (TYPE_PARAMETER_PROBLEM, header.code.code_u8(), header.pointer.to_be_bytes())
-            }
-            EchoRequest(echo) => (TYPE_ECHO_REQUEST, 0, echo.to_bytes()),
-            EchoReply(echo) => (TYPE_ECHO_REPLY, 0, echo.to_bytes()),
-        }
-    }
-
     /// Creates a header with the correct checksum.
     pub fn to_header(
         self,

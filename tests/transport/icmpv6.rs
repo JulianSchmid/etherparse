@@ -448,65 +448,6 @@ mod icmpv6_type {
 
     proptest! {
         #[test]
-        fn to_bytes(
-            type_u8 in any::<u8>(),
-            code_u8 in any::<u8>(),
-            bytes5to8 in any::<[u8;4]>(),
-            mtu in any::<u32>(),
-        ) {
-            use Icmpv6Type::*;
-            use icmpv6::*;
-            assert_eq!(
-                Unknown{type_u8, code_u8, bytes5to8}.to_bytes(),
-                (type_u8, code_u8, bytes5to8)
-            );
-            if let Some(code) = DestUnreachableCode::from_u8(code_u8) {
-                assert_eq!(
-                    DestinationUnreachable(code).to_bytes(),
-                    (TYPE_DST_UNREACH, code_u8, [0;4])
-                );
-            } else {
-                assert_eq!(
-                    DestinationUnreachable(DestUnreachableCode::NoRoute).to_bytes(),
-                    (TYPE_DST_UNREACH, CODE_DST_UNREACH_NO_ROUTE, [0;4])
-                );
-            }
-            assert_eq!(
-                PacketTooBig{ mtu }.to_bytes(),
-                (TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes())
-            );
-            assert_eq!(
-                TimeExceeded(TimeExceededCode::HopLimitExceeded).to_bytes(),
-                (TYPE_TIME_EXCEEDED, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED, [0u8;4])
-            );
-            assert_eq!(
-                ParameterProblem(
-                    ParameterProblemHeader{
-                        code: ParameterProblemCode::ExtensionHeaderTooBig,
-                        pointer: mtu
-                    }
-                ).to_bytes(),
-                (TYPE_PARAMETER_PROBLEM, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG, mtu.to_be_bytes())
-            );
-            assert_eq!(
-                EchoRequest(IcmpEchoHeader{
-                    id: u16::from_be_bytes([bytes5to8[0], bytes5to8[1]]),
-                    seq: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]])
-                }).to_bytes(),
-                (TYPE_ECHO_REQUEST, 0, bytes5to8)
-            );
-            assert_eq!(
-                EchoReply(IcmpEchoHeader{
-                    id: u16::from_be_bytes([bytes5to8[0], bytes5to8[1]]),
-                    seq: u16::from_be_bytes([bytes5to8[2], bytes5to8[3]])
-                }).to_bytes(),
-                (TYPE_ECHO_REPLY, 0, bytes5to8)
-            );
-        }
-    }
-
-    proptest! {
-        #[test]
         fn to_header(
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
@@ -736,17 +677,13 @@ mod icmpv6_header {
             // normal case
             {
                 let mut buffer = Vec::with_capacity(icmp_type.header_len());
-                Icmpv6Header {
+                let header = Icmpv6Header {
                     icmp_type,
                     checksum,
-                }.write(&mut buffer).unwrap();
-                let (b0, b1, bytes5to8) = icmp_type.to_bytes();
-                let checksum_b = checksum.to_be_bytes();
+                };
+                header.write(&mut buffer).unwrap();
                 assert_eq!(
-                    &[
-                        b0, b1, checksum_b[0], checksum_b[1],
-                        bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3],
-                    ],
+                    &header.to_bytes(),
                     &buffer[..]
                 );
             }
@@ -821,13 +758,10 @@ mod icmpv6_header {
             checksum in any::<u16>(),
         ) {
             let bytes = {
-                let (b0, b1, b5to8) = icmp_type.to_bytes();
-                let checksum_be = checksum.to_be_bytes();
-                [
-                    b0, b1, checksum_be[0], checksum_be[1],
-                    b5to8[0], b5to8[1], b5to8[2], b5to8[3],
-                    0, 0,
-                ]
+                Icmpv6Header {
+                    icmp_type: icmp_type.clone(),
+                    checksum,
+                }.to_bytes()
             };
 
             // ok case
