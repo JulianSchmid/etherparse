@@ -1,5 +1,6 @@
 use super::super::*;
 
+use arrayvec::ArrayVec;
 use std::slice::from_raw_parts;
 
 /// Module containing ICMPv6 related types and constants
@@ -563,23 +564,54 @@ impl Icmpv6Type {
             return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
         }
 
-        let (icmp_type, icmp_code, bytes5to8) = self.to_bytes();
         let msg_len = payload.len() + self.header_len();
 
-        // calculate the checksum; icmp4 will always take an ip4 header
+        // calculate the checksum
+        // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader,
+        // unlike Icmp4
+        let pseudo_sum = checksum::Sum16BitWords::new()
+            .add_16bytes(source_ip)
+            .add_16bytes(destination_ip)
+            .add_2bytes([0, ip_number::IPV6_ICMP])
+            .add_4bytes((msg_len as u32).to_be_bytes());
+
+        use Icmpv6Type::*;
         Ok(
-            // NOTE: rfc4443 section 2.3 - Icmp6 *does* use a pseudoheader,
-            // unlike Icmp4
-            checksum::Sum16BitWords::new()
-                .add_16bytes(source_ip)
-                .add_16bytes(destination_ip)
-                .add_2bytes([0, ip_number::IPV6_ICMP])
-                .add_4bytes((msg_len as u32).to_be_bytes())
-                .add_2bytes([icmp_type, icmp_code])
-                .add_4bytes(bytes5to8)
-                .add_slice(payload)
-                .ones_complement()
-                .to_be(),
+            match self {
+                Unknown {
+                    type_u8,
+                    code_u8,
+                    bytes5to8,
+                } => {
+                    pseudo_sum.add_2bytes([*type_u8, *code_u8])
+                    .add_4bytes(*bytes5to8)
+                },
+                DestinationUnreachable(header) => {
+                    pseudo_sum.add_2bytes([TYPE_DST_UNREACH, header.code_u8()])
+                },
+                PacketTooBig { mtu } => {
+                    pseudo_sum.add_2bytes([TYPE_PACKET_TOO_BIG, 0])
+                    .add_4bytes(mtu.to_be_bytes())
+                },
+                TimeExceeded(code) => {
+                    pseudo_sum.add_2bytes([TYPE_TIME_EXCEEDED, code.code_u8()])
+                },
+                ParameterProblem(header) => {
+                    pseudo_sum.add_2bytes([TYPE_PARAMETER_PROBLEM, header.code.code_u8()])
+                    .add_4bytes(header.pointer.to_be_bytes())
+                }
+                EchoRequest(echo) => {
+                    pseudo_sum.add_2bytes([TYPE_ECHO_REQUEST, 0])
+                    .add_4bytes(echo.to_bytes())
+                }
+                EchoReply(echo) => {
+                    pseudo_sum.add_2bytes([TYPE_ECHO_REPLY, 0])
+                    .add_4bytes(echo.to_bytes())
+                }
+            }
+            .add_slice(payload)
+            .ones_complement()
+            .to_be()
         )
     }
 
@@ -676,6 +708,14 @@ impl Icmpv6Header {
     /// the type and code.
     pub const MIN_SERIALIZED_SIZE: usize = 8;
 
+    /// Maximum number of bytes/octets an Icmpv6Header takes up
+    /// in serialized form.
+    ///
+    /// Currently this number is determined by the biggest
+    /// planned ICMPv6 header type, which is currently the
+    /// "Neighbor Discovery Protocol" "Redirect" message.
+    pub const MAX_SERIALIZED_SIZE: usize = 8 + 16 + 16;
+
     /// Setups a new header with the checksum beeing set to 0.
     #[inline]
     pub fn new(icmp_type: Icmpv6Type) -> Icmpv6Header {
@@ -744,19 +784,84 @@ impl Icmpv6Header {
 
     /// Returns the header on the wire bytes.
     #[inline]
-    pub fn to_bytes(&self) -> [u8; 8] {
-        let (type_value, code_value, bytes5to8) = self.icmp_type.to_bytes();
+    pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+
         let checksum_be = self.checksum.to_be_bytes();
-        [
-            type_value,
-            code_value,
-            checksum_be[0],
-            checksum_be[1],
-            bytes5to8[0],
-            bytes5to8[1],
-            bytes5to8[2],
-            bytes5to8[3],
-        ]
+
+        let return_trivial = |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+            #[rustfmt::skip]
+            let mut re = ArrayVec::from([
+                type_u8, code_u8, checksum_be[0], checksum_be[1],
+                0, 0, 0, 0,
+
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+            ]);
+            // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
+            unsafe {
+                re.set_len(8);
+            }
+            re
+        };
+
+        let return_4u8 = |type_u8: u8, code_u8: u8, bytes5to8: [u8;4]| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+            #[rustfmt::skip]
+            let mut re = ArrayVec::from([
+                type_u8, code_u8, checksum_be[0], checksum_be[1],
+                bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3],
+
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0,
+            ]);
+            // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
+            unsafe {
+                re.set_len(8);
+            }
+            re
+        };
+
+        use Icmpv6Type::*;
+        match self.icmp_type {
+            Unknown {
+                type_u8,
+                code_u8,
+                bytes5to8,
+            } => {
+                return_4u8(type_u8, code_u8, bytes5to8)
+            },
+            DestinationUnreachable(header) => {
+                return_trivial(TYPE_DST_UNREACH, header.code_u8())
+            },
+            PacketTooBig { mtu } => {
+                return_4u8(TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes())
+            },
+            TimeExceeded(code) => {
+                return_trivial(TYPE_TIME_EXCEEDED, code.code_u8())
+            },
+            ParameterProblem(header) => {
+                return_4u8(TYPE_PARAMETER_PROBLEM, header.code.code_u8(), header.pointer.to_be_bytes())
+            }
+            EchoRequest(echo) => {
+                return_4u8(TYPE_ECHO_REQUEST, 0, echo.to_bytes())
+            },
+            EchoReply(echo) => {
+                return_4u8(TYPE_ECHO_REPLY, 0, echo.to_bytes())
+            },
+        }
     }
 }
 
