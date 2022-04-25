@@ -1409,7 +1409,7 @@ mod regression {
             [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
             20,
         ) //time to life
-        .icmp6_echo_request(1, 2);
+        .icmpv6_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
         let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
@@ -1420,8 +1420,8 @@ mod regression {
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
         if let Some(TransportHeader::Icmpv6(hdr)) = new_ip.transport {
             if let Icmpv6Type::EchoRequest(echo) = hdr.icmp_type {
-                assert_eq!(echo.seq, 1);
-                assert_eq!(echo.id, 2);
+                assert_eq!(echo.id, 1);
+                assert_eq!(echo.seq, 2);
             } else {
                 panic!("Not an EchoRequest!?");
             }

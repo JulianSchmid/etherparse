@@ -577,6 +577,36 @@ impl Icmpv4Header {
     /// "Timestamp" and "Timestamp Reply Message".
     pub const MAX_SERIALIZED_SIZE: usize = 20;
 
+    /// Constructs an [`Icmpv4Header`] using the given type
+    /// and the checksum set to 0.
+    pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
+        // Note: will calculate checksum on send
+        Icmpv4Header {
+            icmp_type,
+            checksum: 0,
+        }
+    }
+
+    /// Creates a [`Icmpv4Header`] with a checksum calculated based on the given payload.
+    pub fn with_checksum(
+        icmp_type: Icmpv4Type,
+        payload: &[u8],
+    ) -> Icmpv4Header {
+        let checksum = icmp_type.calc_checksum(payload);
+        Icmpv4Header {
+            icmp_type,
+            checksum,
+        }
+    }
+
+    /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
+    #[inline]
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
+        let header = Icmpv4Slice::from_slice(slice)?.header();
+        let rest = &slice[header.header_len()..];
+        Ok((header, rest))
+    }
+
     /// Length in bytes/octets of this header type.
     #[inline]
     pub fn header_len(&self) -> usize {
@@ -590,16 +620,6 @@ impl Icmpv4Header {
         self.icmp_type.fixed_payload_size()
     }
 
-    /// Constructs an [`Icmpv4Header`] using the given type
-    /// and the checksum set to 0.
-    pub fn new(icmp_type: Icmpv4Type) -> Icmpv4Header {
-        // Note: will calculate checksum on send
-        Icmpv4Header {
-            icmp_type,
-            checksum: 0,
-        }
-    }
-
     /// Write the transport header to the given writer.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         writer.write_all(&self.to_bytes()).map_err(WriteError::from)
@@ -611,14 +631,6 @@ impl Icmpv4Header {
     /// are filled with zeroes.
     pub fn update_checksum(&mut self, payload: &[u8]) {
         self.checksum = self.icmp_type.calc_checksum(payload);
-    }
-
-    /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
-    #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
-        let header = Icmpv4Slice::from_slice(slice)?.header();
-        let rest = &slice[header.header_len()..];
-        Ok((header, rest))
     }
 
     /// Converts the header to the on the wire bytes.

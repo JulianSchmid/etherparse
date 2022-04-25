@@ -665,34 +665,6 @@ mod icmpv4_header {
 
     proptest!{
         #[test]
-        fn header_len(
-            checksum in any::<u16>(),
-            icmpv4_type in icmpv4_type_any()
-        ) {
-            let header = Icmpv4Header{
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-            assert_eq!(header.header_len(), icmpv4_type.header_len());
-        }
-    }
-
-    proptest!{
-        #[test]
-        fn fixed_payload_size(
-            checksum in any::<u16>(),
-            icmpv4_type in icmpv4_type_any()
-        ) {
-            let header = Icmpv4Header{
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-            assert_eq!(header.fixed_payload_size(), icmpv4_type.fixed_payload_size());
-        }
-    }
-
-    proptest!{
-        #[test]
         fn new(icmpv4_type in icmpv4_type_any()) {
             assert_eq!(
                 Icmpv4Header {
@@ -706,44 +678,17 @@ mod icmpv4_header {
 
     proptest!{
         #[test]
-        fn write(
+        fn with_checksum(
             icmpv4_type in icmpv4_type_any(),
-            checksum in any::<u16>(),
-        ) {
-            let header = Icmpv4Header {
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-
-            // normal write
-            {
-                let bytes = header.to_bytes();
-                let mut buffer = Vec::with_capacity(header.header_len());
-                header.write(&mut buffer).unwrap();
-                assert_eq!(&bytes[..], &buffer[..]);
-            }
-
-            // error case
-            for bad_len in 0..icmpv4_type.header_len() {
-                let mut writer = TestWriter::with_max_size(bad_len);
-                header.write(&mut writer).unwrap_err();
-            }
-        }
-    }
-
-    proptest!{
-        #[test]
-        fn update_checksum(
-            icmpv4_type in icmpv4_type_any(),
-            checksum in any::<u16>(),
             payload in proptest::collection::vec(any::<u8>(), 0..1024),
         ) {
-            let mut header = Icmpv4Header {
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-            header.update_checksum(&payload);
-            assert_eq!(header.checksum, icmpv4_type.calc_checksum(&payload));
+            assert_eq!(
+                Icmpv4Header {
+                    icmp_type: icmpv4_type.clone(),
+                    checksum: icmpv4_type.calc_checksum(&payload),
+                },
+                Icmpv4Header::with_checksum(icmpv4_type, &payload)
+            );
         }
     }
 
@@ -787,6 +732,77 @@ mod icmpv4_header {
                     Err(_)
                 );
             }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn header_len(
+            checksum in any::<u16>(),
+            icmpv4_type in icmpv4_type_any()
+        ) {
+            let header = Icmpv4Header{
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            assert_eq!(header.header_len(), icmpv4_type.header_len());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fixed_payload_size(
+            checksum in any::<u16>(),
+            icmpv4_type in icmpv4_type_any()
+        ) {
+            let header = Icmpv4Header{
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            assert_eq!(header.fixed_payload_size(), icmpv4_type.fixed_payload_size());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn write(
+            icmpv4_type in icmpv4_type_any(),
+            checksum in any::<u16>(),
+        ) {
+            let header = Icmpv4Header {
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+
+            // normal write
+            {
+                let bytes = header.to_bytes();
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                assert_eq!(&bytes[..], &buffer[..]);
+            }
+
+            // error case
+            for bad_len in 0..icmpv4_type.header_len() {
+                let mut writer = TestWriter::with_max_size(bad_len);
+                header.write(&mut writer).unwrap_err();
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn update_checksum(
+            icmpv4_type in icmpv4_type_any(),
+            checksum in any::<u16>(),
+            payload in proptest::collection::vec(any::<u8>(), 0..1024),
+        ) {
+            let mut header = Icmpv4Header {
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            header.update_checksum(&payload);
+            assert_eq!(header.checksum, icmpv4_type.calc_checksum(&payload));
         }
     }
 
@@ -1607,7 +1623,7 @@ mod icmpv4_regression {
             [192, 168, 1, 2], //desitionation ip
             20,
         ) //time to life
-        .icmp4_echo_request(1, 2);
+        .icmpv4_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
         let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
@@ -1618,8 +1634,8 @@ mod icmpv4_regression {
         let new_ip = PacketHeaders::from_ip_slice(&result).unwrap();
         if let Some(TransportHeader::Icmpv4(hdr)) = new_ip.transport {
             if let Icmpv4Type::EchoRequest(echo) = hdr.icmp_type {
-                assert_eq!(echo.seq, 1);
-                assert_eq!(echo.id, 2);
+                assert_eq!(echo.id, 1);
+                assert_eq!(echo.seq, 2);
             } else {
                 panic!("Not an EchoRequest!?");
             }
