@@ -339,7 +339,7 @@ use icmpv6::*;
 /// # let mut builder = PacketBuilder::
 /// #   ethernet2([0;6], [0;6])
 /// #   .ipv6([0;16], [0;16], 20)
-/// #   .icmp6_echo_request(1, 2);
+/// #   .icmpv6_echo_request(1, 2);
 /// # let payload = [1,2,3,4];
 /// # let mut packet = Vec::<u8>::with_capacity(builder.size(payload.len()));
 /// # builder.write(&mut packet, &payload);
@@ -702,6 +702,21 @@ impl Icmpv6Header {
         }
     }
 
+    /// Creates a [`Icmpv6Header`] with a checksum calculated based
+    /// on the given payload & ip addresses from the IPv6 header.
+    pub fn with_checksum(
+        icmp_type: Icmpv6Type,
+        source_ip: [u8; 16],
+        destination_ip: [u8; 16],
+        payload: &[u8],
+    ) -> Result<Icmpv6Header, ValueError> {
+        let checksum = icmp_type.calc_checksum(source_ip, destination_ip, payload)?;
+        Ok(Icmpv6Header {
+            icmp_type,
+            checksum,
+        })
+    }
+
     /// Reads an icmp6 header from a slice directly and returns a tuple
     /// containing the resulting header & unused part of the slice.
     #[inline]
@@ -725,20 +740,6 @@ impl Icmpv6Header {
     #[inline]
     pub fn fixed_payload_size(&self) -> Option<usize> {
         self.icmp_type.fixed_payload_size()
-    }
-
-    /// Creates a [`Icmpv6Header`] with a valid checksum.
-    pub fn with_checksum(
-        icmp_type: Icmpv6Type,
-        source_ip: [u8; 16],
-        destination_ip: [u8; 16],
-        payload: &[u8],
-    ) -> Result<Icmpv6Header, ValueError> {
-        let checksum = icmp_type.calc_checksum(source_ip, destination_ip, payload)?;
-        Ok(Icmpv6Header {
-            icmp_type,
-            checksum,
-        })
     }
 
     /// Write the transport header to the given writer.

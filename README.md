@@ -168,8 +168,6 @@ Read the documentations of the different methods for a more details:
 * [`TcpHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.write)
 
 ## Roadmap
-* Documentation
-  * Packet Builder
 * MutPacketSlice -> modifaction of fields in slices directly?
 * Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
 * IEEE 802.3

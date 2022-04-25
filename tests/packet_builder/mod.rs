@@ -898,3 +898,469 @@ proptest! {
                                  .size(123));
     }
 }
+
+proptest! {
+    #[test]
+    fn ipv4_icmpv4(
+        ipv4_source in any::<[u8;4]>(),
+        ipv4_dest in any::<[u8;4]>(),
+        ipv4_time_to_live in any::<u8>(),
+        icmpv4_type_u8 in 15u8..u8::MAX,
+        icmpv4_code_u8 in any::<u8>(),
+        icmpv4_bytes5to8 in any::<[u8;4]>(),
+        icmpv4 in icmpv4_type_any(),
+        echo_id in any::<u16>(),
+        echo_seq in any::<u16>(),
+        payload in proptest::collection::vec(any::<u8>(), 0..64),
+    ) {
+        let test_builder = |builder: PacketBuilderStep<Icmpv4Header>, icmpv4_type: Icmpv4Type| {
+            let icmp_expected = Icmpv4Header::with_checksum(icmpv4_type, &payload);
+            let ip_expected = {
+                let mut expected_ipv4 = Ipv4Header::new(
+                    (icmp_expected.header_len() + payload.len()) as u16,
+                    ipv4_time_to_live,
+                    IpNumber::Icmp,
+                    ipv4_source,
+                    ipv4_dest
+                );
+                expected_ipv4.header_checksum = expected_ipv4.calc_header_checksum().unwrap();
+                expected_ipv4
+            };
+
+            // test builder.size()
+            assert_eq!(
+                builder.size(payload.len()),
+                Ethernet2Header::SERIALIZED_SIZE +
+                Ipv4Header::SERIALIZED_SIZE +
+                icmp_expected.header_len() +
+                payload.len()
+            );
+
+            // test builder.write()
+            let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
+            builder.write(&mut buffer, &payload).unwrap();
+
+            // decode packets
+            let actual = PacketHeaders::from_ethernet_slice(&buffer).unwrap();
+
+            // check the packets could be decoded
+            assert_eq!(
+                Some(Ethernet2Header{
+                    source: [1,2,3,4,5,6],
+                    destination: [7,8,9,10,11,12],
+                    ether_type: ether_type::IPV4
+                }),
+                actual.link
+            );
+            assert_eq!(
+                Some(IpHeader::Version4(ip_expected, Default::default())),
+                actual.ip
+            );
+            assert_eq!(
+                Some(TransportHeader::Icmpv4(icmp_expected)),
+                actual.transport
+            );
+            assert_eq!(actual.payload, &payload);
+        };
+
+        // icmpv4
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv4(icmpv4.clone());
+
+            test_builder(
+                builder,
+                icmpv4
+            );
+        }
+
+        // icmpv4_raw
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv4_raw(icmpv4_type_u8, icmpv4_code_u8, icmpv4_bytes5to8);
+
+            test_builder(
+                builder,
+                Icmpv4Type::Unknown{
+                    type_u8: icmpv4_type_u8,
+                    code_u8: icmpv4_code_u8,
+                    bytes5to8: icmpv4_bytes5to8,
+                }
+            );
+        }
+
+        // icmpv4_echo_request
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv4_echo_request(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv4Type::EchoRequest(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+
+        // icmp4_echo_reply
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv4_echo_reply(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv4Type::EchoReply(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    fn ipv4_icmpv6(
+        ipv4_source in any::<[u8;4]>(),
+        ipv4_dest in any::<[u8;4]>(),
+        ipv4_time_to_live in any::<u8>(),
+        icmpv6_type_u8 in 162u8..u8::MAX,
+        icmpv6_code_u8 in any::<u8>(),
+        icmpv6_bytes5to8 in any::<[u8;4]>(),
+        icmpv6 in icmpv6_type_any(),
+        echo_id in any::<u16>(),
+        echo_seq in any::<u16>(),
+        payload in proptest::collection::vec(any::<u8>(), 0..64),
+    ) {
+        let test_builder = |builder: PacketBuilderStep<Icmpv6Header>, icmpv6_type: Icmpv6Type| {
+            // test builder.size()
+            assert_eq!(
+                builder.size(payload.len()),
+                Ethernet2Header::SERIALIZED_SIZE +
+                Ipv4Header::SERIALIZED_SIZE +
+                icmpv6_type.header_len() +
+                payload.len()
+            );
+
+            // test builder.write()
+            let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
+            // should trigger an error, was it is not possible to calculate the checksum
+            assert_matches!(
+                builder.write(&mut buffer, &payload),
+                Err(_)
+            );
+        };
+
+        // icmpv6
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv6(icmpv6.clone());
+
+            test_builder(
+                builder,
+                icmpv6
+            );
+        }
+
+        // icmpv6_raw
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv6_raw(icmpv6_type_u8, icmpv6_code_u8, icmpv6_bytes5to8);
+
+            test_builder(
+                builder,
+                Icmpv6Type::Unknown{
+                    type_u8: icmpv6_type_u8,
+                    code_u8: icmpv6_code_u8,
+                    bytes5to8: icmpv6_bytes5to8,
+                }
+            );
+        }
+
+        // icmpv6_echo_request
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv6_echo_request(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv6Type::EchoRequest(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+
+        // icmp4_echo_reply
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .icmpv6_echo_reply(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv6Type::EchoReply(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    fn ipv6_icmpv4(
+        ipv6_source in any::<[u8;16]>(),
+        ipv6_dest in any::<[u8;16]>(),
+        ipv6_hop_limit in any::<u8>(),
+        icmpv4_type_u8 in 15u8..u8::MAX,
+        icmpv4_code_u8 in any::<u8>(),
+        icmpv4_bytes5to8 in any::<[u8;4]>(),
+        icmpv4 in icmpv4_type_any(),
+        echo_id in any::<u16>(),
+        echo_seq in any::<u16>(),
+        payload in proptest::collection::vec(any::<u8>(), 0..64),
+    ) {
+        let test_builder = |builder: PacketBuilderStep<Icmpv4Header>, icmpv4_type: Icmpv4Type| {
+            let icmp_expected = Icmpv4Header::with_checksum(icmpv4_type, &payload);
+            let ip_expected = Ipv6Header{
+                traffic_class: 0,
+                flow_label: 0,
+                payload_length: (icmp_expected.header_len() + payload.len()) as u16,
+                next_header: ip_number::ICMP,
+                hop_limit: ipv6_hop_limit,
+                source: ipv6_source,
+                destination: ipv6_dest
+            };
+
+            // test builder.size()
+            assert_eq!(
+                builder.size(payload.len()),
+                Ethernet2Header::SERIALIZED_SIZE +
+                Ipv6Header::SERIALIZED_SIZE +
+                icmp_expected.header_len() +
+                payload.len()
+            );
+
+            // test builder.write()
+            let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
+            builder.write(&mut buffer, &payload).unwrap();
+
+            // decode packets
+            let actual = PacketHeaders::from_ethernet_slice(&buffer).unwrap();
+
+            // check the packets could be decoded
+            assert_eq!(
+                Some(Ethernet2Header{
+                    source: [1,2,3,4,5,6],
+                    destination: [7,8,9,10,11,12],
+                    ether_type: ether_type::IPV6
+                }),
+                actual.link
+            );
+            assert_eq!(
+                Some(IpHeader::Version6(ip_expected, Default::default())),
+                actual.ip
+            );
+            assert_eq!(
+                Some(TransportHeader::Icmpv4(icmp_expected)),
+                actual.transport
+            );
+            assert_eq!(actual.payload, &payload);
+        };
+
+        // icmpv4
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv4(icmpv4.clone());
+
+            test_builder(
+                builder,
+                icmpv4
+            );
+        }
+
+        // icmpv4_raw
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv4_raw(icmpv4_type_u8, icmpv4_code_u8, icmpv4_bytes5to8);
+
+            test_builder(
+                builder,
+                Icmpv4Type::Unknown{
+                    type_u8: icmpv4_type_u8,
+                    code_u8: icmpv4_code_u8,
+                    bytes5to8: icmpv4_bytes5to8,
+                }
+            );
+        }
+
+        // icmpv4_echo_request
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv4_echo_request(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv4Type::EchoRequest(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+
+        // icmp4_echo_reply
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv4_echo_reply(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv4Type::EchoReply(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+    }
+}
+
+proptest! {
+    #[test]
+    fn ipv6_icmpv6(
+        ipv6_source in any::<[u8;16]>(),
+        ipv6_dest in any::<[u8;16]>(),
+        ipv6_hop_limit in any::<u8>(),
+        icmpv6_type_u8 in 162u8..u8::MAX,
+        icmpv6_code_u8 in any::<u8>(),
+        icmpv6_bytes5to8 in any::<[u8;4]>(),
+        icmpv6 in icmpv6_type_any(),
+        echo_id in any::<u16>(),
+        echo_seq in any::<u16>(),
+        payload in proptest::collection::vec(any::<u8>(), 0..64),
+    ) {
+        let test_builder = |builder: PacketBuilderStep<Icmpv6Header>, icmpv6_type: Icmpv6Type| {
+            let icmp_expected = Icmpv6Header::with_checksum(
+                icmpv6_type,
+                ipv6_source,
+                ipv6_dest,
+                &payload
+            ).unwrap();
+            let ip_expected = Ipv6Header{
+                traffic_class: 0,
+                flow_label: 0,
+                payload_length: (icmp_expected.header_len() + payload.len()) as u16,
+                next_header: ip_number::IPV6_ICMP,
+                hop_limit: ipv6_hop_limit,
+                source: ipv6_source,
+                destination: ipv6_dest
+            };
+
+            // test builder.size()
+            assert_eq!(
+                builder.size(payload.len()),
+                Ethernet2Header::SERIALIZED_SIZE +
+                Ipv6Header::SERIALIZED_SIZE +
+                icmp_expected.header_len() +
+                payload.len()
+            );
+
+            // test builder.write()
+            let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
+            builder.write(&mut buffer, &payload).unwrap();
+
+            // decode packets
+            let actual = PacketHeaders::from_ethernet_slice(&buffer).unwrap();
+
+            // check the packets could be decoded
+            assert_eq!(
+                Some(Ethernet2Header{
+                    source: [1,2,3,4,5,6],
+                    destination: [7,8,9,10,11,12],
+                    ether_type: ether_type::IPV6
+                }),
+                actual.link
+            );
+            assert_eq!(
+                Some(IpHeader::Version6(ip_expected, Default::default())),
+                actual.ip
+            );
+            assert_eq!(
+                Some(TransportHeader::Icmpv6(icmp_expected)),
+                actual.transport
+            );
+            assert_eq!(actual.payload, &payload);
+        };
+
+        // icmpv6
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv6(icmpv6.clone());
+
+            test_builder(
+                builder,
+                icmpv6
+            );
+        }
+
+        // icmpv6_raw
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv6_raw(icmpv6_type_u8, icmpv6_code_u8, icmpv6_bytes5to8);
+
+            test_builder(
+                builder,
+                Icmpv6Type::Unknown{
+                    type_u8: icmpv6_type_u8,
+                    code_u8: icmpv6_code_u8,
+                    bytes5to8: icmpv6_bytes5to8,
+                }
+            );
+        }
+
+        // icmpv6_echo_request
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv6_echo_request(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv6Type::EchoRequest(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+
+        // icmp4_echo_reply
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .icmpv6_echo_reply(echo_id, echo_seq);
+
+            test_builder(
+                builder,
+                Icmpv6Type::EchoReply(IcmpEchoHeader{
+                    id: echo_id,
+                    seq: echo_seq,
+                })
+            );
+        }
+    }
+}
