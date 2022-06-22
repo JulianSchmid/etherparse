@@ -465,3 +465,17 @@ mod ip_number {
     }
 
 } // mod ip_number
+
+#[cfg(feature = "ip_number_num_enum")]
+mod ip_number_enum {
+    #[test]
+    fn ip_number_from_u8() {
+        use crate::IpNumber;
+        use std::convert::TryFrom;
+
+        assert_eq!(IpNumber::try_from(0u8), Ok(IpNumber::IPv6HeaderHopByHop));
+        assert_eq!(IpNumber::try_from(1u8), Ok(IpNumber::Icmp));
+        assert_eq!(IpNumber::try_from(6u8), Ok(IpNumber::Tcp));
+        assert_eq!(IpNumber::try_from(132u8), Ok(IpNumber::Sctp));
+    }
+}
