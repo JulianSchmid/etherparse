@@ -157,6 +157,7 @@ pub type IpTrafficClass = IpNumber;
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(u8)]
 #[cfg_attr(feature = "ip_number_num_enum", derive(num_enum::TryFromPrimitive))]
+#[cfg_attr(feature = "ip_number_strum_iter", derive(strum_macros::EnumIter))]
 pub enum IpNumber {
     ///IPv6 Hop-by-Hop Option \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
     IPv6HeaderHopByHop = 0,

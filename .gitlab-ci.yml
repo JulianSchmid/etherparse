@@ -20,4 +20,4 @@ image: "rust:latest"
 test:cargo:
   script:
   - rustc --version && cargo --version      # Print version info for debugging
-  - cargo test --features ip_number_num_enum --all --verbose
+  - cargo test --features ip_number_num_enum ip_number_strum_iter --all --verbose

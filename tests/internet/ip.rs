@@ -467,7 +467,7 @@ mod ip_number {
 } // mod ip_number
 
 #[cfg(feature = "ip_number_num_enum")]
-mod ip_number_enum {
+mod ip_number_num_enum {
     #[test]
     fn ip_number_from_u8() {
         use crate::IpNumber;
@@ -477,5 +477,16 @@ mod ip_number_enum {
         assert_eq!(IpNumber::try_from(1u8), Ok(IpNumber::Icmp));
         assert_eq!(IpNumber::try_from(6u8), Ok(IpNumber::Tcp));
         assert_eq!(IpNumber::try_from(132u8), Ok(IpNumber::Sctp));
+    }
+}
+
+#[cfg(feature = "ip_number_strum_iter")]
+mod ip_number_strum_iter {
+    #[test]
+    fn ip_number_iter() {
+        use crate::IpNumber;
+        use strum::IntoEnumIterator;
+
+        assert_eq!(IpNumber::iter().count(), 144);
     }
 }
