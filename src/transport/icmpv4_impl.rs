@@ -607,6 +607,40 @@ impl Icmpv4Header {
         Ok((header, rest))
     }
 
+    /// Reads an ICMPv4 header from the given reader.
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, ReadError> {
+        let mut bytes = [0u8;Icmpv4Header::MAX_SERIALIZED_SIZE];
+
+        // try reading the initial 8 bytes
+        reader.read_exact(&mut bytes[..8])?;
+
+        match bytes[0] {
+            TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
+                if 0 == bytes[1] {
+                    // Timetamp messages need additional data read & it and
+                    // then set the slice correspondently
+                    reader.read_exact(&mut bytes[8..TimestampMessage::SERIALIZED_SIZE])?;
+                    Ok(Icmpv4Slice {
+                        slice: &bytes[..icmpv4::TimestampMessage::SERIALIZED_SIZE]
+                    }.header())
+                } else {
+                    // fallback to unknown
+                    Ok(Icmpv4Slice {
+                        slice: &bytes[..8]
+                    }.header())
+                }
+            },
+            _ => Ok(Icmpv4Slice {
+                slice: &bytes[..8]
+            }.header())
+        }
+    }
+
+    /// Write the ICMPv4 header to the given writer.
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
+    }
+
     /// Length in bytes/octets of this header type.
     #[inline]
     pub fn header_len(&self) -> usize {
@@ -618,11 +652,6 @@ impl Icmpv4Header {
     #[inline]
     pub fn fixed_payload_size(&self) -> Option<usize> {
         self.icmp_type.fixed_payload_size()
-    }
-
-    /// Write the transport header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
     }
 
     /// Calculates & updates the checksum in the header.
