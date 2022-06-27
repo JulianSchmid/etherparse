@@ -726,6 +726,21 @@ impl Icmpv6Header {
         Ok((header, &slice[len..]))
     }
 
+    /// Read a ICMPv6 header from the given reader
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, ReadError> {
+        // read the initial 8 bytes
+        let mut start = [0u8;8];
+        reader.read_exact(&mut start)?;
+        Ok(Icmpv6Slice{
+            slice: &start
+        }.header())
+    }
+
+    /// Write the ICMPv6 header to the given writer.
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
+    }
+
     /// Serialized length of the header in bytes/octets.
     ///
     /// Note that this size is not the size of the entire
@@ -740,11 +755,6 @@ impl Icmpv6Header {
     #[inline]
     pub fn fixed_payload_size(&self) -> Option<usize> {
         self.icmp_type.fixed_payload_size()
-    }
-
-    /// Write the transport header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
     }
 
     /// Updates the checksum of the header.

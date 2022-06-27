@@ -737,29 +737,49 @@ mod icmpv4_header {
 
     proptest!{
         #[test]
-        fn header_len(
-            checksum in any::<u16>(),
-            icmpv4_type in icmpv4_type_any()
+        fn read(
+            non_timestamp_type in any::<u8>().prop_filter(
+                "type must be a non timestamp type",
+                |v| (*v != icmpv4::TYPE_TIMESTAMP_REPLY && *v != icmpv4::TYPE_TIMESTAMP)
+            ),
+            non_zero_code in 1u8..=u8::MAX,
+            bytes in any::<[u8;icmpv4::TimestampMessage::SERIALIZED_SIZE]>()
         ) {
-            let header = Icmpv4Header{
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-            assert_eq!(header.header_len(), icmpv4_type.header_len());
-        }
-    }
+            for (type_u8, code_u8) in [
+                // non timestamp
+                (non_timestamp_type, bytes[1]),
+                // timestamp with zero code
+                (TYPE_TIMESTAMP_REPLY, 0u8),
+                (TYPE_TIMESTAMP, 0u8),
+                // timestamp with non-zero code
+                (TYPE_TIMESTAMP_REPLY, non_zero_code),
+                (TYPE_TIMESTAMP, non_zero_code),
+            ] {
+                let b = {
+                    let mut b = bytes.clone();
+                    b[0] = type_u8;
+                    b[1] = code_u8;
+                    b
+                };
+                let expected = Icmpv4Header::from_slice(&b).unwrap().0;
 
-    proptest!{
-        #[test]
-        fn fixed_payload_size(
-            checksum in any::<u16>(),
-            icmpv4_type in icmpv4_type_any()
-        ) {
-            let header = Icmpv4Header{
-                icmp_type: icmpv4_type.clone(),
-                checksum,
-            };
-            assert_eq!(header.fixed_payload_size(), icmpv4_type.fixed_payload_size());
+                // ok case
+                {
+                    let mut cursor = std::io::Cursor::new(&b);
+                    let actual = Icmpv4Header::read(&mut cursor).unwrap();
+                    assert_eq!(expected, actual);
+                    assert_eq!(expected.header_len() as u64, cursor.position());
+                }
+
+                // size error case
+                for bad_len in 0..expected.header_len() {
+                    let mut cursor = std::io::Cursor::new(&(b.as_ref()[..bad_len]));
+                    assert_matches!(
+                        Icmpv4Header::read(&mut cursor),
+                        Err(_)
+                    );
+                }
+            }
         }
     }
 
@@ -787,6 +807,34 @@ mod icmpv4_header {
                 let mut writer = TestWriter::with_max_size(bad_len);
                 header.write(&mut writer).unwrap_err();
             }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn header_len(
+            checksum in any::<u16>(),
+            icmpv4_type in icmpv4_type_any()
+        ) {
+            let header = Icmpv4Header{
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            assert_eq!(header.header_len(), icmpv4_type.header_len());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fixed_payload_size(
+            checksum in any::<u16>(),
+            icmpv4_type in icmpv4_type_any()
+        ) {
+            let header = Icmpv4Header{
+                icmp_type: icmpv4_type.clone(),
+                checksum,
+            };
+            assert_eq!(header.fixed_payload_size(), icmpv4_type.fixed_payload_size());
         }
     }
 

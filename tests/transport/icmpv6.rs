@@ -621,32 +621,6 @@ mod icmpv6_header {
 
     proptest! {
         #[test]
-        fn header_len(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
-            assert_eq!(
-                icmp_type.header_len(),
-                Icmpv6Header{
-                    icmp_type,
-                    checksum
-                }.header_len()
-            );
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn fixed_payload_size(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
-            assert_eq!(
-                icmp_type.fixed_payload_size(),
-                Icmpv6Header{
-                    icmp_type,
-                    checksum
-                }.fixed_payload_size()
-            );
-        }
-    }
-
-    proptest! {
-        #[test]
         fn new(icmp_type in icmpv6_type_any()) {
             assert_eq!(
                 Icmpv6Header::new(icmp_type.clone()),
@@ -701,6 +675,74 @@ mod icmpv6_header {
 
     proptest! {
         #[test]
+        fn from_slice(
+            icmp_type in icmpv6_type_any(),
+            checksum in any::<u16>(),
+        ) {
+            let bytes = {
+                Icmpv6Header {
+                    icmp_type: icmp_type.clone(),
+                    checksum,
+                }.to_bytes()
+            };
+
+            // ok case
+            {
+                let result = Icmpv6Header::from_slice(&bytes).unwrap();
+                assert_eq!(
+                    Icmpv6Header{
+                        icmp_type,
+                        checksum,
+                    },
+                    result.0,
+                );
+                assert_eq!(&bytes[8..], result.1);
+            }
+
+
+            // size error case
+            for length in 0..8 {
+                assert_matches!(
+                    Icmpv6Header::from_slice(&bytes[..length]),
+                    Err(ReadError::UnexpectedEndOfSlice(_))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            icmp_type in icmpv6_type_any(),
+            checksum in any::<u16>(),
+        ) {
+            let header = Icmpv6Header {
+                icmp_type: icmp_type.clone(),
+                checksum,
+            };
+            let bytes = header.to_bytes();
+
+            // ok case
+            {
+                let mut cursor = std::io::Cursor::new(&bytes);
+                let result = Icmpv6Header::read(&mut cursor).unwrap();
+                assert_eq!(header, result,);
+                assert_eq!(header.header_len() as u64, cursor.position());
+            }
+
+            // size error case
+            for length in 0..header.header_len() {
+                let mut cursor = std::io::Cursor::new(&bytes[..length]);
+                assert_matches!(
+                    Icmpv6Header::read(&mut cursor),
+                    Err(_)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
         fn write(
             icmp_type in icmpv6_type_any(),
             checksum in any::<u16>(),
@@ -728,6 +770,32 @@ mod icmpv6_header {
                     checksum,
                 }.write(&mut writer).unwrap_err();
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
+            assert_eq!(
+                icmp_type.header_len(),
+                Icmpv6Header{
+                    icmp_type,
+                    checksum
+                }.header_len()
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn fixed_payload_size(icmp_type in icmpv6_type_any(), checksum in any::<u16>()) {
+            assert_eq!(
+                icmp_type.fixed_payload_size(),
+                Icmpv6Header{
+                    icmp_type,
+                    checksum
+                }.fixed_payload_size()
+            );
         }
     }
 
@@ -780,43 +848,6 @@ mod icmpv6_header {
                     checksum: icmp_type.calc_checksum(ip_header.source, ip_header.destination, &payload).unwrap(),
                 }
             );
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn from_slice(
-            icmp_type in icmpv6_type_any(),
-            checksum in any::<u16>(),
-        ) {
-            let bytes = {
-                Icmpv6Header {
-                    icmp_type: icmp_type.clone(),
-                    checksum,
-                }.to_bytes()
-            };
-
-            // ok case
-            {
-                let result = Icmpv6Header::from_slice(&bytes).unwrap();
-                assert_eq!(
-                    Icmpv6Header{
-                        icmp_type,
-                        checksum,
-                    },
-                    result.0,
-                );
-                assert_eq!(&bytes[8..], result.1);
-            }
-
-
-            // size error case
-            for length in 0..8 {
-                assert_matches!(
-                    Icmpv6Header::from_slice(&bytes[..length]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
-                );
-            }
         }
     }
 
