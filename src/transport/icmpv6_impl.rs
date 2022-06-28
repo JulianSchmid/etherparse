@@ -410,13 +410,59 @@ use icmpv6::*;
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw in this enum value.
+    ///
+    /// # What is part of the header for `Icmpv6Type::Unknown`?
+    ///
+    /// For unknown ICMPv6 type & code combination the first 8 bytes are stored
+    /// in the [`Icmpv6Header`] and the rest is stored in the payload
+    /// ([`Icmpv6Slice::payload`] or [`PacketHeaders::payload`]).
+    ///
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |     type_u8   |    code_u8    |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                          bytes5to8                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// ...                           ...                             ...  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     Unknown {
+        /// ICMPv6 type (present in the first byte of the ICMPv6 packet).
         type_u8: u8,
+        /// ICMPv6 code (present in the 2nd byte of the ICMPv6 packet).
         code_u8: u8,
         /// Bytes located at th 5th, 6th, 7th and 8th position of the ICMP packet.
         bytes5to8: [u8; 4],
     },
-    /// Start of "Destination Unreachable Message".
+
+    /// Message sent to inform the client that the destination is unreachable for
+    /// some reason.
+    ///
+    /// # What is part of the header for `Icmpv6Type::DestinationUnreachable`?
+    ///
+    /// For the `Icmpv6Type::DestinationUnreachable` type the first 8 bytes/octets of the ICMPv6
+    /// packet are part of the header. The `unused` part is not stored and droped.
+    /// The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       1       | [value as u8] |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |     <As much of invoking packet as possible without           |  | part of payload
+    /// ...   the ICMPv6 packet exceeding the minimum IPv6 MTU>       ...  |
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///
@@ -426,7 +472,29 @@ pub enum Icmpv6Type {
     /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
     /// packet is dropped due to congestion.)
     DestinationUnreachable(icmpv6::DestUnreachableCode),
-    /// Start of "Packet Too Big Message"
+
+    /// Sent if a packet to too big to be forwarded.
+    ///
+    /// # What is part of the header for `Icmpv6Type::PacketTooBig`?
+    ///
+    /// For the `Icmpv6Type::PacketTooBig` type the first 8 bytes/octets of the ICMPv6
+    /// packet are part of the header. The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       2       |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                              mtu                              |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |     <As much of invoking packet as possible without           |  | part of payload
+    /// ...   the ICMPv6 packet exceeding the minimum IPv6 MTU>       ...  |
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///
@@ -438,7 +506,31 @@ pub enum Icmpv6Type {
         /// The Maximum Transmission Unit of the next-hop link.
         mtu: u32,
     },
-    /// Start of "Time Exceeded Message"
+
+    /// Generated when a datagram had to be discarded due to the hop limit field
+    /// reaching zero.
+    ///
+    /// # What is part of the header for `Icmpv6Type::TimeExceeded`?
+    ///
+    /// For the `Icmpv6Type::TimeExceeded` type the first 8 bytes/octets of the ICMPv6
+    /// packet are part of the header. The `unused` part is not stored and droped.
+    /// The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       3       | [value as u8] |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |     <As much of invoking packet as possible without           |  | part of payload
+    /// ...   the ICMPv6 packet exceeding the minimum IPv6 MTU>       ...  |
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///
@@ -451,7 +543,30 @@ pub enum Icmpv6Type {
     /// An ICMPv6 Time Exceeded message with Code 1 is used to report
     /// fragment reassembly timeout, as specified in [IPv6, Section 4.5].
     TimeExceeded(icmpv6::TimeExceededCode),
-    /// Start of "Parameter Problem Message"
+
+    /// Sent if there is a problem with a parameter in a received packet.
+    ///
+    /// # What is part of the header for `Icmpv6Type::ParameterProblem`?
+    ///
+    /// For the `Icmpv6Type::ParameterProblem` type the first 8 bytes/octets of the ICMPv6
+    /// packet are part of the header. The `unused` part is not stored and droped.
+    /// The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       4       | [value].code  |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                        [value].pointer                        |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |     <As much of invoking packet as possible without           |  | part of payload
+    /// ...   the ICMPv6 packet exceeding the minimum IPv6 MTU>       ...  |
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///
@@ -461,7 +576,29 @@ pub enum Icmpv6Type {
     /// originate an ICMPv6 Parameter Problem message to the packet's source,
     /// indicating the type and location of the problem.
     ParameterProblem(icmpv6::ParameterProblemHeader),
-    /// Start of "Echo Request Message"
+
+    /// Requesting an `EchoReply` from the receiver.
+    ///
+    /// # What is part of the header for `Icmpv6Type::EchoRequest`?
+    ///
+    /// For the [`Icmpv6Type::EchoRequest`] type the first 8 bytes/octets of the
+    /// ICMPv6 packet are part of the header. This includes the `id` and `seq`
+    /// fields. The data part of the ICMP echo request packet is part of the payload
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      128      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |          [value].id           |         [value].seq           |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// ...                          <data>                           ...  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///
@@ -471,7 +608,28 @@ pub enum Icmpv6Type {
     /// originating Echo Requests and receiving Echo Replies, for diagnostic
     /// purposes.
     EchoRequest(IcmpEchoHeader),
-    /// Start of "Echo Reply Message"
+    /// Response to an `EchoRequest` message.
+    ///
+    /// # What is part of the header for `Icmpv6Type::EchoReply`?
+    ///
+    /// For the [`Icmpv6Type::EchoReply`] type the first 8 bytes/octets of the
+    /// ICMPv6 packet are part of the header. This includes the `id` and `seq`
+    /// fields. The data part of the ICMP echo request packet is part of the payload
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      129      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |          [value].id           |         [value].seq           |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// ...                          <data>                           ...  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     ///
     /// # RFC 4443 Description
     ///

@@ -399,7 +399,7 @@ pub enum Icmpv4Type {
     /// |                          bytes5to8                            |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |                             ...                               |  | part of payload
+    /// ...                           ...                             ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     /// ```
@@ -430,7 +430,7 @@ pub enum Icmpv4Type {
     /// |          [value].id           |         [value].seq           |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |                            <data>                             |  | part of payload
+    /// ...                          <data>                           ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     /// ```
@@ -450,12 +450,12 @@ pub enum Icmpv4Type {
     /// ```text
     /// 0               1               2               3               4
     /// +---------------------------------------------------------------+  -
-    /// |       8       |       0       |  checksum (in Icmpv4Header)   |  |
+    /// |       3       |       0       |  checksum (in Icmpv4Header)   |  |
     /// +---------------------------------------------------------------+  | part of header & type
     /// |[v].next_hop...|                    <unused>                   |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// ...    Internet Header + 64 bits of Original Data Datagram    ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     /// ```
@@ -474,12 +474,12 @@ pub enum Icmpv4Type {
     /// ```text
     /// 0               1               2               3               4
     /// +---------------------------------------------------------------+  -
-    /// |       8       | [value].code  |  checksum (in Icmpv4Header)   |  |
+    /// |       5       | [value].code  |  checksum (in Icmpv4Header)   |  |
     /// +---------------------------------------------------------------+  | part of header & type
     /// |                [value].gateway_internet_address               |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// ..     Internet Header + 64 bits of Original Data Datagram    ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     Redirect(RedirectHeader),
@@ -502,7 +502,7 @@ pub enum Icmpv4Type {
     /// |          [value].id           |         [value].seq           |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |                            <data>                             |  | part of payload
+    /// ...                          <data>                           ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     /// ```
@@ -522,12 +522,12 @@ pub enum Icmpv4Type {
     /// ```text
     /// 0               1               2               3               4
     /// +---------------------------------------------------------------+  -
-    /// |       8       | [value as u8] |  checksum (in Icmpv4Header)   |  |
+    /// |       11      | [value as u8] |  checksum (in Icmpv4Header)   |  |
     /// +---------------------------------------------------------------+  | part of header & type
     /// |                           <unused>                            |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// ...    Internet Header + 64 bits of Original Data Datagram    ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     TimeExceeded(TimeExceededCode),
@@ -550,7 +550,7 @@ pub enum Icmpv4Type {
     /// |[value].pointer|                   <unused>                    |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// ...    Internet Header + 64 bits of Original Data Datagram    ...  | part of payload
     /// |                                                               |  ↓
     /// +---------------------------------------------------------------+  -
     ParameterProblem(ParameterProblemHeader),
