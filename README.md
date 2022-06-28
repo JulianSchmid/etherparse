@@ -16,6 +16,7 @@ Currently supported are:
 * IPv6 (supporting the most common extension headers, but not all)
 * UDP
 * TCP
+* ICMP & ICMPv6 (not all message types are supported)
 
 ## Usage
 
@@ -98,6 +99,8 @@ Have a look at the documentation for the <NAME>Slice.from_slice methods, if you 
 * [`Ipv6FragmentHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6FragmentHeaderSlice.html#method.from_slice)
 * [`UdpHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeaderSlice.html#method.from_slice)
 * [`TcpHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeaderSlice.html#method.from_slice)
+* [`Icmpv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv4Slice.html#method.from_slice)
+* [`Icmpv6Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv6Slice.html#method.from_slice)
 
 And for deserialization into the corresponding header structs have a look at:
 
@@ -114,6 +117,8 @@ And for deserialization into the corresponding header structs have a look at:
 * [`Ipv6FragmentHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6FragmentHeader.html#method.read) & [`Ipv6FragmentHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6FragmentHeader.html#method.from_slice)
 * [`UdpHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.read) & [`UdpHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.from_slice)
 * [`TcpHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.read) & [`TcpHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.from_slice)
+* [`Icmpv4Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv4Header.html#method.read) & [`Icmpv4Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv4Header.html#method.from_slice)
+* [`Icmpv6Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv6Header.html#method.read) & [`Icmpv6Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv6Header.html#method.from_slice)
 
 ## How to generate fake packet data?
 ### Packet Builder
@@ -166,6 +171,8 @@ Read the documentations of the different methods for a more details:
 * [`Ipv6FragmentHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6FragmentHeader.html#method.write)
 * [`UdpHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.UdpHeader.html#method.write)
 * [`TcpHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.TcpHeader.html#method.write)
+* [`Icmpv4Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv4Header.html#method.write)
+* [`Icmpv6Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Icmpv6Header.html#method.write)
 
 ## Roadmap
 * MutPacketSlice -> modifaction of fields in slices directly?

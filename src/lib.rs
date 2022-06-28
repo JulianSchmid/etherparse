@@ -7,6 +7,7 @@
 //! * IPv6 (supporting the most common extension headers, but not all)
 //! * UDP
 //! * TCP
+//! * ICMP & ICMPv6 (not all message types are supported)
 //! 
 //! # Usage
 //! 
@@ -119,6 +120,8 @@
 //! * [`Ipv6FragmentHeaderSlice::from_slice`]
 //! * [`UdpHeaderSlice::from_slice`]
 //! * [`TcpHeaderSlice::from_slice`]
+//! * [`Icmpv4Slice::from_slice`]
+//! * [`Icmpv6Slice::from_slice`]
 //!
 //! And for deserialization into the corresponding header structs have a look at:
 //!
@@ -135,6 +138,8 @@
 //! * [`Ipv6FragmentHeader::read`] & [`Ipv6FragmentHeader::from_slice`]
 //! * [`UdpHeader::read`] & [`UdpHeader::from_slice`]
 //! * [`TcpHeader::read`] & [`TcpHeader::from_slice`]
+//! * [`Icmpv4Header::read`] & [`Icmpv4Header::from_slice`]
+//! * [`Icmpv6Header::read`] & [`Icmpv6Header::from_slice`]
 //!
 //! # How to generate fake packet data?
 //! ## Packet Builder
@@ -187,6 +192,8 @@
 //! * [`Ipv6FragmentHeader::write`]
 //! * [`UdpHeader::write`]
 //! * [`TcpHeader::write`]
+//! * [`Icmpv4Header::write`]
+//! * [`Icmpv6Header::write`]
 //!
 //! # Roadmap
 //! * Documentation
