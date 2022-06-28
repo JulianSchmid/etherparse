@@ -379,10 +379,30 @@ use icmpv4::*;
 /// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Icmpv4Type {
-    /// Unknown ICMP type & code.
-    ///
     /// In case of an unknown ICMP type and code combination is received the
-    /// header elements are stored raw.
+    /// header elements are stored raw in this enum value. The `Unknown` value can
+    /// also be passed to the `Icmpv4Header::write` function to write arbitrary ICMP
+    /// packets.
+    ///
+    /// # What is part of the header for `Icmpv4Type::Unknown`?
+    ///
+    /// For unknown ICMP type & code combination the first 8 bytes are stored
+    /// in the [`Icmpv4Header`] and the rest is stored in the payload
+    /// ([`Icmpv4Slice::payload`] or [`PacketHeaders::payload`]).
+    ///
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |     type_u8   |    code_u8    |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                          bytes5to8                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                             ...                               |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     Unknown {
         /// ICMP type (present in the first byte of the ICMP packet).
         type_u8: u8,
@@ -392,18 +412,163 @@ pub enum Icmpv4Type {
         bytes5to8: [u8; 4],
     },
 
-    /// Echo Reply (defined in RFC792)
+    /// Response to an `EchoRequest` message (defined in RFC792).
+    ///
+    /// # What is part of the header for `Icmpv4Type::EchoReply`?
+    ///
+    /// For the [`Icmpv4Type::EchoReply`] type the first 8 bytes/octets of the 
+    /// ICMP packet are part of the header. This includes the `id` and `seq`
+    /// fields. The data part of the ICMP Echo Reply packet is part of the
+    /// payload ([`Icmpv4Slice::payload`] or [`PacketHeaders::payload`])
+    /// and not part of the [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       0       |       0       |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |          [value].id           |         [value].seq           |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                            <data>                             |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     EchoReply(IcmpEchoHeader),
     
+    /// Message sent to inform the client that the destination is unreachable for
+    /// some reason (defined in RFC792).
+    ///
+    /// # What is part of the header for `Icmpv4Type::DestinationUnreachable`?
+    ///
+    /// For the [`Icmpv4Type::DestinationUnreachable`] type the first 8 bytes/octets
+    /// of the ICMP packet are part of the header. This includes the `next_hop_mtu`
+    /// field. The `unused` part is not stored and droped. The offending packet
+    /// is stored in the payload part of the packet ([`Icmpv4Slice::payload`] or
+    /// [`PacketHeaders::payload`]) and is not part of the [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       8       |       0       |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |[v].next_hop...|                    <unused>                   |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     DestinationUnreachable(DestUnreachableHeader),
 
+    /// Requests data packets be sent on an alternative route (defined in RFC792).
+    ///
+    /// # What is part of the header for `Icmpv4Type::Redirect`?
+    ///
+    /// For the [`Icmpv4Type::Redirect`] type the first 8 bytes/octets of the ICMP
+    /// packet are part of the header. This includes the `gateway_internet_address`
+    /// field. The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv4Slice::payload`] or [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       8       | [value].code  |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                [value].gateway_internet_address               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
     Redirect(RedirectHeader),
 
-    /// Echo Request (defined in RFC792)
+    /// Requesting an `EchoReply` from the receiver (defined in RFC792)
+    ///
+    /// # What is part of the header for `Icmpv4Type::EchoRequest`?
+    ///
+    /// For the [`Icmpv4Type::EchoRequest`] type the first 8 bytes/octets of the
+    /// ICMP packet are part of the header. This includes the `id` and `seq`
+    /// fields. The data part of the ICMP echo request packet is part of the payload
+    /// ([`Icmpv4Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       8       |       0       |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |          [value].id           |         [value].seq           |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                            <data>                             |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// ```
     EchoRequest(IcmpEchoHeader),
+
+    /// Generated when a datagram had to be discarded due to the time to live field
+    /// reaching zero (defined in RFC792).
+    ///
+    /// # What is part of the header for `Icmpv4Type::TimeExceeded`?
+    ///
+    /// For the `Icmpv4Type::TimeExceeded` type the first 8 bytes/octets of the ICMP
+    /// packet are part of the header. The `unused` part is not stored and droped.
+    /// The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv4Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       8       | [value as u8] |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
     TimeExceeded(TimeExceededCode),
+
+    /// Sent if there is a problem with a parameter in a received packet.
+    ///
+    /// # What is part of the header for `Icmpv4Type::ParameterProblem`?
+    ///
+    /// For the `Icmpv4Type::ParameterProblem` type the first 8 bytes/octets of the ICMP
+    /// packet are part of the header. The `unused` part is not stored and droped.
+    /// The offending packet is stored in the payload part of the packet
+    /// ([`Icmpv4Slice::payload`] & [`PacketHeaders::payload`]) and is not part of
+    /// the [`Icmpv4Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |       12      | [v].code_u8() |  checksum (in Icmpv4Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |[value].pointer|                   <unused>                    |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |      Internet Header + 64 bits of Original Data Datagram      |  | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
     ParameterProblem(ParameterProblemHeader),
+
+    /// Timestamp is used for time synchronization.
+    ///
+    /// # What is part of the header for `Icmpv4Type::TimestampRequest`?
+    ///
+    /// For the `Icmpv4Type::TimestampRequest` type the entire ICMP packet is 
+    /// contained within the header. The payload data is empty.
     TimestampRequest(TimestampMessage),
+
+    /// Anwser to a `TimestampRequest` message.
+    ///
+    /// # What is part of the header for `Icmpv4Type::TimestampReply`?
+    ///
+    /// For the `Icmpv4Type::TimestampReply` type the entire ICMP packet is 
+    /// contained within the header. The payload data is empty.
     TimestampReply(TimestampMessage),
 }
 
@@ -560,7 +725,9 @@ impl Icmpv4Type {
 /// of the header.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Icmpv4Header {
+    /// Type & type specific values & code.
     pub icmp_type: Icmpv4Type,
+    /// Checksum in the ICMP header.
     pub checksum: u16,
 }
 
@@ -1075,6 +1242,16 @@ impl<'a> Icmpv4Slice<'a> {
     }
 
     /// Returns a slice to the bytes not covered by `.header()`.
+    ///
+    /// The contents of the slice returned by `payload()` depends on the type
+    /// and code of the ICMP packet:
+    ///
+    /// | `.header().icmp_type` or `.icmp_type()`                                                                                                    | Payload Content                                                              |
+    /// |--------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------|
+    /// | [`Icmpv4Type::EchoReply`]<br>[`Icmpv4Type::EchoRequest`]<br>                                                                               | Data part of the echo message                                                |
+    /// | [`Icmpv4Type::DestinationUnreachable`]<br>[`Icmpv4Type::Redirect`]<br>[`Icmpv4Type::TimeExceeded`]<br>[`Icmpv4Type::ParameterProblem`]<br> | Internet Header + 64 bits of Original Data Datagram causing the ICMP message |
+    /// | [`Icmpv4Type::TimestampRequest`]<br>[`Icmpv4Type::TimestampReply`]<br>                                                                     | Nothing                                                                      |
+    /// | [`Icmpv4Type::Unknown`]                                                                                                                    | Everything after the 8th byte/octet of the ICMP packet.                      |
     #[inline]
     pub fn payload(&self) -> &'a [u8] {
         // explicitly inlined the code to determine the

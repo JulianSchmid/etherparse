@@ -409,7 +409,7 @@ use icmpv6::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
-    /// the first 8 bytes/octets are stored raw.
+    /// the first 8 bytes/octets are stored raw in this enum value.
     Unknown {
         type_u8: u8,
         code_u8: u8,
@@ -673,6 +673,7 @@ impl Icmpv6Type {
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Icmpv6Header {
+    /// Type & type specific values & code.
     pub icmp_type: Icmpv6Type,
     /// Checksum in the ICMPv6 header.
     pub checksum: u16,
