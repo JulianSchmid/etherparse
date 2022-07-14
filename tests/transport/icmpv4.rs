@@ -1670,6 +1670,7 @@ mod icmpv4_regression {
             [192, 168, 1, 1], //source ip
             [192, 168, 1, 2], //desitionation ip
             20,
+            IpNumber::Icmp as u8,
         ) //time to life
         .icmpv4_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];

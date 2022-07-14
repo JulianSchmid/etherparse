@@ -7,7 +7,7 @@ fn eth_ipv4_udp() {
     let in_payload = [24,25,26,27];
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                  .ipv4([13,14,15,16], [17,18,19,20], 21)
+                  .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Udp as u8)
                   .udp(22,23)
                   .write(&mut serialized, &in_payload)
                   .unwrap();
@@ -39,7 +39,7 @@ fn eth_ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         21, //ttl
-        IpNumber::Udp,
+        IpNumber::Udp as u8,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -60,11 +60,96 @@ fn eth_ipv4_udp() {
 }
 
 #[test]
+fn ipv4() {
+    //generate
+    let in_payload = [22,23,24,25];
+    let mut serialized = Vec::new();
+    PacketBuilder::ipv4([13,14,15,16], [17,18,19,20], 21, 200)
+    .write(&mut serialized, &in_payload)
+    .unwrap();
+
+    //check the deserialized size
+    assert_eq!(Ipv4Header::SERIALIZED_SIZE + in_payload.len(), serialized.len());
+
+    //deserialize and check that everything is as expected
+    use std::io::{Cursor, Read};
+
+    //deserialize each part of the message and check it
+    let mut cursor = Cursor::new(&serialized);
+
+    //ip header
+    let ip_actual = Ipv4Header::read(&mut cursor).unwrap();
+    let mut ip_expected = Ipv4Header::new(
+        in_payload.len() as u16,
+        21, //ttl
+        200,
+        [13,14,15,16],
+        [17,18,19,20]
+    );
+    ip_expected.header_checksum = ip_expected.calc_header_checksum().unwrap();
+    assert_eq!(ip_actual,
+                ip_expected);
+
+    //payload
+    let mut actual_payload: [u8;4] = [0;4];
+    cursor.read_exact(&mut actual_payload).unwrap();
+    assert_eq!(actual_payload, in_payload);
+}
+
+#[test]
+fn ipv6() {
+    //generate
+    let in_payload = [48,49,50,51];
+    let mut serialized = Vec::new();
+    PacketBuilder::
+        ipv6(
+             //source
+            [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+            //destination
+            [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
+            //hop_limit
+            47,
+            200,
+        )
+        .write(&mut serialized, &in_payload)
+        .unwrap();
+
+    //check the deserialized size
+    assert_eq!(Ipv6Header::SERIALIZED_SIZE + in_payload.len(), serialized.len());
+
+    //deserialize and check that everything is as expected
+    use std::io::{Cursor, Read};
+
+    //deserialize each part of the message and check it
+    let mut cursor = Cursor::new(&serialized);
+
+    //ip header
+    let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
+    let ip_expected = Ipv6Header{
+        traffic_class: 0,
+        flow_label: 0,
+        payload_length: in_payload.len() as u16,
+        next_header: 200,
+        hop_limit: 47,
+        source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+        destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
+    };
+
+    assert_eq!(ip_actual,
+               ip_expected);
+
+    //payload
+    let mut actual_payload: [u8;4] = [0;4];
+    cursor.read_exact(&mut actual_payload).unwrap();
+    assert_eq!(actual_payload, in_payload);
+}
+
+#[test]
 fn ipv4_udp() {
     //generate
     let in_payload = [24,25,26,27];
     let mut serialized = Vec::new();
-    PacketBuilder::ipv4([13,14,15,16], [17,18,19,20], 21)
+    PacketBuilder::ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Udp as u8)
                    .udp(22,23)
                    .write(&mut serialized, &in_payload)
                    .unwrap();
@@ -87,7 +172,7 @@ fn ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         21, //ttl
-        IpNumber::Udp,
+        IpNumber::Udp as u8,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -119,7 +204,9 @@ fn ipv6_udp() {
             //destination
             [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
             //hop_limit
-            47)
+            47,
+            IpNumber::Udp as u8
+        )
         .udp(22,23)
         .write(&mut serialized, &in_payload)
         .unwrap();
@@ -165,7 +252,7 @@ fn ipv6_udp() {
 }
 
 #[test]
-fn ipv_custom_udp() {
+fn ipv4_custom_udp() {
     //generate
     let in_payload = [24,25,26,27];
     let mut serialized = Vec::new();
@@ -173,7 +260,7 @@ fn ipv_custom_udp() {
         ip(IpHeader::Version4(Ipv4Header::new(
             0, //payload_len will be replaced during write
             12, //time_to_live
-            IpNumber::Tcp, //will be replaced during write
+            IpNumber::Tcp as u8, //will be replaced during write
             [13,14,15,16], //source
             [17,18,19,20] //destination
         ), Default::default()))
@@ -199,7 +286,7 @@ fn ipv_custom_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         12, //ttl
-        IpNumber::Udp,
+        IpNumber::Udp as u8,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -227,7 +314,9 @@ fn udp_builder_eth_ipv6_udp() {
     PacketBuilder::ethernet2([1,2,3,4,5,6], [7,8,9,10,11,12])
                   .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
-                        47)
+                        47,
+                        IpNumber::Udp as u8
+                    )
                   .udp(48,49)
                   .write(&mut serialized, &in_payload)
                   .unwrap();
@@ -287,7 +376,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1,2,3,4,5,6], [7,8,9,10,11,12])
                   .single_vlan(0x123)
-                  .ipv4([13,14,15,16], [17,18,19,20], 21)
+                  .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Udp as u8)
                   .udp(48,49)
                   .write(&mut serialized, &in_payload)
                   .unwrap();
@@ -330,7 +419,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16, //payload_len
         21, //ttl
-        IpNumber::Udp,
+        IpNumber::Udp as u8,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -359,7 +448,9 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
                   .double_vlan(0x123, 0x234)
                   .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
-                         47)
+                         47,
+                         IpNumber::Udp as u8
+                  )
                   .udp(48,49)
                   .write(&mut serialized, &in_payload)
                   .unwrap();
@@ -592,7 +683,7 @@ proptest! {
         let mut ip_expected = Ipv4Header::new(
             in_payload.len() as u16 + input.header_len(),
             21, //ttl
-            IpNumber::Tcp,
+            IpNumber::Tcp as u8,
             [13,14,15,16],
             [17,18,19,20]
         );
@@ -619,7 +710,7 @@ proptest! {
 
             //create builder
             let mut builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                                            .ipv4([13,14,15,16], [17,18,19,20], 21)
+                                            .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Tcp as u8)
                                             .tcp(input.source_port,
                                                  input.destination_port,
                                                  input.sequence_number,
@@ -730,7 +821,9 @@ proptest! {
             let mut builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
                                             .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                                                   [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
-                                                  47)
+                                                  47,
+                                                  IpNumber::Tcp as u8
+                                            )
                                             .tcp(input.source_port,
                                                  input.destination_port,
                                                  input.sequence_number,
@@ -808,7 +901,7 @@ fn tcp_options() {
     let options = vec![MaximumSegmentSize(1234), Noop];
 
     PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-        .ipv4([13,14,15,16], [17,18,19,20], 21)
+        .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Tcp as u8)
         .tcp(1,
              2,
              3,
@@ -833,7 +926,7 @@ fn size() {
                123,
 
                PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                             .ipv4([13,14,15,16], [17,18,19,20], 21)
+                             .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Udp as u8)
                              .udp(22,23)
                              .size(123));
 
@@ -846,7 +939,9 @@ fn size() {
                PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
                              .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                                    [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
-                                   47)
+                                   47,
+                                   IpNumber::Udp as u8
+                             )
                              .udp(22,23)
                              .size(123));
 
@@ -859,7 +954,7 @@ fn size() {
 
                PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
                              .single_vlan(0x123)
-                             .ipv4([13,14,15,16], [17,18,19,20], 21)
+                             .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Udp as u8)
                              .udp(22,23)
                              .size(123));
 
@@ -874,7 +969,9 @@ fn size() {
                              .double_vlan(0x123, 0x234)
                              .ipv6([11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                                    [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
-                                   47)
+                                   47,
+                                   IpNumber::Udp as u8
+                             )
                              .udp(22,23)
                              .size(123));
 }
@@ -889,7 +986,7 @@ proptest! {
                    123,
 
                    PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                                 .ipv4([13,14,15,16], [17,18,19,20], 21)
+                                 .ipv4([13,14,15,16], [17,18,19,20], 21, IpNumber::Tcp as u8)
                                  .tcp(input.source_port, 
                                       input.destination_port, 
                                       input.sequence_number, 
@@ -925,7 +1022,7 @@ proptest! {
                 let mut expected_ipv4 = Ipv4Header::new(
                     (icmp_expected.header_len() + adapted_payload.len()) as u16,
                     ipv4_time_to_live,
-                    IpNumber::Icmp,
+                    IpNumber::Icmp as u8,
                     ipv4_source,
                     ipv4_dest
                 );
@@ -972,7 +1069,7 @@ proptest! {
         // icmpv4
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv4(icmpv4.clone());
 
             test_builder(
@@ -984,7 +1081,7 @@ proptest! {
         // icmpv4_raw
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv4_raw(icmpv4_type_u8, icmpv4_code_u8, icmpv4_bytes5to8);
 
             test_builder(
@@ -1000,7 +1097,7 @@ proptest! {
         // icmpv4_echo_request
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv4_echo_request(echo_id, echo_seq);
 
             test_builder(
@@ -1015,7 +1112,7 @@ proptest! {
         // icmp4_echo_reply
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv4_echo_reply(echo_id, echo_seq);
 
             test_builder(
@@ -1065,7 +1162,7 @@ proptest! {
         // icmpv6
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv6(icmpv6.clone());
 
             test_builder(
@@ -1077,7 +1174,7 @@ proptest! {
         // icmpv6_raw
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv6_raw(icmpv6_type_u8, icmpv6_code_u8, icmpv6_bytes5to8);
 
             test_builder(
@@ -1093,7 +1190,7 @@ proptest! {
         // icmpv6_echo_request
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv6_echo_request(echo_id, echo_seq);
 
             test_builder(
@@ -1108,7 +1205,7 @@ proptest! {
         // icmp4_echo_reply
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live)
+                .ipv4(ipv4_source, ipv4_dest, ipv4_time_to_live, IpNumber::Icmp as u8)
                 .icmpv6_echo_reply(echo_id, echo_seq);
 
             test_builder(
@@ -1187,7 +1284,7 @@ proptest! {
         // icmpv4
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv4(icmpv4.clone());
 
             test_builder(
@@ -1199,7 +1296,7 @@ proptest! {
         // icmpv4_raw
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv4_raw(icmpv4_type_u8, icmpv4_code_u8, icmpv4_bytes5to8);
 
             test_builder(
@@ -1215,7 +1312,7 @@ proptest! {
         // icmpv4_echo_request
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv4_echo_request(echo_id, echo_seq);
 
             test_builder(
@@ -1230,7 +1327,7 @@ proptest! {
         // icmp4_echo_reply
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv4_echo_reply(echo_id, echo_seq);
 
             test_builder(
@@ -1314,7 +1411,7 @@ proptest! {
         // icmpv6
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv6(icmpv6.clone());
 
             test_builder(
@@ -1326,7 +1423,7 @@ proptest! {
         // icmpv6_raw
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv6_raw(icmpv6_type_u8, icmpv6_code_u8, icmpv6_bytes5to8);
 
             test_builder(
@@ -1342,7 +1439,7 @@ proptest! {
         // icmpv6_echo_request
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv6_echo_request(echo_id, echo_seq);
 
             test_builder(
@@ -1357,7 +1454,7 @@ proptest! {
         // icmp4_echo_reply
         {
             let builder = PacketBuilder::ethernet2([1,2,3,4,5,6],[7,8,9,10,11,12])
-                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit)
+                .ipv6(ipv6_source, ipv6_dest, ipv6_hop_limit, IpNumber::Icmp as u8)
                 .icmpv6_echo_reply(echo_id, echo_seq);
 
             test_builder(
