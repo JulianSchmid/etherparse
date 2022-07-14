@@ -164,7 +164,7 @@ impl PacketBuilder {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(source: [u8;4], destination: [u8;4], time_to_live: u8, protocol: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
         PacketBuilderStep {
             state: PacketImpl {
                 ethernet2_header: None,
@@ -173,7 +173,7 @@ impl PacketBuilder {
                 transport_header: None
             },
             _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv4(source, destination, time_to_live, protocol)
+        }.ipv4(source, destination, time_to_live)
     }
 
     /// Start a packet with an IPv6 header.
@@ -206,7 +206,7 @@ impl PacketBuilder {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(source: [u8;16], destination: [u8;16], hop_limit: u8, next_header: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv6(source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
         PacketBuilderStep {
             state: PacketImpl {
                 ethernet2_header: None,
@@ -215,7 +215,7 @@ impl PacketBuilder {
                 transport_header: None
             },
             _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv6(source, destination, hop_limit, next_header)
+        }.ipv6(source, destination, hop_limit)
     }
 
     /// Starts a packet with an arbitrary IP header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
@@ -233,7 +233,7 @@ impl PacketBuilder {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpNumber::Udp, //will be replaced during write
+    ///            IpNumber::Udp as u8, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ), 
@@ -337,14 +337,13 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(mut self, source: [u8;4], destination: [u8;4], time_to_live: u8, protocol: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(mut self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
         //add ip header
         self.state.ip_header = Some(IpHeader::Version4({
             let mut value: Ipv4Header = Default::default();
             value.source = source;
             value.destination = destination;
             value.time_to_live = time_to_live;
-            value.protocol = protocol;
             value
         }, Default::default()));
         //return for next step
@@ -371,7 +370,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpNumber::Udp, //will be replaced during write
+    ///            IpNumber::Udp as u8, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ),
@@ -440,12 +439,12 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8, next_header: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
         self.state.ip_header = Some(IpHeader::Version6(Ipv6Header{
             traffic_class: 0,
             flow_label: 0,
             payload_length: 0, //filled in on write
-            next_header,
+            next_header: 0,
             hop_limit,
             source,
             destination
@@ -615,7 +614,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///         Ipv4Header::new(
     ///             0, //payload_len will be replaced during write
     ///             12, //time_to_live
-    ///             IpNumber::Udp, //will be replaced during write
+    ///             IpNumber::Udp as u8, //will be replaced during write
     ///             [0,1,2,3], //source
     ///             [4,5,6,7] //destination
     ///         ),
@@ -685,12 +684,12 @@ impl PacketBuilderStep<VlanHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(self, source: [u8;16], destination: [u8;16], hop_limit: u8, next_header: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv6(self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
         PacketBuilderStep {
             state: self.state,
             _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv6(source, destination, hop_limit, next_header)
+        }.ipv6(source, destination, hop_limit)
     }
 
     /// Add an IPv4 header
@@ -722,12 +721,12 @@ impl PacketBuilderStep<VlanHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(self, source: [u8;4], destination: [u8;4], time_to_live: u8, protocol: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
         PacketBuilderStep {
             state: self.state,
             _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv4(source, destination, time_to_live, protocol)
+        }.ipv4(source, destination, time_to_live)
     }
 }
 

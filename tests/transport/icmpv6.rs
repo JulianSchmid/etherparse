@@ -1438,9 +1438,7 @@ mod regression {
         let builder = PacketBuilder::ipv6(
             [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], //source ip
             [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
-            20,
-            IpNumber::Udp as u8
-        ) //time to life
+            20) //time to life
         .icmpv6_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result

@@ -1669,9 +1669,7 @@ mod icmpv4_regression {
         let builder = PacketBuilder::ipv4(
             [192, 168, 1, 1], //source ip
             [192, 168, 1, 2], //desitionation ip
-            20,
-            IpNumber::Icmp as u8,
-        ) //time to life
+            20) //time to life
         .icmpv4_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
