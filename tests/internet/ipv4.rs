@@ -189,7 +189,7 @@ mod header {
             let result = Ipv4Header::new(
                 payload_len,
                 ttl,
-                IpNumber::Udp as u8,
+                ip_number::UDP,
                 source_ip,
                 dest_ip
             );
@@ -212,7 +212,7 @@ mod header {
 
     #[test]
     fn set_payload_len() {
-        let mut header = Ipv4Header::new(0, 0, IpNumber::Udp as u8, [0;4], [0;4]);
+        let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0;4], [0;4]);
 
         //add options (to make sure they are included in the calculation)
         header.set_options(&[1,2,3,4]).unwrap();
@@ -298,7 +298,7 @@ mod header {
         let base: Ipv4Header = Ipv4Header::new(
             40,
             4, // ttl
-            IpNumber::Udp as u8,
+            ip_number::UDP,
             [192, 168, 1, 1], // source
             [212, 10, 11, 123] // destination
         );
