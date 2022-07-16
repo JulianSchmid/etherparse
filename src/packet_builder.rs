@@ -233,7 +233,7 @@ impl PacketBuilder {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpNumber::Udp as u8, //will be replaced during write
+    ///            ip_number::UDP, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ), 
@@ -370,7 +370,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
-    ///            IpNumber::Udp as u8, //will be replaced during write
+    ///            ip_number::UDP, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
     ///        ),
@@ -614,7 +614,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///         Ipv4Header::new(
     ///             0, //payload_len will be replaced during write
     ///             12, //time_to_live
-    ///             IpNumber::Udp as u8, //will be replaced during write
+    ///             ip_number::UDP, //will be replaced during write
     ///             [0,1,2,3], //source
     ///             [4,5,6,7] //destination
     ///         ),

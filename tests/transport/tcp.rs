@@ -925,7 +925,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             0,
             //contained protocol is udp
-            IpNumber::Tcp as u8,
+            ip_number::TCP,
             //source ip address
             [0;4],
             //destination ip address
@@ -968,7 +968,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             20,
             //contained protocol is udp
-            IpNumber::Tcp as u8,
+            ip_number::TCP,
             //source ip address
             [192,168,1,42],
             //destination ip address
@@ -1026,7 +1026,7 @@ fn calc_header_checksum_ipv4() {
             //time to live
             20,
             //contained protocol is udp
-            IpNumber::Tcp as u8,
+            ip_number::TCP,
             //source ip address
             [192,168,1,42],
             //destination ip address
@@ -1117,7 +1117,7 @@ fn calc_header_checksum_ipv4_error() {
     let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
     let mut tcp_payload = Vec::with_capacity(len);
     tcp_payload.resize(len, 0); 
-    let ip_header = Ipv4Header::new(0, 0, IpNumber::Tcp as u8, [0;4], [0;4]);
+    let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0;4], [0;4]);
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
     assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload));
 

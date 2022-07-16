@@ -39,7 +39,7 @@ fn eth_ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         21, //ttl
-        IpNumber::Udp as u8,
+        ip_number::UDP,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -188,7 +188,7 @@ fn ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         21, //ttl
-        IpNumber::Udp as u8,
+        ip_number::UDP,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -275,7 +275,7 @@ fn ipv4_custom_udp() {
         ip(IpHeader::Version4(Ipv4Header::new(
             0, //payload_len will be replaced during write
             12, //time_to_live
-            IpNumber::Tcp as u8, //will be replaced during write
+            ip_number::TCP, //will be replaced during write
             [13,14,15,16], //source
             [17,18,19,20] //destination
         ), Default::default()))
@@ -301,7 +301,7 @@ fn ipv4_custom_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16,
         12, //ttl
-        IpNumber::Udp as u8,
+        ip_number::UDP,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -433,7 +433,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     let mut ip_expected = Ipv4Header::new(
         expected_ip_size as u16, //payload_len
         21, //ttl
-        IpNumber::Udp as u8,
+        ip_number::UDP,
         [13,14,15,16],
         [17,18,19,20]
     );
@@ -696,7 +696,7 @@ proptest! {
         let mut ip_expected = Ipv4Header::new(
             in_payload.len() as u16 + input.header_len(),
             21, //ttl
-            IpNumber::Tcp as u8,
+            ip_number::TCP,
             [13,14,15,16],
             [17,18,19,20]
         );
@@ -1032,7 +1032,7 @@ proptest! {
                 let mut expected_ipv4 = Ipv4Header::new(
                     (icmp_expected.header_len() + adapted_payload.len()) as u16,
                     ipv4_time_to_live,
-                    IpNumber::Icmp as u8,
+                    ip_number::ICMP,
                     ipv4_source,
                     ipv4_dest
                 );
