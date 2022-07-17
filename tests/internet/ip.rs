@@ -305,6 +305,82 @@ mod ip_header {
 
     proptest!{
         #[test]
+        fn set_payload_len(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+            payload_len in 0usize..10
+        ) {
+            // ipv4 (with valid payload length)
+            {
+                let mut actual = IpHeader::Version4(
+                    v4.clone(),
+                    v4_exts.clone()
+                );
+                actual.set_payload_len(payload_len).unwrap();
+
+                assert_eq!(
+                    actual,
+                    IpHeader::Version4(
+                        {
+                            let mut re = v4.clone();
+                            re.set_payload_len(v4_exts.header_len() + payload_len).unwrap();
+                            re
+                        },
+                        v4_exts.clone()
+                    )
+                );
+            }
+            // ipv6 (with valid payload length)
+            {
+                let mut actual = IpHeader::Version6(
+                    v6.clone(),
+                    v6_exts.clone()
+                );
+                actual.set_payload_len(payload_len).unwrap();
+
+                assert_eq!(
+                    actual,
+                    IpHeader::Version6(
+                        {
+                            let mut re = v6.clone();
+                            re.set_payload_length(v6_exts.header_len() + payload_len).unwrap();
+                            re
+                        },
+                        v6_exts.clone()
+                    )
+                );
+            }
+
+            // v4 (with invalid size)
+            {
+                let mut actual = IpHeader::Version4(
+                    v4.clone(),
+                    v4_exts.clone()
+                );
+                assert_matches!(
+                    actual.set_payload_len(usize::MAX),
+                    Err(_)
+                );
+            }
+
+            // v6 (with invalid size)
+            {
+                let mut actual = IpHeader::Version6(
+                    v6.clone(),
+                    v6_exts.clone()
+                );
+                assert_matches!(
+                    actual.set_payload_len(usize::MAX),
+                    Err(_)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
         fn debug(
             v4 in ipv4_any(),
             v4_exts in ipv4_extensions_any(),
