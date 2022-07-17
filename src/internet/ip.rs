@@ -132,12 +132,31 @@ impl IpHeader {
         }
     }
 
-    /// Sets the payload length if the value is not too big. Otherwise an error
-    /// is returned.
-    pub fn set_payload_length(&mut self, len: usize) -> Result<(), ValueError> {
+    /// Tryies to set the payload length for the data after the ip header and
+    /// extension header.
+    ///
+    /// If the payload length is too large to be stored in the length fields
+    /// of the ip header an error is returned.
+    ///
+    /// Note that this function will automatically add the length of the extension
+    /// headers is they are present.
+    pub fn set_payload_len(&mut self, len: usize) -> Result<(), ValueError> {
+        use crate::ValueError::*;
         match self {
-            IpHeader::Version4(ipv4_hdr, _) => ipv4_hdr.set_payload_len(len),
-            IpHeader::Version6(ipv6_hdr, _) => ipv6_hdr.set_payload_length(len),
+            IpHeader::Version4(ipv4_hdr, exts) => {
+                if let Some(complete_len) = len.checked_add(exts.header_len()) {
+                    ipv4_hdr.set_payload_len(complete_len)
+                } else {
+                    Err(Ipv4PayloadLengthTooLarge(len))
+                }
+            },
+            IpHeader::Version6(ipv6_hdr, exts) => {
+                if let Some(complete_len) = len.checked_add(exts.header_len()) {
+                    ipv6_hdr.set_payload_length(complete_len)
+                } else {
+                    Err(Ipv6PayloadLengthTooLarge(len))
+                }
+            },
         }
     }
 }
