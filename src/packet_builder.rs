@@ -1243,8 +1243,6 @@ impl PacketBuilderStep<Icmpv6Header> {
     }
 }
 
-
-
 impl PacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
@@ -1511,11 +1509,11 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
 
 #[cfg(test)]
 mod whitebox_tests {
+    use super::*;
+
     //whitebox tests that need internal access
     #[test]
     fn size() {
-        use super::*;
-
         assert_eq!(0,
         PacketBuilderStep::<UdpHeader> {
             state: PacketImpl {
@@ -1526,6 +1524,25 @@ mod whitebox_tests {
             },
             _marker: marker::PhantomData::<UdpHeader>{}
         }.size(0));
+    }
+
+    #[test]
+    #[should_panic]
+    fn final_write_panic_missing_ip() {
+        let mut writer = Vec::new();
+        final_write(
+            PacketBuilderStep::<UdpHeader> {
+                state: PacketImpl {
+                    ethernet2_header: None,
+                    ip_header: None,
+                    vlan_header: None,
+                    transport_header: None
+                },
+                _marker: marker::PhantomData::<UdpHeader>{}
+            },
+            &mut writer,
+            &[]
+        ).unwrap();
     }
 }
 
