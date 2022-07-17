@@ -131,8 +131,8 @@ impl IpHeader {
         }
     }
 
-    /// Tryies to set the payload length for the data after the ip header and
-    /// extension header.
+    /// Tries to set the length field in the ip header given the length of data
+    /// after the ip header and extension header(s).
     ///
     /// If the payload length is too large to be stored in the length fields
     /// of the ip header an error is returned.
