@@ -61,10 +61,17 @@ fn eth_ipv4_udp() {
 
 #[test]
 fn ipv4() {
+    let auth_ext = IpAuthenticationHeader::new(
+        0,
+        1,
+        2,
+        &[3,4,5,6]
+    ).unwrap();
+    
     //generate
     let in_payload = [22,23,24,25];
     let mut serialized = Vec::new();
-    PacketBuilder::ip(
+    let builder = PacketBuilder::ip(
         IpHeader::Version4(
             Ipv4Header::new(
                 in_payload.len() as u16,
@@ -73,14 +80,32 @@ fn ipv4() {
                 [13,14,15,16],
                 [17,18,19,20]
             ),
-            Default::default()
+            Ipv4Extensions{
+                auth: Some(auth_ext.clone())
+            }
         )
-    )
-    .write(&mut serialized, 200, &in_payload)
+    );
+
+    // check size
+    assert_eq!(
+        builder.size(in_payload.len()),
+        Ipv4Header::SERIALIZED_SIZE +
+        auth_ext.header_len() +
+        in_payload.len()
+    );
+
+    // write
+    serialized.reserve(builder.size(in_payload.len()));
+    builder.write(&mut serialized, 200, &in_payload)
     .unwrap();
 
     //check the deserialized size
-    assert_eq!(Ipv4Header::SERIALIZED_SIZE + in_payload.len(), serialized.len());
+    assert_eq!(
+        Ipv4Header::SERIALIZED_SIZE +
+        auth_ext.header_len() +
+        in_payload.len(),
+        serialized.len()
+    );
 
     //deserialize and check that everything is as expected
     use std::io::{Cursor, Read};
@@ -91,15 +116,27 @@ fn ipv4() {
     //ip header
     let ip_actual = Ipv4Header::read(&mut cursor).unwrap();
     let mut ip_expected = Ipv4Header::new(
-        in_payload.len() as u16,
+        (auth_ext.header_len() + in_payload.len()) as u16,
         21, //ttl
-        200,
+        ip_number::AUTH, // should have been set
         [13,14,15,16],
         [17,18,19,20]
     );
     ip_expected.header_checksum = ip_expected.calc_header_checksum().unwrap();
     assert_eq!(ip_actual,
                 ip_expected);
+
+    // auth header
+    let auth_actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+    assert_eq!(
+        auth_actual,
+        IpAuthenticationHeader::new(
+            200, // ip number should have been set
+            1,
+            2,
+            &[3,4,5,6]
+        ).unwrap()
+    );
 
     //payload
     let mut actual_payload: [u8;4] = [0;4];
@@ -109,10 +146,17 @@ fn ipv4() {
 
 #[test]
 fn ipv6() {
+    let auth_ext = IpAuthenticationHeader::new(
+        0,
+        1,
+        2,
+        &[3,4,5,6]
+    ).unwrap();
+
     //generate
     let in_payload = [48,49,50,51];
     let mut serialized = Vec::new();
-    PacketBuilder::
+    let builder = PacketBuilder::
         ip(
             IpHeader::Version6(
                 Ipv6Header{
@@ -124,14 +168,34 @@ fn ipv6() {
                     source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                     destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
                 },
-                Default::default()
+                Ipv6Extensions {
+                    hop_by_hop_options: None,
+                    destination_options: None,
+                    routing: None,
+                    fragment: None,
+                    auth: Some(auth_ext.clone()),
+                }
             )
-        )
-        .write(&mut serialized, 200, &in_payload)
-        .unwrap();
+        );
+
+    // check size
+    assert_eq!(
+        builder.size(in_payload.len()),
+        Ipv6Header::SERIALIZED_SIZE +
+        auth_ext.header_len() +
+        in_payload.len()
+    );
+
+    // write
+    builder.write(&mut serialized, 200, &in_payload).unwrap();
 
     //check the deserialized size
-    assert_eq!(Ipv6Header::SERIALIZED_SIZE + in_payload.len(), serialized.len());
+    assert_eq!(
+        Ipv6Header::SERIALIZED_SIZE +
+        auth_ext.header_len() +
+        in_payload.len(),
+        serialized.len()
+    );
 
     //deserialize and check that everything is as expected
     use std::io::{Cursor, Read};
@@ -144,8 +208,8 @@ fn ipv6() {
     let ip_expected = Ipv6Header{
         traffic_class: 0,
         flow_label: 0,
-        payload_length: in_payload.len() as u16,
-        next_header: 200,
+        payload_length: (auth_ext.header_len() + in_payload.len()) as u16,
+        next_header: ip_number::AUTH, // should have been set
         hop_limit: 47,
         source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
         destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
@@ -153,6 +217,18 @@ fn ipv6() {
 
     assert_eq!(ip_actual,
                ip_expected);
+
+    // auth header
+    let auth_actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+    assert_eq!(
+        auth_actual,
+        IpAuthenticationHeader::new(
+            200, // ip number should have been set
+            1,
+            2,
+            &[3,4,5,6]
+        ).unwrap()
+    );
 
     //payload
     let mut actual_payload: [u8;4] = [0;4];
