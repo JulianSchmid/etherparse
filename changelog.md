@@ -2,6 +2,9 @@
 
 ## 0.11.0
 
+* Added partial ICMP and ICMPv6 support (thanks to @robs-zeynet for the initial implementation).
+* `Ipv4Header::new` changed `protocol` argument type from `IpNumber` to `u8`.
+* `PacketBuilder` `write` without transport protocol added (thanks to @karpawich)
 * Added functions [SlicedPacket::from_ether_type](https://docs.rs/etherparse/0.11.0/etherparse/struct.SlicedPacket.html#method.from_ether_type) & [PacketHeaders::from_ether_type](https://docs.rs/etherparse/0.10.1/etherparse/struct.PacketHeaders.html#method.from_ether_type) to slice & decode messages based on the starting `ether type`
 
 ## 0.10.1: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
