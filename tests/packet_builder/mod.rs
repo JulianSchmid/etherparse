@@ -1320,11 +1320,18 @@ proptest! {
         payload in proptest::collection::vec(any::<u8>(), 0..64),
     ) {
         let test_builder = |builder: PacketBuilderStep<Icmpv4Header>, icmpv4_type: Icmpv4Type| {
-            let icmp_expected = Icmpv4Header::with_checksum(icmpv4_type, &payload);
+
+            use Icmpv4Type::*;
+            let adapted_payload = match icmpv4_type {
+                TimestampRequest(_) | TimestampReply(_) => &[],
+                _ => &payload[..],
+            };
+
+            let icmp_expected = Icmpv4Header::with_checksum(icmpv4_type, &adapted_payload);
             let ip_expected = Ipv6Header{
                 traffic_class: 0,
                 flow_label: 0,
-                payload_length: (icmp_expected.header_len() + payload.len()) as u16,
+                payload_length: (icmp_expected.header_len() + adapted_payload.len()) as u16,
                 next_header: ip_number::ICMP,
                 hop_limit: ipv6_hop_limit,
                 source: ipv6_source,
@@ -1333,16 +1340,16 @@ proptest! {
 
             // test builder.size()
             assert_eq!(
-                builder.size(payload.len()),
+                builder.size(adapted_payload.len()),
                 Ethernet2Header::SERIALIZED_SIZE +
                 Ipv6Header::SERIALIZED_SIZE +
                 icmp_expected.header_len() +
-                payload.len()
+                adapted_payload.len()
             );
 
             // test builder.write()
-            let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
-            builder.write(&mut buffer, &payload).unwrap();
+            let mut buffer = Vec::<u8>::with_capacity(builder.size(adapted_payload.len()));
+            builder.write(&mut buffer, adapted_payload).unwrap();
 
             // decode packets
             let actual = PacketHeaders::from_ethernet_slice(&buffer).unwrap();
@@ -1364,7 +1371,7 @@ proptest! {
                 Some(TransportHeader::Icmpv4(icmp_expected)),
                 actual.transport
             );
-            assert_eq!(actual.payload, &payload);
+            assert_eq!(actual.payload, adapted_payload);
         };
 
         // icmpv4
