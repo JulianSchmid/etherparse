@@ -57,6 +57,7 @@ use std::{io, marker};
 ///     * [`PacketBuilderStep<VlanHeader>::ipv4`]
 ///     * [`PacketBuilderStep<VlanHeader>::ipv6`]
 /// * Options after an IP header was added:
+///     * [`PacketBuilderStep<IpHeader>::write`]
 ///     * [`PacketBuilderStep<IpHeader>::tcp`]
 ///     * [`PacketBuilderStep<IpHeader>::udp`]
 ///     * [`PacketBuilderStep<IpHeader>::icmpv4`]
@@ -444,7 +445,7 @@ impl PacketBuilderStep<Ethernet2Header> {
             traffic_class: 0,
             flow_label: 0,
             payload_length: 0, //filled in on write
-            next_header: 0,
+            next_header: 0, //filled in on write
             hop_limit,
             source,
             destination
@@ -1201,8 +1202,13 @@ impl PacketBuilderStep<IpHeader> {
         }
     }
 
-    ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    /// Write all the headers and the payload with the given ip number.
+    ///
+    /// `last_next_header_ip_number` will be set in the last extension header
+    /// or if no extension header exists the ip header as the "next header" or
+    /// "protocol number".
+    pub fn write<T: io::Write + Sized>(mut self, writer: &mut T, last_next_header_ip_number: u8, payload: &[u8]) -> Result<(),WriteError> {
+        self.state.ip_header.as_mut().unwrap().set_next_headers(last_next_header_ip_number);
         final_write(self, writer, payload)
     }
 
@@ -1392,14 +1398,19 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
     let transport = builder.state.transport_header;
     match transport {
         None => {
+            // in case no transport header is present the protocol
+            // number and next_header fields are set in the write call
+            // directly and don't need to be set here again.
             match ip_header {
-                Version4(mut ip, _) => {
-                    ip.set_payload_len(payload.len())?;
+                Version4(mut ip, ext) => {
+                    ip.set_payload_len(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
+                    ext.write(writer, ip.protocol)?;
                 },
-                Version6(mut ip, _) => {
-                    ip.set_payload_length(payload.len())?;
+                Version6(mut ip, ext) => {
+                    ip.set_payload_length(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
+                    ext.write(writer, ip.next_header)?;
                 }
             }
         },
