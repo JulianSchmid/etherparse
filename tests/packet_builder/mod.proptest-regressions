@@ -1,0 +1,10 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc d577e10285ad36f88c147f7c53f0951e85410c31a943333fedac312263d977c8 # shrinks to ipv4_source = [0, 0, 0, 0], ipv4_dest = [0, 0, 0, 0], ipv4_time_to_live = 0, icmpv4_type_u8 = 15, icmpv4_code_u8 = 0, icmpv4_bytes5to8 = [0, 0, 0, 0], icmpv4 = Icmpv4Header { icmp_type: EchoReply(IcmpEchoHeader { id: 0, seq: 0 }), checksum: 0 }, payload = []
+cc 6220e36db716272237e0db616e62aa7e9cdacf172ed0d059a3de92bd7e44e5f4 # shrinks to ipv6_source = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], ipv6_dest = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], ipv6_hop_limit = 0, icmpv6_type_u8 = 128, icmpv6_code_u8 = 0, icmpv6_bytes5to8 = [0, 0, 0, 0], icmpv6 = Unknown { type_u8: 0, code_u8: 0, bytes5to8: [0, 0, 0, 0] }, echo_id = 0, echo_seq = 0, payload = []
+cc 5a7d441c96931785724cc1a64a70b0814ea4eb376f0c3f431e25d810244f9831
+cc c44f627b48969e745640922cdc65a84c23581947a07a9c8e6b2ac29281fb6001
