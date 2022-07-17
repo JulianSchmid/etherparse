@@ -53,6 +53,55 @@ mod internet_slice {
             );
         }
     }
+
+    #[test]
+    fn is_fragmenting_payload() {
+        for is_frag in [false, true] {
+            // ipv4
+            {
+                let mut header : Ipv4Header = Default::default();
+                header.protocol = ip_number::UDP;
+                header.more_fragments = is_frag;
+                let buffer = {
+                    let mut buffer = Vec::with_capacity(header.header_len());
+                    header.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let ipv4 = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+                let exts = Ipv4ExtensionsSlice {
+                    auth: None
+                };
+                let slice = InternetSlice::Ipv4(ipv4.clone(), exts.clone());
+                assert_eq!(is_frag, slice.is_fragmenting_payload());
+            }
+            // ipv6
+            {
+                let mut header : Ipv6Header = Default::default();
+                header.next_header = ip_number::IPV6_FRAG;
+                let frag_header = Ipv6FragmentHeader{
+                    next_header: ip_number::UDP,
+                    fragment_offset: 0,
+                    more_fragments: is_frag,
+                    identification: 0
+                };
+                header.payload_length = frag_header.header_len() as u16;
+                let buffer = {
+                    let mut buffer = Vec::with_capacity(
+                        header.header_len() + frag_header.header_len()
+                    );
+                    header.write(&mut buffer).unwrap();
+                    frag_header.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let ipv6 = Ipv6HeaderSlice::from_slice(&buffer).unwrap();
+                let exts = Ipv6ExtensionsSlice::from_slice(ip_number::IPV6_FRAG, &buffer[header.header_len()..]).unwrap().0;
+                let slice = InternetSlice::Ipv6(ipv6.clone(), exts.clone());
+
+                // clone & eq
+                assert_eq!(is_frag, slice.is_fragmenting_payload());
+            }
+        }
+    }
 }
 
 mod transport_slice {
