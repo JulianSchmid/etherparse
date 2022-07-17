@@ -50,7 +50,7 @@ impl Ipv4Header {
             more_fragments: false,
             fragments_offset: 0,
             time_to_live,
-            protocol: protocol,
+            protocol,
             header_checksum: 0,
             source,
             destination,
