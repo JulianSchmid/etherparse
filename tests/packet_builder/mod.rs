@@ -69,14 +69,14 @@ fn ipv4() {
             Ipv4Header::new(
                 in_payload.len() as u16,
                 21,
-                200,
+                0,
                 [13,14,15,16],
                 [17,18,19,20]
             ),
             Default::default()
         )
     )
-    .write(&mut serialized, &in_payload)
+    .write(&mut serialized, 200, &in_payload)
     .unwrap();
 
     //check the deserialized size
@@ -119,7 +119,7 @@ fn ipv6() {
                     traffic_class: 0,
                     flow_label: 0,
                     payload_length: in_payload.len() as u16,
-                    next_header: 200,
+                    next_header: 0,
                     hop_limit: 47,
                     source: [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
                     destination: [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46]
@@ -127,7 +127,7 @@ fn ipv6() {
                 Default::default()
             )
         )
-        .write(&mut serialized, &in_payload)
+        .write(&mut serialized, 200, &in_payload)
         .unwrap();
 
     //check the deserialized size
