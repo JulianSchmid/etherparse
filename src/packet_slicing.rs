@@ -245,6 +245,44 @@ impl<'a> SlicedPacket<'a> {
     pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket, ReadError> {
         CursorSlice::new(data).slice_ip()
     }
+
+    /// If the `payload` contains an ethernet payload this method returns
+    /// the ether type number describing the payload type.
+    ///
+    /// The ether type number can come from an ethernet II header or a
+    /// VLAN header depending on which headers are present.
+    ///
+    /// In case that `ip` and/or `transport` fields are the filled None
+    /// is returned, as the payload contents then are defined by a
+    /// lower layer protocol described in these fields.
+    pub fn payload_ether_type(&self) -> Option<u16> {
+        if self.ip.is_some() || self.transport.is_some() {
+            None
+        } else {
+            if let Some(vlan) = &self.vlan {
+                use VlanSlice::*;
+                match vlan {
+                    SingleVlan(s) => {
+                        Some(s.ether_type())
+                    },
+                    DoubleVlan(d) => {
+                        Some(d.inner().ether_type())
+                    }
+                }
+            } else {
+                if let Some(link) = &self.link {
+                    use LinkSlice::*;
+                    match link {
+                        Ethernet2(eth) => {
+                            Some(eth.ether_type())
+                        }
+                    }
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 ///Helper class for slicing packets

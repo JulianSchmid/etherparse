@@ -220,4 +220,132 @@ mod sliced_packet {
         };
         assert_eq!(header.clone(), header);
     }
+
+    #[test]
+    fn payload_ether_type() {
+        // empty
+        {
+            let s = SlicedPacket{
+                link: None,
+                vlan: None,
+                ip: None,
+                transport: None,
+                payload: &[]
+            };
+            assert_eq!(None, s.payload_ether_type());
+        }
+
+        // with ip
+        {
+            let in_payload = [50,51,52,53]; 
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6], [7,8,9,10,11,12])
+                .single_vlan(0x123)
+                .ipv4([13,14,15,16], [17,18,19,20], 21);
+            let mut serialized = Vec::with_capacity(builder.size(in_payload.len()));
+            builder.write(&mut serialized, 123, &in_payload).unwrap();
+
+            assert_eq!(
+                None,
+                SlicedPacket::from_ethernet(&serialized)
+                    .unwrap()
+                    .payload_ether_type()
+            );
+        }
+
+        // with transport
+        {
+            let builder = PacketBuilder::ethernet2([1,2,3,4,5,6], [7,8,9,10,11,12])
+                .single_vlan(0x123)
+                .ipv4([13,14,15,16], [17,18,19,20], 21)
+                .udp(48,49);
+            let mut serialized = Vec::with_capacity(builder.size(0));
+            builder.write(&mut serialized, &[]).unwrap();
+
+            assert_eq!(
+                None,
+                SlicedPacket::from_ethernet(&serialized)
+                    .unwrap()
+                    .payload_ether_type()
+            );
+        }
+
+        // only ethernet
+        {
+            let header = Ethernet2Header{
+                source: [1,2,3,4,5,6], 
+                destination: [7,8,9,10,11,12],
+                ether_type: 1234,
+            };
+            let mut serialized = Vec::with_capacity(header.header_len());
+            header.write(&mut serialized).unwrap();
+            assert_eq!(
+                Some(1234),
+                SlicedPacket::from_ethernet(&serialized)
+                    .unwrap()
+                    .payload_ether_type()
+            );
+        }
+
+        // with single vlan
+        {
+            let eth_header = Ethernet2Header{
+                source: [1,2,3,4,5,6], 
+                destination: [7,8,9,10,11,12],
+                ether_type: ether_type::VLAN_TAGGED_FRAME,
+            };
+            let vlan_header = SingleVlanHeader {
+                priority_code_point: 1,
+                drop_eligible_indicator: false,
+                vlan_identifier: 89,
+                ether_type: 1234,
+            };
+            let mut serialized = Vec::with_capacity(
+                eth_header.header_len() +
+                vlan_header.header_len()
+            );
+            eth_header.write(&mut serialized).unwrap();
+            vlan_header.write(&mut serialized).unwrap();
+            assert_eq!(
+                Some(1234),
+                SlicedPacket::from_ethernet(&serialized)
+                    .unwrap()
+                    .payload_ether_type()
+            );
+        }
+
+        // with double vlan
+        {
+            let eth_header = Ethernet2Header{
+                source: [1,2,3,4,5,6], 
+                destination: [7,8,9,10,11,12],
+                ether_type: ether_type::VLAN_TAGGED_FRAME,
+            };
+            let outer_vlan_header = SingleVlanHeader {
+                priority_code_point: 1,
+                drop_eligible_indicator: false,
+                vlan_identifier: 89,
+                ether_type: ether_type::VLAN_TAGGED_FRAME,
+            };
+            let inner_vlan_header = SingleVlanHeader {
+                priority_code_point: 1,
+                drop_eligible_indicator: false,
+                vlan_identifier: 89,
+                ether_type: 1234,
+            };
+            let mut serialized = Vec::with_capacity(
+                eth_header.header_len() +
+                outer_vlan_header.header_len() +
+                inner_vlan_header.header_len()
+            );
+            eth_header.write(&mut serialized).unwrap();
+            outer_vlan_header.write(&mut serialized).unwrap();
+            inner_vlan_header.write(&mut serialized).unwrap();
+            assert_eq!(
+                Some(1234),
+                SlicedPacket::from_ethernet(&serialized)
+                    .unwrap()
+                    .payload_ether_type()
+            );
+        }
+    }
 }
