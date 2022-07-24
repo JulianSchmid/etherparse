@@ -1,5 +1,9 @@
 # Changelog:
 
+## 0.12.0
+
+* Add `payload_ether_type` method to `SlicedPacket` & `PacketHeaders`
+
 ## 0.11.0
 
 ### New Features:
