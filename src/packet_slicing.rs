@@ -246,8 +246,8 @@ impl<'a> SlicedPacket<'a> {
         CursorSlice::new(data).slice_ip()
     }
 
-    /// If the `payload` contains an ethernet payload this method returns
-    /// the ether type number describing the payload type.
+    /// If the slice in the `payload` field contains an ethernet payload
+    /// this method returns the ether type number describing the payload type.
     ///
     /// The ether type number can come from an ethernet II header or a
     /// VLAN header depending on which headers are present.

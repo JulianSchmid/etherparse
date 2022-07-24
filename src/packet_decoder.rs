@@ -380,6 +380,39 @@ impl<'a> PacketHeaders<'a> {
 
         Ok(result)
     }
+
+    /// If the slice in the `payload` field contains an ethernet payload
+    /// this method returns the ether type number describing the payload type.
+    ///
+    /// The ether type number can come from an ethernet II header or a
+    /// VLAN header depending on which headers are present.
+    ///
+    /// In case that `ip` and/or `transport` fields are the filled None
+    /// is returned, as the payload contents then are defined by a
+    /// lower layer protocol described in these fields.
+    pub fn payload_ether_type(&self) -> Option<u16> {
+        if self.ip.is_some() || self.transport.is_some() {
+            None
+        } else {
+            if let Some(vlan) = &self.vlan {
+                use VlanHeader::*;
+                match vlan {
+                    Single(s) => {
+                        Some(s.ether_type)
+                    },
+                    Double(d) => {
+                        Some(d.inner.ether_type)
+                    }
+                }
+            } else {
+                if let Some(link) = &self.link {
+                    Some(link.ether_type)
+                } else {
+                    None
+                }
+            }
+        }
+    }
 }
 
 /// helper function to process transport headers
