@@ -1,22 +1,82 @@
-name: Main 
+name: main
 
-on: [ push, pull_request ]
+on:
+  pull_request:
+  push:
+    branches:
+    - master
 
 jobs:
-
   test:
-    name: cargo test
+    name: cargo build and test
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        build:
+        - linux-stable
+        - linux-32bit-stable
+        - linux-beta
+        - linux-nightly
+        - macos-stable
+        - win-msvc-stable
+        - win-gnu-stable
+        include:
+        - build: linux-stable
+          os: ubuntu-latest
+          rust: stable
+        - build: linux-32bit-stable
+          os: ubuntu-latest
+          rust: stable
+          target: i686-unknown-linux-gnu
+        - build: linux-beta
+          os: ubuntu-latest
+          rust: beta
+        - build: linux-nightly
+          os: ubuntu-latest
+          rust: nightly
+        - build: macos-stable
+          os: macos-latest
+          rust: stable
+        - build: win-msvc-stable
+          os: windows-latest
+          rust: stable
+        - build: win-gnu-stable
+          os: windows-latest
+          rust: stable-x86_64-gnu
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+
+    - uses: actions/checkout@v2
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: ${{ matrix.rust }}
+        override: true
+
+    - name: cargo build
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+
+    - name: cross build
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --target ${{ matrix.target }}
+
+    - name: cargo test
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+
+    - name: cross test
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: test
+        args: --target ${{ matrix.target }}
