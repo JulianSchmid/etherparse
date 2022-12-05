@@ -24,7 +24,7 @@ Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.12.0"
+etherparse = "0.13"
 ```
 
 ## What is etherparse?
@@ -206,7 +206,7 @@ Read the documentations of the different methods for a more details:
 * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 
 ## License
-Licensed under the BSD 3-Clause license. Please see the LICENSE file for more information.
+Licensed under either of Apache License, Version 2.0 or MIT license at your option. The corresponding license texts can be found in the LICENSE-APACHE file and the LICENSE-MIT file.
 
 ### Contribution
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you shall be licensed as above, without any additional terms or conditions.

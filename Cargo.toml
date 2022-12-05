@@ -1,13 +1,13 @@
 [package]
 name = "etherparse"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 edition = "2018"
 repository = "https://github.com/JulianSchmid/etherparse"
 description = "A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...)."
 categories = ["network-programming", "parser-implementations"]
 keywords = ["ipv4", "ipv6", "vlan", "udp", "tcp"]
-license = "BSD-3-Clause"
+license = "MIT OR Apache-2.0"
 readme = "README.md"
 exclude = [
     ".gitignore",
