@@ -1,5 +1,6 @@
 extern crate etherparse;
 use etherparse::*;
+use std::io::Write;
 
 fn main() {
 
@@ -71,6 +72,8 @@ fn main() {
             udp_payload.len()
         ).unwrap().write(&mut out).unwrap();
     }
+
+    out.write_all(&udp_payload).unwrap();
 
     println!("{:?}", &out);
 }
