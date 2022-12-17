@@ -1,5 +1,6 @@
 /// Code value in an ICMPv4 Redirect message.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum RedirectCode {
     /// Redirect Datagram for the Network (or subnet)
     RedirectForNetwork = 0,

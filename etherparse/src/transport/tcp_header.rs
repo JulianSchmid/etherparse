@@ -20,6 +20,7 @@ pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 ///
 /// Field descriptions copied from RFC 793 page 15++
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TcpHeader {
     /// The source port number.
     pub source_port: u16,

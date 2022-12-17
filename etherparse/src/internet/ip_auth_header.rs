@@ -13,6 +13,7 @@ pub type IpAuthenticationHeader = IpAuthHeader;
 
 /// IP Authentication Header (rfc4302)
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IpAuthHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///

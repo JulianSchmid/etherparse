@@ -2,6 +2,7 @@ use crate::*;
 
 /// IEEE 802.1Q VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SingleVlanHeader {
     /// A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     pub pcp: VlanPcp,

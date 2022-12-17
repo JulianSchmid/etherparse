@@ -8,6 +8,7 @@
 /// originating Echo Requests and receiving Echo Replies, for diagnostic
 /// purposes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IcmpEchoHeader {
     /// An identifier to aid in matching Echo Replies to Echo Requests. May be zero.
     pub id: u16,

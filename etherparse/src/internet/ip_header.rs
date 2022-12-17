@@ -5,6 +5,7 @@ use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[allow(clippy::large_enum_variant)]
 pub enum IpHeader {
     /// IPv4 header & extension headers.
