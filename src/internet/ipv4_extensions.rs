@@ -8,6 +8,7 @@ use super::super::*;
 /// Currently not supported:
 /// - Encapsulating Security Payload Header (ESP)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv4Extensions {
     pub auth: Option<IpAuthenticationHeader>,
 }

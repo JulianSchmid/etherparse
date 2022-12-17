@@ -6,6 +6,7 @@ use std::slice::from_raw_parts;
 
 /// IPv4 header without options.
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv4Header {
     pub differentiated_services_code_point: u8,
     pub explicit_congestion_notification: u8,
@@ -28,6 +29,7 @@ pub struct Ipv4Header {
     pub destination: [u8;4],
     /// Length of the options in the options_buffer in bytes.
     options_len: u8,
+    #[cfg_attr(feature = "serde", serde(skip), serde(default = "default_options_buffer"))]
     options_buffer: [u8;40]
 }
 
@@ -728,4 +730,10 @@ impl<'a> Ipv4HeaderSlice<'a> {
             }
         }
     }
+}
+
+#[feature("serde")]
+/// Used to create an empty buffer when deserializing using `serde`
+fn default_options_buffer() -> [u8;40] {
+    [0;40]
 }

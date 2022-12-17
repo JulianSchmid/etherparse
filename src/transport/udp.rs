@@ -4,6 +4,7 @@ use std::slice::from_raw_parts;
 
 ///Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct UdpHeader {
     ///Source port of the packet (optional).
     pub source_port: u16,

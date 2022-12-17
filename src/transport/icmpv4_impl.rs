@@ -129,6 +129,7 @@ pub mod icmpv4 {
     /// Codes 0, 1, 4, and 5 may be received from a gateway.  Codes 2 and
     /// 3 may be received from a host.
     #[derive(Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum DestUnreachableHeader {
         /// Network unreachable error.
         Network,
@@ -231,6 +232,7 @@ pub mod icmpv4 {
 
     /// Code value in an ICMPv4 Redirect message.
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum RedirectCode {
         /// Redirect Datagram for the Network (or subnet)
         RedirectForNetwork = 0,
@@ -266,6 +268,7 @@ pub mod icmpv4 {
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct RedirectHeader {
         pub code: RedirectCode,
         pub gateway_internet_address: [u8; 4],
@@ -279,6 +282,7 @@ pub mod icmpv4 {
 
     /// Code values for ICMPv4 time exceeded message.
     #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum TimeExceededCode {
         /// Time-to-live exceeded in transit.
         TtlExceededInTransit = 0,
@@ -309,6 +313,7 @@ pub mod icmpv4 {
 
     /// A ICMPv4 timestamp or timestamp response message.
     #[derive(Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct TimestampMessage {
         pub id: u16,
         pub seq: u16,
@@ -345,6 +350,7 @@ pub mod icmpv4 {
     /// The header of an ICMPv4 Parameter Problems (contents up to
     /// the offending ip header).
     #[derive(Clone, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ParameterProblemHeader {
         /// Identifies the octet where an error was detected.
         ///
@@ -378,6 +384,7 @@ use icmpv4::*;
 
 /// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Icmpv4Type {
     /// In case of an unknown ICMP type and code combination is received the
     /// header elements are stored raw in this enum value. The `Unknown` value can
@@ -724,6 +731,7 @@ impl Icmpv4Type {
 /// and code. But usually the static sized elements are part
 /// of the header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Icmpv4Header {
     /// Type & type specific values & code.
     pub icmp_type: Icmpv4Type,

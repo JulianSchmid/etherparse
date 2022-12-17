@@ -12,6 +12,7 @@ pub type IPv6AuthenticationHeader = IpAuthenticationHeader;
 
 /// IP Authentication Header (rfc4302)
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IpAuthenticationHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
@@ -27,6 +28,7 @@ pub struct IpAuthenticationHeader {
     raw_icv_len: u8,
     /// Buffer containing the "Encoded Integrity Check Value-ICV" (variable).
     /// The length of the used data can be set via the `variable` (must be a multiple of 4 bytes).
+    #[cfg_attr(feature = "serde", serde(skip), serde(default = "default_raw_icv_buffer"))]
     raw_icv_buffer: [u8;0xfe*4],
 }
 
@@ -325,4 +327,10 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
             self.raw_icv(),
         ).unwrap()
     }
+}
+
+#[feature("serde")]
+/// Used to create an empty buffer when deserializing using `serde`
+fn default_raw_icv_buffer() -> [u8;0xfe*4] {
+    [0;0xfe*4]
 }

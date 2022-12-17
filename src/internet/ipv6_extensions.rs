@@ -19,6 +19,7 @@ use std::slice::from_raw_parts;
 /// * IP Mobility
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6Extensions {
     pub hop_by_hop_options: Option<Ipv6RawExtensionHeader>,
     pub destination_options: Option<Ipv6RawExtensionHeader>,
@@ -656,6 +657,7 @@ impl Ipv6Extensions {
 /// In case a route header is present it is also possible
 /// to attach a "final destination" header.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6RoutingExtensions {
     pub routing: Ipv6RawExtensionHeader,
     pub final_destination_options: Option<Ipv6RawExtensionHeader>

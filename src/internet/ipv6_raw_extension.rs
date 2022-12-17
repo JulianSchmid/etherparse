@@ -21,6 +21,7 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
 /// * Host Identity Protocol
 /// * Shim6 Protocol
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6RawExtensionHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
@@ -29,6 +30,7 @@ pub struct Ipv6RawExtensionHeader {
     /// Length of the extension header in 8 octets (minus the first 8 octets).
     header_length: u8,
     //// The data contained in the extension header (excluding next_header & hdr length).
+    #[cfg_attr(feature = "serde", serde(skip), serde(default = "default_payload_buffer"))]
     payload_buffer: [u8;0xff * 8 + 6],
 }
 
@@ -287,4 +289,10 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
             self.payload()
         ).unwrap()
     }
+}
+
+#[feature("serde")]
+/// Used to create an empty buffer when deserializing using `serde`
+fn default_payload_buffer() -> [u8;0xff * 8 + 6] {
+    [0;0xff * 8 + 6]
 }

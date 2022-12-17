@@ -4,6 +4,7 @@ use std::slice::from_raw_parts;
 
 /// IPv6 fragment header.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6FragmentHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///

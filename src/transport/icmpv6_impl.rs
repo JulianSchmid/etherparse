@@ -111,6 +111,7 @@ pub mod icmpv6 {
     /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
     /// packet is dropped due to congestion.)
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum DestUnreachableCode {
         /// No route to destination
         NoRoute = 0,
@@ -179,6 +180,7 @@ pub mod icmpv6 {
 
     /// Code values for ICMPv6 time exceeded message.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum TimeExceededCode {
         /// "hop limit exceeded in transit"
         HopLimitExceeded = 0,
@@ -247,6 +249,7 @@ pub mod icmpv6 {
     ///
     /// Source: <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5>
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub enum ParameterProblemCode {
         /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
         ErroneousHeaderField = 0,
@@ -308,6 +311,7 @@ pub mod icmpv6 {
 
     /// ICMPv6 parameter problem header.
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
     pub struct ParameterProblemHeader {
         /// The code can offer additional informations about what kind of parameter
         /// problem caused the error.
@@ -407,6 +411,7 @@ use icmpv6::*;
 /// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw in this enum value.
@@ -830,6 +835,7 @@ impl Icmpv6Type {
 
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Icmpv6Header {
     /// Type & type specific values & code.
     pub icmp_type: Icmpv6Type,

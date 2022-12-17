@@ -5,6 +5,7 @@ use std::slice::from_raw_parts;
 
 /// IEEE 802.1Q VLAN Tagging Header (can be single or double tagged).
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum VlanHeader {
     /// IEEE 802.1Q VLAN Tagging Header
     Single(SingleVlanHeader),
@@ -63,6 +64,7 @@ impl<'a> VlanSlice<'a> {
 
 /// IEEE 802.1Q VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SingleVlanHeader {
     /// A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     pub priority_code_point: u8,
@@ -178,6 +180,7 @@ impl SingleVlanHeader {
 
 /// IEEE 802.1Q double VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DoubleVlanHeader {
     /// The outer vlan tagging header
     pub outer: SingleVlanHeader,

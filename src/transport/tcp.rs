@@ -14,6 +14,7 @@ pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 ///
 ///Field descriptions copied from RFC 793 page 15++
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct TcpHeader {
     ///The source port number.
     pub source_port: u16,
@@ -70,7 +71,14 @@ pub struct TcpHeader {
     ///the URG control bit set.
     pub urgent_pointer: u16,
     ///Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
+    #[cfg_attr(feature = "serde", serde(skip), serde(default = "default_options_buffer"))]
     options_buffer: [u8;40]
+}
+
+#[feature("serde")]
+/// Used to create an empty buffer when deserializing using `serde`
+fn default_options_buffer() -> [u8;40] {
+    [0;40]
 }
 
 impl TcpHeader {

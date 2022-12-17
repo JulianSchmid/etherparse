@@ -58,6 +58,7 @@ pub mod ether_type {
 
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ethernet2Header {
     pub source: [u8;6],
     pub destination: [u8;6],
