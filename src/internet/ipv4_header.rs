@@ -432,7 +432,7 @@ impl std::cmp::PartialEq for Ipv4Header {
 
 impl std::cmp::Eq for Ipv4Header {}
 
-/// A slice containing an ipv4 header of a network package.
+/// A slice containing an ipv4 header & payload of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv4HeaderSlice<'a> {
     slice: &'a [u8]
