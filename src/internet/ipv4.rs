@@ -4,6 +4,8 @@ use std::net::Ipv4Addr;
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
+use rand::Rng;
+
 /// IPv4 header without options.
 #[derive(Clone)]
 pub struct Ipv4Header {
@@ -45,7 +47,7 @@ impl Ipv4Header {
             differentiated_services_code_point: 0,
             explicit_congestion_notification: 0,
             payload_len,
-            identification: 0,
+            identification: rand::thread_rng().gen(),
             dont_fragment: true,
             more_fragments: false,
             fragments_offset: 0,
