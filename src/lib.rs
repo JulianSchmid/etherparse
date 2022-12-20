@@ -251,6 +251,8 @@ use std::io;
 use std::fmt;
 use std::error::Error;
 
+pub mod err;
+
 mod link;
 pub use crate::link::LinkSlice;
 pub use crate::link::ethernet::*;

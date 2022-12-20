@@ -69,6 +69,24 @@ impl<'a> Ipv4HeaderSlice<'a> {
         })
     }
 
+    /// Converts the given slice into a ipv4 header slice WITHOUT any
+    /// checks to ensure that the data present is an ipv4 header or that the
+    /// slice length is matching the header length.
+    /// 
+    /// If you are not sure what this means, use [`Ipv4HeaderSlice::from_slice`]
+    /// instead.
+    /// 
+    /// # Safety
+    /// 
+    /// It must ensured that the slice exactly contains the IPv4 header
+    /// and the ihl (intra header length) & total length must be consistent.
+    #[inline]
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ipv4HeaderSlice {
+        Ipv4HeaderSlice {
+            slice,
+        }
+    }
+
     /// Returns the slice containing the ipv4 header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
