@@ -25,7 +25,7 @@ jobs:
     - name: Install jq
       run: sudo apt install jq
     - name: Determine coverage
-      run: scripts/coverage.bash
+      run: coverage/coverage.bash
       shell: bash
     - name: Codecov
       uses: codecov/codecov-action@v2
