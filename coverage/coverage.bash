@@ -23,8 +23,8 @@
 pushd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 # folder for all the coverage files
-coverage_dir="target/coverage"
-    
+coverage_dir="$(pwd -P)/target/coverage"
+
 # make sure no cached data is used (can interfere with the instrumentalisation and testruns)
 cargo clean
 
