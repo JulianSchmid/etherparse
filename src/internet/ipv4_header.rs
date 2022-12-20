@@ -1,8 +1,5 @@
-use super::super::*;
-
-use std::net::Ipv4Addr;
+use crate::*;
 use std::fmt::{Debug, Formatter};
-use std::slice::from_raw_parts;
 
 /// IPv4 header without options.
 #[derive(Clone)]
