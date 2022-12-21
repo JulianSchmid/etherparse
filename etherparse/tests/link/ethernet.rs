@@ -32,8 +32,8 @@ mod ether_type {
 
     #[test]
     fn constants() {
-        use crate::EtherType::*;
         use crate::ether_type::*;
+        use crate::EtherType::*;
         let pairs = &[
             (Ipv4, IPV4),
             (Ipv6, IPV6),
@@ -41,7 +41,7 @@ mod ether_type {
             (WakeOnLan, WAKE_ON_LAN),
             (VlanTaggedFrame, VLAN_TAGGED_FRAME),
             (ProviderBridging, PROVIDER_BRIDGING),
-            (VlanDoubleTaggedFrame, VLAN_DOUBLE_TAGGED_FRAME)
+            (VlanDoubleTaggedFrame, VLAN_DOUBLE_TAGGED_FRAME),
         ];
 
         for (enum_value, constant) in pairs {
@@ -59,14 +59,11 @@ mod ether_type {
             (WakeOnLan, "WakeOnLan"),
             (VlanTaggedFrame, "VlanTaggedFrame"),
             (ProviderBridging, "ProviderBridging"),
-            (VlanDoubleTaggedFrame, "VlanDoubleTaggedFrame")
+            (VlanDoubleTaggedFrame, "VlanDoubleTaggedFrame"),
         ];
 
         for (enum_value, str_value) in pairs {
-            assert_eq!(
-                str_value,
-                &format!("{:?}", enum_value)
-            );
+            assert_eq!(str_value, &format!("{:?}", enum_value));
         }
     }
 
@@ -91,14 +88,8 @@ mod ether_type {
         // eq
         for (a_pos, a) in values.iter().enumerate() {
             for (b_pos, b) in values.iter().enumerate() {
-                assert_eq!(
-                    a_pos == b_pos, 
-                    a == b
-                );
-                assert_eq!(
-                    a_pos != b_pos, 
-                    a != b
-                );
+                assert_eq!(a_pos == b_pos, a == b);
+                assert_eq!(a_pos != b_pos, a != b);
             }
         }
     }
