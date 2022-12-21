@@ -1,8 +1,8 @@
 pub mod icmp;
 pub mod icmpv4_impl;
 pub mod icmpv6_impl;
-pub mod udp;
 pub mod tcp;
+pub mod udp;
 
 use super::*;
 
@@ -18,7 +18,6 @@ pub enum TransportHeader {
 }
 
 impl TransportHeader {
-
     /// Returns Result::Some containing the udp header if self has the value Udp.
     /// Otherwise None is returned.
     pub fn udp(self) -> Option<udp::UdpHeader> {
@@ -45,7 +44,7 @@ impl TransportHeader {
     /// Otherwise None is returned.
     pub fn tcp(self) -> Option<tcp::TcpHeader> {
         use crate::TransportHeader::*;
-        if let Tcp(value)  = self {
+        if let Tcp(value) = self {
             Some(value)
         } else {
             None
@@ -121,18 +120,22 @@ impl TransportHeader {
 
     /// Calculates the checksum for the transport header & sets it in the header for
     /// an ipv4 header.
-    pub fn update_checksum_ipv4(&mut self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<(), ValueError> {
+    pub fn update_checksum_ipv4(
+        &mut self,
+        ip_header: &Ipv4Header,
+        payload: &[u8],
+    ) -> Result<(), ValueError> {
         use crate::TransportHeader::*;
         match self {
             Udp(header) => {
                 header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
-            },
+            }
             Tcp(header) => {
                 header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
-            },
+            }
             Icmpv4(header) => {
                 header.update_checksum(payload);
-            },
+            }
             Icmpv6(_) => return Err(ValueError::Icmpv6InIpv4),
         }
         Ok(())
@@ -140,14 +143,20 @@ impl TransportHeader {
 
     /// Calculates the checksum for the transport header & sets it in the header for
     /// an ipv6 header.
-    pub fn update_checksum_ipv6(&mut self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<(), ValueError> {
+    pub fn update_checksum_ipv6(
+        &mut self,
+        ip_header: &Ipv6Header,
+        payload: &[u8],
+    ) -> Result<(), ValueError> {
         use crate::TransportHeader::*;
         match self {
             Icmpv4(header) => header.update_checksum(payload),
-            Icmpv6(header) => header.update_checksum(ip_header.source, ip_header.destination, payload)?,
+            Icmpv6(header) => {
+                header.update_checksum(ip_header.source, ip_header.destination, payload)?
+            }
             Udp(header) => {
                 header.checksum = header.calc_checksum_ipv6(ip_header, payload)?;
-            },
+            }
             Tcp(header) => {
                 header.checksum = header.calc_checksum_ipv6(ip_header, payload)?;
             }
@@ -162,7 +171,7 @@ impl TransportHeader {
             Icmpv4(value) => value.write(writer),
             Icmpv6(value) => value.write(writer),
             Udp(value) => value.write(writer),
-            Tcp(value) => value.write(writer).map_err(WriteError::from)
+            Tcp(value) => value.write(writer).map_err(WriteError::from),
         }
     }
 }
