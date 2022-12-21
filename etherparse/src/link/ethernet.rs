@@ -1,7 +1,7 @@
 use super::super::*;
 
-use std::slice::from_raw_parts;
 use std::io;
+use std::slice::from_raw_parts;
 
 /// Ether type enum present in ethernet II header.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -12,7 +12,7 @@ pub enum EtherType {
     WakeOnLan = 0x0842,
     VlanTaggedFrame = 0x8100,
     ProviderBridging = 0x88A8,
-    VlanDoubleTaggedFrame = 0x9100
+    VlanDoubleTaggedFrame = 0x9100,
 }
 
 impl EtherType {
@@ -27,7 +27,7 @@ impl EtherType {
             0x88A8 => Some(ProviderBridging),
             0x8100 => Some(VlanTaggedFrame),
             0x9100 => Some(VlanDoubleTaggedFrame),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -59,9 +59,9 @@ pub mod ether_type {
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ethernet2Header {
-    pub source: [u8;6],
-    pub destination: [u8;6],
-    pub ether_type: u16
+    pub source: [u8; 6],
+    pub destination: [u8; 6],
+    pub ether_type: u16,
 }
 
 impl SerializedSize for Ethernet2Header {
@@ -70,12 +70,8 @@ impl SerializedSize for Ethernet2Header {
 }
 
 impl Ethernet2Header {
-
     /// Creates a ethernet slice from an other slice.
-    #[deprecated(
-        since = "0.10.1",
-        note = "Use Ethernet2Header::from_slice instead."
-    )]
+    #[deprecated(since = "0.10.1", note = "Use Ethernet2Header::from_slice instead.")]
     #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
         Ethernet2Header::from_slice(slice)
@@ -86,51 +82,31 @@ impl Ethernet2Header {
     pub fn from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
         Ok((
             Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Ethernet2Header::SERIALIZED_SIZE..]
+            &slice[Ethernet2Header::SERIALIZED_SIZE..],
         ))
     }
 
     /// Read an Ethernet2Header from a static sized byte array.
     #[inline]
-    pub fn from_bytes(bytes: [u8;14]) -> Ethernet2Header {
-        Ethernet2Header{
-            destination: [
-                bytes[0],
-                bytes[1],
-                bytes[2],
-                bytes[3],
-                bytes[4],
-                bytes[5],
-            ],
-            source: [
-                bytes[6],
-                bytes[7],
-                bytes[8],
-                bytes[9],
-                bytes[10],
-                bytes[11],
-            ],
-            ether_type: u16::from_be_bytes(
-                [
-                    bytes[12],
-                    bytes[13],
-                ]
-            )
+    pub fn from_bytes(bytes: [u8; 14]) -> Ethernet2Header {
+        Ethernet2Header {
+            destination: [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]],
+            source: [bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]],
+            ether_type: u16::from_be_bytes([bytes[12], bytes[13]]),
         }
     }
 
     /// Reads an Ethernet-II header from the current position of the read argument.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ethernet2Header, io::Error> {
-
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<Ethernet2Header, io::Error> {
         let buffer = {
-            let mut buffer = [0;Ethernet2Header::SERIALIZED_SIZE];
+            let mut buffer = [0; Ethernet2Header::SERIALIZED_SIZE];
             reader.read_exact(&mut buffer)?;
             buffer
         };
 
-        Ok(Ethernet2HeaderSlice{
-            slice: &buffer
-        }.to_header())
+        Ok(Ethernet2HeaderSlice { slice: &buffer }.to_header())
     }
 
     /// Serialize the header to a given slice. Returns the unused part of the slice.
@@ -160,7 +136,7 @@ impl Ethernet2Header {
     /// Returns the serialized form of the header as a statically
     /// sized byte array.
     #[inline]
-    pub fn to_bytes(&self) -> [u8;14] {
+    pub fn to_bytes(&self) -> [u8; 14] {
         let ether_type_be = self.ether_type.to_be_bytes();
         [
             self.destination[0],
@@ -184,23 +160,20 @@ impl Ethernet2Header {
 ///A slice containing an ethernet 2 header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ethernet2HeaderSlice<'a> {
-    slice: &'a [u8]
+    slice: &'a [u8],
 }
 
 impl<'a> Ethernet2HeaderSlice<'a> {
-
     /// Creates a ethernet slice from an other slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError>{
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
-                    actual_len: slice.len(),
-                    layer: err::Layer::Ethernet2Header,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                actual_len: slice.len(),
+                layer: err::Layer::Ethernet2Header,
+            }));
         }
 
         //all done
@@ -208,12 +181,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
             // SAFETY:
             // Safe as slice length is checked to be at least
             // Ethernet2Header::SERIALIZED_SIZE (14) before this.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    Ethernet2Header::SERIALIZED_SIZE
-                )
-            }
+            slice: unsafe { from_raw_parts(slice.as_ptr(), Ethernet2Header::SERIALIZED_SIZE) },
         })
     }
 
@@ -225,24 +193,20 @@ impl<'a> Ethernet2HeaderSlice<'a> {
 
     /// Read the destination mac address
     #[inline]
-    pub fn destination(&self) -> [u8;6] {
+    pub fn destination(&self) -> [u8; 6] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
-        unsafe {
-            get_unchecked_6_byte_array(self.slice.as_ptr())
-        }
+        unsafe { get_unchecked_6_byte_array(self.slice.as_ptr()) }
     }
 
     /// Read the source mac address
     #[inline]
-    pub fn source(&self) -> [u8;6] {
+    pub fn source(&self) -> [u8; 6] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
-        unsafe {
-            get_unchecked_6_byte_array(self.slice.as_ptr().add(6))
-        }
+        unsafe { get_unchecked_6_byte_array(self.slice.as_ptr().add(6)) }
     }
 
     /// Read the ether_type field of the header (in system native byte order).
@@ -251,9 +215,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
-        unsafe {
-            get_unchecked_be_u16(self.slice.as_ptr().add(12))
-        }
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) }
     }
 
     /// Decode all the fields and copy the results to a Ipv4Header struct
@@ -261,7 +223,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         Ethernet2Header {
             source: self.source(),
             destination: self.destination(),
-            ether_type: self.ether_type()
+            ether_type: self.ether_type(),
         }
     }
 }
