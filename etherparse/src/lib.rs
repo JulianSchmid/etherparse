@@ -1,5 +1,5 @@
 //! A zero allocation library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
-//! 
+//!
 //! Currently supported are:
 //! * Ethernet II
 //! * IEEE 802.1Q VLAN Tagging Header
@@ -8,11 +8,11 @@
 //! * UDP
 //! * TCP
 //! * ICMP & ICMPv6 (not all message types are supported)
-//! 
+//!
 //! # Usage
-//! 
+//!
 //! Add the following to your `Cargo.toml`:
-//! 
+//!
 //! ```toml
 //! [dependencies]
 //! etherparse = "0.13"
@@ -20,17 +20,17 @@
 //!
 //! # What is etherparse?
 //! Etherparse is intended to provide the basic network parsing functions that allow for easy analysis, transformation or generation of recorded network data.
-//! 
+//!
 //! Some key points are:
-//! 
+//!
 //! * It is completly written in Rust and thoroughly tested.
 //! * Special attention has been paid to not use allocations or syscalls.
-//! * The package is still in development and can & will still change. 
+//! * The package is still in development and can & will still change.
 //! * The current focus of development is on the most popular protocols in the internet & transport layer.
 //!
 //! # How to parse network packages?
 //! Etherparse gives you two options for parsing network packages automatically:
-//! 
+//!
 //! ## Slicing the packet
 //! Here the different components in a packet are seperated without parsing all their fields. For each header a slice is generated that allows access to the fields of a header.
 //! ```
@@ -41,7 +41,7 @@
 //! #    .ipv4([192,168,1,1], //source ip
 //! #          [192,168,1,2], //desitionation ip
 //! #          20)            //time to life
-//! #    .udp(21,    //source port 
+//! #    .udp(21,    //source port
 //! #         1234); //desitnation port
 //! #    //payload of the udp packet
 //! #    let payload = [1,2,3,4,5,6,7,8];
@@ -60,7 +60,7 @@
 //! }
 //! ```
 //! This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packages based on a subset of the headers and/or their fields.
-//! 
+//!
 //! Depending from which point downward you want to slice a package check out the functions:
 //!
 //! * [`SlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
@@ -77,7 +77,7 @@
 //! #    .ipv4([192,168,1,1], //source ip
 //! #          [192,168,1,2], //desitionation ip
 //! #          20)            //time to life
-//! #    .udp(21,    //source port 
+//! #    .udp(21,    //source port
 //! #         1234); //desitnation port
 //! #    //payload of the udp packet
 //! #    let payload = [1,2,3,4,5,6,7,8];
@@ -96,7 +96,7 @@
 //! }
 //! ```
 //! This option is slower then slicing when only few fields are accessed. But it can be the faster option or useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
-//! 
+//!
 //! Depending from which point downward you want to unpack a package check out the functions
 //!
 //! * [`PacketHeaders::from_ethernet_slice`] for parsing from an Ethernet II header downwards
@@ -104,10 +104,10 @@
 //! * [`PacketHeaders::from_ip_slice`] for parsing from an IPv4 or IPv6 downwards
 //!
 //! ## Manually slicing & parsing packets
-//! It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice. 
-//! 
+//! It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice.
+//!
 //! Have a look at the documentation for the <NAME>Slice.from_slice methods, if you want to create your own slices:
-//! 
+//!
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
 //! * [`DoubleVlanHeaderSlice::from_slice`]
@@ -155,30 +155,30 @@
 //!     .ipv4([192,168,1,1], //source ip
 //!           [192,168,1,2], //desitination ip
 //!           20)            //time to life
-//!     .udp(21,    //source port 
+//!     .udp(21,    //source port
 //!          1234); //desitnation port
-//! 
+//!
 //! //payload of the udp packet
 //! let payload = [1,2,3,4,5,6,7,8];
 //!
 //! //get some memory to store the result
 //! let mut result = Vec::<u8>::with_capacity(builder.size(payload.len()));
-//! 
+//!
 //! //serialize
 //! //this will automatically set all length fields, checksums and identifiers (ethertype & protocol)
 //! //before writing the packet out to "result"
 //! builder.write(&mut result, &payload).unwrap();
 //! ```
-//! 
+//!
 //! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_tcp.rs) available.
-//! 
+//!
 //! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more informations.
-//! 
+//!
 //! ## Manually serialising each header
 //! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
-//! 
+//!
 //! Read the documentations of the different methods for a more details:
-//! 
+//!
 //! * [`Ethernet2Header::write`]
 //! * [`SingleVlanHeader::write`]
 //! * [`DoubleVlanHeader::write`]
@@ -202,7 +202,7 @@
 //! * Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
 //! * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)
 //! * IEEE 802.3
-//! 
+//!
 //! # References
 //! * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
 //! * Internet Protocol, Version 6 (IPv6) Specification [RFC 8200](https://tools.ietf.org/html/rfc8200)
@@ -230,45 +230,43 @@
 //! * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 
 // # Reason for 'bool_comparison' disable:
- //
- // Clippy triggers triggers errors like the following if the warning stays enabled:
- //
- //   warning: equality checks against false can be replaced by a negation
- //     --> src/packet_decoder.rs:131:20
- //      |
- //  131 |                 if false == fragmented {
- //      |                    ^^^^^^^^^^^^^^^^^^^ help: try simplifying it as shown: `!fragmented`
- //
- //
- // I prefer to write `false == value` instead of `!value` as it
- // is more visually striking and is not as easy to overlook as the single
- // character '!'.
- #![allow(
-   clippy::bool_comparison,
- )]
+//
+// Clippy triggers triggers errors like the following if the warning stays enabled:
+//
+//   warning: equality checks against false can be replaced by a negation
+//     --> src/packet_decoder.rs:131:20
+//      |
+//  131 |                 if false == fragmented {
+//      |                    ^^^^^^^^^^^^^^^^^^^ help: try simplifying it as shown: `!fragmented`
+//
+//
+// I prefer to write `false == value` instead of `!value` as it
+// is more visually striking and is not as easy to overlook as the single
+// character '!'.
+#![allow(clippy::bool_comparison)]
 
-use std::io;
-use std::fmt;
 use std::error::Error;
+use std::fmt;
+use std::io;
 
 pub mod err;
 
 mod link;
 use crate::err::UnexpectedEndOfSliceError;
-pub use crate::link::LinkSlice;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
+pub use crate::link::LinkSlice;
 
 mod internet;
 pub use crate::internet::ip::*;
 pub use crate::internet::ip_authentication::*;
+pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;
-pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv6::*;
 pub use crate::internet::ipv6_extensions::*;
-pub use crate::internet::ipv6_raw_extension::*;
 pub use crate::internet::ipv6_fragment::*;
+pub use crate::internet::ipv6_raw_extension::*;
 
 mod transport;
 pub use crate::transport::icmp::*;
@@ -305,7 +303,7 @@ pub enum ReadError {
     ///Error when an unexpected end of a slice was reached even though more data was expected to be present.
     UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
     ///Error when a slice has a different size then expected.
-    UnexpectedLenOfSlice{ expected: usize, actual: usize },
+    UnexpectedLenOfSlice { expected: usize, actual: usize },
     ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
     ///The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
@@ -339,15 +337,16 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: value.expected_min_len + offset,
-                    actual_len: value.actual_len + offset,
-                    layer: value.layer,
-                }
-            ),
-            UnexpectedLenOfSlice{ expected, actual } => UnexpectedLenOfSlice{ expected: expected + offset, actual: actual + offset },
-            value => value
+            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: value.expected_min_len + offset,
+                actual_len: value.actual_len + offset,
+                layer: value.layer,
+            }),
+            UnexpectedLenOfSlice { expected, actual } => UnexpectedLenOfSlice {
+                expected: expected + offset,
+                actual: actual + offset,
+            },
+            value => value,
         }
     }
 
@@ -356,14 +355,14 @@ impl ReadError {
     pub fn io_error(self) -> Option<std::io::Error> {
         match self {
             ReadError::IoError(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
     /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
     pub fn unexpected_end_of_slice(self) -> Option<err::UnexpectedEndOfSliceError> {
         match self {
             ReadError::UnexpectedEndOfSlice(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -375,39 +374,39 @@ impl fmt::Display for ReadError {
         match self {
             IoError(err) => err.fmt(f),
             UnexpectedEndOfSlice(err) => err.fmt(f),
-            UnexpectedLenOfSlice{ expected, actual } => {
+            UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
-            },
-            DoubleVlanOuterNonVlanEtherType(ether_type) => { //u16
+            }
+            DoubleVlanOuterNonVlanEtherType(ether_type) => {
                 write!(f, "ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", ether_type)
-            },
-            IpUnsupportedVersion(version_number) => { // u8
+            }
+            IpUnsupportedVersion(version_number) => {
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
-            },
-            Ipv4UnexpectedVersion(version_number) => { //u8
+            }
+            Ipv4UnexpectedVersion(version_number) => {
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
-            },
-            Ipv4HeaderLengthBad(header_length) => { //u8
+            }
+            Ipv4HeaderLengthBad(header_length) => {
                 write!(f, "ReadError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
-            },
-            Ipv4TotalLengthTooSmall(total_length_field) => { //u16
+            }
+            Ipv4TotalLengthTooSmall(total_length_field) => {
                 write!(f, "ReadError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
-            },
-            Ipv6UnexpectedVersion(version_number) => { //u8
+            }
+            Ipv6UnexpectedVersion(version_number) => {
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
-            },
+            }
             Ipv6TooManyHeaderExtensions => {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
-            },
+            }
             Ipv6HopByHopHeaderNotAtStart => {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
-            },
+            }
             IpAuthenticationHeaderTooSmallPayloadLength(length) => {
                 write!(f, "ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", length)
-            },
-            TcpDataOffsetTooSmall(data_offset) => { //u8
+            }
+            TcpDataOffsetTooSmall(data_offset) => {
                 write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
-            },
+            }
             Icmpv6PacketTooBig(size) => {
                 write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
             }
@@ -420,7 +419,7 @@ impl Error for ReadError {
         match self {
             ReadError::IoError(err) => Some(err),
             ReadError::UnexpectedEndOfSlice(err) => Some(err),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -447,7 +446,7 @@ impl WriteError {
     pub fn io_error(self) -> Option<std::io::Error> {
         match self {
             WriteError::IoError(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
     /// Returns the `std::io::Error` value if the `WriteError` is an `ValueError`.
@@ -455,7 +454,7 @@ impl WriteError {
     pub fn value_error(self) -> Option<ValueError> {
         match self {
             WriteError::ValueError(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
 
@@ -463,7 +462,7 @@ impl WriteError {
     pub fn slice_too_small_size(self) -> Option<usize> {
         match self {
             WriteError::SliceTooSmall(value) => Some(value),
-            _ => None
+            _ => None,
         }
     }
 }
@@ -487,7 +486,7 @@ impl fmt::Display for WriteError {
             IoError(err) => err.fmt(f),
             ValueError(err) => {
                 write!(f, "ValueError: {}", err)
-            },
+            }
             SliceTooSmall(size) => {
                 write!(f, "SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size)
             }
@@ -501,7 +500,7 @@ impl Error for WriteError {
         match self {
             IoError(ref err) => Some(err),
             ValueError(ref err) => Some(err),
-            SliceTooSmall(_) => None
+            SliceTooSmall(_) => None,
         }
     }
 }
@@ -538,74 +537,96 @@ pub enum ValueError {
     /// Note that a the maximum size, as far as tcp is conceirned, is max_value(u16) - tcp_header.data_offset()*4. The data_offset is for the size of the udp header itself.
     TcpLengthTooLarge(usize),
     /// Error when a u8 field in a header has a larger value then supported.
-    U8TooLarge{value: u8, max: u8, field: ErrorField},
+    U8TooLarge {
+        value: u8,
+        max: u8,
+        field: ErrorField,
+    },
     /// Error when a u16 field in a header has a larger value then supported.
-    U16TooLarge{value: u16, max: u16, field: ErrorField},
+    U16TooLarge {
+        value: u16,
+        max: u16,
+        field: ErrorField,
+    },
     /// Error when a u32 field in a header has a larger value then supported.
-    U32TooLarge{value: u32, max: u32, field: ErrorField},
+    U32TooLarge {
+        value: u32,
+        max: u32,
+        field: ErrorField,
+    },
     /// Error when an Icmpv6 payload is found in an IPv4 packet.
     Icmpv6InIpv4,
 }
 
-impl Error for ValueError {
-
-}
+impl Error for ValueError {}
 
 impl fmt::Display for ValueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use ValueError::*;
         match self {
-            Ipv4OptionsLengthBad(options_len) => { //usize
+            Ipv4OptionsLengthBad(options_len) => {
                 write!(f, "Bad IPv4 'options_len'. The IPv4 options length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 40 bytes.", options_len)
-            },
-            Ipv4PayloadLengthTooLarge(total_length) => { //usize
+            }
+            Ipv4PayloadLengthTooLarge(total_length) => {
                 write!(f, "IPv4 'total_legnth' too large. The IPv4 header and payload have a larger size ({} bytes) than can be be represented by the 'total_legnth' field in the IPv4 header.", total_length)
-            },
-            Ipv6PayloadLengthTooLarge(size) => { //usize
+            }
+            Ipv6PayloadLengthTooLarge(size) => {
                 write!(f, "IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", size)
-            },
+            }
             Ipv6ExtensionPayloadTooSmall(size) => {
                 write!(f, "IPv6 extensions header payload length is too small. The payload size ({} bytes) is less then 6 octets which is the minimum IPv6 extension header payload size.", size)
-            },
+            }
             Ipv6ExtensionPayloadTooLarge(size) => {
                 write!(f, "IPv6 extensions header payload length is too large. The payload size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", size)
-            },
+            }
             Ipv6ExtensionPayloadLengthUnaligned(size) => {
                 write!(f, "IPv6 extensions header 'payload length ({} bytes) + 2' is not multiple of 8 (+ 2 for the `next_header` and `header_length` fields). This is required as the header length field can only express lengths in multiple of 8 bytes.", size)
-            },
+            }
             IpAuthenticationHeaderBadIcvLength(size) => {
                 write!(f, "IP authentication header 'raw_icv' value has a length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 1016 bytes.", size)
-            },
+            }
             Ipv4ExtensionNotReferenced(ip_protocol_number) => {
                 write!(f, "IPv4 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the 'protocol' field of the IPv4 header.", ip_protocol_number)
             }
             Ipv6ExtensionHopByHopNotAtStart => {
                 write!(f, "IPv6 extensions hop-by-hop is not located directly after the IPv6 header (required by IPv6).")
-            },
+            }
             Ipv6ExtensionNotReferenced(ip_protocol_number) => {
                 write!(f, "IPv6 extensions '{:?}' is defined but is not referenced by any of the 'next_header' of the other extension headers or the IPv6 header.", ip_protocol_number)
-            },
+            }
             Ipv6ExtensionNotDefinedReference(ip_protocol_number) => {
                 write!(f, "IPv6 extensions '{:?}' is referenced by the 'next_header' field of an extension headers or the IPv6 header but is not defined in the 'Ipv6Extensions'.", ip_protocol_number)
-            },
-            UdpPayloadLengthTooLarge(length) => { //usize
+            }
+            UdpPayloadLengthTooLarge(length) => {
                 write!(f, "UDP 'length' too large. The UDP length ({} bytes) is larger then what can be be represented by the 'length' field in the UDP header.", length)
-            }, 
-            TcpLengthTooLarge(length) => {  //usize
+            }
+            TcpLengthTooLarge(length) => {
                 write!(f, "TCP length too large. The TCP packet length ({} bytes) is larger then what is supported.", length)
-            },
-            U8TooLarge{value, max, field} => {
-                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
-            },
-            U16TooLarge{value, max, field} => {
-                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
-            },
-            U32TooLarge{value, max, field} => {
-                write!(f, "The value {} of the field '{}' is larger then the allowed maximum of {}.", value, field, max)
-            },
+            }
+            U8TooLarge { value, max, field } => {
+                write!(
+                    f,
+                    "The value {} of the field '{}' is larger then the allowed maximum of {}.",
+                    value, field, max
+                )
+            }
+            U16TooLarge { value, max, field } => {
+                write!(
+                    f,
+                    "The value {} of the field '{}' is larger then the allowed maximum of {}.",
+                    value, field, max
+                )
+            }
+            U32TooLarge { value, max, field } => {
+                write!(
+                    f,
+                    "The value {} of the field '{}' is larger then the allowed maximum of {}.",
+                    value, field, max
+                )
+            }
             Icmpv6InIpv4 => {
                 write!(f, "ICMPv6 packet can not be combined with IPv4 headers.")
-            },
+            }
         }
     }
 }
@@ -637,7 +658,7 @@ impl fmt::Display for ErrorField {
             Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
             Ipv6FragmentOffset => write!(f, "Ipv6FragmentHeader.fragment_offset"),
             VlanTagPriorityCodePoint => write!(f, "SingleVlanHeader.priority_code_point"),
-            VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier")
+            VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier"),
         }
     }
 }
@@ -647,11 +668,7 @@ fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError>
     if value <= max {
         Ok(())
     } else {
-        Err(U8TooLarge { 
-            value, 
-            max,
-            field
-        })
+        Err(U8TooLarge { value, max, field })
     }
 }
 
@@ -660,11 +677,7 @@ fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueErr
     if value <= max {
         Ok(())
     } else {
-        Err(U16TooLarge{ 
-            value, 
-            max, 
-            field
-        })
+        Err(U16TooLarge { value, max, field })
     }
 }
 
@@ -677,12 +690,7 @@ fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueErr
 /// will be triggered.
 #[inline]
 unsafe fn get_unchecked_be_u16(ptr: *const u8) -> u16 {
-    u16::from_be_bytes(
-        [
-            *ptr,
-            *ptr.add(1),
-        ]
-    )
+    u16::from_be_bytes([*ptr, *ptr.add(1)])
 }
 
 /// Helper function for reading big endian u32 values from a ptr unchecked.
@@ -694,14 +702,7 @@ unsafe fn get_unchecked_be_u16(ptr: *const u8) -> u16 {
 /// will be triggered.
 #[inline]
 unsafe fn get_unchecked_be_u32(ptr: *const u8) -> u32 {
-    u32::from_be_bytes(
-        [
-            *ptr,
-            *ptr.add(1),
-            *ptr.add(2),
-            *ptr.add(3)
-        ]
-    )
+    u32::from_be_bytes([*ptr, *ptr.add(1), *ptr.add(2), *ptr.add(3)])
 }
 
 /// Helper function for reading a 4 byte fixed-size array.
@@ -712,13 +713,8 @@ unsafe fn get_unchecked_be_u32(ptr: *const u8) -> u32 {
 /// bytes accessable via the ptr. If this is not the case undefined behavior
 /// will be triggered.
 #[inline]
-unsafe fn get_unchecked_4_byte_array(ptr: *const u8) -> [u8;4] {
-    [
-        *ptr,
-        *ptr.add(1),
-        *ptr.add(2),
-        *ptr.add(3)
-    ]
+unsafe fn get_unchecked_4_byte_array(ptr: *const u8) -> [u8; 4] {
+    [*ptr, *ptr.add(1), *ptr.add(2), *ptr.add(3)]
 }
 
 /// Helper function for reading a 6 byte fixed-size array.
@@ -729,14 +725,14 @@ unsafe fn get_unchecked_4_byte_array(ptr: *const u8) -> [u8;4] {
 /// bytes accessable via the ptr. If this is not the case undefined behavior
 /// will be triggered.
 #[inline]
-unsafe fn get_unchecked_6_byte_array(ptr: *const u8) -> [u8;6] {
+unsafe fn get_unchecked_6_byte_array(ptr: *const u8) -> [u8; 6] {
     [
         *ptr,
         *ptr.add(1),
         *ptr.add(2),
         *ptr.add(3),
         *ptr.add(4),
-        *ptr.add(5)
+        *ptr.add(5),
     ]
 }
 
@@ -748,23 +744,20 @@ unsafe fn get_unchecked_6_byte_array(ptr: *const u8) -> [u8;6] {
 /// bytes accessable via the ptr. If this is not the case undefined behavior
 /// will be triggered.
 #[inline]
-unsafe fn get_unchecked_16_byte_array(ptr: *const u8) -> [u8;16] {
+unsafe fn get_unchecked_16_byte_array(ptr: *const u8) -> [u8; 16] {
     [
         *ptr,
         *ptr.add(1),
         *ptr.add(2),
         *ptr.add(3),
-
         *ptr.add(4),
         *ptr.add(5),
         *ptr.add(6),
         *ptr.add(7),
-
         *ptr.add(8),
         *ptr.add(9),
         *ptr.add(10),
         *ptr.add(11),
-
         *ptr.add(12),
         *ptr.add(13),
         *ptr.add(14),
