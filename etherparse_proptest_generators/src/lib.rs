@@ -1,6 +1,6 @@
 use etherparse::*;
-use proptest::*;
 use proptest::prelude::*;
+use proptest::*;
 
 pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
     use ErrorField::*;
@@ -41,7 +41,7 @@ prop_compose! {
 prop_compose! {
     pub fn ethernet_2_any()
         (ether_type in any::<u16>())
-        (result in ethernet_2_with(ether_type)) 
+        (result in ethernet_2_with(ether_type))
         -> Ethernet2Header
     {
         result
@@ -53,7 +53,7 @@ pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
     ether_type::IPV6,
     ether_type::VLAN_TAGGED_FRAME,
     ether_type::PROVIDER_BRIDGING,
-    ether_type::VLAN_DOUBLE_TAGGED_FRAME
+    ether_type::VLAN_DOUBLE_TAGGED_FRAME,
 ];
 
 prop_compose! {
@@ -110,7 +110,7 @@ prop_compose! {
 prop_compose! {
     pub fn vlan_single_any()
         (ether_type in any::<u16>())
-        (result in vlan_single_with(ether_type)) 
+        (result in vlan_single_with(ether_type))
         -> SingleVlanHeader
     {
         result
@@ -120,7 +120,7 @@ prop_compose! {
 prop_compose! {
     pub fn vlan_double_any()
         (ether_type in any::<u16>())
-        (result in vlan_double_with(ether_type)) 
+        (result in vlan_double_with(ether_type))
         -> DoubleVlanHeader
     {
         result
@@ -182,7 +182,7 @@ prop_compose! {
             //set the options
             result.set_options(&options[..len]).unwrap();
         }
-        
+
         result.differentiated_services_code_point = dscp;
         result.explicit_congestion_notification = ecn;
         result.payload_len = payload_len;
@@ -202,7 +202,7 @@ prop_compose! {
 prop_compose! {
     pub fn ipv4_any()
                (protocol in any::<u8>())
-               (result in ipv4_with(protocol)) 
+               (result in ipv4_with(protocol))
                -> Ipv4Header
     {
         result
@@ -251,7 +251,7 @@ prop_compose! {
 prop_compose! {
     pub fn ipv4_extensions_any()
                (protocol in any::<u8>())
-               (result in ipv4_extensions_with(protocol)) 
+               (result in ipv4_extensions_with(protocol))
                -> Ipv4Extensions
     {
         result
@@ -272,7 +272,6 @@ prop_compose! {
         result
     }
 }
-
 
 prop_compose! {
     pub fn ipv6_with(next_header: u8)
@@ -368,7 +367,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_raw_extension_any() 
+    pub fn ipv6_raw_extension_any()
         (
             next_header in any::<u8>(),
             len in any::<u8>()
@@ -439,7 +438,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_extensions_any() 
+    pub fn ipv6_extensions_any()
         (
             next_header in any::<u8>()
         ) (
