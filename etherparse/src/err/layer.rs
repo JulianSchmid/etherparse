@@ -1,5 +1,5 @@
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Layer {
     /// Error occured in the ethernet 2 header.
     Ethernet2Header,

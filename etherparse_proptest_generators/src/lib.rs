@@ -1,4 +1,4 @@
-use super::*;
+use etherparse::*;
 use proptest::*;
 use proptest::prelude::*;
 
@@ -24,7 +24,7 @@ pub fn vlan_ethertype_any() -> impl Strategy<Value = u16> {
 }
 
 prop_compose! {
-    pub(crate) fn ethernet_2_with(ether_type: u16)(
+    pub fn ethernet_2_with(ether_type: u16)(
         source in prop::array::uniform6(any::<u8>()),
         dest in prop::array::uniform6(any::<u8>()),
         ether_type in proptest::strategy::Just(ether_type))
@@ -39,7 +39,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ethernet_2_any()
+    pub fn ethernet_2_any()
         (ether_type in any::<u16>())
         (result in ethernet_2_with(ether_type)) 
         -> Ethernet2Header
@@ -57,7 +57,7 @@ pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
 ];
 
 prop_compose! {
-    pub(crate) fn ethernet_2_unknown()(
+    pub fn ethernet_2_unknown()(
         source in prop::array::uniform6(any::<u8>()),
         dest in prop::array::uniform6(any::<u8>()),
         ether_type in any::<u16>().prop_filter("ether_type must be unknown",
@@ -73,7 +73,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn vlan_single_unknown()(
+    pub fn vlan_single_unknown()(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
         vlan_identifier in prop::bits::u16::between(0,12),
@@ -91,7 +91,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn vlan_single_with(ether_type: u16)(
+    pub fn vlan_single_with(ether_type: u16)(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
         vlan_identifier in prop::bits::u16::between(0,12),
@@ -108,7 +108,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn vlan_single_any()
+    pub fn vlan_single_any()
         (ether_type in any::<u16>())
         (result in vlan_single_with(ether_type)) 
         -> SingleVlanHeader
@@ -118,7 +118,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn vlan_double_any()
+    pub fn vlan_double_any()
         (ether_type in any::<u16>())
         (result in vlan_double_with(ether_type)) 
         -> DoubleVlanHeader
@@ -128,7 +128,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn vlan_double_with(ether_type: u16)(
+    pub fn vlan_double_with(ether_type: u16)(
         outer_ethertype in vlan_ethertype_any(),
         inner_ethertype in proptest::strategy::Just(ether_type)
     )(
@@ -143,7 +143,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv4_with(protocol: u8)
+    pub fn ipv4_with(protocol: u8)
     (
         ihl in 0u8..10,
         protocol in proptest::strategy::Just(protocol))
@@ -200,7 +200,7 @@ prop_compose! {
     }
 }
 prop_compose! {
-    pub(crate) fn ipv4_any()
+    pub fn ipv4_any()
                (protocol in any::<u8>())
                (result in ipv4_with(protocol)) 
                -> Ipv4Header
@@ -218,7 +218,7 @@ static IPV4_KNOWN_PROTOCOLS: &'static [u8] = &[
 ];
 
 prop_compose! {
-    pub(crate) fn ipv4_unknown()
+    pub fn ipv4_unknown()
         (protocol in any::<u8>().prop_filter("protocol must be unknown",
             |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
         )
@@ -230,7 +230,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv4_extensions_with(next_header: u8)
+    pub fn ipv4_extensions_with(next_header: u8)
     (
         has_auth in any::<bool>(),
         auth in ip_authentication_with(next_header)
@@ -249,7 +249,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv4_extensions_any()
+    pub fn ipv4_extensions_any()
                (protocol in any::<u8>())
                (result in ipv4_extensions_with(protocol)) 
                -> Ipv4Extensions
@@ -259,7 +259,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv4_extensions_unknown()
+    pub fn ipv4_extensions_unknown()
         (
             next_header in any::<u8>().prop_filter(
                 "next_header must be unknown",
@@ -275,7 +275,7 @@ prop_compose! {
 
 
 prop_compose! {
-    pub(crate) fn ipv6_with(next_header: u8)
+    pub fn ipv6_with(next_header: u8)
     (
         source in prop::array::uniform16(any::<u8>()),
         dest in prop::array::uniform16(any::<u8>()),
@@ -299,7 +299,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_any()
+    pub fn ipv6_any()
         (next_header in any::<u8>())
         (result in ipv6_with(next_header)
     ) -> Ipv6Header
@@ -328,7 +328,7 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [u8] = &[
 ];
 
 prop_compose! {
-    pub(crate) fn ipv6_unknown()(
+    pub fn ipv6_unknown()(
         source in prop::array::uniform16(any::<u8>()),
         dest in prop::array::uniform16(any::<u8>()),
         traffic_class in any::<u8>(),
@@ -352,7 +352,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_raw_extension_with(
+    pub fn ipv6_raw_extension_with(
         next_header: u8,
         len: u8
     ) (
@@ -368,7 +368,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_raw_extension_any() 
+    pub fn ipv6_raw_extension_any() 
         (
             next_header in any::<u8>(),
             len in any::<u8>()
@@ -381,7 +381,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_extensions_with(next_header: u8)
+    pub fn ipv6_extensions_with(next_header: u8)
     (
         has_hop_by_hop_options in any::<bool>(),
         hop_by_hop_options in ipv6_raw_extension_any(),
@@ -439,7 +439,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_extensions_any() 
+    pub fn ipv6_extensions_any() 
         (
             next_header in any::<u8>()
         ) (
@@ -451,7 +451,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_extensions_unknown()
+    pub fn ipv6_extensions_unknown()
         (
             next_header in any::<u8>().prop_filter(
                 "next_header must be unknown",
@@ -466,7 +466,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_fragment_with(
+    pub fn ipv6_fragment_with(
         next_header: u8
     ) (
         next_header in proptest::strategy::Just(next_header),
@@ -485,7 +485,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ipv6_fragment_any()
+    pub fn ipv6_fragment_any()
         (next_header in any::<u8>())
         (result in ipv6_fragment_with(next_header)
     ) -> Ipv6FragmentHeader
@@ -495,7 +495,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ip_authentication_with(
+    pub fn ip_authentication_with(
         next_header: u8
     ) (
         next_header in proptest::strategy::Just(next_header),
@@ -516,7 +516,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn ip_authentication_any() (
+    pub fn ip_authentication_any() (
         next_header in any::<u8>()
     ) (
         header in ip_authentication_with(next_header)
@@ -526,7 +526,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn udp_any()(
+    pub fn udp_any()(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
             length in any::<u16>(),
@@ -543,7 +543,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub(crate) fn tcp_any()
+    pub fn tcp_any()
         (data_offset in TCP_MINIMUM_DATA_OFFSET..(TCP_MAXIMUM_DATA_OFFSET + 1))
         (
             source_port in any::<u16>(),

@@ -4,6 +4,7 @@ use etherparse::*;
 use assert_matches::assert_matches;
 
 use std::io;
+pub use etherparse_proptest_generators::*;
 
 mod checksum;
 mod errors;
@@ -14,8 +15,6 @@ mod packet_builder;
 mod packet_decoder;
 mod packet_filter;
 mod packet_slicing;
-mod proptest_generators;
-pub use crate::proptest_generators::*;
 use proptest::prelude::*;
 mod packet_compositions;
 mod test_writer;
