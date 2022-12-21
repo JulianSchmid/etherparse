@@ -118,18 +118,22 @@ fn read_error_source() {
 
     assert!(
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error"))
-        .source().is_some()
+            .source()
+            .is_some()
     );
-    assert!(
-        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
-            expected_min_len: 0,
-            actual_len: 0,
-            layer: err::Layer::Ethernet2Header,
-        }).source().is_some()
-    );
+    assert!(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+        expected_min_len: 0,
+        actual_len: 0,
+        layer: err::Layer::Ethernet2Header,
+    })
+    .source()
+    .is_some());
 
     let none_values = [
-        UnexpectedLenOfSlice{ expected: 0, actual: 0 },
+        UnexpectedLenOfSlice {
+            expected: 0,
+            actual: 0,
+        },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
@@ -154,10 +158,15 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(
-            err::UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: err::Layer::Ethernet2Header }
-        ),
-        UnexpectedLenOfSlice{ expected: 0, actual: 0 },
+        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: err::Layer::Ethernet2Header,
+        }),
+        UnexpectedLenOfSlice {
+            expected: 0,
+            actual: 0,
+        },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4UnexpectedVersion(0),
@@ -179,9 +188,8 @@ fn read_error_debug() {
 /// Check the write error display fmt generate the expected strings
 #[test]
 fn write_error_display() {
-
-    use WriteError::{IoError, SliceTooSmall};
     use ValueError::Ipv4OptionsLengthBad;
+    use WriteError::{IoError, SliceTooSmall};
 
     //IoError
     {
@@ -227,17 +235,14 @@ fn write_error_source() {
         Some(_)
     );
 
-    assert_matches!(
-        SliceTooSmall(0).source(),
-        None
-    );
+    assert_matches!(SliceTooSmall(0).source(), None);
 }
 
 /// Check that all values return None as source
 #[test]
 fn value_error_source() {
-    use ValueError::*;
     use std::error::Error;
+    use ValueError::*;
 
     let none_values = [
         Ipv4OptionsLengthBad(0),
@@ -250,9 +255,21 @@ fn value_error_source() {
         Ipv6ExtensionNotDefinedReference(IpNumber::Icmp),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
-        U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
-        U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
-        U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U8TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
+        U16TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
+        U32TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
         Icmpv6InIpv4,
     ];
 
@@ -276,9 +293,21 @@ fn value_error_debug() {
         Ipv6ExtensionNotDefinedReference(IpNumber::Icmp),
         UdpPayloadLengthTooLarge(0),
         TcpLengthTooLarge(0),
-        U8TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
-        U16TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
-        U32TooLarge{ value:0, max:0, field:ErrorField::Ipv4Dscp },
+        U8TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
+        U16TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
+        U32TooLarge {
+            value: 0,
+            max: 0,
+            field: ErrorField::Ipv4Dscp,
+        },
         Icmpv6InIpv4,
     ];
 
@@ -423,11 +452,29 @@ fn error_field_display() {
     use ErrorField::*;
 
     assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
-    assert_eq!("Ipv4Header.differentiated_services_code_point", &format!("{}", Ipv4Dscp));
-    assert_eq!("Ipv4Header.explicit_congestion_notification", &format!("{}", Ipv4Ecn));
-    assert_eq!("Ipv4Header.fragments_offset", &format!("{}", Ipv4FragmentsOffset));
+    assert_eq!(
+        "Ipv4Header.differentiated_services_code_point",
+        &format!("{}", Ipv4Dscp)
+    );
+    assert_eq!(
+        "Ipv4Header.explicit_congestion_notification",
+        &format!("{}", Ipv4Ecn)
+    );
+    assert_eq!(
+        "Ipv4Header.fragments_offset",
+        &format!("{}", Ipv4FragmentsOffset)
+    );
     assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
-    assert_eq!("Ipv6FragmentHeader.fragment_offset", &format!("{}", Ipv6FragmentOffset));
-    assert_eq!("SingleVlanHeader.priority_code_point", &format!("{}", VlanTagPriorityCodePoint));
-    assert_eq!("SingleVlanHeader.vlan_identifier", &format!("{}", VlanTagVlanId));
+    assert_eq!(
+        "Ipv6FragmentHeader.fragment_offset",
+        &format!("{}", Ipv6FragmentOffset)
+    );
+    assert_eq!(
+        "SingleVlanHeader.priority_code_point",
+        &format!("{}", VlanTagPriorityCodePoint)
+    );
+    assert_eq!(
+        "SingleVlanHeader.vlan_identifier",
+        &format!("{}", VlanTagVlanId)
+    );
 }
