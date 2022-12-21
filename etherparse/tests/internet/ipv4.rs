@@ -1,6 +1,6 @@
 use super::super::*;
-use std::io::Cursor;
 use proptest::prelude::*;
+use std::io::Cursor;
 
 mod header {
 
@@ -8,7 +8,7 @@ mod header {
 
     #[test]
     fn default() {
-        let default : Ipv4Header = Default::default();
+        let default: Ipv4Header = Default::default();
         assert_eq!(5, default.ihl());
         assert_eq!(0, default.differentiated_services_code_point);
         assert_eq!(0, default.explicit_congestion_notification);
@@ -20,8 +20,8 @@ mod header {
         assert_eq!(0, default.time_to_live);
         assert_eq!(0, default.protocol);
         assert_eq!(0, default.header_checksum);
-        assert_eq!([0;4], default.source);
-        assert_eq!([0;4], default.destination);
+        assert_eq!([0; 4], default.source);
+        assert_eq!([0; 4], default.destination);
     }
 
     proptest! {
@@ -212,10 +212,10 @@ mod header {
 
     #[test]
     fn set_payload_len() {
-        let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0;4], [0;4]);
+        let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0; 4], [0; 4]);
 
         //add options (to make sure they are included in the calculation)
-        header.set_options(&[1,2,3,4]).unwrap();
+        header.set_options(&[1, 2, 3, 4]).unwrap();
 
         //zero check
         assert_matches!(header.set_payload_len(0), Ok(()));
@@ -227,8 +227,10 @@ mod header {
         assert_eq!(header.total_len(), std::u16::MAX);
 
         const OVER_MAX: usize = MAX + 1;
-        assert_matches!(header.set_payload_len(OVER_MAX),
-                        Err(ValueError::Ipv4PayloadLengthTooLarge(OVER_MAX)));
+        assert_matches!(
+            header.set_payload_len(OVER_MAX),
+            Err(ValueError::Ipv4PayloadLengthTooLarge(OVER_MAX))
+        );
     }
 
     #[test]
@@ -236,7 +238,7 @@ mod header {
         //length of 1
         {
             let mut header: Ipv4Header = Default::default();
-            let options = [1,2,3,4];
+            let options = [1, 2, 3, 4];
             assert_eq!(header.set_options(&options), Ok(()));
 
             assert_eq!(&options, header.options());
@@ -255,11 +257,10 @@ mod header {
         //maximum length (40)
         {
             let mut header: Ipv4Header = Default::default();
-            let options = [1,2,3,4,5,6,7,8,
-                           9,10,11,12,13,14,15,16,
-                           17,18,19,20,21,22,23,24,
-                           25,26,27,28,29,30,31,32,
-                           33,34,35,36,37,38,39,40];
+            let options = [
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+                24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+            ];
             assert_eq!(header.set_options(&options), Ok(()));
 
             assert_eq!(&options[..], header.options());
@@ -269,11 +270,10 @@ mod header {
         }
         //errors
         {
-            let buffer: [u8;50] = [0;50];
+            let buffer: [u8; 50] = [0; 50];
             for len in &[
-                1usize,2,3, //unaligned
-                5,6,7,
-                41,44 //over max
+                1usize, 2, 3, //unaligned
+                5, 6, 7, 41, 44, //over max
             ] {
                 let mut header: Ipv4Header = Default::default();
 
@@ -299,8 +299,8 @@ mod header {
             40,
             4, // ttl
             ip_number::UDP,
-            [192, 168, 1, 1], // source
-            [212, 10, 11, 123] // destination
+            [192, 168, 1, 1],   // source
+            [212, 10, 11, 123], // destination
         );
 
         //without options
@@ -322,7 +322,7 @@ mod header {
             let header = {
                 let mut header = base.clone();
                 header.payload_len = 40 - 8;
-                header.set_options(&[1,2,3,4,5,6,7,8]).unwrap();
+                header.set_options(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
                 header
             };
             assert_eq!(0xc36e, header.calc_header_checksum().unwrap());
@@ -406,7 +406,7 @@ mod header {
     fn is_fragmenting_payload() {
         // not fragmenting
         {
-            let mut header : Ipv4Header = Default::default();
+            let mut header: Ipv4Header = Default::default();
             header.fragments_offset = 0;
             header.more_fragments = false;
             assert_eq!(false, header.is_fragmenting_payload());
@@ -414,7 +414,7 @@ mod header {
 
         // fragmenting based on offset
         {
-            let mut header : Ipv4Header = Default::default();
+            let mut header: Ipv4Header = Default::default();
             header.fragments_offset = 1;
             header.more_fragments = false;
             assert!(header.is_fragmenting_payload());
@@ -422,7 +422,7 @@ mod header {
 
         // fragmenting based on more_fragments
         {
-            let mut header : Ipv4Header = Default::default();
+            let mut header: Ipv4Header = Default::default();
             header.fragments_offset = 0;
             header.more_fragments = true;
             assert!(header.is_fragmenting_payload());
@@ -438,7 +438,7 @@ mod slice {
         // not fragmenting
         {
             let buffer = {
-                let mut header : Ipv4Header = Default::default();
+                let mut header: Ipv4Header = Default::default();
                 header.fragments_offset = 0;
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
@@ -452,7 +452,7 @@ mod slice {
         // fragmenting based on offset
         {
             let buffer = {
-                let mut header : Ipv4Header = Default::default();
+                let mut header: Ipv4Header = Default::default();
                 header.fragments_offset = 1;
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
@@ -466,7 +466,7 @@ mod slice {
         // fragmenting based on more_fragments
         {
             let buffer = {
-                let mut header : Ipv4Header = Default::default();
+                let mut header: Ipv4Header = Default::default();
                 header.fragments_offset = 0;
                 header.more_fragments = true;
                 let mut buffer = Vec::with_capacity(header.header_len());
@@ -481,34 +481,25 @@ mod slice {
 
 #[test]
 fn range_errors() {
-    use crate::ValueError::*;
     use crate::ErrorField::*;
+    use crate::ValueError::*;
 
     fn test_range_methods(input: &Ipv4Header, expected: ValueError) {
         //check_ranges
-        assert_eq!(expected.clone(),
-                   input
-                   .calc_header_checksum()
-                   .unwrap_err());
+        assert_eq!(expected.clone(), input.calc_header_checksum().unwrap_err());
         //write
         {
             let mut buffer: Vec<u8> = Vec::new();
             let result = input.write(&mut buffer);
             assert_eq!(0, buffer.len());
-            assert_eq!(Some(expected.clone()),
-                       result
-                       .unwrap_err()
-                       .value_error());
+            assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
         }
         //write_raw
         {
             let mut buffer: Vec<u8> = Vec::new();
             let result = input.write_raw(&mut buffer);
             assert_eq!(0, buffer.len());
-            assert_eq!(Some(expected.clone()), 
-                       result
-                       .unwrap_err()
-                       .value_error());
+            assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
         }
     }
     //dscp
@@ -520,7 +511,11 @@ fn range_errors() {
         };
         test_range_methods(
             &value,
-            U8TooLarge{value: 0x40, max: 0x3f, field: Ipv4Dscp}
+            U8TooLarge {
+                value: 0x40,
+                max: 0x3f,
+                field: Ipv4Dscp,
+            },
         );
     }
     //ecn
@@ -532,7 +527,11 @@ fn range_errors() {
         };
         test_range_methods(
             &value,
-            U8TooLarge{value: 0x4, max: 0x3, field: Ipv4Ecn}
+            U8TooLarge {
+                value: 0x4,
+                max: 0x3,
+                field: Ipv4Ecn,
+            },
         );
     }
     //fragmentation offset
@@ -543,8 +542,12 @@ fn range_errors() {
             value
         };
         test_range_methods(
-            &value, 
-            U16TooLarge{value: 0x2000, max: 0x1FFF, field: Ipv4FragmentsOffset}
+            &value,
+            U16TooLarge {
+                value: 0x2000,
+                max: 0x1FFF,
+                field: Ipv4FragmentsOffset,
+            },
         );
     }
     //payload len
@@ -553,17 +556,20 @@ fn range_errors() {
 
         let value = {
             let mut value: Ipv4Header = Default::default();
-            value.set_options(&[1,2,3,4,5,6,7,8]).unwrap();
+            value.set_options(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
             value.payload_len = MAX_PAYLOAD_LEN + 1;
             value
         };
         test_range_methods(
-            &value, 
-            U16TooLarge{value: MAX_PAYLOAD_LEN + 1, max: MAX_PAYLOAD_LEN, field: Ipv4PayloadLength}
+            &value,
+            U16TooLarge {
+                value: MAX_PAYLOAD_LEN + 1,
+                max: MAX_PAYLOAD_LEN,
+                field: Ipv4PayloadLength,
+            },
         );
     }
 }
-
 
 proptest! {
     #[test]
@@ -627,7 +633,7 @@ proptest! {
                 ),
                 Err(Ipv4HeaderLengthBad(_))
             );
-            
+
             // from_slice
             assert_matches!(
                 Ipv4Header::from_slice(&buffer),
@@ -763,7 +769,7 @@ proptest! {
         {
             use std::net::Ipv4Addr;
             let slice = Ipv4HeaderSlice::from_slice(&buffer[..]).unwrap();
-            
+
             assert_eq!(slice.slice(), &buffer);
 
             assert_eq!(slice.version(), 4);

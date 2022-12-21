@@ -7,21 +7,45 @@ fn header_new_raw_and_set_payload() {
     use ValueError::*;
     struct Test {
         payload: &'static [u8],
-        expected: Result<(),ValueError>
+        expected: Result<(), ValueError>,
     }
 
     let tests = [
         // ok
-        Test{payload: &[1,2,3,4,5,6], expected: Ok(()) },
-        Test{payload: &[1,2,3,4,5,6,7,8,9,10,11,12,13,14], expected: Ok(()) },
-        Test{payload: &[0;0xff*8 + 6], expected: Ok(()) },
+        Test {
+            payload: &[1, 2, 3, 4, 5, 6],
+            expected: Ok(()),
+        },
+        Test {
+            payload: &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+            expected: Ok(()),
+        },
+        Test {
+            payload: &[0; 0xff * 8 + 6],
+            expected: Ok(()),
+        },
         // too small
-        Test{payload: &[1,2,3,4,5], expected: Err(Ipv6ExtensionPayloadTooSmall(5)) },
-        Test{payload: &[1,2,3,4], expected: Err(Ipv6ExtensionPayloadTooSmall(4)) },
-        Test{payload: &[1], expected: Err(Ipv6ExtensionPayloadTooSmall(1)) },
-        Test{payload: &[], expected: Err(Ipv6ExtensionPayloadTooSmall(0)) },
+        Test {
+            payload: &[1, 2, 3, 4, 5],
+            expected: Err(Ipv6ExtensionPayloadTooSmall(5)),
+        },
+        Test {
+            payload: &[1, 2, 3, 4],
+            expected: Err(Ipv6ExtensionPayloadTooSmall(4)),
+        },
+        Test {
+            payload: &[1],
+            expected: Err(Ipv6ExtensionPayloadTooSmall(1)),
+        },
+        Test {
+            payload: &[],
+            expected: Err(Ipv6ExtensionPayloadTooSmall(0)),
+        },
         // too large
-        Test{payload: &[0;0xff*8 + 7], expected: Err(Ipv6ExtensionPayloadTooLarge(0xff*8 + 7)) },
+        Test {
+            payload: &[0; 0xff * 8 + 7],
+            expected: Err(Ipv6ExtensionPayloadTooLarge(0xff * 8 + 7)),
+        },
     ];
 
     for test in tests.iter() {
@@ -33,7 +57,7 @@ fn header_new_raw_and_set_payload() {
                     let unpacked = actual.unwrap();
                     assert_eq!(123, unpacked.next_header);
                     assert_eq!(&test.payload[..], unpacked.payload());
-                },
+                }
                 Err(err) => {
                     assert_eq!(Err(err.clone()), actual);
                 }
@@ -41,16 +65,16 @@ fn header_new_raw_and_set_payload() {
         }
         // set payload
         {
-            let mut header = Ipv6RawExtensionHeader::new_raw(123, &[0;6]).unwrap();
+            let mut header = Ipv6RawExtensionHeader::new_raw(123, &[0; 6]).unwrap();
             let result = header.set_payload(test.payload);
             match &test.expected {
                 Ok(_) => {
                     assert_eq!(Ok(()), result);
                     assert_eq!(test.payload, header.payload());
-                },
+                }
                 Err(err) => {
                     assert_eq!(Err(err.clone()), result);
-                    assert_eq!(&[0;6], header.payload());
+                    assert_eq!(&[0; 6], header.payload());
                 }
             }
         }
@@ -58,7 +82,7 @@ fn header_new_raw_and_set_payload() {
 
     // unaligment errors
     {
-        let payload = [0;23];
+        let payload = [0; 23];
         for i in 7..=23 {
             if 0 != (i - 6) % 8 {
                 assert_eq!(
@@ -66,12 +90,12 @@ fn header_new_raw_and_set_payload() {
                     Ipv6RawExtensionHeader::new_raw(123, &payload[..i])
                 );
                 {
-                    let mut header = Ipv6RawExtensionHeader::new_raw(123, &[0;6]).unwrap();
+                    let mut header = Ipv6RawExtensionHeader::new_raw(123, &[0; 6]).unwrap();
                     assert_eq!(
                         Err(Ipv6ExtensionPayloadLengthUnaligned(i)),
                         header.set_payload(&payload[..i])
                     );
-                    assert_eq!(&[0;6], header.payload());
+                    assert_eq!(&[0; 6], header.payload());
                 }
             }
         }
@@ -82,41 +106,33 @@ fn header_new_raw_and_set_payload() {
 fn slice_from_slice() {
     // base test
     let data = {
-        let mut data = [0;6*8];
+        let mut data = [0; 6 * 8];
         data[0] = 1; // next header type
         data[1] = 4; // header length
         data
     };
     let actual = Ipv6RawExtensionHeaderSlice::from_slice(&data).unwrap();
     assert_eq!(1, actual.next_header());
-    assert_eq!(
-        &data[..5*8],
-        actual.slice()
-    );
-    assert_eq!(
-        &data[2..5*8],
-        actual.payload()
-    );
+    assert_eq!(&data[..5 * 8], actual.slice());
+    assert_eq!(&data[2..5 * 8], actual.payload());
 
     {
         let header = actual.to_header();
         assert_eq!(1, header.next_header);
-        assert_eq!(&data[2..5*8], header.payload());
+        assert_eq!(&data[2..5 * 8], header.payload());
     }
 }
 
 #[test]
 fn slice_from_slice_unchecked() {
     let data = {
-        let mut data = [0;6*8];
+        let mut data = [0; 6 * 8];
         data[0] = 1; // next header type
         data[1] = 4; // header length
         data
     };
-    let header = unsafe {
-        Ipv6RawExtensionHeaderSlice::from_slice_unchecked(&data)
-    };
-    assert_eq!(&data[..5*8], header.slice());
+    let header = unsafe { Ipv6RawExtensionHeaderSlice::from_slice_unchecked(&data) };
+    assert_eq!(&data[..5 * 8], header.slice());
 }
 
 #[test]
@@ -125,16 +141,22 @@ fn slice_from_slice_error() {
     // length smaller then 8
     {
         assert_eq!(
-            Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            Ipv6RawExtensionHeaderSlice::from_slice(&[0; 7])
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 8,
                 actual_len: 7,
                 layer: err::Layer::Ipv6ExtHeader
             }
         );
         assert_eq!(
-            Ipv6RawExtensionHeader::from_slice(&[0;7]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            Ipv6RawExtensionHeader::from_slice(&[0; 7])
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 8,
                 actual_len: 7,
                 layer: err::Layer::Ipv6ExtHeader
@@ -144,24 +166,30 @@ fn slice_from_slice_error() {
     // length smaller then spezified size
     {
         let data = {
-            let mut data: [u8;4*8 - 1] = [0;4*8 - 1];
+            let mut data: [u8; 4 * 8 - 1] = [0; 4 * 8 - 1];
             // set length field
             data[1] = 3;
             data
         };
         assert_eq!(
-            Ipv6RawExtensionHeaderSlice::from_slice(&data).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            Ipv6RawExtensionHeaderSlice::from_slice(&data)
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 32,
-                actual_len: 8*4 - 1,
+                actual_len: 8 * 4 - 1,
                 layer: err::Layer::Ipv6ExtHeader
             }
         );
         assert_eq!(
-            Ipv6RawExtensionHeader::from_slice(&data).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            Ipv6RawExtensionHeader::from_slice(&data)
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 32,
-                actual_len: 8*4 - 1,
+                actual_len: 8 * 4 - 1,
                 layer: err::Layer::Ipv6ExtHeader
             }
         );
@@ -174,12 +202,13 @@ fn extension_from_slice_bad_length() {
 
     //smaller then minimum extension header size (8 bytes)
     {
-        let buffer: [u8; 7] = [
-            UDP,2,0,0, 0,0,0
-        ];
+        let buffer: [u8; 7] = [UDP, 2, 0, 0, 0, 0, 0];
         assert_eq!(
-            Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            Ipv6RawExtensionHeaderSlice::from_slice(&buffer)
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 8,
                 actual_len: 7,
                 layer: err::Layer::Ipv6ExtHeader
@@ -188,18 +217,19 @@ fn extension_from_slice_bad_length() {
     }
     //smaller then specified size by length field
     {
-        let buffer: [u8; 8*3-1] = [
-            UDP,2,0,0, 0,0,0,0,
-            0,0,0,0,   0,0,0,0,
-            0,0,0,0,   0,0,0,
+        #[rustfmt::skip]
+        let buffer: [u8; 8 * 3 - 1] = [
+            UDP, 2, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0,
         ];
         // should generate an error
         let err = Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err();
         assert_eq!(
             err.unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
-                expected_min_len: 8*3,
-                actual_len: 8*3-1,
+            err::UnexpectedEndOfSliceError {
+                expected_min_len: 8 * 3,
+                actual_len: 8 * 3 - 1,
                 layer: err::Layer::Ipv6ExtHeader
             }
         );
@@ -212,10 +242,13 @@ fn header_type_supported() {
     for i in 0..0xffu8 {
         let expected = match i {
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => true,
-            _ => false
+            _ => false,
         };
         assert_eq!(expected, Ipv6RawExtensionHeader::header_type_supported(i));
-        assert_eq!(expected, Ipv6RawExtensionHeaderSlice::header_type_supported(i));
+        assert_eq!(
+            expected,
+            Ipv6RawExtensionHeaderSlice::header_type_supported(i)
+        );
     }
 }
 
@@ -258,7 +291,7 @@ fn read_errors() {
     // errors:
     // length smaller then 8
     for i in 0..8 {
-        let buffer = [0u8;7];
+        let buffer = [0u8; 7];
         let mut cursor = Cursor::new(&buffer[..i]);
         assert_matches!(
             Ipv6RawExtensionHeader::read(&mut cursor),
@@ -268,7 +301,7 @@ fn read_errors() {
     // length smaller then spezified size
     {
         let buffer = {
-            let mut buffer: [u8;4*8 - 1] = [0;4*8 - 1];
+            let mut buffer: [u8; 4 * 8 - 1] = [0; 4 * 8 - 1];
             // set length field
             buffer[1] = 3;
             buffer
@@ -334,12 +367,11 @@ fn partial_equal() {
     let a = Ipv6RawExtensionHeader::new_raw(
         123,
         &[
-                   1, 2, 3, 4, 5, 6,
-             7, 8, 9,10,11,12,13,14,
-            15,16,17,18,19,20,21,22,
-            23,24,25,26,27,28,29,30,
-        ]
-    ).unwrap();
+            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+            25, 26, 27, 28, 29, 30,
+        ],
+    )
+    .unwrap();
     assert_eq!(a, a);
 
     // non equal next_header
@@ -351,28 +383,32 @@ fn partial_equal() {
 
     // non equal payload data
     {
+        #[rustfmt::skip]
         let b = Ipv6RawExtensionHeader::new_raw(
             123,
             &[
-                       1, 2, 3, 4, 5, 6,
-                 7, 8, 9,99,11,12,13,14,
-                15,16,17,18,19,20,21,22,
-                23,24,25,26,27,28,29,30,
-            ]
-        ).unwrap();
+                         1,  2,  3,  4,  5,  6,
+                 7,  8,  9, 99, 11, 12, 13, 14,
+                15, 16, 17, 18, 19, 20, 21, 22,
+                23, 24, 25, 26, 27, 28, 29, 30,
+            ],
+        )
+        .unwrap();
         assert_ne!(a, b);
     }
 
     // non equal payload length
     {
+        #[rustfmt::skip]
         let b = Ipv6RawExtensionHeader::new_raw(
             123,
             &[
-                       1, 2, 3, 4, 5, 6,
-                 7, 8, 9,10,11,12,13,14,
-                15,16,17,18,19,20,21,22,
-            ]
-        ).unwrap();
+                         1,  2,  3,  4,  5,  6,
+                 7,  8,  9, 10, 11, 12, 13, 14,
+                15, 16, 17, 18, 19, 20, 21, 22,
+            ],
+        )
+        .unwrap();
         assert_ne!(a, b);
     }
 }
