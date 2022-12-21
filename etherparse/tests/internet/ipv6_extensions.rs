@@ -4,7 +4,7 @@ use crate::ip_number::*;
 use std::io::Cursor;
 
 // IP numbers that are assigned ipv6 header extensions.
-const EXTESION_KNOWN_IP_NUMBERS : [u8;5] = [
+const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
     AUTH,
     IPV6_DEST_OPTIONS,
     IPV6_HOP_BY_HOP,
@@ -24,15 +24,15 @@ impl ExtensionTestPayload {
         assert!(ip_numbers.len() > 1);
         assert!(header_sizes.len() > 0);
 
-        let mut result = ExtensionTestPayload{
+        let mut result = ExtensionTestPayload {
             ip_numbers: ip_numbers.to_vec(),
-            data: Vec::with_capacity((ip_numbers.len() - 1)*(0xff*8 + 8)),
+            data: Vec::with_capacity((ip_numbers.len() - 1) * (0xff * 8 + 8)),
         };
         for i in 0..ip_numbers.len() - 1 {
             result.add_payload(
                 ip_numbers[i],
                 ip_numbers[i + 1],
-                header_sizes[i % header_sizes.len()]
+                header_sizes[i % header_sizes.len()],
             )
         }
         result
@@ -44,45 +44,46 @@ impl ExtensionTestPayload {
 
     fn add_payload(&mut self, ip_number: u8, next_header: u8, header_ext_len: u8) {
         match ip_number {
-            IPV6_HOP_BY_HOP |  IPV6_ROUTE | IPV6_DEST_OPTIONS => {
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
                 // insert next header & size
-                let mut raw : [u8;0xff*8 + 8] = [0;0xff*8 + 8];
+                let mut raw: [u8; 0xff * 8 + 8] = [0; 0xff * 8 + 8];
                 raw[0] = next_header;
                 raw[1] = header_ext_len;
 
                 // insert payload
-                self.data.extend_from_slice(&raw[..8 + usize::from(header_ext_len)*8]);
-            },
+                self.data
+                    .extend_from_slice(&raw[..8 + usize::from(header_ext_len) * 8]);
+            }
             IPV6_FRAG => {
                 // generate payload
-                let mut raw : [u8;8] = [0;8];
+                let mut raw: [u8; 8] = [0; 8];
                 raw[0] = next_header;
                 raw[1] = 0;
 
                 // insert payload
                 self.data.extend_from_slice(&raw[..8]);
-            },
+            }
             AUTH => {
-                let mut raw : [u8;0xff*4 + 8] = [0;0xff*4 + 8];
+                let mut raw: [u8; 0xff * 4 + 8] = [0; 0xff * 4 + 8];
                 raw[0] = next_header;
                 // authentfication header len is defined as
                 // '32-bit words (4-byteunits), minus "2"'
                 let len = if header_ext_len > 0 {
                     raw[1] = header_ext_len;
-                    usize::from(header_ext_len)*4
+                    usize::from(header_ext_len) * 4
                 } else {
                     // auth has a minimum size of 1
                     raw[1] = 1;
                     4
                 } + 8;
                 self.data.extend_from_slice(&raw[..len]);
-            },
+            }
             _ => unreachable!(),
         }
     }
 
     /// Returns true of the payload will trigger a "hop by hop not
-    /// at start" error which is not ignored because of an early 
+    /// at start" error which is not ignored because of an early
     /// parsing abort.
     pub fn exts_hop_by_hop_error(&self) -> bool {
         struct ReadState {
@@ -104,14 +105,18 @@ impl ExtensionTestPayload {
 
         for i in 0..self.ip_numbers.len() {
             match self.ip_numbers[i] {
-                IPV6_HOP_BY_HOP => if i != 0 {
-                    return true;
-                },
-                IPV6_ROUTE => if read.routing {
-                    return false;
-                } else {
-                    read.routing = true;
-                },
+                IPV6_HOP_BY_HOP => {
+                    if i != 0 {
+                        return true;
+                    }
+                }
+                IPV6_ROUTE => {
+                    if read.routing {
+                        return false;
+                    } else {
+                        read.routing = true;
+                    }
+                }
                 IPV6_DEST_OPTIONS => {
                     // check the kind of destination options (aka is it before or after the routing header)
                     if read.routing {
@@ -130,16 +135,20 @@ impl ExtensionTestPayload {
                         }
                     }
                 }
-                IPV6_FRAG => if read.frag {
-                    return false;
-                } else {
-                    read.frag = true;
-                },
-                AUTH => if read.auth {
-                    return false;
-                } else {
-                    read.auth = true;
-                },
+                IPV6_FRAG => {
+                    if read.frag {
+                        return false;
+                    } else {
+                        read.frag = true;
+                    }
+                }
+                AUTH => {
+                    if read.auth {
+                        return false;
+                    } else {
+                        read.auth = true;
+                    }
+                }
                 _ => return false,
             }
         }
@@ -149,7 +158,6 @@ impl ExtensionTestPayload {
     /// Checks the if the extensions match the expected values based
     /// on this test payload.
     pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, u8) {
-
         struct ReadState {
             hop_by_hop: bool,
             dest_opt: bool,
@@ -176,12 +184,12 @@ impl ExtensionTestPayload {
             let mut stop = false;
             match self.ip_numbers[i] {
                 IPV6_HOP_BY_HOP => {
-                    assert!(false == read.hop_by_hop); 
+                    assert!(false == read.hop_by_hop);
                     let (header, rest) = Ipv6RawExtensionHeader::from_slice(slice).unwrap();
                     assert_eq!(&header, exts.hop_by_hop_options.as_ref().unwrap());
                     slice = rest;
                     read.hop_by_hop = true;
-                },
+                }
                 IPV6_ROUTE => {
                     if read.routing {
                         stop = true;
@@ -191,7 +199,7 @@ impl ExtensionTestPayload {
                         slice = rest;
                         read.routing = true;
                     }
-                },
+                }
                 IPV6_DEST_OPTIONS => {
                     // check the kind of destination options (aka is it before or after the routing header)
                     if read.routing {
@@ -200,7 +208,15 @@ impl ExtensionTestPayload {
                             stop = true;
                         } else {
                             let (header, rest) = Ipv6RawExtensionHeader::from_slice(slice).unwrap();
-                            assert_eq!(&header, exts.routing.as_ref().unwrap().final_destination_options.as_ref().unwrap());
+                            assert_eq!(
+                                &header,
+                                exts.routing
+                                    .as_ref()
+                                    .unwrap()
+                                    .final_destination_options
+                                    .as_ref()
+                                    .unwrap()
+                            );
                             slice = rest;
                             read.final_dest_opt = true;
                         }
@@ -226,7 +242,7 @@ impl ExtensionTestPayload {
                         slice = rest;
                         read.frag = true;
                     }
-                },
+                }
                 AUTH => {
                     if read.auth {
                         // duplicate header -> stop
@@ -237,7 +253,7 @@ impl ExtensionTestPayload {
                         slice = rest;
                         read.auth = true;
                     }
-                },
+                }
                 _ => {
                     // non extension header -> stop
                     stop = true;
@@ -262,7 +278,12 @@ impl ExtensionTestPayload {
             assert!(exts.routing.is_none());
         } else {
             if false == read.final_dest_opt {
-                assert!(exts.routing.as_ref().unwrap().final_destination_options.is_none());
+                assert!(exts
+                    .routing
+                    .as_ref()
+                    .unwrap()
+                    .final_destination_options
+                    .is_none());
             }
         }
         if false == read.frag {
@@ -288,7 +309,7 @@ impl ExtensionTestHeaders {
         assert!(ip_numbers.len() > 1);
         assert!(header_sizes.len() > 0);
 
-        let mut result = ExtensionTestHeaders{
+        let mut result = ExtensionTestHeaders {
             ip_numbers: ip_numbers.to_vec(),
             data: Default::default(),
         };
@@ -296,7 +317,7 @@ impl ExtensionTestHeaders {
             let succ = result.add_payload(
                 ip_numbers[i],
                 ip_numbers[i + 1],
-                header_sizes[i % header_sizes.len()]
+                header_sizes[i % header_sizes.len()],
             );
             if false == succ {
                 // write was not possible (duplicate)
@@ -315,28 +336,36 @@ impl ExtensionTestHeaders {
         // set the next_header of the last extension header and return the id
         use IpNumber::*;
         if self.ip_numbers.len() >= 3 {
-            match self.ip_numbers[self.ip_numbers.len()-3] {
+            match self.ip_numbers[self.ip_numbers.len() - 3] {
                 IPV6_HOP_BY_HOP => {
                     self.data.hop_by_hop_options.as_mut().unwrap().next_header = new_header;
-                },
+                }
                 IPV6_DEST_OPTIONS => {
-                    if self.ip_numbers[..self.ip_numbers.len()-3].iter().any(|&x| x == IPV6_ROUTE) {
-                        self.data.routing.as_mut().unwrap()
-                            .final_destination_options.as_mut().unwrap()
+                    if self.ip_numbers[..self.ip_numbers.len() - 3]
+                        .iter()
+                        .any(|&x| x == IPV6_ROUTE)
+                    {
+                        self.data
+                            .routing
+                            .as_mut()
+                            .unwrap()
+                            .final_destination_options
+                            .as_mut()
+                            .unwrap()
                             .next_header = new_header;
                     } else {
                         self.data.destination_options.as_mut().unwrap().next_header = new_header;
                     }
-                },
+                }
                 IPV6_ROUTE => {
                     self.data.routing.as_mut().unwrap().routing.next_header = new_header;
-                },
+                }
                 IPV6_FRAG => {
                     self.data.fragment.as_mut().unwrap().next_header = new_header;
-                },
+                }
                 AUTH => {
                     self.data.auth.as_mut().unwrap().next_header = new_header;
-                },
+                }
                 _ => unreachable!(),
             }
             match self.ip_numbers[self.ip_numbers.len() - 2] {
@@ -364,82 +393,79 @@ impl ExtensionTestHeaders {
 
     fn add_payload(&mut self, ip_number: u8, next_header: u8, header_ext_len: u8) -> bool {
         match ip_number {
-            IPV6_HOP_BY_HOP |  IPV6_ROUTE | IPV6_DEST_OPTIONS => {
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
                 use Ipv6RawExtensionHeader as R;
-                let payload : [u8;R::MAX_PAYLOAD_LEN] = [0;R::MAX_PAYLOAD_LEN];
-                let len = usize::from(header_ext_len)*8 + 6;
+                let payload: [u8; R::MAX_PAYLOAD_LEN] = [0; R::MAX_PAYLOAD_LEN];
+                let len = usize::from(header_ext_len) * 8 + 6;
 
-                let raw = Ipv6RawExtensionHeader::new_raw(
-                    next_header,
-                    &payload[..len],
-                ).unwrap();
+                let raw = Ipv6RawExtensionHeader::new_raw(next_header, &payload[..len]).unwrap();
                 match ip_number {
-                    IPV6_HOP_BY_HOP => if self.data.hop_by_hop_options.is_none() {
-                        self.data.hop_by_hop_options = Some(raw);
-                        true
-                    } else {
-                        false
-                    },
-                    IPV6_ROUTE => if self.data.routing.is_none() {
-                        self.data.routing = Some(
-                            Ipv6RoutingExtensions{
+                    IPV6_HOP_BY_HOP => {
+                        if self.data.hop_by_hop_options.is_none() {
+                            self.data.hop_by_hop_options = Some(raw);
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    IPV6_ROUTE => {
+                        if self.data.routing.is_none() {
+                            self.data.routing = Some(Ipv6RoutingExtensions {
                                 routing: raw,
                                 final_destination_options: None,
+                            });
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    IPV6_DEST_OPTIONS => {
+                        if let Some(ref mut route) = self.data.routing {
+                            if route.final_destination_options.is_none() {
+                                route.final_destination_options = Some(raw);
+                                true
+                            } else {
+                                false
                             }
-                        );
-                        true
-                    } else {
-                        false
-                    },
-                    IPV6_DEST_OPTIONS => if let Some(ref mut route) = self.data.routing {
-                        if route.final_destination_options.is_none() {
-                            route.final_destination_options = Some(raw);
-                            true
                         } else {
-                            false
+                            // dest option
+                            if self.data.destination_options.is_none() {
+                                self.data.destination_options = Some(raw);
+                                true
+                            } else {
+                                false
+                            }
                         }
-                    } else {
-                        // dest option
-                        if self.data.destination_options.is_none() {
-                            self.data.destination_options = Some(raw);
-                            true
-                        } else {
-                            false
-                        }
-                    },
+                    }
                     _ => unreachable!(),
                 }
-            },
-            IPV6_FRAG => if self.data.fragment.is_none() {
-                self.data.fragment = Some(
-                    Ipv6FragmentHeader::new(
-                        next_header, 0, true, 123
-                    )
-                );
-                true
-            } else {
-                false
-            },
-            AUTH => if self.data.auth.is_none() {
-                use IpAuthenticationHeader as A;
-
-                let mut len = usize::from(header_ext_len)*4;
-                if len > A::MAX_ICV_LEN {
-                    len = A::MAX_ICV_LEN;
+            }
+            IPV6_FRAG => {
+                if self.data.fragment.is_none() {
+                    self.data.fragment = Some(Ipv6FragmentHeader::new(next_header, 0, true, 123));
+                    true
+                } else {
+                    false
                 }
-                let raw_icv : [u8;A::MAX_ICV_LEN] = [0;A::MAX_ICV_LEN];
-                self.data.auth = Some(
-                    IpAuthenticationHeader::new(
-                        next_header,
-                        123,
-                        234,
-                        &raw_icv[..len]
-                    ).unwrap()
-                );
-                true
-            } else {
-                false
-            },
+            }
+            AUTH => {
+                if self.data.auth.is_none() {
+                    use IpAuthenticationHeader as A;
+
+                    let mut len = usize::from(header_ext_len) * 4;
+                    if len > A::MAX_ICV_LEN {
+                        len = A::MAX_ICV_LEN;
+                    }
+                    let raw_icv: [u8; A::MAX_ICV_LEN] = [0; A::MAX_ICV_LEN];
+                    self.data.auth = Some(
+                        IpAuthenticationHeader::new(next_header, 123, 234, &raw_icv[..len])
+                            .unwrap(),
+                    );
+                    true
+                } else {
+                    false
+                }
+            }
             _ => unreachable!(),
         }
     }
@@ -448,7 +474,7 @@ impl ExtensionTestHeaders {
 pub mod header {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             header_size in any::<u8>(),
@@ -486,7 +512,7 @@ pub mod header {
                     let (read_len, expected_post_header) = e.assert_extensions(&header);
                     assert_eq!(next, expected_post_header);
                     assert_eq!(rest, &e.slice()[read_len..]);
-                
+
                     // unexpected end of slice
                     assert_matches!(
                         Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
@@ -494,7 +520,7 @@ pub mod header {
                     );
                 }
             }
-            
+
             // test the parsing of different extension header combinations
             for first_header in &EXTESION_KNOWN_IP_NUMBERS {
 
@@ -524,7 +550,7 @@ pub mod header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             header_size in any::<u8>(),
@@ -563,7 +589,7 @@ pub mod header {
                     let (read_len, expected_post_header) = e.assert_extensions(&header);
                     assert_eq!(next, expected_post_header);
                     assert_eq!(cursor.position() as usize, read_len);
-                
+
                     // unexpected end of slice
                     {
                         let mut short_cursor = Cursor::new(&e.slice()[..read_len - 1]);
@@ -574,7 +600,7 @@ pub mod header {
                     }
                 }
             }
-            
+
             // test the parsing of different extension header combinations
             for first_header in &EXTESION_KNOWN_IP_NUMBERS {
 
@@ -723,7 +749,7 @@ pub mod header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             hop_by_hop_options in ipv6_raw_extension_any(),
@@ -845,7 +871,7 @@ pub mod header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn next_header(
             header_size in any::<u8>(),
@@ -932,125 +958,129 @@ pub mod header {
         // empty
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
                 fragment: None,
                 auth: None,
-            }.is_fragmenting_payload()
+            }
+            .is_fragmenting_payload()
         );
 
         // non fragmenting frag header
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
                 fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, false, 0)),
                 auth: None,
-            }.is_fragmenting_payload()
+            }
+            .is_fragmenting_payload()
         );
 
         // fragmenting frag header
-        assert!(
-            Ipv6Extensions{
-                hop_by_hop_options: None,
-                destination_options: None,
-                routing: None,
-                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)),
-                auth: None,
-            }.is_fragmenting_payload()
-        );
+        assert!(Ipv6Extensions {
+            hop_by_hop_options: None,
+            destination_options: None,
+            routing: None,
+            fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)),
+            auth: None,
+        }
+        .is_fragmenting_payload());
     }
 
     #[test]
     fn is_empty() {
         // empty
-        assert!(
-            Ipv6Extensions{
-                hop_by_hop_options: None,
-                destination_options: None,
-                routing: None,
-                fragment: None,
-                auth: None,
-            }.is_empty()
-        );
+        assert!(Ipv6Extensions {
+            hop_by_hop_options: None,
+            destination_options: None,
+            routing: None,
+            fragment: None,
+            auth: None,
+        }
+        .is_empty());
 
         // hop_by_hop_options
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: Some(
-                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap()
+                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1, 2, 3, 4, 5, 6]).unwrap()
                 ),
                 destination_options: None,
                 routing: None,
                 fragment: None,
                 auth: None,
-            }.is_empty()
+            }
+            .is_empty()
         );
 
         // destination_options
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: Some(
-                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap()
+                    Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1, 2, 3, 4, 5, 6]).unwrap()
                 ),
                 routing: None,
                 fragment: None,
                 auth: None,
-            }.is_empty()
+            }
+            .is_empty()
         );
 
         // routing
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: None,
-                routing: Some(
-                    Ipv6RoutingExtensions{
-                        routing: Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1,2,3,4,5,6]).unwrap(),
-                        final_destination_options: None,
-                    }
-                ),
+                routing: Some(Ipv6RoutingExtensions {
+                    routing: Ipv6RawExtensionHeader::new_raw(ip_number::UDP, &[1, 2, 3, 4, 5, 6])
+                        .unwrap(),
+                    final_destination_options: None,
+                }),
                 fragment: None,
                 auth: None,
-            }.is_empty()
+            }
+            .is_empty()
         );
 
         // fragment
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
                 fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)),
                 auth: None,
-            }.is_empty()
+            }
+            .is_empty()
         );
 
         // auth
         assert_eq!(
             false,
-            Ipv6Extensions{
+            Ipv6Extensions {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
                 fragment: None,
                 auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
-            }.is_empty()
+            }
+            .is_empty()
         );
     }
 
     #[test]
     fn debug() {
-        let a : Ipv6Extensions = Default::default();
+        let a: Ipv6Extensions = Default::default();
         assert_eq!(
             &format!(
                 "Ipv6Extensions {{ hop_by_hop_options: {:?}, destination_options: {:?}, routing: {:?}, fragment: {:?}, auth: {:?} }}",
@@ -1066,13 +1096,13 @@ pub mod header {
 
     #[test]
     fn clone_eq() {
-        let a : Ipv6Extensions = Default::default();
+        let a: Ipv6Extensions = Default::default();
         assert_eq!(a, a.clone());
     }
 
     #[test]
     fn default() {
-        let a : Ipv6Extensions = Default::default();
+        let a: Ipv6Extensions = Default::default();
         assert_eq!(a.hop_by_hop_options, None);
         assert_eq!(a.destination_options, None);
         assert_eq!(a.routing, None);
@@ -1083,8 +1113,8 @@ pub mod header {
 
 pub mod slice {
     use super::*;
-    
-    proptest!{
+
+    proptest! {
         #[test]
         fn from_slice(
             header_size in any::<u8>(),
@@ -1125,7 +1155,7 @@ pub mod slice {
                     assert_eq!(header.slice(), e.slice());
                     assert_eq!(next, *ip_numbers.last().unwrap());
                     assert_eq!(rest, &e.slice()[e.slice().len()..]);
-                
+
                     // unexpected end of slice
                     assert_matches!(
                         Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
@@ -1133,7 +1163,7 @@ pub mod slice {
                     );
                 }
             }
-            
+
             // test the parsing of different extension header combinations
             for first_header in &EXTESION_KNOWN_IP_NUMBERS {
 
@@ -1163,7 +1193,7 @@ pub mod slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn is_fragmenting_payload(
             hop_by_hop_options in ipv6_raw_extension_any(),
@@ -1233,30 +1263,27 @@ pub mod slice {
     fn is_empty() {
         // empty
         {
-            let slice = Ipv6ExtensionsSlice::from_slice(
-                ip_number::UDP,
-                &[]
-            ).unwrap().0;
+            let slice = Ipv6ExtensionsSlice::from_slice(ip_number::UDP, &[])
+                .unwrap()
+                .0;
             assert!(slice.is_empty());
         }
 
         // fragment
         {
-            let bytes = Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0).to_bytes().unwrap();
-            let slice = Ipv6ExtensionsSlice::from_slice(
-                ip_number::IPV6_FRAG,
-                &bytes
-            ).unwrap().0;
-            assert_eq!(
-                false,
-                slice.is_empty()
-            );
+            let bytes = Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0)
+                .to_bytes()
+                .unwrap();
+            let slice = Ipv6ExtensionsSlice::from_slice(ip_number::IPV6_FRAG, &bytes)
+                .unwrap()
+                .0;
+            assert_eq!(false, slice.is_empty());
         }
     }
 
     #[test]
     fn debug() {
-        let a : Ipv6ExtensionsSlice = Default::default();
+        let a: Ipv6ExtensionsSlice = Default::default();
         assert_eq!(
             "Ipv6ExtensionsSlice { first_header: None, fragmented: false, slice: [] }",
             &format!("{:?}", a)
@@ -1265,13 +1292,13 @@ pub mod slice {
 
     #[test]
     fn clone_eq() {
-        let a : Ipv6ExtensionsSlice = Default::default();
+        let a: Ipv6ExtensionsSlice = Default::default();
         assert_eq!(a, a.clone());
     }
 
     #[test]
     fn default() {
-        let a : Ipv6ExtensionsSlice = Default::default();
+        let a: Ipv6ExtensionsSlice = Default::default();
         assert_eq!(a.is_fragmenting_payload(), false);
         assert_eq!(a.first_header(), None);
         assert_eq!(a.slice().len(), 0);
@@ -1283,18 +1310,14 @@ pub mod ipv6_routing_extension {
 
     #[test]
     fn debug() {
-        let a : Ipv6RoutingExtensions = Ipv6RoutingExtensions{
-            routing: Ipv6RawExtensionHeader::new_raw(
-                0,
-                &[0;6],
-            ).unwrap(),
+        let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
+            routing: Ipv6RawExtensionHeader::new_raw(0, &[0; 6]).unwrap(),
             final_destination_options: None,
         };
         assert_eq!(
             &format!(
                 "Ipv6RoutingExtensions {{ routing: {:?}, final_destination_options: {:?} }}",
-                a.routing,
-                a.final_destination_options,
+                a.routing, a.final_destination_options,
             ),
             &format!("{:?}", a)
         );
@@ -1302,11 +1325,8 @@ pub mod ipv6_routing_extension {
 
     #[test]
     fn clone_eq() {
-        let a : Ipv6RoutingExtensions = Ipv6RoutingExtensions{
-            routing: Ipv6RawExtensionHeader::new_raw(
-                0,
-                &[0;6],
-            ).unwrap(),
+        let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
+            routing: Ipv6RawExtensionHeader::new_raw(0, &[0; 6]).unwrap(),
             final_destination_options: None,
         };
         assert_eq!(a, a.clone());
@@ -1320,7 +1340,7 @@ pub mod ipv6_extension_slice {
     fn debug() {
         use Ipv6ExtensionSlice::*;
         {
-            let header = Ipv6RawExtensionHeader::new_raw(UDP, &[1,2,3,4,5,6]).unwrap();
+            let header = Ipv6RawExtensionHeader::new_raw(UDP, &[1, 2, 3, 4, 5, 6]).unwrap();
             let mut buffer = Vec::with_capacity(header.header_len());
             header.write(&mut buffer).unwrap();
             let slice = Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap();
@@ -1348,7 +1368,7 @@ pub mod ipv6_extension_slice {
             );
         }
         {
-            let header = IpAuthenticationHeader::new(UDP, 1, 2, &[1,2,3,4]).unwrap();
+            let header = IpAuthenticationHeader::new(UDP, 1, 2, &[1, 2, 3, 4]).unwrap();
             let mut buffer = Vec::with_capacity(header.header_len());
             header.write(&mut buffer).unwrap();
             let slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
@@ -1363,11 +1383,11 @@ pub mod ipv6_extension_slice {
     fn clone_eq() {
         use Ipv6ExtensionSlice::*;
 
-        let header = Ipv6RawExtensionHeader::new_raw(UDP, &[1,2,3,4,5,6]).unwrap();
+        let header = Ipv6RawExtensionHeader::new_raw(UDP, &[1, 2, 3, 4, 5, 6]).unwrap();
         let mut buffer = Vec::with_capacity(header.header_len());
         header.write(&mut buffer).unwrap();
         let slice = Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap();
-        
+
         let hop = HopByHop(slice.clone());
         assert_eq!(hop.clone(), hop.clone());
 
@@ -1383,12 +1403,12 @@ pub mod slice_iter {
 
     #[test]
     fn into_iter() {
-        let a : Ipv6ExtensionsSlice = Default::default();
+        let a: Ipv6ExtensionsSlice = Default::default();
         let mut iter = a.into_iter();
         assert_eq!(None, iter.next());
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn next(
             header_size in any::<u8>(),
@@ -1452,7 +1472,7 @@ pub mod slice_iter {
                     assert_eq!(None, iter.next());
                 }
             }
-            
+
             // test the parsing of different extension header combinations
             for first_header in &EXTESION_KNOWN_IP_NUMBERS {
 
@@ -1484,7 +1504,7 @@ pub mod slice_iter {
 
     #[test]
     fn debug() {
-        let a : Ipv6ExtensionSliceIter = Default::default();
+        let a: Ipv6ExtensionSliceIter = Default::default();
         assert_eq!(
             "Ipv6ExtensionSliceIter { next_header: 59, rest: [] }",
             &format!("{:?}", a)
@@ -1493,13 +1513,13 @@ pub mod slice_iter {
 
     #[test]
     fn clone_eq() {
-        let a : Ipv6ExtensionSliceIter = Default::default();
+        let a: Ipv6ExtensionSliceIter = Default::default();
         assert_eq!(a.clone(), a);
     }
 
     #[test]
     fn default() {
-        let mut a : Ipv6ExtensionSliceIter = Default::default();
+        let mut a: Ipv6ExtensionSliceIter = Default::default();
         assert_eq!(None, a.next());
     }
 }

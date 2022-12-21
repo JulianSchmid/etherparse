@@ -8,12 +8,7 @@ pub mod header {
 
     #[test]
     fn from_slice() {
-        let auth_header = IpAuthenticationHeader::new(
-            UDP,
-            0,
-            0,
-            &[]
-        ).unwrap();
+        let auth_header = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
 
         let buffer = {
             let mut buffer = Vec::with_capacity(auth_header.header_len());
@@ -25,10 +20,7 @@ pub mod header {
 
         // no auth header
         {
-            let (header, next, rest) = Ipv4Extensions::from_slice(
-                TCP,
-                &buffer
-            ).unwrap();
+            let (header, next, rest) = Ipv4Extensions::from_slice(TCP, &buffer).unwrap();
             assert!(header.auth.is_none());
             assert_eq!(TCP, next);
             assert_eq!(rest, &buffer);
@@ -36,25 +28,20 @@ pub mod header {
 
         // with auth header
         {
-            let (actual, next, rest) = Ipv4Extensions::from_slice(
-                AUTH,
-                &buffer
-            ).unwrap();
+            let (actual, next, rest) = Ipv4Extensions::from_slice(AUTH, &buffer).unwrap();
             assert_eq!(actual.auth.unwrap(), auth_header);
             assert_eq!(UDP, next);
             assert_eq!(rest, &buffer[auth_header.header_len()..]);
         }
-        
+
         // too small
         {
-            let err = Ipv4Extensions::from_slice(
-                AUTH,
-                &buffer[..auth_header.header_len() - 1]
-            ).unwrap_err();
+            let err = Ipv4Extensions::from_slice(AUTH, &buffer[..auth_header.header_len() - 1])
+                .unwrap_err();
             const AUTH_HEADER_LEN: usize = 12;
             assert_eq!(
                 err.unexpected_end_of_slice().unwrap(),
-                err::UnexpectedEndOfSliceError{
+                err::UnexpectedEndOfSliceError {
                     expected_min_len: AUTH_HEADER_LEN,
                     actual_len: auth_header.header_len() - 1,
                     layer: err::Layer::IpAuthHeader,
@@ -115,24 +102,21 @@ pub mod header {
         // None
         {
             let mut buffer = Vec::new();
-            Ipv4Extensions{
-                auth: None,
-            }.write(&mut buffer, UDP).unwrap();
+            Ipv4Extensions { auth: None }
+                .write(&mut buffer, UDP)
+                .unwrap();
             assert_eq!(0, buffer.len());
         }
 
         // Some
-        let auth_header = IpAuthenticationHeader::new(
-            UDP,
-            0,
-            0,
-            &[]
-        ).unwrap();
+        let auth_header = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
         {
             let mut buffer = Vec::with_capacity(auth_header.header_len());
-            Ipv4Extensions{
+            Ipv4Extensions {
                 auth: Some(auth_header.clone()),
-            }.write(&mut buffer, AUTH).unwrap();
+            }
+            .write(&mut buffer, AUTH)
+            .unwrap();
             let (read_header, _) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
             assert_eq!(auth_header, read_header);
         }
@@ -140,27 +124,27 @@ pub mod header {
         // Some bad start number
         {
             let mut buffer = Vec::new();
-            let err = Ipv4Extensions{
+            let err = Ipv4Extensions {
                 auth: Some(auth_header.clone()),
-            }.write(&mut buffer, UDP).unwrap_err();
+            }
+            .write(&mut buffer, UDP)
+            .unwrap_err();
             assert_matches!(
                 err,
-                WriteError::ValueError(
-                    ValueError::Ipv4ExtensionNotReferenced(
-                        IpNumber::AuthenticationHeader
-                    )
-                )
+                WriteError::ValueError(ValueError::Ipv4ExtensionNotReferenced(
+                    IpNumber::AuthenticationHeader
+                ))
             );
         }
 
         // Some: Write error
         {
-            let mut writer = TestWriter::with_max_size(
-                auth_header.header_len() - 1
-            );
-            let err = Ipv4Extensions{
+            let mut writer = TestWriter::with_max_size(auth_header.header_len() - 1);
+            let err = Ipv4Extensions {
                 auth: Some(auth_header.clone()),
-            }.write(&mut writer, AUTH).unwrap_err();
+            }
+            .write(&mut writer, AUTH)
+            .unwrap_err();
             assert_eq!(
                 std::io::ErrorKind::UnexpectedEof,
                 err.io_error().unwrap().kind()
@@ -171,41 +155,22 @@ pub mod header {
     #[test]
     fn header_len() {
         // None
-        assert_eq!(
-            0,
-            Ipv4Extensions{
-                auth: None,
-            }.header_len()
-        );
+        assert_eq!(0, Ipv4Extensions { auth: None }.header_len());
 
         // Some
         {
-            let auth = IpAuthenticationHeader::new(
-                UDP,
-                0,
-                0,
-                &[]
-            ).unwrap();
+            let auth = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
             assert_eq!(
                 auth.header_len(),
-                Ipv4Extensions{
-                    auth: Some(auth),
-                }.header_len()
+                Ipv4Extensions { auth: Some(auth) }.header_len()
             );
         }
         // Some with paylaod
         {
-            let auth = IpAuthenticationHeader::new(
-                UDP,
-                0,
-                0,
-                &[ 1, 2, 3, 4 ]
-            ).unwrap();
+            let auth = IpAuthenticationHeader::new(UDP, 0, 0, &[1, 2, 3, 4]).unwrap();
             assert_eq!(
                 auth.header_len(),
-                Ipv4Extensions{
-                    auth: Some(auth),
-                }.header_len()
+                Ipv4Extensions { auth: Some(auth) }.header_len()
             );
         }
     }
@@ -214,23 +179,14 @@ pub mod header {
     fn set_next_headers() {
         // None
         {
-            let mut exts = Ipv4Extensions{
-                auth: None,
-            };
+            let mut exts = Ipv4Extensions { auth: None };
             assert_eq!(UDP, exts.set_next_headers(UDP));
         }
 
         // Some
         {
-            let mut exts = Ipv4Extensions{
-                auth: Some(
-                    IpAuthenticationHeader::new(
-                        TCP,
-                        0,
-                        0,
-                        &[]
-                    ).unwrap()
-                ),
+            let mut exts = Ipv4Extensions {
+                auth: Some(IpAuthenticationHeader::new(TCP, 0, 0, &[]).unwrap()),
             };
             assert_eq!(TCP, exts.auth.as_ref().unwrap().next_header);
             // change from TCP to UDP
@@ -244,22 +200,13 @@ pub mod header {
     fn next_header() {
         // None
         {
-            let exts = Ipv4Extensions{
-                auth: None,
-            };
+            let exts = Ipv4Extensions { auth: None };
             assert_eq!(UDP, exts.next_header(UDP).unwrap());
         }
         // Some
         {
-            let exts = Ipv4Extensions{
-                auth: Some(
-                    IpAuthenticationHeader::new(
-                        TCP,
-                        0,
-                        0,
-                        &[]
-                    ).unwrap()
-                ),
+            let exts = Ipv4Extensions {
+                auth: Some(IpAuthenticationHeader::new(TCP, 0, 0, &[]).unwrap()),
             };
 
             // auth referenced
@@ -267,9 +214,7 @@ pub mod header {
 
             // auth not referenced (error)
             assert_eq!(
-                ValueError::Ipv4ExtensionNotReferenced(
-                    IpNumber::AuthenticationHeader
-                ),
+                ValueError::Ipv4ExtensionNotReferenced(IpNumber::AuthenticationHeader),
                 exts.next_header(TCP).unwrap_err()
             );
         }
@@ -278,18 +223,15 @@ pub mod header {
     #[test]
     fn is_empty() {
         // empty
-        assert!(
-            Ipv4Extensions{
-                auth: None,
-            }.is_empty()
-        );
+        assert!(Ipv4Extensions { auth: None }.is_empty());
 
         // auth
         assert_eq!(
             false,
-            Ipv4Extensions{
+            Ipv4Extensions {
                 auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
-            }.is_empty()
+            }
+            .is_empty()
         );
     }
 
@@ -335,7 +277,7 @@ pub mod header {
                     }
                 );
             }
-            
+
             // Some
             {
                 let header = Ipv4Extensions{
@@ -449,11 +391,7 @@ mod slice {
     #[test]
     fn is_empty() {
         // empty
-        assert!(
-            Ipv4ExtensionsSlice{
-                auth: None,
-            }.is_empty()
-        );
+        assert!(Ipv4ExtensionsSlice { auth: None }.is_empty());
 
         // auth
         {
@@ -465,9 +403,10 @@ mod slice {
             };
             assert_eq!(
                 false,
-                Ipv4ExtensionsSlice{
+                Ipv4ExtensionsSlice {
                     auth: Some(IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap()),
-                }.is_empty()
+                }
+                .is_empty()
             );
         }
     }
@@ -520,7 +459,7 @@ mod slice {
                     }
                 );
             }
-            
+
             // Some
             {
                 let buffer = {

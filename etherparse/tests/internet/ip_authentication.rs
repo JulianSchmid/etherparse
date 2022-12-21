@@ -8,23 +8,50 @@ fn new_and_set_icv() {
 
     struct Test {
         icv: &'static [u8],
-        ok: bool
+        ok: bool,
     }
 
     let tests = [
         // ok
-        Test{ icv: &[], ok: true },
-        Test{ icv: &[1,2,3,4], ok: true },
-        Test{ icv: &[1,2,3,4,5,6,7,8], ok: true },
-        Test{ icv: &[1,2,3,4,5,6,7,8,9,10,11,12], ok: true },
-        Test{ icv: &[0;0xfe*4], ok: true },
+        Test { icv: &[], ok: true },
+        Test {
+            icv: &[1, 2, 3, 4],
+            ok: true,
+        },
+        Test {
+            icv: &[1, 2, 3, 4, 5, 6, 7, 8],
+            ok: true,
+        },
+        Test {
+            icv: &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+            ok: true,
+        },
+        Test {
+            icv: &[0; 0xfe * 4],
+            ok: true,
+        },
         // unaligned
-        Test{ icv: &[1], ok: false },
-        Test{ icv: &[1,2,3], ok: false },
-        Test{ icv: &[1,2,3,4,5], ok: false },
-        Test{ icv: &[1,2,3,4,5,6,7], ok: false },
+        Test {
+            icv: &[1],
+            ok: false,
+        },
+        Test {
+            icv: &[1, 2, 3],
+            ok: false,
+        },
+        Test {
+            icv: &[1, 2, 3, 4, 5],
+            ok: false,
+        },
+        Test {
+            icv: &[1, 2, 3, 4, 5, 6, 7],
+            ok: false,
+        },
         // too big
-        Test{ icv: &[0;0xff*4], ok: false },
+        Test {
+            icv: &[0; 0xff * 4],
+            ok: false,
+        },
     ];
 
     for test in tests.iter() {
@@ -38,15 +65,12 @@ fn new_and_set_icv() {
                 assert_eq!(7, unwrapped.sequence_number);
                 assert_eq!(test.icv, unwrapped.raw_icv());
             } else {
-                assert_eq!(
-                    Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())),
-                    a
-                );
+                assert_eq!(Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())), a);
             }
         }
         // set_raw_icv
         {
-            let mut header = IpAuthenticationHeader::new(5, 6, 7, &[0;4]).unwrap();
+            let mut header = IpAuthenticationHeader::new(5, 6, 7, &[0; 4]).unwrap();
             let result = header.set_raw_icv(test.icv);
             assert_eq!(5, header.next_header);
             assert_eq!(6, header.spi);
@@ -59,7 +83,7 @@ fn new_and_set_icv() {
                     Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())),
                     result
                 );
-                assert_eq!(&[0;4], header.raw_icv());
+                assert_eq!(&[0; 4], header.raw_icv());
             }
         }
     }
@@ -93,7 +117,7 @@ proptest! {
 fn from_slice_bad_header_len() {
     use ReadError::*;
 
-    let data = [0;16];
+    let data = [0; 16];
     assert_matches!(
         IpAuthenticationHeaderSlice::from_slice(&data[..]),
         Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
@@ -182,25 +206,25 @@ proptest! {
 /// Test that an IoError is correctly forwarded
 #[test]
 pub fn write_io_error() {
-    let header = IpAuthenticationHeader::new(
-        1,
-        2,
-        3,
-        &[4,5,6,7]
-    ).unwrap();
+    let header = IpAuthenticationHeader::new(1, 2, 3, &[4, 5, 6, 7]).unwrap();
     // iterate through all too short lenghts
     for len in 0..header.header_len() {
         let mut writer = TestWriter::with_max_size(len);
         assert_eq!(
             writer.error_kind(),
-            header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
+            header
+                .write(&mut writer)
+                .unwrap_err()
+                .io_error()
+                .unwrap()
+                .kind()
         );
     }
 }
 
 #[test]
 pub fn read_too_small_payload_len() {
-    let input = [0u8;16]; // the 2nd
+    let input = [0u8; 16]; // the 2nd
     let mut cursor = Cursor::new(&input);
     assert_matches!(
         IpAuthenticationHeader::read(&mut cursor),
@@ -211,24 +235,24 @@ pub fn read_too_small_payload_len() {
 /// Dummy test for the clone function
 #[test]
 pub fn clone() {
-    let a = IpAuthenticationHeader::new(0,0,0,&[0;4]);
+    let a = IpAuthenticationHeader::new(0, 0, 0, &[0; 4]);
     assert_eq!(a.clone(), a);
 }
 
 #[test]
 pub fn partial_eq() {
-    let a = IpAuthenticationHeader::new(0,0,0,&[0;4]);
-    
+    let a = IpAuthenticationHeader::new(0, 0, 0, &[0; 4]);
+
     //equal
-    assert!(a == IpAuthenticationHeader::new(0,0,0,&[0;4]));
+    assert!(a == IpAuthenticationHeader::new(0, 0, 0, &[0; 4]));
 
     //not equal tests
-    assert!(a != IpAuthenticationHeader::new(1,0,0,&[0;4]));
-    assert!(a != IpAuthenticationHeader::new(0,1,0,&[0;4]));
-    assert!(a != IpAuthenticationHeader::new(0,0,1,&[0;4]));
-    assert!(a != IpAuthenticationHeader::new(0,0,0,&[0,1,0,0]));
-    assert!(a != IpAuthenticationHeader::new(0,0,1,&[]));
-    assert!(a != IpAuthenticationHeader::new(0,0,1,&[0;8]));
+    assert!(a != IpAuthenticationHeader::new(1, 0, 0, &[0; 4]));
+    assert!(a != IpAuthenticationHeader::new(0, 1, 0, &[0; 4]));
+    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[0; 4]));
+    assert!(a != IpAuthenticationHeader::new(0, 0, 0, &[0, 1, 0, 0]));
+    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[]));
+    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[0; 8]));
 }
 
 proptest! {

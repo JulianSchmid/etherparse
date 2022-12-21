@@ -5,7 +5,7 @@ mod ip_header {
     use crate::ip_number::*;
     use std::io::Cursor;
 
-    const EXTESION_KNOWN_IP_NUMBERS : [u8;5] = [
+    const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
         AUTH,
         IPV6_DEST_OPTIONS,
         IPV6_HOP_BY_HOP,
@@ -17,11 +17,7 @@ mod ip_header {
         IpHeader::Version4(
             {
                 let mut v4 = v4.clone();
-                v4.protocol = if ext.auth.is_some() {
-                    AUTH
-                } else {
-                    UDP
-                };
+                v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
                 v4.header_checksum = v4.calc_header_checksum().unwrap();
                 v4
             },
@@ -45,7 +41,7 @@ mod ip_header {
         )
     }
 
-    proptest!{
+    proptest! {
         #[test]
         #[allow(deprecated)]
         fn read_from_slice(
@@ -63,7 +59,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             v4 in ipv4_any(),
@@ -121,7 +117,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             v4 in ipv4_any(),
@@ -185,7 +181,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(
             v4 in ipv4_any(),
@@ -251,7 +247,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             v4 in ipv4_any(),
@@ -270,7 +266,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn next_header(
             v4 in ipv4_any(),
@@ -303,7 +299,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn set_payload_len(
             v4 in ipv4_any(),
@@ -379,7 +375,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(
             v4 in ipv4_any(),
@@ -406,7 +402,7 @@ mod ip_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(
             v4 in ipv4_any(),
@@ -434,10 +430,10 @@ mod ip_header {
             payload_length: 0x8021,
             next_header: 30,
             hop_limit: 40,
-            source: [1, 2, 3, 4, 5, 6, 7, 8,
-                     9,10,11,12,13,14,15,16],
-            destination: [21,22,23,24,25,26,27,28,
-                          29,30,31,32,33,34,35,36]
+            source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+            destination: [
+                21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+            ],
         };
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(20);
@@ -450,7 +446,10 @@ mod ip_header {
         //deserialize with read
         {
             let mut cursor = Cursor::new(&buffer);
-            assert_matches!(IpHeader::read(&mut cursor), Err(ReadError::IpUnsupportedVersion(0xf)));
+            assert_matches!(
+                IpHeader::read(&mut cursor),
+                Err(ReadError::IpUnsupportedVersion(0xf))
+            );
         }
 
         //deserialize with read_from_slice
@@ -458,11 +457,18 @@ mod ip_header {
             IpHeader::from_slice(&buffer),
             Err(ReadError::IpUnsupportedVersion(0xf))
         );
-        //also check that an error is thrown when the slice is too small 
+        //also check that an error is thrown when the slice is too small
         //to even read the version
         assert_eq!(
-            IpHeader::from_slice(&buffer[buffer.len()..]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{ expected_min_len: 1, actual_len: 0, layer: err::Layer::IpHeader }
+            IpHeader::from_slice(&buffer[buffer.len()..])
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
+                expected_min_len: 1,
+                actual_len: 0,
+                layer: err::Layer::IpHeader
+            }
         );
     }
 } // mod ip_header
@@ -472,8 +478,8 @@ mod ip_number {
 
     #[test]
     fn is_ipv6_ext_header_value() {
-        use crate::IpNumber;
         use crate::ip_number::*;
+        use crate::IpNumber;
         let ext_ids = [
             IPV6_HOP_BY_HOP,
             IPV6_ROUTE,
@@ -485,14 +491,11 @@ mod ip_number {
             HIP,
             SHIM6 as u8,
             EXP0 as u8,
-            EXP1 as u8
+            EXP1 as u8,
         ];
 
         for i in 0..std::u8::MAX {
-            assert_eq!(
-                ext_ids.contains(&i),
-                IpNumber::is_ipv6_ext_header_value(i)
-            );
+            assert_eq!(ext_ids.contains(&i), IpNumber::is_ipv6_ext_header_value(i));
         }
     }
 
@@ -539,5 +542,4 @@ mod ip_number {
         let value = IpNumber::IPv6HeaderHopByHop;
         assert_eq!(value, value.clone());
     }
-
 } // mod ip_number

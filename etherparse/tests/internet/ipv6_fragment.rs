@@ -146,7 +146,7 @@ pub mod header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn is_fragmenting_payload(
             non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
