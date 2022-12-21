@@ -2,22 +2,22 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the ip header version field is not equal 4. The value is the version that was received.
-    UnexpectedVersion{
+    UnexpectedVersion {
         /// The unexpected version number that was not 4.
         version_number: u8,
     },
-    
+
     /// Error when the ipv4 internet header length is smaller then the header itself (5).
-    HeaderLengthSmallerThanHeader{
+    HeaderLengthSmallerThanHeader {
         /// The internet header length that was too small.
         ihl: u8,
     },
 
     /// Error when the total length of the ipv4 packet is smaller then the ipv4 header itself.
-    TotalLengthSmallerThanHeader{
+    TotalLengthSmallerThanHeader {
         /// The total length value present in the header that was smaller then the header itself.
         total_length: u16,
-        /// The minimum expected length based on the 
+        /// The minimum expected length based on the
         min_expected_length: u16,
     },
 }
@@ -39,12 +39,15 @@ impl std::error::Error for HeaderError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use std::{error::Error, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
-    use super::{*, HeaderError::*};
-    
+    use super::{HeaderError::*, *};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        error::Error,
+        hash::{Hash, Hasher},
+    };
+
     #[test]
     fn debug() {
         assert_eq!(
@@ -89,9 +92,12 @@ mod tests {
     #[test]
     fn source() {
         let values = [
-            UnexpectedVersion{ version_number: 0 },
-            HeaderLengthSmallerThanHeader{ ihl: 0 },
-            TotalLengthSmallerThanHeader{ total_length: 0, min_expected_length: 0 },
+            UnexpectedVersion { version_number: 0 },
+            HeaderLengthSmallerThanHeader { ihl: 0 },
+            TotalLengthSmallerThanHeader {
+                total_length: 0,
+                min_expected_length: 0,
+            },
         ];
         for v in values {
             assert!(v.source().is_none());

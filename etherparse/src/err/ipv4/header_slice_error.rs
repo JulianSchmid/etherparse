@@ -1,5 +1,5 @@
-use crate::err::UnexpectedEndOfSliceError;
 use super::HeaderError;
+use crate::err::UnexpectedEndOfSliceError;
 
 /// Error when decoding the IPv4 part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -32,10 +32,14 @@ impl std::error::Error for HeaderSliceError {
 
 #[cfg(test)]
 mod tests {
-    use std::{error::Error, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
+    use super::{HeaderSliceError::*, *};
     use crate::err::Layer;
-    use super::{*, HeaderSliceError::*};
-    
+    use std::{
+        collections::hash_map::DefaultHasher,
+        error::Error,
+        hash::{Hash, Hasher},
+    };
+
     #[test]
     fn debug() {
         let err = HeaderError::UnexpectedVersion { version_number: 6 };
@@ -75,18 +79,23 @@ mod tests {
         );
         {
             let err = HeaderError::UnexpectedVersion { version_number: 6 };
-            assert_eq!(
-                format!("{}", &err),
-                format!("{}", Content(err.clone()))
-            );
+            assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
 
     #[test]
     fn source() {
-        assert!(UnexpectedEndOfSlice(
-            UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: Layer::Ipv4Header }
-        ).source().is_none());
-        assert!(Content(HeaderError::UnexpectedVersion { version_number: 6 }).source().is_some());
+        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: Layer::Ipv4Header
+        })
+        .source()
+        .is_none());
+        assert!(
+            Content(HeaderError::UnexpectedVersion { version_number: 6 })
+                .source()
+                .is_some()
+        );
     }
 }
