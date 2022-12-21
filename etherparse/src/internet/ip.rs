@@ -5,16 +5,12 @@ use super::super::*;
 #[allow(clippy::large_enum_variant)]
 pub enum IpHeader {
     Version4(Ipv4Header, Ipv4Extensions),
-    Version6(Ipv6Header, Ipv6Extensions)
+    Version6(Ipv6Header, Ipv6Extensions),
 }
 
 impl IpHeader {
-
     /// Renamed to `IpHeader::from_slice`
-    #[deprecated(
-        since = "0.10.1",
-        note = "Renamed to `IpHeader::from_slice`"
-    )]
+    #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
     #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         IpHeader::from_slice(slice)
@@ -24,55 +20,55 @@ impl IpHeader {
     pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         use crate::ReadError::*;
         if slice.is_empty() {
-            Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: 1,
-                    actual_len: slice.len(),
-                    layer: err::Layer::IpHeader,
-                }
-            ))
+            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: 1,
+                actual_len: slice.len(),
+                layer: err::Layer::IpHeader,
+            }))
         } else {
             match slice[0] >> 4 {
                 4 => {
                     let (header, rest) = Ipv4Header::from_slice(slice)?;
                     Ipv4Extensions::from_slice(header.protocol, rest).map(
-                        |(ext, next_protocol, rest)|
-                        (IpHeader::Version4(header, ext), next_protocol, rest)
+                        |(ext, next_protocol, rest)| {
+                            (IpHeader::Version4(header, ext), next_protocol, rest)
+                        },
                     )
-                },
+                }
                 6 => {
                     let (header, rest) = Ipv6Header::from_slice(slice)?;
                     Ipv6Extensions::from_slice(header.next_header, rest).map(
-                        |(ext, next_protocol, rest)| 
-                        (IpHeader::Version6(header, ext), next_protocol, rest)
+                        |(ext, next_protocol, rest)| {
+                            (IpHeader::Version6(header, ext), next_protocol, rest)
+                        },
                     )
-                },
-                version => Err(ReadError::IpUnsupportedVersion(version))
+                }
+                version => Err(ReadError::IpUnsupportedVersion(version)),
             }
         }
     }
 
     ///Reads an IP (v4 or v6) header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<(IpHeader, u8), ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<(IpHeader, u8), ReadError> {
         let value = {
-            let mut buf = [0;1];
+            let mut buf = [0; 1];
             reader.read_exact(&mut buf)?;
             buf[0]
         };
         match value >> 4 {
             4 => {
                 let header = Ipv4Header::read_without_version(reader, value & 0xf)?;
-                Ipv4Extensions::read(reader, header.protocol).map( 
-                    |(ext, next)| (IpHeader::Version4(header, ext), next)
-                )
-            },
+                Ipv4Extensions::read(reader, header.protocol)
+                    .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
+            }
             6 => {
                 let header = Ipv6Header::read_without_version(reader, value & 0xf)?;
-                Ipv6Extensions::read(reader, header.next_header).map(
-                    |(ext, next)| (IpHeader::Version6(header, ext), next)
-                )
-            },
-            version => Err(ReadError::IpUnsupportedVersion(version))
+                Ipv6Extensions::read(reader, header.next_header)
+                    .map(|(ext, next)| (IpHeader::Version6(header, ext), next))
+            }
+            version => Err(ReadError::IpUnsupportedVersion(version)),
         }
     }
 
@@ -95,12 +91,8 @@ impl IpHeader {
     pub fn header_len(&self) -> usize {
         use crate::IpHeader::*;
         match *self {
-            Version4(ref header, ref extensions) => {
-                header.header_len() + extensions.header_len()
-            }
-            Version6(_, ref extensions) => {
-                Ipv6Header::SERIALIZED_SIZE + extensions.header_len()
-            }
+            Version4(ref header, ref extensions) => header.header_len() + extensions.header_len(),
+            Version6(_, ref extensions) => Ipv6Header::SERIALIZED_SIZE + extensions.header_len(),
         }
     }
 
@@ -109,12 +101,8 @@ impl IpHeader {
     pub fn next_header(&self) -> Result<u8, ValueError> {
         use crate::IpHeader::*;
         match *self {
-            Version4(ref header, ref extensions) => {
-                extensions.next_header(header.protocol)
-            }
-            Version6(ref header, ref extensions) => {
-                extensions.next_header(header.next_header)
-            }
+            Version4(ref header, ref extensions) => extensions.next_header(header.protocol),
+            Version6(ref header, ref extensions) => extensions.next_header(header.next_header),
         }
     }
 
@@ -130,11 +118,11 @@ impl IpHeader {
             Version4(ref mut header, ref mut extensions) => {
                 header.protocol = extensions.set_next_headers(last_next_header);
                 EtherType::Ipv4
-            },
+            }
             Version6(ref mut header, ref mut extensions) => {
                 header.next_header = extensions.set_next_headers(last_next_header);
                 EtherType::Ipv6
-            },
+            }
         }
     }
 
@@ -155,14 +143,14 @@ impl IpHeader {
                 } else {
                     Err(Ipv4PayloadLengthTooLarge(len))
                 }
-            },
+            }
             IpHeader::Version6(ipv6_hdr, exts) => {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv6_hdr.set_payload_length(complete_len)
                 } else {
                     Err(Ipv6PayloadLengthTooLarge(len))
                 }
-            },
+            }
         }
     }
 }
@@ -178,10 +166,7 @@ impl IpHeader {
 /// To avoid such confusions in the future the enum has been renamed
 /// to [IpNumber], which also closer to the name
 /// "Assigned Internet Protocol Numbers" used on iana.org .
-#[deprecated(
-    since = "0.10.1",
-    note = "Please use the type IpNumber instead"
-)]
+#[deprecated(since = "0.10.1", note = "Please use the type IpNumber instead")]
 pub type IpTrafficClass = IpNumber;
 
 /// Identifiers for the next_header field in ipv6 headers and protocol field in ipv4 headers.
@@ -478,25 +463,33 @@ pub enum IpNumber {
     ///Use for experimentation and testing
     ExperimentalAndTesting0 = 253,
     ///Use for experimentation and testing
-    ExperimentalAndTesting1 = 254
+    ExperimentalAndTesting1 = 254,
 }
 
 impl IpNumber {
-
     /// Returns true if the given number is the internet number of an IPV6 extension header.
     pub fn is_ipv6_ext_header_value(value: u8) -> bool {
         use crate::ip_number::*;
         matches!(
             value,
-            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | ENCAP_SEC | AUTH 
-            | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 | EXP0 | EXP1
+            IPV6_HOP_BY_HOP
+                | IPV6_ROUTE
+                | IPV6_FRAG
+                | ENCAP_SEC
+                | AUTH
+                | IPV6_DEST_OPTIONS
+                | MOBILITY
+                | HIP
+                | SHIM6
+                | EXP0
+                | EXP1
         )
     }
 }
 
 /// `u8` constants for the most used ip protocol numbers.
 ///
-/// The constants only exist for convenience. You can get equivalent values by 
+/// The constants only exist for convenience. You can get equivalent values by
 /// casting the enum values of [`IpNumber`] to a u8 value.
 ///
 /// ```

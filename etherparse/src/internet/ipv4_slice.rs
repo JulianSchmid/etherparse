@@ -1,6 +1,6 @@
 use core::slice;
 
-use crate::{err::ipv4::SliceError, Ipv4HeaderSlice, Ipv4ExtensionsSlice};
+use crate::{err::ipv4::SliceError, Ipv4ExtensionsSlice, Ipv4HeaderSlice};
 
 #[derive(Debug)]
 pub struct Ipv4Slice<'a> {
@@ -10,9 +10,8 @@ pub struct Ipv4Slice<'a> {
 }
 
 impl<'a> Ipv4Slice<'a> {
-    /// 
+    ///
     pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
-        
         todo!()
     }
 
@@ -20,11 +19,10 @@ impl<'a> Ipv4Slice<'a> {
     pub fn header(&self) -> Ipv4HeaderSlice {
         // SAFETY: Sizes were verified in the construction function `from_slice`.
         unsafe {
-            Ipv4HeaderSlice::from_slice_unchecked(
-                slice::from_raw_parts(
-                    self.slice.as_ptr(), self.header_len
-                )
-            )
+            Ipv4HeaderSlice::from_slice_unchecked(slice::from_raw_parts(
+                self.slice.as_ptr(),
+                self.header_len,
+            ))
         }
     }
 
@@ -38,7 +36,7 @@ impl<'a> Ipv4Slice<'a> {
         todo!()
     }
 
-    /// Returns 
+    /// Returns
     pub fn payload_ip_number(&self) -> u8 {
         todo!()
     }

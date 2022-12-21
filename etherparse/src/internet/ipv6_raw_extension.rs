@@ -10,13 +10,13 @@ pub const IPV6_MAX_NUM_HEADER_EXTENSIONS: usize = 12;
 ///
 /// IPv6 extension header with only minimal data interpretation. NOTE only ipv6 header
 /// extensions with the first two bytes representing the next header and the header length
-/// in 8-octets (- 8 octets) can be represented with this struct. This excludes the "Authentication 
+/// in 8-octets (- 8 octets) can be represented with this struct. This excludes the "Authentication
 /// Header" (AH) and "Encapsulating Security Payload" (ESP).
 ///
 /// The following headers can be represented in a `Ipv6RawExtensionHeader`:
 /// * Hop by Hop
 /// * Destination Options
-/// * Routing 
+/// * Routing
 /// * Mobility
 /// * Host Identity Protocol
 /// * Shim6 Protocol
@@ -29,38 +29,42 @@ pub struct Ipv6RawExtensionHeader {
     /// Length of the extension header in 8 octets (minus the first 8 octets).
     header_length: u8,
     //// The data contained in the extension header (excluding next_header & hdr length).
-    payload_buffer: [u8;0xff * 8 + 6],
+    payload_buffer: [u8; 0xff * 8 + 6],
 }
 
 impl Debug for Ipv6RawExtensionHeader {
     fn fmt(&self, fotmatter: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(fotmatter, "Ipv6RawExtensionHeader {{ next_header: {}, payload: {:?} }}", 
+        write!(
+            fotmatter,
+            "Ipv6RawExtensionHeader {{ next_header: {}, payload: {:?} }}",
             self.next_header,
-            self.payload())
+            self.payload()
+        )
     }
 }
 
 impl PartialEq for Ipv6RawExtensionHeader {
     fn eq(&self, other: &Self) -> bool {
-        self.next_header == other.next_header &&
-        self.payload() == other.payload()
+        self.next_header == other.next_header && self.payload() == other.payload()
     }
 }
 
 impl Eq for Ipv6RawExtensionHeader {}
 
 impl Ipv6RawExtensionHeader {
-
     /// Minimum length of a [Ipv6RawExtensionHeader] payload
     pub const MIN_PAYLOAD_LEN: usize = 6;
 
     /// Maximum length of a [Ipv6RawExtensionHeader] the payload
-    pub const MAX_PAYLOAD_LEN: usize = 0xff*8 + 6;
+    pub const MAX_PAYLOAD_LEN: usize = 0xff * 8 + 6;
 
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeader`.
     pub fn header_type_supported(next_header: u8) -> bool {
         use crate::ip_number::*;
-        matches!(next_header, IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6)
+        matches!(
+            next_header,
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6
+        )
     }
 
     /// Creates an generic IPv6 extension header with the given data.
@@ -87,7 +91,7 @@ impl Ipv6RawExtensionHeader {
             let mut result = Ipv6RawExtensionHeader {
                 next_header,
                 header_length: ((payload.len() - 6) / 8) as u8,
-                payload_buffer: [0;Self::MAX_PAYLOAD_LEN]
+                payload_buffer: [0; Self::MAX_PAYLOAD_LEN],
             };
             result.payload_buffer[..payload.len()].copy_from_slice(payload);
             Ok(result)
@@ -99,17 +103,14 @@ impl Ipv6RawExtensionHeader {
         let s = Ipv6RawExtensionHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
-        Ok((
-            header, 
-            rest
-        ))
+        Ok((header, rest))
     }
 
-    /// Return a slice containing the current payload. This does NOT contain 
+    /// Return a slice containing the current payload. This does NOT contain
     /// the `next_header` and `header_length` fields. But everything after these
     /// two fields.
     pub fn payload(&self) -> &[u8] {
-        &self.payload_buffer[..(6 + usize::from(self.header_length)*8)]
+        &self.payload_buffer[..(6 + usize::from(self.header_length) * 8)]
     }
 
     /// Sets the payload (content of the header after the `next_header` & `header_length` fields).
@@ -135,9 +136,11 @@ impl Ipv6RawExtensionHeader {
     }
 
     /// Read an fragment header from the current reader position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6RawExtensionHeader, ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<Ipv6RawExtensionHeader, ReadError> {
         let (next_header, header_length) = {
-            let mut d : [u8;2] = [0;2];
+            let mut d: [u8; 2] = [0; 2];
             reader.read_exact(&mut d)?;
             (d[0], d[1])
         };
@@ -146,8 +149,8 @@ impl Ipv6RawExtensionHeader {
             next_header,
             header_length,
             payload_buffer: {
-                let mut buffer = [0;0xff * 8 + 6];
-                reader.read_exact(&mut buffer[..usize::from(header_length)*8 + 6])?;
+                let mut buffer = [0; 0xff * 8 + 6];
+                reader.read_exact(&mut buffer[..usize::from(header_length) * 8 + 6])?;
                 buffer
             },
         })
@@ -162,7 +165,7 @@ impl Ipv6RawExtensionHeader {
 
     ///Length of the header in bytes.
     pub fn header_len(&self) -> usize {
-        2 + (6 + usize::from(self.header_length)*8)
+        2 + (6 + usize::from(self.header_length) * 8)
     }
 }
 
@@ -170,13 +173,13 @@ impl Ipv6RawExtensionHeader {
 ///
 /// Slice containing an IPv6 extension header with only minimal data interpretation. NOTE only ipv6 header
 /// extensions with the first two bytes representing the next header and the header length
-/// in 8-octets (- 8 octets) can be represented with this struct. This excludes the "Authentication 
+/// in 8-octets (- 8 octets) can be represented with this struct. This excludes the "Authentication
 /// Header" (AH) and "Encapsulating Security Payload" (ESP).
 ///
 /// The following headers can be represented in a Ipv6ExtensionHeaderSlice:
 /// * HopbyHop
 /// * Destination Options
-/// * Routing 
+/// * Routing
 /// * Mobility
 /// * Host Identity Protocol
 /// * Shim6 Protocol
@@ -187,39 +190,33 @@ pub struct Ipv6RawExtensionHeaderSlice<'a> {
 }
 
 impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
-
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeaderSlice`.
     pub fn header_type_supported(next_header: u8) -> bool {
         Ipv6RawExtensionHeader::header_type_supported(next_header)
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<Ipv6RawExtensionHeaderSlice<'a>, ReadError> {
-
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtensionHeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < 8 {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: 8,
-                    actual_len: slice.len(),
-                    layer: err::Layer::Ipv6ExtHeader,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: 8,
+                actual_len: slice.len(),
+                layer: err::Layer::Ipv6ExtHeader,
+            }));
         }
 
         //check length
-        let len = ((slice[1] as usize) + 1)*8;
+        let len = ((slice[1] as usize) + 1) * 8;
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: len,
-                    actual_len: slice.len(),
-                    layer: err::Layer::Ipv6ExtHeader,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: len,
+                actual_len: slice.len(),
+                layer: err::Layer::Ipv6ExtHeader,
+            }));
         }
 
         //all good
@@ -227,12 +224,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
             // SAFETY:
             // Safe as the slice has been checked in the previous if
             // to have at least the the length of the variable len.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    len
-                )
-            }
+            slice: unsafe { from_raw_parts(slice.as_ptr(), len) },
         })
     }
 
@@ -248,18 +240,15 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     ///
     /// If these precondtions are not fullfilled the behavior of this function
     /// and the methods of the return IpAuthenticationHeaderSlice will be undefined.
-    pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
+    pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
         Ipv6RawExtensionHeaderSlice {
-            slice: from_raw_parts(
-                slice.as_ptr(),
-                ((*slice.get_unchecked(1) as usize) + 1)*8
-            )
+            slice: from_raw_parts(slice.as_ptr(), ((*slice.get_unchecked(1) as usize) + 1) * 8),
         }
     }
 
     /// Returns the slice containing the ipv6 extension header
     #[inline]
-    pub fn slice(&self) -> &'a[u8] {
+    pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
@@ -268,9 +257,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     /// See [IpNumber] or [ip_number] for a definition of the known values.
     #[inline]
     pub fn next_header(&self) -> u8 {
-        unsafe {
-            *self.slice.get_unchecked(0)
-        }
+        unsafe { *self.slice.get_unchecked(0) }
     }
 
     /// Returns a slice containing the payload data of the header.
@@ -279,24 +266,16 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     /// until the end of the header (length specified by the
     /// hdr ext length field).
     #[inline]
-    pub fn payload(&self) -> &'a[u8] {
-        unsafe {
-            from_raw_parts(
-                self.slice.as_ptr().add(2),
-                self.slice.len() - 2
-            )
-        }
+    pub fn payload(&self) -> &'a [u8] {
+        unsafe { from_raw_parts(self.slice.as_ptr().add(2), self.slice.len() - 2) }
     }
 
     /// Convert the slice to an [Ipv6RawExtensionHeader].
     ///
-    /// Decode some of the fields and copy the results to a 
+    /// Decode some of the fields and copy the results to a
     /// [Ipv6RawExtensionHeader] struct together with a slice pointing
     /// to the non decoded parts.
     pub fn to_header(&self) -> Ipv6RawExtensionHeader {
-        Ipv6RawExtensionHeader::new_raw(
-            self.next_header(),
-            self.payload()
-        ).unwrap()
+        Ipv6RawExtensionHeader::new_raw(self.next_header(), self.payload()).unwrap()
     }
 }

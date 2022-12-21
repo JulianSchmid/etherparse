@@ -27,43 +27,48 @@ pub struct Ipv4ExtensionsSlice<'a> {
 impl Ipv4Extensions {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
-    pub fn from_slice(start_protocol: u8, slice: &[u8]) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
-        Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(
-            |v| (v.0.to_header(), v.1, v.2)
-        )
+    pub fn from_slice(
+        start_protocol: u8,
+        slice: &[u8],
+    ) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
+        Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(|v| (v.0.to_header(), v.1, v.2))
     }
 
     /// Reads the known ipv4 extension headers from the reader and returns the
     /// headers together with the internet protocol number identifying the protocol
     /// that will be next.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T, start_ip_number: u8) -> Result<(Ipv4Extensions, u8), ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+        start_ip_number: u8,
+    ) -> Result<(Ipv4Extensions, u8), ReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthenticationHeader::read(reader)?;
             let next_ip_number = header.next_header;
-            Ok((
-                Ipv4Extensions{
-                    auth: Some(header)
-                },
-                next_ip_number,
-            ))
+            Ok((Ipv4Extensions { auth: Some(header) }, next_ip_number))
         } else {
             Ok((Default::default(), start_ip_number))
         }
     }
 
     /// Write the extensions to the writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T, start_ip_number: u8) -> Result<(), WriteError> {
+    pub fn write<T: io::Write + Sized>(
+        &self,
+        writer: &mut T,
+        start_ip_number: u8,
+    ) -> Result<(), WriteError> {
         use ip_number::*;
         use IpNumber::*;
         use ValueError::*;
         match self.auth {
-            Some(ref header) => if AUTH == start_ip_number {
-                header.write(writer)
-            } else {
-                Err(Ipv4ExtensionNotReferenced(AuthenticationHeader).into())
-            },
-            None => Ok(())
+            Some(ref header) => {
+                if AUTH == start_ip_number {
+                    header.write(writer)
+                } else {
+                    Err(Ipv4ExtensionNotReferenced(AuthenticationHeader).into())
+                }
+            }
+            None => Ok(()),
         }
     }
 
@@ -106,11 +111,9 @@ impl Ipv4Extensions {
             if first_next_header == AUTH {
                 Ok(auth.next_header)
             } else {
-                Err(
-                    ValueError::Ipv4ExtensionNotReferenced(
-                        IpNumber::AuthenticationHeader
-                    )
-                )
+                Err(ValueError::Ipv4ExtensionNotReferenced(
+                    IpNumber::AuthenticationHeader,
+                ))
             }
         } else {
             Ok(first_next_header)
@@ -125,21 +128,21 @@ impl Ipv4Extensions {
 }
 
 impl<'a> Ipv4ExtensionsSlice<'a> {
-
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
-    pub fn from_slice(start_ip_number: u8, start_slice: &'a [u8]) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), ReadError> {
+    pub fn from_slice(
+        start_ip_number: u8,
+        start_slice: &'a [u8],
+    ) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), ReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthenticationHeaderSlice::from_slice(start_slice)?;
             let rest = &start_slice[header.slice().len()..];
             let next_header = header.next_header();
             Ok((
-                Ipv4ExtensionsSlice{
-                    auth: Some(header)
-                },
+                Ipv4ExtensionsSlice { auth: Some(header) },
                 next_header,
-                rest
+                rest,
             ))
         } else {
             Ok((Default::default(), start_ip_number, start_slice))
@@ -149,7 +152,7 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     /// Convert the slices into actual headers.
     pub fn to_header(&self) -> Ipv4Extensions {
         Ipv4Extensions {
-            auth: self.auth.as_ref().map(|v| v.to_header())
+            auth: self.auth.as_ref().map(|v| v.to_header()),
         }
     }
 

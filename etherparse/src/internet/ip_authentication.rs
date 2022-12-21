@@ -19,15 +19,15 @@ pub struct IpAuthenticationHeader {
     pub next_header: u8,
     /// Security Parameters Index
     pub spi: u32,
-    /// This unsigned 32-bit field contains a counter value that 
+    /// This unsigned 32-bit field contains a counter value that
     /// increases by one for each packet sent.
     pub sequence_number: u32,
-    /// Length in 4-octets (maximum valid value is 0xfe) of data filled in the 
+    /// Length in 4-octets (maximum valid value is 0xfe) of data filled in the
     /// `raw_icv_buffer`.
     raw_icv_len: u8,
     /// Buffer containing the "Encoded Integrity Check Value-ICV" (variable).
     /// The length of the used data can be set via the `variable` (must be a multiple of 4 bytes).
-    raw_icv_buffer: [u8;0xfe*4],
+    raw_icv_buffer: [u8; 0xfe * 4],
 }
 
 impl Debug for IpAuthenticationHeader {
@@ -42,18 +42,17 @@ impl Debug for IpAuthenticationHeader {
 
 impl PartialEq for IpAuthenticationHeader {
     fn eq(&self, other: &Self) -> bool {
-        self.next_header == other.next_header &&
-        self.spi == other.spi &&
-        self.sequence_number == other.sequence_number &&
-        self.raw_icv() == other.raw_icv()
+        self.next_header == other.next_header
+            && self.spi == other.spi
+            && self.sequence_number == other.sequence_number
+            && self.raw_icv() == other.raw_icv()
     }
 }
 
 impl Eq for IpAuthenticationHeader {}
 
 impl<'a> IpAuthenticationHeader {
-
-    pub const MAX_ICV_LEN: usize = 0xfe*4;
+    pub const MAX_ICV_LEN: usize = 0xfe * 4;
 
     /// Create a new authentication header with the given parameters.
     ///
@@ -67,7 +66,7 @@ impl<'a> IpAuthenticationHeader {
         next_header: u8,
         spi: u32,
         sequence_number: u32,
-        raw_icv: &'a [u8]
+        raw_icv: &'a [u8],
     ) -> Result<IpAuthenticationHeader, ValueError> {
         if raw_icv.len() > IpAuthenticationHeader::MAX_ICV_LEN || 0 != raw_icv.len() % 4 {
             use ValueError::*;
@@ -78,7 +77,7 @@ impl<'a> IpAuthenticationHeader {
                 spi,
                 sequence_number,
                 raw_icv_len: (raw_icv.len() / 4) as u8,
-                raw_icv_buffer: [0;IpAuthenticationHeader::MAX_ICV_LEN]
+                raw_icv_buffer: [0; IpAuthenticationHeader::MAX_ICV_LEN],
             };
             result.raw_icv_buffer[..raw_icv.len()].copy_from_slice(raw_icv);
             Ok(result)
@@ -86,21 +85,19 @@ impl<'a> IpAuthenticationHeader {
     }
 
     /// Read an  authentication header from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthenticationHeader, &'a[u8]), ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthenticationHeader, &'a [u8]), ReadError> {
         let s = IpAuthenticationHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
-        Ok((
-            header, 
-            rest
-        ))
+        Ok((header, rest))
     }
 
     /// Read an authentication header from the current reader position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<IpAuthenticationHeader, ReadError> {
-        
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<IpAuthenticationHeader, ReadError> {
         let start = {
-            let mut start = [0;4+4+4];
+            let mut start = [0; 4 + 4 + 4];
             reader.read_exact(&mut start)?;
             start
         };
@@ -116,26 +113,12 @@ impl<'a> IpAuthenticationHeader {
             // read the rest of the header
             Ok(IpAuthenticationHeader {
                 next_header,
-                spi: u32::from_be_bytes(
-                    [
-                        start[4],
-                        start[5],
-                        start[6],
-                        start[7],
-                    ]
-                ),
-                sequence_number: u32::from_be_bytes(
-                    [
-                        start[8],
-                        start[9],
-                        start[10],
-                        start[11],
-                    ]
-                ),
+                spi: u32::from_be_bytes([start[4], start[5], start[6], start[7]]),
+                sequence_number: u32::from_be_bytes([start[8], start[9], start[10], start[11]]),
                 raw_icv_len: payload_len - 1,
                 raw_icv_buffer: {
-                    let mut buffer = [0;0xfe*4];
-                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1)*4])?;
+                    let mut buffer = [0; 0xfe * 4];
+                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1) * 4])?;
                     buffer
                 },
             })
@@ -144,7 +127,7 @@ impl<'a> IpAuthenticationHeader {
 
     /// Returns a slice the raw icv value.
     pub fn raw_icv(&self) -> &[u8] {
-        &self.raw_icv_buffer[..usize::from(self.raw_icv_len)*4]
+        &self.raw_icv_buffer[..usize::from(self.raw_icv_len) * 4]
     }
 
     /// Sets the icv value to the given raw value. The length of the slice must be
@@ -153,7 +136,7 @@ impl<'a> IpAuthenticationHeader {
     /// not fullfill these requirements the value is not copied and an
     /// `Err(ValueError::IpAuthenticationHeaderBadIcvLength)` is returned.
     /// If successfull an Ok(()) is returned.
-    pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(),ValueError> {
+    pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(), ValueError> {
         if raw_icv.len() > IpAuthenticationHeader::MAX_ICV_LEN || 0 != raw_icv.len() % 4 {
             use ValueError::*;
             Err(IpAuthenticationHeaderBadIcvLength(raw_icv.len()))
@@ -166,65 +149,56 @@ impl<'a> IpAuthenticationHeader {
 
     /// Writes the given authentication header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-
         let spi_be = self.spi.to_be_bytes();
         let sequence_number_be = self.sequence_number.to_be_bytes();
         debug_assert!(self.raw_icv_len != 0xff);
 
-        writer.write_all(
-            &[
-                self.next_header,
-                self.raw_icv_len + 1,
-                0,
-                0,
-                spi_be[0],
-                spi_be[1],
-                spi_be[2],
-                spi_be[3],
-                sequence_number_be[0],
-                sequence_number_be[1],
-                sequence_number_be[2],
-                sequence_number_be[3],
-            ]
-        )?;
+        writer.write_all(&[
+            self.next_header,
+            self.raw_icv_len + 1,
+            0,
+            0,
+            spi_be[0],
+            spi_be[1],
+            spi_be[2],
+            spi_be[3],
+            sequence_number_be[0],
+            sequence_number_be[1],
+            sequence_number_be[2],
+            sequence_number_be[3],
+        ])?;
         writer.write_all(self.raw_icv())?;
         Ok(())
     }
 
     ///Length of the header in bytes.
     pub fn header_len(&self) -> usize {
-        12 + usize::from(self.raw_icv_len)*4
+        12 + usize::from(self.raw_icv_len) * 4
     }
 }
 
 /// A slice containing an IP Authentication Header (rfc4302)
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct IpAuthenticationHeaderSlice<'a> {
-    slice: &'a [u8]
+    slice: &'a [u8],
 }
 
 impl<'a> IpAuthenticationHeaderSlice<'a> {
-    
     /// Creates a ip authentication header slice from a slice.
-    pub fn from_slice(slice: &'a[u8]) -> Result<IpAuthenticationHeaderSlice<'a>, ReadError> {
-        
+    pub fn from_slice(slice: &'a [u8]) -> Result<IpAuthenticationHeaderSlice<'a>, ReadError> {
         // check slice length
         use crate::ReadError::*;
         if slice.len() < 12 {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: 12,
-                    actual_len: slice.len(),
-                    layer: err::Layer::IpAuthHeader,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: 12,
+                actual_len: slice.len(),
+                layer: err::Layer::IpAuthHeader,
+            }));
         }
 
-        // SAFETY: 
+        // SAFETY:
         // Safe the slice length gets checked to be at least 12 beforehand.
-        let payload_len_enc = unsafe {
-            *slice.get_unchecked(1)
-        };
+        let payload_len_enc = unsafe { *slice.get_unchecked(1) };
 
         // check header length minimum size
         if payload_len_enc < 1 {
@@ -235,27 +209,20 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         // note: The unit is different then all other ipv6 extension headers.
         //       In the other headers the lenth is in 8 octets, but for authentication
         //       headers the length is in 4 octets.
-        let len = ((payload_len_enc as usize) + 2)*4;
+        let len = ((payload_len_enc as usize) + 2) * 4;
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: len,
-                    actual_len: slice.len(),
-                    layer: err::Layer::IpAuthHeader,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: len,
+                actual_len: slice.len(),
+                layer: err::Layer::IpAuthHeader,
+            }));
         }
 
         // all good
-        Ok(IpAuthenticationHeaderSlice{
+        Ok(IpAuthenticationHeaderSlice {
             // SAFETY:
             // Safe as slice len is checked to be at last len above.
-            slice: unsafe {
-                from_raw_parts(
-                    slice.as_ptr(),
-                    len
-                )
-            }
+            slice: unsafe { from_raw_parts(slice.as_ptr(), len) },
         })
     }
 
@@ -270,18 +237,15 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
     ///
     /// If these precondtions are not fullfilled the behavior of this function
     /// and the methods of the return IpAuthenticationHeaderSlice will be undefined.
-    pub unsafe fn from_slice_unchecked(slice: &'a[u8]) -> IpAuthenticationHeaderSlice<'a> {
-        IpAuthenticationHeaderSlice{
-            slice: from_raw_parts(
-                slice.as_ptr(),
-                ((*slice.get_unchecked(1) as usize) + 2)*4
-            )
+    pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> IpAuthenticationHeaderSlice<'a> {
+        IpAuthenticationHeaderSlice {
+            slice: from_raw_parts(slice.as_ptr(), ((*slice.get_unchecked(1) as usize) + 2) * 4),
         }
     }
 
     /// Returns the slice containing the authentification header.
     #[inline]
-    pub fn slice(&self) -> &'a[u8] {
+    pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
@@ -293,9 +257,7 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         // SAFETY:
         // Safe as slice length is checked in the constructor
         // to be at least 12.
-        unsafe {
-            *self.slice.get_unchecked(0)
-        }
+        unsafe { *self.slice.get_unchecked(0) }
     }
 
     /// Read the security parameters index from the slice
@@ -304,29 +266,25 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
         // SAFETY:
         // Safe as slice length is checked in the constructor
         // to be at least 12.
-        unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(4))
-        }
+        unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(4)) }
     }
 
-    /// This unsigned 32-bit field contains a counter value that 
+    /// This unsigned 32-bit field contains a counter value that
     /// increases by one for each packet sent.
     #[inline]
     pub fn sequence_number(&self) -> u32 {
         // SAFETY:
         // Safe as slice length is checked in the constructor
         // to be at least 12.
-        unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(8))
-        }
+        unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(8)) }
     }
 
     /// Return a slice with the raw integrity check value
-    pub fn raw_icv(&self) -> &'a[u8] {
+    pub fn raw_icv(&self) -> &'a [u8] {
         &self.slice[12..]
     }
 
-    /// Decode some of the fields and copy the results to a 
+    /// Decode some of the fields and copy the results to a
     /// Ipv6ExtensionHeader struct together with a slice pointing
     /// to the non decoded parts.
     pub fn to_header(&self) -> IpAuthenticationHeader {
@@ -335,6 +293,7 @@ impl<'a> IpAuthenticationHeaderSlice<'a> {
             self.spi(),
             self.sequence_number(),
             self.raw_icv(),
-        ).unwrap()
+        )
+        .unwrap()
     }
 }
