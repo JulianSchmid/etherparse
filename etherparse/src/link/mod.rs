@@ -5,11 +5,10 @@ pub mod vlan_tagging;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkSlice<'a> {
     /// A slice containing an Ethernet II header.
-    Ethernet2(ethernet::Ethernet2HeaderSlice<'a>)
+    Ethernet2(ethernet::Ethernet2HeaderSlice<'a>),
 }
 
 impl<'a> LinkSlice<'a> {
-
     /// Convert the link slice to a header (currently just the
     /// ethernet2 header as this is the only value it can take).
     pub fn to_header(&self) -> ethernet::Ethernet2Header {
