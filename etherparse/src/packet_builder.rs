@@ -4,10 +4,10 @@ use std::{io, marker};
 
 /// Helper for building packets.
 ///
-/// The packet builder allows the easy construction of a packet from the 
-/// ethernet II layer downwards including ipv6, ipv4, the udp header and the 
-/// actual payload. The packet builder automatically calculates lengths & checksums 
-/// for ip & udp and set type identifiers for ethernetII and ip. This makes it 
+/// The packet builder allows the easy construction of a packet from the
+/// ethernet II layer downwards including ipv6, ipv4, the udp header and the
+/// actual payload. The packet builder automatically calculates lengths & checksums
+/// for ip & udp and set type identifiers for ethernetII and ip. This makes it
 /// easy and less error prone to construct custom packets.
 ///
 /// # Example:
@@ -16,14 +16,14 @@ use std::{io, marker};
 ///
 /// ```
 /// use etherparse::PacketBuilder;
-/// 
+///
 /// let builder = PacketBuilder::
 ///     ethernet2([1,2,3,4,5,6],     //source mac
 ///               [7,8,9,10,11,12]) //destionation mac
 ///    .ipv4([192,168,1,1], //source ip
 ///          [192,168,1,2], //desitionation ip
 ///          20)            //time to life
-///    .udp(21,    //source port 
+///    .udp(21,    //source port
 ///         1234); //desitnation port
 ///
 /// //payload of the udp packet
@@ -99,7 +99,7 @@ impl PacketBuilder {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -110,7 +110,7 @@ impl PacketBuilder {
     ///    .ipv4([192,168,1,1], //source ip
     ///          [192,168,1,2], //desitionation ip
     ///          20)            //time to life
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -123,19 +123,19 @@ impl PacketBuilder {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ethernet2(source: [u8;6], destination: [u8;6]) -> PacketBuilderStep<Ethernet2Header> {
+    pub fn ethernet2(source: [u8; 6], destination: [u8; 6]) -> PacketBuilderStep<Ethernet2Header> {
         PacketBuilderStep {
             state: PacketImpl {
-                ethernet2_header: Some(Ethernet2Header{
+                ethernet2_header: Some(Ethernet2Header {
                     source,
                     destination,
-                    ether_type: 0 //the type identifier 
+                    ether_type: 0, //the type identifier
                 }),
                 vlan_header: None,
                 ip_header: None,
-                transport_header: None
+                transport_header: None,
             },
-            _marker: marker::PhantomData::<Ethernet2Header>{}
+            _marker: marker::PhantomData::<Ethernet2Header> {},
         }
     }
 
@@ -143,7 +143,7 @@ impl PacketBuilder {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -152,7 +152,7 @@ impl PacketBuilder {
     ///    ipv4([192,168,1,1],  //source ip
     ///          [192,168,1,2], //desitionation ip
     ///          20)            //time to life
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -165,23 +165,28 @@ impl PacketBuilder {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(
+        source: [u8; 4],
+        destination: [u8; 4],
+        time_to_live: u8,
+    ) -> PacketBuilderStep<IpHeader> {
         PacketBuilderStep {
             state: PacketImpl {
                 ethernet2_header: None,
                 vlan_header: None,
                 ip_header: None,
-                transport_header: None
+                transport_header: None,
             },
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv4(source, destination, time_to_live)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv4(source, destination, time_to_live)
     }
 
     /// Start a packet with an IPv6 header.
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -194,7 +199,7 @@ impl PacketBuilder {
     ///         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
     ///         //hop_limit
     ///         47)
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -207,16 +212,21 @@ impl PacketBuilder {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv6(
+        source: [u8; 16],
+        destination: [u8; 16],
+        hop_limit: u8,
+    ) -> PacketBuilderStep<IpHeader> {
         PacketBuilderStep {
             state: PacketImpl {
                 ethernet2_header: None,
                 vlan_header: None,
                 ip_header: None,
-                transport_header: None
+                transport_header: None,
             },
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv6(source, destination, hop_limit)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv6(source, destination, hop_limit)
     }
 
     /// Starts a packet with an arbitrary IP header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
@@ -237,9 +247,9 @@ impl PacketBuilder {
     ///            ip_number::UDP, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
-    ///        ), 
+    ///        ),
     ///        Default::default()))
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -270,7 +280,7 @@ impl PacketBuilder {
     ///             destination: [0;16]
     ///         },
     ///         Default::default()))
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -289,10 +299,11 @@ impl PacketBuilder {
                 ethernet2_header: None,
                 vlan_header: None,
                 ip_header: None,
-                transport_header: None
+                transport_header: None,
             },
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ip(ip_header)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ip(ip_header)
     }
 }
 
@@ -300,13 +311,13 @@ struct PacketImpl {
     ethernet2_header: Option<Ethernet2Header>,
     ip_header: Option<IpHeader>,
     vlan_header: Option<VlanHeader>,
-    transport_header: Option<TransportHeader>
+    transport_header: Option<TransportHeader>,
 }
 
 ///An unfinished packet that is build with the packet builder
 pub struct PacketBuilderStep<LastStep> {
     state: PacketImpl,
-    _marker: marker::PhantomData<LastStep>
+    _marker: marker::PhantomData<LastStep>,
 }
 
 impl PacketBuilderStep<Ethernet2Header> {
@@ -314,7 +325,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -325,7 +336,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///    .ipv4([192,168,1,1], //source ip
     ///          [192,168,1,2], //desitionation ip
     ///          20)            //time to life
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -338,19 +349,27 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(mut self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(
+        mut self,
+        source: [u8; 4],
+        destination: [u8; 4],
+        time_to_live: u8,
+    ) -> PacketBuilderStep<IpHeader> {
         //add ip header
-        self.state.ip_header = Some(IpHeader::Version4({
-            let mut value: Ipv4Header = Default::default();
-            value.source = source;
-            value.destination = destination;
-            value.time_to_live = time_to_live;
-            value
-        }, Default::default()));
+        self.state.ip_header = Some(IpHeader::Version4(
+            {
+                let mut value: Ipv4Header = Default::default();
+                value.source = source;
+                value.destination = destination;
+                value.time_to_live = time_to_live;
+                value
+            },
+            Default::default(),
+        ));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<IpHeader>{}
+            _marker: marker::PhantomData::<IpHeader> {},
         }
     }
 
@@ -404,7 +423,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<IpHeader>{}
+            _marker: marker::PhantomData::<IpHeader> {},
         }
     }
 
@@ -412,7 +431,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -427,7 +446,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
     ///         //hop_limit
     ///         47)
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -440,21 +459,29 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(mut self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
-        self.state.ip_header = Some(IpHeader::Version6(Ipv6Header{
-            traffic_class: 0,
-            flow_label: 0,
-            payload_length: 0, //filled in on write
-            next_header: 0, //filled in on write
-            hop_limit,
-            source,
-            destination
-        }, Default::default()));
-        
+    pub fn ipv6(
+        mut self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        hop_limit: u8,
+    ) -> PacketBuilderStep<IpHeader> {
+        self.state.ip_header = Some(IpHeader::Version6(
+            Ipv6Header {
+                traffic_class: 0,
+                flow_label: 0,
+                payload_length: 0, //filled in on write
+                next_header: 0,    //filled in on write
+                hop_limit,
+                source,
+                destination,
+            },
+            Default::default(),
+        ));
+
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<IpHeader>{}
+            _marker: marker::PhantomData::<IpHeader> {},
         }
     }
 
@@ -462,7 +489,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, SingleVlanHeader, VlanHeader};
@@ -480,7 +507,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
-    ///     .udp(21,    //source port 
+    ///     .udp(21,    //source port
     ///          1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -498,7 +525,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<VlanHeader>{}
+            _marker: marker::PhantomData::<VlanHeader> {},
         }
     }
 
@@ -506,7 +533,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, SingleVlanHeader, VlanHeader};
@@ -518,7 +545,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
-    ///     .udp(21,    //source port 
+    ///     .udp(21,    //source port
     ///          1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -541,7 +568,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<VlanHeader>{}
+            _marker: marker::PhantomData::<VlanHeader> {},
         }
     }
 
@@ -549,7 +576,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, SingleVlanHeader, VlanHeader};
@@ -562,7 +589,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
-    ///     .udp(21,    //source port 
+    ///     .udp(21,    //source port
     ///          1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -575,7 +602,11 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn double_vlan(mut self, outer_vlan_identifier: u16, inner_vlan_identifier: u16) -> PacketBuilderStep<VlanHeader> {
+    pub fn double_vlan(
+        mut self,
+        outer_vlan_identifier: u16,
+        inner_vlan_identifier: u16,
+    ) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Double(DoubleVlanHeader {
             outer: SingleVlanHeader {
                 priority_code_point: 0,
@@ -588,18 +619,17 @@ impl PacketBuilderStep<Ethernet2Header> {
                 drop_eligible_indicator: false,
                 vlan_identifier: inner_vlan_identifier,
                 ether_type: 0, //will be set automatically during write
-            }
+            },
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<VlanHeader>{}
+            _marker: marker::PhantomData::<VlanHeader> {},
         }
     }
 }
 
 impl PacketBuilderStep<VlanHeader> {
-
     ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
     /// # Example IPv4
@@ -648,15 +678,16 @@ impl PacketBuilderStep<VlanHeader> {
         //use the method from the Ethernet2Header implementation
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ip(ip_header)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ip(ip_header)
     }
 
     /// Add an IPv6 header
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, SingleVlanHeader, VlanHeader};
@@ -672,7 +703,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
     ///         //hop_limit
     ///         47)
-    ///     .udp(21,    //source port 
+    ///     .udp(21,    //source port
     ///          1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -685,19 +716,25 @@ impl PacketBuilderStep<VlanHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv6(self, source: [u8;16], destination: [u8;16], hop_limit: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv6(
+        self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        hop_limit: u8,
+    ) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv6(source, destination, hop_limit)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv6(source, destination, hop_limit)
     }
 
     /// Add an IPv4 header
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, SingleVlanHeader, VlanHeader};
@@ -709,7 +746,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
-    ///     .udp(21,    //source port 
+    ///     .udp(21,    //source port
     ///          1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -722,20 +759,25 @@ impl PacketBuilderStep<VlanHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn ipv4(self, source: [u8;4], destination: [u8;4], time_to_live: u8) -> PacketBuilderStep<IpHeader> {
+    pub fn ipv4(
+        self,
+        source: [u8; 4],
+        destination: [u8; 4],
+        time_to_live: u8,
+    ) -> PacketBuilderStep<IpHeader> {
         //use the method from the Ethernet2Header implementation
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Ethernet2Header>{}
-        }.ipv4(source, destination, time_to_live)
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv4(source, destination, time_to_live)
     }
 }
 
 impl PacketBuilderStep<IpHeader> {
-
     /// Adds an ICMPv4 header of the given [`Icmpv4Type`] to the packet.
     ///
-    /// If an ICMPv4 header gets added the payload used during the builders `write` 
+    /// If an ICMPv4 header gets added the payload used during the builders `write`
     /// call contains the bytes after the header and has different meanings
     /// and contents based on the type. Ususally all statically sized values
     /// known based on the ICMPv4 type & code are part of the header and the
@@ -746,7 +788,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, Icmpv4Type, icmpv4};
@@ -776,14 +818,14 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv4(mut self, icmp_type: Icmpv4Type) -> PacketBuilderStep<Icmpv4Header> {
-        self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header{
+        self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header {
             icmp_type,
             checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header> {},
         }
     }
 
@@ -796,7 +838,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -821,16 +863,25 @@ impl PacketBuilderStep<IpHeader> {
     /// // serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn icmpv4_raw(mut self, type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv4Header> {
-        let icmp_type = Icmpv4Type::Unknown{type_u8, code_u8, bytes5to8};
-        self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header{
+    pub fn icmpv4_raw(
+        mut self,
+        type_u8: u8,
+        code_u8: u8,
+        bytes5to8: [u8; 4],
+    ) -> PacketBuilderStep<Icmpv4Header> {
+        let icmp_type = Icmpv4Type::Unknown {
+            type_u8,
+            code_u8,
+            bytes5to8,
+        };
+        self.state.transport_header = Some(TransportHeader::Icmpv4(Icmpv4Header {
             icmp_type,
             checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header> {},
         }
     }
 
@@ -838,7 +889,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -863,16 +914,13 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv4_echo_request(mut self, id: u16, seq: u16) -> PacketBuilderStep<Icmpv4Header> {
-        let echo_header = IcmpEchoHeader{
-            id,
-            seq,
-        };
+        let echo_header = IcmpEchoHeader { id, seq };
         let icmpv4_echo = Icmpv4Header::new(Icmpv4Type::EchoRequest(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmpv4(icmpv4_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header> {},
         }
     }
 
@@ -880,7 +928,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -905,22 +953,19 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv4_echo_reply(mut self, id: u16, seq: u16) -> PacketBuilderStep<Icmpv4Header> {
-        let echo_header = IcmpEchoHeader{
-            id,
-            seq,
-        };
+        let echo_header = IcmpEchoHeader { id, seq };
         let icmpv4_echo = Icmpv4Header::new(Icmpv4Type::EchoReply(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmpv4(icmpv4_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv4Header>{}
+            _marker: marker::PhantomData::<Icmpv4Header> {},
         }
     }
 
     /// Adds an ICMPv6 header of the given [`Icmpv6Type`] to the packet.
     ///
-    /// If an ICMPv6 header gets added the payload used during the builders `write` 
+    /// If an ICMPv6 header gets added the payload used during the builders `write`
     /// call contains the bytes after the header and has different meanings
     /// and contents based on the type. Ususally all statically sized values
     /// known based on the ICMPv6 type & code are part of the header and the
@@ -931,7 +976,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::{PacketBuilder, Icmpv6Type, icmpv6};
@@ -965,14 +1010,14 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv6(mut self, icmp_type: Icmpv6Type) -> PacketBuilderStep<Icmpv6Header> {
-        self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header{
+        self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header {
             icmp_type,
             checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header> {},
         }
     }
 
@@ -985,7 +1030,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -1014,16 +1059,25 @@ impl PacketBuilderStep<IpHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn icmpv6_raw(mut self, type_u8: u8, code_u8: u8, bytes5to8: [u8;4]) -> PacketBuilderStep<Icmpv6Header> {
-        let icmp_type = Icmpv6Type::Unknown{type_u8, code_u8, bytes5to8};
-        self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header{
+    pub fn icmpv6_raw(
+        mut self,
+        type_u8: u8,
+        code_u8: u8,
+        bytes5to8: [u8; 4],
+    ) -> PacketBuilderStep<Icmpv6Header> {
+        let icmp_type = Icmpv6Type::Unknown {
+            type_u8,
+            code_u8,
+            bytes5to8,
+        };
+        self.state.transport_header = Some(TransportHeader::Icmpv6(Icmpv6Header {
             icmp_type,
             checksum: 0, // calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header> {},
         }
     }
 
@@ -1031,7 +1085,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -1060,16 +1114,13 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv6_echo_request(mut self, id: u16, seq: u16) -> PacketBuilderStep<Icmpv6Header> {
-        let echo_header = IcmpEchoHeader{
-            id,
-            seq,
-        };
+        let echo_header = IcmpEchoHeader { id, seq };
         let icmpv6_echo = Icmpv6Header::new(Icmpv6Type::EchoRequest(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmpv6(icmpv6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header> {},
         }
     }
 
@@ -1077,7 +1128,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -1106,16 +1157,13 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn icmpv6_echo_reply(mut self, id: u16, seq: u16) -> PacketBuilderStep<Icmpv6Header> {
-        let echo_header = IcmpEchoHeader{
-            seq,
-            id,
-        };
+        let echo_header = IcmpEchoHeader { seq, id };
         let icmpv6_echo = Icmpv6Header::new(Icmpv6Type::EchoReply(echo_header));
         self.state.transport_header = Some(TransportHeader::Icmpv6(icmpv6_echo));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<Icmpv6Header>{}
+            _marker: marker::PhantomData::<Icmpv6Header> {},
         }
     }
 
@@ -1123,7 +1171,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -1134,7 +1182,7 @@ impl PacketBuilderStep<IpHeader> {
     ///    .ipv4([192,168,1,1], //source ip
     ///          [192,168,1,2], //desitionation ip
     ///          20)            //time to life
-    ///    .udp(21,    //source port 
+    ///    .udp(21,    //source port
     ///         1234); //desitnation port
     ///
     /// //payload of the udp packet
@@ -1148,16 +1196,16 @@ impl PacketBuilderStep<IpHeader> {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn udp(mut self, source_port: u16, destination_port: u16) -> PacketBuilderStep<UdpHeader> {
-        self.state.transport_header = Some(TransportHeader::Udp(UdpHeader{
+        self.state.transport_header = Some(TransportHeader::Udp(UdpHeader {
             source_port,
             destination_port,
-            length: 0, //calculated later
-            checksum: 0 //calculated later
+            length: 0,   //calculated later
+            checksum: 0, //calculated later
         }));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<UdpHeader>{}
+            _marker: marker::PhantomData::<UdpHeader> {},
         }
     }
 
@@ -1165,7 +1213,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// # Example
     ///
-    /// Basic usage: 
+    /// Basic usage:
     ///
     /// ```
     /// # use etherparse::PacketBuilder;
@@ -1176,7 +1224,7 @@ impl PacketBuilderStep<IpHeader> {
     ///    .ipv4([192,168,1,1], // source ip
     ///          [192,168,1,2], // desitionation ip
     ///          20)            // time to life
-    ///    .tcp(21,    // source port 
+    ///    .tcp(21,    // source port
     ///         12,    // destination port
     ///         12345, // sequence number
     ///         4000); // window size
@@ -1191,14 +1239,23 @@ impl PacketBuilderStep<IpHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn tcp(mut self, source_port: u16, destination_port: u16, sequence_number: u32, window_size: u16) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header = Some(TransportHeader::Tcp(
-            TcpHeader::new(source_port, destination_port, sequence_number, window_size)
-        ));
+    pub fn tcp(
+        mut self,
+        source_port: u16,
+        destination_port: u16,
+        sequence_number: u32,
+        window_size: u16,
+    ) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header = Some(TransportHeader::Tcp(TcpHeader::new(
+            source_port,
+            destination_port,
+            sequence_number,
+            window_size,
+        )));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<TcpHeader>{}
+            _marker: marker::PhantomData::<TcpHeader> {},
         }
     }
 
@@ -1207,8 +1264,17 @@ impl PacketBuilderStep<IpHeader> {
     /// `last_next_header_ip_number` will be set in the last extension header
     /// or if no extension header exists the ip header as the "next header" or
     /// "protocol number".
-    pub fn write<T: io::Write + Sized>(mut self, writer: &mut T, last_next_header_ip_number: u8, payload: &[u8]) -> Result<(),WriteError> {
-        self.state.ip_header.as_mut().unwrap().set_next_headers(last_next_header_ip_number);
+    pub fn write<T: io::Write + Sized>(
+        mut self,
+        writer: &mut T,
+        last_next_header_ip_number: u8,
+        payload: &[u8],
+    ) -> Result<(), WriteError> {
+        self.state
+            .ip_header
+            .as_mut()
+            .unwrap()
+            .set_next_headers(last_next_header_ip_number);
         final_write(self, writer, payload)
     }
 
@@ -1220,7 +1286,11 @@ impl PacketBuilderStep<IpHeader> {
 
 impl PacketBuilderStep<Icmpv4Header> {
     /// Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    pub fn write<T: io::Write + Sized>(
+        self,
+        writer: &mut T,
+        payload: &[u8],
+    ) -> Result<(), WriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1228,12 +1298,15 @@ impl PacketBuilderStep<Icmpv4Header> {
     pub fn size(&self, payload_size: usize) -> usize {
         final_size(self, payload_size)
     }
-
 }
 
 impl PacketBuilderStep<Icmpv6Header> {
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    pub fn write<T: io::Write + Sized>(
+        self,
+        writer: &mut T,
+        payload: &[u8],
+    ) -> Result<(), WriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1245,7 +1318,11 @@ impl PacketBuilderStep<Icmpv6Header> {
 
 impl PacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    pub fn write<T: io::Write + Sized>(
+        self,
+        writer: &mut T,
+        payload: &[u8],
+    ) -> Result<(), WriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1256,36 +1333,71 @@ impl PacketBuilderStep<UdpHeader> {
 }
 
 impl PacketBuilderStep<TcpHeader> {
-
     ///Set ns flag (ECN-nonce - concealment protection; experimental: see RFC 3540)
     pub fn ns(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().ns = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .ns = true;
         self
     }
     ///Set fin flag (No more data from sender)
     pub fn fin(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().fin = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .fin = true;
         self
     }
     ///Set the syn flag (synchronize sequence numbers)
     pub fn syn(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().syn = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .syn = true;
         self
     }
     ///Sets the rst flag (reset the connection)
     pub fn rst(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().rst = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .rst = true;
         self
     }
     ///Sets the psh flag (push function)
     pub fn psh(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().psh = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .psh = true;
         self
     }
     ///Sets the ack flag and the acknowledgment_number.
     pub fn ack(mut self, acknowledgment_number: u32) -> PacketBuilderStep<TcpHeader> {
         {
-            let header = self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap();
+            let header = self
+                .state
+                .transport_header
+                .as_mut()
+                .unwrap()
+                .mut_tcp()
+                .unwrap();
             header.ack = true;
             header.acknowledgment_number = acknowledgment_number;
         }
@@ -1297,7 +1409,13 @@ impl PacketBuilderStep<TcpHeader> {
     ///the urgent data.
     pub fn urg(mut self, urgent_pointer: u16) -> PacketBuilderStep<TcpHeader> {
         {
-            let header = self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap();
+            let header = self
+                .state
+                .transport_header
+                .as_mut()
+                .unwrap()
+                .mut_tcp()
+                .unwrap();
             header.urg = true;
             header.urgent_pointer = urgent_pointer;
         }
@@ -1305,7 +1423,13 @@ impl PacketBuilderStep<TcpHeader> {
     }
     ///Sets ece flag (ECN-Echo, RFC 3168)
     pub fn ece(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().ece = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .ece = true;
         self
     }
 
@@ -1313,24 +1437,52 @@ impl PacketBuilderStep<TcpHeader> {
     ///
     ///This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
     pub fn cwr(mut self) -> PacketBuilderStep<TcpHeader> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().cwr = true;
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .cwr = true;
         self
     }
 
     ///Set the tcp options of the header.
-    pub fn options(mut self, options: &[TcpOptionElement]) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().set_options(options)?;
+    pub fn options(
+        mut self,
+        options: &[TcpOptionElement],
+    ) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .set_options(options)?;
         Ok(self)
     }
 
     ///Set the tcp options of the header (setting the bytes directly).
-    pub fn options_raw(mut self, options: &[u8]) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
-        self.state.transport_header.as_mut().unwrap().mut_tcp().unwrap().set_options_raw(options)?;
+    pub fn options_raw(
+        mut self,
+        options: &[u8],
+    ) -> Result<PacketBuilderStep<TcpHeader>, TcpOptionWriteError> {
+        self.state
+            .transport_header
+            .as_mut()
+            .unwrap()
+            .mut_tcp()
+            .unwrap()
+            .set_options_raw(options)?;
         Ok(self)
     }
 
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
+    pub fn write<T: io::Write + Sized>(
+        self,
+        writer: &mut T,
+        payload: &[u8],
+    ) -> Result<(), WriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1341,28 +1493,30 @@ impl PacketBuilderStep<TcpHeader> {
 }
 
 ///Write all the headers and the payload.
-fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &mut T, payload: &[u8]) -> Result<(),WriteError> {
-    
+fn final_write<T: io::Write + Sized, B>(
+    builder: PacketBuilderStep<B>,
+    writer: &mut T,
+    payload: &[u8],
+) -> Result<(), WriteError> {
     let ip_ether_type = {
         use crate::IpHeader::*;
         match builder.state.ip_header {
-            Some(Version4(_,_)) => ether_type::IPV4,
-            Some(Version6(_,_)) => ether_type::IPV6,
-            None => panic!("Missing ip header")
+            Some(Version4(_, _)) => ether_type::IPV4,
+            Some(Version6(_, _)) => ether_type::IPV6,
+            None => panic!("Missing ip header"),
         }
     };
 
     //ethernetII header
     if let Some(mut eth) = builder.state.ethernet2_header {
         eth.ether_type = {
-            
             use crate::VlanHeader::*;
             //determine the ether type depending on if there is a vlan tagging header
             match builder.state.vlan_header {
                 Some(Single(_)) => ether_type::VLAN_TAGGED_FRAME,
                 Some(Double(_)) => ether_type::PROVIDER_BRIDGING,
                 //if no vlan header exists, the id is purely defined by the ip type
-                None => ip_ether_type
+                None => ip_ether_type,
             }
         };
         eth.write(writer)?;
@@ -1376,17 +1530,16 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
             value.ether_type = ip_ether_type;
             //serialize
             value.write(writer)?;
-        },
+        }
         Some(Double(mut value)) => {
             //set ether types
             value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
             value.inner.ether_type = ip_ether_type;
             //serialize
             value.write(writer)?;
-        },
+        }
         None => {}
     }
-
 
     //ip header
     use crate::IpHeader::*;
@@ -1404,14 +1557,14 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
                     ip.set_payload_len(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
                     ext.write(writer, ip.protocol)?;
-                },
+                }
                 Version6(mut ip, ext) => {
                     ip.set_payload_length(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
                     ext.write(writer, ip.next_header)?;
                 }
             }
-        },
+        }
         Some(mut transport) => {
             match ip_header {
                 Version4(mut ip, mut ext) => {
@@ -1420,63 +1573,63 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
                     ip.set_payload_len(ext.header_len() + transport_size)?;
                     use crate::TransportHeader::*;
                     match transport {
-                        Icmpv4(_) => {},
-                        Icmpv6(_) => {},
-                        Udp(ref mut udp) => { udp.length = transport_size as u16; }
-                        Tcp(_) => {},
-                    }
-        
-                    //ip protocol number & next header values of the extension header
-                    ip.protocol = ext.set_next_headers(
-                        match transport {
-                            Icmpv4(_) => ip_number::ICMP,
-                            Icmpv6(_) => ip_number::IPV6_ICMP,
-                            Udp(_) => ip_number::UDP,
-                            Tcp(_) => ip_number::TCP
+                        Icmpv4(_) => {}
+                        Icmpv6(_) => {}
+                        Udp(ref mut udp) => {
+                            udp.length = transport_size as u16;
                         }
-                    );
-        
+                        Tcp(_) => {}
+                    }
+
+                    //ip protocol number & next header values of the extension header
+                    ip.protocol = ext.set_next_headers(match transport {
+                        Icmpv4(_) => ip_number::ICMP,
+                        Icmpv6(_) => ip_number::IPV6_ICMP,
+                        Udp(_) => ip_number::UDP,
+                        Tcp(_) => ip_number::TCP,
+                    });
+
                     //calculate the udp checksum
                     transport.update_checksum_ipv4(&ip, payload)?;
-        
+
                     //write (will automatically calculate the checksum)
                     ip.write(writer)?;
                     ext.write(writer, ip.protocol)?;
-                },
+                }
                 Version6(mut ip, mut ext) => {
                     //set total length
                     let transport_size = transport.header_len() + payload.len();
                     ip.set_payload_length(ext.header_len() + transport_size)?;
                     use crate::TransportHeader::*;
                     match transport {
-                        Icmpv4(_) => {},
-                        Icmpv6(_) => {},
-                        Udp(ref mut udp) => { udp.length = transport_size as u16; }
+                        Icmpv4(_) => {}
+                        Icmpv6(_) => {}
+                        Udp(ref mut udp) => {
+                            udp.length = transport_size as u16;
+                        }
                         Tcp(_) => {}
                     }
-        
+
                     //set the protocol
-                    ip.next_header = ext.set_next_headers(
-                        match transport {
-                            Icmpv4(_) => ip_number::ICMP,
-                            Icmpv6(_) => ip_number::IPV6_ICMP,
-                            Udp(_) => ip_number::UDP,
-                            Tcp(_) => ip_number::TCP
-                        }
-                    );
-        
+                    ip.next_header = ext.set_next_headers(match transport {
+                        Icmpv4(_) => ip_number::ICMP,
+                        Icmpv6(_) => ip_number::IPV6_ICMP,
+                        Udp(_) => ip_number::UDP,
+                        Tcp(_) => ip_number::TCP,
+                    });
+
                     //calculate the udp checksum
                     transport.update_checksum_ipv6(&ip, payload)?;
-        
+
                     //write (will automatically calculate the checksum)
                     ip.write(writer)?;
                     ext.write(writer, ip.next_header)?;
                 }
             }
-        
+
             //finaly write the udp header & payload
             transport.write(writer)?;
-        },
+        }
     }
     writer.write_all(payload)?;
     Ok(())
@@ -1485,25 +1638,25 @@ fn final_write<T: io::Write + Sized, B>(builder: PacketBuilderStep<B>, writer: &
 ///Returns the size of the packet when it is serialized
 fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     use crate::IpHeader::*;
-    use crate::VlanHeader::*;
     use crate::TransportHeader::*;
+    use crate::VlanHeader::*;
     (match builder.state.ethernet2_header {
         Some(_) => Ethernet2Header::SERIALIZED_SIZE,
-        None => 0
+        None => 0,
     }) + match builder.state.vlan_header {
         Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
         Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
-        None => 0 
+        None => 0,
     } + match builder.state.ip_header {
         Some(Version4(ref value, ref ext)) => value.header_len() + ext.header_len(),
         Some(Version6(_, ref ext)) => Ipv6Header::SERIALIZED_SIZE + ext.header_len(),
-        None => 0
+        None => 0,
     } + match builder.state.transport_header {
         Some(Icmpv4(ref value)) => value.header_len(),
         Some(Icmpv6(ref value)) => value.header_len(),
         Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
         Some(Tcp(ref value)) => value.header_len() as usize,
-        None => 0
+        None => 0,
     } + payload_size
 }
 
@@ -1514,16 +1667,19 @@ mod whitebox_tests {
     //whitebox tests that need internal access
     #[test]
     fn size() {
-        assert_eq!(0,
-        PacketBuilderStep::<UdpHeader> {
-            state: PacketImpl {
-                ethernet2_header: None,
-                ip_header: None,
-                vlan_header: None,
-                transport_header: None
-            },
-            _marker: marker::PhantomData::<UdpHeader>{}
-        }.size(0));
+        assert_eq!(
+            0,
+            PacketBuilderStep::<UdpHeader> {
+                state: PacketImpl {
+                    ethernet2_header: None,
+                    ip_header: None,
+                    vlan_header: None,
+                    transport_header: None
+                },
+                _marker: marker::PhantomData::<UdpHeader> {}
+            }
+            .size(0)
+        );
     }
 
     #[test]
@@ -1536,13 +1692,13 @@ mod whitebox_tests {
                     ethernet2_header: None,
                     ip_header: None,
                     vlan_header: None,
-                    transport_header: None
+                    transport_header: None,
                 },
-                _marker: marker::PhantomData::<UdpHeader>{}
+                _marker: marker::PhantomData::<UdpHeader> {},
             },
             &mut writer,
-            &[]
-        ).unwrap();
+            &[],
+        )
+        .unwrap();
     }
 }
-

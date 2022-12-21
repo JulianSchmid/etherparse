@@ -21,7 +21,7 @@ pub struct PacketHeaders<'a> {
     /// TCP or UDP header if present.
     pub transport: Option<TransportHeader>,
     /// Rest of the packet that could not be decoded as a header (usually the payload).
-    pub payload: &'a [u8]
+    pub payload: &'a [u8],
 }
 
 impl<'a> PacketHeaders<'a> {
@@ -67,16 +67,15 @@ impl<'a> PacketHeaders<'a> {
     /// }
     /// ```
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
-        
         let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)?;
         let mut ether_type = ethernet.ether_type;
 
-        let mut result = PacketHeaders{
+        let mut result = PacketHeaders {
             link: Some(ethernet),
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
 
         //parse vlan header(s)
@@ -95,24 +94,20 @@ impl<'a> PacketHeaders<'a> {
                 match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
                         ether_type = inner.ether_type;
 
-                        Some(Double(DoubleVlanHeader{
-                            outer,
-                            inner
-                        }))
-                    },
+                        Some(Double(DoubleVlanHeader { outer, inner }))
+                    }
                     //no second vlan header detected -> single vlan header
-                    _ => Some(Single(outer))
+                    _ => Some(Single(outer)),
                 }
-            },
+            }
             //no vlan header
-            _ => None
+            _ => None,
         };
 
         //parse ip (if present)
@@ -120,7 +115,8 @@ impl<'a> PacketHeaders<'a> {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
                 let fragmented = ip.is_fragmenting_payload();
-                let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
+                let (ip_ext, ip_protocol, ip_ext_rest) =
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
@@ -136,10 +132,11 @@ impl<'a> PacketHeaders<'a> {
                     rest = transport_rest;
                     result.transport = transport;
                 }
-            },
+            }
             IPV6 => {
                 let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
-                let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
+                let (ip_ext, next_header, ip_ext_rest) =
+                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
                 let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest
@@ -155,8 +152,7 @@ impl<'a> PacketHeaders<'a> {
                     rest = transport_rest;
                     result.transport = transport;
                 }
-
-            },
+            }
             _ => {}
         }
 
@@ -218,14 +214,17 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ether_type(mut ether_type: u16, data: &'a [u8]) -> Result<PacketHeaders, ReadError> {
+    pub fn from_ether_type(
+        mut ether_type: u16,
+        data: &'a [u8],
+    ) -> Result<PacketHeaders, ReadError> {
         let mut rest = data;
-        let mut result = PacketHeaders{
+        let mut result = PacketHeaders {
             link: None,
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
 
         //parse vlan header(s)
@@ -244,24 +243,20 @@ impl<'a> PacketHeaders<'a> {
                 match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
                         ether_type = inner.ether_type;
 
-                        Some(Double(DoubleVlanHeader{
-                            outer,
-                            inner
-                        }))
-                    },
+                        Some(Double(DoubleVlanHeader { outer, inner }))
+                    }
                     //no second vlan header detected -> single vlan header
-                    _ => Some(Single(outer))
+                    _ => Some(Single(outer)),
                 }
-            },
+            }
             //no vlan header
-            _ => None
+            _ => None,
         };
 
         //parse ip (if present)
@@ -269,7 +264,8 @@ impl<'a> PacketHeaders<'a> {
             IPV4 => {
                 let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
                 let fragmented = ip.is_fragmenting_payload();
-                let (ip_ext, ip_protocol, ip_ext_rest) = Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
+                let (ip_ext, ip_protocol, ip_ext_rest) =
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
@@ -285,10 +281,11 @@ impl<'a> PacketHeaders<'a> {
                     rest = transport_rest;
                     result.transport = transport;
                 }
-            },
+            }
             IPV6 => {
                 let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
-                let (ip_ext, next_header, ip_ext_rest) = Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
+                let (ip_ext, next_header, ip_ext_rest) =
+                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
                 let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest
@@ -304,8 +301,7 @@ impl<'a> PacketHeaders<'a> {
                     rest = transport_rest;
                     result.transport = transport;
                 }
-
-            },
+            }
             _ => {}
         }
 
@@ -314,7 +310,6 @@ impl<'a> PacketHeaders<'a> {
 
         Ok(result)
     }
-
 
     /// Tries to decode an ip packet and its transport headers.
     ///
@@ -397,12 +392,8 @@ impl<'a> PacketHeaders<'a> {
             if let Some(vlan) = &self.vlan {
                 use VlanHeader::*;
                 match vlan {
-                    Single(s) => {
-                        Some(s.ether_type)
-                    },
-                    Double(d) => {
-                        Some(d.inner.ether_type)
-                    }
+                    Single(s) => Some(s.ether_type),
+                    Double(d) => Some(d.inner.ether_type),
                 }
             } else {
                 if let Some(link) = &self.link {
@@ -422,14 +413,10 @@ fn read_transport(
 ) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
     use crate::ip_number::*;
     match protocol {
-        ICMP => {
-            Ok(Icmpv4Header::from_slice(rest)?)
-            .map( |value| (Some(TransportHeader::Icmpv4(value.0)), value.1))
-        },
-        IPV6_ICMP => {
-            Ok(Icmpv6Header::from_slice(rest)?)
-            .map( |value| (Some(TransportHeader::Icmpv6(value.0)), value.1))
-        },
+        ICMP => Ok(Icmpv4Header::from_slice(rest)?)
+            .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1)),
+        IPV6_ICMP => Ok(Icmpv6Header::from_slice(rest)?)
+            .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1)),
         UDP => Ok(UdpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
         TCP => Ok(TcpHeader::from_slice(rest)
