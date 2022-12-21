@@ -1,7 +1,7 @@
 use super::super::*;
 
-use std::io::{Cursor, ErrorKind};
 use proptest::prelude::*;
+use std::io::{Cursor, ErrorKind};
 
 mod vlan_header {
     use super::*;
@@ -12,12 +12,12 @@ mod vlan_header {
         use VlanHeader as V;
 
         assert_eq!(3, V::VLAN_ETHER_TYPES.len());
-        assert_eq!(VLAN_TAGGED_FRAME,        V::VLAN_ETHER_TYPES[0]);
-        assert_eq!(PROVIDER_BRIDGING,        V::VLAN_ETHER_TYPES[1]);
+        assert_eq!(VLAN_TAGGED_FRAME, V::VLAN_ETHER_TYPES[0]);
+        assert_eq!(PROVIDER_BRIDGING, V::VLAN_ETHER_TYPES[1]);
         assert_eq!(VLAN_DOUBLE_TAGGED_FRAME, V::VLAN_ETHER_TYPES[2]);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(
             single in vlan_single_any(),
@@ -36,7 +36,7 @@ mod vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn dbg(
             single in vlan_single_any(),
@@ -67,7 +67,7 @@ mod vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             single in vlan_single_any(),
@@ -86,7 +86,7 @@ mod vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(
             single in vlan_single_any(),
@@ -128,7 +128,7 @@ mod vlan_header {
 mod vlan_slice {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(
             single in vlan_single_any(),
@@ -160,7 +160,7 @@ mod vlan_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(
             single in vlan_single_any(),
@@ -188,7 +188,7 @@ mod vlan_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(
             single in vlan_single_any(),
@@ -223,7 +223,7 @@ mod single_vlan_header {
         assert_eq!(4, SingleVlanHeader::SERIALIZED_SIZE);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             input in vlan_single_any(),
@@ -264,7 +264,7 @@ mod single_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_bytes(input in vlan_single_any()) {
             let actual = SingleVlanHeader::from_bytes(
@@ -274,7 +274,7 @@ mod single_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             input in vlan_single_any(),
@@ -306,7 +306,7 @@ mod single_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write_and_to_bytes(input in vlan_single_any()) {
             // normal write
@@ -402,7 +402,7 @@ mod single_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(input in vlan_single_any()) {
             assert_eq!(4, input.header_len());
@@ -411,21 +411,21 @@ mod single_vlan_header {
 
     #[test]
     fn default() {
-        let actual : SingleVlanHeader = Default::default();
+        let actual: SingleVlanHeader = Default::default();
         assert_eq!(0, actual.priority_code_point);
         assert_eq!(false, actual.drop_eligible_indicator);
         assert_eq!(0, actual.vlan_identifier);
         assert_eq!(0, actual.ether_type);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(input in vlan_single_any()) {
             assert_eq!(input, input.clone());
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn dbg(input in vlan_single_any()) {
             assert_eq!(
@@ -450,7 +450,7 @@ mod double_vlan_header {
         assert_eq!(8, DoubleVlanHeader::SERIALIZED_SIZE);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             input in vlan_double_any(),
@@ -507,7 +507,7 @@ mod double_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             input in vlan_double_any(),
@@ -558,7 +558,7 @@ mod double_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write_and_to_bytes(input in vlan_double_any()) {
             // normal write
@@ -643,7 +643,7 @@ mod double_vlan_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(input in vlan_double_any()) {
             assert_eq!(8, input.header_len());
@@ -652,26 +652,23 @@ mod double_vlan_header {
 
     #[test]
     fn default() {
-        let actual : DoubleVlanHeader = Default::default();
-        assert_eq!(
-            actual.outer,
-            {
-                let mut outer : SingleVlanHeader = Default::default();
-                outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
-                outer
-            }
-        );
+        let actual: DoubleVlanHeader = Default::default();
+        assert_eq!(actual.outer, {
+            let mut outer: SingleVlanHeader = Default::default();
+            outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
+            outer
+        });
         assert_eq!(actual.inner, Default::default());
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(input in vlan_double_any()) {
             assert_eq!(input, input.clone());
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn dbg(input in vlan_double_any()) {
             assert_eq!(
@@ -689,7 +686,7 @@ mod double_vlan_header {
 mod single_vlan_header_slice {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             input in vlan_single_any(),
@@ -723,7 +720,7 @@ mod single_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(input in vlan_single_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -736,7 +733,7 @@ mod single_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(input in vlan_single_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -745,7 +742,7 @@ mod single_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(input in vlan_single_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -754,7 +751,7 @@ mod single_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn dbg(input in vlan_single_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -773,7 +770,7 @@ mod single_vlan_header_slice {
 mod double_vlan_header_slice {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             input in vlan_double_any(),
@@ -824,7 +821,7 @@ mod double_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(input in vlan_double_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -835,7 +832,7 @@ mod double_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(input in vlan_double_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -851,7 +848,7 @@ mod double_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(input in vlan_double_any()) {
             let bytes = input.to_bytes().unwrap();
@@ -860,7 +857,7 @@ mod double_vlan_header_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn dbg(input in vlan_double_any()) {
             let bytes = input.to_bytes().unwrap();
