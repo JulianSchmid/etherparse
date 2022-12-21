@@ -255,7 +255,13 @@ impl<'a> UdpHeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(UdpHeader::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: UdpHeader::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::UdpHeader,
+                }
+            ));
         }
 
         //done

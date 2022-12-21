@@ -68,17 +68,23 @@ fn new_and_set_icv() {
 proptest! {
     #[test]
     fn from_slice_slice_smaller_12(len in 0..12usize) {
-        use ReadError::*;
-
         let data = [0;12];
-        assert_matches!(
-            IpAuthenticationHeaderSlice::from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(12))
+        assert_eq!(
+            IpAuthenticationHeaderSlice::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 12,
+                actual_len: len,
+                layer: err::Layer::IpAuthHeader,
+            }
         );
 
-        assert_matches!(
-            IpAuthenticationHeader::from_slice(&data[..len]),
-            Err(UnexpectedEndOfSlice(12))
+        assert_eq!(
+            IpAuthenticationHeader::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 12,
+                actual_len: len,
+                layer: err::Layer::IpAuthHeader,
+            }
         );
     }
 }

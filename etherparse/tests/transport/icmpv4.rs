@@ -1127,9 +1127,13 @@ mod icmpv4_slice {
         // smaller then min size error
         for bad_len in 0..8 {
             let bytes = [0u8;8];
-            assert_matches!(
-                Icmpv4Slice::from_slice(&bytes[..bad_len]),
-                Err(UnexpectedEndOfSlice(Icmpv4Header::MIN_SERIALIZED_SIZE))
+            assert_eq!(
+                Icmpv4Slice::from_slice(&bytes[..bad_len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
+                    actual_len: bad_len,
+                    layer: err::Layer::Icmpv4
+                }
             );
         }
 

@@ -48,7 +48,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            UnexpectedEndOfSlice(0),
+            UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: err::Layer::Icmpv4 }),
             DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
             Ipv4UnexpectedVersion(0),
@@ -110,11 +110,6 @@ fn test_debug_write() {
             link: None,
             vlan: None,
             ip: None,
-            /*ip_extensions: [
-                None, None, None, None, None,
-                None, None, None, None, None,
-                None, None
-            ],*/
             transport: None,
             payload: &dummy[..]
         };
@@ -139,9 +134,19 @@ mod read_error {
     #[test]
     fn add_slice_offset() {
         use super::*;
-        assert_matches!(
-            ReadError::UnexpectedEndOfSlice(2).add_slice_offset(3),
-            ReadError::UnexpectedEndOfSlice(5)
+        assert_eq!(
+            ReadError::UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: 1,
+                    actual_len: 2,
+                    layer: err::Layer::Icmpv4,
+                }
+            ).add_slice_offset(3).unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 4,
+                actual_len: 5,
+                layer: err::Layer::Icmpv4,
+            }
         );
         assert_matches!(
             ReadError::UnexpectedLenOfSlice{ expected: 7, actual: 10 }.add_slice_offset(2),
@@ -162,7 +167,7 @@ mod read_error {
             .io_error().unwrap().kind()
         );
         assert!(
-            ReadError::UnexpectedEndOfSlice(0)
+            ReadError::IpUnsupportedVersion(0)
             .io_error().is_none()
         );
     }
@@ -172,13 +177,21 @@ mod read_error {
         use super::*;
         assert!(
             ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-            .unexpected_end_of_slice_min_expected_size().is_none()
+            .unexpected_end_of_slice().is_none()
         );
-        assert_eq!(
-            123,
-            ReadError::UnexpectedEndOfSlice(123)
-            .unexpected_end_of_slice_min_expected_size().unwrap()
-        );
+        {
+            let err = err::UnexpectedEndOfSliceError{
+                expected_min_len: 1,
+                actual_len: 2,
+                layer: err::Layer::Icmpv4,
+            };
+            assert_eq!(
+                err.clone(),
+                ReadError::UnexpectedEndOfSlice(
+                    err.clone()
+                ).unexpected_end_of_slice().unwrap()
+            );
+        }
     }
 }
 

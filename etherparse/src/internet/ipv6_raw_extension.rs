@@ -199,7 +199,13 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < 8 {
-            return Err(UnexpectedEndOfSlice(8));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: 8,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv6ExtHeader,
+                }
+            ));
         }
 
         //check length
@@ -207,7 +213,13 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(len));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: len,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv6ExtHeader,
+                }
+            ));
         }
 
         //all good

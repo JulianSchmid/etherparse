@@ -291,7 +291,13 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(SingleVlanHeader::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                UnexpectedEndOfSliceError {
+                    expected_min_len: SingleVlanHeader::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::VlanHeader,
+                }
+            ));
         }
 
         //all done
@@ -383,7 +389,13 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         // check length
         use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(DoubleVlanHeader::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::VlanHeader,
+                }
+            ));
         }
 
         // create slice

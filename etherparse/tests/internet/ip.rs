@@ -460,9 +460,9 @@ mod ip_header {
         );
         //also check that an error is thrown when the slice is too small 
         //to even read the version
-        assert_matches!(
-            IpHeader::from_slice(&buffer[buffer.len()..]),
-            Err(ReadError::UnexpectedEndOfSlice(1))
+        assert_eq!(
+            IpHeader::from_slice(&buffer[buffer.len()..]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{ expected_min_len: 1, actual_len: 0, layer: err::Layer::IpHeader }
         );
     }
 } // mod ip_header

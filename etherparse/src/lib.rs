@@ -254,6 +254,7 @@ use std::error::Error;
 pub mod err;
 
 mod link;
+use crate::err::UnexpectedEndOfSliceError;
 pub use crate::link::LinkSlice;
 pub use crate::link::ethernet::*;
 pub use crate::link::vlan_tagging::*;
@@ -301,8 +302,8 @@ pub trait SerializedSize {
 pub enum ReadError {
     ///Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
-    ///Error when an unexpected end of a slice was reached even though more data was expected to be present (expected minimum size as argument).
-    UnexpectedEndOfSlice(usize),
+    ///Error when an unexpected end of a slice was reached even though more data was expected to be present.
+    UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
     ///Error when a slice has a different size then expected.
     UnexpectedLenOfSlice{ expected: usize, actual: usize },
     ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
@@ -338,7 +339,13 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(value + offset),
+            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: value.expected_min_len + offset,
+                    actual_len: value.actual_len + offset,
+                    layer: value.layer,
+                }
+            ),
             UnexpectedLenOfSlice{ expected, actual } => UnexpectedLenOfSlice{ expected: expected + offset, actual: actual + offset },
             value => value
         }
@@ -352,8 +359,8 @@ impl ReadError {
             _ => None
         }
     }
-    /// Returns the expected minimum size if the error is an `UnexpectedEndOfSlice`.
-    pub fn unexpected_end_of_slice_min_expected_size(self) -> Option<usize> {
+    /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
+    pub fn unexpected_end_of_slice(self) -> Option<err::UnexpectedEndOfSliceError> {
         match self {
             ReadError::UnexpectedEndOfSlice(value) => Some(value),
             _ => None
@@ -367,9 +374,7 @@ impl fmt::Display for ReadError {
 
         match self {
             IoError(err) => err.fmt(f),
-            UnexpectedEndOfSlice(expected_minimum_size) => { // usize
-                write!(f, "ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", expected_minimum_size)
-            },
+            UnexpectedEndOfSlice(err) => err.fmt(f),
             UnexpectedLenOfSlice{ expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
             },
@@ -413,7 +418,8 @@ impl fmt::Display for ReadError {
 impl Error for ReadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            ReadError::IoError(ref err) => Some(err),
+            ReadError::IoError(err) => Some(err),
+            ReadError::UnexpectedEndOfSlice(err) => Some(err),
             _ => None
         }
     }

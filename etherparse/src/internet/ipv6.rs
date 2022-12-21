@@ -107,12 +107,24 @@ impl Ipv6Header {
             };
 
             if slice.len() < len {
-                Err(ReadError::UnexpectedEndOfSlice(len))
+                Err(ReadError::UnexpectedEndOfSlice(
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: len,
+                        actual_len: slice.len(),
+                        layer: err::Layer::Ipv6ExtHeader,
+                    }
+                ))
             } else {
                 Ok((slice[0], &slice[len..]))
             }
         } else {
-            Err(ReadError::UnexpectedEndOfSlice(2))
+            Err(ReadError::UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: 2,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv6ExtHeader,
+                }
+            ))
         }
     }
 
@@ -303,7 +315,13 @@ impl<'a> Ipv6HeaderSlice<'a, > {
         // check length
         use crate::ReadError::*;
         if slice.len() < Ipv6Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv6Header,
+                }
+            ));
         }
 
         // read version & ihl
