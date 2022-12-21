@@ -188,7 +188,13 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
         // the fragmentation header has the exact size of 8 bytes
         use crate::ReadError::*;
         if slice.len() < 8 {
-            Err(UnexpectedEndOfSlice(8))
+            Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: 8,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv6FragHeader,
+                }
+            ))
         } else {
             Ok(Ipv6FragmentHeaderSlice {
                 // SAFETY:

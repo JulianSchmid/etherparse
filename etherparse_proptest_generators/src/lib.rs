@@ -772,3 +772,22 @@ prop_compose! {
         Icmpv6Header::from_slice(&bytes).unwrap().0
     }
 }
+
+pub fn err_layer_any() -> impl Strategy<Value = err::Layer> {
+    use err::Layer::*;
+    prop_oneof![
+        Just(Ethernet2Header),
+        Just(VlanHeader),
+        Just(IpHeader),
+        Just(Ipv4Header),
+        Just(Ipv4Packet),
+        Just(IpAuthHeader),
+        Just(Ipv6Header),
+        Just(Ipv6FragHeader),
+        Just(Ipv6ExtHeader),
+        Just(UdpHeader),
+        Just(TcpHeader),
+        Just(Icmpv4),
+        Just(Icmpv6),
+    ]
+}

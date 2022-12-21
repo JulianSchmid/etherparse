@@ -194,7 +194,13 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Ethernet2Header::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ethernet2Header,
+                }
+            ));
         }
 
         //all done

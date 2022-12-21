@@ -1,4 +1,5 @@
 use super::*;
+use etherparse::err::UnexpectedEndOfSliceError;
 use proptest::prelude::*;
 
 proptest! {
@@ -8,7 +9,8 @@ proptest! {
         arg_u16 in any::<u16>(),
         arg_usize in any::<usize>(),
         arg2_usize in any::<usize>(),
-    ) { //arg_u16 in any::<u16>()
+        err_layer in err_layer_any(),
+    ) {
 
         use super::ReadError::*;
 
@@ -22,10 +24,17 @@ proptest! {
         }
 
         //UnexpectedEndOfSlice
-        assert_eq!(
-            &format!("ReadError: Unexpected end of slice. The given slice contained less then minimum required {} bytes.", arg_usize),
-            &format!("{}", UnexpectedEndOfSlice(arg_usize))
-        );
+        {
+            let err = UnexpectedEndOfSliceError{
+                expected_min_len: arg_usize,
+                actual_len: arg2_usize,
+                layer: err_layer,
+            };
+            assert_eq!(
+                &format!("{}", err),
+                &format!("{}", UnexpectedEndOfSlice(err))
+            );
+        }
 
         //UnexpectedLenOfSlice
         assert_eq!(
@@ -107,13 +116,19 @@ fn read_error_source() {
     use super::ReadError::*;
     use std::error::Error;
 
-    assert_matches!(
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source(), 
-        Some(_)
+    assert!(
+        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error"))
+        .source().is_some()
+    );
+    assert!(
+        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: err::Layer::Ethernet2Header,
+        }).source().is_some()
     );
 
     let none_values = [
-        UnexpectedEndOfSlice(0),
         UnexpectedLenOfSlice{ expected: 0, actual: 0 },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
@@ -139,7 +154,9 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(0),
+        UnexpectedEndOfSlice(
+            err::UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: err::Layer::Ethernet2Header }
+        ),
         UnexpectedLenOfSlice{ expected: 0, actual: 0 },
         DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),

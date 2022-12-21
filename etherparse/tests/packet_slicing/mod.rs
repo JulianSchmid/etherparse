@@ -212,9 +212,13 @@ mod sliced_packet {
         use crate::ReadError::*;
 
         //slice length error
-        assert_matches!(
-            SlicedPacket::from_ip(&[]),
-            Err(UnexpectedEndOfSlice(1))
+        assert_eq!(
+            SlicedPacket::from_ip(&[]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 1,
+                actual_len: 0,
+                layer: err::Layer::IpHeader
+            }
         );
 
         //bad protocol number

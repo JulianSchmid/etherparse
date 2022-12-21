@@ -1,6 +1,5 @@
 use super::super::*;
 
-use crate::ReadError::UnexpectedEndOfSlice;
 use crate::ip_number::*;
 use std::io::Cursor;
 
@@ -53,9 +52,13 @@ pub mod header {
                 &buffer[..auth_header.header_len() - 1]
             ).unwrap_err();
             const AUTH_HEADER_LEN: usize = 12;
-            assert_matches!(
-                err,
-                UnexpectedEndOfSlice(AUTH_HEADER_LEN)
+            assert_eq!(
+                err.unexpected_end_of_slice().unwrap(),
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: AUTH_HEADER_LEN,
+                    actual_len: auth_header.header_len() - 1,
+                    layer: err::Layer::IpAuthHeader,
+                }
             );
         }
     }
@@ -396,9 +399,13 @@ mod slice {
             {
                 let err = Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err();
                 const AUTH_HEADER_LEN: usize = 12;
-                assert_matches!(
-                    err,
-                    UnexpectedEndOfSlice(AUTH_HEADER_LEN)
+                assert_eq!(
+                    err.unexpected_end_of_slice().unwrap(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: AUTH_HEADER_LEN,
+                        actual_len: 0,
+                        layer: err::Layer::IpAuthHeader
+                    }
                 );
             }
         }

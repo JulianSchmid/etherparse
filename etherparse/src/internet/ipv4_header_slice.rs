@@ -16,7 +16,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Ipv4Header::SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Ipv4Header::SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv4Header,
+                }
+            ));
         }
 
         //read version & ihl
@@ -39,7 +45,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check that the slice contains enough data for the entire header + options
         let header_length = (usize::from(ihl))*4;
         if slice.len() < header_length {
-            return Err(UnexpectedEndOfSlice(header_length));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: header_length,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Ipv4Header,
+                }
+            ));
         }
 
         // check the total_length can contain the header

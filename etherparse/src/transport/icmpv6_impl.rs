@@ -1034,7 +1034,13 @@ impl<'a> Icmpv6Slice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(Icmpv6Header::MIN_SERIALIZED_SIZE));
+            return Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
+                    actual_len: slice.len(),
+                    layer: err::Layer::Icmpv6,
+                }
+            ));
         }
         if slice.len() > icmpv6::MAX_ICMPV6_BYTE_LEN {
             return Err(Icmpv6PacketTooBig(slice.len()));

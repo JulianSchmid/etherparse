@@ -15,7 +15,7 @@ impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
         match self {
-            UnexpectedEndOfSlice(err) => write!(f, "IPv4 Header: Length of the slice ({} bytes/octets) is too small to contain an IPv4 header. The slice must at least contain {} bytes/octets.", err.actual, err.expected_min),
+            UnexpectedEndOfSlice(err) => write!(f, "IPv4 Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain an IPv4 header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
             Content(value) => value.fmt(f),
         }
     }
@@ -65,11 +65,11 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "IPv4 Header: Length of the slice (1 bytes/octets) is too small to contain an IPv4 header. The slice must at least contain 2 bytes/octets.",
+            "IPv4 Header Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain an IPv4 header. The slice must at least contain 2 bytes/octets.",
             format!(
                 "{}",
                 UnexpectedEndOfSlice(
-                    UnexpectedEndOfSliceError{ expected_min: 2, actual: 1, layer: Layer::Ipv4Header }
+                    UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
                 )
             )
         );
@@ -85,7 +85,7 @@ mod tests {
     #[test]
     fn source() {
         assert!(UnexpectedEndOfSlice(
-            UnexpectedEndOfSliceError{ expected_min: 0, actual: 0, layer: Layer::Ipv4Header }
+            UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: Layer::Ipv4Header }
         ).source().is_none());
         assert!(Content(HeaderError::UnexpectedVersion { version_number: 6 }).source().is_some());
     }

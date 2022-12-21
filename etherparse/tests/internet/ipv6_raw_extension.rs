@@ -124,13 +124,21 @@ fn slice_from_slice_error() {
     // errors:
     // length smaller then 8
     {
-        assert_matches!(
-            Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]),
-            Err(ReadError::UnexpectedEndOfSlice(8))
+        assert_eq!(
+            Ipv6RawExtensionHeaderSlice::from_slice(&[0;7]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 8,
+                actual_len: 7,
+                layer: err::Layer::Ipv6ExtHeader
+            }
         );
-        assert_matches!(
-            Ipv6RawExtensionHeader::from_slice(&[0;7]),
-            Err(ReadError::UnexpectedEndOfSlice(8))
+        assert_eq!(
+            Ipv6RawExtensionHeader::from_slice(&[0;7]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 8,
+                actual_len: 7,
+                layer: err::Layer::Ipv6ExtHeader
+            }
         );
     }
     // length smaller then spezified size
@@ -141,13 +149,21 @@ fn slice_from_slice_error() {
             data[1] = 3;
             data
         };
-        assert_matches!(
-            Ipv6RawExtensionHeaderSlice::from_slice(&data),
-            Err(ReadError::UnexpectedEndOfSlice(32))
+        assert_eq!(
+            Ipv6RawExtensionHeaderSlice::from_slice(&data).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 32,
+                actual_len: 8*4 - 1,
+                layer: err::Layer::Ipv6ExtHeader
+            }
         );
-        assert_matches!(
-            Ipv6RawExtensionHeader::from_slice(&data),
-            Err(ReadError::UnexpectedEndOfSlice(32))
+        assert_eq!(
+            Ipv6RawExtensionHeader::from_slice(&data).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 32,
+                actual_len: 8*4 - 1,
+                layer: err::Layer::Ipv6ExtHeader
+            }
         );
     }
 }
@@ -155,15 +171,20 @@ fn slice_from_slice_error() {
 #[test]
 fn extension_from_slice_bad_length() {
     use crate::ip_number::UDP;
-    use self::ReadError::*;
 
     //smaller then minimum extension header size (8 bytes)
     {
         let buffer: [u8; 7] = [
             UDP,2,0,0, 0,0,0
         ];
-        assert_matches!(Ipv6RawExtensionHeaderSlice::from_slice(&buffer), 
-                        Err(UnexpectedEndOfSlice(8)));
+        assert_eq!(
+            Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 8,
+                actual_len: 7,
+                layer: err::Layer::Ipv6ExtHeader
+            }
+        );
     }
     //smaller then specified size by length field
     {
@@ -173,8 +194,15 @@ fn extension_from_slice_bad_length() {
             0,0,0,0,   0,0,0,
         ];
         // should generate an error
-        let slice = Ipv6RawExtensionHeaderSlice::from_slice(&buffer);
-        assert_matches!(slice, Err(UnexpectedEndOfSlice(_)));
+        let err = Ipv6RawExtensionHeaderSlice::from_slice(&buffer).unwrap_err();
+        assert_eq!(
+            err.unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: 8*3,
+                actual_len: 8*3-1,
+                layer: err::Layer::Ipv6ExtHeader
+            }
+        );
     }
 }
 

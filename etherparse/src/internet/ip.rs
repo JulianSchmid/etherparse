@@ -24,7 +24,13 @@ impl IpHeader {
     pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         use crate::ReadError::*;
         if slice.is_empty() {
-            Err(UnexpectedEndOfSlice(1))
+            Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: 1,
+                    actual_len: slice.len(),
+                    layer: err::Layer::IpHeader,
+                }
+            ))
         } else {
             match slice[0] >> 4 {
                 4 => {

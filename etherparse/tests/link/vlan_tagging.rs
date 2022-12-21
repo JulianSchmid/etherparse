@@ -252,9 +252,13 @@ mod single_vlan_header {
                 assert_eq!(
                     SingleVlanHeader::from_slice(&buffer[..len])
                         .unwrap_err()
-                        .unexpected_end_of_slice_min_expected_size()
+                        .unexpected_end_of_slice()
                         .unwrap(),
-                    4
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 4,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
                 );
             }
         }
@@ -479,9 +483,13 @@ mod double_vlan_header {
                 assert_eq!(
                     DoubleVlanHeader::from_slice(&buffer[..len])
                         .unwrap_err()
-                        .unexpected_end_of_slice_min_expected_size()
+                        .unexpected_end_of_slice()
                         .unwrap(),
-                    8
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 8,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
                 );
             }
 
@@ -703,9 +711,13 @@ mod single_vlan_header_slice {
                 assert_eq!(
                     SingleVlanHeaderSlice::from_slice(&buffer[..len])
                         .unwrap_err()
-                        .unexpected_end_of_slice_min_expected_size()
+                        .unexpected_end_of_slice()
                         .unwrap(),
-                    4
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 4,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
                 );
             }
         }
@@ -788,9 +800,13 @@ mod double_vlan_header_slice {
                     assert_eq!(
                         DoubleVlanHeaderSlice::from_slice(&buffer[..len])
                             .unwrap_err()
-                            .unexpected_end_of_slice_min_expected_size()
+                            .unexpected_end_of_slice()
                             .unwrap(),
-                        8
+                        err::UnexpectedEndOfSliceError{
+                            expected_min_len: 8,
+                            actual_len: len,
+                            layer:  err::Layer::VlanHeader
+                        }
                     );
                 }
             }

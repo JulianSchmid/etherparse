@@ -420,7 +420,13 @@ impl<'a> CursorSlice<'a> {
         use ReadError::*;
 
         if self.slice.is_empty() {
-            Err(UnexpectedEndOfSlice(self.offset + 1))
+            Err(UnexpectedEndOfSlice(
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: self.offset + 1,
+                    actual_len: self.offset + self.slice.len(),
+                    layer: err::Layer::IpHeader,
+                }
+            ))
         } else {
             match self.slice[0] >> 4 {
                 4 => self.slice_ipv4(),

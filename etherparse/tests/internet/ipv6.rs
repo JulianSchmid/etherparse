@@ -138,9 +138,13 @@ fn read_error() {
             );
 
             // read from slice
-            assert_matches!(
-                Ipv6Header::from_slice(&buffer[0..len]),
-                Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE))
+            assert_eq!(
+                Ipv6Header::from_slice(&buffer[0..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+                err::UnexpectedEndOfSliceError{
+                    expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                    actual_len: len,
+                    layer: err::Layer::Ipv6Header
+                }
             );
         }
     }
@@ -425,7 +429,14 @@ proptest! {
         input.write(&mut buffer).unwrap();
 
         //check that a too small slice triggers an error
-        assert_matches!(Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]), Err(ReadError::UnexpectedEndOfSlice(Ipv6Header::SERIALIZED_SIZE)));
+        assert_eq!(
+            Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            err::UnexpectedEndOfSliceError{
+                expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                actual_len: buffer.len() - 1,
+                layer: err::Layer::Ipv6Header
+            }
+        );
 
         //check that all the values are read correctly
         use std::net::Ipv6Addr;
