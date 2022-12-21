@@ -1,7 +1,7 @@
 use crate::err::Layer;
 
 /// Error when an unexpected end of a slice is reached even though more data was expected to be present.
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct UnexpectedEndOfSliceError {
     /// Expected minimum length of the slice.
     pub expected_min: usize,

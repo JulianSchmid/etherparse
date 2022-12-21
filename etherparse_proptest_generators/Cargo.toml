@@ -1,14 +1,14 @@
 [package]
-name = "etherparse"
+name = "etherparse_proptest_generators"
 version = "0.13.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
-edition = "2021"
+edition = "2018"
 repository = "https://github.com/JulianSchmid/etherparse"
 description = "A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...)."
 categories = ["network-programming", "parser-implementations"]
 keywords = ["ipv4", "ipv6", "vlan", "udp", "tcp"]
 license = "MIT OR Apache-2.0"
-readme = "../README.md"
+readme = "README.md"
 exclude = [
     ".gitignore",
     ".travis.yml",
@@ -19,9 +19,5 @@ exclude = [
 ]
 
 [dependencies]
-arrayvec = "0.7.2"
-
-[dev-dependencies]
-assert_matches = "1.5.0"
+etherparse = { path = "../etherparse" }
 proptest = "1.0.0"
-etherparse_proptest_generators = { path = "../etherparse_proptest_generators" }
