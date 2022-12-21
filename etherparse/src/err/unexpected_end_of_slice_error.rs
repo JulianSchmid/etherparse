@@ -45,10 +45,14 @@ impl std::error::Error for UnexpectedEndOfSliceError {
 
 #[cfg(test)]
 mod test {
-    use std::{error::Error, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
-    use crate::err::Layer;
     use super::*;
-    
+    use crate::err::Layer;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        error::Error,
+        hash::{Hash, Hasher},
+    };
+
     #[test]
     fn debug() {
         assert_eq!(
@@ -62,7 +66,7 @@ mod test {
 
     #[test]
     fn clone_eq_hash() {
-        let err = UnexpectedEndOfSliceError{
+        let err = UnexpectedEndOfSliceError {
             expected_min_len: 0,
             actual_len: 0,
             layer: Layer::Ipv4Header,
@@ -112,9 +116,12 @@ mod test {
 
     #[test]
     fn source() {
-        assert!(
-            UnexpectedEndOfSliceError{ expected_min_len: 0, actual_len: 0, layer: Layer::Ipv4Header }
-            .source().is_none()
-        );
+        assert!(UnexpectedEndOfSliceError {
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: Layer::Ipv4Header
+        }
+        .source()
+        .is_none());
     }
 }

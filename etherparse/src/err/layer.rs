@@ -94,15 +94,16 @@ impl core::fmt::Display for Layer {
 
 #[cfg(test)]
 mod test {
-    use std::{cmp::{Ord, Ordering}, hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
     use super::Layer::*;
+    use std::{
+        cmp::{Ord, Ordering},
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
 
     #[test]
     fn debug() {
-        assert_eq!(
-            "Ethernet2Header",
-            format!("{:?}", Ethernet2Header)
-        );
+        assert_eq!("Ethernet2Header", format!("{:?}", Ethernet2Header));
     }
 
     #[test]
