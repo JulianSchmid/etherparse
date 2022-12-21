@@ -187,7 +187,6 @@ pub mod icmpv6 {
     }
 
     impl TimeExceededCode {
-
         /// Tries to convert a code [`u8`] value to a [`TimeExceededCode`] value.
         ///
         /// Returns [`None`] in case the code value is not known as a time exceeded code.
@@ -273,7 +272,6 @@ pub mod icmpv6 {
     }
 
     impl ParameterProblemCode {
-
         /// Tries to convert a code [`u8`] value to a [`ParameterProblemCode`] value.
         ///
         /// Returns [`None`] in case the code value is not known as a parameter problem code.
@@ -293,7 +291,9 @@ pub mod icmpv6 {
                 CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG => Some(ExtensionHeaderTooBig),
                 CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG => Some(ExtensionHeaderChainTooLong),
                 CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => Some(TooManyExtensionHeaders),
-                CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => Some(TooManyOptionsInExtensionHeader),
+                CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => {
+                    Some(TooManyOptionsInExtensionHeader)
+                }
                 CODE_PARAM_PROBLEM_OPTION_TOO_BIG => Some(OptionTooBig),
                 _ => None,
             }
@@ -320,7 +320,6 @@ pub mod icmpv6 {
         /// in the maximum size of an ICMPv6 error message.
         pub pointer: u32,
     }
-
 } // mod icmpv6
 
 use icmpv6::*;
@@ -654,7 +653,6 @@ pub enum Icmpv6Type {
 }
 
 impl Icmpv6Type {
-
     /// Returns the type value (first byte of the ICMPv6 header) of this type.
     #[inline]
     pub fn type_u8(&self) -> u8 {
@@ -734,43 +732,34 @@ impl Icmpv6Type {
             .add_4bytes((msg_len as u32).to_be_bytes());
 
         use Icmpv6Type::*;
-        Ok(
-            match self {
-                Unknown {
-                    type_u8,
-                    code_u8,
-                    bytes5to8,
-                } => {
-                    pseudo_sum.add_2bytes([*type_u8, *code_u8])
-                    .add_4bytes(*bytes5to8)
-                },
-                DestinationUnreachable(header) => {
-                    pseudo_sum.add_2bytes([TYPE_DST_UNREACH, header.code_u8()])
-                },
-                PacketTooBig { mtu } => {
-                    pseudo_sum.add_2bytes([TYPE_PACKET_TOO_BIG, 0])
-                    .add_4bytes(mtu.to_be_bytes())
-                },
-                TimeExceeded(code) => {
-                    pseudo_sum.add_2bytes([TYPE_TIME_EXCEEDED, code.code_u8()])
-                },
-                ParameterProblem(header) => {
-                    pseudo_sum.add_2bytes([TYPE_PARAMETER_PROBLEM, header.code.code_u8()])
-                    .add_4bytes(header.pointer.to_be_bytes())
-                }
-                EchoRequest(echo) => {
-                    pseudo_sum.add_2bytes([TYPE_ECHO_REQUEST, 0])
-                    .add_4bytes(echo.to_bytes())
-                }
-                EchoReply(echo) => {
-                    pseudo_sum.add_2bytes([TYPE_ECHO_REPLY, 0])
-                    .add_4bytes(echo.to_bytes())
-                }
+        Ok(match self {
+            Unknown {
+                type_u8,
+                code_u8,
+                bytes5to8,
+            } => pseudo_sum
+                .add_2bytes([*type_u8, *code_u8])
+                .add_4bytes(*bytes5to8),
+            DestinationUnreachable(header) => {
+                pseudo_sum.add_2bytes([TYPE_DST_UNREACH, header.code_u8()])
             }
-            .add_slice(payload)
-            .ones_complement()
-            .to_be()
-        )
+            PacketTooBig { mtu } => pseudo_sum
+                .add_2bytes([TYPE_PACKET_TOO_BIG, 0])
+                .add_4bytes(mtu.to_be_bytes()),
+            TimeExceeded(code) => pseudo_sum.add_2bytes([TYPE_TIME_EXCEEDED, code.code_u8()]),
+            ParameterProblem(header) => pseudo_sum
+                .add_2bytes([TYPE_PARAMETER_PROBLEM, header.code.code_u8()])
+                .add_4bytes(header.pointer.to_be_bytes()),
+            EchoRequest(echo) => pseudo_sum
+                .add_2bytes([TYPE_ECHO_REQUEST, 0])
+                .add_4bytes(echo.to_bytes()),
+            EchoReply(echo) => pseudo_sum
+                .add_2bytes([TYPE_ECHO_REPLY, 0])
+                .add_4bytes(echo.to_bytes()),
+        }
+        .add_slice(payload)
+        .ones_complement()
+        .to_be())
     }
 
     /// Creates a header with the correct checksum.
@@ -799,7 +788,7 @@ impl Icmpv6Type {
                 bytes5to8: _,
             }
             | DestinationUnreachable(_)
-            | PacketTooBig{ mtu: _ }
+            | PacketTooBig { mtu: _ }
             | TimeExceeded(_)
             | ParameterProblem(_)
             | EchoRequest(_)
@@ -819,7 +808,7 @@ impl Icmpv6Type {
                 bytes5to8: _,
             }
             | DestinationUnreachable(_)
-            | PacketTooBig{ mtu: _ }
+            | PacketTooBig { mtu: _ }
             | TimeExceeded(_)
             | ParameterProblem(_)
             | EchoRequest(_)
@@ -888,11 +877,9 @@ impl Icmpv6Header {
     /// Read a ICMPv6 header from the given reader
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, ReadError> {
         // read the initial 8 bytes
-        let mut start = [0u8;8];
+        let mut start = [0u8; 8];
         reader.read_exact(&mut start)?;
-        Ok(Icmpv6Slice{
-            slice: &start
-        }.header())
+        Ok(Icmpv6Slice { slice: &start }.header())
     }
 
     /// Write the ICMPv6 header to the given writer.
@@ -932,11 +919,11 @@ impl Icmpv6Header {
     /// Returns the header on the wire bytes.
     #[inline]
     pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
-
         let checksum_be = self.checksum.to_be_bytes();
 
-        let return_trivial = |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
-            #[rustfmt::skip]
+        let return_trivial =
+            |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+                #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
                 0, 0, 0, 0,
@@ -951,14 +938,17 @@ impl Icmpv6Header {
                 0, 0, 0, 0,
                 0, 0, 0, 0,
             ]);
-            // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
-            unsafe {
-                re.set_len(8);
-            }
-            re
-        };
+                // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 20.
+                unsafe {
+                    re.set_len(8);
+                }
+                re
+            };
 
-        let return_4u8 = |type_u8: u8, code_u8: u8, bytes5to8: [u8;4]| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+        let return_4u8 = |type_u8: u8,
+                          code_u8: u8,
+                          bytes5to8: [u8; 4]|
+         -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
             #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
@@ -987,27 +977,17 @@ impl Icmpv6Header {
                 type_u8,
                 code_u8,
                 bytes5to8,
-            } => {
-                return_4u8(type_u8, code_u8, bytes5to8)
-            },
-            DestinationUnreachable(header) => {
-                return_trivial(TYPE_DST_UNREACH, header.code_u8())
-            },
-            PacketTooBig { mtu } => {
-                return_4u8(TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes())
-            },
-            TimeExceeded(code) => {
-                return_trivial(TYPE_TIME_EXCEEDED, code.code_u8())
-            },
-            ParameterProblem(header) => {
-                return_4u8(TYPE_PARAMETER_PROBLEM, header.code.code_u8(), header.pointer.to_be_bytes())
-            }
-            EchoRequest(echo) => {
-                return_4u8(TYPE_ECHO_REQUEST, 0, echo.to_bytes())
-            },
-            EchoReply(echo) => {
-                return_4u8(TYPE_ECHO_REPLY, 0, echo.to_bytes())
-            },
+            } => return_4u8(type_u8, code_u8, bytes5to8),
+            DestinationUnreachable(header) => return_trivial(TYPE_DST_UNREACH, header.code_u8()),
+            PacketTooBig { mtu } => return_4u8(TYPE_PACKET_TOO_BIG, 0, mtu.to_be_bytes()),
+            TimeExceeded(code) => return_trivial(TYPE_TIME_EXCEEDED, code.code_u8()),
+            ParameterProblem(header) => return_4u8(
+                TYPE_PARAMETER_PROBLEM,
+                header.code.code_u8(),
+                header.pointer.to_be_bytes(),
+            ),
+            EchoRequest(echo) => return_4u8(TYPE_ECHO_REQUEST, 0, echo.to_bytes()),
+            EchoReply(echo) => return_4u8(TYPE_ECHO_REPLY, 0, echo.to_bytes()),
         }
     }
 }
@@ -1034,13 +1014,11 @@ impl<'a> Icmpv6Slice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
-                    actual_len: slice.len(),
-                    layer: err::Layer::Icmpv6,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
+                actual_len: slice.len(),
+                layer: err::Layer::Icmpv6,
+            }));
         }
         if slice.len() > icmpv6::MAX_ICMPV6_BYTE_LEN {
             return Err(Icmpv6PacketTooBig(slice.len()));
@@ -1090,12 +1068,10 @@ impl<'a> Icmpv6Slice<'a> {
             }
             TYPE_PARAMETER_PROBLEM => {
                 if let Some(code) = ParameterProblemCode::from_u8(self.code_u8()) {
-                    return ParameterProblem(
-                        ParameterProblemHeader{
-                            code,
-                            pointer: u32::from_be_bytes(self.bytes5to8())
-                        }
-                    );
+                    return ParameterProblem(ParameterProblemHeader {
+                        code,
+                        pointer: u32::from_be_bytes(self.bytes5to8()),
+                    });
                 }
             }
             TYPE_ECHO_REQUEST => {

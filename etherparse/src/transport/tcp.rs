@@ -4,7 +4,7 @@ use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
 ///The minimum size of the tcp header in bytes
-pub const TCP_MINIMUM_HEADER_SIZE: usize = 5*4;
+pub const TCP_MINIMUM_HEADER_SIZE: usize = 5 * 4;
 ///The minimum data offset size (size of the tcp header itself).
 pub const TCP_MINIMUM_DATA_OFFSET: u8 = 5;
 ///The maximum allowed value for the data offset (it is a 4 bit value).
@@ -21,7 +21,7 @@ pub struct TcpHeader {
     pub destination_port: u16,
     ///The sequence number of the first data octet in this segment (except when SYN is present).
     ///
-    ///If SYN is present the sequence number is the initial sequence number (ISN) 
+    ///If SYN is present the sequence number is the initial sequence number (ISN)
     ///and the first data octet is ISN+1.
     ///[copied from RFC 793, page 16]
     pub sequence_number: u32,
@@ -52,7 +52,7 @@ pub struct TcpHeader {
     pub urg: bool,
     ///ECN-Echo (RFC 3168)
     pub ece: bool,
-    ///Congestion Window Reduced (CWR) flag 
+    ///Congestion Window Reduced (CWR) flag
     ///
     ///This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
     pub cwr: bool,
@@ -70,13 +70,17 @@ pub struct TcpHeader {
     ///the URG control bit set.
     pub urgent_pointer: u16,
     ///Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
-    options_buffer: [u8;40]
+    options_buffer: [u8; 40],
 }
 
 impl TcpHeader {
-
     ///Creates a TcpHeader with the given values and the rest initialized with default values.
-    pub fn new(source_port: u16, destination_port: u16, sequence_number: u32, window_size: u16) -> TcpHeader {
+    pub fn new(
+        source_port: u16,
+        destination_port: u16,
+        sequence_number: u32,
+        window_size: u16,
+    ) -> TcpHeader {
         TcpHeader {
             source_port,
             destination_port,
@@ -95,7 +99,7 @@ impl TcpHeader {
             window_size,
             checksum: 0,
             urgent_pointer: 0,
-            options_buffer: [0;40]
+            options_buffer: [0; 40],
         }
     }
 
@@ -126,7 +130,6 @@ impl TcpHeader {
 
     ///Sets the options (overwrites the current options) or returns an error when there is not enough space.
     pub fn set_options(&mut self, options: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
-
         //calculate the required size of the options
         use crate::TcpOptionElement::*;
         let required_length = options.iter().fold(0, |acc, ref x| {
@@ -135,14 +138,10 @@ impl TcpHeader {
                 MaximumSegmentSize(_) => 4,
                 WindowScale(_) => 3,
                 SelectiveAcknowledgementPermitted => 2,
-                SelectiveAcknowledgement(_, rest) => {
-                    rest.iter().fold(10, |acc2, ref y| {
-                        match y {
-                            None => acc2,
-                            Some(_) => acc2 + 8
-                        }
-                    })
-                },
+                SelectiveAcknowledgement(_, rest) => rest.iter().fold(10, |acc2, ref y| match y {
+                    None => acc2,
+                    Some(_) => acc2 + 8,
+                }),
                 Timestamp(_, _) => 10,
             }
         });
@@ -150,13 +149,12 @@ impl TcpHeader {
         if self.options_buffer.len() < required_length {
             Err(TcpOptionWriteError::NotEnoughSpace(required_length))
         } else {
-
             //reset the options to null
-            self.options_buffer = [0;40];
+            self.options_buffer = [0; 40];
             self._data_offset = TCP_MINIMUM_DATA_OFFSET;
 
             //write the options to the buffer
-            //note to whoever: I would have prefered to use std::io::Cursor as it would be less error 
+            //note to whoever: I would have prefered to use std::io::Cursor as it would be less error
             //                 prone. But just in case that "no std" support is added later lets
             //                 not not rewrite it just yet with cursor.
             use tcp_option::*;
@@ -166,36 +164,36 @@ impl TcpHeader {
                     Noop => {
                         self.options_buffer[i] = KIND_NOOP;
                         i += 1;
-                    },
+                    }
                     MaximumSegmentSize(value) => {
                         // determine insertion area
-                        let insert = &mut self.options_buffer[i..i+4];
+                        let insert = &mut self.options_buffer[i..i + 4];
                         i += 4;
 
                         // write data
                         insert[0] = KIND_MAXIMUM_SEGMENT_SIZE;
                         insert[1] = 4;
                         insert[2..4].copy_from_slice(&value.to_be_bytes());
-                    },
+                    }
                     WindowScale(value) => {
                         // determine insertion area
-                        let insert = &mut self.options_buffer[i..i+3];
+                        let insert = &mut self.options_buffer[i..i + 3];
                         i += 3;
 
                         // write data
                         insert[0] = KIND_WINDOW_SCALE;
                         insert[1] = 3;
                         insert[2] = *value;
-                    },
+                    }
                     SelectiveAcknowledgementPermitted => {
                         // determine insertion area
-                        let insert = &mut self.options_buffer[i..i+2];
+                        let insert = &mut self.options_buffer[i..i + 2];
                         i += 2;
 
                         // write data
                         insert[0] = KIND_SELECTIVE_ACK_PERMITTED;
                         insert[1] = 2;
-                    },
+                    }
                     SelectiveAcknowledgement(first, rest) => {
                         //write guranteed data
                         {
@@ -204,11 +202,9 @@ impl TcpHeader {
 
                             insert[0] = KIND_SELECTIVE_ACK;
                             //write the length
-                            insert[1] = rest.iter().fold(10, |acc, ref y| {
-                                match y {
-                                    None => acc,
-                                    Some(_) => acc + 8
-                                }
+                            insert[1] = rest.iter().fold(10, |acc, ref y| match y {
+                                None => acc,
+                                Some(_) => acc + 8,
                             });
                             // write first
                             insert[2..6].copy_from_slice(&first.0.to_be_bytes());
@@ -217,8 +213,8 @@ impl TcpHeader {
                         //write the rest
                         for v in rest {
                             match v {
-                                None => {},
-                                Some((a,b)) => {
+                                None => {}
+                                Some((a, b)) => {
                                     // determine insertion area
                                     let insert = &mut self.options_buffer[i..i + 8];
                                     i += 8;
@@ -229,8 +225,8 @@ impl TcpHeader {
                                 }
                             }
                         }
-                    },
-                    Timestamp(a, b) =>  {
+                    }
+                    Timestamp(a, b) => {
                         let insert = &mut self.options_buffer[i..i + 10];
                         i += 10;
 
@@ -260,7 +256,7 @@ impl TcpHeader {
             Err(TcpOptionWriteError::NotEnoughSpace(data.len()))
         } else {
             //reset all to zero to ensure padding
-            self.options_buffer = [0;40];
+            self.options_buffer = [0; 40];
 
             //set data & data_offset
             self.options_buffer[..data.len()].copy_from_slice(data);
@@ -275,15 +271,12 @@ impl TcpHeader {
     /// Returns an iterator that allows to iterate through all known TCP header options.
     pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator {
-            options: &self.options_buffer[..self.options_len()]
+            options: &self.options_buffer[..self.options_len()],
         }
     }
 
     /// Renamed to `TcpHeader::from_slice`
-    #[deprecated(
-        since = "0.10.1",
-        note = "Use TcpHeader::from_slice instead."
-    )]
+    #[deprecated(since = "0.10.1", note = "Use TcpHeader::from_slice instead.")]
     #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
         TcpHeader::from_slice(slice)
@@ -293,16 +286,13 @@ impl TcpHeader {
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
         let h = TcpHeaderSlice::from_slice(slice)?;
-        Ok((
-            h.to_header(),
-            &slice[h.slice().len()..]
-        ))
+        Ok((h.to_header(), &slice[h.slice().len()..]))
     }
 
     /// Read a tcp header from the current position
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
         let raw = {
-            let mut raw : [u8;20] = [0;20];
+            let mut raw: [u8; 20] = [0; 20];
             reader.read_exact(&mut raw)?;
             raw
         };
@@ -316,7 +306,7 @@ impl TcpHeader {
         };
         let flags = raw[13];
 
-        Ok(TcpHeader{
+        Ok(TcpHeader {
             source_port,
             destination_port,
             sequence_number,
@@ -337,9 +327,9 @@ impl TcpHeader {
                 if data_offset < TCP_MINIMUM_DATA_OFFSET {
                     return Err(ReadError::TcpDataOffsetTooSmall(data_offset));
                 } else {
-                    let mut buffer: [u8;40] = [0;40];
+                    let mut buffer: [u8; 40] = [0; 40];
                     //convert to bytes minus the tcp header size itself
-                    let len = ((data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
+                    let len = ((data_offset - TCP_MINIMUM_DATA_OFFSET) as usize) * 4;
                     if len > 0 {
                         reader.read_exact(&mut buffer[..len])?;
                     }
@@ -352,7 +342,6 @@ impl TcpHeader {
 
     /// Write the tcp header to a stream (does NOT calculate the checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
-
         //check that the data offset is within range
         debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
         debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
@@ -365,119 +354,148 @@ impl TcpHeader {
         let checksum_be = self.checksum.to_be_bytes();
         let urg_ptr_be = self.urgent_pointer.to_be_bytes();
 
-        writer.write_all(
-            &[
-                src_be[0], src_be[1], dst_be[0], dst_be[1],
-                seq_be[0], seq_be[1], seq_be[2], seq_be[3],
-                ack_be[0], ack_be[1], ack_be[2], ack_be[3],
-                {
-                    let value = (self._data_offset << 4) & 0xF0;
-                    if self.ns {
-                        value | 1
-                    } else {
-                        value
-                    }
-                },
-                {
-                    let mut value = 0;
-                    if self.fin {
-                        value |= 1;
-                    }
-                    if self.syn {
-                        value |= 2;
-                    }
-                    if self.rst {
-                        value |= 4;
-                    }
-                    if self.psh {
-                        value |= 8;
-                    }
-                    if self.ack {
-                        value |= 16;
-                    }
-                    if self.urg {
-                        value |= 32;
-                    }
-                    if self.ece {
-                        value |= 64;
-                    }
-                    if self.cwr {
-                        value |= 128;
-                    }
+        writer.write_all(&[
+            src_be[0],
+            src_be[1],
+            dst_be[0],
+            dst_be[1],
+            seq_be[0],
+            seq_be[1],
+            seq_be[2],
+            seq_be[3],
+            ack_be[0],
+            ack_be[1],
+            ack_be[2],
+            ack_be[3],
+            {
+                let value = (self._data_offset << 4) & 0xF0;
+                if self.ns {
+                    value | 1
+                } else {
                     value
-                },
-                window_be[0], window_be[1],
-                checksum_be[0], checksum_be[1], urg_ptr_be[0], urg_ptr_be[1]
-            ]
-        )?;
+                }
+            },
+            {
+                let mut value = 0;
+                if self.fin {
+                    value |= 1;
+                }
+                if self.syn {
+                    value |= 2;
+                }
+                if self.rst {
+                    value |= 4;
+                }
+                if self.psh {
+                    value |= 8;
+                }
+                if self.ack {
+                    value |= 16;
+                }
+                if self.urg {
+                    value |= 32;
+                }
+                if self.ece {
+                    value |= 64;
+                }
+                if self.cwr {
+                    value |= 128;
+                }
+                value
+            },
+            window_be[0],
+            window_be[1],
+            checksum_be[0],
+            checksum_be[1],
+            urg_ptr_be[0],
+            urg_ptr_be[1],
+        ])?;
 
         //write options if the data_offset is large enough
         if self._data_offset > TCP_MINIMUM_DATA_OFFSET {
-            let len = ((self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize)*4;
+            let len = ((self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize) * 4;
             writer.write_all(&self.options_buffer[..len])?;
         }
         Ok(())
     }
 
     /// Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4Header, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4(
+        &self,
+        ip_header: &Ipv4Header,
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
     /// Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4_raw(&self, source_ip: [u8;4], destination_ip: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
-        
+    pub fn calc_checksum_ipv4_raw(
+        &self,
+        source_ip: [u8; 4],
+        destination_ip: [u8; 4],
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        let tcp_length = (self._data_offset as usize)*4 + payload.len();
+        let tcp_length = (self._data_offset as usize) * 4 + payload.len();
         if (std::u16::MAX as usize) < tcp_length {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
         // calculate the checksum
-        Ok(
-            self.calc_checksum_post_ip(
-                checksum::Sum16BitWords::new()
+        Ok(self.calc_checksum_post_ip(
+            checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
                 .add_2bytes([0, ip_number::TCP])
                 .add_2bytes((tcp_length as u16).to_be_bytes()),
-                payload
-            )
-        )
+            payload,
+        ))
     }
 
     /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
-    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6Header, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6(
+        &self,
+        ip_header: &Ipv6Header,
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
     /// Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
-
+    pub fn calc_checksum_ipv6_raw(
+        &self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        let tcp_length = (self._data_offset as usize)*4 + payload.len();
+        let tcp_length = (self._data_offset as usize) * 4 + payload.len();
         if (std::u32::MAX as usize) < tcp_length {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
         Ok(self.calc_checksum_post_ip(
             checksum::Sum16BitWords::new()
-            .add_16bytes(source)
-            .add_16bytes(destination)
-            .add_4bytes((tcp_length as u32).to_be_bytes())
-            .add_2bytes([0, ip_number::TCP]),
-            payload))
+                .add_16bytes(source)
+                .add_16bytes(destination)
+                .add_4bytes((tcp_length as u32).to_be_bytes())
+                .add_2bytes([0, ip_number::TCP]),
+            payload,
+        ))
     }
 
     ///This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+    fn calc_checksum_post_ip(
+        &self,
+        ip_pseudo_header_sum: checksum::Sum16BitWords,
+        payload: &[u8],
+    ) -> u16 {
         ip_pseudo_header_sum
-        .add_2bytes(self.source_port.to_be_bytes())
-        .add_2bytes(self.destination_port.to_be_bytes())
-        .add_4bytes(self.sequence_number.to_be_bytes())
-        .add_4bytes(self.acknowledgment_number.to_be_bytes())
-        .add_2bytes(
-            [
+            .add_2bytes(self.source_port.to_be_bytes())
+            .add_2bytes(self.destination_port.to_be_bytes())
+            .add_4bytes(self.sequence_number.to_be_bytes())
+            .add_4bytes(self.acknowledgment_number.to_be_bytes())
+            .add_2bytes([
                 {
                     let value = (self._data_offset << 4) & 0xF0;
                     if self.ns {
@@ -513,15 +531,14 @@ impl TcpHeader {
                         value |= 128;
                     }
                     value
-                }
-            ]
-        )
-        .add_2bytes(self.window_size.to_be_bytes())
-        .add_2bytes(self.urgent_pointer.to_be_bytes())
-        .add_slice(&self.options_buffer[..self.options_len()])
-        .add_slice(payload)
-        .ones_complement()
-        .to_be()
+                },
+            ])
+            .add_2bytes(self.window_size.to_be_bytes())
+            .add_2bytes(self.urgent_pointer.to_be_bytes())
+            .add_slice(&self.options_buffer[..self.options_len()])
+            .add_slice(payload)
+            .ones_complement()
+            .to_be()
     }
 }
 
@@ -533,20 +550,26 @@ impl Default for TcpHeader {
             sequence_number: 0,
             acknowledgment_number: 0,
             _data_offset: 5,
-            ns: false, fin: false, syn: false, rst: false,
-            psh: false, ack: false, urg: false, ece: false,
+            ns: false,
+            fin: false,
+            syn: false,
+            rst: false,
+            psh: false,
+            ack: false,
+            urg: false,
+            ece: false,
             cwr: false,
             window_size: 0,
             checksum: 0,
             urgent_pointer: 0,
-            options_buffer: [0;40]
+            options_buffer: [0; 40],
         }
     }
 }
 
 //NOTE: I would have prefered to NOT write my own Debug & PartialEq implementation but there are no
 //      default implementations availible for [u8;40] and the alternative of using [u32;10] would lead
-//      to unsafe casting. Writing impl Debug for [u8;40] in a crate is also illegal as it could lead 
+//      to unsafe casting. Writing impl Debug for [u8;40] in a crate is also illegal as it could lead
 //      to an implementation collision between crates.
 //      So the only option left to me was to write an implementation myself and deal with the added complexity
 //      and potential added error source.
@@ -577,24 +600,24 @@ impl Debug for TcpHeader {
 
 impl std::cmp::PartialEq for TcpHeader {
     fn eq(&self, other: &TcpHeader) -> bool {
-        self.source_port == other.source_port &&
-        self.destination_port == other.destination_port &&
-        self.sequence_number == other.sequence_number &&
-        self.acknowledgment_number == other.acknowledgment_number &&
-        self._data_offset == other._data_offset &&
-        self.ns == other.ns &&
-        self.fin == other.fin &&
-        self.syn == other.syn &&
-        self.rst == other.rst &&
-        self.psh == other.psh &&
-        self.ack == other.ack &&  
-        self.urg == other.urg &&
-        self.ece == other.ece &&
-        self.cwr == other.cwr &&
-        self.window_size == other.window_size &&
-        self.checksum == other.checksum &&
-        self.urgent_pointer  == other.urgent_pointer &&
-        self.options() == other.options()
+        self.source_port == other.source_port
+            && self.destination_port == other.destination_port
+            && self.sequence_number == other.sequence_number
+            && self.acknowledgment_number == other.acknowledgment_number
+            && self._data_offset == other._data_offset
+            && self.ns == other.ns
+            && self.fin == other.fin
+            && self.syn == other.syn
+            && self.rst == other.rst
+            && self.psh == other.psh
+            && self.ack == other.ack
+            && self.urg == other.urg
+            && self.ece == other.ece
+            && self.cwr == other.cwr
+            && self.window_size == other.window_size
+            && self.checksum == other.checksum
+            && self.urgent_pointer == other.urgent_pointer
+            && self.options() == other.options()
     }
 }
 
@@ -603,52 +626,43 @@ impl std::cmp::Eq for TcpHeader {}
 ///A slice containing an tcp header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TcpHeaderSlice<'a> {
-    slice: &'a [u8]
+    slice: &'a [u8],
 }
 
 impl<'a> TcpHeaderSlice<'a> {
-
     ///Creates a slice containing an tcp header.
-    pub fn from_slice(slice: &'a[u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < TCP_MINIMUM_HEADER_SIZE {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: TCP_MINIMUM_HEADER_SIZE,
-                    actual_len: slice.len(),
-                    layer: err::Layer::TcpHeader,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: TCP_MINIMUM_HEADER_SIZE,
+                actual_len: slice.len(),
+                layer: err::Layer::TcpHeader,
+            }));
         }
 
         // SAFETY:
         // Safe as it is checked at the start of the function that the
         // length of the slice is at least TCP_MINIMUM_HEADER_SIZE (20).
-        let data_offset = unsafe {
-            (*slice.get_unchecked(12) & 0xf0) >> 4
-        };
+        let data_offset = unsafe { (*slice.get_unchecked(12) & 0xf0) >> 4 };
         let len = data_offset as usize * 4;
 
         if data_offset < TCP_MINIMUM_DATA_OFFSET {
             Err(ReadError::TcpDataOffsetTooSmall(data_offset))
         } else if slice.len() < len {
-            Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: len,
-                    actual_len: slice.len(),
-                    layer: err::Layer::TcpHeader,
-                }
-            ))
+            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: len,
+                actual_len: slice.len(),
+                layer: err::Layer::TcpHeader,
+            }))
         } else {
             //done
-            Ok(TcpHeaderSlice::<'a>{
+            Ok(TcpHeaderSlice::<'a> {
                 // SAFETY:
                 // Safe as there is a check above that the slice length
                 // is at least len.
-                slice: unsafe {
-                    from_raw_parts(slice.as_ptr(), len)
-                },
+                slice: unsafe { from_raw_parts(slice.as_ptr(), len) },
             })
         }
     }
@@ -664,9 +678,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            get_unchecked_be_u16(self.slice.as_ptr())
-        }
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr()) }
     }
 
     ///Read the destination port number.
@@ -675,14 +687,12 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            get_unchecked_be_u16(self.slice.as_ptr().add(2))
-        }
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
     ///Read the sequence number of the first data octet in this segment (except when SYN is present).
     ///
-    ///If SYN is present the sequence number is the initial sequence number (ISN) 
+    ///If SYN is present the sequence number is the initial sequence number (ISN)
     ///and the first data octet is ISN+1.
     ///\[copied from RFC 793, page 16\]
     #[inline]
@@ -690,9 +700,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(4))
-        }
+        unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(4)) }
     }
 
     ///Reads the acknowledgment number.
@@ -707,9 +715,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            get_unchecked_be_u32(self.slice.as_ptr().add(8))
-        }
+        unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(8)) }
     }
 
     ///Read the number of 32 bit words in the TCP Header.
@@ -721,9 +727,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            (*self.slice.get_unchecked(12) & 0b1111_0000) >> 4
-        }
+        unsafe { (*self.slice.get_unchecked(12) & 0b1111_0000) >> 4 }
     }
 
     ///ECN-nonce - concealment protection (experimental: see RFC 3540)
@@ -732,9 +736,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(12) & 0b0000_0001)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(12) & 0b0000_0001) }
     }
 
     ///Read the fin flag (no more data from sender).
@@ -743,9 +745,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0000_0001)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0001) }
     }
 
     ///Reads the syn flag (synchronize sequence numbers).
@@ -754,9 +754,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0000_0010)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0010) }
     }
 
     ///Reads the rst flag (reset the connection).
@@ -765,9 +763,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0000_0100)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0100) }
     }
 
     ///Reads the psh flag (push function).
@@ -776,9 +772,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0000_1000)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_1000) }
     }
 
     ///Reads the ack flag (acknowledgment field significant).
@@ -787,9 +781,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0001_0000)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0001_0000) }
     }
 
     ///Reads the urg flag (Urgent Pointer field significant).
@@ -798,9 +790,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0010_0000)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0010_0000) }
     }
 
     ///Read the ECN-Echo flag (RFC 3168).
@@ -809,24 +799,20 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b0100_0000)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0100_0000) }
     }
 
-    /// Reads the cwr flag (Congestion Window Reduced). 
+    /// Reads the cwr flag (Congestion Window Reduced).
     ///
     /// This flag is set by the sending host to indicate that it received a TCP
-    /// segment with the ECE flag set and had responded in congestion control 
+    /// segment with the ECE flag set and had responded in congestion control
     /// mechanism (added to header by RFC 3168).
     #[inline]
     pub fn cwr(&self) -> bool {
         // SAFETY:
         // Constructor checks that the slice has at least the length
         // of 20.
-        unsafe {
-            0 != (*self.slice.get_unchecked(13) & 0b1000_0000)
-        }
+        unsafe { 0 != (*self.slice.get_unchecked(13) & 0b1000_0000) }
     }
 
     ///The number of data octets beginning with the one indicated in the
@@ -838,12 +824,7 @@ impl<'a> TcpHeaderSlice<'a> {
             // SAFETY:
             // Constructor checks that the slice has at least the length
             // of 20.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(14),
-                    *self.slice.get_unchecked(15),
-                ]
-            }
+            unsafe { [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)] },
         )
     }
 
@@ -854,12 +835,7 @@ impl<'a> TcpHeaderSlice<'a> {
             // SAFETY:
             // Constructor checks that the slice has at least the length
             // of 20.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(16),
-                    *self.slice.get_unchecked(17),
-                ]
-            }
+            unsafe { [*self.slice.get_unchecked(16), *self.slice.get_unchecked(17)] },
         )
     }
 
@@ -875,19 +851,14 @@ impl<'a> TcpHeaderSlice<'a> {
             // SAFETY:
             // Constructor checks that the slice has at least the length
             // of 20.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(18),
-                    *self.slice.get_unchecked(19),
-                ]
-            }
+            unsafe { [*self.slice.get_unchecked(18), *self.slice.get_unchecked(19)] },
         )
     }
 
     ///Options of the header
     #[inline]
     pub fn options(&self) -> &[u8] {
-        &self.slice[TCP_MINIMUM_HEADER_SIZE..self.data_offset() as usize*4]
+        &self.slice[TCP_MINIMUM_HEADER_SIZE..self.data_offset() as usize * 4]
     }
 
     ///Returns an iterator that allows to iterate through all known TCP header options.
@@ -918,23 +889,31 @@ impl<'a> TcpHeaderSlice<'a> {
             urgent_pointer: self.urgent_pointer(),
             options_buffer: {
                 let options = self.options();
-                let mut result: [u8;40] = [0;40];
+                let mut result: [u8; 40] = [0; 40];
                 if !options.is_empty() {
                     result[..options.len()].clone_from_slice(options);
                 }
                 result
-            }
+            },
         }
     }
 
     ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv4(
+        &self,
+        ip_header: &Ipv4HeaderSlice,
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv4_raw(&self, source_ip: [u8;4], destination_ip: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
-        
+    pub fn calc_checksum_ipv4_raw(
+        &self,
+        source_ip: [u8; 4],
+        destination_ip: [u8; 4],
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         let tcp_length = self.slice.len() + payload.len();
         if (std::u16::MAX as usize) < tcp_length {
@@ -942,52 +921,60 @@ impl<'a> TcpHeaderSlice<'a> {
         }
 
         //calculate the checksum
-        Ok(
-            self.calc_checksum_post_ip(
-                checksum::Sum16BitWords::new()
+        Ok(self.calc_checksum_post_ip(
+            checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
                 .add_2bytes([0, ip_number::TCP])
                 .add_2bytes((tcp_length as u16).to_be_bytes()),
-                payload
-            )
-        )
+            payload,
+        ))
     }
 
     ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
-    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+    pub fn calc_checksum_ipv6(
+        &self,
+        ip_header: &Ipv6HeaderSlice,
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
     ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
-    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
-
+    pub fn calc_checksum_ipv6_raw(
+        &self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        payload: &[u8],
+    ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        let tcp_length = (self.data_offset() as usize)*4 + payload.len();
+        let tcp_length = (self.data_offset() as usize) * 4 + payload.len();
         if (std::u32::MAX as usize) < tcp_length {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
-        Ok(
-            self.calc_checksum_post_ip(
-                checksum::Sum16BitWords::new()
+        Ok(self.calc_checksum_post_ip(
+            checksum::Sum16BitWords::new()
                 .add_16bytes(source)
                 .add_16bytes(destination)
                 .add_2bytes([0, ip_number::TCP])
                 .add_4bytes((tcp_length as u32).to_be_bytes()),
-                payload
-            )
-        )
+            payload,
+        ))
     }
 
     /// This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+    fn calc_checksum_post_ip(
+        &self,
+        ip_pseudo_header_sum: checksum::Sum16BitWords,
+        payload: &[u8],
+    ) -> u16 {
         ip_pseudo_header_sum
-        .add_slice(&self.slice[..16]) //until checksum
-        .add_slice(&self.slice[18..self.slice.len()])
-        .add_slice(payload)
-        .ones_complement()
-        .to_be()
+            .add_slice(&self.slice[..16]) //until checksum
+            .add_slice(&self.slice[18..self.slice.len()])
+            .add_slice(payload)
+            .ones_complement()
+            .to_be()
     }
 }
 
@@ -1016,7 +1003,7 @@ pub enum TcpOptionElement {
     MaximumSegmentSize(u16),
     WindowScale(u8),
     SelectiveAcknowledgementPermitted,
-    SelectiveAcknowledgement((u32,u32), [Option<(u32,u32)>;3]),
+    SelectiveAcknowledgement((u32, u32), [Option<(u32, u32)>; 3]),
     ///Timestamp & echo (first number is the sender timestamp, the second the echo timestamp)
     Timestamp(u32, u32),
 }
@@ -1025,10 +1012,14 @@ pub enum TcpOptionElement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionReadError {
     ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
-    UnexpectedEndOfSlice{ option_id: u8, expected_len: u8, actual_len: usize },
+    UnexpectedEndOfSlice {
+        option_id: u8,
+        expected_len: u8,
+        actual_len: usize,
+    },
 
     ///Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
-    UnexpectedSize{ option_id: u8, size: u8 },
+    UnexpectedSize { option_id: u8, size: u8 },
 
     ///Returned if an unknown tcp header option is encountered.
     ///
@@ -1046,19 +1037,26 @@ impl fmt::Display for TcpOptionReadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use TcpOptionReadError::*;
         match self {
-            UnexpectedEndOfSlice{option_id, expected_len, actual_len} => {
+            UnexpectedEndOfSlice {
+                option_id,
+                expected_len,
+                actual_len,
+            } => {
                 write!(f, "TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", option_id, expected_len, actual_len)
-            },
-            UnexpectedSize{option_id, size} => {
+            }
+            UnexpectedSize { option_id, size } => {
                 write!(f, "TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", option_id, size)
-            },
+            }
             UnknownId(id) => {
-                write!(f, "TcpOptionReadError: Unknown tcp option kind value {}.", id)
+                write!(
+                    f,
+                    "TcpOptionReadError: Unknown tcp option kind value {}.",
+                    id
+                )
             }
         }
     }
 }
-
 
 ///Errors that can occour when setting the options of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -1067,8 +1065,8 @@ pub enum TcpOptionWriteError {
     ///
     ///The options size is limited by the 4 bit data_offset field in the header which describes
     ///the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
-    ///part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself). 
-    NotEnoughSpace(usize)
+    ///part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself).
+    NotEnoughSpace(usize),
 }
 
 impl Error for TcpOptionWriteError {
@@ -1083,7 +1081,7 @@ impl fmt::Display for TcpOptionWriteError {
         match self {
             NotEnoughSpace(size) => {
                 write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", size)
-            },
+            }
         }
     }
 }
@@ -1091,20 +1089,14 @@ impl fmt::Display for TcpOptionWriteError {
 ///Allows iterating over the options after a TCP header.
 #[derive(Clone, Eq, PartialEq)]
 pub struct TcpOptionsIterator<'a> {
-    options: &'a [u8]
+    options: &'a [u8],
 }
 
-#[deprecated(
-    since = "0.10.1",
-    note = "Please use tcp_option::KIND_END instead"
-)]
+#[deprecated(since = "0.10.1", note = "Please use tcp_option::KIND_END instead")]
 /// Deprecated please use [tcp_option::KIND_END] instead.
 pub const TCP_OPTION_ID_END: u8 = 0;
 
-#[deprecated(
-    since = "0.10.1",
-    note = "Please use tcp_option::KIND_NOOP instead"
-)]
+#[deprecated(since = "0.10.1", note = "Please use tcp_option::KIND_NOOP instead")]
 /// Deprecated please use [tcp_option::KIND_NOOP] instead.
 pub const TCP_OPTION_ID_NOP: u8 = 1;
 
@@ -1176,7 +1168,7 @@ pub mod tcp_option {
 impl<'a> TcpOptionsIterator<'a> {
     ///Creates an options iterator from a slice containing encoded tcp options.
     pub fn from_slice(options: &'a [u8]) -> TcpOptionsIterator<'a> {
-        TcpOptionsIterator{ options }
+        TcpOptionsIterator { options }
     }
 
     ///Returns the non processed part of the options slice.
@@ -1189,29 +1181,27 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
     type Item = Result<TcpOptionElement, TcpOptionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-
-        use crate::TcpOptionReadError::*;
         use crate::TcpOptionElement::*;
+        use crate::TcpOptionReadError::*;
 
-        let expect_specific_size = |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionReadError> {
-            let id = slice[0];
-            if slice.len() < expected_size as usize {
-                Err(
-                    UnexpectedEndOfSlice{
-                        option_id: id, 
-                        expected_len: expected_size, 
-                        actual_len: slice.len()
-                    },
-                )
-            } else if slice[1] != expected_size {
-                Err(UnexpectedSize{
-                    option_id: slice[0],
-                    size: slice[1] 
-                })
-            } else {
-                Ok(())
-            }
-        };
+        let expect_specific_size =
+            |expected_size: u8, slice: &[u8]| -> Result<(), TcpOptionReadError> {
+                let id = slice[0];
+                if slice.len() < expected_size as usize {
+                    Err(UnexpectedEndOfSlice {
+                        option_id: id,
+                        expected_len: expected_size,
+                        actual_len: slice.len(),
+                    })
+                } else if slice[1] != expected_size {
+                    Err(UnexpectedSize {
+                        option_id: slice[0],
+                        size: slice[1],
+                    })
+                } else {
+                    Ok(())
+                }
+            };
 
         if self.options.is_empty() {
             None
@@ -1220,38 +1210,31 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
             use tcp_option::*;
             let result = match self.options[0] {
                 //end
-                KIND_END => {
-                    None
-                },
+                KIND_END => None,
                 KIND_NOOP => {
                     self.options = &self.options[1..];
                     Some(Ok(Noop))
-                },
+                }
                 KIND_MAXIMUM_SEGMENT_SIZE => {
                     match expect_specific_size(LEN_MAXIMUM_SEGMENT_SIZE, self.options) {
-                        Err(value) => {
-                            Some(Err(value))
-                        },
+                        Err(value) => Some(Err(value)),
                         _ => {
                             // SAFETY:
                             // Safe as the slice size is checked beforehand to be at
                             // least of size LEN_MAXIMUM_SEGMENT_SIZE (4).
-                            let value = unsafe {
-                                get_unchecked_be_u16(self.options.as_ptr().add(2))
-                            };
+                            let value =
+                                unsafe { get_unchecked_be_u16(self.options.as_ptr().add(2)) };
                             self.options = &self.options[4..];
                             Some(Ok(MaximumSegmentSize(value)))
                         }
                     }
-                },
-                KIND_WINDOW_SCALE => {
-                    match expect_specific_size(LEN_WINDOW_SCALE, self.options) {
-                        Err(value) => Some(Err(value)),
-                        _ => {
-                            let value = self.options[2];
-                            self.options = &self.options[3..];
-                            Some(Ok(WindowScale(value)))
-                        }
+                }
+                KIND_WINDOW_SCALE => match expect_specific_size(LEN_WINDOW_SCALE, self.options) {
+                    Err(value) => Some(Err(value)),
+                    _ => {
+                        let value = self.options[2];
+                        self.options = &self.options[3..];
+                        Some(Ok(WindowScale(value)))
                     }
                 },
                 KIND_SELECTIVE_ACK_PERMITTED => {
@@ -1262,39 +1245,31 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             Some(Ok(SelectiveAcknowledgementPermitted))
                         }
                     }
-                },
+                }
                 KIND_SELECTIVE_ACK => {
                     //check that the length field can be read
                     if self.options.len() < 2 {
-                        Some(
-                            Err(
-                                UnexpectedEndOfSlice {
-                                    option_id: self.options[0], 
-                                    expected_len: 2, 
-                                    actual_len: self.options.len()
-                                }
-                            )
-                        )
+                        Some(Err(UnexpectedEndOfSlice {
+                            option_id: self.options[0],
+                            expected_len: 2,
+                            actual_len: self.options.len(),
+                        }))
                     } else {
                         //check that the length is an allowed one for this option
                         let len = self.options[1];
                         if len != 10 && len != 18 && len != 26 && len != 34 {
-                            Some(Err(UnexpectedSize{
+                            Some(Err(UnexpectedSize {
                                 option_id: self.options[0],
-                                size: len 
+                                size: len,
                             }))
                         } else if self.options.len() < (len as usize) {
-                            Some(
-                                Err(
-                                    UnexpectedEndOfSlice {
-                                        option_id: self.options[0], 
-                                        expected_len: len, 
-                                        actual_len: self.options.len()
-                                    }
-                                )
-                            )
+                            Some(Err(UnexpectedEndOfSlice {
+                                option_id: self.options[0],
+                                expected_len: len,
+                                actual_len: self.options.len(),
+                            }))
                         } else {
-                            let mut acks: [Option<(u32,u32)>;3] = [None;3];
+                            let mut acks: [Option<(u32, u32)>; 3] = [None; 3];
                             // SAFETY:
                             // This is safe as above the len is checked
                             // to be at least 10 and the slice len is
@@ -1305,23 +1280,20 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                                     get_unchecked_be_u32(self.options.as_ptr().add(6)),
                                 )
                             };
-                            for (i, item) in acks.iter_mut()
-                                                 .enumerate()
-                                                 .take(3)
-                            {
-                                let offset = 2 + 8 + (i*8);
+                            for (i, item) in acks.iter_mut().enumerate().take(3) {
+                                let offset = 2 + 8 + (i * 8);
                                 // SAFETY:
                                 // len can only be 10, 18, 26 or 34
                                 // therefore if the offset is smaller then the
                                 // len, then at least 8 bytes can be read.
                                 unsafe {
                                     if offset < (len as usize) {
-                                        *item = Some(
-                                            (
-                                                get_unchecked_be_u32(self.options.as_ptr().add(offset)),
-                                                get_unchecked_be_u32(self.options.as_ptr().add(offset + 4)),
-                                            )
-                                        );
+                                        *item = Some((
+                                            get_unchecked_be_u32(self.options.as_ptr().add(offset)),
+                                            get_unchecked_be_u32(
+                                                self.options.as_ptr().add(offset + 4),
+                                            ),
+                                        ));
                                     }
                                 }
                             }
@@ -1330,11 +1302,11 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             Some(Ok(SelectiveAcknowledgement(first, acks)))
                         }
                     }
-                },
+                }
                 KIND_TIMESTAMP => {
                     match expect_specific_size(LEN_TIMESTAMP, self.options) {
                         Err(value) => Some(Err(value)),
-                        
+
                         _ => unsafe {
                             let t = Timestamp(
                                 // SAFETY:
@@ -1345,14 +1317,12 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                             );
                             self.options = &self.options[10..];
                             Some(Ok(t))
-                        }
+                        },
                     }
-                },
+                }
 
                 //unknown id
-                _ => {
-                    Some(Err(UnknownId(self.options[0])))
-                },
+                _ => Some(Err(UnknownId(self.options[0]))),
             };
 
             //in case the result was an error or the end move the slice to an end position
@@ -1360,7 +1330,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
                 None | Some(Err(_)) => {
                     let len = self.options.len();
                     self.options = &self.options[len..len];
-                },
+                }
                 _ => {}
             }
 
@@ -1377,7 +1347,9 @@ impl<'a> Debug for TcpOptionsIterator<'a> {
         // create a copy and iterate over all elements
         for it in self.clone() {
             match it {
-                Ok(e) => { list.entry(&e); },
+                Ok(e) => {
+                    list.entry(&e);
+                }
                 Err(e) => {
                     list.entry(&Result::<(), TcpOptionReadError>::Err(e.clone()));
                 }

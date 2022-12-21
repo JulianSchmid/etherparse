@@ -165,7 +165,6 @@ pub mod icmpv4 {
     }
 
     impl DestUnreachableHeader {
-
         /// Tries to convert the code [`u8`] value and next_hop_mtu to a [`DestUnreachableHeader`] value.
         ///
         /// Returns [`None`] in case the code value is not known as a destination unreachable code.
@@ -252,7 +251,9 @@ pub mod icmpv4 {
             match code_u8 {
                 CODE_REDIRECT_FOR_NETWORK => Some(RedirectForNetwork),
                 CODE_REDIRECT_FOR_HOST => Some(RedirectForHost),
-                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => Some(RedirectForTypeOfServiceAndNetwork),
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => {
+                    Some(RedirectForTypeOfServiceAndNetwork)
+                }
                 CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST => Some(RedirectForTypeOfServiceAndHost),
                 _ => None,
             }
@@ -295,8 +296,10 @@ pub mod icmpv4 {
             use TimeExceededCode::*;
             match code_u8 {
                 CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT => Some(TtlExceededInTransit),
-                CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED => Some(FragmentReassemblyTimeExceeded),
-                _ => None
+                CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED => {
+                    Some(FragmentReassemblyTimeExceeded)
+                }
+                _ => None,
             }
         }
 
@@ -322,13 +325,15 @@ pub mod icmpv4 {
         pub const SERIALIZED_SIZE: usize = 20;
 
         /// Decodes the timestamp message part of an ICMPv4 message.
-        pub fn from_bytes(bytes: [u8;16]) -> TimestampMessage {
-            TimestampMessage{
+        pub fn from_bytes(bytes: [u8; 16]) -> TimestampMessage {
+            TimestampMessage {
                 id: u16::from_be_bytes([bytes[0], bytes[1]]),
                 seq: u16::from_be_bytes([bytes[2], bytes[3]]),
                 originate_timestamp: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
                 receive_timestamp: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
-                transmit_timestamp: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
+                transmit_timestamp: u32::from_be_bytes([
+                    bytes[12], bytes[13], bytes[14], bytes[15],
+                ]),
             }
         }
     }
@@ -364,14 +369,15 @@ pub mod icmpv4 {
         pub fn from_values(code_u8: u8, pointer: u8) -> Option<ParameterProblemHeader> {
             use ParameterProblemHeader::*;
             match code_u8 {
-                CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR => Some(PointerIndicatesError(pointer)),
+                CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR => {
+                    Some(PointerIndicatesError(pointer))
+                }
                 CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION => Some(MissingRequiredOption),
                 CODE_PARAMETER_PROBLEM_BAD_LENGTH => Some(BadLength),
                 _ => None,
             }
         }
     }
-
 } // mod icmpv4
 
 use icmpv4::*;
@@ -416,7 +422,7 @@ pub enum Icmpv4Type {
     ///
     /// # What is part of the header for `Icmpv4Type::EchoReply`?
     ///
-    /// For the [`Icmpv4Type::EchoReply`] type the first 8 bytes/octets of the 
+    /// For the [`Icmpv4Type::EchoReply`] type the first 8 bytes/octets of the
     /// ICMP packet are part of the header. This includes the `id` and `seq`
     /// fields. The data part of the ICMP Echo Reply packet is part of the
     /// payload ([`Icmpv4Slice::payload`] or [`PacketHeaders::payload`])
@@ -435,7 +441,7 @@ pub enum Icmpv4Type {
     /// +---------------------------------------------------------------+  -
     /// ```
     EchoReply(IcmpEchoHeader),
-    
+
     /// Message sent to inform the client that the destination is unreachable for
     /// some reason (defined in RFC792).
     ///
@@ -559,7 +565,7 @@ pub enum Icmpv4Type {
     ///
     /// # What is part of the header for `Icmpv4Type::TimestampRequest`?
     ///
-    /// For the `Icmpv4Type::TimestampRequest` type the entire ICMP packet is 
+    /// For the `Icmpv4Type::TimestampRequest` type the entire ICMP packet is
     /// contained within the header. The payload data is empty.
     TimestampRequest(TimestampMessage),
 
@@ -567,7 +573,7 @@ pub enum Icmpv4Type {
     ///
     /// # What is part of the header for `Icmpv4Type::TimestampReply`?
     ///
-    /// For the `Icmpv4Type::TimestampReply` type the entire ICMP packet is 
+    /// For the `Icmpv4Type::TimestampReply` type the entire ICMP packet is
     /// contained within the header. The payload data is empty.
     TimestampReply(TimestampMessage),
 }
@@ -755,10 +761,7 @@ impl Icmpv4Header {
     }
 
     /// Creates a [`Icmpv4Header`] with a checksum calculated based on the given payload.
-    pub fn with_checksum(
-        icmp_type: Icmpv4Type,
-        payload: &[u8],
-    ) -> Icmpv4Header {
+    pub fn with_checksum(icmp_type: Icmpv4Type, payload: &[u8]) -> Icmpv4Header {
         let checksum = icmp_type.calc_checksum(payload);
         Icmpv4Header {
             icmp_type,
@@ -776,7 +779,7 @@ impl Icmpv4Header {
 
     /// Reads an ICMPv4 header from the given reader.
     pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, ReadError> {
-        let mut bytes = [0u8;Icmpv4Header::MAX_SERIALIZED_SIZE];
+        let mut bytes = [0u8; Icmpv4Header::MAX_SERIALIZED_SIZE];
 
         // try reading the initial 8 bytes
         reader.read_exact(&mut bytes[..8])?;
@@ -788,18 +791,15 @@ impl Icmpv4Header {
                     // then set the slice correspondently
                     reader.read_exact(&mut bytes[8..TimestampMessage::SERIALIZED_SIZE])?;
                     Ok(Icmpv4Slice {
-                        slice: &bytes[..icmpv4::TimestampMessage::SERIALIZED_SIZE]
-                    }.header())
+                        slice: &bytes[..icmpv4::TimestampMessage::SERIALIZED_SIZE],
+                    }
+                    .header())
                 } else {
                     // fallback to unknown
-                    Ok(Icmpv4Slice {
-                        slice: &bytes[..8]
-                    }.header())
+                    Ok(Icmpv4Slice { slice: &bytes[..8] }.header())
                 }
-            },
-            _ => Ok(Icmpv4Slice {
-                slice: &bytes[..8]
-            }.header())
+            }
+            _ => Ok(Icmpv4Slice { slice: &bytes[..8] }.header()),
         }
     }
 
@@ -1000,13 +1000,11 @@ impl<'a> Icmpv4Slice<'a> {
         // check length
         use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(
-                err::UnexpectedEndOfSliceError{
-                    expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
-                    actual_len: slice.len(),
-                    layer: err::Layer::Icmpv4,
-                }
-            ));
+            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
+                actual_len: slice.len(),
+                layer: err::Layer::Icmpv4,
+            }));
         }
 
         // SAFETY:
@@ -1018,7 +1016,7 @@ impl<'a> Icmpv4Slice<'a> {
         // check type specific length
         match icmp_type {
             TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
-                if 0 == icmp_code  && TimestampMessage::SERIALIZED_SIZE != slice.len() {
+                if 0 == icmp_code && TimestampMessage::SERIALIZED_SIZE != slice.len() {
                     return Err(UnexpectedLenOfSlice {
                         expected: TimestampMessage::SERIALIZED_SIZE,
                         actual: slice.len(),
@@ -1047,11 +1045,13 @@ impl<'a> Icmpv4Slice<'a> {
     #[inline]
     pub fn header_len(&self) -> usize {
         match self.type_u8() {
-            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => if 0 == self.code_u8() {
-                TimestampMessage::SERIALIZED_SIZE
-            } else {
-                8
-            },
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
+                if 0 == self.code_u8() {
+                    TimestampMessage::SERIALIZED_SIZE
+                } else {
+                    8
+                }
+            }
             _ => 8,
         }
     }
@@ -1093,7 +1093,9 @@ impl<'a> Icmpv4Slice<'a> {
                             },
                         });
                     }
-                    CODE_DST_UNREACH_SOURCE_ROUTE_FAILED => return DestinationUnreachable(SourceRouteFailed),
+                    CODE_DST_UNREACH_SOURCE_ROUTE_FAILED => {
+                        return DestinationUnreachable(SourceRouteFailed)
+                    }
                     CODE_DST_UNREACH_NET_UNKNOWN => return DestinationUnreachable(NetworkUnknown),
                     CODE_DST_UNREACH_HOST_UNKNOWN => return DestinationUnreachable(HostUnknown),
                     CODE_DST_UNREACH_ISOLATED => return DestinationUnreachable(Isolated),
@@ -1268,11 +1270,13 @@ impl<'a> Icmpv4Slice<'a> {
             // Lenght safe as the contructor checks that the slice has
             // the length of TimestampMessage::SERIALIZED_SIZE (20)
             // for the messages types TYPE_TIMESTAMP and TYPE_TIMESTAMP_REPLY.
-            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => if 0 == self.code_u8() {
-                TimestampMessage::SERIALIZED_SIZE
-            } else {
-                8
-            },
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
+                if 0 == self.code_u8() {
+                    TimestampMessage::SERIALIZED_SIZE
+                } else {
+                    8
+                }
+            }
             // SAFETY:
             // Lneght safe as the contructor checks that the slice has
             // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE(8) for
@@ -1282,7 +1286,12 @@ impl<'a> Icmpv4Slice<'a> {
         // SAFETY:
         // Lenghts have been depending on type in the constructor of the
         // ICMPv4Slice.
-        unsafe { from_raw_parts(self.slice.as_ptr().add(header_len), self.slice.len() - header_len) }
+        unsafe {
+            from_raw_parts(
+                self.slice.as_ptr().add(header_len),
+                self.slice.len() - header_len,
+            )
+        }
     }
 
     /// Returns the slice containing the ICMPv4 packet.
