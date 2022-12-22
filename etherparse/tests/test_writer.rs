@@ -14,10 +14,9 @@ pub struct TestWriter {
 }
 
 impl TestWriter {
-
     /// Create a new test writer without a maximum size
     pub fn new() -> TestWriter {
-        TestWriter{
+        TestWriter {
             data: Vec::new(),
             cur_size: 0,
             max_size: None,
@@ -25,10 +24,10 @@ impl TestWriter {
         }
     }
 
-    /// Create a new error writer that throws an `io::Error` of kind `io::Error::UnexpectedEof` 
+    /// Create a new error writer that throws an `io::Error` of kind `io::Error::UnexpectedEof`
     /// if a write would exceed the given maximum size.
     pub fn with_max_size(max_size: usize) -> TestWriter {
-        TestWriter{
+        TestWriter {
             data: Vec::new(),
             cur_size: 0,
             max_size: Some(max_size),
@@ -39,7 +38,7 @@ impl TestWriter {
     /// Create a new error writer that throws an `io::Error` of the given kind
     /// if a write would exceed the given maximum size.
     pub fn with_max_size_and_error_kind(max_size: usize, error_kind: io::ErrorKind) -> TestWriter {
-        TestWriter{
+        TestWriter {
             data: Vec::new(),
             cur_size: 0,
             max_size: Some(max_size),
@@ -78,7 +77,7 @@ fn new() {
 
     let mut writer = TestWriter::new();
     assert_eq!(true, writer.flush().is_ok());
-    assert_eq!(4, writer.write(&[1,2,3,4]).unwrap());
+    assert_eq!(4, writer.write(&[1, 2, 3, 4]).unwrap());
 }
 
 #[test]
@@ -88,12 +87,15 @@ fn with_max_size() {
     let mut writer = TestWriter::with_max_size(6);
     // write within bounds
     assert_eq!(true, writer.flush().is_ok());
-    assert_eq!(4, writer.write(&[1,2,3,4]).unwrap());
+    assert_eq!(4, writer.write(&[1, 2, 3, 4]).unwrap());
     assert_eq!(true, writer.flush().is_ok());
     // on bounds on border
-    assert_eq!(2, writer.write(&[1,2]).unwrap());
+    assert_eq!(2, writer.write(&[1, 2]).unwrap());
     // outside of bounds
-    assert_eq!(io::ErrorKind::UnexpectedEof, writer.write(&[1]).unwrap_err().kind());
+    assert_eq!(
+        io::ErrorKind::UnexpectedEof,
+        writer.write(&[1]).unwrap_err().kind()
+    );
     assert_eq!(true, writer.flush().is_ok());
 }
 
@@ -105,5 +107,8 @@ fn new_with_error_kind() {
     // write within bounds
     assert_eq!(1, writer.write(&[1]).unwrap());
     // outside of bounds
-    assert_eq!(io::ErrorKind::Other, writer.write(&[1,2,3]).unwrap_err().kind());
+    assert_eq!(
+        io::ErrorKind::Other,
+        writer.write(&[1, 2, 3]).unwrap_err().kind()
+    );
 }
