@@ -10,9 +10,11 @@ pub struct Ipv4HeaderSlice<'a> {
 
 impl<'a> Ipv4HeaderSlice<'a> {
     /// Creates a slice containing an ipv4 header (including header options).
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv4HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv4HeaderSlice<'a>, err::ipv4::HeaderSliceError> {
+        use err::ipv4::HeaderError::*;
+        use err::ipv4::HeaderSliceError::*;
+
         //check length
-        use crate::ReadError::*;
         if slice.len() < Ipv4Header::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
                 expected_min_len: Ipv4Header::SERIALIZED_SIZE,
@@ -22,20 +24,19 @@ impl<'a> Ipv4HeaderSlice<'a> {
         }
 
         //read version & ihl
-        let (version, ihl) = unsafe {
+        let (version_number, ihl) = unsafe {
             let value = slice.get_unchecked(0);
             (value >> 4, value & 0xf)
         };
 
         //check version
-        if 4 != version {
-            return Err(Ipv4UnexpectedVersion(version));
+        if 4 != version_number {
+            return Err(Content(UnexpectedVersion { version_number }));
         }
 
         //check that the ihl is correct
         if ihl < 5 {
-            use crate::ReadError::*;
-            return Err(Ipv4HeaderLengthBad(ihl));
+            return Err(Content(HeaderLengthSmallerThanHeader { ihl }));
         }
 
         //check that the slice contains enough data for the entire header + options
@@ -56,7 +57,10 @@ impl<'a> Ipv4HeaderSlice<'a> {
         let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
 
         if total_length < header_length as u16 {
-            return Err(Ipv4TotalLengthTooSmall(total_length));
+            return Err(Content(TotalLengthSmallerThanHeader {
+                total_length,
+                min_expected_length: header_length as u16,
+            }));
         }
 
         //all good

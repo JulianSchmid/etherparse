@@ -425,8 +425,14 @@ impl<'a> CursorSlice<'a> {
     pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, ReadError> {
         use InternetSlice::*;
 
-        let ip_header = Ipv4HeaderSlice::from_slice(self.slice)
-            .map_err(|err| err.add_slice_offset(self.offset))?;
+        let ip_header = Ipv4HeaderSlice::from_slice(self.slice).map_err(|err| {
+            use err::ipv4::HeaderSliceError as I;
+            use ReadError as O;
+            match err.add_slice_offset(self.offset) {
+                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                I::Content(err) => O::Ipv4Header(err),
+            }
+        })?;
         let fragmented = ip_header.is_fragmenting_payload();
 
         // move the slice

@@ -18,9 +18,9 @@ impl IpHeader {
 
     /// Read an IpvHeader from a slice and return the header & unused parts of the slice.
     pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
-        use crate::ReadError::*;
         if slice.is_empty() {
-            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            use crate::ReadError::UnexpectedEndOfSlice as U;
+            Err(U(err::UnexpectedEndOfSliceError {
                 expected_min_len: 1,
                 actual_len: slice.len(),
                 layer: err::Layer::IpHeader,
@@ -28,7 +28,14 @@ impl IpHeader {
         } else {
             match slice[0] >> 4 {
                 4 => {
-                    let (header, rest) = Ipv4Header::from_slice(slice)?;
+                    let (header, rest) = Ipv4Header::from_slice(slice).map_err(|err| {
+                        use err::ipv4::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::Content(err) => O::Ipv4Header(err),
+                        }
+                    })?;
                     Ipv4Extensions::from_slice(header.protocol, rest).map(
                         |(ext, next_protocol, rest)| {
                             (IpHeader::Version4(header, ext), next_protocol, rest)

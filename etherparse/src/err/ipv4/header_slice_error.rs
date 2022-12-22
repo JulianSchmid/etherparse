@@ -11,6 +11,18 @@ pub enum HeaderSliceError {
     Content(HeaderError),
 }
 
+impl HeaderSliceError {
+    /// Adds an offset value to all slice length related fields.
+    #[inline]
+    pub const fn add_slice_offset(self, offset: usize) -> Self {
+        use HeaderSliceError::*;
+        match self {
+            UnexpectedEndOfSlice(err) => UnexpectedEndOfSlice(err.add_offset(offset)),
+            Content(err) => Content(err),
+        }
+    }
+}
+
 impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
@@ -39,6 +51,28 @@ mod tests {
         error::Error,
         hash::{Hash, Hasher},
     };
+
+    #[test]
+    fn add_slice_offset() {
+        use HeaderSliceError::*;
+        assert_eq!(
+            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                expected_min_len: 1,
+                actual_len: 2,
+                layer: Layer::Icmpv4
+            })
+            .add_slice_offset(200),
+            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+                expected_min_len: 201,
+                actual_len: 202,
+                layer: Layer::Icmpv4
+            })
+        );
+        assert_eq!(
+            Content(HeaderError::UnexpectedVersion { version_number: 1 }).add_slice_offset(200),
+            Content(HeaderError::UnexpectedVersion { version_number: 1 })
+        );
+    }
 
     #[test]
     fn debug() {

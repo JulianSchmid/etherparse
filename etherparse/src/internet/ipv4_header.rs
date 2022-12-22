@@ -124,12 +124,14 @@ impl Ipv4Header {
     /// Renamed to `Ipv4Header::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `Ipv4Header::from_slice`")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
+    pub fn read_from_slice(
+        slice: &[u8],
+    ) -> Result<(Ipv4Header, &[u8]), err::ipv4::HeaderSliceError> {
         Ipv4Header::from_slice(slice)
     }
 
     /// Read an Ipv4Header from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), err::ipv4::HeaderSliceError> {
         let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();
         let rest = &slice[header.header_len()..];
         Ok((header, rest))
@@ -165,9 +167,10 @@ impl Ipv4Header {
         let mut first_byte: [u8; 1] = [0; 1];
         reader.read_exact(&mut first_byte)?;
 
-        let version = first_byte[0] >> 4;
-        if 4 != version {
-            return Err(ReadError::Ipv4UnexpectedVersion(version));
+        let version_number = first_byte[0] >> 4;
+        if 4 != version_number {
+            use err::ipv4::HeaderError::UnexpectedVersion;
+            return Err(ReadError::Ipv4Header(UnexpectedVersion { version_number }));
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
@@ -177,14 +180,21 @@ impl Ipv4Header {
         reader: &mut T,
         first_byte: u8,
     ) -> Result<Ipv4Header, ReadError> {
-        let mut header_raw: [u8; 20] = [0; 20];
+        use err::ipv4::HeaderError::*;
+        use ReadError::Ipv4Header as R;
+
+        // read the basic ipv4 header (the header options can be
+        // read only after the internet header length was read)
+        let mut header_raw = [0u8; 20];
         header_raw[0] = first_byte;
         reader.read_exact(&mut header_raw[1..])?;
 
         let ihl = header_raw[0] & 0xf;
+
+        // validate that the internet header length is big enough to
+        // contain a basic IPv4 header without options.
         if ihl < 5 {
-            use crate::ReadError::*;
-            return Err(Ipv4HeaderLengthBad(ihl));
+            return Err(R(HeaderLengthSmallerThanHeader { ihl }));
         }
 
         let (dscp, ecn) = {
@@ -193,9 +203,13 @@ impl Ipv4Header {
         };
         let header_length = u16::from(ihl) * 4;
         let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
+
+        // validate the total length
         if total_length < header_length {
-            use crate::ReadError::*;
-            return Err(Ipv4TotalLengthTooSmall(total_length));
+            return Err(R(TotalLengthSmallerThanHeader {
+                total_length,
+                min_expected_length: header_length,
+            }));
         }
         let identification = u16::from_be_bytes([header_raw[4], header_raw[5]]);
         let (dont_fragment, more_fragments, fragments_offset) = (
@@ -228,7 +242,7 @@ impl Ipv4Header {
             ],
             options_len: (ihl - 5) * 4,
             options_buffer: {
-                let mut values: [u8; 40] = [0; 40];
+                let mut values = [0u8; 40];
 
                 let options_len = usize::from(ihl - 5) * 4;
                 if options_len > 0 {

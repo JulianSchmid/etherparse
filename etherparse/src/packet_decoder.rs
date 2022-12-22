@@ -113,7 +113,14 @@ impl<'a> PacketHeaders<'a> {
         //parse ip (if present)
         match ether_type {
             IPV4 => {
-                let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
+                let (ip, ip_rest) = Ipv4Header::from_slice(rest).map_err(|err| {
+                    use err::ipv4::HeaderSliceError as I;
+                    use ReadError as O;
+                    match err {
+                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                        I::Content(err) => O::Ipv4Header(err),
+                    }
+                })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
                     Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
@@ -262,7 +269,14 @@ impl<'a> PacketHeaders<'a> {
         //parse ip (if present)
         match ether_type {
             IPV4 => {
-                let (ip, ip_rest) = Ipv4Header::from_slice(rest)?;
+                let (ip, ip_rest) = Ipv4Header::from_slice(rest).map_err(|err| {
+                    use err::ipv4::HeaderSliceError as I;
+                    use ReadError as O;
+                    match err {
+                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                        I::Content(err) => O::Ipv4Header(err),
+                    }
+                })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
                     Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;

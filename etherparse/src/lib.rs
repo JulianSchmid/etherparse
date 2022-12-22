@@ -295,35 +295,31 @@ pub trait SerializedSize {
     const SERIALIZED_SIZE: usize;
 }
 
-///Errors that can occur when reading.
+/// Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {
-    ///Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
+    /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
-    ///Error when an unexpected end of a slice was reached even though more data was expected to be present.
+    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
     UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
-    ///Error when a slice has a different size then expected.
+    /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
-    ///Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
-    ///The value is the unexpected ether type value in the outer vlan header.
+    /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
+    /// The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),
-    ///Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
+    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
-    ///Error when the ip header version field is not equal 4. The value is the version that was received.
-    Ipv4UnexpectedVersion(u8),
-    ///Error when the ipv4 header length is smaller then the header itself (5).
-    Ipv4HeaderLengthBad(u8),
-    ///Error when the total length field is too small to contain the header itself.
-    Ipv4TotalLengthTooSmall(u16),
-    ///Error when then ip header version field is not equal 6. The value is the version that was received.
+    /// Error when decoding an IPv4 header.
+    Ipv4Header(err::ipv4::HeaderError),
+    /// Error when then ip header version field is not equal 6. The value is the version that was received.
     Ipv6UnexpectedVersion(u8),
-    ///Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
+    /// Error when more then 7 header extensions are present (according to RFC82000 this should never happen).
     Ipv6TooManyHeaderExtensions,
-    ///Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     Ipv6HopByHopHeaderNotAtStart,
-    ///Error if the header length in the ip authentication header is smaller then the minimum size of 1.
+    /// Error if the header length in the ip authentication header is smaller then the minimum size of 1.
     IpAuthenticationHeaderTooSmallPayloadLength(u8),
-    ///Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
+    /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
     TcpDataOffsetTooSmall(u8),
     /// Error when the packet size is too big (e.g larger then can be represendted in a length field).
     ///
@@ -333,7 +329,7 @@ pub enum ReadError {
 }
 
 impl ReadError {
-    ///Adds an offset value to the UnexpectedEndOfSlice error.
+    /// Adds an offset value to the UnexpectedEndOfSlice error.
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
@@ -365,6 +361,14 @@ impl ReadError {
             _ => None,
         }
     }
+
+    /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
+    pub fn ipv4_header(self) -> Option<err::ipv4::HeaderError> {
+        match self {
+            ReadError::Ipv4Header(value) => Some(value),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for ReadError {
@@ -383,15 +387,7 @@ impl fmt::Display for ReadError {
             IpUnsupportedVersion(version_number) => {
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
             }
-            Ipv4UnexpectedVersion(version_number) => {
-                write!(f, "ReadError: Unexpected IP version number. Expected an IPv4 Header but the header contained the version number {}.", version_number)
-            }
-            Ipv4HeaderLengthBad(header_length) => {
-                write!(f, "ReadError: Bad IPv4 header length. The header length value {} in the IPv4 header is smaller then the ipv4 header.", header_length)
-            }
-            Ipv4TotalLengthTooSmall(total_length_field) => {
-                write!(f, "ReadError: Bad IPv4 total length. The total length value {} in the IPv4 header is smaller then the ipv4 header itself.", total_length_field)
-            }
+            Ipv4Header(err) => err.fmt(f),
             Ipv6UnexpectedVersion(version_number) => {
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
             }
@@ -419,6 +415,7 @@ impl Error for ReadError {
         match self {
             ReadError::IoError(err) => Some(err),
             ReadError::UnexpectedEndOfSlice(err) => Some(err),
+            ReadError::Ipv4Header(err) => Some(err),
             _ => None,
         }
     }
