@@ -2,7 +2,6 @@ use super::*;
 use etherparse::packet_filter::*;
 use proptest::*;
 
-
 #[test]
 fn default() {
     let value: ElementFilter<IpFilter> = Default::default();
@@ -18,21 +17,21 @@ struct PacketFilterTest {
     ip: Option<IpHeader>,
     transport: Option<TransportHeader>,
 
-    filter: Filter
+    filter: Filter,
 }
 
 impl PacketFilterTest {
-
     ///Add all permutations of vlan data types to the test (none, single, double)
     ///and then proceeds calling "add_ip_data" with each permutations.
-    fn add_vlan_data(&self, 
-                     outer_vlan: &SingleVlanHeader, 
-                     inner_vlan: &SingleVlanHeader, 
-                     ipv4: &(Ipv4Header, Vec<u8>), 
-                     ipv6: &Ipv6Header, 
-                     udp: &UdpHeader,
-                     tcp: &TcpHeader)
-    {
+    fn add_vlan_data(
+        &self,
+        outer_vlan: &SingleVlanHeader,
+        inner_vlan: &SingleVlanHeader,
+        ipv4: &(Ipv4Header, Vec<u8>),
+        ipv6: &Ipv6Header,
+        udp: &UdpHeader,
+        tcp: &TcpHeader,
+    ) {
         //none
         {
             let mut t = self.clone();
@@ -50,7 +49,7 @@ impl PacketFilterTest {
             let mut t = self.clone();
             t.vlan = Some(VlanHeader::Double(DoubleVlanHeader {
                 outer: outer_vlan.clone(),
-                inner: inner_vlan.clone()
+                inner: inner_vlan.clone(),
             }));
             t.add_ip_data(ipv4, ipv6, udp, tcp);
         }
@@ -58,12 +57,13 @@ impl PacketFilterTest {
 
     ///Add all permutations of ip data types to the test (none, v4, v6)
     ///and then proceeds calling "add_transport_data" with each permutations.
-    fn add_ip_data(&self, 
-                   ipv4: &(Ipv4Header, Vec<u8>), 
-                   ipv6: &Ipv6Header, 
-                   udp: &UdpHeader, 
-                   tcp: &TcpHeader)
-    {
+    fn add_ip_data(
+        &self,
+        ipv4: &(Ipv4Header, Vec<u8>),
+        ipv6: &Ipv6Header,
+        udp: &UdpHeader,
+        tcp: &TcpHeader,
+    ) {
         //none
         {
             let mut t = self.clone();
@@ -122,37 +122,32 @@ impl PacketFilterTest {
             t.filter.link = ElementFilter::No;
             t.add_vlan_filter(match &t.link {
                 None => expected_result,
-                _ => false
+                _ => false,
             });
         }
         //some
         match &self.link {
             Some(_) => {
                 let mut t = self.clone();
-                t.filter.link = ElementFilter::Some(
-                    LinkFilter::Ethernet2 {
-                        source: None,
-                        destination: None
-                    }
-                );
+                t.filter.link = ElementFilter::Some(LinkFilter::Ethernet2 {
+                    source: None,
+                    destination: None,
+                });
                 t.add_vlan_filter(expected_result);
-            },
+            }
             _ => {
                 //test that the filter results in a negative match
                 let mut t = self.clone();
-                t.filter.link = ElementFilter::Some(
-                    LinkFilter::Ethernet2 {
-                        source: None,
-                        destination: None
-                    }
-                );
+                t.filter.link = ElementFilter::Some(LinkFilter::Ethernet2 {
+                    source: None,
+                    destination: None,
+                });
                 t.add_vlan_filter(false);
             }
         }
     }
 
     fn add_vlan_filter(&self, expected_result: bool) {
-
         //any
         {
             let mut t = self.clone();
@@ -166,7 +161,7 @@ impl PacketFilterTest {
             t.filter.vlan = ElementFilter::No;
             t.add_ip_filter(match &t.vlan {
                 None => expected_result,
-                _ => false
+                _ => false,
             });
         }
 
@@ -174,27 +169,21 @@ impl PacketFilterTest {
         match &self.vlan {
             Some(VlanHeader::Single(_)) => {
                 let mut t = self.clone();
-                t.filter.vlan = ElementFilter::Some(
-                    VlanFilter::Single(None)
-                );
+                t.filter.vlan = ElementFilter::Some(VlanFilter::Single(None));
                 t.add_ip_filter(expected_result);
-            },
+            }
             Some(VlanHeader::Double(_)) => {
                 let mut t = self.clone();
-                t.filter.vlan = ElementFilter::Some(
-                    VlanFilter::Double{
-                        outer_identifier: None,
-                        inner_identifier: None,
-                    }
-                );
+                t.filter.vlan = ElementFilter::Some(VlanFilter::Double {
+                    outer_identifier: None,
+                    inner_identifier: None,
+                });
                 t.add_ip_filter(expected_result);
-            },
+            }
             _ => {
                 //test that the filter results in a negative match
                 let mut t = self.clone();
-                t.filter.vlan = ElementFilter::Some(
-                    VlanFilter::Single(None)
-                );
+                t.filter.vlan = ElementFilter::Some(VlanFilter::Single(None));
                 t.add_ip_filter(false);
             }
         }
@@ -214,7 +203,7 @@ impl PacketFilterTest {
             t.filter.ip = ElementFilter::No;
             t.add_transport_filter(match &t.ip {
                 None => expected_result,
-                _ => false
+                _ => false,
             });
         }
 
@@ -222,40 +211,33 @@ impl PacketFilterTest {
         match &self.ip {
             Some(IpHeader::Version4(_, _)) => {
                 let mut t = self.clone();
-                t.filter.ip = ElementFilter::Some(
-                    IpFilter::Ipv4 {
-                        source: None,
-                        destination: None
-                    }
-                );
+                t.filter.ip = ElementFilter::Some(IpFilter::Ipv4 {
+                    source: None,
+                    destination: None,
+                });
                 t.add_transport_filter(expected_result);
-            },
-            Some(IpHeader::Version6(_,_)) => {
+            }
+            Some(IpHeader::Version6(_, _)) => {
                 let mut t = self.clone();
-                t.filter.ip = ElementFilter::Some(
-                    IpFilter::Ipv6 {
-                        source: None,
-                        destination: None
-                    }
-                );
+                t.filter.ip = ElementFilter::Some(IpFilter::Ipv6 {
+                    source: None,
+                    destination: None,
+                });
                 t.add_transport_filter(expected_result);
-            },
+            }
             _ => {
                 //test that the filter results in a negative match
                 let mut t = self.clone();
-                t.filter.ip = ElementFilter::Some(
-                    IpFilter::Ipv4 {
-                        source: None,
-                        destination: None
-                    }
-                );
+                t.filter.ip = ElementFilter::Some(IpFilter::Ipv4 {
+                    source: None,
+                    destination: None,
+                });
                 t.add_transport_filter(false);
             }
         }
     }
 
     fn add_transport_filter(&self, expected_result: bool) {
-
         //any
         {
             let mut t = self.clone();
@@ -269,40 +251,34 @@ impl PacketFilterTest {
             t.filter.transport = ElementFilter::No;
             t.run(match &t.transport {
                 None => expected_result,
-                _ => false
+                _ => false,
             });
         }
         //some
         match &self.transport {
             Some(TransportHeader::Udp(_)) => {
                 let mut t = self.clone();
-                t.filter.transport = ElementFilter::Some(
-                    TransportFilter::Udp {
-                        source_port: None,
-                        destination_port: None
-                    }
-                );
+                t.filter.transport = ElementFilter::Some(TransportFilter::Udp {
+                    source_port: None,
+                    destination_port: None,
+                });
                 t.run(expected_result);
-            },
+            }
             Some(TransportHeader::Tcp(_)) => {
                 let mut t = self.clone();
-                t.filter.transport = ElementFilter::Some(
-                    TransportFilter::Tcp {
-                        source_port: None,
-                        destination_port: None
-                    }
-                );
+                t.filter.transport = ElementFilter::Some(TransportFilter::Tcp {
+                    source_port: None,
+                    destination_port: None,
+                });
                 t.run(expected_result);
-            },
+            }
             _ => {
                 //test that the filter results in a negative match
                 let mut t = self.clone();
-                t.filter.transport = ElementFilter::Some(
-                    TransportFilter::Udp {
-                        source_port: None,
-                        destination_port: None
-                    }
-                );
+                t.filter.transport = ElementFilter::Some(TransportFilter::Udp {
+                    source_port: None,
+                    destination_port: None,
+                });
                 t.run(false);
             }
         }
@@ -321,63 +297,73 @@ impl PacketFilterTest {
             link: match &self.link {
                 Some(header) => {
                     header.write(&mut link_data).unwrap();
-                    Some(LinkSlice::Ethernet2(Ethernet2HeaderSlice::from_slice(&link_data[..]).unwrap()))
-                },
-                None => None
+                    Some(LinkSlice::Ethernet2(
+                        Ethernet2HeaderSlice::from_slice(&link_data[..]).unwrap(),
+                    ))
+                }
+                None => None,
             },
             vlan: match &self.vlan {
                 Some(VlanHeader::Single(header)) => {
                     header.write(&mut vlan_data).unwrap();
-                    Some(VlanSlice::SingleVlan(SingleVlanHeaderSlice::from_slice(&vlan_data[..]).unwrap()))
-                },
+                    Some(VlanSlice::SingleVlan(
+                        SingleVlanHeaderSlice::from_slice(&vlan_data[..]).unwrap(),
+                    ))
+                }
                 Some(VlanHeader::Double(header)) => {
                     header.write(&mut vlan_data).unwrap();
-                    Some(VlanSlice::DoubleVlan(DoubleVlanHeaderSlice::from_slice(&vlan_data[..]).unwrap()))
-                },
-                None => None
+                    Some(VlanSlice::DoubleVlan(
+                        DoubleVlanHeaderSlice::from_slice(&vlan_data[..]).unwrap(),
+                    ))
+                }
+                None => None,
             },
             ip: match &self.ip {
                 Some(IpHeader::Version4(header, _)) => {
                     header.write(&mut ip_data).unwrap();
-                    Some(
-                         InternetSlice::Ipv4(
-                            Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap(),
-                            Default::default()
-                        )
-                    )
-                },
+                    Some(InternetSlice::Ipv4(
+                        Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap(),
+                        Default::default(),
+                    ))
+                }
                 Some(IpHeader::Version6(header, _)) => {
                     header.write(&mut ip_data).unwrap();
-                    Some(
-                        InternetSlice::Ipv6(
-                            Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(),
-                            Default::default()
-                        )
-                    )
-                },
+                    Some(InternetSlice::Ipv6(
+                        Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(),
+                        Default::default(),
+                    ))
+                }
 
-                None => None
+                None => None,
             },
             transport: match &self.transport {
                 Some(TransportHeader::Icmpv4(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmpv4(Icmpv4Slice::from_slice(&transport_data[..]).unwrap()))
-                },
+                    Some(TransportSlice::Icmpv4(
+                        Icmpv4Slice::from_slice(&transport_data[..]).unwrap(),
+                    ))
+                }
                 Some(TransportHeader::Icmpv6(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Icmpv6(Icmpv6Slice::from_slice(&transport_data[..]).unwrap()))
-                },
+                    Some(TransportSlice::Icmpv6(
+                        Icmpv6Slice::from_slice(&transport_data[..]).unwrap(),
+                    ))
+                }
                 Some(TransportHeader::Udp(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Udp(UdpHeaderSlice::from_slice(&transport_data[..]).unwrap()))
-                },
+                    Some(TransportSlice::Udp(
+                        UdpHeaderSlice::from_slice(&transport_data[..]).unwrap(),
+                    ))
+                }
                 Some(TransportHeader::Tcp(header)) => {
                     header.write(&mut transport_data).unwrap();
-                    Some(TransportSlice::Tcp(TcpHeaderSlice::from_slice(&transport_data[..]).unwrap()))
-                },
-                None => None
+                    Some(TransportSlice::Tcp(
+                        TcpHeaderSlice::from_slice(&transport_data[..]).unwrap(),
+                    ))
+                }
+                None => None,
             },
-            payload: &payload[..]
+            payload: &payload[..],
         };
 
         assert_eq!(expected_result, self.filter.applies_to_slice(&slice));
@@ -385,15 +371,14 @@ impl PacketFilterTest {
 }
 ///Test that all known packet compositions are parsed correctly.
 #[test]
-fn test_compositions()
-{
+fn test_compositions() {
     //test without link
     {
         let test: PacketFilterTest = Default::default();
         test.add_vlan_data(
             &{
                 //explicitly set the outer vlan ether_type id
-                let mut re : SingleVlanHeader = Default::default();
+                let mut re: SingleVlanHeader = Default::default();
                 re.ether_type = EtherType::VlanTaggedFrame as u16;
                 re
             },
@@ -401,7 +386,7 @@ fn test_compositions()
             &Default::default(),
             &Default::default(),
             &Default::default(),
-            &Default::default()
+            &Default::default(),
         );
     }
 
@@ -412,7 +397,7 @@ fn test_compositions()
         test.add_vlan_data(
             &{
                 //explicitly set the outer vlan ether_type id
-                let mut re : SingleVlanHeader = Default::default();
+                let mut re: SingleVlanHeader = Default::default();
                 re.ether_type = EtherType::VlanTaggedFrame as u16;
                 re
             },
@@ -420,7 +405,7 @@ fn test_compositions()
             &Default::default(),
             &Default::default(),
             &Default::default(),
-            &Default::default()
+            &Default::default(),
         );
     }
 }
@@ -716,12 +701,18 @@ mod transport_filter {
 
 #[test]
 fn type_derives() {
-    println!("{:?}", TransportFilter::Udp{
-        source_port: None,
-        destination_port: None
-    });
-    println!("{:?}", TransportFilter::Tcp{
-        source_port: None,
-        destination_port: None
-    });
+    println!(
+        "{:?}",
+        TransportFilter::Udp {
+            source_port: None,
+            destination_port: None
+        }
+    );
+    println!(
+        "{:?}",
+        TransportFilter::Tcp {
+            source_port: None,
+            destination_port: None
+        }
+    );
 }

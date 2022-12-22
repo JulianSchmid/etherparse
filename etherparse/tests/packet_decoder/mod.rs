@@ -5,12 +5,12 @@ mod packet_headers {
 
     #[test]
     fn debug() {
-        let header = PacketHeaders{
+        let header = PacketHeaders {
             link: None,
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
         assert_eq!(
             &format!("{:?}", header),
@@ -27,12 +27,12 @@ mod packet_headers {
 
     #[test]
     fn clone_eq() {
-        let header = PacketHeaders{
+        let header = PacketHeaders {
             link: None,
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
         assert_eq!(header.clone(), header);
     }

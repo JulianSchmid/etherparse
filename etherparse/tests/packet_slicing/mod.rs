@@ -7,7 +7,7 @@ mod internet_slice {
     fn debug_clone_eq() {
         // ipv4
         {
-            let mut header : Ipv4Header = Default::default();
+            let mut header: Ipv4Header = Default::default();
             header.protocol = ip_number::UDP;
             let buffer = {
                 let mut buffer = Vec::with_capacity(header.header_len());
@@ -15,9 +15,7 @@ mod internet_slice {
                 buffer
             };
             let ipv4 = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
-            let exts = Ipv4ExtensionsSlice {
-                auth: None
-            };
+            let exts = Ipv4ExtensionsSlice { auth: None };
             let slice = InternetSlice::Ipv4(ipv4.clone(), exts.clone());
 
             // clone & eq
@@ -28,11 +26,10 @@ mod internet_slice {
                 format!("{:?}", slice),
                 format!("Ipv4({:?}, {:?})", ipv4, exts)
             );
-
         }
         // ipv6
         {
-            let mut header : Ipv6Header = Default::default();
+            let mut header: Ipv6Header = Default::default();
             header.next_header = ip_number::UDP;
             let buffer = {
                 let mut buffer = Vec::with_capacity(header.header_len());
@@ -40,7 +37,9 @@ mod internet_slice {
                 buffer
             };
             let ipv6 = Ipv6HeaderSlice::from_slice(&buffer).unwrap();
-            let exts = Ipv6ExtensionsSlice::from_slice(ip_number::UDP, &[]).unwrap().0;
+            let exts = Ipv6ExtensionsSlice::from_slice(ip_number::UDP, &[])
+                .unwrap()
+                .0;
             let slice = InternetSlice::Ipv6(ipv6.clone(), exts.clone());
 
             // clone & eq
@@ -59,7 +58,7 @@ mod internet_slice {
         for is_frag in [false, true] {
             // ipv4
             {
-                let mut header : Ipv4Header = Default::default();
+                let mut header: Ipv4Header = Default::default();
                 header.protocol = ip_number::UDP;
                 header.more_fragments = is_frag;
                 let buffer = {
@@ -68,33 +67,35 @@ mod internet_slice {
                     buffer
                 };
                 let ipv4 = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
-                let exts = Ipv4ExtensionsSlice {
-                    auth: None
-                };
+                let exts = Ipv4ExtensionsSlice { auth: None };
                 let slice = InternetSlice::Ipv4(ipv4.clone(), exts.clone());
                 assert_eq!(is_frag, slice.is_fragmenting_payload());
             }
             // ipv6
             {
-                let mut header : Ipv6Header = Default::default();
+                let mut header: Ipv6Header = Default::default();
                 header.next_header = ip_number::IPV6_FRAG;
-                let frag_header = Ipv6FragmentHeader{
+                let frag_header = Ipv6FragmentHeader {
                     next_header: ip_number::UDP,
                     fragment_offset: 0,
                     more_fragments: is_frag,
-                    identification: 0
+                    identification: 0,
                 };
                 header.payload_length = frag_header.header_len() as u16;
                 let buffer = {
-                    let mut buffer = Vec::with_capacity(
-                        header.header_len() + frag_header.header_len()
-                    );
+                    let mut buffer =
+                        Vec::with_capacity(header.header_len() + frag_header.header_len());
                     header.write(&mut buffer).unwrap();
                     frag_header.write(&mut buffer).unwrap();
                     buffer
                 };
                 let ipv6 = Ipv6HeaderSlice::from_slice(&buffer).unwrap();
-                let exts = Ipv6ExtensionsSlice::from_slice(ip_number::IPV6_FRAG, &buffer[header.header_len()..]).unwrap().0;
+                let exts = Ipv6ExtensionsSlice::from_slice(
+                    ip_number::IPV6_FRAG,
+                    &buffer[header.header_len()..],
+                )
+                .unwrap()
+                .0;
                 let slice = InternetSlice::Ipv6(ipv6.clone(), exts.clone());
 
                 // clone & eq
@@ -154,7 +155,7 @@ mod transport_slice {
     fn debug_clone_eq() {
         // udp
         {
-            let header : UdpHeader = Default::default();
+            let header: UdpHeader = Default::default();
             let raw = header.to_bytes();
             let u = UdpHeaderSlice::from_slice(&raw).unwrap();
             let slice = TransportSlice::Udp(u.clone());
@@ -163,14 +164,11 @@ mod transport_slice {
             assert_eq!(slice.clone(), slice);
 
             // debug
-            assert_eq!(
-                format!("{:?}", slice),
-                format!("Udp({:?})", u)
-            );
+            assert_eq!(format!("{:?}", slice), format!("Udp({:?})", u));
         }
         // tcp
         {
-            let header : TcpHeader = Default::default();
+            let header: TcpHeader = Default::default();
             let buffer = {
                 let mut buffer = Vec::with_capacity(header.header_len() as usize);
                 header.write(&mut buffer).unwrap();
@@ -183,10 +181,7 @@ mod transport_slice {
             assert_eq!(slice.clone(), slice);
 
             // debug
-            assert_eq!(
-                format!("{:?}", slice),
-                format!("Tcp({:?})", t)
-            );
+            assert_eq!(format!("{:?}", slice), format!("Tcp({:?})", t));
         }
         // unknown
         {
@@ -213,8 +208,11 @@ mod sliced_packet {
 
         //slice length error
         assert_eq!(
-            SlicedPacket::from_ip(&[]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            SlicedPacket::from_ip(&[])
+                .unwrap_err()
+                .unexpected_end_of_slice()
+                .unwrap(),
+            err::UnexpectedEndOfSliceError {
                 expected_min_len: 1,
                 actual_len: 0,
                 layer: err::Layer::IpHeader
@@ -223,25 +221,20 @@ mod sliced_packet {
 
         //bad protocol number
         for i in 0u8..std::u8::MAX {
-            if i >> 4 != 4  &&
-               i >> 4 != 6
-            {
-                assert_matches!(
-                    SlicedPacket::from_ip(&[i]),
-                    Err(IpUnsupportedVersion(_))
-                );
+            if i >> 4 != 4 && i >> 4 != 6 {
+                assert_matches!(SlicedPacket::from_ip(&[i]), Err(IpUnsupportedVersion(_)));
             }
         }
     }
 
     #[test]
     fn debug() {
-        let header = SlicedPacket{
+        let header = SlicedPacket {
             link: None,
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
         assert_eq!(
             format!("{:?}", header),
@@ -258,12 +251,12 @@ mod sliced_packet {
 
     #[test]
     fn clone_eq() {
-        let header = SlicedPacket{
+        let header = SlicedPacket {
             link: None,
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[]
+            payload: &[],
         };
         assert_eq!(header.clone(), header);
     }
