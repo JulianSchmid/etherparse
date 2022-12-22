@@ -383,9 +383,9 @@ mod header {
             assert_eq!("NotEnoughSpace(0)", format!("{:?}", NotEnoughSpace(0)));
         }
         // TcpOptionsIterator
-        #[rustfmt::skip]
         {
             use tcp_option::*;
+            #[rustfmt::skip]
             assert_eq!(
                 "[MaximumSegmentSize(0), WindowScale(0)]",
                 format!(
@@ -397,6 +397,7 @@ mod header {
                     ])
                 )
             );
+            #[rustfmt::skip]
             assert_eq!(
                 "[MaximumSegmentSize(0), Err(UnexpectedSize { option_id: 3, size: 0 })]",
                 format!(

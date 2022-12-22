@@ -1,5 +1,4 @@
 use super::*;
-use etherparse::*;
 
 #[test]
 fn eth_ipv4_udp() {
