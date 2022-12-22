@@ -49,21 +49,26 @@ mod udp_header {
     }
 
     /// Calculat the expected UDP header checksum for the tests.
-    fn expected_udp_ipv4_checksum(source: [u8;4], destination: [u8;4], udp_header: &UdpHeader, payload: &[u8]) -> u16 {
+    fn expected_udp_ipv4_checksum(
+        source: [u8; 4],
+        destination: [u8; 4],
+        udp_header: &UdpHeader,
+        payload: &[u8],
+    ) -> u16 {
         ::etherparse::checksum::Sum16BitWords::new()
-        // pseudo header
-        .add_4bytes(source)
-        .add_4bytes(destination)
-        .add_2bytes([0, ip_number::UDP])
-        .add_2bytes(udp_header.length.to_be_bytes())
-        // udp header
-        .add_2bytes(udp_header.source_port.to_be_bytes())
-        .add_2bytes(udp_header.destination_port.to_be_bytes())
-        .add_2bytes(udp_header.length.to_be_bytes())
-        .add_2bytes([0, 0]) // checksum as zero (should have no effect)
-        .add_slice(payload)
-        .to_ones_complement_with_no_zero()
-        .to_be()
+            // pseudo header
+            .add_4bytes(source)
+            .add_4bytes(destination)
+            .add_2bytes([0, ip_number::UDP])
+            .add_2bytes(udp_header.length.to_be_bytes())
+            // udp header
+            .add_2bytes(udp_header.source_port.to_be_bytes())
+            .add_2bytes(udp_header.destination_port.to_be_bytes())
+            .add_2bytes(udp_header.length.to_be_bytes())
+            .add_2bytes([0, 0]) // checksum as zero (should have no effect)
+            .add_slice(payload)
+            .to_ones_complement_with_no_zero()
+            .to_be()
     }
 
     proptest! {
@@ -270,21 +275,26 @@ mod udp_header {
     }
 
     /// Calculat the expected UDP header checksum for the tests.
-    fn expected_udp_ipv6_checksum(source: [u8;16], destination: [u8;16], udp_header: &UdpHeader, payload: &[u8]) -> u16 {
+    fn expected_udp_ipv6_checksum(
+        source: [u8; 16],
+        destination: [u8; 16],
+        udp_header: &UdpHeader,
+        payload: &[u8],
+    ) -> u16 {
         ::etherparse::checksum::Sum16BitWords::new()
-        // pseudo header
-        .add_16bytes(source)
-        .add_16bytes(destination)
-        .add_2bytes([0, ip_number::UDP])
-        .add_4bytes(u32::from(udp_header.length).to_be_bytes())
-        // udp header
-        .add_2bytes(udp_header.source_port.to_be_bytes())
-        .add_2bytes(udp_header.destination_port.to_be_bytes())
-        .add_2bytes(udp_header.length.to_be_bytes())
-        .add_2bytes([0, 0]) // checksum as zero (should have no effect)
-        .add_slice(payload)
-        .to_ones_complement_with_no_zero()
-        .to_be()
+            // pseudo header
+            .add_16bytes(source)
+            .add_16bytes(destination)
+            .add_2bytes([0, ip_number::UDP])
+            .add_4bytes(u32::from(udp_header.length).to_be_bytes())
+            // udp header
+            .add_2bytes(udp_header.source_port.to_be_bytes())
+            .add_2bytes(udp_header.destination_port.to_be_bytes())
+            .add_2bytes(udp_header.length.to_be_bytes())
+            .add_2bytes([0, 0]) // checksum as zero (should have no effect)
+            .add_slice(payload)
+            .to_ones_complement_with_no_zero()
+            .to_be()
     }
 
     proptest! {
@@ -721,7 +731,7 @@ mod udp_header {
 
     #[test]
     fn default() {
-        let actual : UdpHeader = Default::default();
+        let actual: UdpHeader = Default::default();
         assert_eq!(actual.source_port, 0);
         assert_eq!(actual.destination_port, 0);
         assert_eq!(actual.length, 0);

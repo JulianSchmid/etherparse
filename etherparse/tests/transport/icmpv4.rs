@@ -72,7 +72,10 @@ mod dest_unreachable_header {
             (CODE_DST_UNREACH_HOST, Host),
             (CODE_DST_UNREACH_PROTOCOL, Protocol),
             (CODE_DST_UNREACH_PORT, Port),
-            (CODE_DST_UNREACH_NEED_FRAG, FragmentationNeeded{ next_hop_mtu }),
+            (
+                CODE_DST_UNREACH_NEED_FRAG,
+                FragmentationNeeded { next_hop_mtu },
+            ),
             (CODE_DST_UNREACH_SOURCE_ROUTE_FAILED, SourceRouteFailed),
             (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
             (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
@@ -82,7 +85,10 @@ mod dest_unreachable_header {
             (CODE_DST_UNREACH_TOS_NET, TosNetwork),
             (CODE_DST_UNREACH_TOS_HOST, TosHost),
             (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
-            (CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION, HostPrecedenceViolation),
+            (
+                CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION,
+                HostPrecedenceViolation,
+            ),
             (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
         ]
     }
@@ -183,8 +189,14 @@ mod redirect_code {
         let tests = [
             (CODE_REDIRECT_FOR_NETWORK, RedirectForNetwork),
             (CODE_REDIRECT_FOR_HOST, RedirectForHost),
-            (CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK, RedirectForTypeOfServiceAndNetwork),
-            (CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST, RedirectForTypeOfServiceAndHost),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK,
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST,
+                RedirectForTypeOfServiceAndHost,
+            ),
         ];
         for t in tests {
             assert_eq!(Some(t.1), RedirectCode::from_u8(t.0));
@@ -199,8 +211,14 @@ mod redirect_code {
         let tests = [
             (CODE_REDIRECT_FOR_NETWORK, RedirectForNetwork),
             (CODE_REDIRECT_FOR_HOST, RedirectForHost),
-            (CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK, RedirectForTypeOfServiceAndNetwork),
-            (CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST, RedirectForTypeOfServiceAndHost),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK,
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST,
+                RedirectForTypeOfServiceAndHost,
+            ),
         ];
         for t in tests {
             assert_eq!(t.1.code_u8(), t.0);
@@ -225,8 +243,14 @@ mod redirect_code {
         let tests = [
             ("RedirectForNetwork", RedirectForNetwork),
             ("RedirectForHost", RedirectForHost),
-            ("RedirectForTypeOfServiceAndNetwork", RedirectForTypeOfServiceAndNetwork),
-            ("RedirectForTypeOfServiceAndHost", RedirectForTypeOfServiceAndHost),
+            (
+                "RedirectForTypeOfServiceAndNetwork",
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                "RedirectForTypeOfServiceAndHost",
+                RedirectForTypeOfServiceAndHost,
+            ),
         ];
         for t in tests {
             assert_eq!(t.0, format!("{:?}", t.1));
@@ -240,25 +264,24 @@ mod redirect_header {
 
     #[test]
     fn clone_eq() {
-        let v = RedirectHeader{
+        let v = RedirectHeader {
             code: RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         assert_eq!(v.clone(), v);
     }
 
     #[test]
     fn debug() {
-        let v = RedirectHeader{
+        let v = RedirectHeader {
             code: RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         assert_eq!(
             format!("{:?}", v),
             format!(
                 "RedirectHeader {{ code: {:?}, gateway_internet_address: {:?} }}",
-                v.code,
-                v.gateway_internet_address
+                v.code, v.gateway_internet_address
             )
         );
     }
@@ -286,15 +309,24 @@ mod time_exceeded_code {
 
     #[test]
     fn code_u8() {
-        assert_eq!(TtlExceededInTransit.code_u8(), CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT);
-        assert_eq!(FragmentReassemblyTimeExceeded.code_u8(), CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED);
+        assert_eq!(
+            TtlExceededInTransit.code_u8(),
+            CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT
+        );
+        assert_eq!(
+            FragmentReassemblyTimeExceeded.code_u8(),
+            CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED
+        );
     }
 
     #[test]
     fn debug() {
         let values = [
             ("TtlExceededInTransit", TtlExceededInTransit),
-            ("FragmentReassemblyTimeExceeded", FragmentReassemblyTimeExceeded),
+            (
+                "FragmentReassemblyTimeExceeded",
+                FragmentReassemblyTimeExceeded,
+            ),
         ];
         for (expected, input) in values {
             assert_eq!(expected, format!("{:?}", input));
@@ -303,10 +335,7 @@ mod time_exceeded_code {
 
     #[test]
     fn clone_eq() {
-        let values = [
-            TtlExceededInTransit,
-            FragmentReassemblyTimeExceeded,
-        ];
+        let values = [TtlExceededInTransit, FragmentReassemblyTimeExceeded];
         for value in values {
             assert_eq!(value.clone(), value);
         }
@@ -320,7 +349,7 @@ mod timestamp_message {
         assert_eq!(20, TimestampMessage::SERIALIZED_SIZE);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_bytes(bytes in any::<[u8;16]>()) {
             assert_eq!(
@@ -375,7 +404,7 @@ mod parameter_problem_header {
     use super::*;
     use ParameterProblemHeader::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_values(pointer in any::<u8>()) {
             {
@@ -396,11 +425,7 @@ mod parameter_problem_header {
 
     #[test]
     fn clone_eq() {
-        let tests = [
-            PointerIndicatesError(0),
-            MissingRequiredOption,
-            BadLength,
-        ];
+        let tests = [PointerIndicatesError(0), MissingRequiredOption, BadLength];
         for t in tests {
             assert_eq!(t.clone(), t);
         }
@@ -425,23 +450,27 @@ mod icmpv4_type {
 
     #[test]
     fn header_len() {
-        let dummy_ts = TimestampMessage{
+        let dummy_ts = TimestampMessage {
             id: 0,
             seq: 0,
             originate_timestamp: 0,
             receive_timestamp: 0,
             transmit_timestamp: 0,
         };
-        let dummy_echo = IcmpEchoHeader{
-            id: 0,
-            seq: 0,
-        };
-        let dummy_redirect = RedirectHeader{
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
             code: RedirectCode::RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         let tests = [
-            (8, Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]}),
+            (
+                8,
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4],
+                },
+            ),
             (8, EchoReply(dummy_echo)),
             (8, DestinationUnreachable(DestUnreachableHeader::Network)),
             (8, Redirect(dummy_redirect)),
@@ -460,23 +489,27 @@ mod icmpv4_type {
     fn fixed_payload_size() {
         use Icmpv4Type::*;
 
-        let dummy_ts = TimestampMessage{
+        let dummy_ts = TimestampMessage {
             id: 0,
             seq: 0,
             originate_timestamp: 0,
             receive_timestamp: 0,
             transmit_timestamp: 0,
         };
-        let dummy_echo = IcmpEchoHeader{
-            id: 0,
-            seq: 0,
-        };
-        let dummy_redirect = RedirectHeader{
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
             code: RedirectCode::RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         let tests = [
-            (None, Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]}),
+            (
+                None,
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4],
+                },
+            ),
             (None, EchoReply(dummy_echo)),
             (None, DestinationUnreachable(DestUnreachableHeader::Network)),
             (None, Redirect(dummy_redirect)),
@@ -491,7 +524,7 @@ mod icmpv4_type {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn calc_checksum(
             dest_unreach_code_u8 in 0u8..=15,
@@ -543,7 +576,7 @@ mod icmpv4_type {
                 TimestampRequest(ts.clone()),
                 TimestampReply(ts),
             ];
-            
+
             for t in values {
                 let bytes = Icmpv4Header{
                     icmp_type: t.clone(),
@@ -561,23 +594,24 @@ mod icmpv4_type {
 
     #[test]
     fn clone_eq() {
-        let dummy_ts = TimestampMessage{
+        let dummy_ts = TimestampMessage {
             id: 0,
             seq: 0,
             originate_timestamp: 0,
             receive_timestamp: 0,
             transmit_timestamp: 0,
         };
-        let dummy_echo = IcmpEchoHeader{
-            id: 0,
-            seq: 0,
-        };
-        let dummy_redirect = RedirectHeader{
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
             code: RedirectCode::RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         let tests = [
-            Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]},
+            Unknown {
+                type_u8: 0,
+                code_u8: 0,
+                bytes5to8: [0; 4],
+            },
             EchoReply(dummy_echo),
             DestinationUnreachable(DestUnreachableHeader::Network),
             Redirect(dummy_redirect),
@@ -594,23 +628,27 @@ mod icmpv4_type {
 
     #[test]
     fn debug() {
-        let dummy_ts = TimestampMessage{
+        let dummy_ts = TimestampMessage {
             id: 0,
             seq: 0,
             originate_timestamp: 0,
             receive_timestamp: 0,
             transmit_timestamp: 0,
         };
-        let dummy_echo = IcmpEchoHeader{
-            id: 0,
-            seq: 0,
-        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
 
         assert_eq!(
-            format!("{:?}", Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]}),
+            format!(
+                "{:?}",
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4]
+                }
+            ),
             format!(
                 "Unknown {{ type_u8: {:?}, code_u8: {:?}, bytes5to8: {:?} }}",
-                0u8, 0u8, [0u8;4]
+                0u8, 0u8, [0u8; 4]
             )
         );
         assert_eq!(
@@ -618,13 +656,19 @@ mod icmpv4_type {
             format!("EchoReply({:?})", dummy_echo)
         );
         assert_eq!(
-            format!("{:?}", DestinationUnreachable(DestUnreachableHeader::Network)),
-            format!("DestinationUnreachable({:?})", DestUnreachableHeader::Network)
+            format!(
+                "{:?}",
+                DestinationUnreachable(DestUnreachableHeader::Network)
+            ),
+            format!(
+                "DestinationUnreachable({:?})",
+                DestUnreachableHeader::Network
+            )
         );
         {
-            let dummy_redirect = RedirectHeader{
+            let dummy_redirect = RedirectHeader {
                 code: RedirectCode::RedirectForNetwork,
-                gateway_internet_address: [0;4],
+                gateway_internet_address: [0; 4],
             };
             assert_eq!(
                 format!("{:?}", Redirect(dummy_redirect.clone())),
@@ -647,7 +691,7 @@ mod icmpv4_type {
             format!("{:?}", TimestampRequest(dummy_ts.clone())),
             format!("TimestampRequest({:?})", dummy_ts)
         );
-         assert_eq!(
+        assert_eq!(
             format!("{:?}", TimestampReply(dummy_ts.clone())),
             format!("TimestampReply({:?})", dummy_ts)
         );
@@ -663,7 +707,7 @@ mod icmpv4_header {
         assert_eq!(20, Icmpv4Header::MAX_SERIALIZED_SIZE);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn new(icmpv4_type in icmpv4_type_any()) {
             assert_eq!(
@@ -676,7 +720,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn with_checksum(
             icmpv4_type in icmpv4_type_any(),
@@ -692,7 +736,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             icmpv4_type in icmpv4_type_any(),
@@ -709,7 +753,7 @@ mod icmpv4_header {
             let buffer = {
                 let mut buffer = Vec::with_capacity(header.header_len() + payload.len());
                 buffer.extend_from_slice(&header.to_bytes());
-                
+
                 match icmpv4_type {
                     // skip the payoad for the timestamp request (those don't have a payload)
                     TimestampRequest(_) | TimestampReply(_) => {},
@@ -735,7 +779,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             non_timestamp_type in any::<u8>().prop_filter(
@@ -783,7 +827,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(
             icmpv4_type in icmpv4_type_any(),
@@ -810,7 +854,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             checksum in any::<u16>(),
@@ -824,7 +868,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn fixed_payload_size(
             checksum in any::<u16>(),
@@ -838,7 +882,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn update_checksum(
             icmpv4_type in icmpv4_type_any(),
@@ -854,7 +898,7 @@ mod icmpv4_header {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         #[rustfmt::skip]
         fn to_bytes(
@@ -938,7 +982,7 @@ mod icmpv4_header {
                         ]
                     }
                 ),
-                
+
                 (
                     Redirect(redirect),
                     8,
@@ -998,7 +1042,7 @@ mod icmpv4_header {
                     }
                 ),
             ];
-            
+
             for t in random_values {
                 let actual = Icmpv4Header{
                     icmp_type: t.0.clone(),
@@ -1105,7 +1149,10 @@ mod icmpv4_header {
         };
         assert_eq!(
             format!("{:?}", header),
-            format!("Icmpv4Header {{ icmp_type: {:?}, checksum: {:?} }}", header.icmp_type, header.checksum)
+            format!(
+                "Icmpv4Header {{ icmp_type: {:?}, checksum: {:?} }}",
+                header.icmp_type, header.checksum
+            )
         );
     }
 }
@@ -1119,17 +1166,20 @@ mod icmpv4_slice {
 
         // normal case
         {
-            let bytes = [0u8;8];
+            let bytes = [0u8; 8];
             let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
             assert_eq!(slice.slice(), &bytes);
         }
 
         // smaller then min size error
         for bad_len in 0..8 {
-            let bytes = [0u8;8];
+            let bytes = [0u8; 8];
             assert_eq!(
-                Icmpv4Slice::from_slice(&bytes[..bad_len]).unwrap_err().unexpected_end_of_slice().unwrap(),
-                err::UnexpectedEndOfSliceError{
+                Icmpv4Slice::from_slice(&bytes[..bad_len])
+                    .unwrap_err()
+                    .unexpected_end_of_slice()
+                    .unwrap(),
+                err::UnexpectedEndOfSliceError {
                     expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
                     actual_len: bad_len,
                     layer: err::Layer::Icmpv4
@@ -1140,7 +1190,7 @@ mod icmpv4_slice {
         // timestamp tests
         for ts_type_u8 in [TYPE_TIMESTAMP, TYPE_TIMESTAMP_REPLY] {
             let bytes = {
-                let mut bytes = [0u8;26];
+                let mut bytes = [0u8; 26];
                 bytes[0] = ts_type_u8;
                 bytes
             };
@@ -1155,7 +1205,7 @@ mod icmpv4_slice {
             for bad_len in 8..20 {
                 assert_matches!(
                     Icmpv4Slice::from_slice(&bytes[..bad_len]),
-                    Err(UnexpectedLenOfSlice{
+                    Err(UnexpectedLenOfSlice {
                         expected: TimestampMessage::SERIALIZED_SIZE,
                         actual: _
                     })
@@ -1166,7 +1216,7 @@ mod icmpv4_slice {
             for bad_len in 21..26 {
                 assert_matches!(
                     Icmpv4Slice::from_slice(&bytes[..bad_len]),
-                    Err(UnexpectedLenOfSlice{
+                    Err(UnexpectedLenOfSlice {
                         expected: TimestampMessage::SERIALIZED_SIZE,
                         actual: _
                     })
@@ -1175,7 +1225,7 @@ mod icmpv4_slice {
 
             // timestamp with a non zero code
             for code_u8 in 1..=u8::MAX {
-                let mut bytes = [0u8;20];
+                let mut bytes = [0u8; 20];
                 bytes[0] = ts_type_u8;
                 bytes[1] = code_u8;
                 let slice = Icmpv4Slice::from_slice(&bytes[..8]).unwrap();
@@ -1184,7 +1234,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header(bytes in any::<[u8;20]>()) {
             let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
@@ -1201,48 +1251,56 @@ mod icmpv4_slice {
     #[test]
     fn header_len() {
         use Icmpv4Type::*;
-        let dummy_ts = TimestampMessage{
+        let dummy_ts = TimestampMessage {
             id: 0,
             seq: 0,
             originate_timestamp: 0,
             receive_timestamp: 0,
             transmit_timestamp: 0,
         };
-        let dummy_echo = IcmpEchoHeader{
-            id: 0,
-            seq: 0,
-        };
-        let dummy_redirect = RedirectHeader{
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
             code: RedirectCode::RedirectForNetwork,
-            gateway_internet_address: [0;4],
+            gateway_internet_address: [0; 4],
         };
         let tests = [
-            (Unknown{type_u8: u8::MAX, code_u8: 0, bytes5to8: [0;4]}),
+            (Unknown {
+                type_u8: u8::MAX,
+                code_u8: 0,
+                bytes5to8: [0; 4],
+            }),
             (EchoReply(dummy_echo)),
             (DestinationUnreachable(DestUnreachableHeader::Network)),
             (Redirect(dummy_redirect)),
             (EchoRequest(dummy_echo)),
-
             (TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
             (ParameterProblem(ParameterProblemHeader::BadLength)),
             (TimestampRequest(dummy_ts.clone())),
             // check that a non zero code value return 8
-            (Unknown{type_u8: TYPE_TIMESTAMP, code_u8: 1, bytes5to8: [0;4]}),
+            (Unknown {
+                type_u8: TYPE_TIMESTAMP,
+                code_u8: 1,
+                bytes5to8: [0; 4],
+            }),
             (TimestampReply(dummy_ts)),
             // check that a non zero code value return 8
-            (Unknown{type_u8: TYPE_TIMESTAMP_REPLY, code_u8: 1, bytes5to8: [0;4]}),
+            (Unknown {
+                type_u8: TYPE_TIMESTAMP_REPLY,
+                code_u8: 1,
+                bytes5to8: [0; 4],
+            }),
         ];
         for t in tests {
             assert_eq!(
                 t.header_len(),
-                Icmpv4Slice::from_slice(
-                    &Icmpv4Header::new(t).to_bytes()
-                ).unwrap().header_len()
+                Icmpv4Slice::from_slice(&Icmpv4Header::new(t).to_bytes())
+                    .unwrap()
+                    .header_len()
             );
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn icmp_type(base_bytes in any::<[u8;20]>()) {
 
@@ -1509,7 +1567,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn type_u8(bytes in any::<[u8;20]>()) {
             assert_eq!(
@@ -1519,7 +1577,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn code_u8(bytes in any::<[u8;20]>()) {
             assert_eq!(
@@ -1529,7 +1587,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn checksum(bytes in any::<[u8;20]>()) {
             assert_eq!(
@@ -1539,7 +1597,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn bytes5to8(bytes in any::<[u8;20]>()) {
             assert_eq!(
@@ -1549,7 +1607,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn payload(
             payload in proptest::collection::vec(any::<u8>(), 8..26)
@@ -1616,7 +1674,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn slice(bytes in proptest::collection::vec(any::<u8>(), 20..1024)) {
             let slice = if bytes[0] == TYPE_TIMESTAMP || bytes[0] == TYPE_TIMESTAMP_REPLY {
@@ -1631,7 +1689,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(bytes in any::<[u8;20]>()) {
             let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
@@ -1639,7 +1697,7 @@ mod icmpv4_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(bytes in any::<[u8;20]>()) {
             let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
@@ -1673,7 +1731,8 @@ mod icmpv4_regression {
         let builder = PacketBuilder::ipv4(
             [192, 168, 1, 1], //source ip
             [192, 168, 1, 2], //desitionation ip
-            20) //time to life
+            20,
+        ) //time to life
         .icmpv4_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
@@ -1776,7 +1835,10 @@ mod icmpv4_regression {
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
             icmp4.checksum = 0;
-            assert_eq!(icmp4.icmp_type.calc_checksum(request.payload), valid_checksum);
+            assert_eq!(
+                icmp4.icmp_type.calc_checksum(request.payload),
+                valid_checksum
+            );
         }
     }
 

@@ -1,8 +1,8 @@
 use super::super::*;
 use proptest::prelude::*;
 
-use etherparse::icmpv6::*;
 use arrayvec::ArrayVec;
+use etherparse::icmpv6::*;
 
 #[test]
 fn constants() {
@@ -65,23 +65,23 @@ mod dest_unreachable_code {
     use super::*;
     use etherparse::icmpv6::DestUnreachableCode::*;
 
-    pub const VALID_VALUES: [(DestUnreachableCode, u8);7] = [
+    pub const VALID_VALUES: [(DestUnreachableCode, u8); 7] = [
         (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
         (Prohibited, CODE_DST_UNREACH_PROHIBITED),
         (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
         (Address, CODE_DST_UNREACH_ADDR),
         (Port, CODE_DST_UNREACH_PORT),
-        (SourceAddressFailedPolicy, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY),
+        (
+            SourceAddressFailedPolicy,
+            CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
+        ),
         (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
     ];
 
     #[test]
     fn from_u8() {
         for (code, code_u8) in VALID_VALUES {
-            assert_eq!(
-                code,
-                DestUnreachableCode::from_u8(code_u8).unwrap()
-            );
+            assert_eq!(code, DestUnreachableCode::from_u8(code_u8).unwrap());
         }
         for code_u8 in 7u8..=0xff {
             assert!(DestUnreachableCode::from_u8(code_u8).is_none());
@@ -123,18 +123,18 @@ mod time_exceeded_code {
     use super::*;
     use etherparse::icmpv6::TimeExceededCode::*;
 
-    pub const VALID_VALUES: [(TimeExceededCode, u8);2] = [
+    pub const VALID_VALUES: [(TimeExceededCode, u8); 2] = [
         (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
-        (FragmentReassemblyTimeExceeded, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED),
+        (
+            FragmentReassemblyTimeExceeded,
+            CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
+        ),
     ];
 
     #[test]
     fn from_u8() {
         for (code, code_u8) in VALID_VALUES {
-            assert_eq!(
-                Some(code),
-                TimeExceededCode::from_u8(code_u8)
-            );
+            assert_eq!(Some(code), TimeExceededCode::from_u8(code_u8));
         }
         for code_u8 in 2..=u8::MAX {
             assert_eq!(None, TimeExceededCode::from_u8(code_u8));
@@ -144,10 +144,7 @@ mod time_exceeded_code {
     #[test]
     fn from_enum() {
         for (code, code_u8) in VALID_VALUES {
-            assert_eq!(
-                code.code_u8(),
-                code_u8
-            );
+            assert_eq!(code.code_u8(), code_u8);
         }
     }
 
@@ -177,23 +174,46 @@ mod parameter_problem_code {
     use super::*;
     use ParameterProblemCode::*;
 
-    pub const VALID_VALUES: [(ParameterProblemCode, u8);11] = [
+    pub const VALID_VALUES: [(ParameterProblemCode, u8); 11] = [
         (ErroneousHeaderField, CODE_PARAM_PROBLEM_ERR_HEADER_FIELD),
-        (UnrecognizedNextHeader, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER),
-        (UnrecognizedIpv6Option, CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION),
-        (Ipv6FirstFragmentIncompleteHeaderChain, CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN),
-        (SrUpperLayerHeaderError, CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR),
-        (UnrecognizedNextHeaderByIntermediateNode, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE),
+        (
+            UnrecognizedNextHeader,
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
+        ),
+        (
+            UnrecognizedIpv6Option,
+            CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
+        ),
+        (
+            Ipv6FirstFragmentIncompleteHeaderChain,
+            CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN,
+        ),
+        (
+            SrUpperLayerHeaderError,
+            CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
+        ),
+        (
+            UnrecognizedNextHeaderByIntermediateNode,
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE,
+        ),
         (ExtensionHeaderTooBig, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG),
-        (ExtensionHeaderChainTooLong, CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG),
-        (TooManyExtensionHeaders, CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS),
-        (TooManyOptionsInExtensionHeader, CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER),
-        (OptionTooBig, CODE_PARAM_PROBLEM_OPTION_TOO_BIG)
+        (
+            ExtensionHeaderChainTooLong,
+            CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
+        ),
+        (
+            TooManyExtensionHeaders,
+            CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
+        ),
+        (
+            TooManyOptionsInExtensionHeader,
+            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
+        ),
+        (OptionTooBig, CODE_PARAM_PROBLEM_OPTION_TOO_BIG),
     ];
 
     #[test]
     fn from_u8() {
-
         for t in VALID_VALUES {
             assert_eq!(Some(t.0), ParameterProblemCode::from_u8(t.1));
         }
@@ -253,7 +273,7 @@ mod parameter_problem_header {
 
     #[test]
     fn clone_eq() {
-        let value = ParameterProblemHeader{
+        let value = ParameterProblemHeader {
             code: ParameterProblemCode::ErroneousHeaderField,
             pointer: 0,
         };
@@ -262,14 +282,17 @@ mod parameter_problem_header {
 
     #[test]
     fn debug() {
-        let value = ParameterProblemHeader{
+        let value = ParameterProblemHeader {
             code: ParameterProblemCode::ErroneousHeaderField,
             pointer: 0,
         };
 
         assert_eq!(
             format!("{:?}", value),
-            format!("ParameterProblemHeader {{ code: {:?}, pointer: {:?} }}", value.code, value.pointer)
+            format!(
+                "ParameterProblemHeader {{ code: {:?}, pointer: {:?} }}",
+                value.code, value.pointer
+            )
         );
     }
 }
@@ -1061,7 +1084,7 @@ mod icmpv6_slice {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn icmp_type(
             checksum in any::<[u8;2]>(),
@@ -1183,7 +1206,6 @@ mod icmpv6_slice {
             }
         }
     }
-
 
     proptest! {
         #[test]
@@ -1440,9 +1462,13 @@ mod regression {
     #[test]
     fn ip6_echo_marshall_unmarshall() {
         let builder = PacketBuilder::ipv6(
-            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], //source ip
-            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114], //dst ip
-            20) //time to life
+            //source ip
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+            //dst ip
+            [0xfe, 0x80, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 114],
+            //time to life
+            20,
+        )
         .icmpv6_echo_request(1, 2);
         let payload = [0xde, 0xad, 0xbe, 0xef];
         //get some memory to store the result
