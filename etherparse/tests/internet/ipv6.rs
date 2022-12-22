@@ -499,7 +499,7 @@ proptest! {
 fn from_slice_bad_version() {
     //write an ipv4 header and check that the bad version number is detected
     let input = {
-        let mut input: Ipv4Header = Default::default();
+        let mut input: crate::Ipv4Header = Default::default();
         //set the options to increase the size,
         //otherwise an unexpected end of slice error is returned
         input.set_options(&[0; 24]).unwrap();

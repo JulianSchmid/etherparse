@@ -13,6 +13,18 @@ pub struct UnexpectedEndOfSliceError {
     pub layer: Layer,
 }
 
+impl UnexpectedEndOfSliceError {
+    /// Adds an offset value to the `expected_min_len` & `actual_len` fields to the UnexpectedEndOfSliceError.
+    #[inline]
+    pub const fn add_offset(self, offset: usize) -> Self {
+        UnexpectedEndOfSliceError {
+            expected_min_len: self.expected_min_len + offset,
+            actual_len: self.actual_len + offset,
+            layer: self.layer,
+        }
+    }
+}
+
 impl core::fmt::Display for UnexpectedEndOfSliceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.layer.name_starts_with_vocal() {
@@ -52,6 +64,23 @@ mod test {
         error::Error,
         hash::{Hash, Hasher},
     };
+
+    #[test]
+    fn add_offset() {
+        assert_eq!(
+            UnexpectedEndOfSliceError {
+                expected_min_len: 1,
+                actual_len: 2,
+                layer: Layer::Icmpv4,
+            }
+            .add_offset(100),
+            UnexpectedEndOfSliceError {
+                expected_min_len: 101,
+                actual_len: 102,
+                layer: Layer::Icmpv4,
+            }
+        );
+    }
 
     #[test]
     fn debug() {
