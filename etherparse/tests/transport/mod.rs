@@ -1,13 +1,13 @@
 pub mod icmp;
 pub mod icmpv4;
 pub mod icmpv6;
-pub mod udp;
 pub mod tcp;
+pub mod udp;
 
 mod transport_header {
     use super::super::*;
-    use std::slice;
     use std::io::Cursor;
+    use std::slice;
 
     proptest! {
         #[test]
@@ -119,19 +119,19 @@ mod transport_header {
             icmpv6 in icmpv6_header_any(),
         ) {
             assert_eq!(
-                TransportHeader::Udp(udp).header_len(), 
+                TransportHeader::Udp(udp).header_len(),
                 UdpHeader::SERIALIZED_SIZE
             );
             assert_eq!(
-                TransportHeader::Tcp(tcp.clone()).header_len(), 
+                TransportHeader::Tcp(tcp.clone()).header_len(),
                 tcp.header_len() as usize
             );
             assert_eq!(
-                TransportHeader::Icmpv4(icmpv4.clone()).header_len(), 
+                TransportHeader::Icmpv4(icmpv4.clone()).header_len(),
                 icmpv4.header_len()
             );
             assert_eq!(
-                TransportHeader::Icmpv6(icmpv6.clone()).header_len(), 
+                TransportHeader::Icmpv6(icmpv6.clone()).header_len(),
                 icmpv6.header_len()
             );
         }
@@ -154,7 +154,7 @@ mod transport_header {
                     let mut transport = Udp(udp.clone());
                     let payload = Vec::new();
                     transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
-                    assert_eq!(transport.udp().unwrap().checksum, 
+                    assert_eq!(transport.udp().unwrap().checksum,
                                udp.calc_checksum_ipv4(&ipv4, &payload).unwrap());
                 }
                 // error case
@@ -181,7 +181,7 @@ mod transport_header {
                     let mut transport = Tcp(tcp.clone());
                     let payload = Vec::new();
                     transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
-                    assert_eq!(transport.tcp().unwrap().checksum, 
+                    assert_eq!(transport.tcp().unwrap().checksum,
                                tcp.calc_checksum_ipv4(&ipv4, &payload).unwrap());
                 }
                 //error case
@@ -208,7 +208,7 @@ mod transport_header {
                 let payload = Vec::new();
                 transport.update_checksum_ipv4(&ipv4, &payload).unwrap();
                 assert_eq!(
-                    transport.icmpv4().unwrap().checksum, 
+                    transport.icmpv4().unwrap().checksum,
                     icmpv4.icmp_type.calc_checksum(&payload)
                 );
             }
@@ -223,7 +223,7 @@ mod transport_header {
 
     proptest! {
         #[test]
-        #[cfg(target_pointer_width = "64")] 
+        #[cfg(target_pointer_width = "64")]
         fn update_checksum_ipv6(
             ipv6 in ipv6_any(),
             udp in udp_any(),
@@ -240,7 +240,7 @@ mod transport_header {
                     let mut transport = Udp(udp.clone());
                     let payload = Vec::new();
                     transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
-                    assert_eq!(transport.udp().unwrap().checksum, 
+                    assert_eq!(transport.udp().unwrap().checksum,
                                udp.calc_checksum_ipv6(&ipv6, &payload).unwrap());
                 }
                 //error case
@@ -270,7 +270,7 @@ mod transport_header {
                     let mut transport = Tcp(tcp.clone());
                     let payload = Vec::new();
                     transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
-                    assert_eq!(transport.tcp().unwrap().checksum, 
+                    assert_eq!(transport.tcp().unwrap().checksum,
                                tcp.calc_checksum_ipv6(&ipv6, &payload).unwrap());
                 }
                 //error case
@@ -297,7 +297,7 @@ mod transport_header {
                 let payload = Vec::new();
                 transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
                 assert_eq!(
-                    transport.icmpv4().unwrap().checksum, 
+                    transport.icmpv4().unwrap().checksum,
                     icmpv4.icmp_type.calc_checksum(&payload)
                 );
             }
@@ -310,7 +310,7 @@ mod transport_header {
                     let payload = Vec::new();
                     transport.update_checksum_ipv6(&ipv6, &payload).unwrap();
                     assert_eq!(
-                        transport.icmpv6().unwrap().checksum, 
+                        transport.icmpv6().unwrap().checksum,
                         icmpv6.icmp_type.calc_checksum(ipv6.source, ipv6.destination, &payload).unwrap()
                     );
                 }

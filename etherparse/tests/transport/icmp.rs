@@ -4,7 +4,7 @@ use proptest::prelude::*;
 mod icmp_echo_header {
     use super::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(
             id in any::<u16>(),
