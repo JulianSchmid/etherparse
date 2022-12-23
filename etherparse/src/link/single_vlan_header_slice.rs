@@ -10,15 +10,14 @@ pub struct SingleVlanHeaderSlice<'a> {
 impl<'a> SingleVlanHeaderSlice<'a> {
     ///Creates a vlan header slice from a slice.
     #[inline]
-    pub fn from_slice(slice: &'a [u8]) -> Result<SingleVlanHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<SingleVlanHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        use crate::ReadError::*;
         if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(err::UnexpectedEndOfSliceError {
                 expected_min_len: SingleVlanHeader::SERIALIZED_SIZE,
                 actual_len: slice.len(),
                 layer: err::Layer::VlanHeader,
-            }));
+            });
         }
 
         //all done

@@ -337,7 +337,7 @@ impl<'a> CursorSlice<'a> {
         use LinkSlice::*;
 
         let result = Ethernet2HeaderSlice::from_slice(self.slice)
-            .map_err(|err| err.add_slice_offset(self.offset))?;
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
 
         //cache the ether_type for later
         let ether_type = result.ether_type();
@@ -360,7 +360,7 @@ impl<'a> CursorSlice<'a> {
         use VlanSlice::*;
 
         let single = SingleVlanHeaderSlice::from_slice(self.slice)
-            .map_err(|err| err.add_slice_offset(self.offset))?;
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
 
         //check if it is a double vlan header
         match single.ether_type() {

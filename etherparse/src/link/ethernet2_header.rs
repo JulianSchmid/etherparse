@@ -18,13 +18,13 @@ impl Ethernet2Header {
     /// Creates a ethernet slice from an other slice.
     #[deprecated(since = "0.10.1", note = "Use Ethernet2Header::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), err::UnexpectedEndOfSliceError> {
         Ethernet2Header::from_slice(slice)
     }
 
     /// Read an Ethernet2Header from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), err::UnexpectedEndOfSliceError> {
         Ok((
             Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
             &slice[Ethernet2Header::SERIALIZED_SIZE..],
