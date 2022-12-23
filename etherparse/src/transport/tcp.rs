@@ -1027,14 +1027,14 @@ pub enum TcpOptionReadError {
     UnknownId(u8),
 }
 
-impl Error for TcpOptionReadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for TcpOptionReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
 
-impl fmt::Display for TcpOptionReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for TcpOptionReadError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use TcpOptionReadError::*;
         match self {
             UnexpectedEndOfSlice {
@@ -1069,14 +1069,14 @@ pub enum TcpOptionWriteError {
     NotEnoughSpace(usize),
 }
 
-impl Error for TcpOptionWriteError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for TcpOptionWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
 }
 
-impl fmt::Display for TcpOptionWriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl core::fmt::Display for TcpOptionWriteError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use TcpOptionWriteError::*;
         match self {
             NotEnoughSpace(size) => {
