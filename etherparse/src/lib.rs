@@ -245,8 +245,6 @@
 // character '!'.
 #![allow(clippy::bool_comparison)]
 
-use std::error::Error;
-use std::fmt;
 use std::io;
 
 pub mod err;
@@ -254,7 +252,7 @@ pub mod err;
 mod link;
 pub use crate::link::double_vlan_header_slice::*;
 pub use crate::link::double_vlan_header::*;
-pub use crate::link::ether_type::*;
+pub use crate::link::ether_type_impl::*;
 pub use crate::link::ethernet2_header::*;
 pub use crate::link::ethernet2_header_slice::*;
 pub use crate::link::link_slice::*;
@@ -377,8 +375,8 @@ impl ReadError {
     }
 }
 
-impl fmt::Display for ReadError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ReadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ReadError::*;
 
         match self {
@@ -416,8 +414,8 @@ impl fmt::Display for ReadError {
     }
 }
 
-impl Error for ReadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for ReadError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ReadError::IoError(err) => Some(err),
             ReadError::UnexpectedEndOfSlice(err) => Some(err),
@@ -482,8 +480,8 @@ impl From<std::io::Error> for WriteError {
     }
 }
 
-impl fmt::Display for WriteError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use WriteError::*;
         match self {
             IoError(err) => err.fmt(f),
@@ -497,8 +495,8 @@ impl fmt::Display for WriteError {
     }
 }
 
-impl Error for WriteError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
+impl std::error::Error for WriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use WriteError::*;
         match self {
             IoError(ref err) => Some(err),
@@ -561,10 +559,10 @@ pub enum ValueError {
     Icmpv6InIpv4,
 }
 
-impl Error for ValueError {}
+impl std::error::Error for ValueError {}
 
-impl fmt::Display for ValueError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ValueError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ValueError::*;
         match self {
             Ipv4OptionsLengthBad(options_len) => {
@@ -650,8 +648,8 @@ pub enum ErrorField {
     VlanTagVlanId,
 }
 
-impl fmt::Display for ErrorField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for ErrorField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use ErrorField::*;
         match self {
             Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
