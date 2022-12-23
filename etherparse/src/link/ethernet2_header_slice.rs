@@ -9,15 +9,14 @@ pub struct Ethernet2HeaderSlice<'a> {
 
 impl<'a> Ethernet2HeaderSlice<'a> {
     /// Creates a ethernet slice from an other slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ethernet2HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ethernet2HeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        use crate::ReadError::*;
         if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(err::UnexpectedEndOfSliceError {
                 expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
                 actual_len: slice.len(),
                 layer: err::Layer::Ethernet2Header,
-            }));
+            });
         }
 
         //all done

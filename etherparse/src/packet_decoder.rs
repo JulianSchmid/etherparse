@@ -67,7 +67,8 @@ impl<'a> PacketHeaders<'a> {
     /// }
     /// ```
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
-        let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)?;
+        let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders {
@@ -84,7 +85,8 @@ impl<'a> PacketHeaders<'a> {
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
-                let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)?;
+                let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)
+                    .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
 
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
@@ -94,7 +96,8 @@ impl<'a> PacketHeaders<'a> {
                 match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                        let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)?;
+                        let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
+                            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
@@ -240,7 +243,8 @@ impl<'a> PacketHeaders<'a> {
         result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
-                let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)?;
+                let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)
+                    .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
 
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
@@ -250,7 +254,8 @@ impl<'a> PacketHeaders<'a> {
                 match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                        let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)?;
+                        let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
+                            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
