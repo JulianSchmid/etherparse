@@ -252,10 +252,16 @@ use std::io;
 pub mod err;
 
 mod link;
-use crate::err::UnexpectedEndOfSliceError;
-pub use crate::link::ethernet::*;
-pub use crate::link::vlan_tagging::*;
-pub use crate::link::LinkSlice;
+pub use crate::link::double_vlan_header_slice::*;
+pub use crate::link::double_vlan_header::*;
+pub use crate::link::ether_type::*;
+pub use crate::link::ethernet2_header::*;
+pub use crate::link::ethernet2_header_slice::*;
+pub use crate::link::link_slice::*;
+pub use crate::link::single_vlan_header_slice::*;
+pub use crate::link::single_vlan_header::*;
+pub use crate::link::vlan_header::*;
+pub use crate::link::vlan_slice::*;
 
 mod internet;
 pub use crate::internet::ip::*;
