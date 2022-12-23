@@ -54,9 +54,10 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
         // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
         unsafe {
-            SingleVlanHeaderSlice::from_slice_unchecked(
-                from_raw_parts(self.slice.as_ptr(), SingleVlanHeader::SERIALIZED_SIZE)
-            )
+            SingleVlanHeaderSlice::from_slice_unchecked(from_raw_parts(
+                self.slice.as_ptr(),
+                SingleVlanHeader::SERIALIZED_SIZE,
+            ))
         }
     }
 
@@ -68,12 +69,10 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
         // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
         unsafe {
-            SingleVlanHeaderSlice::from_slice_unchecked(
-                from_raw_parts(
-                    self.slice.as_ptr().add(SingleVlanHeader::SERIALIZED_SIZE),
-                    SingleVlanHeader::SERIALIZED_SIZE,
-                )
-            )
+            SingleVlanHeaderSlice::from_slice_unchecked(from_raw_parts(
+                self.slice.as_ptr().add(SingleVlanHeader::SERIALIZED_SIZE),
+                SingleVlanHeader::SERIALIZED_SIZE,
+            ))
         }
     }
 

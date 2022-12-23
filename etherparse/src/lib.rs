@@ -250,14 +250,14 @@ use std::io;
 pub mod err;
 
 mod link;
-pub use crate::link::double_vlan_header_slice::*;
 pub use crate::link::double_vlan_header::*;
+pub use crate::link::double_vlan_header_slice::*;
 pub use crate::link::ether_type_impl::*;
 pub use crate::link::ethernet2_header::*;
 pub use crate::link::ethernet2_header_slice::*;
 pub use crate::link::link_slice::*;
-pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::single_vlan_header::*;
+pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::vlan_header::*;
 pub use crate::link::vlan_slice::*;
 
@@ -269,8 +269,8 @@ pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;
 pub use crate::internet::ipv6::*;
 pub use crate::internet::ipv6_extensions::*;
-pub use crate::internet::ipv6_fragment_header_slice::*;
 pub use crate::internet::ipv6_fragment_header::*;
+pub use crate::internet::ipv6_fragment_header_slice::*;
 pub use crate::internet::ipv6_raw_extension::*;
 
 mod transport;
