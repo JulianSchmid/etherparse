@@ -171,8 +171,8 @@ impl TransportHeader {
         match self {
             Icmpv4(value) => value.write(writer),
             Icmpv6(value) => value.write(writer),
-            Udp(value) => value.write(writer),
-            Tcp(value) => value.write(writer).map_err(WriteError::from),
+            Udp(value) => value.write(writer).map_err(WriteError::IoError),
+            Tcp(value) => value.write(writer).map_err(WriteError::IoError),
         }
     }
 }

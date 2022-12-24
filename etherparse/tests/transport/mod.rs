@@ -2,7 +2,6 @@ pub mod icmp;
 pub mod icmpv4;
 pub mod icmpv6;
 pub mod tcp;
-pub mod udp;
 
 mod transport_header {
     use super::super::*;
