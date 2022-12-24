@@ -82,3 +82,86 @@ impl<'a> UdpHeaderSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in udp_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(8 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let result = UdpHeaderSlice::from_slice(&buffer[..]).unwrap();
+                assert_eq!(&buffer[..8], result.slice());
+            }
+
+            // call with not enough data in the slice
+            for len in 0..8 {
+                assert_eq!(
+                    UdpHeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: UdpHeader::LEN,
+                        actual_len: len,
+                        layer: err::Layer::UdpHeader
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(slice.source_port(), input.source_port);
+            assert_eq!(slice.destination_port(), input.destination_port);
+            assert_eq!(slice.length(), input.length);
+            assert_eq!(slice.checksum(), input.checksum);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in udp_any()) {
+            let bytes = input.to_bytes();
+            let slice = UdpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "UdpHeaderSlice {{ slice: {:?} }}",
+                    slice.slice()
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+}
