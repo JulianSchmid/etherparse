@@ -437,6 +437,7 @@ fn read_transport(
         IPV6_ICMP => Ok(Icmpv6Header::from_slice(rest)?)
             .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1)),
         UDP => Ok(UdpHeader::from_slice(rest)
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
         TCP => Ok(TcpHeader::from_slice(rest)
             .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),

@@ -535,7 +535,7 @@ impl<'a> CursorSlice<'a> {
         use crate::TransportSlice::*;
 
         let result = UdpHeaderSlice::from_slice(self.slice)
-            .map_err(|err| err.add_slice_offset(self.offset))?;
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
 
         //set the new data
         self.move_by_slice(result.slice());
