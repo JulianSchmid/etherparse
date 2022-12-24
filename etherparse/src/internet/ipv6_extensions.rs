@@ -122,7 +122,8 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6FragmentHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
+                            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.fragment = Some(slice.to_header());
@@ -732,7 +733,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     next_header = slice.next_header();
                 }
                 IPV6_FRAG => {
-                    let slice = Ipv6FragmentHeaderSlice::from_slice(rest)?;
+                    let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
+                        .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
                     // SAFETY:
                     // Ipv6FragmentHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed
