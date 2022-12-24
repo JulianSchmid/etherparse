@@ -84,3 +84,112 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+    use assert_matches::assert_matches;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            {
+                // serialize
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+                input.write(&mut buffer).unwrap();
+                buffer.extend(&dummy_data[..]);
+
+                // normal
+                {
+                    let slice = DoubleVlanHeaderSlice::from_slice(&buffer).unwrap();
+                    assert_eq!(slice.slice(), &buffer[..8]);
+                }
+
+                // slice length to small
+                for len in 0..8 {
+                    assert_eq!(
+                        DoubleVlanHeaderSlice::from_slice(&buffer[..len])
+                            .unwrap_err()
+                            .unexpected_end_of_slice()
+                            .unwrap(),
+                        err::UnexpectedEndOfSliceError{
+                            expected_min_len: 8,
+                            actual_len: len,
+                            layer:  err::Layer::VlanHeader
+                        }
+                    );
+                }
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                assert_matches!(
+                    DoubleVlanHeaderSlice::from_slice(&bad_outer.to_bytes().unwrap())
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(input.outer, slice.outer().to_header());
+            assert_eq!(input.inner, slice.inner().to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(
+                DoubleVlanHeader{
+                    outer: input.outer,
+                    inner: input.inner,
+                },
+                slice.to_header()
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in vlan_double_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "DoubleVlanHeaderSlice {{ slice: {:?} }}",
+                    slice.slice(),
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+}

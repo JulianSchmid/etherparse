@@ -50,3 +50,97 @@ pub mod ether_type {
     pub const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
     pub const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn to_u16() {
+        use crate::EtherType::*;
+        assert_eq!(0x0800, Ipv4 as u16);
+        assert_eq!(0x86dd, Ipv6 as u16);
+        assert_eq!(0x0806, Arp as u16);
+        assert_eq!(0x0842, WakeOnLan as u16);
+        assert_eq!(0x8100, VlanTaggedFrame as u16);
+        assert_eq!(0x88A8, ProviderBridging as u16);
+        assert_eq!(0x9100, VlanDoubleTaggedFrame as u16);
+    }
+
+    #[test]
+    fn from_u16() {
+        use crate::EtherType::*;
+        assert_eq!(EtherType::from_u16(0x0800), Some(Ipv4));
+        assert_eq!(EtherType::from_u16(0x86dd), Some(Ipv6));
+        assert_eq!(EtherType::from_u16(0x0806), Some(Arp));
+        assert_eq!(EtherType::from_u16(0x0842), Some(WakeOnLan));
+        assert_eq!(EtherType::from_u16(0x8100), Some(VlanTaggedFrame));
+        assert_eq!(EtherType::from_u16(0x88A8), Some(ProviderBridging));
+        assert_eq!(EtherType::from_u16(0x9100), Some(VlanDoubleTaggedFrame));
+        assert_eq!(EtherType::from_u16(0x1234), None);
+    }
+
+    #[test]
+    fn constants() {
+        use crate::ether_type::*;
+        use crate::EtherType::*;
+        let pairs = &[
+            (Ipv4, IPV4),
+            (Ipv6, IPV6),
+            (Arp, ARP),
+            (WakeOnLan, WAKE_ON_LAN),
+            (VlanTaggedFrame, VLAN_TAGGED_FRAME),
+            (ProviderBridging, PROVIDER_BRIDGING),
+            (VlanDoubleTaggedFrame, VLAN_DOUBLE_TAGGED_FRAME),
+        ];
+
+        for (enum_value, constant) in pairs {
+            assert_eq!(enum_value.clone() as u16, *constant);
+        }
+    }
+
+    #[test]
+    fn dbg() {
+        use crate::EtherType::*;
+        let pairs = &[
+            (Ipv4, "Ipv4"),
+            (Ipv6, "Ipv6"),
+            (Arp, "Arp"),
+            (WakeOnLan, "WakeOnLan"),
+            (VlanTaggedFrame, "VlanTaggedFrame"),
+            (ProviderBridging, "ProviderBridging"),
+            (VlanDoubleTaggedFrame, "VlanDoubleTaggedFrame"),
+        ];
+
+        for (enum_value, str_value) in pairs {
+            assert_eq!(str_value, &format!("{:?}", enum_value));
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        use crate::EtherType::*;
+        let values = &[
+            Ipv4,
+            Ipv6,
+            Arp,
+            WakeOnLan,
+            VlanTaggedFrame,
+            ProviderBridging,
+            VlanDoubleTaggedFrame,
+        ];
+
+        // clone
+        for v in values {
+            assert_eq!(v, &v.clone());
+        }
+
+        // eq
+        for (a_pos, a) in values.iter().enumerate() {
+            for (b_pos, b) in values.iter().enumerate() {
+                assert_eq!(a_pos == b_pos, a == b);
+                assert_eq!(a_pos != b_pos, a != b);
+            }
+        }
+    }
+}

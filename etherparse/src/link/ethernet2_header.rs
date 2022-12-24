@@ -1,5 +1,4 @@
 use crate::*;
-use std::io;
 
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -46,9 +45,9 @@ impl Ethernet2Header {
     }
 
     /// Reads an Ethernet-II header from the current position of the read argument.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<Ethernet2Header, io::Error> {
+    ) -> Result<Ethernet2Header, std::io::Error> {
         let buffer = {
             let mut buffer = [0; Ethernet2Header::SERIALIZED_SIZE];
             reader.read_exact(&mut buffer)?;
@@ -75,7 +74,7 @@ impl Ethernet2Header {
 
     /// Writes a given Ethernet-II header to the current position of the write argument.
     #[inline]
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), io::Error> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }
 
@@ -106,5 +105,190 @@ impl Ethernet2Header {
             ether_type_be[0],
             ether_type_be[1],
         ]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test_gens::*;
+    use proptest::prelude::*;
+    use std::io::{Cursor, ErrorKind};
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in ethernet_2_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(14 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let (result, rest) = Ethernet2Header::from_slice(&buffer[..]).unwrap();
+                assert_eq!(input, result);
+                assert_eq!(&buffer[14..], rest);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = Ethernet2Header::read_from_slice(&buffer[..]).unwrap();
+                assert_eq!(input, result);
+                assert_eq!(&buffer[14..], rest);
+            }
+
+            // call with not enough data in the slice
+            for len in 0..=13 {
+                assert_eq!(
+                    Ethernet2Header::from_slice(&buffer[..len]),
+                    Err(err::UnexpectedEndOfSliceError{
+                        expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                        actual_len: len,
+                        layer: err::Layer::Ethernet2Header
+                    })
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_bytes(input in ethernet_2_any()) {
+            assert_eq!(
+                input,
+                Ethernet2Header::from_bytes(input.to_bytes())
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            input in ethernet_2_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // normal read
+            let mut buffer = Vec::with_capacity(14 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = Ethernet2Header::read(&mut cursor).unwrap();
+                assert_eq!(input, result);
+                assert_eq!(cursor.position(), 14);
+            }
+
+            // unexpected eof
+            for len in 0..=13 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    Ethernet2Header::read(&mut cursor)
+                    .unwrap_err()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_to_slice(input in ethernet_2_any()) {
+            // normal write
+            {
+                let mut buffer: [u8;14] = [0;14];
+                input.write_to_slice(&mut buffer).unwrap();
+                assert_eq!(buffer, input.to_bytes());
+            }
+            // len to small
+            for len in 0..14 {
+                let mut buffer: [u8;14] = [0;14];
+                assert_eq!(
+                    input.write_to_slice(&mut buffer[..len])
+                        .unwrap_err()
+                        .slice_too_small_size()
+                        .unwrap(),
+                    Ethernet2Header::SERIALIZED_SIZE
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write(input in ethernet_2_any()) {
+            // successfull write
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(14);
+                input.write(&mut buffer).unwrap();
+                assert_eq!(&buffer[..], &input.to_bytes());
+            }
+
+            // not enough memory for write (unexpected eof)
+            for len in 0..8 {
+                let mut buffer = [0u8;8];
+                let mut writer = Cursor::new(&mut buffer[..len]);
+                assert!(input.write(&mut writer).is_err());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(input in ethernet_2_any()) {
+            assert_eq!(input.header_len(), 14);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_bytes(input in ethernet_2_any()) {
+            let ether_type_be = input.ether_type.to_be_bytes();
+            assert_eq!(
+                input.to_bytes(),
+                [
+                    input.destination[0],
+                    input.destination[1],
+                    input.destination[2],
+                    input.destination[3],
+                    input.destination[4],
+                    input.destination[5],
+                    input.source[0],
+                    input.source[1],
+                    input.source[2],
+                    input.source[3],
+                    input.source[4],
+                    input.source[5],
+                    ether_type_be[0],
+                    ether_type_be[1],
+                ]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in ethernet_2_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in ethernet_2_any()) {
+            assert_eq!(
+                &format!(
+                    "Ethernet2Header {{ source: {:?}, destination: {:?}, ether_type: {} }}",
+                    input.source,
+                    input.destination,
+                    input.ether_type
+                ),
+                &format!("{:?}", input)
+            );
+        }
     }
 }

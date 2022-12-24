@@ -9,7 +9,6 @@ use std::io;
 mod checksum;
 mod errors;
 mod internet;
-mod link;
 mod packet_builder;
 mod packet_decoder;
 mod packet_filter;
