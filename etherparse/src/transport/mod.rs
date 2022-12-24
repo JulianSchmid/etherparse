@@ -2,7 +2,8 @@ pub mod icmp;
 pub mod icmpv4_impl;
 pub mod icmpv6_impl;
 pub mod tcp;
-pub mod udp;
+pub mod udp_header;
+pub mod udp_header_slice;
 
 use super::*;
 
@@ -11,7 +12,7 @@ use std::io;
 ///The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportHeader {
-    Udp(udp::UdpHeader),
+    Udp(udp_header::UdpHeader),
     Tcp(tcp::TcpHeader),
     Icmpv4(Icmpv4Header),
     Icmpv6(Icmpv6Header),
@@ -20,7 +21,7 @@ pub enum TransportHeader {
 impl TransportHeader {
     /// Returns Result::Some containing the udp header if self has the value Udp.
     /// Otherwise None is returned.
-    pub fn udp(self) -> Option<udp::UdpHeader> {
+    pub fn udp(self) -> Option<udp_header::UdpHeader> {
         use crate::TransportHeader::*;
         if let Udp(value) = self {
             Some(value)
@@ -31,7 +32,7 @@ impl TransportHeader {
 
     /// Returns Result::Some containing the udp header if self has the value Udp.
     /// Otherwise None is returned.
-    pub fn mut_udp(&mut self) -> Option<&mut udp::UdpHeader> {
+    pub fn mut_udp(&mut self) -> Option<&mut udp_header::UdpHeader> {
         use crate::TransportHeader::*;
         if let Udp(value) = self {
             Some(value)
@@ -111,7 +112,7 @@ impl TransportHeader {
     pub fn header_len(&self) -> usize {
         use crate::TransportHeader::*;
         match self {
-            Udp(_) => udp::UdpHeader::SERIALIZED_SIZE,
+            Udp(_) => udp_header::UdpHeader::SERIALIZED_SIZE,
             Tcp(value) => usize::from(value.header_len()),
             Icmpv4(value) => value.header_len(),
             Icmpv6(value) => value.header_len(),
