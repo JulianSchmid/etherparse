@@ -1,21 +1,23 @@
-use super::super::*;
+use crate::*;
 
-use std::slice::from_raw_parts;
-
-///Udp header according to rfc768.
+/// Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct UdpHeader {
-    ///Source port of the packet (optional).
+    /// Source port of the packet (optional).
     pub source_port: u16,
-    ///Destination port of the packet.
+    /// Destination port of the packet.
     pub destination_port: u16,
-    ///Length of the packet (includes the udp header length of 8 bytes).
+    /// Length of the packet (includes the udp header length of 8 bytes).
     pub length: u16,
-    ///The checksum of the packet. The checksum is calculated from a pseudo header, the udp header and the payload. The pseudo header is composed of source and destination address, protocol number
+    /// The checksum of the packet. The checksum is calculated from a pseudo header, the udp header and the payload. The pseudo header is composed of source and destination address, protocol number
     pub checksum: u16,
 }
 
 impl UdpHeader {
+
+    /// Serialized size of an UDP header in bytes/octets.
+    pub const LEN: usize = 8;
+
     /// Returns an udp header for the given parameters
     pub fn without_ipv4_checksum(
         source_port: u16,
@@ -187,13 +189,13 @@ impl UdpHeader {
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[deprecated(since = "0.10.1", note = "Use UdpHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         UdpHeader::from_slice(slice)
     }
 
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         Ok((
             UdpHeaderSlice::from_slice(slice)?.to_header(),
             &slice[UdpHeader::SERIALIZED_SIZE..],
