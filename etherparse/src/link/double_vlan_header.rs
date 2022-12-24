@@ -90,3 +90,248 @@ impl Default for DoubleVlanHeader {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+    use std::io::{Cursor, ErrorKind};
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn constants() {
+        assert_eq!(8, DoubleVlanHeader::SERIALIZED_SIZE);
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let (result, rest) = DoubleVlanHeader::from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = DoubleVlanHeader::read_from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[8..]);
+            }
+
+            // slice length to small
+            for len in 0..8 {
+                assert_eq!(
+                    DoubleVlanHeader::from_slice(&buffer[..len])
+                        .unwrap_err()
+                        .unexpected_end_of_slice()
+                        .unwrap(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 8,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
+                );
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                let bytes = bad_outer.to_bytes().unwrap();
+                assert_matches!(
+                    DoubleVlanHeader::from_slice(&bytes)
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            input in vlan_double_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            ether_type_non_vlan in any::<u16>().prop_filter(
+                "ether_type must not be a vlan ether type",
+                |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
+            )
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = DoubleVlanHeader::read(&mut cursor).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(8, cursor.position());
+            }
+
+            // outer & inner error
+            for len in 0..8 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    DoubleVlanHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .io_error()
+                    .unwrap()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+
+            // bad outer ether type
+            {
+                let mut bad_outer = input.clone();
+                bad_outer.outer.ether_type = ether_type_non_vlan;
+                let bytes = bad_outer.to_bytes().unwrap();
+                let mut cursor = Cursor::new(&bytes);
+                assert_matches!(
+                    DoubleVlanHeader::read(&mut cursor)
+                        .unwrap_err(),
+                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_and_to_bytes(input in vlan_double_any()) {
+            // normal write
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                input.write(&mut buffer).unwrap();
+                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                {
+                    let inner_bytes = input.inner.to_bytes().unwrap();
+                    let outer_bytes = input.outer.to_bytes().unwrap();
+                    assert_eq!(
+                        input.to_bytes().unwrap(),
+                        [
+                            outer_bytes[0],
+                            outer_bytes[1],
+                            outer_bytes[2],
+                            outer_bytes[3],
+                            inner_bytes[0],
+                            inner_bytes[1],
+                            inner_bytes[2],
+                            inner_bytes[3],
+                        ]
+                    );
+                }
+            }
+
+            // bad value outer
+            {
+                let mut bad_input = input.clone();
+                bad_input.outer.priority_code_point = 0b1000;
+
+                let mut buffer: Vec<u8> = Vec::new();
+                let expected = ValueError::U8TooLarge{
+                    value: bad_input.outer.priority_code_point,
+                    max: 0b111,
+                    field: ErrorField::VlanTagPriorityCodePoint
+                };
+
+                assert_eq!(
+                    bad_input
+                        .write(&mut buffer)
+                        .unwrap_err()
+                        .value_error()
+                        .unwrap(),
+                    expected
+                );
+                assert_eq!(
+                    bad_input
+                        .to_bytes()
+                        .unwrap_err(),
+                    expected
+                );
+            }
+
+            // bad value inner
+            {
+                let mut bad_input = input.clone();
+                bad_input.inner.priority_code_point = 0b1000;
+
+                let mut buffer: Vec<u8> = Vec::new();
+                let expected = ValueError::U8TooLarge{
+                    value: bad_input.inner.priority_code_point,
+                    max: 0b111,
+                    field: ErrorField::VlanTagPriorityCodePoint
+                };
+
+                assert_eq!(
+                    bad_input
+                        .write(&mut buffer)
+                        .unwrap_err()
+                        .value_error()
+                        .unwrap(),
+                    expected
+                );
+                assert_eq!(
+                    bad_input
+                        .to_bytes()
+                        .unwrap_err(),
+                    expected
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(input in vlan_double_any()) {
+            assert_eq!(8, input.header_len());
+        }
+    }
+
+    #[test]
+    fn default() {
+        let actual: DoubleVlanHeader = Default::default();
+        assert_eq!(actual.outer, {
+            let mut outer: SingleVlanHeader = Default::default();
+            outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
+            outer
+        });
+        assert_eq!(actual.inner, Default::default());
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in vlan_double_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in vlan_double_any()) {
+            assert_eq!(
+                &format!(
+                    "DoubleVlanHeader {{ outer: {:?}, inner: {:?} }}",
+                    input.outer,
+                    input.inner,
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}

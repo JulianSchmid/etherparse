@@ -88,3 +88,85 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::test_gens::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in ethernet_2_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(14 + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // calls with a valid result
+            {
+                let result = Ethernet2HeaderSlice::from_slice(&buffer[..]).unwrap();
+                assert_eq!(&buffer[..14], result.slice());
+            }
+
+            // call with not enough data in the slice
+            for len in 0..=13 {
+                assert_eq!(
+                    Ethernet2HeaderSlice::from_slice(&buffer[..len]),
+                    Err(err::UnexpectedEndOfSliceError{
+                        expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                        actual_len: len,
+                        layer: err::Layer::Ethernet2Header,
+                    })
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in ethernet_2_any()) {
+            let buffer = input.to_bytes();
+            let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(input.destination, slice.destination());
+            assert_eq!(input.source, slice.source());
+            assert_eq!(input.ether_type, slice.ether_type());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in ethernet_2_any()) {
+            let buffer = input.to_bytes();
+            let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in ethernet_2_any()) {
+            let buffer = input.to_bytes();
+            let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in ethernet_2_any()) {
+            let buffer = input.to_bytes();
+            let slice = Ethernet2HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                &format!(
+                    "Ethernet2HeaderSlice {{ slice: {:?} }}",
+                    slice.slice()
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+}

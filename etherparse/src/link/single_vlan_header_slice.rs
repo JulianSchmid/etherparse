@@ -103,3 +103,87 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let slice = SingleVlanHeaderSlice::from_slice(&buffer).unwrap();
+                assert_eq!(slice.slice(), &buffer[..4]);
+            }
+
+            // slice length to small
+            for len in 0..4 {
+                assert_eq!(
+                    SingleVlanHeaderSlice::from_slice(&buffer[..len])
+                        .unwrap_err(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 4,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getters(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(input.priority_code_point, slice.priority_code_point());
+            assert_eq!(input.drop_eligible_indicator, slice.drop_eligible_indicator());
+            assert_eq!(input.vlan_identifier, slice.vlan_identifier());
+            assert_eq!(input.ether_type, slice.ether_type());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(input, slice.to_header());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in vlan_single_any()) {
+            let bytes = input.to_bytes().unwrap();
+            let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                &format!(
+                    "SingleVlanHeaderSlice {{ slice: {:?} }}",
+                    slice.slice(),
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+}

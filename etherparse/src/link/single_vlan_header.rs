@@ -104,3 +104,230 @@ impl SingleVlanHeader {
         ])
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+    use std::io::{Cursor, ErrorKind};
+
+    #[test]
+    fn constants() {
+        assert_eq!(4, SingleVlanHeader::SERIALIZED_SIZE);
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let (result, rest) = SingleVlanHeader::from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[4..]);
+            }
+            #[allow(deprecated)]
+            {
+                let (result, rest) = SingleVlanHeader::read_from_slice(&buffer).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(rest, &buffer[4..]);
+            }
+
+            // slice length to small
+            for len in 0..4 {
+                assert_eq!(
+                    SingleVlanHeader::from_slice(&buffer[..len])
+                        .unwrap_err(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: 4,
+                        actual_len: len,
+                        layer:  err::Layer::VlanHeader
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_bytes(input in vlan_single_any()) {
+            let actual = SingleVlanHeader::from_bytes(
+                input.to_bytes().unwrap()
+            );
+            assert_eq!(actual, input);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            input in vlan_single_any(),
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+        ) {
+            // serialize
+            let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
+            input.write(&mut buffer).unwrap();
+            buffer.extend(&dummy_data[..]);
+
+            // normal
+            {
+                let mut cursor = Cursor::new(&buffer);
+                let result = SingleVlanHeader::read(&mut cursor).unwrap();
+                assert_eq!(result, input);
+                assert_eq!(4, cursor.position());
+            }
+
+            // unexpexted eof
+            for len in 0..4 {
+                let mut cursor = Cursor::new(&buffer[0..len]);
+                assert_eq!(
+                    SingleVlanHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .kind(),
+                    ErrorKind::UnexpectedEof
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_and_to_bytes(input in vlan_single_any()) {
+            // normal write
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                input.write(&mut buffer).unwrap();
+                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                {
+                    let id_be = input.vlan_identifier.to_be_bytes();
+                    let eth_type_be = input.ether_type.to_be_bytes();
+                    assert_eq!(
+                        input.to_bytes().unwrap(),
+                        [
+                            (
+                                id_be[0] | if input.drop_eligible_indicator {
+                                    0x10
+                                } else {
+                                    0
+                                } | (input.priority_code_point << 5)
+                            ),
+                            id_be[1],
+                            eth_type_be[0],
+                            eth_type_be[1]
+                        ]
+                    );
+                }
+            }
+
+            // priority_code_point: outside of range error
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                for i in 1..=0b0001_1111u8 {
+                    let mut bad_input = input.clone();
+                    bad_input.priority_code_point |= i << 3;
+                    let expected = ValueError::U8TooLarge{
+                        value: bad_input.priority_code_point,
+                        max: 0b111,
+                        field: ErrorField::VlanTagPriorityCodePoint
+                    };
+                    assert_eq!(
+                        expected,
+                        bad_input.write(&mut buffer)
+                            .unwrap_err()
+                            .value_error()
+                            .unwrap()
+                    );
+                    assert_eq!(
+                        expected,
+                        bad_input.to_bytes()
+                            .unwrap_err()
+                    );
+                }
+            }
+
+            // vlan_identifier: outside of range error
+            {
+                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
+                for i in 1..=0b1111u16 {
+                    let mut bad_input = input.clone();
+                    bad_input.vlan_identifier |= i << 12;
+                    let expected = ValueError::U16TooLarge{
+                        value: bad_input.vlan_identifier,
+                        max: 0b1111_1111_1111,
+                        field: ErrorField::VlanTagVlanId
+                    };
+                    assert_eq!(
+                        expected,
+                        bad_input.write(&mut buffer)
+                            .unwrap_err()
+                            .value_error()
+                            .unwrap()
+                    );
+                    assert_eq!(
+                        expected,
+                        bad_input.to_bytes()
+                            .unwrap_err()
+                    );
+                }
+            }
+
+            // unexpected eof
+            for len in 0..4 {
+                let mut buffer = [0u8;4];
+                let mut cursor = Cursor::new(&mut buffer[..len]);
+                assert!(
+                    input.write(&mut cursor)
+                        .unwrap_err()
+                        .io_error()
+                        .is_some()
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(input in vlan_single_any()) {
+            assert_eq!(4, input.header_len());
+        }
+    }
+
+    #[test]
+    fn default() {
+        let actual: SingleVlanHeader = Default::default();
+        assert_eq!(0, actual.priority_code_point);
+        assert_eq!(false, actual.drop_eligible_indicator);
+        assert_eq!(0, actual.vlan_identifier);
+        assert_eq!(0, actual.ether_type);
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(input in vlan_single_any()) {
+            assert_eq!(input, input.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn dbg(input in vlan_single_any()) {
+            assert_eq!(
+                &format!(
+                    "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {}, ether_type: {} }}",
+                    input.priority_code_point,
+                    input.drop_eligible_indicator,
+                    input.vlan_identifier,
+                    input.ether_type,
+                ),
+                &format!("{:?}", input)
+            );
+        }
+    }
+}

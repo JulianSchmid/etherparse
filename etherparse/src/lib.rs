@@ -261,6 +261,9 @@ pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::vlan_header::*;
 pub use crate::link::vlan_slice::*;
 
+#[cfg(test)]
+pub(crate) mod test_gens;
+
 mod internet;
 pub use crate::internet::ip::*;
 pub use crate::internet::ip_authentication::*;
