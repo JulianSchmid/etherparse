@@ -10,15 +10,14 @@ pub struct Ipv6FragmentHeaderSlice<'a> {
 
 impl<'a> Ipv6FragmentHeaderSlice<'a> {
     /// Creates a hop by hop header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6FragmentHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6FragmentHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         // the fragmentation header has the exact size of 8 bytes
-        use crate::ReadError::*;
         if slice.len() < 8 {
-            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            Err(err::UnexpectedEndOfSliceError {
                 expected_min_len: 8,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6FragHeader,
-            }))
+            })
         } else {
             Ok(Ipv6FragmentHeaderSlice {
                 // SAFETY:

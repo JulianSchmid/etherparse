@@ -45,9 +45,13 @@ pub mod header {
             }
             // call with not enough data in the slice
             for len in 0..=7 {
-                assert_matches!(
-                    Ipv6FragmentHeader::from_slice(&buffer[0..len]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                assert_eq!(
+                    Ipv6FragmentHeader::from_slice(&buffer[0..len]).unwrap_err(),
+                    err::UnexpectedEndOfSliceError{
+                        expected_min_len: Ipv6FragmentHeader::LEN,
+                        actual_len: len,
+                        layer: err::Layer::Ipv6FragHeader,
+                    }
                 );
             }
         }
@@ -306,7 +310,7 @@ pub mod slice {
             // call with not enough data in the slice
             for len in 0..=7 {
                 assert_eq!(
-                    Ipv6FragmentHeaderSlice::from_slice(&buffer[0..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+                    Ipv6FragmentHeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
                     err::UnexpectedEndOfSliceError{
                         expected_min_len: 8,
                         actual_len: len,
