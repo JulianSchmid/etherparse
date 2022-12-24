@@ -281,9 +281,9 @@ pub use crate::transport::icmp::*;
 pub use crate::transport::icmpv4_impl::*;
 pub use crate::transport::icmpv6_impl::*;
 pub use crate::transport::tcp::*;
+pub use crate::transport::transport_header::*;
 pub use crate::transport::udp_header::*;
 pub use crate::transport::udp_header_slice::*;
-pub use crate::transport::TransportHeader;
 
 /// Helpers for calculating checksums.
 pub mod checksum;
