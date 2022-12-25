@@ -222,7 +222,7 @@ mod header {
         assert_eq!(header.total_len(), 24);
 
         //max check
-        const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::SERIALIZED_SIZE - 4;
+        const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::LEN_MIN - 4;
         assert_matches!(header.set_payload_len(MAX), Ok(()));
         assert_eq!(header.total_len(), std::u16::MAX);
 
@@ -552,7 +552,7 @@ fn range_errors() {
     }
     //payload len
     {
-        const MAX_PAYLOAD_LEN: u16 = std::u16::MAX - (Ipv4Header::SERIALIZED_SIZE as u16) - 8;
+        const MAX_PAYLOAD_LEN: u16 = std::u16::MAX - (Ipv4Header::LEN_MIN as u16) - 8;
 
         let value = {
             let mut value: Ipv4Header = Default::default();
@@ -597,7 +597,7 @@ proptest! {
                 assert_eq!(
                     Ipv4Header::read(&mut Cursor::new(&buffer))
                         .unwrap_err()
-                        .ipv4_header()
+                        .content_error()
                         .unwrap(),
                     expected.clone()
                 );
@@ -615,7 +615,7 @@ proptest! {
                 );
             }
         }
-/*
+
         //bad ihl (smaller then 5)
         for ihl in 0..5 {
             let buffer = {
@@ -627,31 +627,33 @@ proptest! {
                 buffer
             };
 
+            let expected = HeaderLengthSmallerThanHeader{ ihl };
+
             // read
-            assert_matches!(
-                Ipv4Header::read(&mut Cursor::new(&buffer)),
-                Err(Ipv4HeaderLengthBad(_))
+            assert_eq!(
+                Ipv4Header::read(&mut Cursor::new(&buffer)).unwrap_err().content_error(),
+                Some(expected.clone())
             );
 
             // read_without_version
-            assert_matches!(
+            assert_eq!(
                 Ipv4Header::read_without_version(
                     &mut Cursor::new(&buffer[1..]),
                     buffer[0] & 0xf
-                ),
-                Err(Ipv4HeaderLengthBad(_))
+                ).unwrap_err().content_error(),
+                Some(expected.clone())
             );
 
             // from_slice
-            assert_matches!(
-                Ipv4Header::from_slice(&buffer),
-                Err(Ipv4HeaderLengthBad(_))
+            assert_eq!(
+                Ipv4Header::from_slice(&buffer).unwrap_err(),
+                Content(expected.clone())
             );
 
             // from_slice
-            assert_matches!(
-                Ipv4HeaderSlice::from_slice(&buffer),
-                Err(Ipv4HeaderLengthBad(_))
+            assert_eq!(
+                Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
+                Content(expected.clone())
             );
         }
 
@@ -668,31 +670,36 @@ proptest! {
                 buffer
             };
 
+            let expected = TotalLengthSmallerThanHeader{
+                total_length: total_length as u16,
+                min_expected_length: header.header_len() as u16,
+            };
+
             // read
-            assert_matches!(
-                Ipv4Header::read(&mut Cursor::new(&buffer)),
-                Err(Ipv4TotalLengthTooSmall(_))
+            assert_eq!(
+                Ipv4Header::read(&mut Cursor::new(&buffer)).unwrap_err().content_error(),
+                Some(expected.clone())
             );
 
             // read_without_version
-            assert_matches!(
+            assert_eq!(
                 Ipv4Header::read_without_version(
                     &mut Cursor::new(&buffer[1..]),
                     buffer[0] & 0xf
-                ),
-                Err(Ipv4TotalLengthTooSmall(_))
+                ).unwrap_err().content_error(),
+                Some(expected.clone())
             );
 
             // from_slice
-            assert_matches!(
-                Ipv4Header::from_slice(&buffer),
-                Err(Ipv4TotalLengthTooSmall(_))
+            assert_eq!(
+                Ipv4Header::from_slice(&buffer).unwrap_err(),
+                Content(expected.clone())
             );
 
             // from_slice
-            assert_matches!(
-                Ipv4HeaderSlice::from_slice(&buffer),
-                Err(Ipv4TotalLengthTooSmall(_))
+            assert_eq!(
+                Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
+                Content(expected.clone())
             );
         }
 
@@ -715,35 +722,49 @@ proptest! {
             // check that all too small lenghts trigger an error
             for len in 0..buffer.len() {
                 // read
-                assert_matches!(
-                    Ipv4Header::read(&mut Cursor::new(&buffer[..len])),
-                    Err(IoError(_))
+                assert!(
+                    Ipv4Header::read(&mut Cursor::new(&buffer[..len]))
+                        .unwrap_err()
+                        .io_error()
+                        .is_some()
                 );
 
                 // read_without_version
                 if len > 0 {
-                    assert_matches!(
+                    assert!(
                         Ipv4Header::read_without_version(
                             &mut Cursor::new(&buffer[1..len]),
                             buffer[0] & 0xf
-                        ),
-                        Err(IoError(_))
+                        ).unwrap_err()
+                        .io_error()
+                        .is_some()
                     );
                 }
 
                 // from_slice
-                assert_matches!(
-                    Ipv4Header::from_slice(&buffer[..len]),
-                    Err(UnexpectedEndOfSlice(_))
+                use err::ipv4::HeaderSliceError::UnexpectedEndOfSlice;
+                let expected_ueos = UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                    expected_min_len: if len < Ipv4Header::LEN_MIN {
+                        Ipv4Header::LEN_MIN
+                    } else {
+                        buffer.len()
+                    },
+                    actual_len: len,
+                    layer: err::Layer::Ipv4Header
+                });
+
+                assert_eq!(
+                    Ipv4Header::from_slice(&buffer[..len]).unwrap_err(),
+                    expected_ueos.clone()
                 );
 
                 // from_slice
-                assert_matches!(
-                    Ipv4HeaderSlice::from_slice(&buffer[..len]),
-                    Err(UnexpectedEndOfSlice(_))
+                assert_eq!(
+                    Ipv4HeaderSlice::from_slice(&buffer[..len]).unwrap_err(),
+                    expected_ueos.clone()
                 );
             }
-        } */
+        }
     }
 }
 

@@ -28,14 +28,25 @@ pub struct Ipv4Header {
     options_buffer: [u8; 40],
 }
 
-impl SerializedSize for Ipv4Header {
-    /// Size of the header itself (without options) in bytes.
-    const SERIALIZED_SIZE: usize = 20;
-}
-
 const IPV4_MAX_OPTIONS_LENGTH: usize = 10 * 4;
 
 impl Ipv4Header {
+
+    /// Minimum length of an IPv4 header in bytes/octets.
+    pub const LEN_MIN: usize = 20;
+
+    /// Maximum length of an IPv4 header in bytes/octets.
+    /// 
+    /// This number is calculated by taking the maximum value
+    /// that the "internet header length" field supports (0xf,
+    /// as the field is only 4 bits long) and multiplying it
+    /// with 4 as the "internet header length" specifies how
+    /// many 4 bytes words are present in the header.
+    pub const LEN_MAX: usize = 0b1111*4;
+
+    #[deprecated(since = "0.14.0", note = "Use `Ipv4Header::LEN_MIN` instead")]
+    pub const SERIALIZED_SIZE: usize = Ipv4Header::LEN_MIN;
+
     ///Constructs an Ipv4Header with standard values for non specified values.
     pub fn new(
         payload_len: u16,
@@ -77,12 +88,12 @@ impl Ipv4Header {
     ///Length of the header (includes options) in bytes.
     #[inline]
     pub fn header_len(&self) -> usize {
-        Ipv4Header::SERIALIZED_SIZE + usize::from(self.options_len)
+        Ipv4Header::LEN_MIN + usize::from(self.options_len)
     }
 
     ///Returns the total length of the header + payload in bytes.
     pub fn total_len(&self) -> u16 {
-        self.payload_len + (Ipv4Header::SERIALIZED_SIZE as u16) + u16::from(self.options_len)
+        self.payload_len + (Ipv4Header::LEN_MIN as u16) + u16::from(self.options_len)
     }
 
     ///Sets the payload length if the value is not too big. Otherwise an error is returned.
@@ -98,7 +109,7 @@ impl Ipv4Header {
 
     ///Returns the maximum payload size based on the current options size.
     pub fn max_payload_len(&self) -> u16 {
-        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::SERIALIZED_SIZE as u16)
+        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::LEN_MIN as u16)
     }
 
     ///Sets the options & header_length based on the provided length.
@@ -163,14 +174,16 @@ impl Ipv4Header {
     }
 
     /// Reads an IPv4 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv4Header, ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
+        use err::ipv4::HeaderReadError::*;
+
         let mut first_byte: [u8; 1] = [0; 1];
-        reader.read_exact(&mut first_byte)?;
+        reader.read_exact(&mut first_byte).map_err(|err| Io(err))?;
 
         let version_number = first_byte[0] >> 4;
         if 4 != version_number {
             use err::ipv4::HeaderError::UnexpectedVersion;
-            return Err(ReadError::Ipv4Header(UnexpectedVersion { version_number }));
+            return Err(Content(UnexpectedVersion { version_number }));
         }
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
@@ -179,22 +192,22 @@ impl Ipv4Header {
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
         first_byte: u8,
-    ) -> Result<Ipv4Header, ReadError> {
+    ) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
         use err::ipv4::HeaderError::*;
-        use ReadError::Ipv4Header as R;
+        use err::ipv4::HeaderReadError::*;
 
         // read the basic ipv4 header (the header options can be
         // read only after the internet header length was read)
         let mut header_raw = [0u8; 20];
         header_raw[0] = first_byte;
-        reader.read_exact(&mut header_raw[1..])?;
+        reader.read_exact(&mut header_raw[1..]).map_err(|err| Io(err))?;
 
         let ihl = header_raw[0] & 0xf;
 
         // validate that the internet header length is big enough to
         // contain a basic IPv4 header without options.
         if ihl < 5 {
-            return Err(R(HeaderLengthSmallerThanHeader { ihl }));
+            return Err(Content(HeaderLengthSmallerThanHeader { ihl }));
         }
 
         let (dscp, ecn) = {
@@ -206,7 +219,7 @@ impl Ipv4Header {
 
         // validate the total length
         if total_length < header_length {
-            return Err(R(TotalLengthSmallerThanHeader {
+            return Err(Content(TotalLengthSmallerThanHeader {
                 total_length,
                 min_expected_length: header_length,
             }));
@@ -246,7 +259,7 @@ impl Ipv4Header {
 
                 let options_len = usize::from(ihl - 5) * 4;
                 if options_len > 0 {
-                    reader.read_exact(&mut values[..options_len])?;
+                    reader.read_exact(&mut values[..options_len]).map_err(|err| Io(err))?;
                 }
                 values
             },
