@@ -66,7 +66,15 @@ impl IpHeader {
         };
         match value >> 4 {
             4 => {
-                let header = Ipv4Header::read_without_version(reader, value & 0xf)?;
+                let header = Ipv4Header::read_without_version(reader, value & 0xf)
+                    .map_err(|err| {
+                            use err::ipv4::HeaderReadError::*;
+                            match err {
+                                Io(err) => ReadError::IoError(err),
+                                Content(err) => ReadError::Ipv4Header(err)
+                            }
+                        }
+                    )?;
                 Ipv4Extensions::read(reader, header.protocol)
                     .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
             }

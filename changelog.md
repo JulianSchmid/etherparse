@@ -6,6 +6,7 @@
 
 * TODO: Changed packet slicing & reading so the length of the payload is taken into account.
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
+* Remove `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Use `XHeader::LEN` or `XHeader::LEN_MIN` instead depending on the header.
 
 ### Internal Changes:
 

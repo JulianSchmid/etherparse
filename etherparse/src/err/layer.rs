@@ -122,6 +122,7 @@ mod test {
         };
         assert_eq!(hash_a, hash_b);
         assert_eq!(Ordering::Equal, layer.cmp(&layer));
+        assert_eq!(Some(Ordering::Equal), layer.partial_cmp(&layer));
     }
 
     #[test]

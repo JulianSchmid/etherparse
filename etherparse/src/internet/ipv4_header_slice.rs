@@ -15,9 +15,9 @@ impl<'a> Ipv4HeaderSlice<'a> {
         use err::ipv4::HeaderSliceError::*;
 
         //check length
-        if slice.len() < Ipv4Header::SERIALIZED_SIZE {
+        if slice.len() < Ipv4Header::LEN_MIN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: Ipv4Header::SERIALIZED_SIZE,
+                expected_min_len: Ipv4Header::LEN_MIN,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv4Header,
             }));
