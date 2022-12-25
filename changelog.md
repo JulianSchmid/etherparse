@@ -1,5 +1,22 @@
 # Changelog:
 
+## 0.14.0
+
+### Breaking Changes:
+
+* TODO: Changed packet slicing & reading so the length of the payload is taken into account.
+* Refactored error types so functions & methods (mostly) only return error types that they can cause.
+
+### Internal Changes:
+
+* Seperated proptest generators into seperate library `etherparse_proptest_generators`
+* Applied rust-fmt to all code & tests (with exceptions where needed)
+* TODO Split modules up into one file per struct/enum and moved tests there
+
+## 0.13.0
+
+* Switched license to MIT OR Apache-2.0
+
 ## 0.12.0
 
 * Add `payload_ether_type` method to `SlicedPacket` & `PacketHeaders`
