@@ -313,6 +313,9 @@ pub enum ReadError {
     UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
+
+    /// Error decoding an double vlan header.
+    
     /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
     /// The value is the unexpected ether type value in the outer vlan header.
     DoubleVlanOuterNonVlanEtherType(u16),

@@ -4,14 +4,15 @@ use core::slice::from_raw_parts;
 /// A slice containing an double vlan header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DoubleVlanHeaderSlice<'a> {
-    slice: &'a [u8],
+    pub(crate) slice: &'a [u8],
 }
 
 impl<'a> DoubleVlanHeaderSlice<'a> {
     /// Creates a double header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DoubleVlanHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<DoubleVlanHeaderSlice<'a>, err::double_vlan::HeaderSliceError> {
+        use err::double_vlan::{HeaderSliceError::*, HeaderError::*};
+        
         // check length
-        use crate::ReadError::*;
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
                 expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE,
@@ -36,7 +37,9 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
                 //all done
                 Ok(result)
             }
-            value => Err(DoubleVlanOuterNonVlanEtherType(value)),
+            value => Err(Content(NonVlanEtherType{
+                unexpected_ether_type: value,
+            })),
         }
     }
 
@@ -89,7 +92,6 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
 mod test {
     use crate::{*, test_gens::*};
     use proptest::prelude::*;
-    use assert_matches::assert_matches;
 
     proptest! {
         #[test]
@@ -101,6 +103,7 @@ mod test {
                 |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
             )
         ) {
+            use err::double_vlan::{HeaderError::*, HeaderSliceError::*};
             {
                 // serialize
                 let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
@@ -117,14 +120,13 @@ mod test {
                 for len in 0..8 {
                     assert_eq!(
                         DoubleVlanHeaderSlice::from_slice(&buffer[..len])
-                            .unwrap_err()
-                            .unexpected_end_of_slice()
-                            .unwrap(),
-                        err::UnexpectedEndOfSliceError{
+                            .unwrap_err(),
+                        
+                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                             expected_min_len: 8,
                             actual_len: len,
                             layer:  err::Layer::VlanHeader
-                        }
+                        })
                     );
                 }
             }
@@ -133,10 +135,10 @@ mod test {
             {
                 let mut bad_outer = input.clone();
                 bad_outer.outer.ether_type = ether_type_non_vlan;
-                assert_matches!(
+                assert_eq!(
                     DoubleVlanHeaderSlice::from_slice(&bad_outer.to_bytes().unwrap())
                         .unwrap_err(),
-                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                    Content(NonVlanEtherType{ unexpected_ether_type: ether_type_non_vlan })
                 );
             }
         }
