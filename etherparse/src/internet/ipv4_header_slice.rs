@@ -264,6 +264,233 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// Decode all the fields and copy the results to a Ipv4Header struct
     #[inline]
     pub fn to_header(&self) -> Ipv4Header {
-        Ipv4Header::from_ipv4_slice(self)
+        let options = self.options();
+        Ipv4Header {
+            differentiated_services_code_point: self.dcp(),
+            explicit_congestion_notification: self.ecn(),
+            payload_len: self.payload_len(),
+            identification: self.identification(),
+            dont_fragment: self.dont_fragment(),
+            more_fragments: self.more_fragments(),
+            fragments_offset: self.fragments_offset(),
+            time_to_live: self.ttl(),
+            protocol: self.protocol(),
+            header_checksum: self.header_checksum(),
+            source: self.source(),
+            destination: self.destination(),
+            options_len: options.len() as u8,
+            options_buffer: {
+                let mut result: [u8; 40] = [0; 40];
+                result[..options.len()].copy_from_slice(options);
+                result
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+    use arrayvec::ArrayVec;
+
+    #[test]
+    fn debug() {
+        let buffer = {
+            let header: Ipv4Header = Default::default();
+            header.to_bytes().unwrap()
+        };
+        let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(
+            format!("{:?}", slice),
+            format!("Ipv4HeaderSlice {{ slice: {:?} }}", slice.slice())
+        );
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(header in ipv4_any()) {
+            let buffer = header.to_bytes().unwrap();
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(slice.clone(), slice);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(header in ipv4_any()) {
+            use err::ipv4::HeaderError::*;
+            use err::ipv4::HeaderSliceError::*;
+
+            // ok
+            {
+                let mut buffer = ArrayVec::<u8, { Ipv4Header::LEN_MAX + 1 }>::new();
+                buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+                buffer.try_extend_from_slice(&[1]).unwrap();
+
+                let actual_slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+                assert_eq!(actual_slice.to_header(), header);
+                assert_eq!(actual_slice.slice(), &buffer[..header.header_len()]);
+            }
+
+            // unexpected end of slice
+            {
+                let buffer = header.to_bytes().unwrap();
+                for len in 0..header.header_len() {
+                    assert_eq!(
+                        Ipv4HeaderSlice::from_slice(&buffer[..len]),
+                        Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                            expected_min_len: if len < Ipv4Header::LEN_MIN {
+                                Ipv4Header::LEN_MIN
+                            } else {
+                                header.header_len()
+                            },
+                            actual_len: len,
+                            layer: err::Layer::Ipv4Header,
+                        }))
+                    );
+                }
+            }
+
+            // version error
+            for version_number in 0u8..0b1111u8 {
+                if 4 != version_number {
+                    let mut buffer = header.to_bytes().unwrap();
+                    // inject the bad ihl
+                    buffer[0] = (version_number << 4) | (buffer[0] & 0b1111);
+                    // expect an error
+                    assert_eq!(
+                        Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
+                        Content(UnexpectedVersion{
+                            version_number,
+                        })
+                    );
+                }
+            }
+
+            // ihl too small error
+            for ihl in 0u8..5u8 {
+                let mut buffer = header.to_bytes().unwrap();
+                // inject the bad ihl
+                buffer[0] = (4 << 4) | ihl;
+                // expect an error
+                assert_eq!(
+                    Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
+                    Content(HeaderLengthSmallerThanHeader{
+                        ihl,
+                    })
+                );
+            }
+
+            // total length too small error
+            for total_length in 0..header.header_len() {
+                let mut buffer = header.to_bytes().unwrap();
+                // inject total length smaller then the header length
+                let tl_be = (total_length as u16).to_be_bytes();
+                buffer[2] = tl_be[0];
+                buffer[3] = tl_be[1];
+                // expect an error
+                assert_eq!(
+                    Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
+                    Content(TotalLengthSmallerThanHeader{
+                        total_length: total_length as u16,
+                        min_expected_length: header.header_len() as u16,
+                    })
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn from_slice_unchecked() {
+        let buffer = [0u8;4];
+        let slice = unsafe {
+            Ipv4HeaderSlice::from_slice_unchecked(&buffer)
+        };
+        assert_eq!(slice.slice(), &buffer);
+    }
+
+    proptest!{
+        #[test]
+        fn getters(header in ipv4_any()) {
+            use std::net::Ipv4Addr;
+
+            let buffer = header.to_bytes().unwrap();
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+
+            assert_eq!(slice.slice(), &buffer[..]);
+            assert_eq!(slice.version(), 4);
+            assert_eq!(slice.ihl(), header.ihl());
+            assert_eq!(slice.dcp(), header.differentiated_services_code_point);
+            assert_eq!(slice.ecn(), header.explicit_congestion_notification);
+            assert_eq!(slice.total_len(), header.total_len());
+            assert_eq!(slice.payload_len(), header.payload_len);
+            assert_eq!(slice.identification(), header.identification);
+            assert_eq!(slice.dont_fragment(), header.dont_fragment);
+            assert_eq!(slice.more_fragments(), header.more_fragments);
+            assert_eq!(slice.fragments_offset(), header.fragments_offset);
+            assert_eq!(slice.ttl(), header.time_to_live);
+            assert_eq!(slice.protocol(), header.protocol);
+            assert_eq!(slice.header_checksum(), header.header_checksum);
+            assert_eq!(slice.source(), header.source);
+            assert_eq!(slice.source_addr(), Ipv4Addr::from(header.source));
+            assert_eq!(slice.destination(), header.destination);
+            assert_eq!(slice.destination_addr(), Ipv4Addr::from(header.destination));
+            assert_eq!(slice.options(), header.options());
+        }
+    }
+
+    #[test]
+    fn is_fragmenting_payload() {
+        // not fragmenting
+        {
+            let buffer = {
+                let mut header: Ipv4Header = Default::default();
+                header.fragments_offset = 0;
+                header.more_fragments = false;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(false, slice.is_fragmenting_payload());
+        }
+
+        // fragmenting based on offset
+        {
+            let buffer = {
+                let mut header: Ipv4Header = Default::default();
+                header.fragments_offset = 1;
+                header.more_fragments = false;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+
+        // fragmenting based on more_fragments
+        {
+            let buffer = {
+                let mut header: Ipv4Header = Default::default();
+                header.fragments_offset = 0;
+                header.more_fragments = true;
+                let mut buffer = Vec::with_capacity(header.header_len());
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert!(slice.is_fragmenting_payload());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(header in ipv4_any()) {
+            let buffer = header.to_bytes().unwrap();
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(slice.to_header(), header);
+        }
     }
 }

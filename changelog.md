@@ -2,6 +2,10 @@
 
 ## 0.14.0
 
+### New
+
+* Corrected `Ipv4Header` `core::fmt::Debug` implementation (will now correctly write newlines when `{:#?}` is used)
+
 ### Breaking Changes:
 
 * TODO: Changed packet slicing & reading so the length of the payload is taken into account.
