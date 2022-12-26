@@ -3,7 +3,7 @@
 pub enum HeaderError {
     /// Error when two vlan header were expected but the ether_type
     /// value of the first vlan header is not an vlan header type.
-    UnexpectedEtherType{
+    NonVlanEtherType{
         /// Non-VLAN ether type encountered in the outer vlan
         /// header.
         unexpected_ether_type: u16
@@ -15,7 +15,7 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         use HeaderError::*;
         match self {
-            UnexpectedEtherType { unexpected_ether_type } => write!(f, "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type {}.", unexpected_ether_type),
+            NonVlanEtherType { unexpected_ether_type } => write!(f, "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type {}.", unexpected_ether_type),
         }
     }
 }
@@ -38,14 +38,14 @@ mod tests {
     #[test]
     fn debug() {
         assert_eq!(
-            "UnexpectedEtherType { unexpected_ether_type: 1 }",
-            format!("{:?}", UnexpectedEtherType{ unexpected_ether_type: 1 })
+            "NonVlanEtherType { unexpected_ether_type: 1 }",
+            format!("{:?}", NonVlanEtherType{ unexpected_ether_type: 1 })
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = UnexpectedEtherType{ unexpected_ether_type: 1 };
+        let err = NonVlanEtherType{ unexpected_ether_type: 1 };
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -64,12 +64,12 @@ mod tests {
     fn fmt() {
         assert_eq!(
             "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type 1.",
-            format!("{}", UnexpectedEtherType{ unexpected_ether_type: 1 })
+            format!("{}", NonVlanEtherType{ unexpected_ether_type: 1 })
         );
     }
 
     #[test]
     fn source() {
-        assert!(UnexpectedEtherType{ unexpected_ether_type: 1 }.source().is_none());
+        assert!(NonVlanEtherType{ unexpected_ether_type: 1 }.source().is_none());
     }
 }

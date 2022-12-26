@@ -359,19 +359,40 @@ impl<'a> CursorSlice<'a> {
         use ether_type::*;
         use VlanSlice::*;
 
-        let single = SingleVlanHeaderSlice::from_slice(self.slice)
+        let outer = SingleVlanHeaderSlice::from_slice(self.slice)
             .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
 
         //check if it is a double vlan header
-        match single.ether_type() {
+        match outer.ether_type() {
             //in case of a double vlan header continue with the inner
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                self.slice_double_vlan()
+                
+                self.move_by_slice(outer.slice());
+                let inner = SingleVlanHeaderSlice::from_slice(self.slice)
+                    .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
+                self.move_by_slice(inner.slice());
+                
+                let inner_ether_type = inner.ether_type();
+                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice{
+                    // SAFETY: Safe as the lenght of the slice was previously verified.
+                    slice: unsafe {
+                        core::slice::from_raw_parts(
+                            outer.slice().as_ptr(),
+                            outer.slice().len() + inner.slice().len()
+                        )
+                    }
+                }));
+
+                match inner_ether_type {
+                    IPV4 => self.slice_ipv4(),
+                    IPV6 => self.slice_ipv6(),
+                    _ => self.slice_payload(),
+                }
             }
             value => {
                 //set the vlan header and continue the normal parsing
-                self.move_by_slice(single.slice());
-                self.result.vlan = Some(SingleVlan(single));
+                self.move_by_slice(outer.slice());
+                self.result.vlan = Some(SingleVlan(outer));
 
                 match value {
                     IPV4 => self.slice_ipv4(),
@@ -379,28 +400,6 @@ impl<'a> CursorSlice<'a> {
                     _ => self.slice_payload(),
                 }
             }
-        }
-    }
-
-    pub fn slice_double_vlan(mut self) -> Result<SlicedPacket<'a>, ReadError> {
-        use ether_type::*;
-        use VlanSlice::*;
-
-        let result = DoubleVlanHeaderSlice::from_slice(self.slice)
-            .map_err(|err| err.add_slice_offset(self.offset))?;
-
-        //cache ether_type for later
-        let ether_type = result.inner().ether_type();
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.vlan = Some(DoubleVlan(result));
-
-        //continue parsing (if required)
-        match ether_type {
-            IPV4 => self.slice_ipv4(),
-            IPV6 => self.slice_ipv6(),
-            _ => self.slice_payload(),
         }
     }
 

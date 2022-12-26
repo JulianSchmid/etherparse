@@ -18,13 +18,13 @@ impl DoubleVlanHeader {
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(since = "0.10.1", note = "Use SingleVlanHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
         DoubleVlanHeader::from_slice(slice)
     }
 
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
         Ok((
             DoubleVlanHeaderSlice::from_slice(slice)?.to_header(),
             &slice[DoubleVlanHeader::SERIALIZED_SIZE..],
@@ -34,8 +34,10 @@ impl DoubleVlanHeader {
     /// Read a double tagging header from the given source
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<DoubleVlanHeader, ReadError> {
-        let outer = SingleVlanHeader::read(reader)?;
+    ) -> Result<DoubleVlanHeader, err::double_vlan::HeaderReadError> {
+        use err::double_vlan::{HeaderError::*, HeaderReadError::*};
+
+        let outer = SingleVlanHeader::read(reader).map_err(Io)?;
 
         use crate::ether_type::{PROVIDER_BRIDGING, VLAN_DOUBLE_TAGGED_FRAME, VLAN_TAGGED_FRAME};
         //check that outer ethertype is matching
@@ -43,12 +45,14 @@ impl DoubleVlanHeader {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 Ok(DoubleVlanHeader {
                     outer,
-                    inner: SingleVlanHeader::read(reader)?,
+                    inner: SingleVlanHeader::read(reader)
+                        .map_err(Io)?,
                 })
             }
             value => {
-                use crate::ReadError::*;
-                Err(DoubleVlanOuterNonVlanEtherType(value))
+                Err(Content(NonVlanEtherType{
+                    unexpected_ether_type: value
+                }))
             }
         }
     }
@@ -96,7 +100,6 @@ mod test {
     use crate::{*, test_gens::*};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
-    use assert_matches::assert_matches;
 
     #[test]
     fn constants() {
@@ -113,6 +116,8 @@ mod test {
                 |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
             )
         ) {
+            use err::double_vlan::{HeaderError::*, HeaderSliceError::*};
+
             // serialize
             let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
             input.write(&mut buffer).unwrap();
@@ -135,14 +140,12 @@ mod test {
             for len in 0..8 {
                 assert_eq!(
                     DoubleVlanHeader::from_slice(&buffer[..len])
-                        .unwrap_err()
-                        .unexpected_end_of_slice()
-                        .unwrap(),
-                    err::UnexpectedEndOfSliceError{
+                        .unwrap_err(),
+                    UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                         expected_min_len: 8,
                         actual_len: len,
                         layer:  err::Layer::VlanHeader
-                    }
+                    })
                 );
             }
 
@@ -151,10 +154,12 @@ mod test {
                 let mut bad_outer = input.clone();
                 bad_outer.outer.ether_type = ether_type_non_vlan;
                 let bytes = bad_outer.to_bytes().unwrap();
-                assert_matches!(
+                assert_eq!(
                     DoubleVlanHeader::from_slice(&bytes)
                         .unwrap_err(),
-                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                    Content(NonVlanEtherType{
+                        unexpected_ether_type: ether_type_non_vlan,
+                    })
                 );
             }
         }
@@ -170,6 +175,8 @@ mod test {
                 |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
             )
         ) {
+            use err::double_vlan::HeaderError::*;
+
             // serialize
             let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len() + dummy_data.len());
             input.write(&mut buffer).unwrap();
@@ -202,10 +209,14 @@ mod test {
                 bad_outer.outer.ether_type = ether_type_non_vlan;
                 let bytes = bad_outer.to_bytes().unwrap();
                 let mut cursor = Cursor::new(&bytes);
-                assert_matches!(
+                assert_eq!(
                     DoubleVlanHeader::read(&mut cursor)
-                        .unwrap_err(),
-                    ReadError::DoubleVlanOuterNonVlanEtherType(_)
+                        .unwrap_err()
+                        .content_error()
+                        .unwrap(),
+                    NonVlanEtherType{
+                        unexpected_ether_type: ether_type_non_vlan,
+                    }
                 );
             }
         }
