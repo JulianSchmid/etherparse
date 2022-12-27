@@ -28,7 +28,7 @@ impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
         match self {
-            UnexpectedEndOfSlice(err) => write!(f, "Double VLAN Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain two VLAN headers The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
+            UnexpectedEndOfSlice(err) => write!(f, "IPv4 Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain an IPv4 header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
             Content(value) => value.fmt(f),
         }
     }
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "Double VLAN Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain two VLAN headers The slice must at least contain 2 bytes/octets.",
+            "IPv4 Header Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain an IPv4 header. The slice must at least contain 2 bytes/octets.",
             format!(
                 "{}",
                 UnexpectedEndOfSlice(
