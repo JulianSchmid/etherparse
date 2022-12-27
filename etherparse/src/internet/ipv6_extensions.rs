@@ -24,7 +24,7 @@ pub struct Ipv6Extensions {
     pub destination_options: Option<Ipv6RawExtensionHeader>,
     pub routing: Option<Ipv6RoutingExtensions>,
     pub fragment: Option<Ipv6FragmentHeader>,
-    pub auth: Option<IpAuthenticationHeader>,
+    pub auth: Option<IpAuthHeader>,
 }
 
 impl Ipv6Extensions {
@@ -134,7 +134,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = IpAuthenticationHeaderSlice::from_slice(rest)?;
+                        let slice = IpAuthHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.auth = Some(slice.to_header());
@@ -249,7 +249,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = IpAuthenticationHeader::read(reader)?;
+                        let header = IpAuthHeader::read(reader)?;
                         next_protocol = header.next_header;
                         result.auth = Some(header);
                     }
@@ -749,9 +749,9 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     fragmented = fragmented || slice.is_fragmenting_payload();
                 }
                 AUTH => {
-                    let slice = IpAuthenticationHeaderSlice::from_slice(rest)?;
+                    let slice = IpAuthHeaderSlice::from_slice(rest)?;
                     // SAFETY:
-                    // IpAuthenticationHeaderSlice::from_slice always generates
+                    // IpAuthHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed
                     // that len is always greater or equal the len of rest.
                     rest = unsafe {
@@ -842,7 +842,7 @@ pub enum Ipv6ExtensionSlice<'a> {
     /// Destination Options for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
     DestinationOptions(Ipv6RawExtensionHeaderSlice<'a>),
     /// Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
-    Authentication(IpAuthenticationHeaderSlice<'a>),
+    Authentication(IpAuthHeaderSlice<'a>),
 }
 
 impl<'a> IntoIterator for Ipv6ExtensionsSlice<'a> {
@@ -920,7 +920,7 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
                 Some(Fragment(slice))
             },
             AUTH => unsafe {
-                let slice = IpAuthenticationHeaderSlice::from_slice_unchecked(self.rest);
+                let slice = IpAuthHeaderSlice::from_slice_unchecked(self.rest);
                 let len = slice.slice().len();
                 self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
                 self.next_header = slice.next_header();

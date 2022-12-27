@@ -9,7 +9,7 @@ use super::super::*;
 /// - Encapsulating Security Payload Header (ESP)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv4Extensions {
-    pub auth: Option<IpAuthenticationHeader>,
+    pub auth: Option<IpAuthHeader>,
 }
 
 /// Slices of the IPv4 extension headers present after the ip header.
@@ -21,7 +21,7 @@ pub struct Ipv4Extensions {
 /// * Encapsulating Security Payload Header (ESP)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv4ExtensionsSlice<'a> {
-    pub auth: Option<IpAuthenticationHeaderSlice<'a>>,
+    pub auth: Option<IpAuthHeaderSlice<'a>>,
 }
 
 impl Ipv4Extensions {
@@ -43,7 +43,7 @@ impl Ipv4Extensions {
     ) -> Result<(Ipv4Extensions, u8), ReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
-            let header = IpAuthenticationHeader::read(reader)?;
+            let header = IpAuthHeader::read(reader)?;
             let next_ip_number = header.next_header;
             Ok((Ipv4Extensions { auth: Some(header) }, next_ip_number))
         } else {
@@ -136,7 +136,7 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     ) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), ReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
-            let header = IpAuthenticationHeaderSlice::from_slice(start_slice)?;
+            let header = IpAuthHeaderSlice::from_slice(start_slice)?;
             let rest = &start_slice[header.slice().len()..];
             let next_header = header.next_header();
             Ok((

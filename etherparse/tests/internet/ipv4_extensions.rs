@@ -8,7 +8,7 @@ pub mod header {
 
     #[test]
     fn from_slice() {
-        let auth_header = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
+        let auth_header = IpAuthHeader::new(UDP, 0, 0, &[]).unwrap();
 
         let buffer = {
             let mut buffer = Vec::with_capacity(auth_header.header_len());
@@ -109,7 +109,7 @@ pub mod header {
         }
 
         // Some
-        let auth_header = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
+        let auth_header = IpAuthHeader::new(UDP, 0, 0, &[]).unwrap();
         {
             let mut buffer = Vec::with_capacity(auth_header.header_len());
             Ipv4Extensions {
@@ -117,7 +117,7 @@ pub mod header {
             }
             .write(&mut buffer, AUTH)
             .unwrap();
-            let (read_header, _) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
+            let (read_header, _) = IpAuthHeader::from_slice(&buffer).unwrap();
             assert_eq!(auth_header, read_header);
         }
 
@@ -159,7 +159,7 @@ pub mod header {
 
         // Some
         {
-            let auth = IpAuthenticationHeader::new(UDP, 0, 0, &[]).unwrap();
+            let auth = IpAuthHeader::new(UDP, 0, 0, &[]).unwrap();
             assert_eq!(
                 auth.header_len(),
                 Ipv4Extensions { auth: Some(auth) }.header_len()
@@ -167,7 +167,7 @@ pub mod header {
         }
         // Some with paylaod
         {
-            let auth = IpAuthenticationHeader::new(UDP, 0, 0, &[1, 2, 3, 4]).unwrap();
+            let auth = IpAuthHeader::new(UDP, 0, 0, &[1, 2, 3, 4]).unwrap();
             assert_eq!(
                 auth.header_len(),
                 Ipv4Extensions { auth: Some(auth) }.header_len()
@@ -186,7 +186,7 @@ pub mod header {
         // Some
         {
             let mut exts = Ipv4Extensions {
-                auth: Some(IpAuthenticationHeader::new(TCP, 0, 0, &[]).unwrap()),
+                auth: Some(IpAuthHeader::new(TCP, 0, 0, &[]).unwrap()),
             };
             assert_eq!(TCP, exts.auth.as_ref().unwrap().next_header);
             // change from TCP to UDP
@@ -206,7 +206,7 @@ pub mod header {
         // Some
         {
             let exts = Ipv4Extensions {
-                auth: Some(IpAuthenticationHeader::new(TCP, 0, 0, &[]).unwrap()),
+                auth: Some(IpAuthHeader::new(TCP, 0, 0, &[]).unwrap()),
             };
 
             // auth referenced
@@ -229,7 +229,7 @@ pub mod header {
         assert_eq!(
             false,
             Ipv4Extensions {
-                auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
+                auth: Some(IpAuthHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
             }
             .is_empty()
         );
@@ -240,7 +240,7 @@ pub mod header {
         fn debug(auth in ip_authentication_any()) {
             // None
             assert_eq!(
-                &format!("Ipv4Extensions {{ auth: {:?} }}", Option::<IpAuthenticationHeader>::None),
+                &format!("Ipv4Extensions {{ auth: {:?} }}", Option::<IpAuthHeader>::None),
                 &format!(
                     "{:?}",
                     Ipv4Extensions {
@@ -329,7 +329,7 @@ mod slice {
                     slice,
                     Ipv4ExtensionsSlice{
                         auth: Some(
-                            IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap()
+                            IpAuthHeaderSlice::from_slice(&buffer).unwrap()
                         ),
                     }
                 );
@@ -375,7 +375,7 @@ mod slice {
                 };
                 let slice = Ipv4ExtensionsSlice{
                     auth: Some(
-                        IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap()
+                        IpAuthHeaderSlice::from_slice(&buffer).unwrap()
                     ),
                 };
                 assert_eq!(
@@ -396,7 +396,7 @@ mod slice {
         // auth
         {
             let buffer = {
-                let auth = IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap();
+                let auth = IpAuthHeader::new(ip_number::UDP, 0, 0, &[]).unwrap();
                 let mut buffer = Vec::with_capacity(auth.header_len());
                 auth.write(&mut buffer).unwrap();
                 buffer
@@ -404,7 +404,7 @@ mod slice {
             assert_eq!(
                 false,
                 Ipv4ExtensionsSlice {
-                    auth: Some(IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap()),
+                    auth: Some(IpAuthHeaderSlice::from_slice(&buffer).unwrap()),
                 }
                 .is_empty()
             );
@@ -416,7 +416,7 @@ mod slice {
         fn debug(auth in ip_authentication_any()) {
             // None
             assert_eq!(
-                &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Option::<IpAuthenticationHeader>::None),
+                &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Option::<IpAuthHeader>::None),
                 &format!(
                     "{:?}",
                     Ipv4ExtensionsSlice {
@@ -431,7 +431,7 @@ mod slice {
                 auth.write(&mut buffer).unwrap();
                 buffer
             };
-            let auth_slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+            let auth_slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(
                 &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Some(auth_slice.clone())),
                 &format!(
@@ -467,7 +467,7 @@ mod slice {
                     auth.write(&mut buffer).unwrap();
                     buffer
                 };
-                let auth_slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+                let auth_slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
                 let slice = Ipv4ExtensionsSlice {
                     auth: Some(auth_slice.clone()),
                 };

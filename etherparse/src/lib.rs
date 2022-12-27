@@ -116,7 +116,7 @@
 //! * [`Ipv6HeaderSlice::from_slice`]
 //! * [`Ipv6ExtensionsSlice::from_slice`]
 //! * [`Ipv6RawExtensionHeaderSlice::from_slice`]
-//! * [`IpAuthenticationHeaderSlice::from_slice`]
+//! * [`IpAuthHeaderSlice::from_slice`]
 //! * [`Ipv6FragmentHeaderSlice::from_slice`]
 //! * [`UdpHeaderSlice::from_slice`]
 //! * [`TcpHeaderSlice::from_slice`]
@@ -134,7 +134,7 @@
 //! * [`Ipv6Header::read`] & [`Ipv6Header::from_slice`]
 //! * [`Ipv6Extensions::read`] & [`Ipv6Extensions::from_slice`]
 //! * [`Ipv6RawExtensionHeader::read`] & [`Ipv6RawExtensionHeader::from_slice`]
-//! * [`IpAuthenticationHeader::read`] & [`IpAuthenticationHeader::from_slice`]
+//! * [`IpAuthHeader::read`] & [`IpAuthHeader::from_slice`]
 //! * [`Ipv6FragmentHeader::read`] & [`Ipv6FragmentHeader::from_slice`]
 //! * [`UdpHeader::read`] & [`UdpHeader::from_slice`]
 //! * [`TcpHeader::read`] & [`TcpHeader::from_slice`]
@@ -188,7 +188,7 @@
 //! * [`Ipv6Header::write`]
 //! * [`Ipv6Extensions::write`]
 //! * [`Ipv6RawExtensionHeader::write`]
-//! * [`IpAuthenticationHeader::write`]
+//! * [`IpAuthHeader::write`]
 //! * [`Ipv6FragmentHeader::write`]
 //! * [`UdpHeader::write`]
 //! * [`TcpHeader::write`]
@@ -266,6 +266,7 @@ pub(crate) mod test_gens;
 
 mod internet;
 pub use crate::internet::ip::*;
+pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ip_authentication::*;
 pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv4_header::*;

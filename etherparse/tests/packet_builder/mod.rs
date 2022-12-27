@@ -59,7 +59,7 @@ fn eth_ipv4_udp() {
 
 #[test]
 fn ipv4() {
-    let auth_ext = IpAuthenticationHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
+    let auth_ext = IpAuthHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
 
     //generate
     let in_payload = [22, 23, 24, 25];
@@ -112,10 +112,10 @@ fn ipv4() {
     assert_eq!(ip_actual, ip_expected);
 
     // auth header
-    let auth_actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+    let auth_actual = IpAuthHeader::read(&mut cursor).unwrap();
     assert_eq!(
         auth_actual,
-        IpAuthenticationHeader::new(
+        IpAuthHeader::new(
             200, // ip number should have been set
             1,
             2,
@@ -132,7 +132,7 @@ fn ipv4() {
 
 #[test]
 fn ipv6() {
-    let auth_ext = IpAuthenticationHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
+    let auth_ext = IpAuthHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
 
     //generate
     let in_payload = [48, 49, 50, 51];
@@ -200,10 +200,10 @@ fn ipv6() {
     assert_eq!(ip_actual, ip_expected);
 
     // auth header
-    let auth_actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+    let auth_actual = IpAuthHeader::read(&mut cursor).unwrap();
     assert_eq!(
         auth_actual,
-        IpAuthenticationHeader::new(
+        IpAuthHeader::new(
             200, // ip number should have been set
             1,
             2,
