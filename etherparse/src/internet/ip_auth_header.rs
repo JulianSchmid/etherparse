@@ -38,11 +38,12 @@ pub struct IpAuthHeader {
 
 impl Debug for IpAuthHeader {
     fn fmt(&self, formatter: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(formatter, "IpAuthHeader {{ next_header: {}, spi: {}, sequence_number: {}, raw_icv: {:?} }}", 
-            self.next_header,
-            self.spi,
-            self.sequence_number,
-            self.raw_icv())
+        let mut s = formatter.debug_struct("IpAuthHeader");
+        s.field("next_header", &self.next_header);
+        s.field("spi", &self.spi);
+        s.field("sequence_number", &self.sequence_number);
+        s.field("raw_icv", &self.raw_icv());
+        s.finish()
     }
 }
 

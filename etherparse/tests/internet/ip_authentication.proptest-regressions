@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 92c1bb4ef079cf2fa8f79ae52487e0f10b8115e43187064a2494fd053210ec16 # shrinks to input = IpAuthHeader { next_header: 198, spi: 0, sequence_number: 47710145, raw_icv: 47710145 }
