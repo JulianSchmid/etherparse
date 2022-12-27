@@ -30,7 +30,7 @@ impl Ipv4Extensions {
     pub fn from_slice(
         start_protocol: u8,
         slice: &[u8],
-    ) -> Result<(Ipv4Extensions, u8, &[u8]), ReadError> {
+    ) -> Result<(Ipv4Extensions, u8, &[u8]), err::ip_auth::HeaderSliceError> {
         Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(|v| (v.0.to_header(), v.1, v.2))
     }
 
@@ -40,7 +40,7 @@ impl Ipv4Extensions {
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
         start_ip_number: u8,
-    ) -> Result<(Ipv4Extensions, u8), ReadError> {
+    ) -> Result<(Ipv4Extensions, u8), err::ip_auth::HeaderReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeader::read(reader)?;
@@ -63,7 +63,7 @@ impl Ipv4Extensions {
         match self.auth {
             Some(ref header) => {
                 if AUTH == start_ip_number {
-                    header.write(writer)
+                    header.write(writer).map_err(WriteError::IoError)
                 } else {
                     Err(Ipv4ExtensionNotReferenced(AuthenticationHeader).into())
                 }
@@ -133,7 +133,7 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     pub fn from_slice(
         start_ip_number: u8,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), ReadError> {
+    ) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), err::ip_auth::HeaderSliceError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeaderSlice::from_slice(start_slice)?;

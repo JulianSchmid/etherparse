@@ -1,4 +1,4 @@
-use super::super::*;
+use crate::*;
 use std::slice::from_raw_parts;
 
 /// IPv6 extension headers present after the ip header.
@@ -134,7 +134,15 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = IpAuthHeaderSlice::from_slice(rest)?;
+                        let slice = IpAuthHeaderSlice::from_slice(rest)
+                            .map_err(|err| {
+                                use err::ip_auth::HeaderSliceError as I;
+                                use ReadError as O;
+                                match err {
+                                    I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                                    I::Content(err) => O::IpAuthHeader(err),
+                                }
+                            })?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.auth = Some(slice.to_header());
@@ -186,7 +194,7 @@ impl Ipv6Extensions {
         let mut next_protocol = start_ip_number;
 
         use ip_number::*;
-        use ReadError::*;
+        use ReadError::Ipv6HopByHopHeaderNotAtStart;
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_protocol {
@@ -249,7 +257,15 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = IpAuthHeader::read(reader)?;
+                        let header = IpAuthHeader::read(reader)
+                            .map_err(|err| {
+                                use err::ip_auth::HeaderReadError as I;
+                                use ReadError as O;
+                                match err {
+                                    I::Io(err) => O::IoError(err),
+                                    I::Content(err) => O::IpAuthHeader(err),
+                                }
+                            })?;
                         next_protocol = header.next_header;
                         result.auth = Some(header);
                     }
@@ -749,7 +765,15 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     fragmented = fragmented || slice.is_fragmenting_payload();
                 }
                 AUTH => {
-                    let slice = IpAuthHeaderSlice::from_slice(rest)?;
+                    let slice = IpAuthHeaderSlice::from_slice(rest)
+                        .map_err(|err| {
+                            use err::ip_auth::HeaderSliceError as I;
+                            use ReadError as O;
+                            match err {
+                                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                                I::Content(err) => O::IpAuthHeader(err),
+                            }
+                        })?;
                     // SAFETY:
                     // IpAuthHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed

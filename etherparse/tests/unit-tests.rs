@@ -52,7 +52,6 @@ fn test_debug_write() {
                 actual_len: 0,
                 layer: err::Layer::Icmpv4,
             }),
-            DoubleVlanOuterNonVlanEtherType(0),
             IpUnsupportedVersion(0),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
             Ipv6UnexpectedVersion(0),
@@ -186,8 +185,8 @@ mod read_error {
             }
         );
         assert_matches!(
-            ReadError::DoubleVlanOuterNonVlanEtherType(2).add_slice_offset(3),
-            ReadError::DoubleVlanOuterNonVlanEtherType(2)
+            ReadError::Ipv6UnexpectedVersion(2).add_slice_offset(3),
+            ReadError::Ipv6UnexpectedVersion(2)
         );
     }
 

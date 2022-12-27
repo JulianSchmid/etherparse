@@ -16,12 +16,13 @@ pub struct IpAuthHeaderSlice<'a> {
 
 impl<'a> IpAuthHeaderSlice<'a> {
     /// Creates a ip authentication header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<IpAuthHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<IpAuthHeaderSlice<'a>, err::ip_auth::HeaderSliceError> {
+        use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
+
         // check slice length
-        use crate::ReadError::*;
-        if slice.len() < 12 {
+        if slice.len() < IpAuthHeader::LEN_MIN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: 12,
+                expected_min_len: IpAuthHeader::LEN_MIN,
                 actual_len: slice.len(),
                 layer: err::Layer::IpAuthHeader,
             }));
@@ -33,7 +34,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
 
         // check header length minimum size
         if payload_len_enc < 1 {
-            return Err(IpAuthenticationHeaderTooSmallPayloadLength(payload_len_enc));
+            return Err(Content(ZeroPayloadLen));
         }
 
         // check length

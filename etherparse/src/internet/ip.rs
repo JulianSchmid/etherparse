@@ -40,7 +40,14 @@ impl IpHeader {
                         |(ext, next_protocol, rest)| {
                             (IpHeader::Version4(header, ext), next_protocol, rest)
                         },
-                    )
+                    ).map_err(|err| {
+                        use err::ip_auth::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::Content(err) => O::IpAuthHeader(err),
+                        }
+                    })
                 }
                 6 => {
                     let (header, rest) = Ipv6Header::from_slice(slice)?;
@@ -77,6 +84,14 @@ impl IpHeader {
                     )?;
                 Ipv4Extensions::read(reader, header.protocol)
                     .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
+                    .map_err(|err| {
+                        use err::ip_auth::HeaderReadError as I;
+                        use ReadError as O;
+                        match err {
+                            I::Io(err) => O::IoError(err),
+                            I::Content(err) => O::IpAuthHeader(err),
+                        }
+                    })
             }
             6 => {
                 let header = Ipv6Header::read_without_version(reader, value & 0xf)?;

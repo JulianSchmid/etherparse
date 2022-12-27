@@ -126,7 +126,15 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
-                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)
+                    .map_err(|err| {
+                        use err::ip_auth::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::Content(err) => O::IpAuthHeader(err),
+                        }
+                    })?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;
@@ -284,7 +292,15 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
-                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)?;
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)
+                    .map_err(|err| {
+                        use err::ip_auth::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::Content(err) => O::IpAuthHeader(err),
+                        }
+                    })?;
 
                 //set the ip result & rest
                 rest = ip_ext_rest;

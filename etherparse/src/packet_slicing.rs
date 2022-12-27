@@ -440,7 +440,14 @@ impl<'a> CursorSlice<'a> {
         // slice extensions
         let (ip_ext, protocol, rest) =
             Ipv4ExtensionsSlice::from_slice(ip_header.protocol(), self.slice)
-                .map_err(|err| err.add_slice_offset(self.offset))?;
+                .map_err(|err| {
+                    use err::ip_auth::HeaderSliceError as I;
+                    use ReadError as O;
+                    match err {
+                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err.add_offset(self.offset)),
+                        I::Content(err) => O::IpAuthHeader(err),
+                    }
+                })?;
 
         // set the new data
         self.move_to_slice(rest);
