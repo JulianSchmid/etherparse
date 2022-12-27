@@ -1,6 +1,6 @@
 pub mod ip;
 pub mod ip_auth_header_slice;
-pub mod ip_authentication;
+pub mod ip_auth_header;
 pub mod ipv4_extensions;
 pub mod ipv4_header;
 pub mod ipv4_header_slice;
