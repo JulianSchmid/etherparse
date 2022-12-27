@@ -59,6 +59,10 @@ jobs:
       with:
         command: build
 
+    - name: install cross
+      if: matrix.target != ''
+      run: cargo install cross --locked
+
     - name: cross build
       if: matrix.target != ''
       uses: actions-rs/cargo@v1
