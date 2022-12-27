@@ -13,6 +13,7 @@
 * Added non-allocating `to_bytes()` methods that return `arrayvec::ArrayVec<u8, Header::MAX_LEN>` to the following headers:
   * `Ipv4Header`
   * TODO Add to all headers that have write methods
+* Added `LEN` or `LEN_MIN` & `LEN_MAX` constants to all headers & packets.
 
 ### Breaking Changes:
 
@@ -22,7 +23,7 @@
 
 ### Minor Fixes
 
-* Corrected `Ipv4Header` `core::fmt::Debug` implementation (will now correctly write newlines when `{:#?}` is used)
+* Corrected `Ipv4Header` & `IpAuthHeader` `core::fmt::Debug` implementations (will now correctly write newlines when `{:#?}` is used)
 
 ### Deprecations / Renames:
 

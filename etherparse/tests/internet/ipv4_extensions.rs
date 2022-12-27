@@ -36,16 +36,16 @@ pub mod header {
 
         // too small
         {
-            let err = Ipv4Extensions::from_slice(AUTH, &buffer[..auth_header.header_len() - 1])
-                .unwrap_err();
+            use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
             const AUTH_HEADER_LEN: usize = 12;
             assert_eq!(
-                err.unexpected_end_of_slice().unwrap(),
-                err::UnexpectedEndOfSliceError {
+                Ipv4Extensions::from_slice(AUTH, &buffer[..auth_header.header_len() - 1])
+                    .unwrap_err(),
+                UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
                     expected_min_len: AUTH_HEADER_LEN,
                     actual_len: auth_header.header_len() - 1,
                     layer: err::Layer::IpAuthHeader,
-                }
+                })
             );
         }
     }
@@ -88,11 +88,7 @@ pub mod header {
             // Some error
             {
                 let mut cursor = Cursor::new(&[]);
-                let err = Ipv4Extensions::read(&mut cursor, AUTH).unwrap_err();
-                assert_matches!(
-                    err,
-                    ReadError::IoError(_)
-                );
+                assert!(Ipv4Extensions::read(&mut cursor, AUTH).is_err());
             }
         }
     }
@@ -339,15 +335,14 @@ mod slice {
 
             // Error unexpected end of slice
             {
-                let err = Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err();
-                const AUTH_HEADER_LEN: usize = 12;
+                use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
                 assert_eq!(
-                    err.unexpected_end_of_slice().unwrap(),
-                    err::UnexpectedEndOfSliceError{
-                        expected_min_len: AUTH_HEADER_LEN,
+                    Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
+                    UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        expected_min_len: IpAuthHeader::LEN_MIN,
                         actual_len: 0,
                         layer: err::Layer::IpAuthHeader
-                    }
+                    })
                 );
             }
         }

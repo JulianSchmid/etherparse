@@ -6,7 +6,6 @@ proptest! {
     #[test]
     fn read_error_display(
         arg_u8 in any::<u8>(),
-        arg_u16 in any::<u16>(),
         arg_usize in any::<usize>(),
         arg2_usize in any::<usize>(),
         err_layer in err_layer_any(),
@@ -40,12 +39,6 @@ proptest! {
         assert_eq!(
             &format!("ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", arg2_usize, arg_usize),
             &format!("{}", UnexpectedLenOfSlice{ expected: arg_usize, actual: arg2_usize })
-        );
-
-        //DoubleVlanOuterNonVlanEtherType
-        assert_eq!(
-            &format!("ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", arg_u16),
-            &format!("{}", DoubleVlanOuterNonVlanEtherType(arg_u16))
         );
 
         //IpUnsupportedVersion
@@ -85,8 +78,8 @@ proptest! {
 
         //IpAuthenticationHeaderTooSmallPayloadLength
         assert_eq!(
-            &format!("ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", arg_u8),
-            &format!("{}", IpAuthenticationHeaderTooSmallPayloadLength(arg_u8))
+            &format!("{}", err::ip_auth::HeaderError::ZeroPayloadLen),
+            &format!("{}", IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen))
         );
 
         //TcpDataOffsetTooSmall
@@ -132,12 +125,11 @@ fn read_error_source() {
             expected: 0,
             actual: 0,
         },
-        DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv6UnexpectedVersion(0),
         Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
-        IpAuthenticationHeaderTooSmallPayloadLength(0),
+        IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpDataOffsetTooSmall(0),
         Icmpv6PacketTooBig(0),
     ];
@@ -162,13 +154,12 @@ fn read_error_debug() {
             expected: 0,
             actual: 0,
         },
-        DoubleVlanOuterNonVlanEtherType(0),
         IpUnsupportedVersion(0),
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6UnexpectedVersion(0),
         Ipv6TooManyHeaderExtensions,
         Ipv6HopByHopHeaderNotAtStart,
-        IpAuthenticationHeaderTooSmallPayloadLength(0),
+        IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpDataOffsetTooSmall(0),
         Icmpv6PacketTooBig(0),
     ];

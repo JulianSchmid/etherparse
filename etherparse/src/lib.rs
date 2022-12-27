@@ -314,12 +314,6 @@ pub enum ReadError {
     UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
-
-    /// Error decoding an double vlan header.
-    
-    /// Error when a double vlan tag was expected but the ether type of the the first vlan header does not an vlan header ether type.
-    /// The value is the unexpected ether type value in the outer vlan header.
-    DoubleVlanOuterNonVlanEtherType(u16),
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
     IpUnsupportedVersion(u8),
     /// Error when decoding an IPv4 header.
@@ -330,8 +324,8 @@ pub enum ReadError {
     Ipv6TooManyHeaderExtensions,
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     Ipv6HopByHopHeaderNotAtStart,
-    /// Error if the header length in the ip authentication header is smaller then the minimum size of 1.
-    IpAuthenticationHeaderTooSmallPayloadLength(u8),
+    /// Error when decoding an IP authentification header.
+    IpAuthHeader(err::ip_auth::HeaderError),
     /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
     TcpDataOffsetTooSmall(u8),
     /// Error when the packet size is too big (e.g larger then can be represendted in a length field).
@@ -375,10 +369,18 @@ impl ReadError {
         }
     }
 
-    /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
+    /// Returns the `err::ipv4::HeaderError` value if the `ReadError` is an `Ipv4Header`.
     pub fn ipv4_header(self) -> Option<err::ipv4::HeaderError> {
         match self {
             ReadError::Ipv4Header(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns the `err::ip_auth::HeaderError` value if the `ReadError` is an `IpAuthHeader`.
+    pub fn ip_auth_header(self) -> Option<err::ip_auth::HeaderError> {
+        match self {
+            ReadError::IpAuthHeader(value) => Some(value),
             _ => None,
         }
     }
@@ -393,32 +395,27 @@ impl std::fmt::Display for ReadError {
             UnexpectedEndOfSlice(err) => err.fmt(f),
             UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
-            }
-            DoubleVlanOuterNonVlanEtherType(ether_type) => {
-                write!(f, "ReadError: Expected a double vlan header, but the ether type field value {} of the outer vlan header is a non vlan header ether type.", ether_type)
-            }
+            },
             IpUnsupportedVersion(version_number) => {
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
-            }
+            },
             Ipv4Header(err) => err.fmt(f),
             Ipv6UnexpectedVersion(version_number) => {
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
-            }
+            },
             Ipv6TooManyHeaderExtensions => {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
-            }
+            },
             Ipv6HopByHopHeaderNotAtStart => {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
-            }
-            IpAuthenticationHeaderTooSmallPayloadLength(length) => {
-                write!(f, "ReadError: Authentication header payload size is smaller then 1 ({}) which is smaller then the minimum size of the header.", length)
-            }
+            },
+            IpAuthHeader(err) => err.fmt(f),
             TcpDataOffsetTooSmall(data_offset) => {
                 write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
-            }
+            },
             Icmpv6PacketTooBig(size) => {
                 write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
-            }
+            },
         }
     }
 }

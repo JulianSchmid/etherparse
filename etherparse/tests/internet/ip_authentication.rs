@@ -92,40 +92,42 @@ fn new_and_set_icv() {
 proptest! {
     #[test]
     fn from_slice_slice_smaller_12(len in 0..12usize) {
+        use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
+
         let data = [0;12];
         assert_eq!(
-            IpAuthHeaderSlice::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            IpAuthHeaderSlice::from_slice(&data[..len]).unwrap_err(),
+            UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                 expected_min_len: 12,
                 actual_len: len,
                 layer: err::Layer::IpAuthHeader,
-            }
+            })
         );
 
         assert_eq!(
-            IpAuthHeader::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
-            err::UnexpectedEndOfSliceError{
+            IpAuthHeader::from_slice(&data[..len]).unwrap_err(),
+            UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                 expected_min_len: 12,
                 actual_len: len,
                 layer: err::Layer::IpAuthHeader,
-            }
+            })
         );
     }
 }
 
 #[test]
 fn from_slice_bad_header_len() {
-    use ReadError::*;
+    use err::ip_auth::{HeaderError::*, HeaderSliceError::Content};
 
     let data = [0; 16];
-    assert_matches!(
+    assert_eq!(
         IpAuthHeaderSlice::from_slice(&data[..]),
-        Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
+        Err(Content(ZeroPayloadLen))
     );
 
-    assert_matches!(
+    assert_eq!(
         IpAuthHeader::from_slice(&data[..]),
-        Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
+        Err(Content(ZeroPayloadLen))
     );
 }
 
@@ -183,20 +185,33 @@ proptest! {
 
         // test error when the slice is smaller then the data lenght
         for len in 0..buffer.len()-3 {
-            use ReadError::*;
-            assert_matches!(
-                IpAuthHeader::from_slice(&buffer[..len]),
-                Err(UnexpectedEndOfSlice(_))
+            use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
+
+            let expected = UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                expected_min_len: if len < IpAuthHeader::LEN_MIN {
+                    IpAuthHeader::LEN_MIN
+                } else {
+                    expected.header_len()
+                },
+                actual_len: len,
+                layer: err::Layer::IpAuthHeader,
+            });
+
+            assert_eq!(
+                IpAuthHeader::from_slice(&buffer[..len]).unwrap_err(),
+                expected
             );
-            assert_matches!(
-                IpAuthHeaderSlice::from_slice(&buffer[..len]),
-                Err(UnexpectedEndOfSlice(_))
+            assert_eq!(
+                IpAuthHeaderSlice::from_slice(&buffer[..len]).unwrap_err(),
+                expected
             );
             {
                 let mut cursor = Cursor::new(&buffer[..len]);
-                assert_matches!(
-                    IpAuthHeader::read(&mut cursor),
-                    Err(IoError(_))
+                assert!(
+                    IpAuthHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .io_error()
+                        .is_some()
                 );
             }
         }
@@ -210,15 +225,7 @@ pub fn write_io_error() {
     // iterate through all too short lenghts
     for len in 0..header.header_len() {
         let mut writer = TestWriter::with_max_size(len);
-        assert_eq!(
-            writer.error_kind(),
-            header
-                .write(&mut writer)
-                .unwrap_err()
-                .io_error()
-                .unwrap()
-                .kind()
-        );
+        assert!(header.write(&mut writer).is_err());
     }
 }
 
@@ -226,9 +233,9 @@ pub fn write_io_error() {
 pub fn read_too_small_payload_len() {
     let input = [0u8; 16]; // the 2nd
     let mut cursor = Cursor::new(&input);
-    assert_matches!(
-        IpAuthHeader::read(&mut cursor),
-        Err(ReadError::IpAuthenticationHeaderTooSmallPayloadLength(0))
+    assert_eq!(
+        IpAuthHeader::read(&mut cursor).unwrap_err().content_error(),
+        Some(err::ip_auth::HeaderError::ZeroPayloadLen)
     );
 }
 

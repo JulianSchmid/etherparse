@@ -1,6 +1,6 @@
 use super::super::*;
 
-use std::fmt::{Debug, Formatter};
+use core::fmt::{Debug, Formatter};
 
 /// Deprecated use [IpAuthHeader] instead.
 #[deprecated(
@@ -59,6 +59,20 @@ impl PartialEq for IpAuthHeader {
 impl Eq for IpAuthHeader {}
 
 impl<'a> IpAuthHeader {
+
+    /// Minimum length of an IP authentifcation header in bytes/octets.
+    pub const LEN_MIN: usize = 4 + 4 + 4;
+
+    /// Maximum length of an IP authentifcation header in bytes/octets.
+    /// 
+    /// This number is calculated by taking the maximum value
+    /// that the "payload length" field supports (0xff) adding 2 and
+    /// multiplying the sum by 4 as the "payload length" specifies how
+    /// many 4 bytes words are present in the header.
+    pub const LEN_MAX: usize = 4*(0xff + 2);
+
+    /// The maximum amount of bytes/octets that can be stored in the ICV
+    /// part of an IP authentification header.
     pub const MAX_ICV_LEN: usize = 0xfe * 4;
 
     /// Create a new authentication header with the given parameters.
@@ -92,7 +106,7 @@ impl<'a> IpAuthHeader {
     }
 
     /// Read an  authentication header from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthHeader, &'a [u8]), ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthHeader, &'a [u8]), err::ip_auth::HeaderSliceError> {
         let s = IpAuthHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -102,10 +116,13 @@ impl<'a> IpAuthHeader {
     /// Read an authentication header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<IpAuthHeader, ReadError> {
+    ) -> Result<IpAuthHeader, err::ip_auth::HeaderReadError> {
+        use err::ip_auth::HeaderReadError::*;
+        use err::ip_auth::HeaderError::*;
+
         let start = {
             let mut start = [0; 4 + 4 + 4];
-            reader.read_exact(&mut start)?;
+            reader.read_exact(&mut start).map_err(Io)?;
             start
         };
 
@@ -114,8 +131,7 @@ impl<'a> IpAuthHeader {
 
         // payload len must be at least 1
         if payload_len < 1 {
-            use ReadError::*;
-            Err(IpAuthenticationHeaderTooSmallPayloadLength(payload_len))
+            Err(Content(ZeroPayloadLen))
         } else {
             // read the rest of the header
             Ok(IpAuthHeader {
@@ -125,7 +141,7 @@ impl<'a> IpAuthHeader {
                 raw_icv_len: payload_len - 1,
                 raw_icv_buffer: {
                     let mut buffer = [0; 0xfe * 4];
-                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1) * 4])?;
+                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1) * 4]).map_err(Io)?;
                     buffer
                 },
             })
@@ -155,7 +171,7 @@ impl<'a> IpAuthHeader {
     }
 
     /// Writes the given authentication header to the current position.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         let spi_be = self.spi.to_be_bytes();
         let sequence_number_be = self.sequence_number.to_be_bytes();
         debug_assert!(self.raw_icv_len != 0xff);
