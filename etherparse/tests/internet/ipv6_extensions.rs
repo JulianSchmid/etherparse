@@ -248,7 +248,7 @@ impl ExtensionTestPayload {
                         // duplicate header -> stop
                         stop = true;
                     } else {
-                        let (header, rest) = IpAuthenticationHeader::from_slice(slice).unwrap();
+                        let (header, rest) = IpAuthHeader::from_slice(slice).unwrap();
                         assert_eq!(&header, exts.auth.as_ref().unwrap());
                         slice = rest;
                         read.auth = true;
@@ -450,7 +450,7 @@ impl ExtensionTestHeaders {
             }
             AUTH => {
                 if self.data.auth.is_none() {
-                    use IpAuthenticationHeader as A;
+                    use IpAuthHeader as A;
 
                     let mut len = usize::from(header_ext_len) * 4;
                     if len > A::MAX_ICV_LEN {
@@ -458,7 +458,7 @@ impl ExtensionTestHeaders {
                     }
                     let raw_icv: [u8; A::MAX_ICV_LEN] = [0; A::MAX_ICV_LEN];
                     self.data.auth = Some(
-                        IpAuthenticationHeader::new(next_header, 123, 234, &raw_icv[..len])
+                        IpAuthHeader::new(next_header, 123, 234, &raw_icv[..len])
                             .unwrap(),
                     );
                     true
@@ -1072,7 +1072,7 @@ pub mod header {
                 destination_options: None,
                 routing: None,
                 fragment: None,
-                auth: Some(IpAuthenticationHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
+                auth: Some(IpAuthHeader::new(ip_number::UDP, 0, 0, &[]).unwrap()),
             }
             .is_empty()
         );
@@ -1368,10 +1368,10 @@ pub mod ipv6_extension_slice {
             );
         }
         {
-            let header = IpAuthenticationHeader::new(UDP, 1, 2, &[1, 2, 3, 4]).unwrap();
+            let header = IpAuthHeader::new(UDP, 1, 2, &[1, 2, 3, 4]).unwrap();
             let mut buffer = Vec::with_capacity(header.header_len());
             header.write(&mut buffer).unwrap();
-            let slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+            let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(
                 format!("Authentication({:?})", slice),
                 format!("{:?}", Authentication(slice.clone()))
@@ -1460,7 +1460,7 @@ pub mod slice_iter {
                                 slice = &slice[header.slice().len()..];
                             },
                             AUTH => {
-                                let header = IpAuthenticationHeaderSlice::from_slice(slice).unwrap();
+                                let header = IpAuthHeaderSlice::from_slice(slice).unwrap();
                                 assert_eq!(next, Authentication(header.clone()));
                                 slice = &slice[header.slice().len()..];
                             },

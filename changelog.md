@@ -2,15 +2,32 @@
 
 ## 0.14.0
 
+### TODO before release
+
+* TODO: Use lengths in IP, UDP & TCP headers to correctly identify payload.
+* TODO Add `LEN` or `LEN_MIN` & `LEN_MAX` constants to all headers & packets.
+* TODO Remove the `SerializedSize` trait.
+
 ### New
 
-* Corrected `Ipv4Header` `core::fmt::Debug` implementation (will now correctly write newlines when `{:#?}` is used)
+* Added non-allocating `to_bytes()` methods that return `arrayvec::ArrayVec<u8, Header::MAX_LEN>` to the following headers:
+  * `Ipv4Header`
+  * TODO Add to all headers that have write methods
 
 ### Breaking Changes:
 
 * TODO: Changed packet slicing & reading so the length of the payload is taken into account.
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
 * Remove `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Use `XHeader::LEN` or `XHeader::LEN_MIN` instead depending on the header.
+
+### Minor Fixes
+
+* Corrected `Ipv4Header` `core::fmt::Debug` implementation (will now correctly write newlines when `{:#?}` is used)
+
+### Deprecations / Renames:
+
+* Renamed `IpAuthenticationHeader` to `IpAuthHeader` (alias for backwards compatibility exists with an deprecation warning).
+* Renamed `IpAuthenticationHeaderSlice` to `IpAuthHeaderSlice` (alias for backwards compatibility exists with an deprecation warning).
 
 ### Internal Changes:
 

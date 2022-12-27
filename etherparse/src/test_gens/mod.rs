@@ -504,8 +504,8 @@ prop_compose! {
         spi in any::<u32>(),
         sequence_number in any::<u32>(),
         icv in proptest::collection::vec(any::<u8>(), (len as usize)*4)
-    ) -> IpAuthenticationHeader {
-        IpAuthenticationHeader::new(
+    ) -> IpAuthHeader {
+        IpAuthHeader::new(
             next_header,
             spi,
             sequence_number,
@@ -519,7 +519,7 @@ prop_compose! {
         next_header in any::<u8>()
     ) (
         header in ip_authentication_with(next_header)
-    ) -> IpAuthenticationHeader {
+    ) -> IpAuthHeader {
         header
     }
 }

@@ -57,7 +57,7 @@ fn new_and_set_icv() {
     for test in tests.iter() {
         // new
         {
-            let a = IpAuthenticationHeader::new(5, 6, 7, test.icv);
+            let a = IpAuthHeader::new(5, 6, 7, test.icv);
             if test.ok {
                 let unwrapped = a.unwrap();
                 assert_eq!(5, unwrapped.next_header);
@@ -70,7 +70,7 @@ fn new_and_set_icv() {
         }
         // set_raw_icv
         {
-            let mut header = IpAuthenticationHeader::new(5, 6, 7, &[0; 4]).unwrap();
+            let mut header = IpAuthHeader::new(5, 6, 7, &[0; 4]).unwrap();
             let result = header.set_raw_icv(test.icv);
             assert_eq!(5, header.next_header);
             assert_eq!(6, header.spi);
@@ -94,7 +94,7 @@ proptest! {
     fn from_slice_slice_smaller_12(len in 0..12usize) {
         let data = [0;12];
         assert_eq!(
-            IpAuthenticationHeaderSlice::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            IpAuthHeaderSlice::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
             err::UnexpectedEndOfSliceError{
                 expected_min_len: 12,
                 actual_len: len,
@@ -103,7 +103,7 @@ proptest! {
         );
 
         assert_eq!(
-            IpAuthenticationHeader::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+            IpAuthHeader::from_slice(&data[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
             err::UnexpectedEndOfSliceError{
                 expected_min_len: 12,
                 actual_len: len,
@@ -119,12 +119,12 @@ fn from_slice_bad_header_len() {
 
     let data = [0; 16];
     assert_matches!(
-        IpAuthenticationHeaderSlice::from_slice(&data[..]),
+        IpAuthHeaderSlice::from_slice(&data[..]),
         Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
     );
 
     assert_matches!(
-        IpAuthenticationHeader::from_slice(&data[..]),
+        IpAuthHeader::from_slice(&data[..]),
         Err(IpAuthenticationHeaderTooSmallPayloadLength(0))
     );
 }
@@ -152,7 +152,7 @@ proptest! {
 
         // from_slice
         {
-            let actual = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+            let actual = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(actual.slice(), &buffer[..buffer.len()-2]);
             assert_eq!(actual.next_header(), expected.next_header);
             assert_eq!(actual.spi(), expected.spi);
@@ -164,19 +164,19 @@ proptest! {
         }
         // from_slice_unchecked
         unsafe {
-            let actual = IpAuthenticationHeaderSlice::from_slice_unchecked(&buffer);
+            let actual = IpAuthHeaderSlice::from_slice_unchecked(&buffer);
             assert_eq!(actual.slice(), &buffer[..buffer.len()-2]);
         }
         // from_slice
         {
-            let (actual, rest) = IpAuthenticationHeader::from_slice(&buffer).unwrap();
+            let (actual, rest) = IpAuthHeader::from_slice(&buffer).unwrap();
             assert_eq!(actual, expected);
             assert_eq!(rest, &buffer[buffer.len()-2..]);
         }
         // read
         {
             let mut cursor = Cursor::new(&buffer);
-            let actual = IpAuthenticationHeader::read(&mut cursor).unwrap();
+            let actual = IpAuthHeader::read(&mut cursor).unwrap();
             assert_eq!(expected, actual);
             assert_eq!(cursor.position(), (buffer.len()-2) as u64);
         }
@@ -185,17 +185,17 @@ proptest! {
         for len in 0..buffer.len()-3 {
             use ReadError::*;
             assert_matches!(
-                IpAuthenticationHeader::from_slice(&buffer[..len]),
+                IpAuthHeader::from_slice(&buffer[..len]),
                 Err(UnexpectedEndOfSlice(_))
             );
             assert_matches!(
-                IpAuthenticationHeaderSlice::from_slice(&buffer[..len]),
+                IpAuthHeaderSlice::from_slice(&buffer[..len]),
                 Err(UnexpectedEndOfSlice(_))
             );
             {
                 let mut cursor = Cursor::new(&buffer[..len]);
                 assert_matches!(
-                    IpAuthenticationHeader::read(&mut cursor),
+                    IpAuthHeader::read(&mut cursor),
                     Err(IoError(_))
                 );
             }
@@ -206,7 +206,7 @@ proptest! {
 /// Test that an IoError is correctly forwarded
 #[test]
 pub fn write_io_error() {
-    let header = IpAuthenticationHeader::new(1, 2, 3, &[4, 5, 6, 7]).unwrap();
+    let header = IpAuthHeader::new(1, 2, 3, &[4, 5, 6, 7]).unwrap();
     // iterate through all too short lenghts
     for len in 0..header.header_len() {
         let mut writer = TestWriter::with_max_size(len);
@@ -227,7 +227,7 @@ pub fn read_too_small_payload_len() {
     let input = [0u8; 16]; // the 2nd
     let mut cursor = Cursor::new(&input);
     assert_matches!(
-        IpAuthenticationHeader::read(&mut cursor),
+        IpAuthHeader::read(&mut cursor),
         Err(ReadError::IpAuthenticationHeaderTooSmallPayloadLength(0))
     );
 }
@@ -235,24 +235,24 @@ pub fn read_too_small_payload_len() {
 /// Dummy test for the clone function
 #[test]
 pub fn clone() {
-    let a = IpAuthenticationHeader::new(0, 0, 0, &[0; 4]);
+    let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
     assert_eq!(a.clone(), a);
 }
 
 #[test]
 pub fn partial_eq() {
-    let a = IpAuthenticationHeader::new(0, 0, 0, &[0; 4]);
+    let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
 
     //equal
-    assert!(a == IpAuthenticationHeader::new(0, 0, 0, &[0; 4]));
+    assert!(a == IpAuthHeader::new(0, 0, 0, &[0; 4]));
 
     //not equal tests
-    assert!(a != IpAuthenticationHeader::new(1, 0, 0, &[0; 4]));
-    assert!(a != IpAuthenticationHeader::new(0, 1, 0, &[0; 4]));
-    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[0; 4]));
-    assert!(a != IpAuthenticationHeader::new(0, 0, 0, &[0, 1, 0, 0]));
-    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[]));
-    assert!(a != IpAuthenticationHeader::new(0, 0, 1, &[0; 8]));
+    assert!(a != IpAuthHeader::new(1, 0, 0, &[0; 4]));
+    assert!(a != IpAuthHeader::new(0, 1, 0, &[0; 4]));
+    assert!(a != IpAuthHeader::new(0, 0, 1, &[0; 4]));
+    assert!(a != IpAuthHeader::new(0, 0, 0, &[0, 1, 0, 0]));
+    assert!(a != IpAuthHeader::new(0, 0, 1, &[]));
+    assert!(a != IpAuthHeader::new(0, 0, 1, &[0; 8]));
 }
 
 proptest! {
@@ -261,7 +261,7 @@ proptest! {
     fn debug(input in ip_authentication_any()) {
         assert_eq!(
             &format!(
-                "IpAuthenticationHeader {{ next_header: {}, spi: {}, sequence_number: {}, raw_icv: {:?} }}",
+                "IpAuthHeader {{ next_header: {}, spi: {}, sequence_number: {}, raw_icv: {:?} }}",
                 input.next_header,
                 input.spi,
                 input.sequence_number,
@@ -274,10 +274,10 @@ proptest! {
             input.write(&mut buffer).unwrap();
             buffer
         };
-        let slice = IpAuthenticationHeaderSlice::from_slice(&buffer).unwrap();
+        let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(
             &format!(
-                "IpAuthenticationHeaderSlice {{ slice: {:?} }}",
+                "IpAuthHeaderSlice {{ slice: {:?} }}",
                 slice.slice()
             ),
             &format!("{:?}", slice)

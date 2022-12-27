@@ -239,7 +239,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     /// slice points must also be valid (meaning no nullptr or alike allowed).
     ///
     /// If these precondtions are not fullfilled the behavior of this function
-    /// and the methods of the return IpAuthenticationHeaderSlice will be undefined.
+    /// and the methods of the return [`IpAuthHeaderSlice`] will be undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
         Ipv6RawExtensionHeaderSlice {
             slice: from_raw_parts(slice.as_ptr(), ((*slice.get_unchecked(1) as usize) + 1) * 8),
