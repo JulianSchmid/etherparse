@@ -9,7 +9,7 @@ fn main() {
     let mut out = Vec::<u8>::with_capacity(
         //lets reserve enough memory to avoid unnecessary allocations
         Ethernet2Header::SERIALIZED_SIZE
-            + Ipv4Header::LEN_MAX
+            + Ipv4Header::MAX_LEN
             + UdpHeader::SERIALIZED_SIZE
             + 8, //payload
     );

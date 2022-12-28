@@ -756,7 +756,7 @@ pub mod header {
             destination_options in ipv6_raw_extension_any(),
             routing in ipv6_raw_extension_any(),
             fragment in ipv6_fragment_any(),
-            auth in ip_authentication_any(),
+            auth in ip_auth_any(),
             final_destination_options in ipv6_raw_extension_any(),
         ) {
             // None
@@ -827,7 +827,7 @@ pub mod header {
             destination_options in ipv6_raw_extension_any(),
             routing in ipv6_raw_extension_any(),
             fragment in ipv6_fragment_any(),
-            auth in ip_authentication_any(),
+            auth in ip_auth_any(),
             final_destination_options in ipv6_raw_extension_any(),
             post_header in any::<u8>()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
@@ -1199,7 +1199,7 @@ pub mod slice {
             hop_by_hop_options in ipv6_raw_extension_any(),
             destination_options in ipv6_raw_extension_any(),
             routing in ipv6_raw_extension_any(),
-            auth in ip_authentication_any(),
+            auth in ip_auth_any(),
             final_destination_options in ipv6_raw_extension_any()
         ) {
             // no fragment header

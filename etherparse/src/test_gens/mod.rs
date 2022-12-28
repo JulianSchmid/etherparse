@@ -157,7 +157,7 @@ prop_compose! {
         more_fragments in any::<bool>(),
         fragments_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
-        payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::LEN_MIN as u16)),
+        payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::MIN_LEN as u16)),
         protocol in proptest::strategy::Just(protocol),
         options_len in proptest::strategy::Just(ihl*4),
         options_part0 in prop::array::uniform32(any::<u8>()),
@@ -233,7 +233,7 @@ prop_compose! {
     pub fn ipv4_extensions_with(next_header: u8)
     (
         has_auth in any::<bool>(),
-        auth in ip_authentication_with(next_header)
+        auth in ip_auth_with(next_header)
     ) -> Ipv4Extensions
     {
         if has_auth {
@@ -391,7 +391,7 @@ prop_compose! {
         has_fragment in any::<bool>(),
         fragment in ipv6_fragment_any(),
         has_auth in any::<bool>(),
-        auth in ip_authentication_with(next_header),
+        auth in ip_auth_with(next_header),
         has_final_destination_options in any::<bool>(),
         final_destination_options in ipv6_raw_extension_any()
     ) -> Ipv6Extensions
@@ -494,7 +494,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ip_authentication_with(
+    pub fn ip_auth_with(
         next_header: u8
     ) (
         next_header in proptest::strategy::Just(next_header),
@@ -515,10 +515,10 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ip_authentication_any() (
+    pub fn ip_auth_any() (
         next_header in any::<u8>()
     ) (
-        header in ip_authentication_with(next_header)
+        header in ip_auth_with(next_header)
     ) -> IpAuthHeader {
         header
     }

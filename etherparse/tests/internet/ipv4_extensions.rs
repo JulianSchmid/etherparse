@@ -51,7 +51,7 @@ pub mod header {
     }
     proptest! {
         #[test]
-        fn read(auth in ip_authentication_any()) {
+        fn read(auth in ip_auth_any()) {
             // None
             {
                 let mut cursor = Cursor::new(&[]);
@@ -233,7 +233,7 @@ pub mod header {
 
     proptest! {
         #[test]
-        fn debug(auth in ip_authentication_any()) {
+        fn debug(auth in ip_auth_any()) {
             // None
             assert_eq!(
                 &format!("Ipv4Extensions {{ auth: {:?} }}", Option::<IpAuthHeader>::None),
@@ -260,7 +260,7 @@ pub mod header {
 
     proptest! {
         #[test]
-        fn clone_eq(auth in ip_authentication_any()) {
+        fn clone_eq(auth in ip_auth_any()) {
             // None
             {
                 let header = Ipv4Extensions{
@@ -295,7 +295,7 @@ mod slice {
 
     proptest! {
         #[test]
-        fn from_slice(auth in ip_authentication_any()) {
+        fn from_slice(auth in ip_auth_any()) {
             // None
             {
                 let buffer = [1,2,3,4];
@@ -339,7 +339,7 @@ mod slice {
                 assert_eq!(
                     Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
                     UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
-                        expected_min_len: IpAuthHeader::LEN_MIN,
+                        expected_min_len: IpAuthHeader::MIN_LEN,
                         actual_len: 0,
                         layer: err::Layer::IpAuthHeader
                     })
@@ -350,7 +350,7 @@ mod slice {
 
     proptest! {
         #[test]
-        fn to_header(auth in ip_authentication_any()) {
+        fn to_header(auth in ip_auth_any()) {
             // None
             assert_eq!(
                 Ipv4ExtensionsSlice{
@@ -408,7 +408,7 @@ mod slice {
 
     proptest! {
         #[test]
-        fn debug(auth in ip_authentication_any()) {
+        fn debug(auth in ip_auth_any()) {
             // None
             assert_eq!(
                 &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Option::<IpAuthHeader>::None),
@@ -441,7 +441,7 @@ mod slice {
 
     proptest! {
         #[test]
-        fn clone_eq(auth in ip_authentication_any()) {
+        fn clone_eq(auth in ip_auth_any()) {
             // None
             {
                 let header = Ipv4ExtensionsSlice{

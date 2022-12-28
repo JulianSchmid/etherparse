@@ -20,9 +20,9 @@ impl<'a> IpAuthHeaderSlice<'a> {
         use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
 
         // check slice length
-        if slice.len() < IpAuthHeader::LEN_MIN {
+        if slice.len() < IpAuthHeader::MIN_LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: IpAuthHeader::LEN_MIN,
+                expected_min_len: IpAuthHeader::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::IpAuthHeader,
             }));
@@ -127,5 +127,120 @@ impl<'a> IpAuthHeaderSlice<'a> {
             self.raw_icv(),
         )
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
+    use proptest::prelude::*;
+    use crate::test_gens::*;
+    use arrayvec::ArrayVec;
+
+    proptest!{
+        #[test]
+        fn debug(input in ip_auth_any()) {
+            let buffer = input.to_bytes();
+            let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                &format!(
+                    "IpAuthHeaderSlice {{ slice: {:?} }}",
+                    slice.slice()
+                ),
+                &format!("{:?}", slice)
+            );
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let buffer = IpAuthHeader::new(0, 0, 0, &[0; 4]).unwrap().to_bytes();
+        let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
+        assert_eq!(slice.clone(), slice);
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(header in ip_auth_any()) {
+
+            // ok
+            {
+                let mut bytes = ArrayVec::<u8, {IpAuthHeader::MAX_LEN + 2}>::new();
+                bytes.extend(header.to_bytes());
+                bytes.push(1);
+                bytes.push(2);
+                
+                let slice = IpAuthHeaderSlice::from_slice(&bytes).unwrap();
+                assert_eq!(slice.slice(), &bytes[..bytes.len() - 2]);
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..header.header_len() {
+                    assert_eq!(
+                        IpAuthHeaderSlice::from_slice(&bytes[..len]).unwrap_err(),
+                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                            expected_min_len: if len < IpAuthHeader::MIN_LEN {
+                                IpAuthHeader::MIN_LEN
+                            } else {
+                                header.header_len()
+                            },
+                            actual_len: len,
+                            layer: err::Layer::IpAuthHeader,
+                        })
+                    );
+                }
+            }
+
+            // payload length error
+            {
+                let mut bytes = header.to_bytes();
+                // set payload length to 0
+                bytes[1] = 0;
+                assert_eq!(
+                    IpAuthHeaderSlice::from_slice(&bytes).unwrap_err(),
+                    Content(ZeroPayloadLen)
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice_unchecked(header in ip_auth_any()) {
+            let bytes = header.to_bytes();
+            let slice = unsafe {
+                IpAuthHeaderSlice::from_slice_unchecked(&bytes)
+            };
+            assert_eq!(slice.slice(), &bytes[..]);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(header in ip_auth_any()) {
+            let bytes = header.to_bytes();
+            let slice = IpAuthHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.slice(), &bytes[..]);
+            assert_eq!(slice.next_header(), header.next_header);
+            assert_eq!(slice.spi(), header.spi);
+            assert_eq!(slice.sequence_number(), header.sequence_number);
+            assert_eq!(slice.raw_icv(), header.raw_icv());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(header in ip_auth_any()) {
+            let bytes = header.to_bytes();
+            assert_eq!(
+                header,
+                IpAuthHeaderSlice::from_slice(&bytes)
+                    .unwrap()
+                    .to_header()
+            );
+        }
     }
 }
