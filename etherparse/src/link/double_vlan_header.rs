@@ -10,7 +10,6 @@ pub struct DoubleVlanHeader {
 }
 
 impl DoubleVlanHeader {
-
     /// Serialized size of two VLAN headers in bytes/octets.
     pub const LEN: usize = 8;
 

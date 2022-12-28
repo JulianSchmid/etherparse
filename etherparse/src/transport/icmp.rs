@@ -16,7 +16,6 @@ pub struct IcmpEchoHeader {
 }
 
 impl IcmpEchoHeader {
-
     /// Serialized size of an IcmpEchoHeader header in bytes/octets.
     pub const LEN: usize = 4;
 

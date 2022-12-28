@@ -79,9 +79,8 @@ pub struct TcpHeader {
 }
 
 impl TcpHeader {
-
     /// Minimum length of a TCP header in bytes/octets.
-    pub const MIN_LEN: usize = 5*4;
+    pub const MIN_LEN: usize = 5 * 4;
 
     /// Maximum length of a TCP header in bytes/octets.
     ///
@@ -89,7 +88,7 @@ impl TcpHeader {
     /// that "data offset" can take (it is a 4 bit number so the max
     /// is 0b1111) and multiplying it by 4 as it describes the offset
     /// to the data in 4-bytes words.
-    pub const MAX_LEN: usize = 0b1111*4;
+    pub const MAX_LEN: usize = 0b1111 * 4;
 
     /// The minimum data offset size (size of the tcp header itself).
     pub const MIN_DATA_OFFSET: u8 = 5;

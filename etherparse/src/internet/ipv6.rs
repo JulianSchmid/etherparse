@@ -24,7 +24,6 @@ pub struct Ipv6Header {
 }
 
 impl Ipv6Header {
-
     /// Serialized size of an IPv6 header in bytes/octets.
     pub const LEN: usize = 40;
 

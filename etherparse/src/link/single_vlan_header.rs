@@ -14,7 +14,6 @@ pub struct SingleVlanHeader {
 }
 
 impl SingleVlanHeader {
-
     /// Serialized size of an VLAN header in bytes/octets.
     pub const LEN: usize = 4;
 
@@ -57,8 +56,7 @@ impl SingleVlanHeader {
         reader: &mut T,
     ) -> Result<SingleVlanHeader, io::Error> {
         let buffer = {
-            let mut buffer: [u8; SingleVlanHeader::LEN] =
-                [0; SingleVlanHeader::LEN];
+            let mut buffer: [u8; SingleVlanHeader::LEN] = [0; SingleVlanHeader::LEN];
             reader.read_exact(&mut buffer)?;
             buffer
         };
