@@ -111,7 +111,7 @@ mod ip_header {
 
                 // read error ipv4 extensions
                 if v6_exts.header_len() > 0 {
-                    IpHeader::from_slice(&buffer[..Ipv6Header::SERIALIZED_SIZE + 1]).unwrap_err();
+                    IpHeader::from_slice(&buffer[..Ipv6Header::LEN + 1]).unwrap_err();
                 }
             }
         }
@@ -174,7 +174,7 @@ mod ip_header {
 
                 // read error ipv4 extensions
                 if v6_exts.header_len() > 0 {
-                    let mut cursor = Cursor::new(&buffer[..Ipv6Header::SERIALIZED_SIZE + 1]);
+                    let mut cursor = Cursor::new(&buffer[..Ipv6Header::LEN + 1]);
                     IpHeader::read(&mut cursor).unwrap_err();
                 }
             }
@@ -237,7 +237,7 @@ mod ip_header {
 
                 // write error v6 extension headers
                 if v6_exts.header_len() > 0 {
-                    let mut writer = TestWriter::with_max_size(Ipv6Header::SERIALIZED_SIZE + 1);
+                    let mut writer = TestWriter::with_max_size(Ipv6Header::LEN + 1);
                     assert_eq!(
                         writer.error_kind(),
                         header.write(&mut writer).unwrap_err().io_error().unwrap().kind()
@@ -260,7 +260,7 @@ mod ip_header {
                 IpHeader::Version4(v4, v4_exts).header_len()
             );
             assert_eq!(
-                Ipv6Header::SERIALIZED_SIZE + v6_exts.header_len(),
+                Ipv6Header::LEN + v6_exts.header_len(),
                 IpHeader::Version6(v6, v6_exts).header_len()
             );
         }

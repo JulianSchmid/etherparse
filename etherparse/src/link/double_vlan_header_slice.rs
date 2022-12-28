@@ -15,9 +15,9 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         use err::double_vlan::{HeaderError::*, HeaderSliceError::*};
 
         // check length
-        if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
+        if slice.len() < DoubleVlanHeader::LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: DoubleVlanHeader::SERIALIZED_SIZE,
+                expected_min_len: DoubleVlanHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::VlanHeader,
             }));
@@ -27,8 +27,8 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         let result = DoubleVlanHeaderSlice {
             // SAFETY:
             // Safe as the slice length is checked is before to have
-            // at least the length of DoubleVlanHeader::SERIALIZED_SIZE (8)
-            slice: unsafe { from_raw_parts(slice.as_ptr(), DoubleVlanHeader::SERIALIZED_SIZE) },
+            // at least the length of DoubleVlanHeader::LEN (8)
+            slice: unsafe { from_raw_parts(slice.as_ptr(), DoubleVlanHeader::LEN) },
         };
 
         use ether_type::*;
@@ -56,12 +56,12 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
     pub fn outer(&self) -> SingleVlanHeaderSlice<'a> {
         // SAFETY:
         // Safe as the constructor checks that the slice has the length
-        // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
-        // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
+        // of DoubleVlanHeader::LEN (8) and the
+        // SingleVlanHeader::LEN has a size of 4.
         unsafe {
             SingleVlanHeaderSlice::from_slice_unchecked(from_raw_parts(
                 self.slice.as_ptr(),
-                SingleVlanHeader::SERIALIZED_SIZE,
+                SingleVlanHeader::LEN,
             ))
         }
     }
@@ -71,12 +71,12 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
     pub fn inner(&self) -> SingleVlanHeaderSlice<'a> {
         // SAFETY:
         // Safe as the constructor checks that the slice has the length
-        // of DoubleVlanHeader::SERIALIZED_SIZE (8) and the
-        // SingleVlanHeader::SERIALIZED_SIZE has a size of 4.
+        // of DoubleVlanHeader::LEN (8) and the
+        // SingleVlanHeader::LEN has a size of 4.
         unsafe {
             SingleVlanHeaderSlice::from_slice_unchecked(from_raw_parts(
-                self.slice.as_ptr().add(SingleVlanHeader::SERIALIZED_SIZE),
-                SingleVlanHeader::SERIALIZED_SIZE,
+                self.slice.as_ptr().add(SingleVlanHeader::LEN),
+                SingleVlanHeader::LEN,
             ))
         }
     }

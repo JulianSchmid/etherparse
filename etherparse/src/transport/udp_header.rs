@@ -17,6 +17,9 @@ impl UdpHeader {
     /// Serialized size of an UDP header in bytes/octets.
     pub const LEN: usize = 8;
 
+    #[deprecated(since = "0.14.0", note = "Use `UdpHeader::LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = UdpHeader::LEN;
+
     /// Returns an udp header for the given parameters
     pub fn without_ipv4_checksum(
         source_port: u16,
@@ -24,7 +27,7 @@ impl UdpHeader {
         payload_length: usize,
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload_length {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload_length));
         }
@@ -32,7 +35,7 @@ impl UdpHeader {
         Ok(UdpHeader {
             source_port,
             destination_port,
-            length: (UdpHeader::SERIALIZED_SIZE + payload_length) as u16, //payload plus udp header
+            length: (UdpHeader::LEN + payload_length) as u16, //payload plus udp header
             checksum: 0,
         })
     }
@@ -45,7 +48,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -53,7 +56,7 @@ impl UdpHeader {
         let mut result = UdpHeader {
             source_port,
             destination_port,
-            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
+            length: (UdpHeader::LEN + payload.len()) as u16, //payload plus udp header
             checksum: 0,
         };
         result.checksum =
@@ -78,7 +81,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -112,7 +115,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH <= payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -120,7 +123,7 @@ impl UdpHeader {
         let mut result = UdpHeader {
             source_port,
             destination_port,
-            length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16, //payload plus udp header
+            length: (UdpHeader::LEN + payload.len()) as u16, //payload plus udp header
             checksum: 0,
         };
         result.checksum =
@@ -145,7 +148,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -199,7 +202,7 @@ impl UdpHeader {
     pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         Ok((
             UdpHeaderSlice::from_slice(slice)?.to_header(),
-            &slice[UdpHeader::SERIALIZED_SIZE..],
+            &slice[UdpHeader::LEN..],
         ))
     }
 
@@ -232,11 +235,11 @@ impl UdpHeader {
 
     /// Length of the serialized header in bytes.
     ///
-    /// The function always returns the constant UdpHeader::SERIALIZED_SIZE
+    /// The function always returns the constant UdpHeader::LEN
     /// and exists to keep the methods consistent with other headers.
     #[inline]
     pub fn header_len(&self) -> usize {
-        UdpHeader::SERIALIZED_SIZE
+        UdpHeader::LEN
     }
 
     /// Returns the serialized form of the header as a statically
@@ -260,11 +263,6 @@ impl UdpHeader {
     }
 }
 
-impl SerializedSize for UdpHeader {
-    ///Size of the header itself
-    const SERIALIZED_SIZE: usize = 8;
-}
-
 #[cfg(test)]
 mod udp_header {
     use crate::{test_gens::*, *};
@@ -276,8 +274,8 @@ mod udp_header {
         fn without_ipv4_checksum(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
-            good_payload_length in 0..=((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE),
-            bad_payload_length in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            good_payload_length in 0..=((std::u16::MAX as usize) - UdpHeader::LEN),
+            bad_payload_length in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
 
             // normal working call
@@ -292,7 +290,7 @@ mod udp_header {
                     UdpHeader{
                         source_port,
                         destination_port,
-                        length: (UdpHeader::SERIALIZED_SIZE + good_payload_length) as u16,
+                        length: (UdpHeader::LEN + good_payload_length) as u16,
                         checksum: 0
                     }
                 );
@@ -343,7 +341,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -357,7 +355,7 @@ mod udp_header {
                     let mut expected = UdpHeader {
                         source_port,
                         destination_port,
-                        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                        length: (UdpHeader::LEN + payload.len()) as u16,
                         checksum: 0,
                     };
                     let checksum = expected_udp_ipv4_checksum(
@@ -377,7 +375,7 @@ mod udp_header {
                 let base = UdpHeader {
                     source_port: 0,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: 0,
                 };
                 // use the source port to force 0 as a result value
@@ -443,14 +441,14 @@ mod udp_header {
             dummy_checksum in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             {
                 let header = UdpHeader {
                     source_port,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
 
@@ -475,7 +473,7 @@ mod udp_header {
                 let base = UdpHeader {
                     source_port: 0,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
                 // use the source port to force 0 as a result value
@@ -512,7 +510,7 @@ mod udp_header {
                     source_port,
                     destination_port,
                     // udp header length itself is ok, but the payload not
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
                 // SAFETY: In case the error is not triggered
@@ -569,7 +567,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -583,7 +581,7 @@ mod udp_header {
                     let mut expected = UdpHeader {
                         source_port,
                         destination_port,
-                        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                        length: (UdpHeader::LEN + payload.len()) as u16,
                         checksum: 0,
                     };
                     let checksum = expected_udp_ipv6_checksum(
@@ -603,7 +601,7 @@ mod udp_header {
                 let base = UdpHeader {
                     source_port: 0,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: 0,
                 };
                 // use the source port to force 0 as a result value
@@ -668,7 +666,7 @@ mod udp_header {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            bad_len in ((std::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -682,7 +680,7 @@ mod udp_header {
                     let mut expected = UdpHeader {
                         source_port,
                         destination_port,
-                        length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                        length: (UdpHeader::LEN + payload.len()) as u16,
                         checksum: 0,
                     };
                     let checksum = expected_udp_ipv6_checksum(
@@ -702,7 +700,7 @@ mod udp_header {
                 let base = UdpHeader {
                     source_port: 0,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: 0,
                 };
                 // use the source port to force 0 as a result value
@@ -768,14 +766,14 @@ mod udp_header {
             dummy_checksum in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1)..=usize::MAX,
+            bad_len in ((std::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             {
                 let header = UdpHeader {
                     source_port,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
 
@@ -800,7 +798,7 @@ mod udp_header {
                 let base = UdpHeader {
                     source_port: 0,
                     destination_port,
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
                 // use the source port to force 0 as a result value
@@ -837,7 +835,7 @@ mod udp_header {
                     source_port,
                     destination_port,
                     // udp header length itself is ok, but the payload not
-                    length: (UdpHeader::SERIALIZED_SIZE + payload.len()) as u16,
+                    length: (UdpHeader::LEN + payload.len()) as u16,
                     checksum: dummy_checksum,
                 };
                 // SAFETY: In case the error is not triggered

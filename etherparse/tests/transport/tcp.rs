@@ -439,7 +439,7 @@ mod header {
 
             assert_eq!(options_length, header.options_len());
             assert_eq!(
-                (options_length / 4) as u8 + TCP_MINIMUM_DATA_OFFSET,
+                (options_length / 4) as u8 + TcpHeader::MIN_DATA_OFFSET,
                 header.data_offset()
             );
             assert_eq!(&expected_options[..options_length], header.options());
@@ -743,7 +743,7 @@ proptest! {
 proptest! {
     #[test]
     fn read_data_offset_too_small(ref input in tcp_any(),
-                  data_offset in 0..TCP_MINIMUM_DATA_OFFSET)
+                  data_offset in 0..TcpHeader::MIN_DATA_OFFSET)
     {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(60);
@@ -889,7 +889,7 @@ proptest! {
 proptest! {
     #[test]
     fn packet_slice_from_slice_data_offset_too_small(ref input in tcp_any(),
-                  data_offset in 0..TCP_MINIMUM_DATA_OFFSET)
+                  data_offset in 0..TcpHeader::MIN_DATA_OFFSET)
     {
         //serialize
         let mut buffer: Vec<u8> = Vec::with_capacity(60);

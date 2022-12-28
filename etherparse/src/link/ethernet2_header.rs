@@ -8,12 +8,14 @@ pub struct Ethernet2Header {
     pub ether_type: u16,
 }
 
-impl SerializedSize for Ethernet2Header {
-    ///Serialized size of the header in bytes.
-    const SERIALIZED_SIZE: usize = 14;
-}
-
 impl Ethernet2Header {
+
+    /// Serialized size of an Ethernet2 header in bytes/octets.
+    pub const LEN: usize = 14;
+
+    #[deprecated(since = "0.14.0", note = "Use `Ethernet2Header::LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = Ethernet2Header::LEN;
+
     /// Creates a ethernet slice from an other slice.
     #[deprecated(since = "0.10.1", note = "Use Ethernet2Header::from_slice instead.")]
     #[inline]
@@ -30,7 +32,7 @@ impl Ethernet2Header {
     ) -> Result<(Ethernet2Header, &[u8]), err::UnexpectedEndOfSliceError> {
         Ok((
             Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Ethernet2Header::SERIALIZED_SIZE..],
+            &slice[Ethernet2Header::LEN..],
         ))
     }
 
@@ -49,13 +51,13 @@ impl Ethernet2Header {
         reader: &mut T,
     ) -> Result<Ethernet2Header, std::io::Error> {
         let buffer = {
-            let mut buffer = [0; Ethernet2Header::SERIALIZED_SIZE];
+            let mut buffer = [0; Ethernet2Header::LEN];
             reader.read_exact(&mut buffer)?;
             buffer
         };
 
         Ok(
-            // SAFETY: Safe as the buffer contains exactly the needed Ethernet2Header::SERIALIZED_SIZE bytes.
+            // SAFETY: Safe as the buffer contains exactly the needed Ethernet2Header::LEN bytes.
             unsafe { Ethernet2HeaderSlice::from_slice_unchecked(&buffer) }.to_header(),
         )
     }
@@ -64,11 +66,11 @@ impl Ethernet2Header {
     pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], WriteError> {
         use self::WriteError::*;
         //length check
-        if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
-            Err(SliceTooSmall(Ethernet2Header::SERIALIZED_SIZE))
+        if slice.len() < Ethernet2Header::LEN {
+            Err(SliceTooSmall(Ethernet2Header::LEN))
         } else {
-            slice[..Ethernet2Header::SERIALIZED_SIZE].copy_from_slice(&self.to_bytes());
-            Ok(&mut slice[Ethernet2Header::SERIALIZED_SIZE..])
+            slice[..Ethernet2Header::LEN].copy_from_slice(&self.to_bytes());
+            Ok(&mut slice[Ethernet2Header::LEN..])
         }
     }
 
@@ -144,7 +146,7 @@ mod test {
                 assert_eq!(
                     Ethernet2Header::from_slice(&buffer[..len]),
                     Err(err::UnexpectedEndOfSliceError{
-                        expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                        expected_min_len: Ethernet2Header::LEN,
                         actual_len: len,
                         layer: err::Layer::Ethernet2Header
                     })
@@ -212,7 +214,7 @@ mod test {
                         .unwrap_err()
                         .slice_too_small_size()
                         .unwrap(),
-                    Ethernet2Header::SERIALIZED_SIZE
+                    Ethernet2Header::LEN
                 );
             }
         }

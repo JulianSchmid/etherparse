@@ -9,12 +9,14 @@ pub struct DoubleVlanHeader {
     pub inner: SingleVlanHeader,
 }
 
-impl SerializedSize for DoubleVlanHeader {
-    /// Serialized size of the header in bytes.
-    const SERIALIZED_SIZE: usize = 8;
-}
-
 impl DoubleVlanHeader {
+
+    /// Serialized size of two VLAN headers in bytes/octets.
+    pub const LEN: usize = 8;
+
+    #[deprecated(since = "0.14.0", note = "Use `DoubleVlanHeader::LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = DoubleVlanHeader::LEN;
+
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(since = "0.10.1", note = "Use SingleVlanHeader::from_slice instead.")]
     #[inline]
@@ -31,7 +33,7 @@ impl DoubleVlanHeader {
     ) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
         Ok((
             DoubleVlanHeaderSlice::from_slice(slice)?.to_header(),
-            &slice[DoubleVlanHeader::SERIALIZED_SIZE..],
+            &slice[DoubleVlanHeader::LEN..],
         ))
     }
 
@@ -104,7 +106,7 @@ mod test {
 
     #[test]
     fn constants() {
-        assert_eq!(8, DoubleVlanHeader::SERIALIZED_SIZE);
+        assert_eq!(8, DoubleVlanHeader::LEN);
     }
 
     proptest! {

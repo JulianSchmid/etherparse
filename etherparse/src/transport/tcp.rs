@@ -3,78 +3,101 @@ use super::super::*;
 use std::fmt::{Debug, Formatter};
 use std::slice::from_raw_parts;
 
-///The minimum size of the tcp header in bytes
+/// Deprecated use [`TcpHeader::MIN_LEN`] instead.
+#[deprecated(since = "0.14.0", note = "Use `TcpHeader::MIN_LEN` instead")]
 pub const TCP_MINIMUM_HEADER_SIZE: usize = 5 * 4;
-///The minimum data offset size (size of the tcp header itself).
+
+/// Deprecated use [`TcpHeader::MIN_DATA_OFFSET`] instead.
+#[deprecated(since = "0.14.0", note = "Use `TcpHeader::MIN_DATA_OFFSET` instead")]
 pub const TCP_MINIMUM_DATA_OFFSET: u8 = 5;
-///The maximum allowed value for the data offset (it is a 4 bit value).
+
+/// Deprecated use [`TcpHeader::MAX_DATA_OFFSET`] instead.
+#[deprecated(since = "0.14.0", note = "Use `TcpHeader::MAX_DATA_OFFSET` instead")]
 pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 
-///TCP header according to rfc 793.
+/// TCP header according to rfc 793.
 ///
-///Field descriptions copied from RFC 793 page 15++
+/// Field descriptions copied from RFC 793 page 15++
 #[derive(Clone)]
 pub struct TcpHeader {
-    ///The source port number.
+    /// The source port number.
     pub source_port: u16,
-    ///The destination port number.
+    /// The destination port number.
     pub destination_port: u16,
-    ///The sequence number of the first data octet in this segment (except when SYN is present).
+    /// The sequence number of the first data octet in this segment (except when SYN is present).
     ///
-    ///If SYN is present the sequence number is the initial sequence number (ISN)
-    ///and the first data octet is ISN+1.
-    ///[copied from RFC 793, page 16]
+    /// If SYN is present the sequence number is the initial sequence number (ISN)
+    /// and the first data octet is ISN+1.
+    /// [copied from RFC 793, page 16]
     pub sequence_number: u32,
-    ///If the ACK control bit is set this field contains the value of the
-    ///next sequence number the sender of the segment is expecting to
-    ///receive.
+    /// If the ACK control bit is set this field contains the value of the
+    /// next sequence number the sender of the segment is expecting to
+    /// receive.
     ///
-    ///Once a connection is established this is always sent.
+    /// Once a connection is established this is always sent.
     pub acknowledgment_number: u32,
-    ///The number of 32 bit words in the TCP Header.
+    /// The number of 32 bit words in the TCP Header.
     ///
-    ///This indicates where the data begins.  The TCP header (even one including options) is an
-    ///integral number of 32 bits long.
+    /// This indicates where the data begins.  The TCP header (even one including options) is an
+    /// integral number of 32 bits long.
     _data_offset: u8,
-    ///ECN-nonce - concealment protection (experimental: see RFC 3540)
+    /// ECN-nonce - concealment protection (experimental: see RFC 3540)
     pub ns: bool,
-    ///No more data from sender
+    /// No more data from sender
     pub fin: bool,
-    ///Synchronize sequence numbers
+    /// Synchronize sequence numbers
     pub syn: bool,
-    ///Reset the connection
+    /// Reset the connection
     pub rst: bool,
-    ///Push Function
+    /// Push Function
     pub psh: bool,
-    ///Acknowledgment field significant
+    /// Acknowledgment field significant
     pub ack: bool,
-    ///Urgent Pointer field significant
+    /// Urgent Pointer field significant
     pub urg: bool,
-    ///ECN-Echo (RFC 3168)
+    /// ECN-Echo (RFC 3168)
     pub ece: bool,
-    ///Congestion Window Reduced (CWR) flag
+    /// Congestion Window Reduced (CWR) flag
     ///
-    ///This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
+    /// This flag is set by the sending host to indicate that it received a TCP segment with the ECE flag set and had responded in congestion control mechanism (added to header by RFC 3168).
     pub cwr: bool,
-    ///The number of data octets beginning with the one indicated in the
-    ///acknowledgment field which the sender of this segment is willing to
-    ///accept.
+    /// The number of data octets beginning with the one indicated in the
+    /// acknowledgment field which the sender of this segment is willing to
+    /// accept.
     pub window_size: u16,
-    ///Checksum (16 bit one's complement) of the pseudo ip header, this tcp header and the payload.
+    /// Checksum (16 bit one's complement) of the pseudo ip header, this tcp header and the payload.
     pub checksum: u16,
-    ///This field communicates the current value of the urgent pointer as a
-    ///positive offset from the sequence number in this segment.
+    /// This field communicates the current value of the urgent pointer as a
+    /// positive offset from the sequence number in this segment.
     ///
-    ///The urgent pointer points to the sequence number of the octet following
-    ///the urgent data.  This field is only be interpreted in segments with
-    ///the URG control bit set.
+    /// The urgent pointer points to the sequence number of the octet following
+    /// the urgent data.  This field is only be interpreted in segments with
+    /// the URG control bit set.
     pub urgent_pointer: u16,
-    ///Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
+    /// Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
     options_buffer: [u8; 40],
 }
 
 impl TcpHeader {
-    ///Creates a TcpHeader with the given values and the rest initialized with default values.
+
+    /// Minimum length of a TCP header in bytes/octets.
+    pub const MIN_LEN: usize = 5*4;
+
+    /// Maximum length of a TCP header in bytes/octets.
+    ///
+    /// The length is obtained by multiplying the maximum value
+    /// that "data offset" can take (it is a 4 bit number so the max
+    /// is 0b1111) and multiplying it by 4 as it describes the offset
+    /// to the data in 4-bytes words.
+    pub const MAX_LEN: usize = 0b1111*4;
+
+    /// The minimum data offset size (size of the tcp header itself).
+    pub const MIN_DATA_OFFSET: u8 = 5;
+
+    /// The maximum allowed value for the data offset (it is a 4 bit value).
+    pub const MAX_DATA_OFFSET: u8 = 0xf;
+
+    /// Creates a TcpHeader with the given values and the rest initialized with default values.
     pub fn new(
         source_port: u16,
         destination_port: u16,
@@ -86,7 +109,7 @@ impl TcpHeader {
             destination_port,
             sequence_number,
             acknowledgment_number: 0,
-            _data_offset: TCP_MINIMUM_DATA_OFFSET,
+            _data_offset: TcpHeader::MIN_DATA_OFFSET,
             ns: false,
             fin: false,
             syn: false,
@@ -103,32 +126,32 @@ impl TcpHeader {
         }
     }
 
-    ///The number of 32 bit words in the TCP Header.
+    /// The number of 32 bit words in the TCP Header.
     ///
-    ///This indicates where the data begins.  The TCP header (even one including options) is an
-    ///integral number of 32 bits long.
+    /// This indicates where the data begins.  The TCP header (even one including options) is an
+    /// integral number of 32 bits long.
     pub fn data_offset(&self) -> u8 {
         self._data_offset
     }
 
-    ///Returns the length of the header including the options.
+    /// Returns the length of the header including the options.
     pub fn header_len(&self) -> u16 {
         u16::from(self._data_offset) * 4
     }
 
-    ///Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
+    /// Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
     pub fn options_len(&self) -> usize {
-        debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
-        debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
-        (self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize * 4
+        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
+        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
+        (self._data_offset - TcpHeader::MIN_DATA_OFFSET) as usize * 4
     }
 
-    ///Returns a slice containing the options of the header (size is determined via the data_offset field.
+    /// Returns a slice containing the options of the header (size is determined via the data_offset field.
     pub fn options(&self) -> &[u8] {
         &self.options_buffer[..self.options_len()]
     }
 
-    ///Sets the options (overwrites the current options) or returns an error when there is not enough space.
+    /// Sets the options (overwrites the current options) or returns an error when there is not enough space.
     pub fn set_options(&mut self, options: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
         //calculate the required size of the options
         use crate::TcpOptionElement::*;
@@ -151,7 +174,7 @@ impl TcpHeader {
         } else {
             //reset the options to null
             self.options_buffer = [0; 40];
-            self._data_offset = TCP_MINIMUM_DATA_OFFSET;
+            self._data_offset = TcpHeader::MIN_DATA_OFFSET;
 
             //write the options to the buffer
             //note to whoever: I would have prefered to use std::io::Cursor as it would be less error
@@ -239,7 +262,7 @@ impl TcpHeader {
             }
             //set the new data offset
             if i > 0 {
-                self._data_offset = (i / 4) as u8 + TCP_MINIMUM_DATA_OFFSET;
+                self._data_offset = (i / 4) as u8 + TcpHeader::MIN_DATA_OFFSET;
                 if i % 4 != 0 {
                     self._data_offset += 1;
                 }
@@ -249,7 +272,7 @@ impl TcpHeader {
         }
     }
 
-    ///Sets the options to the data given.
+    /// Sets the options to the data given.
     pub fn set_options_raw(&mut self, data: &[u8]) -> Result<(), TcpOptionWriteError> {
         //check length
         if self.options_buffer.len() < data.len() {
@@ -260,7 +283,7 @@ impl TcpHeader {
 
             //set data & data_offset
             self.options_buffer[..data.len()].copy_from_slice(data);
-            self._data_offset = (data.len() / 4) as u8 + TCP_MINIMUM_DATA_OFFSET;
+            self._data_offset = (data.len() / 4) as u8 + TcpHeader::MIN_DATA_OFFSET;
             if data.len() % 4 != 0 {
                 self._data_offset += 1;
             }
@@ -324,12 +347,12 @@ impl TcpHeader {
             checksum: u16::from_be_bytes([raw[16], raw[17]]),
             urgent_pointer: u16::from_be_bytes([raw[18], raw[19]]),
             options_buffer: {
-                if data_offset < TCP_MINIMUM_DATA_OFFSET {
+                if data_offset < TcpHeader::MIN_DATA_OFFSET {
                     return Err(ReadError::TcpDataOffsetTooSmall(data_offset));
                 } else {
                     let mut buffer: [u8; 40] = [0; 40];
                     //convert to bytes minus the tcp header size itself
-                    let len = ((data_offset - TCP_MINIMUM_DATA_OFFSET) as usize) * 4;
+                    let len = ((data_offset - TcpHeader::MIN_DATA_OFFSET) as usize) * 4;
                     if len > 0 {
                         reader.read_exact(&mut buffer[..len])?;
                     }
@@ -343,8 +366,8 @@ impl TcpHeader {
     /// Write the tcp header to a stream (does NOT calculate the checksum).
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         //check that the data offset is within range
-        debug_assert!(TCP_MINIMUM_DATA_OFFSET <= self._data_offset);
-        debug_assert!(self._data_offset <= TCP_MAXIMUM_DATA_OFFSET);
+        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
+        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
 
         let src_be = self.source_port.to_be_bytes();
         let dst_be = self.destination_port.to_be_bytes();
@@ -412,8 +435,8 @@ impl TcpHeader {
         ])?;
 
         //write options if the data_offset is large enough
-        if self._data_offset > TCP_MINIMUM_DATA_OFFSET {
-            let len = ((self._data_offset - TCP_MINIMUM_DATA_OFFSET) as usize) * 4;
+        if self._data_offset > TcpHeader::MIN_DATA_OFFSET {
+            let len = ((self._data_offset - TcpHeader::MIN_DATA_OFFSET) as usize) * 4;
             writer.write_all(&self.options_buffer[..len])?;
         }
         Ok(())
@@ -623,20 +646,20 @@ impl std::cmp::PartialEq for TcpHeader {
 
 impl std::cmp::Eq for TcpHeader {}
 
-///A slice containing an tcp header of a network package.
+/// A slice containing an tcp header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TcpHeaderSlice<'a> {
     slice: &'a [u8],
 }
 
 impl<'a> TcpHeaderSlice<'a> {
-    ///Creates a slice containing an tcp header.
+    /// Creates a slice containing an tcp header.
     pub fn from_slice(slice: &'a [u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < TCP_MINIMUM_HEADER_SIZE {
+        if slice.len() < TcpHeader::MIN_LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: TCP_MINIMUM_HEADER_SIZE,
+                expected_min_len: TcpHeader::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::TcpHeader,
             }));
@@ -644,11 +667,11 @@ impl<'a> TcpHeaderSlice<'a> {
 
         // SAFETY:
         // Safe as it is checked at the start of the function that the
-        // length of the slice is at least TCP_MINIMUM_HEADER_SIZE (20).
+        // length of the slice is at least TcpHeader::MIN_LEN (20).
         let data_offset = unsafe { (*slice.get_unchecked(12) & 0xf0) >> 4 };
         let len = data_offset as usize * 4;
 
-        if data_offset < TCP_MINIMUM_DATA_OFFSET {
+        if data_offset < TcpHeader::MIN_DATA_OFFSET {
             Err(ReadError::TcpDataOffsetTooSmall(data_offset))
         } else if slice.len() < len {
             Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
@@ -666,13 +689,13 @@ impl<'a> TcpHeaderSlice<'a> {
             })
         }
     }
-    ///Returns the slice containing the tcp header
+    /// Returns the slice containing the tcp header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
     }
 
-    ///Read the destination port number.
+    /// Read the destination port number.
     #[inline]
     pub fn source_port(&self) -> u16 {
         // SAFETY:
@@ -681,7 +704,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { get_unchecked_be_u16(self.slice.as_ptr()) }
     }
 
-    ///Read the destination port number.
+    /// Read the destination port number.
     #[inline]
     pub fn destination_port(&self) -> u16 {
         // SAFETY:
@@ -690,11 +713,11 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
-    ///Read the sequence number of the first data octet in this segment (except when SYN is present).
+    /// Read the sequence number of the first data octet in this segment (except when SYN is present).
     ///
-    ///If SYN is present the sequence number is the initial sequence number (ISN)
-    ///and the first data octet is ISN+1.
-    ///\[copied from RFC 793, page 16\]
+    /// If SYN is present the sequence number is the initial sequence number (ISN)
+    /// and the first data octet is ISN+1.
+    /// \[copied from RFC 793, page 16\]
     #[inline]
     pub fn sequence_number(&self) -> u32 {
         // SAFETY:
@@ -703,13 +726,13 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(4)) }
     }
 
-    ///Reads the acknowledgment number.
+    /// Reads the acknowledgment number.
     ///
-    ///If the ACK control bit is set this field contains the value of the
-    ///next sequence number the sender of the segment is expecting to
-    ///receive.
+    /// If the ACK control bit is set this field contains the value of the
+    /// next sequence number the sender of the segment is expecting to
+    /// receive.
     ///
-    ///Once a connection is established this is always sent.
+    /// Once a connection is established this is always sent.
     #[inline]
     pub fn acknowledgment_number(&self) -> u32 {
         // SAFETY:
@@ -718,10 +741,10 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { get_unchecked_be_u32(self.slice.as_ptr().add(8)) }
     }
 
-    ///Read the number of 32 bit words in the TCP Header.
+    /// Read the number of 32 bit words in the TCP Header.
     ///
-    ///This indicates where the data begins.  The TCP header (even one including options) is an
-    ///integral number of 32 bits long.
+    /// This indicates where the data begins.  The TCP header (even one including options) is an
+    /// integral number of 32 bits long.
     #[inline]
     pub fn data_offset(&self) -> u8 {
         // SAFETY:
@@ -730,7 +753,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { (*self.slice.get_unchecked(12) & 0b1111_0000) >> 4 }
     }
 
-    ///ECN-nonce - concealment protection (experimental: see RFC 3540)
+    /// ECN-nonce - concealment protection (experimental: see RFC 3540)
     #[inline]
     pub fn ns(&self) -> bool {
         // SAFETY:
@@ -739,7 +762,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(12) & 0b0000_0001) }
     }
 
-    ///Read the fin flag (no more data from sender).
+    /// Read the fin flag (no more data from sender).
     #[inline]
     pub fn fin(&self) -> bool {
         // SAFETY:
@@ -748,7 +771,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0001) }
     }
 
-    ///Reads the syn flag (synchronize sequence numbers).
+    /// Reads the syn flag (synchronize sequence numbers).
     #[inline]
     pub fn syn(&self) -> bool {
         // SAFETY:
@@ -757,7 +780,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0010) }
     }
 
-    ///Reads the rst flag (reset the connection).
+    /// Reads the rst flag (reset the connection).
     #[inline]
     pub fn rst(&self) -> bool {
         // SAFETY:
@@ -766,7 +789,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_0100) }
     }
 
-    ///Reads the psh flag (push function).
+    /// Reads the psh flag (push function).
     #[inline]
     pub fn psh(&self) -> bool {
         // SAFETY:
@@ -775,7 +798,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0000_1000) }
     }
 
-    ///Reads the ack flag (acknowledgment field significant).
+    /// Reads the ack flag (acknowledgment field significant).
     #[inline]
     pub fn ack(&self) -> bool {
         // SAFETY:
@@ -784,7 +807,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0001_0000) }
     }
 
-    ///Reads the urg flag (Urgent Pointer field significant).
+    /// Reads the urg flag (Urgent Pointer field significant).
     #[inline]
     pub fn urg(&self) -> bool {
         // SAFETY:
@@ -793,7 +816,7 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b0010_0000) }
     }
 
-    ///Read the ECN-Echo flag (RFC 3168).
+    /// Read the ECN-Echo flag (RFC 3168).
     #[inline]
     pub fn ece(&self) -> bool {
         // SAFETY:
@@ -815,9 +838,9 @@ impl<'a> TcpHeaderSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(13) & 0b1000_0000) }
     }
 
-    ///The number of data octets beginning with the one indicated in the
-    ///acknowledgment field which the sender of this segment is willing to
-    ///accept.
+    /// The number of data octets beginning with the one indicated in the
+    /// acknowledgment field which the sender of this segment is willing to
+    /// accept.
     #[inline]
     pub fn window_size(&self) -> u16 {
         u16::from_be_bytes(
@@ -828,7 +851,7 @@ impl<'a> TcpHeaderSlice<'a> {
         )
     }
 
-    ///Checksum (16 bit one's complement) of the pseudo ip header, this tcp header and the payload.
+    /// Checksum (16 bit one's complement) of the pseudo ip header, this tcp header and the payload.
     #[inline]
     pub fn checksum(&self) -> u16 {
         u16::from_be_bytes(
@@ -839,12 +862,12 @@ impl<'a> TcpHeaderSlice<'a> {
         )
     }
 
-    ///This field communicates the current value of the urgent pointer as a
-    ///positive offset from the sequence number in this segment.
+    /// This field communicates the current value of the urgent pointer as a
+    /// positive offset from the sequence number in this segment.
     ///
-    ///The urgent pointer points to the sequence number of the octet following
-    ///the urgent data.  This field is only be interpreted in segments with
-    ///the URG control bit set.
+    /// The urgent pointer points to the sequence number of the octet following
+    /// the urgent data.  This field is only be interpreted in segments with
+    /// the URG control bit set.
     #[inline]
     pub fn urgent_pointer(&self) -> u16 {
         u16::from_be_bytes(
@@ -855,19 +878,19 @@ impl<'a> TcpHeaderSlice<'a> {
         )
     }
 
-    ///Options of the header
+    /// Options of the header
     #[inline]
     pub fn options(&self) -> &[u8] {
-        &self.slice[TCP_MINIMUM_HEADER_SIZE..self.data_offset() as usize * 4]
+        &self.slice[TcpHeader::MIN_LEN..self.data_offset() as usize * 4]
     }
 
-    ///Returns an iterator that allows to iterate through all known TCP header options.
+    /// Returns an iterator that allows to iterate through all known TCP header options.
     #[inline]
     pub fn options_iterator(&self) -> TcpOptionsIterator {
         TcpOptionsIterator::from_slice(self.options())
     }
 
-    ///Decode all the fields and copy the results to a TcpHeader struct
+    /// Decode all the fields and copy the results to a TcpHeader struct
     pub fn to_header(&self) -> TcpHeader {
         TcpHeader {
             source_port: self.source_port(),
@@ -898,7 +921,7 @@ impl<'a> TcpHeaderSlice<'a> {
         }
     }
 
-    ///Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
+    /// Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(
         &self,
         ip_header: &Ipv4HeaderSlice,
@@ -907,7 +930,7 @@ impl<'a> TcpHeaderSlice<'a> {
         self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
-    ///Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
+    /// Calculates the checksum for the current header in ipv4 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4_raw(
         &self,
         source_ip: [u8; 4],
@@ -931,7 +954,7 @@ impl<'a> TcpHeaderSlice<'a> {
         ))
     }
 
-    ///Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
+    /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(
         &self,
         ip_header: &Ipv6HeaderSlice,
@@ -940,7 +963,7 @@ impl<'a> TcpHeaderSlice<'a> {
         self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
-    ///Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
+    /// Calculates the checksum for the current header in ipv6 mode and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv6_raw(
         &self,
         source: [u8; 16],
@@ -1008,22 +1031,22 @@ pub enum TcpOptionElement {
     Timestamp(u32, u32),
 }
 
-///Errors that can occour while reading the options of a TCP header.
+/// Errors that can occour while reading the options of a TCP header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionReadError {
-    ///Returned if an option id was read, but there was not enough memory in the options left to completely read it.
+    /// Returned if an option id was read, but there was not enough memory in the options left to completely read it.
     UnexpectedEndOfSlice {
         option_id: u8,
         expected_len: u8,
         actual_len: usize,
     },
 
-    ///Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
+    /// Returned if the option as an unexpected size argument (e.g. != 4 for maximum segment size).
     UnexpectedSize { option_id: u8, size: u8 },
 
-    ///Returned if an unknown tcp header option is encountered.
+    /// Returned if an unknown tcp header option is encountered.
     ///
-    ///The first element is the identifier and the slice contains the rest of data left in the options.
+    /// The first element is the identifier and the slice contains the rest of data left in the options.
     UnknownId(u8),
 }
 
@@ -1058,14 +1081,14 @@ impl core::fmt::Display for TcpOptionReadError {
     }
 }
 
-///Errors that can occour when setting the options of a tcp header.
+/// Errors that can occour when setting the options of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionWriteError {
-    ///There is not enough memory to store all options in the options section of the header (maximum 40 bytes).
+    /// There is not enough memory to store all options in the options section of the header (maximum 40 bytes).
     ///
-    ///The options size is limited by the 4 bit data_offset field in the header which describes
-    ///the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
-    ///part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself).
+    /// The options size is limited by the 4 bit data_offset field in the header which describes
+    /// the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
+    /// part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself).
     NotEnoughSpace(usize),
 }
 
@@ -1166,12 +1189,12 @@ pub mod tcp_option {
 }
 
 impl<'a> TcpOptionsIterator<'a> {
-    ///Creates an options iterator from a slice containing encoded tcp options.
+    /// Creates an options iterator from a slice containing encoded tcp options.
     pub fn from_slice(options: &'a [u8]) -> TcpOptionsIterator<'a> {
         TcpOptionsIterator { options }
     }
 
-    ///Returns the non processed part of the options slice.
+    /// Returns the non processed part of the options slice.
     pub fn rest(&self) -> &'a [u8] {
         self.options
     }

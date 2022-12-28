@@ -543,7 +543,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn tcp_any()
-        (data_offset in TCP_MINIMUM_DATA_OFFSET..(TCP_MAXIMUM_DATA_OFFSET + 1))
+        (data_offset in TcpHeader::MIN_DATA_OFFSET..(TcpHeader::MAX_DATA_OFFSET + 1))
         (
             source_port in any::<u16>(),
             destination_port in any::<u16>(),

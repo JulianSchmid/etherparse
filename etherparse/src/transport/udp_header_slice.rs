@@ -14,9 +14,9 @@ impl<'a> UdpHeaderSlice<'a> {
         slice: &'a [u8],
     ) -> Result<UdpHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        if slice.len() < UdpHeader::SERIALIZED_SIZE {
+        if slice.len() < UdpHeader::LEN {
             return Err(err::UnexpectedEndOfSliceError {
-                expected_min_len: UdpHeader::SERIALIZED_SIZE,
+                expected_min_len: UdpHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::UdpHeader,
             });
@@ -26,8 +26,8 @@ impl<'a> UdpHeaderSlice<'a> {
         Ok(UdpHeaderSlice {
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // UdpHeader::SERIALIZED_SIZE (8) before this.
-            slice: unsafe { from_raw_parts(slice.as_ptr(), UdpHeader::SERIALIZED_SIZE) },
+            // UdpHeader::LEN (8) before this.
+            slice: unsafe { from_raw_parts(slice.as_ptr(), UdpHeader::LEN) },
         })
     }
 
@@ -42,7 +42,7 @@ impl<'a> UdpHeaderSlice<'a> {
     pub fn source_port(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of UdpHeader::LEN (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr()) }
     }
 
@@ -51,7 +51,7 @@ impl<'a> UdpHeaderSlice<'a> {
     pub fn destination_port(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of UdpHeader::LEN (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
@@ -60,7 +60,7 @@ impl<'a> UdpHeaderSlice<'a> {
     pub fn length(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of UdpHeader::LEN (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
 
@@ -69,7 +69,7 @@ impl<'a> UdpHeaderSlice<'a> {
     pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of UdpHeader::SERIALIZED_SIZE (8).
+        // at least the length of UdpHeader::LEN (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(6)) }
     }
 

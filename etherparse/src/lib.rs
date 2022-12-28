@@ -300,11 +300,6 @@ pub use crate::packet_slicing::*;
 
 pub mod packet_filter;
 
-///Contains the size when serialized.
-pub trait SerializedSize {
-    const SERIALIZED_SIZE: usize;
-}
-
 /// Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {

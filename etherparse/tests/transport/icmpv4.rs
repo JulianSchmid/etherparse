@@ -346,7 +346,7 @@ mod timestamp_message {
     use super::*;
     #[test]
     fn constants() {
-        assert_eq!(20, TimestampMessage::SERIALIZED_SIZE);
+        assert_eq!(20, TimestampMessage::LEN);
     }
 
     proptest! {
@@ -787,7 +787,7 @@ mod icmpv4_header {
                 |v| (*v != icmpv4::TYPE_TIMESTAMP_REPLY && *v != icmpv4::TYPE_TIMESTAMP)
             ),
             non_zero_code in 1u8..=u8::MAX,
-            bytes in any::<[u8;icmpv4::TimestampMessage::SERIALIZED_SIZE]>()
+            bytes in any::<[u8;icmpv4::TimestampMessage::LEN]>()
         ) {
             for (type_u8, code_u8) in [
                 // non timestamp
@@ -1206,7 +1206,7 @@ mod icmpv4_slice {
                 assert_matches!(
                     Icmpv4Slice::from_slice(&bytes[..bad_len]),
                     Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::SERIALIZED_SIZE,
+                        expected: TimestampMessage::LEN,
                         actual: _
                     })
                 );
@@ -1217,7 +1217,7 @@ mod icmpv4_slice {
                 assert_matches!(
                     Icmpv4Slice::from_slice(&bytes[..bad_len]),
                     Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::SERIALIZED_SIZE,
+                        expected: TimestampMessage::LEN,
                         actual: _
                     })
                 );

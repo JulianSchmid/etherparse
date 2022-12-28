@@ -45,6 +45,7 @@ impl Ipv4Header {
     /// many 4 bytes words are present in the header.
     pub const MAX_LEN: usize = 0b1111 * 4;
 
+    /// Deprecated use [`Ipv4Header::MIN_LEN`] instead.
     #[deprecated(since = "0.14.0", note = "Use `Ipv4Header::MIN_LEN` instead")]
     pub const SERIALIZED_SIZE: usize = Ipv4Header::MIN_LEN;
 

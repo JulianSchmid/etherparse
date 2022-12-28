@@ -14,9 +14,9 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         slice: &'a [u8],
     ) -> Result<SingleVlanHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        if slice.len() < SingleVlanHeader::SERIALIZED_SIZE {
+        if slice.len() < SingleVlanHeader::LEN {
             return Err(err::UnexpectedEndOfSliceError {
-                expected_min_len: SingleVlanHeader::SERIALIZED_SIZE,
+                expected_min_len: SingleVlanHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::VlanHeader,
             });
@@ -26,8 +26,8 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         Ok(SingleVlanHeaderSlice::<'a> {
             // SAFETY:
             // Safe as the slice length is checked beforehand to have
-            // at least the length of SingleVlanHeader::SERIALIZED_SIZE (4)
-            slice: unsafe { from_raw_parts(slice.as_ptr(), SingleVlanHeader::SERIALIZED_SIZE) },
+            // at least the length of SingleVlanHeader::LEN (4)
+            slice: unsafe { from_raw_parts(slice.as_ptr(), SingleVlanHeader::LEN) },
         })
     }
 
@@ -41,7 +41,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     /// # Safety
     ///
     /// The caller must ensured that the given slice has the length of
-    /// [`SingleVlanHeader::SERIALIZED_SIZE`]
+    /// [`SingleVlanHeader::LEN`]
     #[inline]
     pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> SingleVlanHeaderSlice {
         SingleVlanHeaderSlice { slice }
