@@ -14,7 +14,6 @@ pub struct UdpHeader {
 }
 
 impl UdpHeader {
-
     /// Serialized size of an UDP header in bytes/octets.
     pub const LEN: usize = 8;
 
@@ -189,7 +188,9 @@ impl UdpHeader {
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[deprecated(since = "0.10.1", note = "Use UdpHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::UnexpectedEndOfSliceError> {
+    pub fn read_from_slice(
+        slice: &[u8],
+    ) -> Result<(UdpHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         UdpHeader::from_slice(slice)
     }
 
@@ -266,7 +267,7 @@ impl SerializedSize for UdpHeader {
 
 #[cfg(test)]
 mod udp_header {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::Cursor;
 

@@ -366,21 +366,20 @@ impl<'a> CursorSlice<'a> {
         match outer.ether_type() {
             //in case of a double vlan header continue with the inner
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                
                 self.move_by_slice(outer.slice());
                 let inner = SingleVlanHeaderSlice::from_slice(self.slice)
                     .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
                 self.move_by_slice(inner.slice());
-                
+
                 let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice{
+                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
                     // SAFETY: Safe as the lenght of the slice was previously verified.
                     slice: unsafe {
                         core::slice::from_raw_parts(
                             outer.slice().as_ptr(),
-                            outer.slice().len() + inner.slice().len()
+                            outer.slice().len() + inner.slice().len(),
                         )
-                    }
+                    },
                 }));
 
                 match inner_ether_type {
@@ -439,15 +438,16 @@ impl<'a> CursorSlice<'a> {
 
         // slice extensions
         let (ip_ext, protocol, rest) =
-            Ipv4ExtensionsSlice::from_slice(ip_header.protocol(), self.slice)
-                .map_err(|err| {
-                    use err::ip_auth::HeaderSliceError as I;
-                    use ReadError as O;
-                    match err {
-                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err.add_offset(self.offset)),
-                        I::Content(err) => O::IpAuthHeader(err),
+            Ipv4ExtensionsSlice::from_slice(ip_header.protocol(), self.slice).map_err(|err| {
+                use err::ip_auth::HeaderSliceError as I;
+                use ReadError as O;
+                match err {
+                    I::UnexpectedEndOfSlice(err) => {
+                        O::UnexpectedEndOfSlice(err.add_offset(self.offset))
                     }
-                })?;
+                    I::Content(err) => O::IpAuthHeader(err),
+                }
+            })?;
 
         // set the new data
         self.move_to_slice(rest);

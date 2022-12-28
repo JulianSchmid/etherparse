@@ -10,7 +10,9 @@ pub struct Ipv6FragmentHeaderSlice<'a> {
 
 impl<'a> Ipv6FragmentHeaderSlice<'a> {
     /// Creates a hop by hop header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6FragmentHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<Ipv6FragmentHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         // the fragmentation header has the exact size of 8 bytes
         if slice.len() < 8 {
             Err(err::UnexpectedEndOfSliceError {

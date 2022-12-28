@@ -33,18 +33,17 @@ pub struct Ipv4Header {
 const IPV4_MAX_OPTIONS_LENGTH: usize = 10 * 4;
 
 impl Ipv4Header {
-
     /// Minimum length of an IPv4 header in bytes/octets.
     pub const MIN_LEN: usize = 20;
 
     /// Maximum length of an IPv4 header in bytes/octets.
-    /// 
+    ///
     /// This number is calculated by taking the maximum value
     /// that the "internet header length" field supports (0xf,
     /// as the field is only 4 bits long) and multiplying it
     /// with 4 as the "internet header length" specifies how
     /// many 4 bytes words are present in the header.
-    pub const MAX_LEN: usize = 0b1111*4;
+    pub const MAX_LEN: usize = 0b1111 * 4;
 
     #[deprecated(since = "0.14.0", note = "Use `Ipv4Header::MIN_LEN` instead")]
     pub const SERIALIZED_SIZE: usize = Ipv4Header::MIN_LEN;
@@ -151,7 +150,9 @@ impl Ipv4Header {
     }
 
     /// Reads an IPv4 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
         use err::ipv4::HeaderReadError::*;
 
         let mut first_byte: [u8; 1] = [0; 1];
@@ -177,7 +178,9 @@ impl Ipv4Header {
         // read only after the internet header length was read)
         let mut header_raw = [0u8; 20];
         header_raw[0] = first_byte;
-        reader.read_exact(&mut header_raw[1..]).map_err(|err| Io(err))?;
+        reader
+            .read_exact(&mut header_raw[1..])
+            .map_err(|err| Io(err))?;
 
         let ihl = header_raw[0] & 0xf;
 
@@ -236,7 +239,9 @@ impl Ipv4Header {
 
                 let options_len = usize::from(ihl - 5) * 4;
                 if options_len > 0 {
-                    reader.read_exact(&mut values[..options_len]).map_err(|err| Io(err))?;
+                    reader
+                        .read_exact(&mut values[..options_len])
+                        .map_err(|err| Io(err))?;
                 }
                 values
             },
@@ -280,10 +285,9 @@ impl Ipv4Header {
         self.write_ipv4_header_internal(writer, self.header_checksum)
     }
 
-    /// Returns the serialized header (note that this method does NOT 
+    /// Returns the serialized header (note that this method does NOT
     /// update & calculate the checksum).
     pub fn to_bytes(&self) -> Result<ArrayVec<u8, { Ipv4Header::MAX_LEN }>, ValueError> {
-
         //check ranges
         self.check_ranges()?;
 
@@ -338,7 +342,9 @@ impl Ipv4Header {
 
         // SAFETY: Safe as header_len() can never exceed the maximum length of an
         // IPv4 header which is the upper limit of the array vec.
-        unsafe { header_raw.set_len(self.header_len()); }
+        unsafe {
+            header_raw.set_len(self.header_len());
+        }
 
         Ok(header_raw)
     }
@@ -481,8 +487,14 @@ impl Debug for Ipv4Header {
     fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
         let mut s = f.debug_struct("Ipv4Header");
         s.field("ihl", &self.ihl());
-        s.field("differentiated_services_code_point", &self.differentiated_services_code_point);
-        s.field("explicit_congestion_notification", &self.explicit_congestion_notification);
+        s.field(
+            "differentiated_services_code_point",
+            &self.differentiated_services_code_point,
+        );
+        s.field(
+            "explicit_congestion_notification",
+            &self.explicit_congestion_notification,
+        );
         s.field("payload_len", &self.payload_len);
         s.field("identification", &self.identification);
         s.field("dont_fragment", &self.dont_fragment);
@@ -521,9 +533,9 @@ impl std::cmp::Eq for Ipv4Header {}
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
-    use proptest::prelude::*;
+    use crate::{test_gens::*, *};
     use arrayvec::ArrayVec;
+    use proptest::prelude::*;
     use std::io::Cursor;
 
     #[test]
@@ -858,7 +870,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ipv4_any()) {
             use err::ipv4::HeaderError::*;
@@ -943,7 +955,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_and_read_without_version(header in ipv4_any()) {
             use err::ipv4::HeaderError::*;
@@ -1075,7 +1087,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn check_ranges(
             base_header in ipv4_any(),
@@ -1085,15 +1097,15 @@ mod test {
         ) {
             use crate::ErrorField::*;
             use crate::ValueError::*;
-        
+
             fn test_range_methods(input: &Ipv4Header, expected: ValueError) {
-                
+
                 // check_ranges
                 assert_eq!(expected.clone(), input.check_ranges().unwrap_err());
 
                 //calc_header_checksum
                 assert_eq!(expected.clone(), input.calc_header_checksum().unwrap_err());
-                
+
                 //write
                 {
                     let mut buffer: Vec<u8> = Vec::new();

@@ -16,7 +16,9 @@ pub struct IpAuthHeaderSlice<'a> {
 
 impl<'a> IpAuthHeaderSlice<'a> {
     /// Creates a ip authentication header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<IpAuthHeaderSlice<'a>, err::ip_auth::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<IpAuthHeaderSlice<'a>, err::ip_auth::HeaderSliceError> {
         use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
 
         // check slice length
@@ -133,12 +135,12 @@ impl<'a> IpAuthHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
-    use proptest::prelude::*;
     use crate::test_gens::*;
     use arrayvec::ArrayVec;
+    use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
+    use proptest::prelude::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(input in ip_auth_any()) {
             let buffer = input.to_bytes();
@@ -160,7 +162,7 @@ mod test {
         assert_eq!(slice.clone(), slice);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ip_auth_any()) {
 
@@ -170,7 +172,7 @@ mod test {
                 bytes.extend(header.to_bytes());
                 bytes.push(1);
                 bytes.push(2);
-                
+
                 let slice = IpAuthHeaderSlice::from_slice(&bytes).unwrap();
                 assert_eq!(slice.slice(), &bytes[..bytes.len() - 2]);
             }
@@ -207,7 +209,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice_unchecked(header in ip_auth_any()) {
             let bytes = header.to_bytes();
@@ -218,7 +220,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(header in ip_auth_any()) {
             let bytes = header.to_bytes();
@@ -231,7 +233,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(header in ip_auth_any()) {
             let bytes = header.to_bytes();

@@ -8,7 +8,6 @@ pub enum HeaderError {
     ZeroPayloadLen,
 }
 
-
 impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         use HeaderError::*;
@@ -26,7 +25,7 @@ impl std::error::Error for HeaderError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeaderError::*};
+    use super::HeaderError::*;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -35,10 +34,7 @@ mod tests {
 
     #[test]
     fn debug() {
-        assert_eq!(
-            "ZeroPayloadLen",
-            format!("{:?}", ZeroPayloadLen)
-        );
+        assert_eq!("ZeroPayloadLen", format!("{:?}", ZeroPayloadLen));
     }
 
     #[test]

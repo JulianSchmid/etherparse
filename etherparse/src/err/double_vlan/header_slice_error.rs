@@ -1,4 +1,3 @@
-
 use super::HeaderError;
 use crate::err::UnexpectedEndOfSliceError;
 
@@ -70,14 +69,21 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 }).add_slice_offset(200),
-            Content(HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 })
+            Content(HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 1
+            })
+            .add_slice_offset(200),
+            Content(HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 1
+            })
         );
     }
 
     #[test]
     fn debug() {
-        let err = HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 };
+        let err = HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1,
+        };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -86,7 +92,9 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 });
+        let err = Content(HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1,
+        });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -113,7 +121,9 @@ mod tests {
             )
         );
         {
-            let err = HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 };
+            let err = HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 1,
+            };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -127,10 +137,10 @@ mod tests {
         })
         .source()
         .is_none());
-        assert!(
-            Content(HeaderError::NonVlanEtherType{ unexpected_ether_type: 1 })
-                .source()
-                .is_some()
-        );
+        assert!(Content(HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1
+        })
+        .source()
+        .is_some());
     }
 }

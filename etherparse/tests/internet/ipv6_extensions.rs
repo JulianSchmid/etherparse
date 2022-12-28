@@ -457,10 +457,8 @@ impl ExtensionTestHeaders {
                         len = A::MAX_ICV_LEN;
                     }
                     let raw_icv: [u8; A::MAX_ICV_LEN] = [0; A::MAX_ICV_LEN];
-                    self.data.auth = Some(
-                        IpAuthHeader::new(next_header, 123, 234, &raw_icv[..len])
-                            .unwrap(),
-                    );
+                    self.data.auth =
+                        Some(IpAuthHeader::new(next_header, 123, 234, &raw_icv[..len]).unwrap());
                     true
                 } else {
                     false

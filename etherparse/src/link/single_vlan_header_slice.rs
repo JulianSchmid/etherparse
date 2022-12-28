@@ -106,7 +106,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
 
     proptest! {

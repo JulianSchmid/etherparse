@@ -36,18 +36,18 @@ impl IpHeader {
                             I::Content(err) => O::Ipv4Header(err),
                         }
                     })?;
-                    Ipv4Extensions::from_slice(header.protocol, rest).map(
-                        |(ext, next_protocol, rest)| {
+                    Ipv4Extensions::from_slice(header.protocol, rest)
+                        .map(|(ext, next_protocol, rest)| {
                             (IpHeader::Version4(header, ext), next_protocol, rest)
-                        },
-                    ).map_err(|err| {
-                        use err::ip_auth::HeaderSliceError as I;
-                        use ReadError as O;
-                        match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
-                            I::Content(err) => O::IpAuthHeader(err),
-                        }
-                    })
+                        })
+                        .map_err(|err| {
+                            use err::ip_auth::HeaderSliceError as I;
+                            use ReadError as O;
+                            match err {
+                                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                                I::Content(err) => O::IpAuthHeader(err),
+                            }
+                        })
                 }
                 6 => {
                     let (header, rest) = Ipv6Header::from_slice(slice)?;
@@ -73,15 +73,14 @@ impl IpHeader {
         };
         match value >> 4 {
             4 => {
-                let header = Ipv4Header::read_without_version(reader, value & 0xf)
-                    .map_err(|err| {
-                            use err::ipv4::HeaderReadError::*;
-                            match err {
-                                Io(err) => ReadError::IoError(err),
-                                Content(err) => ReadError::Ipv4Header(err)
-                            }
+                let header =
+                    Ipv4Header::read_without_version(reader, value & 0xf).map_err(|err| {
+                        use err::ipv4::HeaderReadError::*;
+                        match err {
+                            Io(err) => ReadError::IoError(err),
+                            Content(err) => ReadError::Ipv4Header(err),
                         }
-                    )?;
+                    })?;
                 Ipv4Extensions::read(reader, header.protocol)
                     .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
                     .map_err(|err| {

@@ -107,7 +107,7 @@ impl SingleVlanHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 

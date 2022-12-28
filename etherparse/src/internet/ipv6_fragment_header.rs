@@ -19,7 +19,6 @@ pub struct Ipv6FragmentHeader {
 }
 
 impl Ipv6FragmentHeader {
-
     /// Length of the serialized header.
     pub const LEN: usize = 8;
 
@@ -41,7 +40,9 @@ impl Ipv6FragmentHeader {
     }
 
     /// Read an Ipv6FragmentHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6FragmentHeader, &[u8]), err::UnexpectedEndOfSliceError> {
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(Ipv6FragmentHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         let s = Ipv6FragmentHeaderSlice::from_slice(slice)?;
         let rest = &slice[8..];
         let header = s.to_header();

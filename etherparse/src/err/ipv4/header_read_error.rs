@@ -55,10 +55,9 @@ impl std::error::Error for HeaderReadError {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use super::{*, HeaderReadError::*};
+    use super::{HeaderReadError::*, *};
 
     #[test]
     fn debug() {
@@ -90,12 +89,12 @@ mod test {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).source().is_some()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .source()
+        .is_some());
         assert!(
             Content(HeaderError::UnexpectedVersion { version_number: 6 })
                 .source()
@@ -105,12 +104,12 @@ mod test {
 
     #[test]
     fn io_error() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).io_error().is_some()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .io_error()
+        .is_some());
         assert!(
             Content(HeaderError::UnexpectedVersion { version_number: 6 })
                 .io_error()
@@ -125,14 +124,12 @@ mod test {
             Io(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
-            )).content_error()
+            ))
+            .content_error()
         );
         {
             let err = HeaderError::UnexpectedVersion { version_number: 6 };
-            assert_eq!(
-                Some(err.clone()),
-                Content(err.clone()).content_error()
-            );
+            assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }
     }
 }

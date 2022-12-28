@@ -230,10 +230,7 @@ fn ipv4_udp() {
 
     //check the deserialized size
     let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
-    assert_eq!(
-        expected_ip_size + Ipv4Header::MIN_LEN,
-        serialized.len()
-    );
+    assert_eq!(expected_ip_size + Ipv4Header::MIN_LEN, serialized.len());
 
     //deserialize and check that everything is as expected
     use std::io::{Cursor, Read};
@@ -348,10 +345,7 @@ fn ipv4_custom_udp() {
 
     //check the deserialized size
     let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
-    assert_eq!(
-        expected_ip_size + Ipv4Header::MIN_LEN,
-        serialized.len()
-    );
+    assert_eq!(expected_ip_size + Ipv4Header::MIN_LEN, serialized.len());
 
     //deserialize and check that everything is as expected
     use std::io::{Cursor, Read};
@@ -1053,10 +1047,7 @@ fn tcp_options() {
 fn size() {
     //ipv4 no vlan
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + Ipv4Header::MIN_LEN
-            + UdpHeader::SERIALIZED_SIZE
-            + 123,
+        Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::MIN_LEN + UdpHeader::SERIALIZED_SIZE + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
             .udp(22, 23)

@@ -10,7 +10,9 @@ pub struct UdpHeaderSlice<'a> {
 impl<'a> UdpHeaderSlice<'a> {
     /// Creates a slice containing an udp header.
     #[inline]
-    pub fn from_slice(slice: &'a [u8]) -> Result<UdpHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<UdpHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
         if slice.len() < UdpHeader::SERIALIZED_SIZE {
             return Err(err::UnexpectedEndOfSliceError {
@@ -85,7 +87,7 @@ impl<'a> UdpHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
 
     proptest! {

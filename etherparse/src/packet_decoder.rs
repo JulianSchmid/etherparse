@@ -126,8 +126,7 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
-                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)
-                    .map_err(|err| {
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest).map_err(|err| {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
@@ -292,8 +291,7 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
                 let (ip_ext, ip_protocol, ip_ext_rest) =
-                    Ipv4Extensions::from_slice(ip.protocol, ip_rest)
-                    .map_err(|err| {
+                    Ipv4Extensions::from_slice(ip.protocol, ip_rest).map_err(|err| {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {

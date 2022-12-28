@@ -18,13 +18,17 @@ impl DoubleVlanHeader {
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(since = "0.10.1", note = "Use SingleVlanHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
+    pub fn read_from_slice(
+        slice: &[u8],
+    ) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
         DoubleVlanHeader::from_slice(slice)
     }
 
     /// Read an DoubleVlanHeader from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(DoubleVlanHeader, &[u8]), err::double_vlan::HeaderSliceError> {
         Ok((
             DoubleVlanHeaderSlice::from_slice(slice)?.to_header(),
             &slice[DoubleVlanHeader::SERIALIZED_SIZE..],
@@ -45,15 +49,12 @@ impl DoubleVlanHeader {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 Ok(DoubleVlanHeader {
                     outer,
-                    inner: SingleVlanHeader::read(reader)
-                        .map_err(Io)?,
+                    inner: SingleVlanHeader::read(reader).map_err(Io)?,
                 })
             }
-            value => {
-                Err(Content(NonVlanEtherType{
-                    unexpected_ether_type: value
-                }))
-            }
+            value => Err(Content(NonVlanEtherType {
+                unexpected_ether_type: value,
+            })),
         }
     }
 
@@ -97,7 +98,7 @@ impl Default for DoubleVlanHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 

@@ -38,12 +38,11 @@ impl VlanHeader {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use proptest::prelude::*;
     use crate::test_gens::*;
+    use proptest::prelude::*;
 
     #[test]
     fn constants() {
