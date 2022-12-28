@@ -12,9 +12,9 @@ fn eth_ipv4_udp() {
         .unwrap();
 
     //check the deserialized size
-    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
+    let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(
-        expected_ip_size + Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::MIN_LEN,
+        expected_ip_size + Ethernet2Header::LEN + Ipv4Header::MIN_LEN,
         serialized.len()
     );
 
@@ -163,7 +163,7 @@ fn ipv6() {
     // check size
     assert_eq!(
         builder.size(in_payload.len()),
-        Ipv6Header::SERIALIZED_SIZE + auth_ext.header_len() + in_payload.len()
+        Ipv6Header::LEN + auth_ext.header_len() + in_payload.len()
     );
 
     // write
@@ -171,7 +171,7 @@ fn ipv6() {
 
     //check the deserialized size
     assert_eq!(
-        Ipv6Header::SERIALIZED_SIZE + auth_ext.header_len() + in_payload.len(),
+        Ipv6Header::LEN + auth_ext.header_len() + in_payload.len(),
         serialized.len()
     );
 
@@ -229,7 +229,7 @@ fn ipv4_udp() {
         .unwrap();
 
     //check the deserialized size
-    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
+    let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(expected_ip_size + Ipv4Header::MIN_LEN, serialized.len());
 
     //deserialize and check that everything is as expected
@@ -283,9 +283,9 @@ fn ipv6_udp() {
     .unwrap();
 
     //check the deserialized size
-    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
+    let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(
-        expected_ip_size + Ipv6Header::SERIALIZED_SIZE,
+        expected_ip_size + Ipv6Header::LEN,
         serialized.len()
     );
 
@@ -300,7 +300,7 @@ fn ipv6_udp() {
     let ip_expected = Ipv6Header {
         traffic_class: 0,
         flow_label: 0,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
         source: [
@@ -344,7 +344,7 @@ fn ipv4_custom_udp() {
     .unwrap();
 
     //check the deserialized size
-    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
+    let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(expected_ip_size + Ipv4Header::MIN_LEN, serialized.len());
 
     //deserialize and check that everything is as expected
@@ -397,9 +397,9 @@ fn udp_builder_eth_ipv6_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + in_payload.len(),
         serialized.len()
     );
@@ -425,7 +425,7 @@ fn udp_builder_eth_ipv6_udp() {
     let ip_expected = Ipv6Header {
         traffic_class: 0,
         flow_label: 0,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
         source: [
@@ -463,12 +463,12 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     //check the deserialized size
 
     //check the deserialized size
-    let expected_ip_size: usize = UdpHeader::SERIALIZED_SIZE + in_payload.len();
+    let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(
         expected_ip_size
-            + Ethernet2Header::SERIALIZED_SIZE
+            + Ethernet2Header::LEN
             + Ipv4Header::MIN_LEN
-            + SingleVlanHeader::SERIALIZED_SIZE,
+            + SingleVlanHeader::LEN,
         serialized.len()
     );
 
@@ -544,10 +544,10 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + DoubleVlanHeader::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + DoubleVlanHeader::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + in_payload.len(),
         serialized.len()
     );
@@ -596,7 +596,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     let ip_expected = Ipv6Header {
         traffic_class: 0,
         flow_label: 0,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
         source: [
@@ -629,7 +629,7 @@ fn udp_builder_eth_ip_udp() {
             Ipv6Header {
                 traffic_class: 1,
                 flow_label: 2,
-                payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+                payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
                 next_header: ip_number::UDP,
                 hop_limit: 47,
                 source: [
@@ -647,9 +647,9 @@ fn udp_builder_eth_ip_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + in_payload.len(),
         serialized.len()
     );
@@ -676,7 +676,7 @@ fn udp_builder_eth_ip_udp() {
     let ip_expected = Ipv6Header {
         traffic_class: 1,
         flow_label: 2,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
         source: [
@@ -715,7 +715,7 @@ fn udp_builder_eth_vlan_ip_udp() {
             Ipv6Header {
                 traffic_class: 1,
                 flow_label: 2,
-                payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+                payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
                 next_header: ip_number::UDP,
                 hop_limit: 47,
                 source: [
@@ -733,10 +733,10 @@ fn udp_builder_eth_vlan_ip_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + SingleVlanHeader::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + SingleVlanHeader::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + in_payload.len(),
         serialized.len()
     );
@@ -774,7 +774,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     let ip_expected = Ipv6Header {
         traffic_class: 1,
         flow_label: 2,
-        payload_length: (UdpHeader::SERIALIZED_SIZE + in_payload.len()) as u16,
+        payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
         source: [
@@ -1047,7 +1047,7 @@ fn tcp_options() {
 fn size() {
     //ipv4 no vlan
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::MIN_LEN + UdpHeader::SERIALIZED_SIZE + 123,
+        Ethernet2Header::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
             .udp(22, 23)
@@ -1056,9 +1056,9 @@ fn size() {
 
     //ipv6 no vlan
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .ipv6(
@@ -1072,10 +1072,10 @@ fn size() {
 
     //ipv4 single vlan
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + SingleVlanHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + SingleVlanHeader::LEN
             + Ipv4Header::MIN_LEN
-            + UdpHeader::SERIALIZED_SIZE
+            + UdpHeader::LEN
             + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .single_vlan(0x123)
@@ -1086,10 +1086,10 @@ fn size() {
 
     //ipv6 double vlan
     assert_eq!(
-        Ethernet2Header::SERIALIZED_SIZE
-            + DoubleVlanHeader::SERIALIZED_SIZE
-            + Ipv6Header::SERIALIZED_SIZE
-            + UdpHeader::SERIALIZED_SIZE
+        Ethernet2Header::LEN
+            + DoubleVlanHeader::LEN
+            + Ipv6Header::LEN
+            + UdpHeader::LEN
             + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .double_vlan(0x123, 0x234)
@@ -1107,7 +1107,7 @@ proptest! {
     #[test]
     fn size_tcp(ref input in tcp_any()) {
 
-        assert_eq!(Ethernet2Header::SERIALIZED_SIZE +
+        assert_eq!(Ethernet2Header::LEN +
                    Ipv4Header::MIN_LEN +
                    input.header_len() as usize +
                    123,
@@ -1160,7 +1160,7 @@ proptest! {
             // test builder.size()
             assert_eq!(
                 builder.size(adapted_payload.len()),
-                Ethernet2Header::SERIALIZED_SIZE +
+                Ethernet2Header::LEN +
                 Ipv4Header::MIN_LEN +
                 icmp_expected.header_len() +
                 adapted_payload.len()
@@ -1271,7 +1271,7 @@ proptest! {
             // test builder.size()
             assert_eq!(
                 builder.size(payload.len()),
-                Ethernet2Header::SERIALIZED_SIZE +
+                Ethernet2Header::LEN +
                 Ipv4Header::MIN_LEN +
                 icmpv6_type.header_len() +
                 payload.len()
@@ -1382,8 +1382,8 @@ proptest! {
             // test builder.size()
             assert_eq!(
                 builder.size(adapted_payload.len()),
-                Ethernet2Header::SERIALIZED_SIZE +
-                Ipv6Header::SERIALIZED_SIZE +
+                Ethernet2Header::LEN +
+                Ipv6Header::LEN +
                 icmp_expected.header_len() +
                 adapted_payload.len()
             );
@@ -1509,8 +1509,8 @@ proptest! {
             // test builder.size()
             assert_eq!(
                 builder.size(payload.len()),
-                Ethernet2Header::SERIALIZED_SIZE +
-                Ipv6Header::SERIALIZED_SIZE +
+                Ethernet2Header::LEN +
+                Ipv6Header::LEN +
                 icmp_expected.header_len() +
                 payload.len()
             );

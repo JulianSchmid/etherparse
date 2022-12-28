@@ -171,7 +171,7 @@ impl<'a> SlicedPacket<'a> {
     /// Basic usage:
     ///
     ///```
-    /// # use etherparse::{Ethernet2Header, SerializedSize, PacketBuilder};
+    /// # use etherparse::{Ethernet2Header, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
     /// #               [7,8,9,10,11,12]) //destionation mac
@@ -189,7 +189,7 @@ impl<'a> SlicedPacket<'a> {
     /// # builder.write(&mut complete_packet, &payload).unwrap();
     /// #
     /// # // skip ethernet 2 header so we can parse from there downwards
-    /// # let packet = &complete_packet[Ethernet2Header::SERIALIZED_SIZE..];
+    /// # let packet = &complete_packet[Ethernet2Header::LEN..];
     /// #
     /// use etherparse::{ether_type, SlicedPacket};
     ///

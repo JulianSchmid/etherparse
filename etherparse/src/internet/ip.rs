@@ -121,7 +121,7 @@ impl IpHeader {
         use crate::IpHeader::*;
         match *self {
             Version4(ref header, ref extensions) => header.header_len() + extensions.header_len(),
-            Version6(_, ref extensions) => Ipv6Header::SERIALIZED_SIZE + extensions.header_len(),
+            Version6(_, ref extensions) => Ipv6Header::LEN + extensions.header_len(),
         }
     }
 

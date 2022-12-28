@@ -6,7 +6,6 @@
 
 * TODO: Use lengths in IP, UDP & TCP headers to correctly identify payload.
 * TODO Add `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
-* TODO Remove the `SerializedSize` trait.
 
 ### New
 
@@ -19,7 +18,7 @@
 
 * TODO: Changed packet slicing & reading so the length of the payload is taken into account.
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
-* Remove `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Use `XHeader::LEN` or `XHeader::MIN_LEN` instead depending on the header.
+* Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
 
 ### Minor Fixes
 

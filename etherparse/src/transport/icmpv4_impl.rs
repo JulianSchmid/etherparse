@@ -321,8 +321,12 @@ pub mod icmpv4 {
     }
 
     impl TimestampMessage {
-        /// The size in bytes/octets of a timestamp request or timestamp response message.
+        /// Deprecated use [`TimestampMessage::LEN`] instead.
+        #[deprecated(since = "0.14.0", note = "Use `TimestampMessage::LEN` instead")]
         pub const SERIALIZED_SIZE: usize = 20;
+
+        /// The size in bytes/octets of a timestamp request or timestamp response message.
+        pub const LEN: usize = 20;
 
         /// Decodes the timestamp message part of an ICMPv4 message.
         pub fn from_bytes(bytes: [u8; 16]) -> TimestampMessage {
@@ -596,7 +600,7 @@ impl Icmpv4Type {
             | EchoRequest(_)
             | TimeExceeded(_)
             | ParameterProblem(_) => 8,
-            TimestampRequest(_) | TimestampReply(_) => TimestampMessage::SERIALIZED_SIZE,
+            TimestampRequest(_) | TimestampReply(_) => TimestampMessage::LEN,
         }
     }
 
@@ -789,9 +793,9 @@ impl Icmpv4Header {
                 if 0 == bytes[1] {
                     // Timetamp messages need additional data read & it and
                     // then set the slice correspondently
-                    reader.read_exact(&mut bytes[8..TimestampMessage::SERIALIZED_SIZE])?;
+                    reader.read_exact(&mut bytes[8..TimestampMessage::LEN])?;
                     Ok(Icmpv4Slice {
-                        slice: &bytes[..icmpv4::TimestampMessage::SERIALIZED_SIZE],
+                        slice: &bytes[..icmpv4::TimestampMessage::LEN],
                     }
                     .header())
                 } else {
@@ -1016,9 +1020,9 @@ impl<'a> Icmpv4Slice<'a> {
         // check type specific length
         match icmp_type {
             TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
-                if 0 == icmp_code && TimestampMessage::SERIALIZED_SIZE != slice.len() {
+                if 0 == icmp_code && TimestampMessage::LEN != slice.len() {
                     return Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::SERIALIZED_SIZE,
+                        expected: TimestampMessage::LEN,
                         actual: slice.len(),
                     });
                 }
@@ -1047,7 +1051,7 @@ impl<'a> Icmpv4Slice<'a> {
         match self.type_u8() {
             TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
                 if 0 == self.code_u8() {
-                    TimestampMessage::SERIALIZED_SIZE
+                    TimestampMessage::LEN
                 } else {
                     8
                 }
@@ -1272,7 +1276,7 @@ impl<'a> Icmpv4Slice<'a> {
             // for the messages types TYPE_TIMESTAMP and TYPE_TIMESTAMP_REPLY.
             TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
                 if 0 == self.code_u8() {
-                    TimestampMessage::SERIALIZED_SIZE
+                    TimestampMessage::LEN
                 } else {
                     8
                 }

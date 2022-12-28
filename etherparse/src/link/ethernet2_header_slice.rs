@@ -13,9 +13,9 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         slice: &'a [u8],
     ) -> Result<Ethernet2HeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        if slice.len() < Ethernet2Header::SERIALIZED_SIZE {
+        if slice.len() < Ethernet2Header::LEN {
             return Err(err::UnexpectedEndOfSliceError {
-                expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                expected_min_len: Ethernet2Header::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::Ethernet2Header,
             });
@@ -25,8 +25,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         Ok(Ethernet2HeaderSlice {
             // SAFETY:
             // Safe as slice length is checked to be at least
-            // Ethernet2Header::SERIALIZED_SIZE (14) before this.
-            slice: unsafe { from_raw_parts(slice.as_ptr(), Ethernet2Header::SERIALIZED_SIZE) },
+            // Ethernet2Header::LEN (14) before this.
+            slice: unsafe { from_raw_parts(slice.as_ptr(), Ethernet2Header::LEN) },
         })
     }
 
@@ -40,7 +40,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     /// # Safety
     ///
     /// The caller must ensured that the given slice has the length of
-    /// [`Ethernet2Header::SERIALIZED_SIZE`]
+    /// [`Ethernet2Header::LEN`]
     #[inline]
     pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ethernet2HeaderSlice {
         Ethernet2HeaderSlice { slice }
@@ -57,7 +57,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     pub fn destination(&self) -> [u8; 6] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        // at least the length of Ethernet2Header::LEN (14).
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr()) }
     }
 
@@ -66,7 +66,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     pub fn source(&self) -> [u8; 6] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        // at least the length of Ethernet2Header::LEN (14).
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr().add(6)) }
     }
 
@@ -75,7 +75,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     pub fn ether_type(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Ethernet2Header::SERIALIZED_SIZE (14).
+        // at least the length of Ethernet2Header::LEN (14).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) }
     }
 
@@ -117,7 +117,7 @@ mod test {
                 assert_eq!(
                     Ethernet2HeaderSlice::from_slice(&buffer[..len]),
                     Err(err::UnexpectedEndOfSliceError{
-                        expected_min_len: Ethernet2Header::SERIALIZED_SIZE,
+                        expected_min_len: Ethernet2Header::LEN,
                         actual_len: len,
                         layer: err::Layer::Ethernet2Header,
                     })

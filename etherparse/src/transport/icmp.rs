@@ -16,6 +16,10 @@ pub struct IcmpEchoHeader {
 }
 
 impl IcmpEchoHeader {
+
+    /// Serialized size of an IcmpEchoHeader header in bytes/octets.
+    pub const LEN: usize = 4;
+
     /// Return the seq + id encoded to the on the wire format.
     #[inline]
     pub fn to_bytes(&self) -> [u8; 4] {

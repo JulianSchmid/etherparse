@@ -32,8 +32,8 @@ impl VlanHeader {
     pub fn header_len(&self) -> usize {
         use VlanHeader::*;
         match &self {
-            Single(_) => SingleVlanHeader::SERIALIZED_SIZE,
-            Double(_) => DoubleVlanHeader::SERIALIZED_SIZE,
+            Single(_) => SingleVlanHeader::LEN,
+            Double(_) => DoubleVlanHeader::LEN,
         }
     }
 }
@@ -113,12 +113,12 @@ mod test {
         ) {
             // single
             assert_eq!(
-                SingleVlanHeader::SERIALIZED_SIZE,
+                SingleVlanHeader::LEN,
                 VlanHeader::Single(single.clone()).header_len()
             );
             // double
             assert_eq!(
-                DoubleVlanHeader::SERIALIZED_SIZE,
+                DoubleVlanHeader::LEN,
                 VlanHeader::Double(double.clone()).header_len()
             );
         }

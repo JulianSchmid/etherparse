@@ -52,6 +52,18 @@ impl PartialEq for Ipv6RawExtensionHeader {
 impl Eq for Ipv6RawExtensionHeader {}
 
 impl Ipv6RawExtensionHeader {
+
+    /// Minimum length of an raw IPv6 extension header in bytes/octets.
+    pub const MIN_LEN: usize = 8;
+
+    /// Maximum length of an raw IPv6 extension header in bytes/octets.
+    /// 
+    /// This number is calculated by multiplying the maximum "hdr ext len"
+    /// (0xff) with 8 and adding 8. As RFC8200 states that "hdr ext len" is
+    /// defined as "8-bit unsigned integer. Length of the Hop-by-Hop Options
+    /// header in 8-octet units, not including the first 8 octets."
+    pub const MAX_LEN: usize = 8 + (8*0xff);
+
     /// Minimum length of a [Ipv6RawExtensionHeader] payload
     pub const MIN_PAYLOAD_LEN: usize = 6;
 

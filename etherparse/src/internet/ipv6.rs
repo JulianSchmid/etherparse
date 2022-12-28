@@ -3,11 +3,11 @@ use super::super::*;
 use std::net::Ipv6Addr;
 use std::slice::from_raw_parts;
 
-///IPv6 header according to rfc8200.
+/// IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6Header {
     pub traffic_class: u8,
-    ///If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
+    /// If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
     pub flow_label: u32,
     ///The length of the payload and extension headers in bytes (0 in case of jumbo payloads).
     pub payload_length: u16,
@@ -15,20 +15,22 @@ pub struct Ipv6Header {
     ///
     /// See [IpNumber] or [ip_number] for a definitions of ids.
     pub next_header: u8,
-    ///The number of hops the packet can take before it is discarded.
+    /// The number of hops the packet can take before it is discarded.
     pub hop_limit: u8,
-    ///IPv6 source address
+    /// IPv6 source address
     pub source: [u8; 16],
-    ///IPv6 destination address
+    /// IPv6 destination address
     pub destination: [u8; 16],
 }
 
-impl SerializedSize for Ipv6Header {
-    ///Size of the header itself in bytes.
-    const SERIALIZED_SIZE: usize = 40;
-}
-
 impl Ipv6Header {
+
+    /// Serialized size of an IPv6 header in bytes/octets.
+    pub const LEN: usize = 40;
+
+    #[deprecated(since = "0.14.0", note = "Use `Ipv6Header::LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = Ipv6Header::LEN;
+
     /// Renamed to `Ipv6Header::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `Ipv6Header::from_slice`")]
     #[inline]
@@ -41,7 +43,7 @@ impl Ipv6Header {
     pub fn from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
         Ok((
             Ipv6HeaderSlice::from_slice(slice)?.to_header(),
-            &slice[Ipv6Header::SERIALIZED_SIZE..],
+            &slice[Ipv6Header::LEN..],
         ))
     }
 
@@ -293,11 +295,11 @@ impl Ipv6Header {
 
     /// Length of the serialized header in bytes.
     ///
-    /// The function always returns the constant Ipv6Header::SERIALIZED_SIZE
+    /// The function always returns the constant Ipv6Header::LEN
     /// and exists to keep the methods consistent with other headers.
     #[inline]
     pub fn header_len(&self) -> usize {
-        Ipv6Header::SERIALIZED_SIZE
+        Ipv6Header::LEN
     }
 
     ///Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
@@ -324,9 +326,9 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6HeaderSlice<'a>, ReadError> {
         // check length
         use crate::ReadError::*;
-        if slice.len() < Ipv6Header::SERIALIZED_SIZE {
+        if slice.len() < Ipv6Header::LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                expected_min_len: Ipv6Header::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6Header,
             }));
@@ -348,9 +350,9 @@ impl<'a> Ipv6HeaderSlice<'a> {
         Ok(Ipv6HeaderSlice {
             // SAFETY:
             // This is safe as the slice length is checked to be
-            // at least Ipv6Header::SERIALIZED_SIZE (40)
+            // at least Ipv6Header::LEN (40)
             // at the start of the function.
-            slice: unsafe { from_raw_parts(slice.as_ptr(), Ipv6Header::SERIALIZED_SIZE) },
+            slice: unsafe { from_raw_parts(slice.as_ptr(), Ipv6Header::LEN) },
         })
     }
 
@@ -365,7 +367,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn version(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { *self.slice.get_unchecked(0) >> 4 }
     }
@@ -375,7 +377,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn traffic_class(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { (self.slice.get_unchecked(0) << 4) | (self.slice.get_unchecked(1) >> 4) }
     }
@@ -386,7 +388,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
         u32::from_be_bytes(
             // SAFETY:
             // Safe as the slice length is set to
-            // Ipv6Header::SERIALIZED_SIZE (40) during construction
+            // Ipv6Header::LEN (40) during construction
             // of the struct.
             unsafe {
                 [
@@ -404,7 +406,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn payload_length(&self) -> u16 {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
@@ -417,7 +419,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn next_header(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { *self.slice.get_unchecked(6) }
     }
@@ -427,7 +429,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn hop_limit(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { *self.slice.get_unchecked(7) }
     }
@@ -437,7 +439,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn source(&self) -> [u8; 16] {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { get_unchecked_16_byte_array(self.slice.as_ptr().add(8)) }
     }
@@ -452,7 +454,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     pub fn destination(&self) -> [u8; 16] {
         // SAFETY:
         // Safe as the slice length is set to
-        // Ipv6Header::SERIALIZED_SIZE (40) during construction
+        // Ipv6Header::LEN (40) during construction
         // of the struct.
         unsafe { get_unchecked_16_byte_array(self.slice.as_ptr().add(24)) }
     }

@@ -287,7 +287,7 @@ mod test {
         ) {
             assert_eq!(
                 TransportHeader::Udp(udp).header_len(),
-                UdpHeader::SERIALIZED_SIZE
+                UdpHeader::LEN
             );
             assert_eq!(
                 TransportHeader::Tcp(tcp.clone()).header_len(),
@@ -327,7 +327,7 @@ mod test {
                 // error case
                 {
                     let mut transport = Udp(udp.clone());
-                    let len = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+                    let len = (std::u16::MAX as usize) - UdpHeader::LEN + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
@@ -413,7 +413,7 @@ mod test {
                 //error case
                 {
                     let mut transport = Udp(udp.clone());
-                    let len = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE + 1;
+                    let len = (std::u32::MAX as usize) - UdpHeader::LEN + 1;
                     let payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled

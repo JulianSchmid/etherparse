@@ -1641,20 +1641,20 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     use crate::TransportHeader::*;
     use crate::VlanHeader::*;
     (match builder.state.ethernet2_header {
-        Some(_) => Ethernet2Header::SERIALIZED_SIZE,
+        Some(_) => Ethernet2Header::LEN,
         None => 0,
     }) + match builder.state.vlan_header {
-        Some(Single(_)) => SingleVlanHeader::SERIALIZED_SIZE,
-        Some(Double(_)) => DoubleVlanHeader::SERIALIZED_SIZE,
+        Some(Single(_)) => SingleVlanHeader::LEN,
+        Some(Double(_)) => DoubleVlanHeader::LEN,
         None => 0,
     } + match builder.state.ip_header {
         Some(Version4(ref value, ref ext)) => value.header_len() + ext.header_len(),
-        Some(Version6(_, ref ext)) => Ipv6Header::SERIALIZED_SIZE + ext.header_len(),
+        Some(Version6(_, ref ext)) => Ipv6Header::LEN + ext.header_len(),
         None => 0,
     } + match builder.state.transport_header {
         Some(Icmpv4(ref value)) => value.header_len(),
         Some(Icmpv6(ref value)) => value.header_len(),
-        Some(Udp(_)) => UdpHeader::SERIALIZED_SIZE,
+        Some(Udp(_)) => UdpHeader::LEN,
         Some(Tcp(ref value)) => value.header_len() as usize,
         None => 0,
     } + payload_size

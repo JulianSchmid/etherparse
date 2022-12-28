@@ -110,7 +110,7 @@ fn write_errors() {
     //io error (not enough space)
     {
         let header = base();
-        for len in 0..Ipv6Header::SERIALIZED_SIZE {
+        for len in 0..Ipv6Header::LEN {
             let mut writer = TestWriter::with_max_size(len);
             assert_eq!(
                 writer.error_kind(),
@@ -136,11 +136,11 @@ fn read_error() {
     //io error and unexpected end of slice
     {
         let buffer = {
-            let mut buffer: [u8; Ipv6Header::SERIALIZED_SIZE] = [0; Ipv6Header::SERIALIZED_SIZE];
+            let mut buffer: [u8; Ipv6Header::LEN] = [0; Ipv6Header::LEN];
             buffer[0] = 0x60; //ip number is needed
             buffer
         };
-        for len in 0..Ipv6Header::SERIALIZED_SIZE {
+        for len in 0..Ipv6Header::LEN {
             // read
             assert_matches!(
                 Ipv6Header::read(&mut io::Cursor::new(&buffer[0..len])),
@@ -154,7 +154,7 @@ fn read_error() {
                     .unexpected_end_of_slice()
                     .unwrap(),
                 err::UnexpectedEndOfSliceError {
-                    expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                    expected_min_len: Ipv6Header::LEN,
                     actual_len: len,
                     layer: err::Layer::Ipv6Header
                 }
@@ -166,7 +166,7 @@ fn read_error() {
 #[test]
 fn header_len() {
     let header: Ipv6Header = Default::default();
-    assert_eq!(Ipv6Header::SERIALIZED_SIZE, header.header_len());
+    assert_eq!(Ipv6Header::LEN, header.header_len());
 }
 
 #[test]
@@ -466,7 +466,7 @@ proptest! {
         assert_eq!(
             Ipv6HeaderSlice::from_slice(&buffer[..buffer.len()-1]).unwrap_err().unexpected_end_of_slice().unwrap(),
             err::UnexpectedEndOfSliceError{
-                expected_min_len: Ipv6Header::SERIALIZED_SIZE,
+                expected_min_len: Ipv6Header::LEN,
                 actual_len: buffer.len() - 1,
                 layer: err::Layer::Ipv6Header
             }
@@ -523,7 +523,7 @@ fn dbg() {
     let header: Ipv6Header = Default::default();
     println!("{:?}", header);
 
-    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::SERIALIZED_SIZE);
+    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::LEN);
     header.write(&mut buffer).unwrap();
     let slice = Ipv6HeaderSlice::from_slice(&buffer[..]).unwrap();
     println!("{:?}", slice);
@@ -535,7 +535,7 @@ fn eq() {
     assert!(header.eq(&header.clone()));
     assert!(false == header.ne(&header.clone()));
 
-    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::SERIALIZED_SIZE);
+    let mut buffer: Vec<u8> = Vec::with_capacity(Ipv6Header::LEN);
     header.write(&mut buffer).unwrap();
     let slice = Ipv6HeaderSlice::from_slice(&buffer[..]).unwrap();
     assert!(slice.eq(&slice.clone()));

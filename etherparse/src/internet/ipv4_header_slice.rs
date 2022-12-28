@@ -53,7 +53,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) at the start.
+        // Ipv4Header::MIN_LEN (20) at the start.
         let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
 
         if total_length < header_length as u16 {
@@ -99,7 +99,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn version(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(0) >> 4 }
     }
 
@@ -108,7 +108,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn ihl(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(0) & 0xf }
     }
 
@@ -117,7 +117,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn dcp(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(1) >> 2 }
     }
 
@@ -126,7 +126,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn ecn(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(1) & 0x3 }
     }
 
@@ -135,7 +135,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn total_len(&self) -> u16 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
@@ -150,7 +150,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn identification(&self) -> u16 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
 
@@ -159,7 +159,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn dont_fragment(&self) -> bool {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { 0 != (*self.slice.get_unchecked(6) & 0x40) }
     }
 
@@ -168,7 +168,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn more_fragments(&self) -> bool {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { 0 != (*self.slice.get_unchecked(6) & 0x20) }
     }
 
@@ -178,7 +178,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         u16::from_be_bytes(
             // SAFETY:
             // Safe as the slice length is checked to be at least
-            // SERIALIZED_SIZE (20) in the constructor.
+            // Ipv4Header::MIN_LEN (20) in the constructor.
             unsafe {
                 [
                     *self.slice.get_unchecked(6) & 0x1f,
@@ -193,7 +193,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn ttl(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(8) }
     }
 
@@ -202,7 +202,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn protocol(&self) -> u8 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { *self.slice.get_unchecked(9) }
     }
 
@@ -211,7 +211,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn header_checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(10)) }
     }
 
@@ -220,7 +220,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn source(&self) -> [u8; 4] {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { get_unchecked_4_byte_array(self.slice.as_ptr().add(12)) }
     }
 
@@ -234,7 +234,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn destination(&self) -> [u8; 4] {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { get_unchecked_4_byte_array(self.slice.as_ptr().add(16)) }
     }
 
@@ -248,7 +248,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     pub fn options(&self) -> &'a [u8] {
         // SAFETY:
         // Safe as the slice length is checked to be at least
-        // SERIALIZED_SIZE (20) in the constructor.
+        // Ipv4Header::MIN_LEN (20) in the constructor.
         unsafe { from_raw_parts(self.slice.as_ptr().add(20), self.slice.len() - 20) }
     }
 

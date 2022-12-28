@@ -8,7 +8,7 @@ fn main() {
     //For this example lets use a simple Vec as it implements the write trait.
     let mut out = Vec::<u8>::with_capacity(
         //lets reserve enough memory to avoid unnecessary allocations
-        Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::MAX_LEN + UdpHeader::SERIALIZED_SIZE + 8, //payload
+        Ethernet2Header::LEN + Ipv4Header::MAX_LEN + UdpHeader::LEN + 8, //payload
     );
 
     //setup the actual payload of the udp packet
@@ -27,7 +27,7 @@ fn main() {
     //Note: It is also possible to define the rest of the header values via Ipv4Header {...}
     let ip_header = Ipv4Header::new(
         //payload length
-        (UdpHeader::SERIALIZED_SIZE + udp_payload.len()) as u16,
+        (UdpHeader::LEN + udp_payload.len()) as u16,
         20,                //time to live
         ip_number::UDP,    //contained protocol is udp
         [192, 168, 1, 42], //source ip address

@@ -13,12 +13,14 @@ pub struct SingleVlanHeader {
     pub ether_type: u16,
 }
 
-impl SerializedSize for SingleVlanHeader {
-    /// Serialized size of the header in bytes.
-    const SERIALIZED_SIZE: usize = 4;
-}
-
 impl SingleVlanHeader {
+
+    /// Serialized size of an VLAN header in bytes/octets.
+    pub const LEN: usize = 4;
+
+    #[deprecated(since = "0.14.0", note = "Use `SingleVlanHeader::LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = SingleVlanHeader::LEN;
+
     /// Read an SingleVlanHeader from a slice and return the header & unused parts of the slice.
     #[deprecated(since = "0.10.1", note = "Use SingleVlanHeader::from_slice instead.")]
     #[inline]
@@ -35,7 +37,7 @@ impl SingleVlanHeader {
     ) -> Result<(SingleVlanHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         Ok((
             SingleVlanHeaderSlice::from_slice(slice)?.to_header(),
-            &slice[SingleVlanHeader::SERIALIZED_SIZE..],
+            &slice[SingleVlanHeader::LEN..],
         ))
     }
 
@@ -55,8 +57,8 @@ impl SingleVlanHeader {
         reader: &mut T,
     ) -> Result<SingleVlanHeader, io::Error> {
         let buffer = {
-            let mut buffer: [u8; SingleVlanHeader::SERIALIZED_SIZE] =
-                [0; SingleVlanHeader::SERIALIZED_SIZE];
+            let mut buffer: [u8; SingleVlanHeader::LEN] =
+                [0; SingleVlanHeader::LEN];
             reader.read_exact(&mut buffer)?;
             buffer
         };
@@ -113,7 +115,7 @@ mod test {
 
     #[test]
     fn constants() {
-        assert_eq!(4, SingleVlanHeader::SERIALIZED_SIZE);
+        assert_eq!(4, SingleVlanHeader::LEN);
     }
 
     proptest! {
