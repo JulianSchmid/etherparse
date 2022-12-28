@@ -271,10 +271,11 @@ pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;
-pub use crate::internet::ipv6::*;
 pub use crate::internet::ipv6_extensions::*;
 pub use crate::internet::ipv6_fragment_header::*;
 pub use crate::internet::ipv6_fragment_header_slice::*;
+pub use crate::internet::ipv6_header::*;
+pub use crate::internet::ipv6_header_slice::*;
 pub use crate::internet::ipv6_raw_extension::*;
 
 mod transport;
