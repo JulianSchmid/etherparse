@@ -35,7 +35,7 @@ const IPV4_MAX_OPTIONS_LENGTH: usize = 10 * 4;
 impl Ipv4Header {
 
     /// Minimum length of an IPv4 header in bytes/octets.
-    pub const LEN_MIN: usize = 20;
+    pub const MIN_LEN: usize = 20;
 
     /// Maximum length of an IPv4 header in bytes/octets.
     /// 
@@ -44,10 +44,10 @@ impl Ipv4Header {
     /// as the field is only 4 bits long) and multiplying it
     /// with 4 as the "internet header length" specifies how
     /// many 4 bytes words are present in the header.
-    pub const LEN_MAX: usize = 0b1111*4;
+    pub const MAX_LEN: usize = 0b1111*4;
 
-    #[deprecated(since = "0.14.0", note = "Use `Ipv4Header::LEN_MIN` instead")]
-    pub const SERIALIZED_SIZE: usize = Ipv4Header::LEN_MIN;
+    #[deprecated(since = "0.14.0", note = "Use `Ipv4Header::MIN_LEN` instead")]
+    pub const SERIALIZED_SIZE: usize = Ipv4Header::MIN_LEN;
 
     /// Constructs an Ipv4Header with standard values for non specified values.
     pub fn new(
@@ -85,12 +85,12 @@ impl Ipv4Header {
     /// Length of the header (includes options) in bytes.
     #[inline]
     pub fn header_len(&self) -> usize {
-        Ipv4Header::LEN_MIN + usize::from(self.options_len)
+        Ipv4Header::MIN_LEN + usize::from(self.options_len)
     }
 
     /// Returns the total length of the header + payload in bytes.
     pub fn total_len(&self) -> u16 {
-        self.payload_len + (Ipv4Header::LEN_MIN as u16) + u16::from(self.options_len)
+        self.payload_len + (Ipv4Header::MIN_LEN as u16) + u16::from(self.options_len)
     }
 
     /// Sets the payload length if the value is not too big. Otherwise an error is returned.
@@ -106,7 +106,7 @@ impl Ipv4Header {
 
     /// Returns the maximum payload size based on the current options size.
     pub fn max_payload_len(&self) -> u16 {
-        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::LEN_MIN as u16)
+        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::MIN_LEN as u16)
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).
@@ -282,7 +282,7 @@ impl Ipv4Header {
 
     /// Returns the serialized header (note that this method does NOT 
     /// update & calculate the checksum).
-    pub fn to_bytes(&self) -> Result<ArrayVec<u8, { Ipv4Header::LEN_MAX }>, ValueError> {
+    pub fn to_bytes(&self) -> Result<ArrayVec<u8, { Ipv4Header::MAX_LEN }>, ValueError> {
 
         //check ranges
         self.check_ranges()?;
@@ -307,7 +307,7 @@ impl Ipv4Header {
         let header_checksum_be = self.header_checksum.to_be_bytes();
 
         #[rustfmt::skip]
-        let mut header_raw: ArrayVec<u8, { Ipv4Header::LEN_MAX } > = [
+        let mut header_raw: ArrayVec<u8, { Ipv4Header::MAX_LEN } > = [
             (4 << 4) | self.ihl(),
             (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification,
             total_len_be[0],
@@ -764,7 +764,7 @@ mod test {
         assert_eq!(header.total_len(), 24);
 
         //max check
-        const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::LEN_MIN - 4;
+        const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::MIN_LEN - 4;
         assert!(header.set_payload_len(MAX).is_ok());
         assert_eq!(header.total_len(), std::u16::MAX);
 
@@ -866,7 +866,7 @@ mod test {
 
             // ok
             {
-                let mut buffer = ArrayVec::<u8, { Ipv4Header::LEN_MAX + 1 }>::new();
+                let mut buffer = ArrayVec::<u8, { Ipv4Header::MAX_LEN + 1 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
                 buffer.try_extend_from_slice(&[1]).unwrap();
 
@@ -882,8 +882,8 @@ mod test {
                     assert_eq!(
                         Ipv4Header::from_slice(&buffer[..len]),
                         Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
-                            expected_min_len: if len < Ipv4Header::LEN_MIN {
-                                Ipv4Header::LEN_MIN
+                            expected_min_len: if len < Ipv4Header::MIN_LEN {
+                                Ipv4Header::MIN_LEN
                             } else {
                                 header.header_len()
                             },
@@ -1217,7 +1217,7 @@ mod test {
 
             // io error
             for len in 0..header.header_len() {
-                let mut buffer = [0u8; Ipv4Header::LEN_MAX];
+                let mut buffer = [0u8; Ipv4Header::MAX_LEN];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
                 assert!(
                     header.write(&mut cursor).unwrap_err().io_error().is_some()
@@ -1263,7 +1263,7 @@ mod test {
 
             // io error
             for len in 0..base_header.header_len() {
-                let mut buffer = [0u8; Ipv4Header::LEN_MAX];
+                let mut buffer = [0u8; Ipv4Header::MAX_LEN];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
                 assert!(
                     base_header.write_raw(&mut cursor).unwrap_err().io_error().is_some()

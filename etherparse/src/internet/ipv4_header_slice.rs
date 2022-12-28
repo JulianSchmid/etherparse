@@ -15,9 +15,9 @@ impl<'a> Ipv4HeaderSlice<'a> {
         use err::ipv4::HeaderSliceError::*;
 
         //check length
-        if slice.len() < Ipv4Header::LEN_MIN {
+        if slice.len() < Ipv4Header::MIN_LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
-                expected_min_len: Ipv4Header::LEN_MIN,
+                expected_min_len: Ipv4Header::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv4Header,
             }));
@@ -324,7 +324,7 @@ mod test {
 
             // ok
             {
-                let mut buffer = ArrayVec::<u8, { Ipv4Header::LEN_MAX + 1 }>::new();
+                let mut buffer = ArrayVec::<u8, { Ipv4Header::MAX_LEN + 1 }>::new();
                 buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
                 buffer.try_extend_from_slice(&[1]).unwrap();
 
@@ -340,8 +340,8 @@ mod test {
                     assert_eq!(
                         Ipv4HeaderSlice::from_slice(&buffer[..len]),
                         Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
-                            expected_min_len: if len < Ipv4Header::LEN_MIN {
-                                Ipv4Header::LEN_MIN
+                            expected_min_len: if len < Ipv4Header::MIN_LEN {
+                                Ipv4Header::MIN_LEN
                             } else {
                                 header.header_len()
                             },
