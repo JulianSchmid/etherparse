@@ -165,3 +165,11 @@ impl<'a> Ipv6HeaderSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::*;
+
+    
+}

@@ -245,47 +245,7 @@ impl Ipv6Header {
 
     ///Writes a given IPv6 header to the current position.
     pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        use crate::ErrorField::*;
-        fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), WriteError> {
-            if value <= max {
-                Ok(())
-            } else {
-                Err(WriteError::ValueError(ValueError::U32TooLarge {
-                    value,
-                    max,
-                    field,
-                }))
-            }
-        }
-
-        // check value ranges
-        max_check_u32(self.flow_label, 0xfffff, Ipv6FlowLabel)?;
-
-        // serialize header
-        let flow_label_be = self.flow_label.to_be_bytes();
-        let payload_len_be = self.payload_length.to_be_bytes();
-
-        #[rustfmt::skip]
-        let header_raw = [
-            (6 << 4) | (self.traffic_class >> 4),
-            (self.traffic_class << 4) | flow_label_be[1],
-            flow_label_be[2],
-            flow_label_be[3],
-            payload_len_be[0],
-            payload_len_be[1],
-            self.next_header,
-            self.hop_limit,
-            self.source[0], self.source[1], self.source[2], self.source[3],
-            self.source[4], self.source[5], self.source[6], self.source[7],
-            self.source[8], self.source[9], self.source[10], self.source[11],
-            self.source[12], self.source[13], self.source[14], self.source[15],
-            self.destination[0], self.destination[1], self.destination[2], self.destination[3],
-            self.destination[4], self.destination[5], self.destination[6], self.destination[7],
-            self.destination[8], self.destination[9], self.destination[10], self.destination[11],
-            self.destination[12], self.destination[13], self.destination[14], self.destination[15],
-        ];
-        writer.write_all(&header_raw)?;
-
+        writer.write_all(&self.to_bytes()?)?;
         Ok(())
     }
 
@@ -310,7 +270,7 @@ impl Ipv6Header {
         Ipv6Header::LEN
     }
 
-    ///Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
+    /// Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
     pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueError> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = std::u16::MAX as usize;
@@ -320,6 +280,50 @@ impl Ipv6Header {
 
         self.payload_length = size as u16;
         Ok(())
+    }
+
+    /// Returns the serialized form of the header as a statically
+    /// sized byte array.
+    #[rustfmt::skip]
+    pub fn to_bytes(&self) -> Result<[u8;Ipv6Header::LEN], ValueError> {
+        use crate::ErrorField::*;
+        fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), ValueError> {
+            if value <= max {
+                Ok(())
+            } else {
+                Err(ValueError::U32TooLarge {
+                    value,
+                    max,
+                    field,
+                })
+            }
+        }
+
+        // serialize header
+        let flow_label_be = self.flow_label.to_be_bytes();
+        let payload_len_be = self.payload_length.to_be_bytes();
+
+        // check value ranges
+        max_check_u32(self.flow_label, 0xfffff, Ipv6FlowLabel)?;
+
+        Ok([
+            (6 << 4) | (self.traffic_class >> 4),
+            (self.traffic_class << 4) | flow_label_be[1],
+            flow_label_be[2],
+            flow_label_be[3],
+            payload_len_be[0],
+            payload_len_be[1],
+            self.next_header,
+            self.hop_limit,
+            self.source[0], self.source[1], self.source[2], self.source[3],
+            self.source[4], self.source[5], self.source[6], self.source[7],
+            self.source[8], self.source[9], self.source[10], self.source[11],
+            self.source[12], self.source[13], self.source[14], self.source[15],
+            self.destination[0], self.destination[1], self.destination[2], self.destination[3],
+            self.destination[4], self.destination[5], self.destination[6], self.destination[7],
+            self.destination[8], self.destination[9], self.destination[10], self.destination[11],
+            self.destination[12], self.destination[13], self.destination[14], self.destination[15],
+        ])
     }
 }
 
@@ -345,6 +349,39 @@ mod test {
                 header.destination_addr().octets(),
                 header.destination
             );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_bytes(
+            header in ipv6_any(),
+            bad_flow_label in 0b1_0000_0000_0000_0000_0000..=u32::MAX
+        ) {
+
+            // ok case
+            {
+                let bytes = header.to_bytes().unwrap();
+                assert_eq!(
+                    Ipv6Header::from_slice(&bytes).unwrap().0,
+                    header
+                );
+            }
+
+            // flow label error
+            {
+                let mut bad_header = header.clone();
+                bad_header.flow_label = bad_flow_label;
+                let err = bad_header.to_bytes().unwrap_err();
+                assert_eq!(
+                    err,
+                    ValueError::U32TooLarge {
+                        value: bad_flow_label,
+                        max: 0b1111_1111_1111_1111_1111,
+                        field: ErrorField::Ipv6FlowLabel,
+                    }
+                );
+            }
         }
     }
 
