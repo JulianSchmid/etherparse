@@ -9,7 +9,6 @@ pub struct Ethernet2Header {
 }
 
 impl Ethernet2Header {
-
     /// Serialized size of an Ethernet2 header in bytes/octets.
     pub const LEN: usize = 14;
 

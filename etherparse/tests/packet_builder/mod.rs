@@ -284,10 +284,7 @@ fn ipv6_udp() {
 
     //check the deserialized size
     let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
-    assert_eq!(
-        expected_ip_size + Ipv6Header::LEN,
-        serialized.len()
-    );
+    assert_eq!(expected_ip_size + Ipv6Header::LEN, serialized.len());
 
     //deserialize and check that everything is as expected
     use std::io::{Cursor, Read};
@@ -397,10 +394,7 @@ fn udp_builder_eth_ipv6_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::LEN
-            + Ipv6Header::LEN
-            + UdpHeader::LEN
-            + in_payload.len(),
+        Ethernet2Header::LEN + Ipv6Header::LEN + UdpHeader::LEN + in_payload.len(),
         serialized.len()
     );
 
@@ -465,10 +459,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     //check the deserialized size
     let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
     assert_eq!(
-        expected_ip_size
-            + Ethernet2Header::LEN
-            + Ipv4Header::MIN_LEN
-            + SingleVlanHeader::LEN,
+        expected_ip_size + Ethernet2Header::LEN + Ipv4Header::MIN_LEN + SingleVlanHeader::LEN,
         serialized.len()
     );
 
@@ -647,10 +638,7 @@ fn udp_builder_eth_ip_udp() {
 
     //check the deserialized size
     assert_eq!(
-        Ethernet2Header::LEN
-            + Ipv6Header::LEN
-            + UdpHeader::LEN
-            + in_payload.len(),
+        Ethernet2Header::LEN + Ipv6Header::LEN + UdpHeader::LEN + in_payload.len(),
         serialized.len()
     );
 
@@ -1056,10 +1044,7 @@ fn size() {
 
     //ipv6 no vlan
     assert_eq!(
-        Ethernet2Header::LEN
-            + Ipv6Header::LEN
-            + UdpHeader::LEN
-            + 123,
+        Ethernet2Header::LEN + Ipv6Header::LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .ipv6(
                 [11, 12, 13, 14, 15, 16, 17, 18, 19, 10, 21, 22, 23, 24, 25, 26],
@@ -1072,11 +1057,7 @@ fn size() {
 
     //ipv4 single vlan
     assert_eq!(
-        Ethernet2Header::LEN
-            + SingleVlanHeader::LEN
-            + Ipv4Header::MIN_LEN
-            + UdpHeader::LEN
-            + 123,
+        Ethernet2Header::LEN + SingleVlanHeader::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .single_vlan(0x123)
             .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
@@ -1086,11 +1067,7 @@ fn size() {
 
     //ipv6 double vlan
     assert_eq!(
-        Ethernet2Header::LEN
-            + DoubleVlanHeader::LEN
-            + Ipv6Header::LEN
-            + UdpHeader::LEN
-            + 123,
+        Ethernet2Header::LEN + DoubleVlanHeader::LEN + Ipv6Header::LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
             .double_vlan(0x123, 0x234)
             .ipv6(
