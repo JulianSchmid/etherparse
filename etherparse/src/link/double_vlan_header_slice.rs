@@ -9,9 +9,11 @@ pub struct DoubleVlanHeaderSlice<'a> {
 
 impl<'a> DoubleVlanHeaderSlice<'a> {
     /// Creates a double header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DoubleVlanHeaderSlice<'a>, err::double_vlan::HeaderSliceError> {
-        use err::double_vlan::{HeaderSliceError::*, HeaderError::*};
-        
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<DoubleVlanHeaderSlice<'a>, err::double_vlan::HeaderSliceError> {
+        use err::double_vlan::{HeaderError::*, HeaderSliceError::*};
+
         // check length
         if slice.len() < DoubleVlanHeader::SERIALIZED_SIZE {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
@@ -37,7 +39,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
                 //all done
                 Ok(result)
             }
-            value => Err(Content(NonVlanEtherType{
+            value => Err(Content(NonVlanEtherType {
                 unexpected_ether_type: value,
             })),
         }
@@ -90,7 +92,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
 
     proptest! {
@@ -121,7 +123,7 @@ mod test {
                     assert_eq!(
                         DoubleVlanHeaderSlice::from_slice(&buffer[..len])
                             .unwrap_err(),
-                        
+
                         UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                             expected_min_len: 8,
                             actual_len: len,

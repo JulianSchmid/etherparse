@@ -266,8 +266,8 @@ pub(crate) mod test_gens;
 
 mod internet;
 pub use crate::internet::ip::*;
-pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ip_auth_header::*;
+pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;
@@ -395,27 +395,27 @@ impl std::fmt::Display for ReadError {
             UnexpectedEndOfSlice(err) => err.fmt(f),
             UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
-            },
+            }
             IpUnsupportedVersion(version_number) => {
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
-            },
+            }
             Ipv4Header(err) => err.fmt(f),
             Ipv6UnexpectedVersion(version_number) => {
                 write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
-            },
+            }
             Ipv6TooManyHeaderExtensions => {
                 write!(f, "ReadError: Too many IPv6 header extensions. There are more then 7 extension headers present, this not supported.")
-            },
+            }
             Ipv6HopByHopHeaderNotAtStart => {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
-            },
+            }
             IpAuthHeader(err) => err.fmt(f),
             TcpDataOffsetTooSmall(data_offset) => {
                 write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
-            },
+            }
             Icmpv6PacketTooBig(size) => {
                 write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
-            },
+            }
         }
     }
 }

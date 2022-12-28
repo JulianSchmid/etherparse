@@ -55,14 +55,15 @@ impl std::error::Error for HeaderReadError {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use super::{*, HeaderReadError::*};
+    use super::{HeaderReadError::*, *};
 
     #[test]
     fn debug() {
-        let err = HeaderError::NonVlanEtherType { unexpected_ether_type: 1 };
+        let err = HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1,
+        };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -82,7 +83,9 @@ mod test {
             );
         }
         {
-            let err = HeaderError::NonVlanEtherType { unexpected_ether_type: 1 };
+            let err = HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 1,
+            };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -90,32 +93,32 @@ mod test {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).source().is_some()
-        );
-        assert!(
-            Content(HeaderError::NonVlanEtherType { unexpected_ether_type: 1 })
-                .source()
-                .is_some()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .source()
+        .is_some());
+        assert!(Content(HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1
+        })
+        .source()
+        .is_some());
     }
 
     #[test]
     fn io_error() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).io_error().is_some()
-        );
-        assert!(
-            Content(HeaderError::NonVlanEtherType { unexpected_ether_type: 1 })
-                .io_error()
-                .is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .io_error()
+        .is_some());
+        assert!(Content(HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1
+        })
+        .io_error()
+        .is_none());
     }
 
     #[test]
@@ -125,14 +128,14 @@ mod test {
             Io(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
-            )).content_error()
+            ))
+            .content_error()
         );
         {
-            let err = HeaderError::NonVlanEtherType { unexpected_ether_type: 1 };
-            assert_eq!(
-                Some(err.clone()),
-                Content(err.clone()).content_error()
-            );
+            let err = HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 1,
+            };
+            assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }
     }
 }

@@ -120,13 +120,13 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
-                expected_min_len: 0,
-                actual_len: 0,
-                layer: Layer::Ipv4Header
-            }).source().is_some()
-        );
+        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: Layer::Ipv4Header
+        })
+        .source()
+        .is_some());
         assert!(
             Content(HeaderError::UnexpectedVersion { version_number: 6 })
                 .source()

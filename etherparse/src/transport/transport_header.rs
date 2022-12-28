@@ -170,11 +170,11 @@ impl TransportHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
-    use proptest::prelude::*;
+    use crate::{test_gens::*, *};
     use assert_matches::assert_matches;
-    use std::io::Cursor;
     use core::slice;
+    use proptest::prelude::*;
+    use std::io::Cursor;
 
     proptest! {
         #[test]

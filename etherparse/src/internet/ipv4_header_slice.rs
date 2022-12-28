@@ -290,9 +290,9 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
-    use proptest::prelude::*;
+    use crate::{test_gens::*, *};
     use arrayvec::ArrayVec;
+    use proptest::prelude::*;
 
     #[test]
     fn debug() {
@@ -307,7 +307,7 @@ mod test {
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in ipv4_any()) {
             let buffer = header.to_bytes().unwrap();
@@ -316,7 +316,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ipv4_any()) {
             use err::ipv4::HeaderError::*;
@@ -403,14 +403,12 @@ mod test {
 
     #[test]
     fn from_slice_unchecked() {
-        let buffer = [0u8;4];
-        let slice = unsafe {
-            Ipv4HeaderSlice::from_slice_unchecked(&buffer)
-        };
+        let buffer = [0u8; 4];
+        let slice = unsafe { Ipv4HeaderSlice::from_slice_unchecked(&buffer) };
         assert_eq!(slice.slice(), &buffer);
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(header in ipv4_any()) {
             use std::net::Ipv4Addr;
@@ -485,7 +483,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(header in ipv4_any()) {
             let buffer = header.to_bytes().unwrap();

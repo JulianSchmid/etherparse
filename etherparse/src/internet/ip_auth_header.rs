@@ -5,17 +5,11 @@ use super::super::*;
 use core::fmt::{Debug, Formatter};
 
 /// Deprecated use [IpAuthHeader] instead.
-#[deprecated(
-    since = "0.10.1",
-    note = "Please use the type IpAuthHeader instead"
-)]
+#[deprecated(since = "0.10.1", note = "Please use the type IpAuthHeader instead")]
 pub type IPv6AuthenticationHeader = IpAuthHeader;
 
 /// Deprecated use [IpAuthHeader] instead.
-#[deprecated(
-    since = "0.14.0",
-    note = "Please use the type IpAuthHeader instead"
-)]
+#[deprecated(since = "0.14.0", note = "Please use the type IpAuthHeader instead")]
 pub type IpAuthenticationHeader = IpAuthHeader;
 
 /// IP Authentication Header (rfc4302)
@@ -61,17 +55,16 @@ impl PartialEq for IpAuthHeader {
 impl Eq for IpAuthHeader {}
 
 impl<'a> IpAuthHeader {
-
     /// Minimum length of an IP authentifcation header in bytes/octets.
     pub const MIN_LEN: usize = 4 + 4 + 4;
 
     /// Maximum length of an IP authentifcation header in bytes/octets.
-    /// 
+    ///
     /// This number is calculated by taking the maximum value
     /// that the "payload length" field supports (0xff) adding 2 and
     /// multiplying the sum by 4 as the "payload length" specifies how
     /// many 4 bytes words are present in the header.
-    pub const MAX_LEN: usize = 4*(0xff + 2);
+    pub const MAX_LEN: usize = 4 * (0xff + 2);
 
     /// The maximum amount of bytes/octets that can be stored in the ICV
     /// part of an IP authentification header.
@@ -108,7 +101,9 @@ impl<'a> IpAuthHeader {
     }
 
     /// Read an  authentication header from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<(IpAuthHeader, &'a [u8]), err::ip_auth::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<(IpAuthHeader, &'a [u8]), err::ip_auth::HeaderSliceError> {
         let s = IpAuthHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -119,8 +114,8 @@ impl<'a> IpAuthHeader {
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderReadError> {
-        use err::ip_auth::HeaderReadError::*;
         use err::ip_auth::HeaderError::*;
+        use err::ip_auth::HeaderReadError::*;
 
         let start = {
             let mut start = [0; 4 + 4 + 4];
@@ -143,7 +138,9 @@ impl<'a> IpAuthHeader {
                 raw_icv_len: payload_len - 1,
                 raw_icv_buffer: {
                     let mut buffer = [0; 0xfe * 4];
-                    reader.read_exact(&mut buffer[..usize::from(payload_len - 1) * 4]).map_err(Io)?;
+                    reader
+                        .read_exact(&mut buffer[..usize::from(payload_len - 1) * 4])
+                        .map_err(Io)?;
                     buffer
                 },
             })
@@ -203,15 +200,23 @@ impl<'a> IpAuthHeader {
 
     /// Returns the serialized header.
     pub fn to_bytes(&self) -> ArrayVec<u8, { IpAuthHeader::MAX_LEN }> {
-        
         let spi_be = self.spi.to_be_bytes();
         let seq_be = self.sequence_number.to_be_bytes();
 
         let mut result = ArrayVec::<u8, { IpAuthHeader::MAX_LEN }>::new();
         result.extend([
-            self.next_header, self.raw_icv_len + 1, 0, 0,
-            spi_be[0], spi_be[1], spi_be[2], spi_be[3],
-            seq_be[0], seq_be[1], seq_be[2], seq_be[3],
+            self.next_header,
+            self.raw_icv_len + 1,
+            0,
+            0,
+            spi_be[0],
+            spi_be[1],
+            spi_be[2],
+            spi_be[3],
+            seq_be[0],
+            seq_be[1],
+            seq_be[2],
+            seq_be[3],
         ]);
         result.extend(self.raw_icv_buffer);
         // SAFETY: Safe as the header len can not exceed the maximum length
@@ -222,18 +227,17 @@ impl<'a> IpAuthHeader {
 
         result
     }
-
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::test_gens::*;
     use err::ip_auth::HeaderError::*;
     use proptest::prelude::*;
-    use crate::test_gens::*;
     use std::io::Cursor;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(input in ip_auth_any()) {
             assert_eq!(
@@ -252,15 +256,15 @@ mod test {
     pub fn clone() {
         let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
         assert_eq!(a.clone(), a);
-    }    
+    }
 
     #[test]
     pub fn partial_eq() {
         let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
-    
+
         //equal
         assert!(a == IpAuthHeader::new(0, 0, 0, &[0; 4]));
-    
+
         //not equal tests
         assert!(a != IpAuthHeader::new(1, 0, 0, &[0; 4]));
         assert!(a != IpAuthHeader::new(0, 1, 0, &[0; 4]));
@@ -357,7 +361,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ip_auth_any()) {
             use err::ip_auth::HeaderSliceError::*;
@@ -368,7 +372,7 @@ mod test {
                 bytes.extend(header.to_bytes());
                 bytes.push(1);
                 bytes.push(2);
-                
+
                 let (actual_header, actual_slice) = IpAuthHeader::from_slice(&bytes).unwrap();
                 assert_eq!(header, actual_header);
                 assert_eq!(&[1,2], actual_slice);
@@ -406,7 +410,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(header in ip_auth_any()) {
             // ok
@@ -444,7 +448,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(header in ip_auth_any()) {
 
@@ -454,7 +458,7 @@ mod test {
                 header.write(&mut buffer).unwrap();
                 assert_eq!(header, IpAuthHeader::from_slice(&buffer).unwrap().0);
             };
-            
+
             // io error
             for len in 0..header.header_len() {
                 let mut buffer = [0u8;IpAuthHeader::MAX_LEN];
@@ -464,14 +468,14 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(header in ip_auth_any()) {
             assert_eq!(header.header_len(), header.raw_icv().len() + 12);
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(header in ip_auth_any()) {
             let bytes = header.to_bytes();

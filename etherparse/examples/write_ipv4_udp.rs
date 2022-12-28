@@ -8,10 +8,7 @@ fn main() {
     //For this example lets use a simple Vec as it implements the write trait.
     let mut out = Vec::<u8>::with_capacity(
         //lets reserve enough memory to avoid unnecessary allocations
-        Ethernet2Header::SERIALIZED_SIZE
-            + Ipv4Header::MAX_LEN
-            + UdpHeader::SERIALIZED_SIZE
-            + 8, //payload
+        Ethernet2Header::SERIALIZED_SIZE + Ipv4Header::MAX_LEN + UdpHeader::SERIALIZED_SIZE + 8, //payload
     );
 
     //setup the actual payload of the udp packet
