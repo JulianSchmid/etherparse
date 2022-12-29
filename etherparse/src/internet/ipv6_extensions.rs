@@ -20,8 +20,8 @@ use std::slice::from_raw_parts;
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6Extensions {
-    pub hop_by_hop_options: Option<Ipv6RawExtensionHeader>,
-    pub destination_options: Option<Ipv6RawExtensionHeader>,
+    pub hop_by_hop_options: Option<Ipv6RawExtHeader>,
+    pub destination_options: Option<Ipv6RawExtHeader>,
     pub routing: Option<Ipv6RoutingExtensions>,
     pub fragment: Option<Ipv6FragmentHeader>,
     pub auth: Option<IpAuthHeader>,
@@ -69,7 +69,7 @@ impl Ipv6Extensions {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -88,7 +88,7 @@ impl Ipv6Extensions {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_header, rest));
                         } else {
-                            let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+                            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
                             rest = &rest[slice.slice().len()..];
                             next_header = slice.next_header();
                             routing.final_destination_options = Some(slice.to_header());
@@ -97,7 +97,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.destination_options = Some(slice.to_header());
@@ -108,7 +108,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.routing = Some(Ipv6RoutingExtensions {
@@ -197,7 +197,7 @@ impl Ipv6Extensions {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_protocol {
-            let header = Ipv6RawExtensionHeader::read(reader)?;
+            let header = Ipv6RawExtHeader::read(reader)?;
             next_protocol = header.next_header;
             result.hop_by_hop_options = Some(header);
         }
@@ -215,7 +215,7 @@ impl Ipv6Extensions {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_protocol));
                         } else {
-                            let header = Ipv6RawExtensionHeader::read(reader)?;
+                            let header = Ipv6RawExtHeader::read(reader)?;
                             next_protocol = header.next_header;
                             routing.final_destination_options = Some(header);
                         }
@@ -223,7 +223,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6RawExtensionHeader::read(reader)?;
+                        let header = Ipv6RawExtHeader::read(reader)?;
                         next_protocol = header.next_header;
                         result.destination_options = Some(header);
                     }
@@ -233,7 +233,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6RawExtensionHeader::read(reader)?;
+                        let header = Ipv6RawExtHeader::read(reader)?;
                         next_protocol = header.next_header;
                         result.routing = Some(Ipv6RoutingExtensions {
                             routing: header,
@@ -679,8 +679,8 @@ impl Ipv6Extensions {
 /// to attach a "final destination" header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6RoutingExtensions {
-    pub routing: Ipv6RawExtensionHeader,
-    pub final_destination_options: Option<Ipv6RawExtensionHeader>,
+    pub routing: Ipv6RawExtHeader,
+    pub final_destination_options: Option<Ipv6RawExtHeader>,
 }
 
 /// Slice containing the IPv6 extension headers present after the ip header.
@@ -724,7 +724,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
         }
@@ -735,9 +735,9 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     return Err(Ipv6HopByHopHeaderNotAtStart);
                 }
                 IPV6_DEST_OPTIONS | IPV6_ROUTE => {
-                    let slice = Ipv6RawExtensionHeaderSlice::from_slice(rest)?;
+                    let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
                     // SAFETY:
-                    // Ipv6RawExtensionHeaderSlice::from_slice always generates
+                    // Ipv6RawExtHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed
                     // that len is always greater or equal the len of rest.
                     rest = unsafe {
@@ -855,13 +855,13 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Ipv6ExtensionSlice<'a> {
     /// IPv6 Hop-by-Hop Option \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    HopByHop(Ipv6RawExtensionHeaderSlice<'a>),
+    HopByHop(Ipv6RawExtHeaderSlice<'a>),
     /// Routing Header for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\] \[[RFC5095](https://datatracker.ietf.org/doc/html/rfc5095)\]
-    Routing(Ipv6RawExtensionHeaderSlice<'a>),
+    Routing(Ipv6RawExtHeaderSlice<'a>),
     /// Fragment Header for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
     Fragment(Ipv6FragmentHeaderSlice<'a>),
     /// Destination Options for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    DestinationOptions(Ipv6RawExtensionHeaderSlice<'a>),
+    DestinationOptions(Ipv6RawExtHeaderSlice<'a>),
     /// Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
     Authentication(IpAuthHeaderSlice<'a>),
 }
@@ -912,21 +912,21 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
             // Ipv6ExtensionsSlice::from_slice the content does not have to be
             // rechecked.
             IPV6_HOP_BY_HOP => unsafe {
-                let slice = Ipv6RawExtensionHeaderSlice::from_slice_unchecked(self.rest);
+                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
                 let len = slice.slice().len();
                 self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
                 self.next_header = slice.next_header();
                 Some(HopByHop(slice))
             },
             IPV6_ROUTE => unsafe {
-                let slice = Ipv6RawExtensionHeaderSlice::from_slice_unchecked(self.rest);
+                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
                 let len = slice.slice().len();
                 self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
                 self.next_header = slice.next_header();
                 Some(Routing(slice))
             },
             IPV6_DEST_OPTIONS => unsafe {
-                let slice = Ipv6RawExtensionHeaderSlice::from_slice_unchecked(self.rest);
+                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
                 let len = slice.slice().len();
                 self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
                 self.next_header = slice.next_header();

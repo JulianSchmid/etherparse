@@ -1,7 +1,12 @@
 use super::super::*;
+use core::fmt::{Debug, Formatter};
 
-use std::fmt::{Debug, Formatter};
-use std::slice::from_raw_parts;
+/// Deprecated. Use [Ipv6RawExtHeader] instead.
+#[deprecated(
+    since = "0.14.0",
+    note = "Please use the type Ipv6RawExtHeader instead"
+)]
+pub type Ipv6RawExtensionHeader = Ipv6RawExtHeader;
 
 /// Raw IPv6 extension header (undecoded payload).
 ///
@@ -10,7 +15,7 @@ use std::slice::from_raw_parts;
 /// in 8-octets (- 8 octets) can be represented with this struct. This excludes the "Authentication
 /// Header" (AH) and "Encapsulating Security Payload" (ESP).
 ///
-/// The following headers can be represented in a `Ipv6RawExtensionHeader`:
+/// The following headers can be represented in a [`Ipv6RawExtHeader`]:
 /// * Hop by Hop
 /// * Destination Options
 /// * Routing
@@ -18,7 +23,7 @@ use std::slice::from_raw_parts;
 /// * Host Identity Protocol
 /// * Shim6 Protocol
 #[derive(Clone)]
-pub struct Ipv6RawExtensionHeader {
+pub struct Ipv6RawExtHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
@@ -29,26 +34,24 @@ pub struct Ipv6RawExtensionHeader {
     payload_buffer: [u8; 0xff * 8 + 6],
 }
 
-impl Debug for Ipv6RawExtensionHeader {
-    fn fmt(&self, fotmatter: &mut Formatter) -> Result<(), std::fmt::Error> {
-        write!(
-            fotmatter,
-            "Ipv6RawExtensionHeader {{ next_header: {}, payload: {:?} }}",
-            self.next_header,
-            self.payload()
-        )
+impl Debug for Ipv6RawExtHeader {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+        let mut s = f.debug_struct("Ipv6RawExtHeader");
+        s.field("next_header", &self.next_header);
+        s.field("payload", &self.payload());
+        s.finish()
     }
 }
 
-impl PartialEq for Ipv6RawExtensionHeader {
+impl PartialEq for Ipv6RawExtHeader {
     fn eq(&self, other: &Self) -> bool {
         self.next_header == other.next_header && self.payload() == other.payload()
     }
 }
 
-impl Eq for Ipv6RawExtensionHeader {}
+impl Eq for Ipv6RawExtHeader {}
 
-impl Ipv6RawExtensionHeader {
+impl Ipv6RawExtHeader {
     /// Minimum length of an raw IPv6 extension header in bytes/octets.
     pub const MIN_LEN: usize = 8;
 
@@ -60,10 +63,10 @@ impl Ipv6RawExtensionHeader {
     /// header in 8-octet units, not including the first 8 octets."
     pub const MAX_LEN: usize = 8 + (8 * 0xff);
 
-    /// Minimum length of a [Ipv6RawExtensionHeader] payload
+    /// Minimum length of a [Ipv6RawExtHeader] payload
     pub const MIN_PAYLOAD_LEN: usize = 6;
 
-    /// Maximum length of a [Ipv6RawExtensionHeader] the payload
+    /// Maximum length of a [Ipv6RawExtHeader] the payload
     pub const MAX_PAYLOAD_LEN: usize = 0xff * 8 + 6;
 
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeader`.
@@ -84,10 +87,10 @@ impl Ipv6RawExtensionHeader {
     ///
     /// Note that `payload` must have at least the length of 6 bytes and only supports
     /// length increases in steps of 8. This measn that the following expression must be true `(payload.len() + 2) % 8 == 0`.
-    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN`).
+    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`).
     ///
     /// If a payload with a non supported length is provided a `ValueError` is returned.
-    pub fn new_raw(next_header: u8, payload: &[u8]) -> Result<Ipv6RawExtensionHeader, ValueError> {
+    pub fn new_raw(next_header: u8, payload: &[u8]) -> Result<Ipv6RawExtHeader, ValueError> {
         use ValueError::*;
         if payload.len() < Self::MIN_PAYLOAD_LEN {
             Err(Ipv6ExtensionPayloadTooSmall(payload.len()))
@@ -96,7 +99,7 @@ impl Ipv6RawExtensionHeader {
         } else if 0 != (payload.len() + 2) % 8 {
             Err(Ipv6ExtensionPayloadLengthUnaligned(payload.len()))
         } else {
-            let mut result = Ipv6RawExtensionHeader {
+            let mut result = Ipv6RawExtHeader {
                 next_header,
                 header_length: ((payload.len() - 6) / 8) as u8,
                 payload_buffer: [0; Self::MAX_PAYLOAD_LEN],
@@ -107,8 +110,8 @@ impl Ipv6RawExtensionHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtensionHeader, &[u8]), ReadError> {
-        let s = Ipv6RawExtensionHeaderSlice::from_slice(slice)?;
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtHeader, &[u8]), ReadError> {
+        let s = Ipv6RawExtHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
         Ok((header, rest))
@@ -125,7 +128,7 @@ impl Ipv6RawExtensionHeader {
     ///
     /// Note that `payload` must have at least the length of 6 bytes and only supports
     /// length increases in steps of 8. This measn that the following expression must be true `(payload.len() + 2) % 8 == 0`.
-    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtensionHeader::MAX_PAYLOAD_LEN`).
+    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`).
     ///
     /// If a payload with a non supported length is provided a `ValueError` is returned and the payload of the header is not changed.
     pub fn set_payload(&mut self, payload: &[u8]) -> Result<(), ValueError> {
@@ -146,14 +149,14 @@ impl Ipv6RawExtensionHeader {
     /// Read an fragment header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<Ipv6RawExtensionHeader, ReadError> {
+    ) -> Result<Ipv6RawExtHeader, ReadError> {
         let (next_header, header_length) = {
             let mut d: [u8; 2] = [0; 2];
             reader.read_exact(&mut d)?;
             (d[0], d[1])
         };
 
-        Ok(Ipv6RawExtensionHeader {
+        Ok(Ipv6RawExtHeader {
             next_header,
             header_length,
             payload_buffer: {

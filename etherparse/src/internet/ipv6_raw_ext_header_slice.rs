@@ -1,6 +1,13 @@
 use crate::*;
 use core::slice::from_raw_parts;
 
+/// Deprecated. Use [Ipv6RawExtHeaderSlice] instead.
+#[deprecated(
+    since = "0.14.0",
+    note = "Please use the type Ipv6RawExtHeaderSlice instead"
+)]
+pub type Ipv6RawExtensionHeaderSlice<'a> = Ipv6RawExtHeaderSlice<'a>;
+
 /// Slice containing an IPv6 extension header without specific decoding methods (fallback in case no specific implementation is available).
 ///
 /// Slice containing an IPv6 extension header with only minimal data interpretation. NOTE only ipv6 header
@@ -16,19 +23,19 @@ use core::slice::from_raw_parts;
 /// * Host Identity Protocol
 /// * Shim6 Protocol
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Ipv6RawExtensionHeaderSlice<'a> {
+pub struct Ipv6RawExtHeaderSlice<'a> {
     /// Slice containing the packet data.
     slice: &'a [u8],
 }
 
-impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
+impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeaderSlice`.
     pub fn header_type_supported(next_header: u8) -> bool {
-        Ipv6RawExtensionHeader::header_type_supported(next_header)
+        Ipv6RawExtHeader::header_type_supported(next_header)
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtensionHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtHeaderSlice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
         if slice.len() < 8 {
@@ -52,7 +59,7 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
         }
 
         //all good
-        Ok(Ipv6RawExtensionHeaderSlice {
+        Ok(Ipv6RawExtHeaderSlice {
             // SAFETY:
             // Safe as the slice has been checked in the previous if
             // to have at least the the length of the variable len.
@@ -72,8 +79,8 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
     ///
     /// If these precondtions are not fullfilled the behavior of this function
     /// and the methods of the return [`IpAuthHeaderSlice`] will be undefined.
-    pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> Ipv6RawExtensionHeaderSlice<'a> {
-        Ipv6RawExtensionHeaderSlice {
+    pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> Ipv6RawExtHeaderSlice<'a> {
+        Ipv6RawExtHeaderSlice {
             slice: from_raw_parts(slice.as_ptr(), ((*slice.get_unchecked(1) as usize) + 1) * 8),
         }
     }
@@ -102,12 +109,12 @@ impl<'a> Ipv6RawExtensionHeaderSlice<'a> {
         unsafe { from_raw_parts(self.slice.as_ptr().add(2), self.slice.len() - 2) }
     }
 
-    /// Convert the slice to an [Ipv6RawExtensionHeader].
+    /// Convert the slice to an [Ipv6RawExtHeader].
     ///
     /// Decode some of the fields and copy the results to a
-    /// [Ipv6RawExtensionHeader] struct together with a slice pointing
+    /// [Ipv6RawExtHeader] struct together with a slice pointing
     /// to the non decoded parts.
-    pub fn to_header(&self) -> Ipv6RawExtensionHeader {
-        Ipv6RawExtensionHeader::new_raw(self.next_header(), self.payload()).unwrap()
+    pub fn to_header(&self) -> Ipv6RawExtHeader {
+        Ipv6RawExtHeader::new_raw(self.next_header(), self.payload()).unwrap()
     }
 }
