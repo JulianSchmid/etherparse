@@ -357,9 +357,9 @@ prop_compose! {
     ) (
         next_header in proptest::strategy::Just(next_header),
         payload in proptest::collection::vec(any::<u8>(), (len as usize)*8 + 6)
-    ) -> Ipv6RawExtensionHeader
+    ) -> Ipv6RawExtHeader
     {
-        Ipv6RawExtensionHeader::new_raw(
+        Ipv6RawExtHeader::new_raw(
             next_header,
             &payload[..]
         ).unwrap()
@@ -373,7 +373,7 @@ prop_compose! {
             len in any::<u8>()
         ) (
             result in ipv6_raw_extension_with(next_header, len)
-    ) -> Ipv6RawExtensionHeader
+    ) -> Ipv6RawExtHeader
     {
         result
     }

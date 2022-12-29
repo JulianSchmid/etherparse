@@ -26,12 +26,18 @@
 
 ### Minor Fixes
 
-* Corrected `Ipv4Header` & `IpAuthHeader` `core::fmt::Debug` implementations (will now correctly write newlines when `{:#?}` is used)
+* Previously the manual `core::fmt::Debug` implementations for some types were not correctly inserting newlines & identation when `{:#?}` was used for debug printing. This has been corrected for the following types:
+  * `Ipv4Header`
+  * `IpAuthHeader`
+  * `Ipv6RawExtHeader`
 
 ### Deprecations / Renames:
 
-* Renamed `IpAuthenticationHeader` to `IpAuthHeader` (alias for backwards compatibility exists with an deprecation warning).
-* Renamed `IpAuthenticationHeaderSlice` to `IpAuthHeaderSlice` (alias for backwards compatibility exists with an deprecation warning).
+* The following types have been renamed (alias with the old name exist for backwards compatibility but will trigger a deprecation warning):
+  * `IpAuthenticationHeader` to `IpAuthHeader`
+  * `IpAuthenticationHeaderSlice` to `IpAuthHeaderSlice`
+  * `Ipv6RawExtensionHeader` to `Ipv6RawExtHeader`
+  * `Ipv6RawExtensionHeaderSlice` to `Ipv6RawExtHeaderSlice`
 
 ### Internal Changes:
 
