@@ -171,5 +171,23 @@ mod test {
     use crate::{*, test_gens::*};
     use proptest::*;
 
-    
+    #[test]
+    fn debug() {
+        let header: Ipv6Header = Default::default();
+        let bytes = header.to_bytes().unwrap();
+        let slice = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+        assert_eq!(
+            format!("{:?}", slice),
+            format!("Ipv6HeaderSlice {{ slice: {:?} }}", &bytes[..])
+        );
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(header in ipv6_any()) {
+            let bytes = header.to_bytes().unwrap();
+            let slice = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.clone(), slice);
+        }
+    }
 }

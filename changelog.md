@@ -5,7 +5,6 @@
 ### TODO before release
 
 * TODO: Use lengths in IP, UDP & TCP headers to correctly identify payload.
-* TODO Add `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
 
 ### New
 
@@ -14,11 +13,16 @@
   * TODO Add to all headers that have write methods
 * Added `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
 
+### Changes in Behavior
+
+* Removed `ReadError::Ipv6TooManyHeaderExtensions` error when calling `Ipv6Header::skip_all_header_extensions` and `Ipv6Header::skip_all_header_extensions_in_slice`.
+
 ### Breaking Changes:
 
 * TODO: Changed packet slicing & reading so the length of the payload is taken into account.
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
 * Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
+* Removed `IPV6_MAX_NUM_HEADER_EXTENSIONS` as it is no longer used by the skip functions.
 
 ### Minor Fixes
 
