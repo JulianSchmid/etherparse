@@ -55,7 +55,6 @@ fn test_debug_write() {
             IpUnsupportedVersion(0),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
             Ipv6UnexpectedVersion(0),
-            Ipv6TooManyHeaderExtensions,
             TcpDataOffsetTooSmall(0),
         ]
         .iter()
