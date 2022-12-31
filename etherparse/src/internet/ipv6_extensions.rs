@@ -69,8 +69,8 @@ impl Ipv6Extensions {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                .map_err(ReadError::UnexpectedEndOfSlice)?;
+            let slice =
+                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(ReadError::UnexpectedEndOfSlice)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -728,8 +728,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                .map_err(ReadError::UnexpectedEndOfSlice)?;
+            let slice =
+                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(ReadError::UnexpectedEndOfSlice)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
         }

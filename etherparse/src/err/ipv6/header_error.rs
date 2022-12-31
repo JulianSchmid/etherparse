@@ -67,9 +67,7 @@ mod tests {
 
     #[test]
     fn source() {
-        let values = [
-            UnexpectedVersion { version_number: 0 },
-        ];
+        let values = [UnexpectedVersion { version_number: 0 }];
         for v in values {
             assert!(v.source().is_none());
         }

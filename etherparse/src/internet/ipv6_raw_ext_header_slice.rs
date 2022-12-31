@@ -35,7 +35,9 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
         if slice.len() < 8 {
             return Err(err::UnexpectedEndOfSliceError {
@@ -120,10 +122,10 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
@@ -135,7 +137,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
@@ -149,19 +151,17 @@ mod test {
         use ip_number::*;
         for value in 0..=u8::MAX {
             let expected_supported = match value {
-                IPV6_HOP_BY_HOP |
-                IPV6_DEST_OPTIONS |
-                IPV6_ROUTE |
-                MOBILITY |
-                HIP |
-                SHIM6 => true,
+                IPV6_HOP_BY_HOP | IPV6_DEST_OPTIONS | IPV6_ROUTE | MOBILITY | HIP | SHIM6 => true,
                 _ => false,
             };
-            assert_eq!(expected_supported, Ipv6RawExtHeaderSlice::header_type_supported(value));
+            assert_eq!(
+                expected_supported,
+                Ipv6RawExtHeaderSlice::header_type_supported(value)
+            );
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ipv6_raw_ext_any()) {
             // ok
@@ -197,7 +197,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice_unchecked(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
@@ -208,7 +208,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
@@ -218,7 +218,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
