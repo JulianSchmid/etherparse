@@ -11,7 +11,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     /// Creates a slice containing an ipv6 header (without header extensions).
     pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6HeaderSlice<'a>, err::ipv6::HeaderSliceError> {
         use err::ipv6::{HeaderError::*, HeaderSliceError::*};
-        
+
         // check length
         if slice.len() < Ipv6Header::LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
@@ -30,7 +30,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
         // check version
         if 6 != version_number {
-            return Err(Content(UnexpectedVersion{ version_number }));
+            return Err(Content(UnexpectedVersion { version_number }));
         }
 
         // all good
@@ -184,12 +184,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        *,
-        test_gens::*,
-        err::ipv6::HeaderError::*,
-        err::ipv6::HeaderSliceError::*,
-    };
+    use crate::{err::ipv6::HeaderError::*, err::ipv6::HeaderSliceError::*, test_gens::*, *};
     use proptest::*;
 
     #[test]
@@ -203,7 +198,7 @@ mod test {
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in ipv6_any()) {
             let bytes = header.to_bytes().unwrap();
@@ -212,7 +207,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             header in ipv6_any(),
@@ -255,7 +250,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice_unchecked(header in ipv6_any()) {
             let bytes = header.to_bytes().unwrap();
@@ -266,7 +261,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(header in ipv6_any()) {
             let bytes = header.to_bytes().unwrap();
@@ -285,7 +280,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(header in ipv6_any()) {
             let bytes = header.to_bytes().unwrap();
@@ -293,5 +288,4 @@ mod test {
             assert_eq!(actual.to_header(), header);
         }
     }
-
 }

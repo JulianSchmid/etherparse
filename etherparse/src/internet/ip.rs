@@ -62,12 +62,14 @@ impl IpHeader {
                         // SAFETY:
                         // This is safe as the slice length is checked to be
                         // at least Ipv6Header::LEN (40) befpre this code block.
-                        unsafe { 
-                            Ipv6HeaderSlice::from_slice_unchecked(
-                                core::slice::from_raw_parts(slice.as_ptr(), Ipv6Header::LEN)
-                            )
+                        unsafe {
+                            Ipv6HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
+                                slice.as_ptr(),
+                                Ipv6Header::LEN,
+                            ))
                         }
-                    }.to_header();
+                    }
+                    .to_header();
                     let rest = &slice[Ipv6Header::LEN..];
                     Ipv6Extensions::from_slice(header.next_header, rest).map(
                         |(ext, next_protocol, rest)| {

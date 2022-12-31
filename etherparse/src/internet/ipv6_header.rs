@@ -30,7 +30,9 @@ impl Ipv6Header {
     /// Renamed to `Ipv6Header::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `Ipv6Header::from_slice`")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), err::ipv6::HeaderSliceError> {
+    pub fn read_from_slice(
+        slice: &[u8],
+    ) -> Result<(Ipv6Header, &[u8]), err::ipv6::HeaderSliceError> {
         Ipv6Header::from_slice(slice)
     }
 
@@ -44,7 +46,9 @@ impl Ipv6Header {
     }
 
     ///Reads an IPv6 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6Header, err::ipv6::HeaderReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<Ipv6Header, err::ipv6::HeaderReadError> {
         use err::ipv6::{HeaderError::*, HeaderReadError::*};
 
         let mut value: [u8; 1] = [0; 1];
@@ -53,8 +57,7 @@ impl Ipv6Header {
         if 6 != version_number {
             return Err(Content(UnexpectedVersion { version_number }));
         }
-        Ipv6Header::read_without_version(reader, value[0] & 0xf)
-            .map_err(err::ipv6::HeaderReadError::Io)
+        Ipv6Header::read_without_version(reader, value[0] & 0xf).map_err(Io)
     }
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
@@ -98,7 +101,8 @@ impl Ipv6Header {
         // verify that a ipv6 extension is present (before
         // validating the slice length)
         match next_header {
-            IPV6_FRAG | AUTH | IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {},
+            IPV6_FRAG | AUTH | IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY
+            | HIP | SHIM6 => {}
             _ => {
                 return Ok((next_header, slice));
             }
@@ -324,16 +328,12 @@ impl Ipv6Header {
 #[cfg(test)]
 mod test {
     use crate::{
-        *,
-        test_gens::*,
-        ip_number::*,
-        err::ipv6::HeaderError::*,
-        err::ipv6::HeaderSliceError::*
+        err::ipv6::HeaderError::*, err::ipv6::HeaderSliceError::*, ip_number::*, test_gens::*, *,
     };
-    use proptest::*;
-    use std::io::Cursor;
     use arrayvec::ArrayVec;
     use assert_matches::assert_matches;
+    use proptest::*;
+    use std::io::Cursor;
 
     #[test]
     fn default() {
@@ -343,8 +343,8 @@ mod test {
         assert_eq!(0, header.payload_length);
         assert_eq!(0, header.next_header);
         assert_eq!(0, header.hop_limit);
-        assert_eq!([0u8;16], header.source);
-        assert_eq!([0u8;16], header.destination);
+        assert_eq!([0u8; 16], header.source);
+        assert_eq!([0u8; 16], header.destination);
     }
 
     #[test]
@@ -365,14 +365,14 @@ mod test {
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in ipv6_any()) {
             assert_eq!(header.clone(), header);
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         #[allow(deprecated)]
         fn read_from_slice(
@@ -417,7 +417,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(
             header in ipv6_any(),
@@ -461,7 +461,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(
             header in ipv6_any(),
@@ -507,7 +507,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read_without_version(header in ipv6_any()) {
             // ok read
@@ -530,7 +530,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn skip_header_extension_in_slice(
             generic in ipv6_raw_ext_any(),
@@ -546,7 +546,7 @@ mod test {
                 HIP,
                 SHIM6,
             ];
-            
+
             // generic headers
             for g in GENERICS {
                 let bytes = generic.to_bytes();
@@ -638,7 +638,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn skip_all_header_extensions_in_slice(
             hop_by_hop in ipv6_raw_ext_any(),
@@ -818,7 +818,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn skip_all_header_extensions(
             hop_by_hop in ipv6_raw_ext_any(),
@@ -916,7 +916,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(header in ipv6_any()) {
             let mut buffer = [0u8;Ipv6Header::LEN];
@@ -933,7 +933,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn source_addr(header in ipv6_any()) {
             assert_eq!(
@@ -943,7 +943,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn destination_addr(header in ipv6_any()) {
             assert_eq!(
@@ -953,7 +953,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(
             header in ipv6_any(),
@@ -984,5 +984,4 @@ mod test {
             }
         }
     }
-
 }

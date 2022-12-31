@@ -473,15 +473,16 @@ impl<'a> CursorSlice<'a> {
     pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, ReadError> {
         use crate::InternetSlice::*;
 
-        let ip = Ipv6HeaderSlice::from_slice(self.slice)
-            .map_err(|err| {
-                use err::ipv6::HeaderSliceError as I;
-                use ReadError as O;
-                match err {
-                    I::Content(err) => O::Ipv6Header(err),
-                    I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err.add_offset(self.offset)),
+        let ip = Ipv6HeaderSlice::from_slice(self.slice).map_err(|err| {
+            use err::ipv6::HeaderSliceError as I;
+            use ReadError as O;
+            match err {
+                I::Content(err) => O::Ipv6Header(err),
+                I::UnexpectedEndOfSlice(err) => {
+                    O::UnexpectedEndOfSlice(err.add_offset(self.offset))
                 }
-            })?;
+            }
+        })?;
 
         //move the slice
         self.move_by_slice(ip.slice());

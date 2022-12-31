@@ -1,6 +1,6 @@
 use super::super::*;
-use core::fmt::{Debug, Formatter};
 use arrayvec::ArrayVec;
+use core::fmt::{Debug, Formatter};
 
 /// Deprecated. Use [Ipv6RawExtHeader] instead.
 #[deprecated(
@@ -111,7 +111,9 @@ impl Ipv6RawExtHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtHeader, &[u8]), err::UnexpectedEndOfSliceError> {
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(Ipv6RawExtHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         let s = Ipv6RawExtHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -192,16 +194,15 @@ impl Ipv6RawExtHeader {
     pub fn header_len(&self) -> usize {
         2 + (6 + usize::from(self.header_length) * 8)
     }
-
 }
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::Cursor;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(header in ipv6_raw_ext_any()) {
             assert_eq!(
@@ -215,7 +216,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in ipv6_raw_ext_any()) {
             assert_eq!(header.clone(), header);
@@ -227,19 +228,17 @@ mod test {
         use ip_number::*;
         for value in 0..=u8::MAX {
             let expected_supported = match value {
-                IPV6_HOP_BY_HOP |
-                IPV6_DEST_OPTIONS |
-                IPV6_ROUTE |
-                MOBILITY |
-                HIP |
-                SHIM6 => true,
+                IPV6_HOP_BY_HOP | IPV6_DEST_OPTIONS | IPV6_ROUTE | MOBILITY | HIP | SHIM6 => true,
                 _ => false,
             };
-            assert_eq!(expected_supported, Ipv6RawExtHeader::header_type_supported(value));
+            assert_eq!(
+                expected_supported,
+                Ipv6RawExtHeader::header_type_supported(value)
+            );
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn new_raw(header in ipv6_raw_ext_any()) {
             // ok
@@ -285,7 +284,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in ipv6_raw_ext_any()) {
             // ok
@@ -321,7 +320,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn set_payload(
             header_a in ipv6_raw_ext_any(),
@@ -374,7 +373,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn read(header in ipv6_raw_ext_any()) {
             // ok
@@ -396,7 +395,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn write(header in ipv6_raw_ext_any()) {
             // ok case
@@ -421,7 +420,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_bytes(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
@@ -431,7 +430,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(header in ipv6_raw_ext_any()) {
             assert_eq!(header.header_len(), header.to_bytes().len());
