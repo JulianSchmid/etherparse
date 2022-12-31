@@ -9,9 +9,10 @@ pub struct Ipv6HeaderSlice<'a> {
 
 impl<'a> Ipv6HeaderSlice<'a> {
     /// Creates a slice containing an ipv6 header (without header extensions).
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6HeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6HeaderSlice<'a>, err::ipv6::HeaderSliceError> {
+        use err::ipv6::{HeaderError::*, HeaderSliceError::*};
+        
         // check length
-        use crate::ReadError::*;
         if slice.len() < Ipv6Header::LEN {
             return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
                 expected_min_len: Ipv6Header::LEN,
@@ -25,11 +26,11 @@ impl<'a> Ipv6HeaderSlice<'a> {
         // SAFETY:
         // This is safe as the slice len is checked to be
         // at least 40 bytes at the start of the function.
-        let version = unsafe { slice.get_unchecked(0) >> 4 };
+        let version_number = unsafe { slice.get_unchecked(0) >> 4 };
 
         // check version
-        if 6 != version {
-            return Err(Ipv6UnexpectedVersion(version));
+        if 6 != version_number {
+            return Err(Content(UnexpectedVersion{ version_number }));
         }
 
         // all good
@@ -40,6 +41,21 @@ impl<'a> Ipv6HeaderSlice<'a> {
             // at the start of the function.
             slice: unsafe { from_raw_parts(slice.as_ptr(), Ipv6Header::LEN) },
         })
+    }
+
+    /// Converts the given slice into a ipv6 header slice WITHOUT any
+    /// checks to ensure that the data present is an ipv4 header or that the
+    /// slice length is matching the header length.
+    ///
+    /// If you are not sure what this means, use [`Ipv6HeaderSlice::from_slice`]
+    /// instead.
+    ///
+    /// # Safety
+    ///
+    /// It must ensured that the slice length is at least [`Ipv6Header::LEN`].
+    #[inline]
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ipv6HeaderSlice {
+        Ipv6HeaderSlice { slice }
     }
 
     /// Returns the slice containing the ipv6 header
@@ -168,9 +184,13 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{
+        *,
+        test_gens::*,
+        err::ipv6::HeaderError::*,
+        err::ipv6::HeaderSliceError::*,
+    };
     use proptest::*;
-    use assert_matches::assert_matches;
 
     #[test]
     fn debug() {
@@ -211,9 +231,9 @@ mod test {
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
-                assert_matches!(
-                    Ipv6HeaderSlice::from_slice(&bytes),
-                    Err(ReadError::Ipv6UnexpectedVersion(_))
+                assert_eq!(
+                    Ipv6HeaderSlice::from_slice(&bytes).unwrap_err(),
+                    Content(UnexpectedVersion{ version_number: bad_version })
                 );
             }
 
@@ -223,17 +243,26 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6HeaderSlice::from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .unexpected_end_of_slice()
-                            .unwrap(),
-                        err::UnexpectedEndOfSliceError{
+                            .unwrap_err(),
+                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
-                        }
+                        })
                     );
                 }
             }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice_unchecked(header in ipv6_any()) {
+            let bytes = header.to_bytes().unwrap();
+            let actual = unsafe {
+                Ipv6HeaderSlice::from_slice_unchecked(&bytes)
+            };
+            assert_eq!(actual.slice(), &bytes[..]);
         }
     }
 

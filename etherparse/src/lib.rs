@@ -315,8 +315,8 @@ pub enum ReadError {
     IpUnsupportedVersion(u8),
     /// Error when decoding an IPv4 header.
     Ipv4Header(err::ipv4::HeaderError),
-    /// Error when then ip header version field is not equal 6. The value is the version that was received.
-    Ipv6UnexpectedVersion(u8),
+    /// Error when decoding an IPv6 header.
+    Ipv6Header(err::ipv6::HeaderError),
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     Ipv6HopByHopHeaderNotAtStart,
     /// Error when decoding an IP authentification header.
@@ -395,9 +395,7 @@ impl std::fmt::Display for ReadError {
                 write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
             }
             Ipv4Header(err) => err.fmt(f),
-            Ipv6UnexpectedVersion(version_number) => {
-                write!(f, "ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", version_number)
-            }
+            Ipv6Header(err) => err.fmt(f),
             Ipv6HopByHopHeaderNotAtStart => {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
             }
@@ -418,6 +416,7 @@ impl std::error::Error for ReadError {
             ReadError::IoError(err) => Some(err),
             ReadError::UnexpectedEndOfSlice(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
+            ReadError::Ipv6Header(err) => Some(err),
             _ => None,
         }
     }

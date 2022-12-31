@@ -86,7 +86,9 @@ impl<'a> PacketHeaders<'a> {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
                 let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)
-                    .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
+                    .map_err(|err| ReadError::UnexpectedEndOfSlice(
+                        err.add_offset(packet.len() - rest.len())
+                    ))?;
 
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
@@ -97,7 +99,9 @@ impl<'a> PacketHeaders<'a> {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
-                            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
+                            .map_err(|err| ReadError::UnexpectedEndOfSlice(
+                                err.add_offset(packet.len() - rest.len())
+                            ))?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
@@ -120,7 +124,9 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                            err.add_offset(packet.len() - rest.len())
+                        ),
                         I::Content(err) => O::Ipv4Header(err),
                     }
                 })?;
@@ -130,7 +136,9 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                                err.add_offset(packet.len() - ip_rest.len())
+                            ),
                             I::Content(err) => O::IpAuthHeader(err),
                         }
                     })?;
@@ -143,7 +151,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
+                    let (transport, transport_rest) = read_transport(ip_protocol, packet.len() - rest.len(), rest)?;
 
                     //assign to the output
                     rest = transport_rest;
@@ -151,9 +159,20 @@ impl<'a> PacketHeaders<'a> {
                 }
             }
             IPV6 => {
-                let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
+                let (ip, ip_rest) = Ipv6Header::from_slice(rest)
+                    .map_err(|err| {
+                        use err::ipv6::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                                err.add_offset(packet.len() - rest.len())
+                            ),
+                            I::Content(err) => O::Ipv6Header(err),
+                        }
+                    })?;
                 let (ip_ext, next_header, ip_ext_rest) =
-                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
+                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)
+                    .map_err(|err| err.add_slice_offset(packet.len() - ip_rest.len()))?;
                 let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest
@@ -164,7 +183,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(next_header, rest)?;
+                    let (transport, transport_rest) = read_transport(next_header, packet.len() - rest.len(), rest)?;
 
                     rest = transport_rest;
                     result.transport = transport;
@@ -285,7 +304,9 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                        I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                            err.add_offset(data.len() - rest.len())
+                        ),
                         I::Content(err) => O::Ipv4Header(err),
                     }
                 })?;
@@ -295,7 +316,9 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                                err.add_offset(data.len() - rest.len())
+                            ),
                             I::Content(err) => O::IpAuthHeader(err),
                         }
                     })?;
@@ -308,7 +331,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(ip_protocol, rest)?;
+                    let (transport, transport_rest) = read_transport(ip_protocol, data.len() - rest.len(), rest)?;
 
                     //assign to the output
                     rest = transport_rest;
@@ -316,7 +339,17 @@ impl<'a> PacketHeaders<'a> {
                 }
             }
             IPV6 => {
-                let (ip, ip_rest) = Ipv6Header::from_slice(rest)?;
+                let (ip, ip_rest) = Ipv6Header::from_slice(rest)
+                    .map_err(|err| {
+                        use err::ipv6::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                                err.add_offset(data.len() - rest.len())
+                            ),
+                            I::Content(err) => O::Ipv6Header(err),
+                        }
+                    })?;
                 let (ip_ext, next_header, ip_ext_rest) =
                     Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
                 let fragmented = ip_ext.is_fragmenting_payload();
@@ -329,7 +362,7 @@ impl<'a> PacketHeaders<'a> {
                 // is not fragmented
                 if false == fragmented {
                     //parse the transport layer
-                    let (transport, transport_rest) = read_transport(next_header, rest)?;
+                    let (transport, transport_rest) = read_transport(next_header, data.len() - rest.len(), rest)?;
 
                     rest = transport_rest;
                     result.transport = transport;
@@ -400,7 +433,7 @@ impl<'a> PacketHeaders<'a> {
         };
 
         // try to parse the transport header
-        let (transport, rest) = read_transport(transport_proto, rest)?;
+        let (transport, rest) = read_transport(transport_proto, packet.len() - rest.len(), rest)?;
 
         // update output
         result.transport = transport;
@@ -442,19 +475,23 @@ impl<'a> PacketHeaders<'a> {
 /// helper function to process transport headers
 fn read_transport(
     protocol: u8,
+    offset: usize,
     rest: &[u8],
 ) -> Result<(Option<TransportHeader>, &[u8]), ReadError> {
     use crate::ip_number::*;
-    match protocol {
-        ICMP => Ok(Icmpv4Header::from_slice(rest)?)
-            .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1)),
-        IPV6_ICMP => Ok(Icmpv6Header::from_slice(rest)?)
-            .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1)),
-        UDP => Ok(UdpHeader::from_slice(rest)
-            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))
-            .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?),
-        TCP => Ok(TcpHeader::from_slice(rest)
-            .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?),
-        _ => Ok((None, rest)),
-    }
+    Ok(match protocol {
+        ICMP => Icmpv4Header::from_slice(rest)
+            .map_err(|err| err.add_slice_offset(offset))
+            .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1))?,
+        IPV6_ICMP => Icmpv6Header::from_slice(rest)
+            .map_err(|err| err.add_slice_offset(offset))
+            .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1))?,
+        UDP => UdpHeader::from_slice(rest)
+            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(offset)))
+            .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?,
+        TCP => TcpHeader::from_slice(rest)
+            .map_err(|err| err.add_slice_offset(offset))
+            .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?,
+        _ => (None, rest),
+    })
 }
