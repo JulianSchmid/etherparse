@@ -170,6 +170,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 mod test {
     use crate::{*, test_gens::*};
     use proptest::*;
+    use assert_matches::assert_matches;
 
     #[test]
     fn debug() {
@@ -190,4 +191,78 @@ mod test {
             assert_eq!(slice.clone(), slice);
         }
     }
+
+    proptest!{
+        #[test]
+        fn from_slice(
+            header in ipv6_any(),
+            bad_version in 0..=0b1111u8)
+        {
+            // ok read
+            {
+                let bytes = header.to_bytes().unwrap();
+                let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+                assert_eq!(actual.slice(), &bytes[..]);
+            }
+
+            // version error
+            if bad_version != 6 {
+                let mut bytes = header.to_bytes().unwrap();
+                // inject a bad version number
+                bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
+
+                assert_matches!(
+                    Ipv6HeaderSlice::from_slice(&bytes),
+                    Err(ReadError::Ipv6UnexpectedVersion(_))
+                );
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes().unwrap();
+                for len in 0..bytes.len() {
+                    assert_eq!(
+                        Ipv6HeaderSlice::from_slice(&bytes[..len])
+                            .unwrap_err()
+                            .unexpected_end_of_slice()
+                            .unwrap(),
+                        err::UnexpectedEndOfSliceError{
+                            expected_min_len: Ipv6Header::LEN,
+                            actual_len: len,
+                            layer: err::Layer::Ipv6Header,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(header in ipv6_any()) {
+            let bytes = header.to_bytes().unwrap();
+            let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(actual.slice(), &bytes[..]);
+            assert_eq!(actual.version(), 6);
+            assert_eq!(actual.traffic_class(), header.traffic_class);
+            assert_eq!(actual.flow_label(), header.flow_label);
+            assert_eq!(actual.payload_length(), header.payload_length);
+            assert_eq!(actual.next_header(), header.next_header);
+            assert_eq!(actual.hop_limit(), header.hop_limit);
+            assert_eq!(actual.source(), header.source);
+            assert_eq!(actual.source_addr(), std::net::Ipv6Addr::from(header.source));
+            assert_eq!(actual.destination(), header.destination);
+            assert_eq!(actual.destination_addr(), std::net::Ipv6Addr::from(header.destination));
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(header in ipv6_any()) {
+            let bytes = header.to_bytes().unwrap();
+            let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(actual.to_header(), header);
+        }
+    }
+
 }

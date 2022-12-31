@@ -4,7 +4,6 @@ use etherparse::*;
 use assert_matches::assert_matches;
 
 pub use etherparse_proptest_generators::*;
-use std::io;
 
 mod checksum;
 mod errors;
@@ -18,8 +17,6 @@ use proptest::prelude::*;
 mod packet_compositions;
 mod test_writer;
 use test_writer::*;
-mod test_reader;
-use test_reader::*;
 
 #[test]
 fn test_eq() {

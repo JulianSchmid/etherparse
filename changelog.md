@@ -24,7 +24,11 @@
 * Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
 * Removed `IPV6_MAX_NUM_HEADER_EXTENSIONS` as it is no longer used by the skip functions.
 
-### Minor Fixes
+### Bugfixes
+
+* The IPv6 extension header skipping functions were previously checking that the slice length is at least 2 before checking if an extension header is even present. If less then two bytes were present an error was returned. This was wrong behavior, as there are no gurantees for other protocols that there are 2 bytes of data present. A check has been added, that validates the header type before checking the slice length. The following functions were corrected:
+  * `Ipv6Header::skip_header_extension_in_slice`
+  * `Ipv6Header::skip_all_header_extensions_in_slice`
 
 * Previously the manual `core::fmt::Debug` implementations for some types were not correctly inserting newlines & identation when `{:#?}` was used for debug printing. This has been corrected for the following types:
   * `Ipv4Header`
