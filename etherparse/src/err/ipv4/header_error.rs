@@ -1,9 +1,9 @@
 /// Error when decoding the IPv4 part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
-    /// Error when the ip header version field is not equal 4. The value is the version that was received.
+    /// Error when the IPv4 header version field is not equal to 4.
     UnexpectedVersion {
-        /// The unexpected version number that was not 4.
+        /// The unexpected version number in the IPv4 header.
         version_number: u8,
     },
 
