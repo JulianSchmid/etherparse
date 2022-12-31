@@ -30,13 +30,13 @@ impl Ipv6Header {
     /// Renamed to `Ipv6Header::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `Ipv6Header::from_slice`")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), err::ipv6::HeaderSliceError> {
         Ipv6Header::from_slice(slice)
     }
 
     /// Read an Ipv6Header from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), err::ipv6::HeaderSliceError> {
         Ok((
             Ipv6HeaderSlice::from_slice(slice)?.to_header(),
             &slice[Ipv6Header::LEN..],
@@ -44,24 +44,24 @@ impl Ipv6Header {
     }
 
     ///Reads an IPv6 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6Header, ReadError> {
+    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<Ipv6Header, err::ipv6::HeaderReadError> {
+        use err::ipv6::{HeaderError::*, HeaderReadError::*};
+
         let mut value: [u8; 1] = [0; 1];
-        reader.read_exact(&mut value)?;
-        let version = value[0] >> 4;
-        if 6 != version {
-            return Err(ReadError::Ipv6UnexpectedVersion(version));
+        reader.read_exact(&mut value).map_err(Io)?;
+        let version_number = value[0] >> 4;
+        if 6 != version_number {
+            return Err(Content(UnexpectedVersion { version_number }));
         }
-        match Ipv6Header::read_without_version(reader, value[0] & 0xf) {
-            Ok(value) => Ok(value),
-            Err(err) => Err(ReadError::IoError(err)),
-        }
+        Ipv6Header::read_without_version(reader, value[0] & 0xf)
+            .map_err(err::ipv6::HeaderReadError::Io)
     }
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
     pub fn read_without_version<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
         version_rest: u8,
-    ) -> Result<Ipv6Header, io::Error> {
+    ) -> Result<Ipv6Header, std::io::Error> {
         let mut buffer: [u8; 8 + 32 - 1] = [0; 8 + 32 - 1];
         reader.read_exact(&mut buffer[..])?;
 
@@ -323,7 +323,13 @@ impl Ipv6Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*, ip_number::*};
+    use crate::{
+        *,
+        test_gens::*,
+        ip_number::*,
+        err::ipv6::HeaderError::*,
+        err::ipv6::HeaderSliceError::*
+    };
     use proptest::*;
     use std::io::Cursor;
     use arrayvec::ArrayVec;
@@ -387,9 +393,9 @@ mod test {
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
-                assert_matches!(
-                    Ipv6Header::read_from_slice(&bytes),
-                    Err(ReadError::Ipv6UnexpectedVersion(_))
+                assert_eq!(
+                    Ipv6Header::read_from_slice(&bytes).unwrap_err(),
+                    Content(UnexpectedVersion{ version_number: bad_version })
                 );
             }
 
@@ -399,14 +405,12 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::read_from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .unexpected_end_of_slice()
-                            .unwrap(),
-                        err::UnexpectedEndOfSliceError{
+                            .unwrap_err(),
+                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
-                        }
+                        })
                     );
                 }
             }
@@ -433,9 +437,9 @@ mod test {
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
-                assert_matches!(
-                    Ipv6Header::from_slice(&bytes),
-                    Err(ReadError::Ipv6UnexpectedVersion(_))
+                assert_eq!(
+                    Ipv6Header::from_slice(&bytes).unwrap_err(),
+                    Content(UnexpectedVersion{ version_number: bad_version })
                 );
             }
 
@@ -445,14 +449,12 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .unexpected_end_of_slice()
-                            .unwrap(),
-                        err::UnexpectedEndOfSliceError{
+                            .unwrap_err(),
+                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
-                        }
+                        })
                     );
                 }
             }
@@ -465,6 +467,8 @@ mod test {
             header in ipv6_any(),
             bad_version in 0..=0b1111u8
         ) {
+            use err::ipv6::HeaderError::*;
+
             // ok read
             {
                 let bytes = header.to_bytes().unwrap();
@@ -481,9 +485,14 @@ mod test {
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
                 let mut cursor = Cursor::new(&bytes[..]);
-                assert_matches!(
-                    Ipv6Header::read(&mut cursor),
-                    Err(ReadError::Ipv6UnexpectedVersion(_))
+                assert_eq!(
+                    Ipv6Header::read(&mut cursor)
+                        .unwrap_err()
+                        .content_error()
+                        .unwrap(),
+                    UnexpectedVersion {
+                        version_number: bad_version,
+                    }
                 );
             }
 

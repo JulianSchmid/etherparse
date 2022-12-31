@@ -58,11 +58,16 @@ proptest! {
             );
         }
 
-        //Ipv6UnexpectedVersion
-        assert_eq!(
-            &format!("ReadError: Unexpected IP version number. Expected an IPv6 Header but the header contained the version number {}.", arg_u8),
-            &format!("{}", Ipv6UnexpectedVersion(arg_u8))
-        );
+        //Ipv6HeaderError
+        {
+            let inner = err::ipv6::HeaderError::UnexpectedVersion{
+                version_number: arg_u8,
+            };
+            assert_eq!(
+                &format!("{}", inner),
+                &format!("{}", Ipv6Header(inner))
+            );
+        }
 
         //Ipv6HopByHopHeaderNotAtStart
         assert_eq!(
@@ -113,6 +118,11 @@ fn read_error_source() {
             .source()
             .is_some()
     );
+    assert!(
+        Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 })
+            .source()
+            .is_some()
+    );
 
     let none_values = [
         UnexpectedLenOfSlice {
@@ -120,7 +130,6 @@ fn read_error_source() {
             actual: 0,
         },
         IpUnsupportedVersion(0),
-        Ipv6UnexpectedVersion(0),
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpDataOffsetTooSmall(0),
@@ -149,7 +158,7 @@ fn read_error_debug() {
         },
         IpUnsupportedVersion(0),
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
-        Ipv6UnexpectedVersion(0),
+        Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpDataOffsetTooSmall(0),

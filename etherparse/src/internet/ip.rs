@@ -50,7 +50,25 @@ impl IpHeader {
                         })
                 }
                 6 => {
-                    let (header, rest) = Ipv6Header::from_slice(slice)?;
+                    if slice.len() < Ipv6Header::LEN {
+                        use ReadError::UnexpectedEndOfSlice;
+                        return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                            expected_min_len: Ipv6Header::LEN,
+                            actual_len: slice.len(),
+                            layer: err::Layer::Ipv6Header,
+                        }));
+                    }
+                    let header = {
+                        // SAFETY:
+                        // This is safe as the slice length is checked to be
+                        // at least Ipv6Header::LEN (40) befpre this code block.
+                        unsafe { 
+                            Ipv6HeaderSlice::from_slice_unchecked(
+                                core::slice::from_raw_parts(slice.as_ptr(), Ipv6Header::LEN)
+                            )
+                        }
+                    }.to_header();
+                    let rest = &slice[Ipv6Header::LEN..];
                     Ipv6Extensions::from_slice(header.next_header, rest).map(
                         |(ext, next_protocol, rest)| {
                             (IpHeader::Version6(header, ext), next_protocol, rest)

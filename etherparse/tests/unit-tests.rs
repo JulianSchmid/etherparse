@@ -51,7 +51,7 @@ fn test_debug_write() {
             }),
             IpUnsupportedVersion(0),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
-            Ipv6UnexpectedVersion(0),
+            Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
             TcpDataOffsetTooSmall(0),
         ]
         .iter()
@@ -180,10 +180,13 @@ mod read_error {
                 actual: 12
             }
         );
-        assert_matches!(
-            ReadError::Ipv6UnexpectedVersion(2).add_slice_offset(3),
-            ReadError::Ipv6UnexpectedVersion(2)
-        );
+        {
+            use err::ipv4::HeaderError::UnexpectedVersion;
+            assert_matches!(
+                ReadError::Ipv4Header(UnexpectedVersion { version_number: 0 }).add_slice_offset(3),
+                ReadError::Ipv4Header(UnexpectedVersion { version_number: 0 })
+            );
+        }
     }
 
     #[test]
