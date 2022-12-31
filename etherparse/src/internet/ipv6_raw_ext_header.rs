@@ -1,5 +1,6 @@
 use super::super::*;
 use core::fmt::{Debug, Formatter};
+use arrayvec::ArrayVec;
 
 /// Deprecated. Use [Ipv6RawExtHeader] instead.
 #[deprecated(
@@ -110,7 +111,7 @@ impl Ipv6RawExtHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtHeader, &[u8]), err::UnexpectedEndOfSliceError> {
         let s = Ipv6RawExtHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -149,7 +150,7 @@ impl Ipv6RawExtHeader {
     /// Read an fragment header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<Ipv6RawExtHeader, ReadError> {
+    ) -> Result<Ipv6RawExtHeader, std::io::Error> {
         let (next_header, header_length) = {
             let mut d: [u8; 2] = [0; 2];
             reader.read_exact(&mut d)?;
@@ -168,14 +169,272 @@ impl Ipv6RawExtHeader {
     }
 
     /// Writes a given IPv6 extension header to the current position.
-    pub fn write<W: io::Write + Sized>(&self, writer: &mut W) -> Result<(), WriteError> {
+    pub fn write<W: io::Write + Sized>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         writer.write_all(&[self.next_header, self.header_length])?;
         writer.write_all(self.payload())?;
         Ok(())
     }
 
+    /// Returns the serialized header.
+    pub fn to_bytes(&self) -> ArrayVec<u8, { Ipv6RawExtHeader::MAX_LEN }> {
+        let mut result = ArrayVec::new();
+        result.extend([self.next_header, self.header_length]);
+        // Unwrap Panic Safety:
+        // The following unwrap should never panic, as
+        // the payload length can at most have the size max
+        // header length - 2 and as the internal buffer used to
+        // store the payload data has exactly this size.
+        result.try_extend_from_slice(self.payload()).unwrap();
+        result
+    }
+
     /// Length of the header in bytes.
     pub fn header_len(&self) -> usize {
         2 + (6 + usize::from(self.header_length) * 8)
+    }
+
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+    use std::io::Cursor;
+
+    proptest!{
+        #[test]
+        fn debug(header in ipv6_raw_ext_any()) {
+            assert_eq!(
+                format!("{:?}", header),
+                format!(
+                    "Ipv6RawExtHeader {{ next_header: {}, payload: {:?} }}",
+                    header.next_header,
+                    header.payload()
+                )
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(header in ipv6_raw_ext_any()) {
+            assert_eq!(header.clone(), header);
+        }
+    }
+
+    #[test]
+    fn header_type_supported() {
+        use ip_number::*;
+        for value in 0..=u8::MAX {
+            let expected_supported = match value {
+                IPV6_HOP_BY_HOP |
+                IPV6_DEST_OPTIONS |
+                IPV6_ROUTE |
+                MOBILITY |
+                HIP |
+                SHIM6 => true,
+                _ => false,
+            };
+            assert_eq!(expected_supported, Ipv6RawExtHeader::header_type_supported(value));
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn new_raw(header in ipv6_raw_ext_any()) {
+            // ok
+            {
+                let actual = Ipv6RawExtHeader::new_raw(header.next_header, header.payload()).unwrap();
+                assert_eq!(actual.next_header, header.next_header);
+                assert_eq!(actual.payload(), header.payload());
+            }
+
+            // smaller then minimum
+            for len in 0..Ipv6RawExtHeader::MIN_PAYLOAD_LEN {
+                assert_eq!(
+                    Ipv6RawExtHeader::new_raw(header.next_header, &header.payload()[..len]).unwrap_err(),
+                    ValueError::Ipv6ExtensionPayloadTooSmall(len)
+                );
+            }
+
+            // bigger then maximum
+            {
+                let bytes = [0u8;Ipv6RawExtHeader::MAX_PAYLOAD_LEN + 1];
+                assert_eq!(
+                    Ipv6RawExtHeader::new_raw(header.next_header, &bytes).unwrap_err(),
+                    ValueError::Ipv6ExtensionPayloadTooLarge(bytes.len())
+                );
+            }
+
+            // non aligned payload
+            {
+                let mut bytes = header.to_bytes();
+                bytes.pop().unwrap();
+                bytes.pop().unwrap();
+
+                for offset in 1..8 {
+                    if offset + header.header_len() < Ipv6RawExtHeader::MAX_LEN {
+                        bytes.push(0);
+                        assert_eq!(
+                            Ipv6RawExtHeader::new_raw(header.next_header, &bytes).unwrap_err(),
+                            ValueError::Ipv6ExtensionPayloadLengthUnaligned(bytes.len())
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(header in ipv6_raw_ext_any()) {
+            // ok
+            {
+                let mut bytes = Vec::with_capacity(header.header_len() + 2);
+                bytes.extend_from_slice(&header.to_bytes());
+                bytes.push(1);
+                bytes.push(2);
+
+                let (actual_header, actual_rest) = Ipv6RawExtHeader::from_slice(&bytes).unwrap();
+                assert_eq!(actual_header, header);
+                assert_eq!(actual_rest, &[1, 2]);
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..bytes.len() {
+                    assert_eq!(
+                        Ipv6RawExtHeader::from_slice(&bytes[..len]).unwrap_err(),
+                        err::UnexpectedEndOfSliceError{
+                            expected_min_len: if len < Ipv6RawExtHeader::MIN_LEN {
+                                Ipv6RawExtHeader::MIN_LEN
+                            } else {
+                                header.header_len()
+                            },
+                            actual_len: len,
+                            layer: err::Layer::Ipv6ExtHeader,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn set_payload(
+            header_a in ipv6_raw_ext_any(),
+            header_b in ipv6_raw_ext_any()
+        ) {
+            // ok
+            {
+                let mut actual = header_a.clone();
+                actual.set_payload(header_b.payload()).unwrap();
+                assert_eq!(actual.payload(), header_b.payload());
+            }
+
+            // smaller then minimum
+            for len in 0..Ipv6RawExtHeader::MIN_PAYLOAD_LEN {
+                let mut actual = header_a.clone();
+                assert_eq!(
+                    actual.set_payload(&header_b.payload()[..len]).unwrap_err(),
+                    ValueError::Ipv6ExtensionPayloadTooSmall(len)
+                );
+                assert_eq!(actual.payload(), header_a.payload());
+            }
+
+            // bigger then maximum
+            {
+                let bytes = [0u8;Ipv6RawExtHeader::MAX_PAYLOAD_LEN + 1];
+                let mut actual = header_a.clone();
+                assert_eq!(
+                    actual.set_payload(&bytes).unwrap_err(),
+                    ValueError::Ipv6ExtensionPayloadTooLarge(bytes.len())
+                );
+            }
+
+            // non aligned payload
+            {
+                let mut bytes = header_b.to_bytes();
+                bytes.pop().unwrap();
+                bytes.pop().unwrap();
+
+                for offset in 1..8 {
+                    if offset + header_b.header_len() < Ipv6RawExtHeader::MAX_LEN {
+                        bytes.push(0);
+                        let mut actual = header_a.clone();
+                        assert_eq!(
+                            actual.set_payload(&bytes).unwrap_err(),
+                            ValueError::Ipv6ExtensionPayloadLengthUnaligned(bytes.len())
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn read(header in ipv6_raw_ext_any()) {
+            // ok
+            {
+                let bytes = header.to_bytes();
+                let mut cursor = Cursor::new(&bytes[..]);
+                let actual = Ipv6RawExtHeader::read(&mut cursor).unwrap();
+                assert_eq!(actual, header);
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..bytes.len() {
+                    let mut cursor = Cursor::new(&bytes[..len]);
+                    assert!(Ipv6RawExtHeader::read(&mut cursor).is_err());
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn write(header in ipv6_raw_ext_any()) {
+            // ok case
+            {
+                let mut buffer = [0u8;Ipv6RawExtHeader::MAX_LEN];
+                let len = {
+                    let mut cursor = Cursor::new(&mut buffer[..]);
+                    header.write(&mut cursor).unwrap();
+                    cursor.position() as usize
+                };
+                let (dec_header, dec_rest) = Ipv6RawExtHeader::from_slice(&buffer[..len]).unwrap();
+                assert_eq!(header, dec_header);
+                assert_eq!(dec_rest, &[]);
+            }
+
+            // length error
+            for len in 0..header.header_len() {
+                let mut buffer = [0u8;Ipv6RawExtHeader::MAX_LEN];
+                let mut cursor = Cursor::new(&mut buffer[..len]);
+                assert!(header.write(&mut cursor).is_err());
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_bytes(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            assert_eq!(bytes[0], header.next_header);
+            assert_eq!(bytes[1], header.header_length);
+            assert_eq!(&bytes[2..], header.payload());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn header_len(header in ipv6_raw_ext_any()) {
+            assert_eq!(header.header_len(), header.to_bytes().len());
+        }
     }
 }

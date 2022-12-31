@@ -69,7 +69,8 @@ impl Ipv6Extensions {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                .map_err(ReadError::UnexpectedEndOfSlice)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -88,7 +89,8 @@ impl Ipv6Extensions {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_header, rest));
                         } else {
-                            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+                            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                                .map_err(ReadError::UnexpectedEndOfSlice)?;
                             rest = &rest[slice.slice().len()..];
                             next_header = slice.next_header();
                             routing.final_destination_options = Some(slice.to_header());
@@ -97,7 +99,8 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                            .map_err(ReadError::UnexpectedEndOfSlice)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.destination_options = Some(slice.to_header());
@@ -108,7 +111,8 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_header, rest));
                     } else {
-                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+                        let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                            .map_err(ReadError::UnexpectedEndOfSlice)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.routing = Some(Ipv6RoutingExtensions {
@@ -123,7 +127,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
-                            .map_err(|err| ReadError::UnexpectedEndOfSlice(err))?;
+                            .map_err(ReadError::UnexpectedEndOfSlice)?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.fragment = Some(slice.to_header());
@@ -724,7 +728,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                .map_err(ReadError::UnexpectedEndOfSlice)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
         }
@@ -735,7 +740,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     return Err(Ipv6HopByHopHeaderNotAtStart);
                 }
                 IPV6_DEST_OPTIONS | IPV6_ROUTE => {
-                    let slice = Ipv6RawExtHeaderSlice::from_slice(rest)?;
+                    let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
+                        .map_err(ReadError::UnexpectedEndOfSlice)?;
                     // SAFETY:
                     // Ipv6RawExtHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed

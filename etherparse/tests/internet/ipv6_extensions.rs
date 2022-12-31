@@ -750,12 +750,12 @@ pub mod header {
     proptest! {
         #[test]
         fn header_len(
-            hop_by_hop_options in ipv6_raw_extension_any(),
-            destination_options in ipv6_raw_extension_any(),
-            routing in ipv6_raw_extension_any(),
+            hop_by_hop_options in ipv6_raw_ext_any(),
+            destination_options in ipv6_raw_ext_any(),
+            routing in ipv6_raw_ext_any(),
             fragment in ipv6_fragment_any(),
             auth in ip_auth_any(),
-            final_destination_options in ipv6_raw_extension_any(),
+            final_destination_options in ipv6_raw_ext_any(),
         ) {
             // None
             {
@@ -821,12 +821,12 @@ pub mod header {
     proptest! {
         #[test]
         fn set_next_headers(
-            hop_by_hop_options in ipv6_raw_extension_any(),
-            destination_options in ipv6_raw_extension_any(),
-            routing in ipv6_raw_extension_any(),
+            hop_by_hop_options in ipv6_raw_ext_any(),
+            destination_options in ipv6_raw_ext_any(),
+            routing in ipv6_raw_ext_any(),
             fragment in ipv6_fragment_any(),
             auth in ip_auth_any(),
-            final_destination_options in ipv6_raw_extension_any(),
+            final_destination_options in ipv6_raw_ext_any(),
             post_header in any::<u8>()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
@@ -1194,11 +1194,11 @@ pub mod slice {
     proptest! {
         #[test]
         fn is_fragmenting_payload(
-            hop_by_hop_options in ipv6_raw_extension_any(),
-            destination_options in ipv6_raw_extension_any(),
-            routing in ipv6_raw_extension_any(),
+            hop_by_hop_options in ipv6_raw_ext_any(),
+            destination_options in ipv6_raw_ext_any(),
+            routing in ipv6_raw_ext_any(),
             auth in ip_auth_any(),
-            final_destination_options in ipv6_raw_extension_any()
+            final_destination_options in ipv6_raw_ext_any()
         ) {
             // no fragment header
             {

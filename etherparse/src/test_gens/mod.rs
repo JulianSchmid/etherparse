@@ -351,7 +351,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_raw_extension_with(
+    pub fn ipv6_raw_ext_with(
         next_header: u8,
         len: u8
     ) (
@@ -367,12 +367,12 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_raw_extension_any()
+    pub fn ipv6_raw_ext_any()
         (
             next_header in any::<u8>(),
             len in any::<u8>()
         ) (
-            result in ipv6_raw_extension_with(next_header, len)
+            result in ipv6_raw_ext_with(next_header, len)
     ) -> Ipv6RawExtHeader
     {
         result
@@ -383,17 +383,17 @@ prop_compose! {
     pub fn ipv6_extensions_with(next_header: u8)
     (
         has_hop_by_hop_options in any::<bool>(),
-        hop_by_hop_options in ipv6_raw_extension_any(),
+        hop_by_hop_options in ipv6_raw_ext_any(),
         has_destination_options in any::<bool>(),
-        destination_options in ipv6_raw_extension_any(),
+        destination_options in ipv6_raw_ext_any(),
         has_routing in any::<bool>(),
-        routing in ipv6_raw_extension_any(),
+        routing in ipv6_raw_ext_any(),
         has_fragment in any::<bool>(),
         fragment in ipv6_fragment_any(),
         has_auth in any::<bool>(),
         auth in ip_auth_with(next_header),
         has_final_destination_options in any::<bool>(),
-        final_destination_options in ipv6_raw_extension_any()
+        final_destination_options in ipv6_raw_ext_any()
     ) -> Ipv6Extensions
     {
         let mut result = Ipv6Extensions {

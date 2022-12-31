@@ -35,15 +35,14 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
         //check length
-        use crate::ReadError::*;
         if slice.len() < 8 {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(err::UnexpectedEndOfSliceError {
                 expected_min_len: 8,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6ExtHeader,
-            }));
+            });
         }
 
         //check length
@@ -51,11 +50,11 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(err::UnexpectedEndOfSliceError {
                 expected_min_len: len,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6ExtHeader,
-            }));
+            });
         }
 
         //all good
@@ -116,5 +115,115 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// to the non decoded parts.
     pub fn to_header(&self) -> Ipv6RawExtHeader {
         Ipv6RawExtHeader::new_raw(self.next_header(), self.payload()).unwrap()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*};
+    use proptest::prelude::*;
+
+    proptest!{
+        #[test]
+        fn debug(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            let slice = Ipv6RawExtHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                format!("{:?}", slice),
+                format!("Ipv6RawExtHeaderSlice {{ slice: {:?} }}", slice.slice())
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            let slice = Ipv6RawExtHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.clone(), slice);
+        }
+    }
+
+    #[test]
+    fn header_type_supported() {
+        use ip_number::*;
+        for value in 0..=u8::MAX {
+            let expected_supported = match value {
+                IPV6_HOP_BY_HOP |
+                IPV6_DEST_OPTIONS |
+                IPV6_ROUTE |
+                MOBILITY |
+                HIP |
+                SHIM6 => true,
+                _ => false,
+            };
+            assert_eq!(expected_supported, Ipv6RawExtHeaderSlice::header_type_supported(value));
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(header in ipv6_raw_ext_any()) {
+            // ok
+            {
+                let mut bytes = Vec::with_capacity(header.header_len() + 2);
+                bytes.extend_from_slice(&header.to_bytes());
+                bytes.push(1);
+                bytes.push(2);
+
+                let (actual_header, actual_rest) = Ipv6RawExtHeader::from_slice(&bytes).unwrap();
+                assert_eq!(actual_header, header);
+                assert_eq!(actual_rest, &[1, 2]);
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..bytes.len() {
+                    assert_eq!(
+                        Ipv6RawExtHeader::from_slice(&bytes[..len]).unwrap_err(),
+                        err::UnexpectedEndOfSliceError{
+                            expected_min_len: if len < Ipv6RawExtHeader::MIN_LEN {
+                                Ipv6RawExtHeader::MIN_LEN
+                            } else {
+                                header.header_len()
+                            },
+                            actual_len: len,
+                            layer: err::Layer::Ipv6ExtHeader,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice_unchecked(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            let slice = unsafe {
+                Ipv6RawExtHeaderSlice::from_slice_unchecked(&bytes)
+            };
+            assert_eq!(&bytes[..], slice.slice());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            let slice = Ipv6RawExtHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.next_header(), header.next_header);
+            assert_eq!(slice.payload(), header.payload());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(header in ipv6_raw_ext_any()) {
+            let bytes = header.to_bytes();
+            let slice = Ipv6RawExtHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(header, slice.to_header());
+        }
     }
 }
