@@ -265,9 +265,10 @@ pub use crate::link::vlan_slice::*;
 pub(crate) mod test_gens;
 
 mod internet;
-pub use crate::internet::ip::*;
+pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_auth_header::*;
 pub use crate::internet::ip_auth_header_slice::*;
+pub use crate::internet::ip_number_impl::*;
 pub use crate::internet::ipv4_extensions::*;
 pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;

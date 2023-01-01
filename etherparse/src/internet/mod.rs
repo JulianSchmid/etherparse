@@ -1,6 +1,7 @@
-pub mod ip;
+pub mod ip_header;
 pub mod ip_auth_header;
 pub mod ip_auth_header_slice;
+pub mod ip_number_impl;
 pub mod ipv4_extensions;
 pub mod ipv4_header;
 pub mod ipv4_header_slice;
