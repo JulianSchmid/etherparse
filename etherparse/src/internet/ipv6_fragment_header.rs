@@ -52,7 +52,7 @@ impl Ipv6FragmentHeader {
     /// Read an fragment header from the current reader position.
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<Ipv6FragmentHeader, ReadError> {
+    ) -> Result<Ipv6FragmentHeader, std::io::Error> {
         let buffer = {
             let mut buffer: [u8; 8] = [0; 8];
             reader.read_exact(&mut buffer)?;
@@ -271,8 +271,6 @@ mod test {
                 assert_eq!(
                     Ipv6FragmentHeader::read(&mut cursor)
                     .unwrap_err()
-                    .io_error()
-                    .unwrap()
                     .kind(),
                     ErrorKind::UnexpectedEof
                 );
