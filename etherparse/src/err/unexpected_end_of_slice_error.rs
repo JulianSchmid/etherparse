@@ -87,7 +87,7 @@ mod test {
         assert_eq!(
             format!("{:?}", SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }),
             format!(
-                "UnexpectedEndOfSliceError {{ expected_min_len: {:?}, actual_len: {:?}, layer: {:?} }}",
+                "SliceLenError {{ expected_min_len: {:?}, actual_len: {:?}, layer: {:?} }}",
                 2, 1, Layer::Ipv4Header
             ),
         );
