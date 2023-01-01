@@ -9,6 +9,10 @@ pub enum IpHeader {
 }
 
 impl IpHeader {
+
+    /// Maximum summed up length of all extension headers in bytes/octets.
+    pub const MAX_LEN: usize = Ipv6Header::LEN + Ipv6Extensions::MAX_LEN;
+
     /// Renamed to `IpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
     #[inline]
