@@ -6,7 +6,7 @@ use crate::err::SliceLenError;
 pub enum HeaderSliceError {
     /// Error when an unexpected end of a slice is reached
     /// even though more data was expected to be present.
-    UnexpectedEndOfSlice(SliceLenError),
+    SliceLen(SliceLenError),
 
     /// Error caused by the contents of the header.
     Content(HeaderError),
@@ -18,7 +18,7 @@ impl HeaderSliceError {
     pub const fn add_slice_offset(self, offset: usize) -> Self {
         use HeaderSliceError::*;
         match self {
-            UnexpectedEndOfSlice(err) => UnexpectedEndOfSlice(err.add_offset(offset)),
+            SliceLen(err) => SliceLen(err.add_offset(offset)),
             Content(err) => Content(err),
         }
     }
@@ -28,7 +28,7 @@ impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
         match self {
-            UnexpectedEndOfSlice(err) => write!(f, "IPv4 Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain an IPv4 header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
+            SliceLen(err) => write!(f, "IPv4 Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain an IPv4 header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
             Content(value) => value.fmt(f),
         }
     }
@@ -37,7 +37,7 @@ impl core::fmt::Display for HeaderSliceError {
 impl std::error::Error for HeaderSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            HeaderSliceError::UnexpectedEndOfSlice(err) => Some(err),
+            HeaderSliceError::SliceLen(err) => Some(err),
             HeaderSliceError::Content(err) => Some(err),
         }
     }
@@ -57,13 +57,13 @@ mod tests {
     fn add_slice_offset() {
         use HeaderSliceError::*;
         assert_eq!(
-            UnexpectedEndOfSlice(SliceLenError {
+            SliceLen(SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: Layer::Icmpv4
             })
             .add_slice_offset(200),
-            UnexpectedEndOfSlice(SliceLenError {
+            SliceLen(SliceLenError {
                 expected_min_len: 201,
                 actual_len: 202,
                 layer: Layer::Icmpv4
@@ -107,7 +107,7 @@ mod tests {
             "IPv4 Header Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain an IPv4 header. The slice must at least contain 2 bytes/octets.",
             format!(
                 "{}",
-                UnexpectedEndOfSlice(
+                SliceLen(
                     SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::VlanHeader }
                 )
             )
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(UnexpectedEndOfSlice(SliceLenError {
+        assert!(SliceLen(SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: Layer::Ipv4Header

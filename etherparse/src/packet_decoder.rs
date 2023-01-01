@@ -125,7 +125,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => {
+                        I::SliceLen(err) => {
                             O::UnexpectedEndOfSlice(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
@@ -137,7 +137,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(
+                            I::SliceLen(err) => O::UnexpectedEndOfSlice(
                                 err.add_offset(packet.len() - ip_rest.len()),
                             ),
                             I::Content(err) => O::IpAuthHeader(err),
@@ -165,7 +165,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv6::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => {
+                        I::SliceLen(err) => {
                             O::UnexpectedEndOfSlice(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),
@@ -306,7 +306,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => {
+                        I::SliceLen(err) => {
                             O::UnexpectedEndOfSlice(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
@@ -318,7 +318,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => {
+                            I::SliceLen(err) => {
                                 O::UnexpectedEndOfSlice(err.add_offset(data.len() - rest.len()))
                             }
                             I::Content(err) => O::IpAuthHeader(err),
@@ -346,7 +346,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv6::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::UnexpectedEndOfSlice(err) => {
+                        I::SliceLen(err) => {
                             O::UnexpectedEndOfSlice(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),

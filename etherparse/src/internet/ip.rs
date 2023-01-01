@@ -32,7 +32,7 @@ impl IpHeader {
                         use err::ipv4::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
                             I::Content(err) => O::Ipv4Header(err),
                         }
                     })?;
@@ -44,7 +44,7 @@ impl IpHeader {
                             use err::ip_auth::HeaderSliceError as I;
                             use ReadError as O;
                             match err {
-                                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                                I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
                                 I::Content(err) => O::IpAuthHeader(err),
                             }
                         })

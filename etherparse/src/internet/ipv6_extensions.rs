@@ -142,7 +142,7 @@ impl Ipv6Extensions {
                             use err::ip_auth::HeaderSliceError as I;
                             use ReadError as O;
                             match err {
-                                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                                I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
                                 I::Content(err) => O::IpAuthHeader(err),
                             }
                         })?;
@@ -773,7 +773,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                            I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
                             I::Content(err) => O::IpAuthHeader(err),
                         }
                     })?;
