@@ -427,7 +427,7 @@ impl<'a> CursorSlice<'a> {
             use err::ipv4::HeaderSliceError as I;
             use ReadError as O;
             match err.add_slice_offset(self.offset) {
-                I::UnexpectedEndOfSlice(err) => O::UnexpectedEndOfSlice(err),
+                I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
                 I::Content(err) => O::Ipv4Header(err),
             }
         })?;
@@ -442,7 +442,7 @@ impl<'a> CursorSlice<'a> {
                 use err::ip_auth::HeaderSliceError as I;
                 use ReadError as O;
                 match err {
-                    I::UnexpectedEndOfSlice(err) => {
+                    I::SliceLen(err) => {
                         O::UnexpectedEndOfSlice(err.add_offset(self.offset))
                     }
                     I::Content(err) => O::IpAuthHeader(err),
@@ -478,7 +478,7 @@ impl<'a> CursorSlice<'a> {
             use ReadError as O;
             match err {
                 I::Content(err) => O::Ipv6Header(err),
-                I::UnexpectedEndOfSlice(err) => {
+                I::SliceLen(err) => {
                     O::UnexpectedEndOfSlice(err.add_offset(self.offset))
                 }
             }

@@ -16,7 +16,7 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
 
         // check length
         if slice.len() < DoubleVlanHeader::LEN {
-            return Err(UnexpectedEndOfSlice(err::SliceLenError {
+            return Err(SliceLen(err::SliceLenError {
                 expected_min_len: DoubleVlanHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::VlanHeader,
@@ -124,7 +124,7 @@ mod test {
                         DoubleVlanHeaderSlice::from_slice(&buffer[..len])
                             .unwrap_err(),
 
-                        UnexpectedEndOfSlice(err::SliceLenError{
+                        SliceLen(err::SliceLenError{
                             expected_min_len: 8,
                             actual_len: len,
                             layer:  err::Layer::VlanHeader

@@ -36,12 +36,12 @@ pub mod header {
 
         // too small
         {
-            use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
+            use err::ip_auth::HeaderSliceError::SliceLen;
             const AUTH_HEADER_LEN: usize = 12;
             assert_eq!(
                 Ipv4Extensions::from_slice(AUTH, &buffer[..auth_header.header_len() - 1])
                     .unwrap_err(),
-                UnexpectedEndOfSlice(err::SliceLenError {
+                SliceLen(err::SliceLenError {
                     expected_min_len: AUTH_HEADER_LEN,
                     actual_len: auth_header.header_len() - 1,
                     layer: err::Layer::IpAuthHeader,
@@ -335,10 +335,10 @@ mod slice {
 
             // Error unexpected end of slice
             {
-                use err::ip_auth::HeaderSliceError::UnexpectedEndOfSlice;
+                use err::ip_auth::HeaderSliceError::SliceLen;
                 assert_eq!(
                     Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
-                    UnexpectedEndOfSlice(err::SliceLenError{
+                    SliceLen(err::SliceLenError{
                         expected_min_len: IpAuthHeader::MIN_LEN,
                         actual_len: 0,
                         layer: err::Layer::IpAuthHeader

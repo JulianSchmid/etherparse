@@ -405,7 +405,7 @@ mod test {
                     assert_eq!(
                         Ipv6Header::read_from_slice(&bytes[..len])
                             .unwrap_err(),
-                        UnexpectedEndOfSlice(err::SliceLenError{
+                        SliceLen(err::SliceLenError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
@@ -449,7 +449,7 @@ mod test {
                     assert_eq!(
                         Ipv6Header::from_slice(&bytes[..len])
                             .unwrap_err(),
-                        UnexpectedEndOfSlice(err::SliceLenError{
+                        SliceLen(err::SliceLenError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
