@@ -6,5 +6,5 @@ pub mod ipv6;
 mod layer;
 pub use layer::*;
 
-mod unexpected_end_of_slice_error;
-pub use unexpected_end_of_slice_error::*;
+mod slice_len_error;
+pub use slice_len_error::*;
