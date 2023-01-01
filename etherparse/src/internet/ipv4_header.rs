@@ -894,7 +894,7 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         Ipv4Header::from_slice(&buffer[..len]),
-                        Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        Err(UnexpectedEndOfSlice(err::SliceLenError{
                             expected_min_len: if len < Ipv4Header::MIN_LEN {
                                 Ipv4Header::MIN_LEN
                             } else {

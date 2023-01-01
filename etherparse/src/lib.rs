@@ -308,7 +308,7 @@ pub enum ReadError {
     /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError),
+    UnexpectedEndOfSlice(err::SliceLenError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
@@ -335,7 +335,7 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: value.expected_min_len + offset,
                 actual_len: value.actual_len + offset,
                 layer: value.layer,
@@ -357,7 +357,7 @@ impl ReadError {
         }
     }
     /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
-    pub fn unexpected_end_of_slice(self) -> Option<err::UnexpectedEndOfSliceError> {
+    pub fn unexpected_end_of_slice(self) -> Option<err::SliceLenError> {
         match self {
             ReadError::UnexpectedEndOfSlice(value) => Some(value),
             _ => None,

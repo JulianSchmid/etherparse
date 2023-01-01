@@ -212,7 +212,7 @@ mod sliced_packet {
                 .unwrap_err()
                 .unexpected_end_of_slice()
                 .unwrap(),
-            err::UnexpectedEndOfSliceError {
+            err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: 0,
                 layer: err::Layer::IpHeader

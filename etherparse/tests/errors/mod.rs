@@ -1,5 +1,5 @@
 use super::*;
-use etherparse::err::UnexpectedEndOfSliceError;
+use etherparse::err::SliceLenError;
 use proptest::prelude::*;
 
 proptest! {
@@ -24,7 +24,7 @@ proptest! {
 
         //UnexpectedEndOfSlice
         {
-            let err = UnexpectedEndOfSliceError{
+            let err = SliceLenError{
                 expected_min_len: arg_usize,
                 actual_len: arg2_usize,
                 layer: err_layer,
@@ -106,7 +106,7 @@ fn read_error_source() {
             .source()
             .is_some()
     );
-    assert!(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+    assert!(UnexpectedEndOfSlice(err::SliceLenError {
         expected_min_len: 0,
         actual_len: 0,
         layer: err::Layer::Ethernet2Header,
@@ -147,7 +147,7 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+        UnexpectedEndOfSlice(err::SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: err::Layer::Ethernet2Header,

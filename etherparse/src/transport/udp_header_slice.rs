@@ -12,10 +12,10 @@ impl<'a> UdpHeaderSlice<'a> {
     #[inline]
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<UdpHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    ) -> Result<UdpHeaderSlice<'a>, err::SliceLenError> {
         //check length
         if slice.len() < UdpHeader::LEN {
-            return Err(err::UnexpectedEndOfSliceError {
+            return Err(err::SliceLenError {
                 expected_min_len: UdpHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::UdpHeader,
@@ -111,7 +111,7 @@ mod test {
             for len in 0..8 {
                 assert_eq!(
                     UdpHeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
-                    err::UnexpectedEndOfSliceError{
+                    err::SliceLenError{
                         expected_min_len: UdpHeader::LEN,
                         actual_len: len,
                         layer: err::Layer::UdpHeader

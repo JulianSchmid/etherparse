@@ -42,7 +42,7 @@ impl Ipv6FragmentHeader {
     /// Read an Ipv6FragmentHeader from a slice and return the header & unused parts of the slice.
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(Ipv6FragmentHeader, &[u8]), err::UnexpectedEndOfSliceError> {
+    ) -> Result<(Ipv6FragmentHeader, &[u8]), err::SliceLenError> {
         let s = Ipv6FragmentHeaderSlice::from_slice(slice)?;
         let rest = &slice[8..];
         let header = s.to_header();
@@ -234,7 +234,7 @@ mod test {
             for len in 0..Ipv6FragmentHeader::LEN {
                 assert_eq!(
                     Ipv6FragmentHeader::from_slice(&buffer[0..len]).unwrap_err(),
-                    err::UnexpectedEndOfSliceError{
+                    err::SliceLenError{
                         expected_min_len: Ipv6FragmentHeader::LEN,
                         actual_len: len,
                         layer: err::Layer::Ipv6FragHeader,

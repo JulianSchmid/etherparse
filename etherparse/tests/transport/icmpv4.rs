@@ -1179,7 +1179,7 @@ mod icmpv4_slice {
                     .unwrap_err()
                     .unexpected_end_of_slice()
                     .unwrap(),
-                err::UnexpectedEndOfSliceError {
+                err::SliceLenError {
                     expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
                     actual_len: bad_len,
                     layer: err::Layer::Icmpv4

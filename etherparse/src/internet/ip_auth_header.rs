@@ -384,7 +384,7 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         IpAuthHeader::from_slice(&bytes[..len]).unwrap_err(),
-                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        UnexpectedEndOfSlice(err::SliceLenError{
                             expected_min_len: if len < IpAuthHeader::MIN_LEN {
                                 IpAuthHeader::MIN_LEN
                             } else {

@@ -37,10 +37,10 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// Creates a generic ipv6 extension header slice from a slice.
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::SliceLenError> {
         //check length
         if slice.len() < 8 {
-            return Err(err::UnexpectedEndOfSliceError {
+            return Err(err::SliceLenError {
                 expected_min_len: 8,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6ExtHeader,
@@ -52,7 +52,7 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(err::UnexpectedEndOfSliceError {
+            return Err(err::SliceLenError {
                 expected_min_len: len,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6ExtHeader,
@@ -182,7 +182,7 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6RawExtHeader::from_slice(&bytes[..len]).unwrap_err(),
-                        err::UnexpectedEndOfSliceError{
+                        err::SliceLenError{
                             expected_min_len: if len < Ipv6RawExtHeader::MIN_LEN {
                                 Ipv6RawExtHeader::MIN_LEN
                             } else {

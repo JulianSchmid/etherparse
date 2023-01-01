@@ -12,10 +12,10 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
     /// Creates a hop by hop header slice from a slice.
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<Ipv6FragmentHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    ) -> Result<Ipv6FragmentHeaderSlice<'a>, err::SliceLenError> {
         // the fragmentation header has the exact size of 8 bytes
         if slice.len() < 8 {
-            Err(err::UnexpectedEndOfSliceError {
+            Err(err::SliceLenError {
                 expected_min_len: 8,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6FragHeader,
@@ -219,7 +219,7 @@ mod test {
             for len in 0..Ipv6FragmentHeader::LEN {
                 assert_eq!(
                     Ipv6FragmentHeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
-                    err::UnexpectedEndOfSliceError{
+                    err::SliceLenError{
                         expected_min_len: 8,
                         actual_len: len,
                         layer: err::Layer::Ipv6FragHeader,
