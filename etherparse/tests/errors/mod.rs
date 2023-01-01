@@ -31,7 +31,7 @@ proptest! {
             };
             assert_eq!(
                 &format!("{}", err),
-                &format!("{}", UnexpectedEndOfSlice(err))
+                &format!("{}", SliceLen(err))
             );
         }
 
@@ -106,7 +106,7 @@ fn read_error_source() {
             .source()
             .is_some()
     );
-    assert!(UnexpectedEndOfSlice(err::SliceLenError {
+    assert!(SliceLen(err::SliceLenError {
         expected_min_len: 0,
         actual_len: 0,
         layer: err::Layer::Ethernet2Header,
@@ -147,7 +147,7 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        UnexpectedEndOfSlice(err::SliceLenError {
+        SliceLen(err::SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: err::Layer::Ethernet2Header,

@@ -45,7 +45,7 @@ mod ip_header {
         assert_eq!(
             IpHeader::from_slice(&buffer[buffer.len()..])
                 .unwrap_err()
-                .unexpected_end_of_slice()
+                .slice_len()
                 .unwrap(),
             err::SliceLenError {
                 expected_min_len: 1,

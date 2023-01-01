@@ -337,7 +337,7 @@ impl<'a> CursorSlice<'a> {
         use LinkSlice::*;
 
         let result = Ethernet2HeaderSlice::from_slice(self.slice)
-            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
+            .map_err(|err| ReadError::SliceLen(err.add_offset(self.offset)))?;
 
         //cache the ether_type for later
         let ether_type = result.ether_type();
@@ -360,7 +360,7 @@ impl<'a> CursorSlice<'a> {
         use VlanSlice::*;
 
         let outer = SingleVlanHeaderSlice::from_slice(self.slice)
-            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
+            .map_err(|err| ReadError::SliceLen(err.add_offset(self.offset)))?;
 
         //check if it is a double vlan header
         match outer.ether_type() {
@@ -368,7 +368,7 @@ impl<'a> CursorSlice<'a> {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 self.move_by_slice(outer.slice());
                 let inner = SingleVlanHeaderSlice::from_slice(self.slice)
-                    .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
+                    .map_err(|err| ReadError::SliceLen(err.add_offset(self.offset)))?;
                 self.move_by_slice(inner.slice());
 
                 let inner_ether_type = inner.ether_type();
@@ -406,7 +406,7 @@ impl<'a> CursorSlice<'a> {
         use ReadError::*;
 
         if self.slice.is_empty() {
-            Err(UnexpectedEndOfSlice(err::SliceLenError {
+            Err(SliceLen(err::SliceLenError {
                 expected_min_len: self.offset + 1,
                 actual_len: self.offset + self.slice.len(),
                 layer: err::Layer::IpHeader,
@@ -427,7 +427,7 @@ impl<'a> CursorSlice<'a> {
             use err::ipv4::HeaderSliceError as I;
             use ReadError as O;
             match err.add_slice_offset(self.offset) {
-                I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
+                I::SliceLen(err) => O::SliceLen(err),
                 I::Content(err) => O::Ipv4Header(err),
             }
         })?;
@@ -443,7 +443,7 @@ impl<'a> CursorSlice<'a> {
                 use ReadError as O;
                 match err {
                     I::SliceLen(err) => {
-                        O::UnexpectedEndOfSlice(err.add_offset(self.offset))
+                        O::SliceLen(err.add_offset(self.offset))
                     }
                     I::Content(err) => O::IpAuthHeader(err),
                 }
@@ -479,7 +479,7 @@ impl<'a> CursorSlice<'a> {
             match err {
                 I::Content(err) => O::Ipv6Header(err),
                 I::SliceLen(err) => {
-                    O::UnexpectedEndOfSlice(err.add_offset(self.offset))
+                    O::SliceLen(err.add_offset(self.offset))
                 }
             }
         })?;
@@ -549,7 +549,7 @@ impl<'a> CursorSlice<'a> {
         use crate::TransportSlice::*;
 
         let result = UdpHeaderSlice::from_slice(self.slice)
-            .map_err(|err| ReadError::UnexpectedEndOfSlice(err.add_offset(self.offset)))?;
+            .map_err(|err| ReadError::SliceLen(err.add_offset(self.offset)))?;
 
         //set the new data
         self.move_by_slice(result.slice());

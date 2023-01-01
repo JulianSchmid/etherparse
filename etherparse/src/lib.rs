@@ -309,7 +309,7 @@ pub enum ReadError {
     /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(err::SliceLenError),
+    SliceLen(err::SliceLenError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
     /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
@@ -336,7 +336,7 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            UnexpectedEndOfSlice(value) => UnexpectedEndOfSlice(err::SliceLenError {
+            SliceLen(value) => SliceLen(err::SliceLenError {
                 expected_min_len: value.expected_min_len + offset,
                 actual_len: value.actual_len + offset,
                 layer: value.layer,
@@ -358,9 +358,9 @@ impl ReadError {
         }
     }
     /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
-    pub fn unexpected_end_of_slice(self) -> Option<err::SliceLenError> {
+    pub fn slice_len(self) -> Option<err::SliceLenError> {
         match self {
-            ReadError::UnexpectedEndOfSlice(value) => Some(value),
+            ReadError::SliceLen(value) => Some(value),
             _ => None,
         }
     }
@@ -388,7 +388,7 @@ impl std::fmt::Display for ReadError {
 
         match self {
             IoError(err) => err.fmt(f),
-            UnexpectedEndOfSlice(err) => err.fmt(f),
+            SliceLen(err) => err.fmt(f),
             UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
             }
@@ -415,7 +415,7 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ReadError::IoError(err) => Some(err),
-            ReadError::UnexpectedEndOfSlice(err) => Some(err),
+            ReadError::SliceLen(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
             ReadError::Ipv6Header(err) => Some(err),
             _ => None,

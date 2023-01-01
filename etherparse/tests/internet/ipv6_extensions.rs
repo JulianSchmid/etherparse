@@ -514,7 +514,7 @@ pub mod header {
                     // unexpected end of slice
                     assert_matches!(
                         Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
-                        ReadError::UnexpectedEndOfSlice(_)
+                        ReadError::SliceLen(_)
                     );
                 }
             }
@@ -1157,7 +1157,7 @@ pub mod slice {
                     // unexpected end of slice
                     assert_matches!(
                         Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
-                        ReadError::UnexpectedEndOfSlice(_)
+                        ReadError::SliceLen(_)
                     );
                 }
             }

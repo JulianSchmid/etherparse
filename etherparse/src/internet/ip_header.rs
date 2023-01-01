@@ -19,7 +19,7 @@ impl IpHeader {
     /// Read an IpvHeader from a slice and return the header & unused parts of the slice.
     pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         if slice.is_empty() {
-            use crate::ReadError::UnexpectedEndOfSlice as U;
+            use crate::ReadError::SliceLen as U;
             Err(U(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: slice.len(),
@@ -32,7 +32,7 @@ impl IpHeader {
                         use err::ipv4::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
+                            I::SliceLen(err) => O::SliceLen(err),
                             I::Content(err) => O::Ipv4Header(err),
                         }
                     })?;
@@ -44,15 +44,15 @@ impl IpHeader {
                             use err::ip_auth::HeaderSliceError as I;
                             use ReadError as O;
                             match err {
-                                I::SliceLen(err) => O::UnexpectedEndOfSlice(err),
+                                I::SliceLen(err) => O::SliceLen(err),
                                 I::Content(err) => O::IpAuthHeader(err),
                             }
                         })
                 }
                 6 => {
                     if slice.len() < Ipv6Header::LEN {
-                        use ReadError::UnexpectedEndOfSlice;
-                        return Err(UnexpectedEndOfSlice(err::SliceLenError {
+                        use ReadError::SliceLen;
+                        return Err(SliceLen(err::SliceLenError {
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: slice.len(),
                             layer: err::Layer::Ipv6Header,
