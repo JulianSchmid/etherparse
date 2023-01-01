@@ -331,7 +331,6 @@ mod test {
         err::ipv6::HeaderError::*, err::ipv6::HeaderSliceError::*, ip_number::*, test_gens::*, *,
     };
     use arrayvec::ArrayVec;
-    use assert_matches::assert_matches;
     use proptest::*;
     use std::io::Cursor;
 
