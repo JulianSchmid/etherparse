@@ -841,13 +841,13 @@ fn write_and_read_length_error() {
             // from_slice
             assert_matches!(
                 TcpHeader::from_slice(&buffer[0..len]),
-                Err(UnexpectedEndOfSlice(_))
+                Err(SliceLen(_))
             );
 
             // from_slice
             assert_matches!(
                 TcpHeaderSlice::from_slice(&buffer[0..len]),
-                Err(UnexpectedEndOfSlice(_))
+                Err(SliceLen(_))
             );
         }
     }

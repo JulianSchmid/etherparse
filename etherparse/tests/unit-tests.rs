@@ -44,7 +44,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            UnexpectedEndOfSlice(err::SliceLenError {
+            SliceLen(err::SliceLenError {
                 expected_min_len: 0,
                 actual_len: 0,
                 layer: err::Layer::Icmpv4,
@@ -155,13 +155,13 @@ mod read_error {
     fn add_slice_offset() {
         use super::*;
         assert_eq!(
-            ReadError::UnexpectedEndOfSlice(err::SliceLenError {
+            ReadError::SliceLen(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: err::Layer::Icmpv4,
             })
             .add_slice_offset(3)
-            .unexpected_end_of_slice()
+            .slice_len()
             .unwrap(),
             err::SliceLenError {
                 expected_min_len: 4,
@@ -207,7 +207,7 @@ mod read_error {
         use super::*;
         assert!(
             ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .unexpected_end_of_slice()
+                .slice_len()
                 .is_none()
         );
         {
@@ -218,8 +218,8 @@ mod read_error {
             };
             assert_eq!(
                 err.clone(),
-                ReadError::UnexpectedEndOfSlice(err.clone())
-                    .unexpected_end_of_slice()
+                ReadError::SliceLen(err.clone())
+                    .slice_len()
                     .unwrap()
             );
         }

@@ -727,7 +727,7 @@ mod icmpv6_header {
             for length in 0..8 {
                 assert_matches!(
                     Icmpv6Header::from_slice(&bytes[..length]),
-                    Err(ReadError::UnexpectedEndOfSlice(_))
+                    Err(ReadError::SliceLen(_))
                 );
             }
         }
@@ -1026,7 +1026,7 @@ mod icmpv6_slice {
             // too small size error case
             for len in 0..8 {
                 assert_eq!(
-                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
+                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().slice_len().unwrap(),
                     err::SliceLenError{
                         expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
                         actual_len: len,

@@ -1177,7 +1177,7 @@ mod icmpv4_slice {
             assert_eq!(
                 Icmpv4Slice::from_slice(&bytes[..bad_len])
                     .unwrap_err()
-                    .unexpected_end_of_slice()
+                    .slice_len()
                     .unwrap(),
                 err::SliceLenError {
                     expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,

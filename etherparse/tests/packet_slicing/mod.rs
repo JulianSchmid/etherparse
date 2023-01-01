@@ -210,7 +210,7 @@ mod sliced_packet {
         assert_eq!(
             SlicedPacket::from_ip(&[])
                 .unwrap_err()
-                .unexpected_end_of_slice()
+                .slice_len()
                 .unwrap(),
             err::SliceLenError {
                 expected_min_len: 1,
