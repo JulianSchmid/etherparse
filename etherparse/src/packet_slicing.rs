@@ -406,7 +406,7 @@ impl<'a> CursorSlice<'a> {
         use ReadError::*;
 
         if self.slice.is_empty() {
-            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: self.offset + 1,
                 actual_len: self.offset + self.slice.len(),
                 layer: err::Layer::IpHeader,

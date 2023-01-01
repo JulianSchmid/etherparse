@@ -95,7 +95,7 @@ impl Ipv6Header {
     pub fn skip_header_extension_in_slice(
         slice: &[u8],
         next_header: u8,
-    ) -> Result<(u8, &[u8]), err::UnexpectedEndOfSliceError> {
+    ) -> Result<(u8, &[u8]), err::SliceLenError> {
         use crate::ip_number::*;
 
         // verify that a ipv6 extension is present (before
@@ -121,7 +121,7 @@ impl Ipv6Header {
             };
 
             if slice.len() < len {
-                Err(err::UnexpectedEndOfSliceError {
+                Err(err::SliceLenError {
                     expected_min_len: len,
                     actual_len: slice.len(),
                     layer: err::Layer::Ipv6ExtHeader,
@@ -130,7 +130,7 @@ impl Ipv6Header {
                 Ok((slice[0], &slice[len..]))
             }
         } else {
-            Err(err::UnexpectedEndOfSliceError {
+            Err(err::SliceLenError {
                 expected_min_len: 2,
                 actual_len: slice.len(),
                 layer: err::Layer::Ipv6ExtHeader,
@@ -163,7 +163,7 @@ impl Ipv6Header {
     pub fn skip_all_header_extensions_in_slice(
         slice: &[u8],
         next_header: u8,
-    ) -> Result<(u8, &[u8]), err::UnexpectedEndOfSliceError> {
+    ) -> Result<(u8, &[u8]), err::SliceLenError> {
         let mut next_header = next_header;
         let mut rest = slice;
         let mut offset = 0;
@@ -405,7 +405,7 @@ mod test {
                     assert_eq!(
                         Ipv6Header::read_from_slice(&bytes[..len])
                             .unwrap_err(),
-                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        UnexpectedEndOfSlice(err::SliceLenError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
@@ -449,7 +449,7 @@ mod test {
                     assert_eq!(
                         Ipv6Header::from_slice(&bytes[..len])
                             .unwrap_err(),
-                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        UnexpectedEndOfSlice(err::SliceLenError{
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: len,
                             layer: err::Layer::Ipv6Header,
@@ -559,7 +559,7 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::skip_header_extension_in_slice(&bytes[..len], g).unwrap_err(),
-                        err::UnexpectedEndOfSliceError {
+                        err::SliceLenError {
                             expected_min_len: if len < 2 {
                                 2
                             } else {
@@ -584,7 +584,7 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::skip_header_extension_in_slice(&bytes[..len], IPV6_FRAG).unwrap_err(),
-                        err::UnexpectedEndOfSliceError {
+                        err::SliceLenError {
                             expected_min_len: if len < 2 {
                                 2
                             } else {
@@ -610,7 +610,7 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::skip_header_extension_in_slice(&bytes[..len], AUTH).unwrap_err(),
-                        err::UnexpectedEndOfSliceError {
+                        err::SliceLenError {
                             expected_min_len: if len < 2 {
                                 2
                             } else {
@@ -754,7 +754,7 @@ mod test {
                     assert_eq!(
                         Ipv6Header::skip_all_header_extensions_in_slice(&buffer[..len], IPV6_HOP_BY_HOP)
                             .unwrap_err(),
-                        err::UnexpectedEndOfSliceError {
+                        err::SliceLenError {
                             expected_min_len: get_expected(len),
                             actual_len: len,
                             layer: err::Layer::Ipv6ExtHeader

@@ -44,7 +44,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: 0,
                 actual_len: 0,
                 layer: err::Layer::Icmpv4,
@@ -155,7 +155,7 @@ mod read_error {
     fn add_slice_offset() {
         use super::*;
         assert_eq!(
-            ReadError::UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            ReadError::UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: err::Layer::Icmpv4,
@@ -163,7 +163,7 @@ mod read_error {
             .add_slice_offset(3)
             .unexpected_end_of_slice()
             .unwrap(),
-            err::UnexpectedEndOfSliceError {
+            err::SliceLenError {
                 expected_min_len: 4,
                 actual_len: 5,
                 layer: err::Layer::Icmpv4,
@@ -211,7 +211,7 @@ mod read_error {
                 .is_none()
         );
         {
-            let err = err::UnexpectedEndOfSliceError {
+            let err = err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: err::Layer::Icmpv4,

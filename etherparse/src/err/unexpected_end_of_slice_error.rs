@@ -2,7 +2,7 @@ use crate::err::Layer;
 
 /// Error when an unexpected end of a slice is reached even though more data was expected to be present.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub struct UnexpectedEndOfSliceError {
+pub struct SliceLenError {
     /// Expected minimum length of the slice.
     pub expected_min_len: usize,
 
@@ -13,11 +13,11 @@ pub struct UnexpectedEndOfSliceError {
     pub layer: Layer,
 }
 
-impl UnexpectedEndOfSliceError {
+impl SliceLenError {
     /// Adds an offset value to the `expected_min_len` & `actual_len` fields to the UnexpectedEndOfSliceError.
     #[inline]
     pub const fn add_offset(self, offset: usize) -> Self {
-        UnexpectedEndOfSliceError {
+        SliceLenError {
             expected_min_len: self.expected_min_len + offset,
             actual_len: self.actual_len + offset,
             layer: self.layer,
@@ -25,7 +25,7 @@ impl UnexpectedEndOfSliceError {
     }
 }
 
-impl core::fmt::Display for UnexpectedEndOfSliceError {
+impl core::fmt::Display for SliceLenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if self.layer.name_starts_with_vocal() {
             write!(
@@ -49,7 +49,7 @@ impl core::fmt::Display for UnexpectedEndOfSliceError {
     }
 }
 
-impl std::error::Error for UnexpectedEndOfSliceError {
+impl std::error::Error for SliceLenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
     }
@@ -68,13 +68,13 @@ mod test {
     #[test]
     fn add_offset() {
         assert_eq!(
-            UnexpectedEndOfSliceError {
+            SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: Layer::Icmpv4,
             }
             .add_offset(100),
-            UnexpectedEndOfSliceError {
+            SliceLenError {
                 expected_min_len: 101,
                 actual_len: 102,
                 layer: Layer::Icmpv4,
@@ -85,7 +85,7 @@ mod test {
     #[test]
     fn debug() {
         assert_eq!(
-            format!("{:?}", UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }),
+            format!("{:?}", SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }),
             format!(
                 "UnexpectedEndOfSliceError {{ expected_min_len: {:?}, actual_len: {:?}, layer: {:?} }}",
                 2, 1, Layer::Ipv4Header
@@ -95,7 +95,7 @@ mod test {
 
     #[test]
     fn clone_eq_hash() {
-        let err = UnexpectedEndOfSliceError {
+        let err = SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: Layer::Ipv4Header,
@@ -125,7 +125,7 @@ mod test {
             ),
             format!(
                 "{}",
-                UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
+                SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
             )
         );
 
@@ -138,14 +138,14 @@ mod test {
             ),
             format!(
                 "{}",
-                UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1, layer: Layer::VlanHeader }
+                SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::VlanHeader }
             )
         );
     }
 
     #[test]
     fn source() {
-        assert!(UnexpectedEndOfSliceError {
+        assert!(SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: Layer::Ipv4Header

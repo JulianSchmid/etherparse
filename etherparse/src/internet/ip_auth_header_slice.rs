@@ -23,7 +23,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
 
         // check slice length
         if slice.len() < IpAuthHeader::MIN_LEN {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: IpAuthHeader::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::IpAuthHeader,
@@ -45,7 +45,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
         //       headers the length is in 4 octets.
         let len = ((payload_len_enc as usize) + 2) * 4;
         if slice.len() < len {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: len,
                 actual_len: slice.len(),
                 layer: err::Layer::IpAuthHeader,
@@ -183,7 +183,7 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         IpAuthHeaderSlice::from_slice(&bytes[..len]).unwrap_err(),
-                        UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                        UnexpectedEndOfSlice(err::SliceLenError{
                             expected_min_len: if len < IpAuthHeader::MIN_LEN {
                                 IpAuthHeader::MIN_LEN
                             } else {

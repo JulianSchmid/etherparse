@@ -143,7 +143,7 @@ mod test {
                 assert_eq!(
                     DoubleVlanHeader::from_slice(&buffer[..len])
                         .unwrap_err(),
-                    UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError{
+                    UnexpectedEndOfSlice(err::SliceLenError{
                         expected_min_len: 8,
                         actual_len: len,
                         layer:  err::Layer::VlanHeader

@@ -1027,7 +1027,7 @@ mod icmpv6_slice {
             for len in 0..8 {
                 assert_eq!(
                     Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().unexpected_end_of_slice().unwrap(),
-                    err::UnexpectedEndOfSliceError{
+                    err::SliceLenError{
                         expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
                         actual_len: len,
                         layer: err::Layer::Icmpv6

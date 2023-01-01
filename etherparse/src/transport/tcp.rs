@@ -657,7 +657,7 @@ impl<'a> TcpHeaderSlice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < TcpHeader::MIN_LEN {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: TcpHeader::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::TcpHeader,
@@ -673,7 +673,7 @@ impl<'a> TcpHeaderSlice<'a> {
         if data_offset < TcpHeader::MIN_DATA_OFFSET {
             Err(ReadError::TcpDataOffsetTooSmall(data_offset))
         } else if slice.len() < len {
-            Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: len,
                 actual_len: slice.len(),
                 layer: err::Layer::TcpHeader,

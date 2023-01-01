@@ -1014,7 +1014,7 @@ impl<'a> Icmpv6Slice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
                 actual_len: slice.len(),
                 layer: err::Layer::Icmpv6,

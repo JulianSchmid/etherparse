@@ -1004,7 +1004,7 @@ impl<'a> Icmpv4Slice<'a> {
         // check length
         use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
-            return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+            return Err(UnexpectedEndOfSlice(err::SliceLenError {
                 expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
                 actual_len: slice.len(),
                 layer: err::Layer::Icmpv4,

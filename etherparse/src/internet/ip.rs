@@ -20,7 +20,7 @@ impl IpHeader {
     pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
         if slice.is_empty() {
             use crate::ReadError::UnexpectedEndOfSlice as U;
-            Err(U(err::UnexpectedEndOfSliceError {
+            Err(U(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: slice.len(),
                 layer: err::Layer::IpHeader,
@@ -52,7 +52,7 @@ impl IpHeader {
                 6 => {
                     if slice.len() < Ipv6Header::LEN {
                         use ReadError::UnexpectedEndOfSlice;
-                        return Err(UnexpectedEndOfSlice(err::UnexpectedEndOfSliceError {
+                        return Err(UnexpectedEndOfSlice(err::SliceLenError {
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: slice.len(),
                             layer: err::Layer::Ipv6Header,

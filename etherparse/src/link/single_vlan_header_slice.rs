@@ -12,10 +12,10 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     #[inline]
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<SingleVlanHeaderSlice<'a>, err::UnexpectedEndOfSliceError> {
+    ) -> Result<SingleVlanHeaderSlice<'a>, err::SliceLenError> {
         //check length
         if slice.len() < SingleVlanHeader::LEN {
-            return Err(err::UnexpectedEndOfSliceError {
+            return Err(err::SliceLenError {
                 expected_min_len: SingleVlanHeader::LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::VlanHeader,
@@ -131,7 +131,7 @@ mod test {
                 assert_eq!(
                     SingleVlanHeaderSlice::from_slice(&buffer[..len])
                         .unwrap_err(),
-                    err::UnexpectedEndOfSliceError{
+                    err::SliceLenError{
                         expected_min_len: 4,
                         actual_len: len,
                         layer:  err::Layer::VlanHeader

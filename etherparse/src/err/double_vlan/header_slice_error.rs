@@ -1,11 +1,11 @@
 use super::HeaderError;
-use crate::err::UnexpectedEndOfSliceError;
+use crate::err::SliceLenError;
 
 /// Error when decoding a double VLAN header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderSliceError {
     /// Error when an unexpected end of a slice is reached even though more data was expected to be present.
-    UnexpectedEndOfSlice(UnexpectedEndOfSliceError),
+    UnexpectedEndOfSlice(SliceLenError),
 
     /// Error caused by the contents of the header.
     Content(HeaderError),
@@ -56,13 +56,13 @@ mod tests {
     fn add_slice_offset() {
         use HeaderSliceError::*;
         assert_eq!(
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            UnexpectedEndOfSlice(SliceLenError {
                 expected_min_len: 1,
                 actual_len: 2,
                 layer: Layer::Icmpv4
             })
             .add_slice_offset(200),
-            UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+            UnexpectedEndOfSlice(SliceLenError {
                 expected_min_len: 201,
                 actual_len: 202,
                 layer: Layer::Icmpv4
@@ -116,7 +116,7 @@ mod tests {
             format!(
                 "{}",
                 UnexpectedEndOfSlice(
-                    UnexpectedEndOfSliceError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
+                    SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
                 )
             )
         );
@@ -130,7 +130,7 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(UnexpectedEndOfSlice(UnexpectedEndOfSliceError {
+        assert!(UnexpectedEndOfSlice(SliceLenError {
             expected_min_len: 0,
             actual_len: 0,
             layer: Layer::Ipv4Header
