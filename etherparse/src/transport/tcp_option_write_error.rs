@@ -1,0 +1,30 @@
+use crate::*;
+
+/// Errors that can occour when setting the options of a tcp header.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum TcpOptionWriteError {
+    /// There is not enough memory to store all options in the options section of the header (maximum 40 bytes).
+    ///
+    /// The options size is limited by the 4 bit data_offset field in the header which describes
+    /// the total tcp header size in multiple of 4 bytes. This leads to a maximum size for the options
+    /// part of the header of 4*(15 - 5) (minus 5 for the size of the tcp header itself).
+    NotEnoughSpace(usize),
+}
+
+impl std::error::Error for TcpOptionWriteError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        None
+    }
+}
+
+impl core::fmt::Display for TcpOptionWriteError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use TcpOptionWriteError::*;
+        match self {
+            NotEnoughSpace(size) => {
+                write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", size)
+            }
+        }
+    }
+}
+
