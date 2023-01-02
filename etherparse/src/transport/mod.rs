@@ -1,7 +1,13 @@
 pub mod icmp;
 pub mod icmpv4_impl;
 pub mod icmpv6_impl;
-pub mod tcp;
+pub mod tcp_header;
+pub mod tcp_header_slice;
+pub mod tcp_option_element;
+pub mod tcp_option_impl;
+pub mod tcp_option_read_error;
+pub mod tcp_option_write_error;
+pub mod tcp_options_iterator;
 pub mod transport_header;
 pub mod udp_header;
 pub mod udp_header_slice;
