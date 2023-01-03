@@ -333,8 +333,8 @@ pub enum ReadError {
     Ipv6HopByHopHeaderNotAtStart,
     /// Error when decoding an IP authentification header.
     IpAuthHeader(err::ip_auth::HeaderError),
-    /// Error given if the data_offset field in a TCP header is smaller then the minimum size of the tcp header itself.
-    TcpDataOffsetTooSmall(u8),
+    /// Error when decoding a TCP header.
+    TcpHeader(err::tcp::HeaderError),
     /// Error when the packet size is too big (e.g larger then can be represendted in a length field).
     ///
     /// This error can be triggered by
@@ -391,6 +391,14 @@ impl ReadError {
             _ => None,
         }
     }
+
+    /// Returns the `err::tcp::HeaderError` value if the `ReadError` is a `TcpHeader`.
+    pub fn tcp_header(self) -> Option<err::tcp::HeaderError> {
+        match self {
+            ReadError::TcpHeader(value) => Some(value),
+            _ => None,
+        }
+    }
 }
 
 impl std::fmt::Display for ReadError {
@@ -412,9 +420,7 @@ impl std::fmt::Display for ReadError {
                 write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
             }
             IpAuthHeader(err) => err.fmt(f),
-            TcpDataOffsetTooSmall(data_offset) => {
-                write!(f, "ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", data_offset)
-            }
+            TcpHeader(err) => err.fmt(f),
             Icmpv6PacketTooBig(size) => {
                 write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
             }
@@ -429,6 +435,7 @@ impl std::error::Error for ReadError {
             ReadError::SliceLen(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
             ReadError::Ipv6Header(err) => Some(err),
+            ReadError::TcpHeader(err) => Some(err),
             _ => None,
         }
     }

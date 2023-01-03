@@ -52,7 +52,7 @@ fn test_debug_write() {
             IpUnsupportedVersion(0),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
             Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
-            TcpDataOffsetTooSmall(0),
+            TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
         ]
         .iter()
         {

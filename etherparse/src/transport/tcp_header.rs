@@ -303,22 +303,24 @@ impl TcpHeader {
     /// Renamed to `TcpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Use TcpHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), err::tcp::HeaderSliceError> {
         TcpHeader::from_slice(slice)
     }
 
     /// Reads a tcp header from a slice
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(TcpHeader, &[u8]), err::tcp::HeaderSliceError> {
         let h = TcpHeaderSlice::from_slice(slice)?;
         Ok((h.to_header(), &slice[h.slice().len()..]))
     }
 
     /// Read a tcp header from the current position
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, ReadError> {
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, err::tcp::HeaderReadError> {
+        use err::tcp::{HeaderError::*, HeaderReadError::*};
+
         let raw = {
             let mut raw: [u8; 20] = [0; 20];
-            reader.read_exact(&mut raw)?;
+            reader.read_exact(&mut raw).map_err(Io)?;
             raw
         };
         let source_port = u16::from_be_bytes([raw[0], raw[1]]);
@@ -350,13 +352,13 @@ impl TcpHeader {
             urgent_pointer: u16::from_be_bytes([raw[18], raw[19]]),
             options_buffer: {
                 if data_offset < TcpHeader::MIN_DATA_OFFSET {
-                    return Err(ReadError::TcpDataOffsetTooSmall(data_offset));
+                    return Err(Content(DataOffsetTooSmall{ data_offset }));
                 } else {
                     let mut buffer: [u8; 40] = [0; 40];
                     //convert to bytes minus the tcp header size itself
                     let len = ((data_offset - TcpHeader::MIN_DATA_OFFSET) as usize) * 4;
                     if len > 0 {
-                        reader.read_exact(&mut buffer[..len])?;
+                        reader.read_exact(&mut buffer[..len]).map_err(Io)?;
                     }
                     buffer
                 }
@@ -736,10 +738,15 @@ impl core::cmp::Eq for TcpHeader {}
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*, tcp_option::*, TcpOptionElement::*};
+    use crate::{
+        *,
+        test_gens::*,
+        tcp_option::*,
+        TcpOptionElement::*,
+        err::tcp::{HeaderError::*, HeaderSliceError::*}
+    };
     use proptest::prelude::*;
     use std::io::Cursor;
-    use assert_matches::assert_matches;
 
     #[test]
     fn default() {
@@ -1467,9 +1474,9 @@ mod test {
                     bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
                     bytes
                 };
-                assert_matches!(
+                assert_eq!(
                     TcpHeader::read_from_slice(&bytes[..]),
-                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                    Err(Content(DataOffsetTooSmall{ data_offset }))
                 );
             }
 
@@ -1479,10 +1486,8 @@ mod test {
                 for len in 0..(header.header_len() as usize) {
                     assert_eq!(
                         TcpHeader::read_from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .slice_len()
-                            .unwrap(),
-                        err::SliceLenError {
+                            .unwrap_err(),
+                        SliceLen(err::SliceLenError {
                             expected_min_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
@@ -1490,7 +1495,7 @@ mod test {
                             },
                             actual_len: len,
                             layer: err::Layer::TcpHeader,
-                        }
+                        })
                     );
                 }
             }
@@ -1522,9 +1527,9 @@ mod test {
                     bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
                     bytes
                 };
-                assert_matches!(
+                assert_eq!(
                     TcpHeader::from_slice(&bytes[..]),
-                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                    Err(Content(DataOffsetTooSmall{ data_offset }))
                 );
             }
 
@@ -1534,10 +1539,8 @@ mod test {
                 for len in 0..(header.header_len() as usize) {
                     assert_eq!(
                         TcpHeader::from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .slice_len()
-                            .unwrap(),
-                        err::SliceLenError {
+                            .unwrap_err(),
+                        SliceLen(err::SliceLenError {
                             expected_min_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
@@ -1545,7 +1548,7 @@ mod test {
                             },
                             actual_len: len,
                             layer: err::Layer::TcpHeader,
-                        }
+                        })
                     );
                 }
             }
@@ -1571,9 +1574,12 @@ mod test {
                     bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
                     bytes
                 };
-                assert_matches!(
-                    TcpHeader::read(&mut Cursor::new(&bytes[..])),
-                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                assert_eq!(
+                    TcpHeader::read(&mut Cursor::new(&bytes[..]))
+                        .unwrap_err()
+                        .content_error()
+                        .unwrap(),
+                    DataOffsetTooSmall{ data_offset }
                 );
             }
 
