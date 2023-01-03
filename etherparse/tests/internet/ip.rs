@@ -2,7 +2,6 @@ use super::super::*;
 
 mod ip_header {
     use super::*;
-    use crate::ip_number::*;
 
     #[test]
     fn read_ip_header_version_error() {
