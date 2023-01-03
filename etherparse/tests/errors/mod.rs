@@ -75,16 +75,16 @@ proptest! {
             &format!("{}", Ipv6HopByHopHeaderNotAtStart)
         );
 
-        //IpAuthenticationHeaderTooSmallPayloadLength
+        //IpAuthHeader
         assert_eq!(
             &format!("{}", err::ip_auth::HeaderError::ZeroPayloadLen),
             &format!("{}", IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen))
         );
 
-        //TcpDataOffsetTooSmall
+        //TcpHeader
         assert_eq!(
-            &format!("ReadError: TCP data offset too small. The data offset value {} in the tcp header is smaller then the tcp header itself.", arg_u8),
-            &format!("{}", TcpDataOffsetTooSmall(arg_u8))
+            &format!("{}", err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
+            &format!("{}", TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }))
         );
 
         //TcpDataOffsetTooSmall
@@ -123,6 +123,11 @@ fn read_error_source() {
             .source()
             .is_some()
     );
+    assert!(
+        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 })
+            .source()
+            .is_some()
+    );
 
     let none_values = [
         UnexpectedLenOfSlice {
@@ -132,7 +137,6 @@ fn read_error_source() {
         IpUnsupportedVersion(0),
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
-        TcpDataOffsetTooSmall(0),
         Icmpv6PacketTooBig(0),
     ];
 
@@ -161,7 +165,7 @@ fn read_error_debug() {
         Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6HopByHopHeaderNotAtStart,
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
-        TcpDataOffsetTooSmall(0),
+        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
         Icmpv6PacketTooBig(0),
     ];
 

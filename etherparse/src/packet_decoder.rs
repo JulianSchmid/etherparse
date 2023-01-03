@@ -493,7 +493,14 @@ fn read_transport(
             .map_err(|err| ReadError::SliceLen(err.add_offset(offset)))
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?,
         TCP => TcpHeader::from_slice(rest)
-            .map_err(|err| err.add_slice_offset(offset))
+            .map_err(|err| {
+                use err::tcp::HeaderSliceError as I;
+                use ReadError as O;
+                match err  {
+                    I::SliceLen(err) => O::SliceLen(err.add_offset(offset)),
+                    I::Content(err) => O::TcpHeader(err),
+                }
+            })
             .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1))?,
         _ => (None, rest),
     })

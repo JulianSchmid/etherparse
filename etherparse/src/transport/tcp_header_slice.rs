@@ -8,9 +8,10 @@ pub struct TcpHeaderSlice<'a> {
 
 impl<'a> TcpHeaderSlice<'a> {
     /// Creates a slice containing an tcp header.
-    pub fn from_slice(slice: &'a [u8]) -> Result<TcpHeaderSlice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<TcpHeaderSlice<'a>, err::tcp::HeaderSliceError> {
+        use err::tcp::{HeaderError::*, HeaderSliceError::*};
+
         //check length
-        use crate::ReadError::*;
         if slice.len() < TcpHeader::MIN_LEN {
             return Err(SliceLen(err::SliceLenError {
                 expected_min_len: TcpHeader::MIN_LEN,
@@ -26,7 +27,7 @@ impl<'a> TcpHeaderSlice<'a> {
         let len = data_offset as usize * 4;
 
         if data_offset < TcpHeader::MIN_DATA_OFFSET {
-            Err(ReadError::TcpDataOffsetTooSmall(data_offset))
+            Err(Content(DataOffsetTooSmall{ data_offset }))
         } else if slice.len() < len {
             Err(SliceLen(err::SliceLenError {
                 expected_min_len: len,
@@ -357,9 +358,13 @@ impl<'a> TcpHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*, TcpOptionElement::*};
+    use crate::{
+        *,
+        test_gens::*,
+        TcpOptionElement::*,
+        err::tcp::{HeaderError::*, HeaderSliceError::*}
+    };
     use proptest::prelude::*;
-    use assert_matches::assert_matches;
 
     proptest!{
         #[test]
@@ -407,9 +412,9 @@ mod test {
                     bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
                     bytes
                 };
-                assert_matches!(
+                assert_eq!(
                     TcpHeaderSlice::from_slice(&bytes[..]),
-                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                    Err(Content(DataOffsetTooSmall{ data_offset }))
                 );
             }
 
@@ -419,10 +424,8 @@ mod test {
                 for len in 0..(header.header_len() as usize) {
                     assert_eq!(
                         TcpHeaderSlice::from_slice(&bytes[..len])
-                            .unwrap_err()
-                            .slice_len()
-                            .unwrap(),
-                        err::SliceLenError {
+                            .unwrap_err(),
+                        SliceLen(err::SliceLenError {
                             expected_min_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
@@ -430,7 +433,7 @@ mod test {
                             },
                             actual_len: len,
                             layer: err::Layer::TcpHeader,
-                        }
+                        })
                     );
                 }
             }
