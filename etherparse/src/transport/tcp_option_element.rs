@@ -28,3 +28,47 @@ pub enum TcpOptionElement {
     ///Timestamp & echo (first number is the sender timestamp, the second the echo timestamp)
     Timestamp(u32, u32),
 }
+
+#[cfg(test)]
+mod test {
+    use crate::*;
+
+    #[test]
+    fn clone_eq() {
+        use TcpOptionElement::*;
+        let values = [
+            Noop,
+            MaximumSegmentSize(123),
+            WindowScale(123),
+            SelectiveAcknowledgementPermitted,
+            SelectiveAcknowledgement((1, 2), [Some((3, 4)), Some((5, 6)), None]),
+            Timestamp(123, 456),
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        use TcpOptionElement::*;
+        assert_eq!("Noop", format!("{:?}", Noop));
+        assert_eq!(
+            "MaximumSegmentSize(123)",
+            format!("{:?}", MaximumSegmentSize(123))
+        );
+        assert_eq!("WindowScale(123)", format!("{:?}", WindowScale(123)));
+        assert_eq!(
+            "SelectiveAcknowledgementPermitted",
+            format!("{:?}", SelectiveAcknowledgementPermitted)
+        );
+        assert_eq!(
+            "SelectiveAcknowledgement((1, 2), [Some((3, 4)), Some((5, 6)), None])",
+            format!(
+                "{:?}",
+                SelectiveAcknowledgement((1, 2), [Some((3, 4)), Some((5, 6)), None])
+            )
+        );
+        assert_eq!("Timestamp(123, 456)", format!("{:?}", Timestamp(123, 456)));
+    }
+}

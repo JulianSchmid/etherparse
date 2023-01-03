@@ -354,3 +354,547 @@ impl<'a> TcpHeaderSlice<'a> {
             .to_be()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*, TcpOptionElement::*};
+    use proptest::prelude::*;
+    use assert_matches::assert_matches;
+
+    proptest!{
+        #[test]
+        fn debug(header in tcp_any()) {
+            let buffer = header.to_bytes();
+            let slice = TcpHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                format!("{:?}", slice),
+                format!("TcpHeaderSlice {{ slice: {:?} }}", slice.slice())
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn clone_eq(header in tcp_any()) {
+            let bytes = header.to_bytes();
+            let slice = TcpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.clone(), slice);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(header in tcp_any()) {
+            // ok case
+            {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes.try_extend_from_slice(
+                        &([0u8;TcpHeader::MAX_LEN])[..bytes.remaining_capacity()]
+                    ).unwrap();
+                    bytes
+                };
+                
+                let slice = TcpHeaderSlice::from_slice(&bytes[..]).unwrap();
+                assert_eq!(slice.slice(), &bytes[..header.header_len() as usize]);
+                assert_eq!(slice.to_header(), header);
+            }
+
+            // data offset error
+            for data_offset in 0..TcpHeader::MIN_DATA_OFFSET {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
+                    bytes
+                };
+                assert_matches!(
+                    TcpHeaderSlice::from_slice(&bytes[..]),
+                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                );
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..(header.header_len() as usize) {
+                    assert_eq!(
+                        TcpHeaderSlice::from_slice(&bytes[..len])
+                            .unwrap_err()
+                            .slice_len()
+                            .unwrap(),
+                        err::SliceLenError {
+                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                                TcpHeader::MIN_LEN
+                            } else {
+                                header.header_len() as usize
+                            },
+                            actual_len: len,
+                            layer: err::Layer::TcpHeader,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn getters(header in tcp_any()) {
+            let bytes = header.to_bytes();
+            let slice = TcpHeaderSlice::from_slice(&bytes).unwrap();
+
+            assert_eq!(header.source_port, slice.source_port());
+            assert_eq!(header.destination_port, slice.destination_port());
+            assert_eq!(header.sequence_number, slice.sequence_number());
+            assert_eq!(header.acknowledgment_number, slice.acknowledgment_number());
+            assert_eq!(header.data_offset(), slice.data_offset());
+            assert_eq!(header.ns, slice.ns());
+            assert_eq!(header.fin, slice.fin());
+            assert_eq!(header.syn, slice.syn());
+            assert_eq!(header.rst, slice.rst());
+            assert_eq!(header.psh, slice.psh());
+            assert_eq!(header.ack, slice.ack());
+            assert_eq!(header.urg, slice.urg());
+            assert_eq!(header.ece, slice.ece());
+            assert_eq!(header.cwr, slice.cwr());
+            assert_eq!(header.window_size, slice.window_size());
+            assert_eq!(header.checksum, slice.checksum());
+            assert_eq!(header.urgent_pointer, slice.urgent_pointer());
+            assert_eq!(header.options(), slice.options());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn options_iterator(header in tcp_any()) {
+            let bytes = header.to_bytes();
+            let slice = TcpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                TcpOptionsIterator::from_slice(header.options()),
+                slice.options_iterator()
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn to_header(header in tcp_any()) {
+            let bytes = header.to_bytes();
+            let slice = TcpHeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(header, slice.to_header());
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv4() {
+        // checksum == 0xf (no carries) (aka sum == 0xffff)
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            // setup headers
+            let tcp = TcpHeader::new(0, 0, 40905, 0);
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                0,
+                ip_number::TCP,
+                //source ip address
+                [0; 4],
+                //destination ip address
+                [0; 4],
+            );
+
+            // setup slices
+            let ip_bytes = ip_header.to_bytes().unwrap();
+            let ip_slice = Ipv4HeaderSlice::from_slice(&ip_bytes).unwrap();
+
+            let tcp_bytes = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_bytes).unwrap();
+
+            assert_eq!(Ok(0x0), tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload));
+        }
+
+        //a header with options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                20,
+                ip_number::TCP,
+                //source ip address
+                [192, 168, 1, 42],
+                //destination ip address
+                [192, 168, 1, 1],
+            );
+
+            // setup slices
+            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer).unwrap();
+
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
+
+            assert_eq!(
+                Ok(0xdeeb),
+                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
+            );
+        }
+
+        //a header with an uneven number of options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                20,
+                ip_number::TCP,
+                //source ip address
+                [192, 168, 1, 42],
+                //destination ip address
+                [192, 168, 1, 1],
+            );
+
+            // setup slices
+            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
+
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer[..]).unwrap();
+
+            assert_eq!(
+                Ok(0xd5ea),
+                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
+            );
+        }
+
+        // value error
+        {
+            // write the tcp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let mut tcp_payload = Vec::with_capacity(len);
+            tcp_payload.resize(len, 0);
+            let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]);
+
+            // setup slices
+            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer).unwrap();
+
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
+
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
+            );
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv4_raw() {
+        // checksum == 0xf (no carries) (aka sum == 0xffff)
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            // setup headers
+            let tcp = TcpHeader::new(0, 0, 40905, 0);
+
+            // setup slices
+            let tcp_bytes = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_bytes).unwrap();
+
+            assert_eq!(
+                Ok(0x0),
+                tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
+            );
+        }
+
+        //a header with options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // setup slices
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
+
+            assert_eq!(
+                Ok(0xdeeb),
+                tcp_slice.calc_checksum_ipv4_raw(
+                    [192, 168, 1, 42],
+                    [192, 168, 1, 1],
+                    &tcp_payload
+                )
+            );
+        }
+
+        //a header with an uneven number of options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // setup slices
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer[..]).unwrap();
+
+            assert_eq!(
+                Ok(0xd5ea),
+                tcp_slice.calc_checksum_ipv4_raw(
+                    [192, 168, 1, 42],
+                    [192, 168, 1, 1],
+                    &tcp_payload
+                )
+            );
+        }
+
+        // value error
+        {
+            // write the tcp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let mut tcp_payload = Vec::with_capacity(len);
+            tcp_payload.resize(len, 0);
+
+            // setup slices
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
+
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                tcp_slice.calc_checksum_ipv4_raw([0;4], [0;4], &tcp_payload)
+            );
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv6() {
+        // ok case
+        {
+            let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
+
+            // setup tcp header
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            use crate::TcpOptionElement::*;
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // setup ip header
+            let ip_header = Ipv6Header {
+                traffic_class: 1,
+                flow_label: 0x81806,
+                payload_length: tcp_payload.len() as u16 + tcp.header_len(),
+                next_header: ip_number::TCP,
+                hop_limit: 40,
+                source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                destination: [
+                    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                ],
+            };
+
+            // setup slices
+            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_slice = Ipv6HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
+
+            let tcp_bytes = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_bytes).unwrap();
+
+            // verify checksum
+            assert_eq!(
+                Ok(0x786e),
+                tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload)
+            );
+        }
+
+        // error
+        #[cfg(target_pointer_width = "64")]
+        {
+            //write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+
+            //lets create a slice of that size that points to zero
+            //(as most systems can not allocate blocks of the size of u32::MAX)
+            let tcp_payload = unsafe {
+                //NOTE: The pointer must be initialized with a non null value
+                //      otherwise a key constraint of slices is not fullfilled
+                //      which can lead to crashes in release mode.
+                use core::ptr::NonNull;
+                core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)
+            };
+            let ip_header = Ipv6Header {
+                traffic_class: 1,
+                flow_label: 0x81806,
+                payload_length: 0, //lets assume jumbograms behavior (set to 0, as bigger then u16)
+                next_header: ip_number::TCP,
+                hop_limit: 40,
+                source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                destination: [
+                    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                ],
+            };
+            
+            // setup slices
+            let mut ip_buffer = Vec::new();
+            ip_header.write(&mut ip_buffer).unwrap();
+            let ip_slice = Ipv6HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
+
+            let mut tcp_buffer = Vec::new();
+            tcp.write(&mut tcp_buffer).unwrap();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer[..]).unwrap();
+
+            // check for an error during checksum calc
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload)
+            );
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv6_raw() {
+        // ok case
+        {
+            let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
+
+            //write the tcp header
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            use crate::TcpOptionElement::*;
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // setup slice
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer[..]).unwrap();
+
+            // verify checksum
+            assert_eq!(
+                Ok(0x786e),
+                tcp_slice.calc_checksum_ipv6_raw(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
+                    &tcp_payload
+                )
+            );
+        }
+
+        // error
+        #[cfg(target_pointer_width = "64")]
+        {
+            //write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+
+            //lets create a slice of that size that points to zero
+            //(as most systems can not allocate blocks of the size of u32::MAX)
+            let tcp_payload = unsafe {
+                //NOTE: The pointer must be initialized with a non null value
+                //      otherwise a key constraint of slices is not fullfilled
+                //      which can lead to crashes in release mode.
+                use core::ptr::NonNull;
+                core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)
+            };
+
+            // setup slice
+            let tcp_buffer = tcp.to_bytes();
+            let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
+
+            // expect an length error
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                tcp_slice.calc_checksum_ipv6_raw(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
+                    &tcp_payload
+                )
+            );
+        }
+    }
+}

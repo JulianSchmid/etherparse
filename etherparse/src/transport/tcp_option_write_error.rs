@@ -1,5 +1,3 @@
-use crate::*;
-
 /// Errors that can occour when setting the options of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionWriteError {
@@ -28,3 +26,43 @@ impl core::fmt::Display for TcpOptionWriteError {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use crate::*;
+    use proptest::prelude::*;
+    
+    #[test]
+    fn debug() {
+        use TcpOptionWriteError::*;
+        assert_eq!("NotEnoughSpace(0)", format!("{:?}", NotEnoughSpace(0)));
+    }
+
+    #[test]
+    fn clone_eq() {
+        use TcpOptionWriteError::*;
+        let value = NotEnoughSpace(123);
+        assert_eq!(value, value.clone());
+    }
+
+    proptest!{
+        #[test]
+        fn source(arg_usize in any::<usize>()) {
+            use std::error::Error;
+            use crate::TcpOptionWriteError::*;
+
+            assert!(NotEnoughSpace(arg_usize).source().is_none());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fmt(arg_usize in any::<usize>()) {
+            use crate::TcpOptionWriteError::*;
+
+            assert_eq!(
+                &format!("TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", arg_usize),
+                &format!("{}", NotEnoughSpace(arg_usize))
+            );
+        }
+    }
+}

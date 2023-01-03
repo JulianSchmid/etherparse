@@ -1,3 +1,5 @@
+use arrayvec::ArrayVec;
+
 use super::super::*;
 
 /// Deprecated use [`TcpHeader::MIN_LEN`] instead.
@@ -126,16 +128,19 @@ impl TcpHeader {
     ///
     /// This indicates where the data begins.  The TCP header (even one including options) is an
     /// integral number of 32 bits long.
+    #[inline]
     pub fn data_offset(&self) -> u8 {
         self._data_offset
     }
 
     /// Returns the length of the header including the options.
+    #[inline]
     pub fn header_len(&self) -> u16 {
         u16::from(self._data_offset) * 4
     }
 
     /// Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
+    #[inline]
     pub fn options_len(&self) -> usize {
         debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
         debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
@@ -143,6 +148,7 @@ impl TcpHeader {
     }
 
     /// Returns a slice containing the options of the header (size is determined via the data_offset field.
+    #[inline]
     pub fn options(&self) -> &[u8] {
         &self.options_buffer[..self.options_len()]
     }
@@ -438,6 +444,92 @@ impl TcpHeader {
         Ok(())
     }
 
+    /// Returns the serialized header.
+    pub fn to_bytes(&self) -> ArrayVec<u8, { TcpHeader::MAX_LEN }> {
+
+        //check that the data offset is within range
+        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
+        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
+
+        let src_be = self.source_port.to_be_bytes();
+        let dst_be = self.destination_port.to_be_bytes();
+        let seq_be = self.sequence_number.to_be_bytes();
+        let ack_be = self.acknowledgment_number.to_be_bytes();
+        let window_be = self.window_size.to_be_bytes();
+        let checksum_be = self.checksum.to_be_bytes();
+        let urg_ptr_be = self.urgent_pointer.to_be_bytes();
+
+        let mut result = ArrayVec::new();
+
+        // write base header data
+        result.extend([
+            src_be[0],
+            src_be[1],
+            dst_be[0],
+            dst_be[1],
+            seq_be[0],
+            seq_be[1],
+            seq_be[2],
+            seq_be[3],
+            ack_be[0],
+            ack_be[1],
+            ack_be[2],
+            ack_be[3],
+            {
+                let value = (self._data_offset << 4) & 0xF0;
+                if self.ns {
+                    value | 1
+                } else {
+                    value
+                }
+            },
+            {
+                let mut value = 0;
+                if self.fin {
+                    value |= 1;
+                }
+                if self.syn {
+                    value |= 2;
+                }
+                if self.rst {
+                    value |= 4;
+                }
+                if self.psh {
+                    value |= 8;
+                }
+                if self.ack {
+                    value |= 16;
+                }
+                if self.urg {
+                    value |= 32;
+                }
+                if self.ece {
+                    value |= 64;
+                }
+                if self.cwr {
+                    value |= 128;
+                }
+                value
+            },
+            window_be[0],
+            window_be[1],
+            checksum_be[0],
+            checksum_be[1],
+            urg_ptr_be[0],
+            urg_ptr_be[1],
+        ]);
+
+        // add the options
+        result.extend(self.options_buffer);
+        // SAFETY: Safe as the header len can not exceed the maximum length
+        // of the header.
+        unsafe {
+            result.set_len(self.header_len() as usize);
+        }
+
+        result
+    }
+
     /// Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(
         &self,
@@ -641,3 +733,1230 @@ impl core::cmp::PartialEq for TcpHeader {
 }
 
 impl core::cmp::Eq for TcpHeader {}
+
+#[cfg(test)]
+mod test {
+    use crate::{*, test_gens::*, tcp_option::*, TcpOptionElement::*};
+    use proptest::prelude::*;
+    use std::io::Cursor;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn default() {
+        let default: TcpHeader = Default::default();
+
+        assert_eq!(0, default.source_port);
+        assert_eq!(0, default.destination_port);
+        assert_eq!(0, default.sequence_number);
+        assert_eq!(0, default.acknowledgment_number);
+        assert_eq!(5, default.data_offset());
+        assert_eq!(false, default.ns);
+        assert_eq!(false, default.fin);
+        assert_eq!(false, default.syn);
+        assert_eq!(false, default.rst);
+        assert_eq!(false, default.psh);
+        assert_eq!(false, default.ack);
+        assert_eq!(false, default.ece);
+        assert_eq!(false, default.urg);
+        assert_eq!(false, default.cwr);
+        assert_eq!(0, default.window_size);
+        assert_eq!(0, default.checksum);
+        assert_eq!(0, default.urgent_pointer);
+        assert_eq!(&[0; 40][0..0], &default.options()[..]);
+    }
+
+    proptest! {
+        #[test]
+        fn debug(header in tcp_any()) {
+
+            // normal debug printing
+            assert_eq!(
+                format!(
+                    "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {}, options: {:?} }}", 
+                    header.source_port,
+                    header.destination_port,
+                    header.sequence_number,
+                    header.acknowledgment_number,
+                    header.data_offset(),
+                    header.ns,
+                    header.fin,
+                    header.syn,
+                    header.rst,
+                    header.psh,
+                    header.ack,
+                    header.urg,
+                    header.ece,
+                    header.cwr,
+                    header.window_size,
+                    header.checksum,
+                    header.urgent_pointer,
+                    header.options_iterator()
+                ),
+                format!("{:?}", header)
+            );
+
+            // multi line debug printing
+            {
+                let mut header = header.clone();
+                // lets exclude options for now, as I am not quiet sure
+                // how to introduce additional indentation and the options
+                // part is already checked by the previous test
+                header.set_options(&[]).unwrap();
+                assert_eq!(
+                    format!(
+                        "TcpHeader {{
+    source_port: {},
+    destination_port: {},
+    sequence_number: {},
+    acknowledgment_number: {},
+    data_offset: {},
+    ns: {},
+    fin: {},
+    syn: {},
+    rst: {},
+    psh: {},
+    ack: {},
+    urg: {},
+    ece: {},
+    cwr: {},
+    window_size: {},
+    checksum: {},
+    urgent_pointer: {},
+    options: {:?},
+}}",
+                        header.source_port,
+                        header.destination_port,
+                        header.sequence_number,
+                        header.acknowledgment_number,
+                        header.data_offset(),
+                        header.ns,
+                        header.fin,
+                        header.syn,
+                        header.rst,
+                        header.psh,
+                        header.ack,
+                        header.urg,
+                        header.ece,
+                        header.cwr,
+                        header.window_size,
+                        header.checksum,
+                        header.urgent_pointer,
+                        header.options_iterator()
+                    ),
+                    format!("{:#?}", header)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn eq() {
+        let options = [
+            TcpOptionElement::Timestamp(0x00102030, 0x01112131), //10
+            TcpOptionElement::SelectiveAcknowledgement(
+                (0x02122232, 0x03132333),
+                [None, None, None],
+            ), //20
+            TcpOptionElement::Timestamp(0x04142434, 0x05152535), //30
+            TcpOptionElement::Timestamp(0x06162636, 0x07172737), //40
+        ];
+
+        let base: TcpHeader = {
+            let mut base: TcpHeader = Default::default();
+            base.source_port = 1;
+            base.destination_port = 2;
+            base.sequence_number = 3;
+            base.acknowledgment_number = 4;
+            base.window_size = 6;
+            base.checksum = 7;
+            base.urgent_pointer = 8;
+            base.set_options(&options[..]).unwrap();
+
+            base
+        };
+
+        //equal
+        {
+            let other = base.clone();
+            assert_eq!(other, base);
+        }
+        //change every field anc check for neq
+        //source_port
+        {
+            let mut other = base.clone();
+            other.source_port = 10;
+            assert_ne!(other, base);
+        }
+        //destination_port
+        {
+            let mut other = base.clone();
+            other.destination_port = 10;
+            assert_ne!(other, base);
+        }
+        //sequence_number
+        {
+            let mut other = base.clone();
+            other.sequence_number = 10;
+            assert_ne!(other, base);
+        }
+        //acknowledgment_number
+        {
+            let mut other = base.clone();
+            other.acknowledgment_number = 10;
+            assert_ne!(other, base);
+        }
+        //data_offset
+        {
+            let mut other = base.clone();
+            other
+                .set_options(&[TcpOptionElement::MaximumSegmentSize(16)])
+                .unwrap();
+            assert_ne!(other, base);
+        }
+        //ns
+        {
+            let mut other = base.clone();
+            other.ns = true;
+            assert_ne!(other, base);
+        }
+        //fin
+        {
+            let mut other = base.clone();
+            other.fin = true;
+            assert_ne!(other, base);
+        }
+        //syn
+        {
+            let mut other = base.clone();
+            other.syn = true;
+            assert_ne!(other, base);
+        }
+        //rst
+        {
+            let mut other = base.clone();
+            other.rst = true;
+            assert_ne!(other, base);
+        }
+        //psh
+        {
+            let mut other = base.clone();
+            other.psh = true;
+            assert_ne!(other, base);
+        }
+        //ack
+        {
+            let mut other = base.clone();
+            other.ack = true;
+            assert_ne!(other, base);
+        }
+        //ece
+        {
+            let mut other = base.clone();
+            other.ece = true;
+            assert_ne!(other, base);
+        }
+        //urg
+        {
+            let mut other = base.clone();
+            other.urg = true;
+            assert_ne!(other, base);
+        }
+        //cwr
+        {
+            let mut other = base.clone();
+            other.cwr = true;
+            assert_ne!(other, base);
+        }
+        //window_size
+        {
+            let mut other = base.clone();
+            other.window_size = 10;
+            assert_ne!(other, base);
+        }
+        //checksum
+        {
+            let mut other = base.clone();
+            other.checksum = 10;
+            assert_ne!(other, base);
+        }
+        //urgent_pointer
+        {
+            let mut other = base.clone();
+            other.urgent_pointer = 10;
+            assert_ne!(other, base);
+        }
+        //options (first element different)
+        {
+            let mut other = base.clone();
+            other
+                .set_options(&{
+                    let mut other_options = options.clone();
+                    other_options[0] = TcpOptionElement::Timestamp(0x00102039, 0x01112131);
+                    other_options
+                })
+                .unwrap();
+
+            assert_ne!(other, base);
+        }
+        //options (last element)
+        {
+            let mut other = base.clone();
+            other.set_options(&options).unwrap();
+
+            let mut other2 = base.clone();
+            other2
+                .set_options(&{
+                    let mut options2 = options.clone();
+                    options2[3] = TcpOptionElement::Timestamp(0x06162636, 0x97172737);
+                    options2
+                })
+                .unwrap();
+
+            assert_ne!(other, other2);
+        }
+        //options (check only relevant data is compared)
+        {
+            let mut other = base.clone();
+            other.set_options(&options).unwrap();
+
+            let mut other2 = base.clone();
+            other2
+                .set_options(&{
+                    let mut options2 = options.clone();
+                    options2[3] = TcpOptionElement::Timestamp(0x06162636, 0x97172737);
+                    options2
+                })
+                .unwrap();
+
+            // reset the data
+            let new_options = [TcpOptionElement::Timestamp(0x00102030, 0x01112131)];
+            other.set_options(&new_options).unwrap();
+            other2.set_options(&new_options).unwrap();
+
+            assert_eq!(other, other2);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn new(
+            source_port in any::<u16>(),
+            destination_port in any::<u16>(),
+            sequence_number in any::<u32>(),
+            window_size in any::<u16>()
+        ) {
+            let header = TcpHeader::new(
+                source_port,
+                destination_port,
+                sequence_number,
+                window_size
+            );
+            assert_eq!(header.source_port, source_port);
+            assert_eq!(header.destination_port, destination_port);
+            assert_eq!(header.sequence_number, sequence_number);
+            assert_eq!(header.acknowledgment_number, 0);
+            assert_eq!(header._data_offset, 5);
+            assert_eq!(header.ns, false);
+            assert_eq!(header.fin, false);
+            assert_eq!(header.syn, false);
+            assert_eq!(header.rst, false);
+            assert_eq!(header.psh, false);
+            assert_eq!(header.ack, false);
+            assert_eq!(header.urg, false);
+            assert_eq!(header.ece, false);
+            assert_eq!(header.cwr, false);
+            assert_eq!(header.window_size, window_size);
+            assert_eq!(header.checksum, 0);
+            assert_eq!(header.urgent_pointer, 0);
+            assert_eq!(header.options_buffer, [0u8;40]);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn data_offset(header in tcp_any()) {
+            assert_eq!(header.options().len()/4 + 5, header.data_offset().into());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(header in tcp_any()) {
+            assert_eq!(
+                header.header_len(),
+                (20 + header.options().len()) as u16
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn options_len(header in tcp_any()) {
+            assert_eq!(
+                header.options_len(),
+                header.to_bytes().len() - 20
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn options(header in tcp_any()) {
+            assert_eq!(
+                header.options(),
+                &header.to_bytes()[20..]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        #[rustfmt::skip]
+        fn set_options(
+            header in tcp_any(),
+            arg_u8 in any::<u8>(),
+            arg_u16 in any::<u16>(),
+            ack_args in proptest::collection::vec(any::<u32>(), 4*2),
+            arg0_u32 in any::<u32>(),
+            arg1_u32 in any::<u32>()
+        ) {
+            use crate::TcpOptionElement::*;
+
+            // maximum segment size
+            {
+                let mut header = header.clone();
+                header.set_options(
+                    &[Noop, Noop, MaximumSegmentSize(arg_u16), Noop]
+                ).unwrap();
+                assert_eq!(
+                    header.options(),
+                    &{
+                        let arg_be = arg_u16.to_be_bytes();
+                        [
+                            KIND_NOOP, KIND_NOOP, KIND_MAXIMUM_SEGMENT_SIZE, 4,
+                            arg_be[0], arg_be[1], KIND_NOOP, KIND_END
+                        ]
+                    }
+                );
+            }
+
+            // window scale
+            {
+                let mut header = header.clone();
+                header.set_options(
+                    &[Noop, Noop, WindowScale(arg_u8), Noop]
+                ).unwrap();
+                assert_eq!(
+                    header.options(),
+                    &[
+                        KIND_NOOP, KIND_NOOP, KIND_WINDOW_SCALE, 3,
+                        arg_u8, KIND_NOOP, KIND_END, 0
+                    ]
+                );
+            }
+
+            // selective ack permitted
+            {
+                let mut header = header.clone();
+                header.set_options(
+                    &[Noop, Noop, SelectiveAcknowledgementPermitted, Noop]
+                ).unwrap();
+                assert_eq!(
+                    header.options(),
+                    &[
+                        KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK_PERMITTED, 2,
+                        KIND_NOOP, KIND_END, 0, 0
+                    ]
+                );
+            }
+
+            // selective ack
+            {
+                let args_be : Vec<[u8;4]> = ack_args.iter().map(|v| v.to_be_bytes()).collect();
+
+                //1
+                {
+                    let mut header = header.clone();
+                    header.set_options(
+                        &[Noop, Noop, SelectiveAcknowledgement((ack_args[0], ack_args[1]), [None, None, None]), Noop]
+                    ).unwrap();
+                    assert_eq!(
+                        header.options(),
+                        &[
+                            KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 10,
+                            args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                            args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                            KIND_NOOP, KIND_END, 0, 0
+                        ]
+                    );
+                }
+
+                //2
+                {
+                    let mut header = header.clone();
+                    header.set_options(
+                        &[
+                            Noop,
+                            Noop,
+                            SelectiveAcknowledgement(
+                                (ack_args[0], ack_args[1]),
+                                [Some((ack_args[2], ack_args[3])), None, None]
+                            ),
+                            Noop
+                        ]
+                    ).unwrap();
+                    assert_eq!(
+                        header.options(),
+                        [
+                            KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 18,
+                            args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                            args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                            args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                            args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                            KIND_NOOP, KIND_END, 0, 0
+                        ]
+                    );
+                }
+
+                //3
+                {
+                    let mut header = header.clone();
+                    header.set_options(
+                        &[
+                            Noop,
+                            Noop,
+                            SelectiveAcknowledgement(
+                                (ack_args[0], ack_args[1]),
+                                [
+                                    Some((ack_args[2], ack_args[3])),
+                                    Some((ack_args[4], ack_args[5])),
+                                    None
+                                ]
+                            ),
+                            Noop
+                        ]
+                    ).unwrap();
+                    assert_eq!(
+                        header.options(),
+                        &[
+                            KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 26,
+                            args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                            args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                            args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                            args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                            args_be[4][0], args_be[4][1], args_be[4][2], args_be[4][3],
+                            args_be[5][0], args_be[5][1], args_be[5][2], args_be[5][3],
+                            KIND_NOOP, KIND_END, 0, 0
+                        ]
+                    );
+                }
+
+                //4
+                {
+                    let mut header = header.clone();
+                    header.set_options(
+                        &[
+                            Noop,
+                            Noop,
+                            SelectiveAcknowledgement(
+                                (ack_args[0], ack_args[1]),
+                                [
+                                    Some((ack_args[2], ack_args[3])),
+                                    Some((ack_args[4], ack_args[5])),
+                                    Some((ack_args[6], ack_args[7]))
+                                ]
+                            ),
+                            Noop
+                        ]
+                    ).unwrap();
+                    assert_eq!(
+                        header.options(),
+                        &[
+                            KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 34,
+                            args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
+                            args_be[1][0], args_be[1][1], args_be[1][2], args_be[1][3],
+                            args_be[2][0], args_be[2][1], args_be[2][2], args_be[2][3],
+                            args_be[3][0], args_be[3][1], args_be[3][2], args_be[3][3],
+                            args_be[4][0], args_be[4][1], args_be[4][2], args_be[4][3],
+                            args_be[5][0], args_be[5][1], args_be[5][2], args_be[5][3],
+                            args_be[6][0], args_be[6][1], args_be[6][2], args_be[6][3],
+                            args_be[7][0], args_be[7][1], args_be[7][2], args_be[7][3],
+                            KIND_NOOP, KIND_END, 0, 0
+                        ]
+                    );
+                }
+            }
+
+            // timestamp
+            {
+                let mut header = header.clone();
+                header.set_options(
+                    &[Noop, Noop, Timestamp(arg0_u32, arg1_u32), Noop]
+                ).unwrap();
+                assert_eq!(
+                    header.options(),
+                    &{
+                        let arg0_be = arg0_u32.to_be_bytes();
+                        let arg1_be = arg1_u32.to_be_bytes();
+                        [
+                            KIND_NOOP, KIND_NOOP, KIND_TIMESTAMP, 10,
+                            arg0_be[0], arg0_be[1], arg0_be[2], arg0_be[3],
+                            arg1_be[0], arg1_be[1], arg1_be[2], arg1_be[3],
+                            KIND_NOOP, KIND_END, 0, 0
+                        ]
+                    }
+                );
+            }
+
+            // check for padding
+            {
+                let mut header = header.clone();
+                header.set_options(&[
+                    MaximumSegmentSize(1400),          // 4
+                    SelectiveAcknowledgementPermitted, // 2
+                    Timestamp(2661445915, 0),          // 10
+                    Noop,                              // 1
+                    WindowScale(7),                    // 3
+                ]).unwrap(); // total 20
+                // + header 20 = 40 byte
+                assert_eq!(40, header.header_len());
+            }
+
+            // not enough memory error
+            {
+                let mut header = header.clone();
+                assert_eq!(
+                    Err(TcpOptionWriteError::NotEnoughSpace(41)),
+                    header.set_options(&[
+                        MaximumSegmentSize(1),                                        //4
+                        WindowScale(2),                                               //+3 = 7
+                        SelectiveAcknowledgementPermitted,                            //+2 = 9
+                        SelectiveAcknowledgement((3, 4), [Some((5, 6)), None, None]), // + 18 = 27
+                        Timestamp(5, 6),                                              // + 10 = 37
+                        Noop,
+                        Noop,
+                        Noop,
+                        Noop // + 4
+                    ])
+                );
+                //test with all fields filled of the selective ack
+                assert_eq!(
+                    Err(TcpOptionWriteError::NotEnoughSpace(41)),
+                    header.set_options(&[
+                        Noop,                                                                         // 1
+                        SelectiveAcknowledgement((3, 4), [Some((5, 6)), Some((5, 6)), Some((5, 6))]), // + 34 = 35
+                        MaximumSegmentSize(1), // + 4 = 39
+                        Noop,
+                        Noop // + 2 = 41
+                    ])
+                );
+        
+                //test with all fields filled of the selective ack
+                assert_eq!(
+                    Err(TcpOptionWriteError::NotEnoughSpace(41)),
+                    header.set_options(&[
+                        Noop,                                                 // 1
+                        SelectiveAcknowledgement((3, 4), [None, None, None]), // + 10 = 11
+                        Timestamp(1, 2),                                      // + 10 = 21
+                        Timestamp(1, 2),                                      // + 10 = 31
+                        MaximumSegmentSize(1),                                // + 4 = 35
+                        Noop,
+                        Noop,
+                        Noop,
+                        Noop,
+                        Noop,
+                        Noop // + 6 = 41
+                    ])
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn set_options_raw(header in tcp_any()) {
+            let base: TcpHeader = Default::default();
+
+            let dummy = [
+                1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41,
+            ];
+
+            //ok size -> expect output based on options size
+            for i in 0..40 {
+                let mut header = header.clone();
+                //set the options
+                header.set_options_raw(&dummy[..i]).unwrap();
+
+                //determine the expected options length
+                let mut options_length = i / 4;
+                if i % 4 != 0 {
+                    options_length += 1;
+                }
+                options_length = options_length * 4;
+
+                //expecetd data
+                let mut expected_options = [0; 40];
+                expected_options[..i].copy_from_slice(&dummy[..i]);
+
+                assert_eq!(options_length, header.options_len());
+                assert_eq!(
+                    (options_length / 4) as u8 + TcpHeader::MIN_DATA_OFFSET,
+                    header.data_offset()
+                );
+                assert_eq!(&expected_options[..options_length], header.options());
+            }
+
+            //too big -> expect error
+            let mut header = base.clone();
+            use crate::TcpOptionWriteError::*;
+            assert_eq!(
+                Err(NotEnoughSpace(dummy.len())),
+                header.set_options_raw(&dummy[..])
+            );
+        }
+    }
+
+    #[test]
+    fn options_iterator() {
+        let options = [
+            TcpOptionElement::Timestamp(0x00102030, 0x01112131), //10
+            TcpOptionElement::SelectiveAcknowledgement((0x02122232, 0x03132333), [None, None, None]), //20
+            TcpOptionElement::Timestamp(0x04142434, 0x05152535), //30
+            TcpOptionElement::Timestamp(0x06162636, 0x07172737), //40
+        ];
+
+        let base: TcpHeader = {
+            let mut base: TcpHeader = Default::default();
+            base.set_options(&options[..]).unwrap();
+            base
+        };
+
+        assert_eq!(
+            &options[..],
+            &base
+                .options_iterator()
+                .map(|x| x.unwrap())
+                .collect::<Vec<TcpOptionElement>>()[..]
+        );
+    }
+
+    proptest! {
+        #[test]
+        #[allow(deprecated)]
+        fn read_from_slice(header in tcp_any()) {
+            // ok case
+            {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes.try_extend_from_slice(
+                        &([0u8;TcpHeader::MAX_LEN])[..bytes.remaining_capacity()]
+                    ).unwrap();
+                    bytes
+                };
+                
+                let (actual_header, actual_rest) = TcpHeader::read_from_slice(&bytes[..]).unwrap();
+                assert_eq!(actual_header, header);
+                assert_eq!(actual_rest, &bytes[header.header_len() as usize..]);
+            }
+
+            // data offset error
+            for data_offset in 0..TcpHeader::MIN_DATA_OFFSET {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
+                    bytes
+                };
+                assert_matches!(
+                    TcpHeader::read_from_slice(&bytes[..]),
+                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                );
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..(header.header_len() as usize) {
+                    assert_eq!(
+                        TcpHeader::read_from_slice(&bytes[..len])
+                            .unwrap_err()
+                            .slice_len()
+                            .unwrap(),
+                        err::SliceLenError {
+                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                                TcpHeader::MIN_LEN
+                            } else {
+                                header.header_len() as usize
+                            },
+                            actual_len: len,
+                            layer: err::Layer::TcpHeader,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice(header in tcp_any()) {
+            // ok case
+            {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes.try_extend_from_slice(
+                        &([0u8;TcpHeader::MAX_LEN])[..bytes.remaining_capacity()]
+                    ).unwrap();
+                    bytes
+                };
+                
+                let (actual_header, actual_rest) = TcpHeader::from_slice(&bytes[..]).unwrap();
+                assert_eq!(actual_header, header);
+                assert_eq!(actual_rest, &bytes[header.header_len() as usize..]);
+            }
+
+            // data offset error
+            for data_offset in 0..TcpHeader::MIN_DATA_OFFSET {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
+                    bytes
+                };
+                assert_matches!(
+                    TcpHeader::from_slice(&bytes[..]),
+                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                );
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..(header.header_len() as usize) {
+                    assert_eq!(
+                        TcpHeader::from_slice(&bytes[..len])
+                            .unwrap_err()
+                            .slice_len()
+                            .unwrap(),
+                        err::SliceLenError {
+                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                                TcpHeader::MIN_LEN
+                            } else {
+                                header.header_len() as usize
+                            },
+                            actual_len: len,
+                            layer: err::Layer::TcpHeader,
+                        }
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(header in tcp_any()) {
+            // ok case
+            {
+                let bytes = header.to_bytes();
+                let mut cursor = Cursor::new(&bytes[..]);
+                let actual = TcpHeader::read(&mut cursor).unwrap();
+                assert_eq!(header.header_len() as u64, cursor.position());
+                assert_eq!(header, actual);
+            }
+
+            // data offset error
+            for data_offset in 0..TcpHeader::MIN_DATA_OFFSET {
+                let bytes = {
+                    let mut bytes = header.to_bytes();
+                    bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
+                    bytes
+                };
+                assert_matches!(
+                    TcpHeader::read(&mut Cursor::new(&bytes[..])),
+                    Err(ReadError::TcpDataOffsetTooSmall(_))
+                );
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..(header.header_len() as usize) {
+                    let mut cursor = Cursor::new(&bytes[..len]);
+                    let err = TcpHeader::read(&mut cursor).unwrap_err();
+                    assert!(err.io_error().is_some());
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write(header in tcp_any()) {
+            // ok
+            {
+                let mut bytes = [0u8;TcpHeader::MAX_LEN];
+                let len = {
+                    let mut cursor = Cursor::new(&mut bytes[..]);
+                    header.write(&mut cursor).unwrap();
+                    
+                    cursor.position() as usize
+                };
+                assert_eq!(header.header_len() as usize, len);
+                assert_eq!(
+                    header,
+                    TcpHeader::from_slice(&bytes[..len]).unwrap().0
+                );
+            }
+            // length error
+            for len in 0..header.header_len() {
+                let mut bytes = [0u8;TcpHeader::MAX_LEN];
+                let mut cursor = Cursor::new(&mut bytes[..len as usize]);
+                let result = header.write(&mut cursor);
+                assert!(result.is_err());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_bytes(header in tcp_any()) {
+            let bytes = header.to_bytes();
+            let actual = TcpHeader::from_slice(&bytes).unwrap().0;
+            assert_eq!(actual, header);
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv4() {
+        use crate::TcpOptionElement::*;
+
+        // checksum == 0xf (no carries) (aka sum == 0xffff)
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+            //write the tcp header
+            let tcp = TcpHeader::new(0, 0, 40905, 0);
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                0,
+                ip_number::TCP,
+                //source ip address
+                [0; 4],
+                //destination ip address
+                [0; 4],
+            );
+            assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+            assert_eq!(
+                Ok(0x0),
+                tcp.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, &tcp_payload)
+            );
+        }
+
+        //a header with options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                20,
+                //contained protocol is udp
+                ip_number::TCP,
+                //source ip address
+                [192, 168, 1, 42],
+                //destination ip address
+                [192, 168, 1, 1],
+            );
+
+            //check checksum
+            assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+        }
+
+        //a header with an uneven number of options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            let ip_header = Ipv4Header::new(
+                //payload length
+                tcp.header_len() + (tcp_payload.len() as u16),
+                //time to live
+                20,
+                //contained protocol is udp
+                ip_number::TCP,
+                //source ip address
+                [192, 168, 1, 42],
+                //destination ip address
+                [192, 168, 1, 1],
+            );
+
+            //check checksum
+            assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
+        }
+
+        // value error
+        {
+            // write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let mut tcp_payload = Vec::with_capacity(len);
+            tcp_payload.resize(len, 0);
+            let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]);
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                tcp.calc_checksum_ipv4(&ip_header, &tcp_payload)
+            );
+        }
+    }
+
+
+    #[test]
+    fn calc_checksum_ipv4_raw() {
+
+        // checksum == 0xf (no carries) (aka sum == 0xffff)
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+            //write the tcp header
+            let tcp = TcpHeader::new(0, 0, 40905, 0);
+            assert_eq!(
+                Ok(0x0),
+                tcp.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
+            );
+        }
+
+        // a header with options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // check checksum
+            assert_eq!(
+                Ok(0xdeeb),
+                tcp.calc_checksum_ipv4_raw([192, 168, 1, 42], [192, 168, 1, 1], &tcp_payload)
+            );
+        }
+
+        // a header with an uneven number of options
+        {
+            let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // check checksum
+            assert_eq!(
+                Ok(0xd5ea),
+                tcp.calc_checksum_ipv4_raw([192, 168, 1, 42], [192, 168, 1, 1], &tcp_payload)
+            );
+        }
+
+        // value error
+        {
+            // write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let mut tcp_payload = Vec::with_capacity(len);
+            tcp_payload.resize(len, 0);
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                tcp.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
+            );
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv6() {
+        
+        // ok case
+        {
+            let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
+
+            // setup tcp header
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            use crate::TcpOptionElement::*;
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            let ip_header = Ipv6Header {
+                traffic_class: 1,
+                flow_label: 0x81806,
+                payload_length: tcp_payload.len() as u16 + tcp.header_len(),
+                next_header: ip_number::TCP,
+                hop_limit: 40,
+                source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                destination: [
+                    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                ],
+            };
+            // check checksum
+            assert_eq!(Ok(0x786e), tcp.calc_checksum_ipv6(&ip_header, &tcp_payload));
+        }
+
+        // error
+        #[cfg(target_pointer_width = "64")]
+        {
+            //write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+
+            //lets create a slice of that size that points to zero
+            //(as most systems can not allocate blocks of the size of u32::MAX)
+            let tcp_payload = unsafe {
+                //NOTE: The pointer must be initialized with a non null value
+                //      otherwise a key constraint of slices is not fullfilled
+                //      which can lead to crashes in release mode.
+                use core::ptr::NonNull;
+                core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)
+            };
+            let ip_header = Ipv6Header {
+                traffic_class: 1,
+                flow_label: 0x81806,
+                payload_length: 0, //lets assume jumbograms behavior (set to 0, as bigger then u16)
+                next_header: ip_number::TCP,
+                hop_limit: 40,
+                source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                destination: [
+                    21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
+                ],
+            };
+
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                tcp.calc_checksum_ipv6(&ip_header, &tcp_payload)
+            );
+        }
+    }
+
+    #[test]
+    fn calc_checksum_ipv6_raw() {
+        
+        // ok case
+        {
+            let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
+
+            //write the tcp header
+            let mut tcp = TcpHeader::new(69, 42, 0x24900448, 0x3653);
+            tcp.urgent_pointer = 0xE26E;
+
+            tcp.ns = true;
+            tcp.fin = true;
+            tcp.syn = true;
+            tcp.rst = true;
+            tcp.psh = true;
+            tcp.ack = true;
+            tcp.ece = true;
+            tcp.urg = true;
+            tcp.cwr = true;
+
+            use crate::TcpOptionElement::*;
+            tcp.set_options(&[Noop, Noop, Noop, Noop, Timestamp(0x4161008, 0x84161708)])
+                .unwrap();
+
+            // check checksum
+            assert_eq!(
+                Ok(0x786e),
+                tcp.calc_checksum_ipv6_raw(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 
+                    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
+                    &tcp_payload
+                )
+            );
+        }
+
+        // error
+        #[cfg(target_pointer_width = "64")]
+        {
+            //write the udp header
+            let tcp: TcpHeader = Default::default();
+            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+
+            //lets create a slice of that size that points to zero
+            //(as most systems can not allocate blocks of the size of u32::MAX)
+            let tcp_payload = unsafe {
+                //NOTE: The pointer must be initialized with a non null value
+                //      otherwise a key constraint of slices is not fullfilled
+                //      which can lead to crashes in release mode.
+                use core::ptr::NonNull;
+                core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)
+            };
+
+            assert_eq!(
+                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                tcp.calc_checksum_ipv6_raw(
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+                    [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
+                    &tcp_payload
+                )
+            );
+        }
+    }
+}
