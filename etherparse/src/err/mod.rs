@@ -2,6 +2,7 @@ pub mod double_vlan;
 pub mod ip_auth;
 pub mod ipv4;
 pub mod ipv6;
+pub mod tcp;
 
 mod layer;
 pub use layer::*;

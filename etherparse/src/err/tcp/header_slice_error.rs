@@ -1,7 +1,7 @@
 use super::HeaderError;
 use crate::err::SliceLenError;
 
-/// Error when decoding an IP authentification header from a slice.
+/// Error when decoding a TCP header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderSliceError {
     /// Error when an unexpected end of a slice is reached
@@ -28,7 +28,7 @@ impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
         match self {
-            SliceLen(err) => write!(f, "IP Authentification Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain an IP authentification header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
+            SliceLen(err) => write!(f, "TCP Header Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain a TCP header. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
             Content(value) => value.fmt(f),
         }
     }
@@ -70,14 +70,14 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(HeaderError::ZeroPayloadLen).add_slice_offset(200),
-            Content(HeaderError::ZeroPayloadLen)
+            Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 }).add_slice_offset(200),
+            Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 })
         );
     }
 
     #[test]
     fn debug() {
-        let err = HeaderError::ZeroPayloadLen;
+        let err = HeaderError::DataOffsetTooSmall{ data_offset: 1 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(HeaderError::ZeroPayloadLen);
+        let err = Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "IP Authentification Header Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain an IP authentification header. The slice must at least contain 2 bytes/octets.",
+            "TCP Header Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain a TCP header. The slice must at least contain 2 bytes/octets.",
             format!(
                 "{}",
                 SliceLen(
@@ -113,7 +113,7 @@ mod tests {
             )
         );
         {
-            let err = HeaderError::ZeroPayloadLen;
+            let err = HeaderError::DataOffsetTooSmall{ data_offset: 1 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -127,6 +127,6 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(Content(HeaderError::ZeroPayloadLen).source().is_some());
+        assert!(Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 }).source().is_some());
     }
 }
