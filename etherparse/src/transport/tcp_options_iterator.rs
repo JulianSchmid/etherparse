@@ -200,3 +200,258 @@ impl<'a> core::fmt::Debug for TcpOptionsIterator<'a> {
         list.finish()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, tcp_option::*};
+
+    #[test]
+    fn debug() {
+        use tcp_option::*;
+        #[rustfmt::skip]
+        assert_eq!(
+            "[MaximumSegmentSize(0), WindowScale(0)]",
+            format!(
+                "{:?}",
+                TcpOptionsIterator::from_slice(&[
+                    KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
+                    KIND_WINDOW_SCALE, 3, 0,
+                    KIND_END,
+                ])
+            )
+        );
+        #[rustfmt::skip]
+        assert_eq!(
+            "[MaximumSegmentSize(0), Err(UnexpectedSize { option_id: 3, size: 0 })]",
+            format!(
+                "{:?}",
+                TcpOptionsIterator::from_slice(&[
+                    KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0,
+                    KIND_WINDOW_SCALE, 0, 0, 0,
+                ])
+            )
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        use tcp_option::*;
+        let it = TcpOptionsIterator::from_slice(&[KIND_END]);
+        assert_eq!(it, it.clone());
+    }
+
+    #[test]
+    fn from_slice_and_rest() {
+        let buffer = [
+            KIND_NOOP, 
+            KIND_NOOP,
+            KIND_MAXIMUM_SEGMENT_SIZE, 4
+        ];
+        let it = TcpOptionsIterator::from_slice(&buffer);
+        assert_eq!(it.rest(), &buffer[..]);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn next() {
+        use crate::TcpOptionElement::*;
+
+        // ok test
+        {
+            fn expect_elements(buffer: &[u8], expected: &[TcpOptionElement]) {
+                // options iterator via from_slice()
+                let mut it = TcpOptionsIterator::from_slice(buffer);
+                for element in expected.iter() {
+                    assert_eq!(element, &it.next().unwrap().unwrap());
+                }
+        
+                //expect no more elements
+                assert_eq!(None, it.next());
+                assert_eq!(0, it.rest().len());
+            }
+
+            // nop & max segment size
+            #[rustfmt::skip]
+            expect_elements(&[
+                    KIND_NOOP, 
+                    KIND_NOOP,
+                    KIND_MAXIMUM_SEGMENT_SIZE, 4, 
+                    0, 1,
+                    KIND_WINDOW_SCALE, 3, 2,
+                    KIND_SELECTIVE_ACK_PERMITTED, 2,
+                    KIND_SELECTIVE_ACK, 10,
+                    0, 0, 0, 10,
+                    0, 0, 0, 11,
+                    KIND_SELECTIVE_ACK, 18, 
+                    0, 0, 0, 12,
+                    0, 0, 0, 13,
+                    0, 0, 0, 14,
+                    0, 0, 0, 15,
+                    KIND_SELECTIVE_ACK, 26, 
+                    0, 0, 0, 16,
+                    0, 0, 0, 17,
+                    0, 0, 0, 18,
+                    0, 0, 0, 19,
+                    0, 0, 0, 20,
+                    0, 0, 0, 21,
+                    KIND_SELECTIVE_ACK, 34, 
+                    0, 0, 0, 22,
+                    0, 0, 0, 23,
+                    0, 0, 0, 24,
+                    0, 0, 0, 25,
+                    0, 0, 0, 26,
+                    0, 0, 0, 27,
+                    0, 0, 0, 28,
+                    0, 0, 0, 29,
+                    KIND_TIMESTAMP, 10, 
+                    0, 0, 0, 30, 
+                    0, 0, 0, 31,
+                    KIND_END, 0, 0, 0, 0
+                ],
+                &[
+                    Noop,
+                    Noop,
+                    MaximumSegmentSize(1),
+                    WindowScale(2),
+                    SelectiveAcknowledgementPermitted,
+                    SelectiveAcknowledgement((10,11), [None, None, None]),
+                    SelectiveAcknowledgement((12,13), [Some((14,15)), None, None]),
+                    SelectiveAcknowledgement((16,17), [Some((18,19)), Some((20,21)), None]),
+                    SelectiveAcknowledgement((22,23), [Some((24,25)), Some((26,27)), Some((28,29))]),
+                    Timestamp(30,31)
+                ]
+            );
+        }
+
+        // unknown id
+        {
+            let data = [255, 2, 0, 0, 0,
+                0, 0, 0, 0, 0, //10
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, //20
+                0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, //30
+                0, 0, 0, 0];
+            let mut it = TcpOptionsIterator::from_slice(&data);
+            assert_eq!(Some(Err(TcpOptionReadError::UnknownId(255))), it.next());
+            
+            //expect the iterator slice to be moved to the end
+            assert_eq!(0, it.rest().len());
+            assert_eq!(None, it.next());
+            assert_eq!(0, it.rest().len());
+        }
+
+        // unexpected end of slice
+        {
+            fn expect_unexpected_eos(slice: &[u8]) {
+                for i in 1..slice.len()-1 {
+                    let mut it = TcpOptionsIterator::from_slice(&slice[..i]);
+                    assert_eq!(
+                        Some(
+                            Err(
+                                TcpOptionReadError::UnexpectedEndOfSlice{
+                                    option_id: slice[0],
+                                    expected_len: match slice[0] {
+                                        KIND_MAXIMUM_SEGMENT_SIZE => 4,
+                                        KIND_WINDOW_SCALE => 3,
+                                        KIND_SELECTIVE_ACK_PERMITTED => 2,
+                                        KIND_SELECTIVE_ACK => if i < 2 {
+                                            // the inial check only checks if there
+                                            // is enough data to read the length field
+                                            2
+                                        } else {
+                                            slice[1]
+                                        },
+                                        KIND_TIMESTAMP => 10,
+                                        _ => panic!("not part of the tests"),
+                                    },
+                                    actual_len: i
+                                }
+                            )
+                        ),
+                        it.next()
+                    );
+                    //expect the iterator slice to be moved to the end
+                    assert_eq!(0, it.rest().len());
+                    assert_eq!(None, it.next());
+                }
+            }
+
+            expect_unexpected_eos(&[KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+            expect_unexpected_eos(&[KIND_WINDOW_SCALE, 3, 0]);
+            expect_unexpected_eos(&[KIND_MAXIMUM_SEGMENT_SIZE, 4, 0, 0]);
+            expect_unexpected_eos(&[KIND_SELECTIVE_ACK_PERMITTED, 2]);
+            expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 10, 0, 0, 0,
+                                    0, 0, 0, 0, 0]);
+            expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 18, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0]);
+            expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 26, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0,
+                                    0]);
+            expect_unexpected_eos(&[KIND_SELECTIVE_ACK, 34, 0, 0, 0,
+                                    0, 0, 0, 0, 0, //10
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0, //20
+                                    0, 0, 0, 0, 0,
+                                    0, 0, 0, 0, 0, //30
+                                    0, 0, 0, 0]);
+            expect_unexpected_eos(&[KIND_TIMESTAMP, 10, 0, 0, 0,
+                                    0, 0, 0, 0, 0]);
+        }
+
+        // unexpected option size error 
+        {
+            fn expect_unexpected_size(id: u8, size: u8) {
+                let data = [
+                    id, size, 0, 0, 0, 0, 0, 0, 0, 0, //10
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //20
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //30
+                    0, 0, 0, 0,
+                ];
+                let mut it = TcpOptionsIterator::from_slice(&data);
+                assert_eq!(
+                    Some(Err(TcpOptionReadError::UnexpectedSize {
+                        option_id: data[0],
+                        size: data[1]
+                    })),
+                    it.next()
+                );
+                //expect the iterator slice to be moved to the end
+                assert_eq!(0, it.rest().len());
+                assert_eq!(None, it.next());
+                assert_eq!(0, it.rest().len());
+            }
+            expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 3);
+            expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 5);
+        
+            expect_unexpected_size(KIND_WINDOW_SCALE, 2);
+            expect_unexpected_size(KIND_WINDOW_SCALE, 4);
+        
+            expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 3);
+            expect_unexpected_size(KIND_MAXIMUM_SEGMENT_SIZE, 5);
+        
+            expect_unexpected_size(KIND_SELECTIVE_ACK_PERMITTED, 1);
+            expect_unexpected_size(KIND_SELECTIVE_ACK_PERMITTED, 3);
+        
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 9);
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 11);
+        
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 17);
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 19);
+        
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 25);
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 27);
+        
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 33);
+            expect_unexpected_size(KIND_SELECTIVE_ACK, 35);
+        
+            expect_unexpected_size(KIND_TIMESTAMP, 9);
+            expect_unexpected_size(KIND_TIMESTAMP, 11);
+        }
+    }
+}

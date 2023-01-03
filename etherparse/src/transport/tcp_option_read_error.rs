@@ -1,5 +1,3 @@
-use crate::*;
-
 /// Errors that can occour while reading the options of a TCP header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionReadError {
@@ -46,6 +44,79 @@ impl core::fmt::Display for TcpOptionReadError {
                     id
                 )
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::*;
+    use proptest::prelude::*;
+    
+    #[test]
+    fn debug() {
+        use TcpOptionReadError::*;
+        assert_eq!(
+            "UnexpectedEndOfSlice { option_id: 1, expected_len: 2, actual_len: 3 }",
+            format!(
+                "{:?}",
+                UnexpectedEndOfSlice {
+                    option_id: 1,
+                    expected_len: 2,
+                    actual_len: 3
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        use TcpOptionReadError::*;
+        let value = UnexpectedEndOfSlice {
+            option_id: 123,
+            expected_len: 5,
+            actual_len: 4,
+        };
+        assert_eq!(value, value.clone());
+    }
+
+    proptest!{
+        #[test]
+        fn source(
+            arg_u8_0 in any::<u8>(),
+            arg_u8_1 in any::<u8>(),
+            arg_usize in any::<usize>()
+        ) {
+            use std::error::Error;
+            use crate::TcpOptionReadError::*;
+
+            assert!(UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize}.source().is_none());
+            assert!(UnexpectedSize{ option_id: arg_u8_0, size: arg_u8_1 }.source().is_none());
+            assert!(UnknownId(arg_u8_0).source().is_none());
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fmt(
+            arg_u8_0 in any::<u8>(),
+            arg_u8_1 in any::<u8>(),
+            arg_usize in any::<usize>()
+        ) {
+            use crate::TcpOptionReadError::*;
+    
+            assert_eq!(
+                &format!("TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", arg_u8_0, arg_u8_1, arg_usize),
+                &format!("{}", UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize})
+            );
+            assert_eq!(
+                &format!("TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", arg_u8_0, arg_u8_1),
+                &format!("{}", UnexpectedSize{ option_id: arg_u8_0, size: arg_u8_1 })
+            );
+            assert_eq!(
+                &format!("TcpOptionReadError: Unknown tcp option kind value {}.", arg_u8_0),
+                &format!("{}", UnknownId(arg_u8_0))
+            );
         }
     }
 }
