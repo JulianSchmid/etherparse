@@ -128,7 +128,7 @@ mod tests {
                 IpAuth(err::ip_auth::HeaderError::ZeroPayloadLen)
             ];
             for v in values {
-                assert!(v.source().is_none());
+                assert!(v.source().is_some());
             }
         }
     }

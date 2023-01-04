@@ -173,7 +173,16 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
                     Ipv6Extensions::from_slice(ip.next_header, ip_rest)
-                        .map_err(|err| err.add_slice_offset(packet.len() - ip_rest.len()))?;
+                        .map_err(|err| {
+                            use err::ipv6_exts::HeaderSliceError as I;
+                            use ReadError as O;
+                            match err {
+                                I::SliceLen(err) => {
+                                    O::SliceLen(err.add_offset(packet.len() - ip_rest.len()))
+                                },
+                                I::Content(err) => O::Ipv6ExtsHeader(err),
+                            }
+                        })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest
@@ -353,7 +362,17 @@ impl<'a> PacketHeaders<'a> {
                     }
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
-                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)?;
+                    Ipv6Extensions::from_slice(ip.next_header, ip_rest)
+                    .map_err(|err| {
+                        use err::ipv6_exts::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::SliceLen(err) => {
+                                O::SliceLen(err.add_offset(data.len() - ip_rest.len()))
+                            },
+                            I::Content(err) => O::Ipv6ExtsHeader(err),
+                        }
+                    })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
 
                 //set the ip result & rest

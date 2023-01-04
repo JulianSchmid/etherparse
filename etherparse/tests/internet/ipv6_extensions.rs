@@ -157,7 +157,7 @@ impl ExtensionTestPayload {
 
     /// Checks the if the extensions match the expected values based
     /// on this test payload.
-    pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, u8) {
+    pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, Option<u8>, u8) {
         struct ReadState {
             hop_by_hop: bool,
             dest_opt: bool,
@@ -178,6 +178,7 @@ impl ExtensionTestPayload {
         };
 
         let mut slice = &self.data[..];
+        let mut last_decoded = None;
         let mut post_header = self.ip_numbers[0];
 
         for i in 0..self.ip_numbers.len() - 1 {
@@ -189,6 +190,7 @@ impl ExtensionTestPayload {
                     assert_eq!(&header, exts.hop_by_hop_options.as_ref().unwrap());
                     slice = rest;
                     read.hop_by_hop = true;
+                    last_decoded = Some(IPV6_HOP_BY_HOP);
                 }
                 IPV6_ROUTE => {
                     if read.routing {
@@ -198,6 +200,7 @@ impl ExtensionTestPayload {
                         assert_eq!(&header, &exts.routing.as_ref().unwrap().routing);
                         slice = rest;
                         read.routing = true;
+                        last_decoded = Some(IPV6_ROUTE);
                     }
                 }
                 IPV6_DEST_OPTIONS => {
@@ -219,6 +222,7 @@ impl ExtensionTestPayload {
                             );
                             slice = rest;
                             read.final_dest_opt = true;
+                            last_decoded = Some(IPV6_DEST_OPTIONS);
                         }
                     } else {
                         // dst opt
@@ -229,6 +233,7 @@ impl ExtensionTestPayload {
                             assert_eq!(&header, exts.destination_options.as_ref().unwrap());
                             slice = rest;
                             read.dest_opt = true;
+                            last_decoded = Some(IPV6_DEST_OPTIONS);
                         }
                     }
                 }
@@ -241,6 +246,7 @@ impl ExtensionTestPayload {
                         assert_eq!(&header, exts.fragment.as_ref().unwrap());
                         slice = rest;
                         read.frag = true;
+                        last_decoded = Some(IPV6_FRAG);
                     }
                 }
                 AUTH => {
@@ -252,6 +258,7 @@ impl ExtensionTestPayload {
                         assert_eq!(&header, exts.auth.as_ref().unwrap());
                         slice = rest;
                         read.auth = true;
+                        last_decoded = Some(AUTH);
                     }
                 }
                 _ => {
@@ -293,7 +300,7 @@ impl ExtensionTestPayload {
             assert!(exts.auth.is_none());
         }
 
-        (self.data.len() - slice.len(), post_header)
+        (self.data.len() - slice.len(), last_decoded, post_header)
     }
 }
 
@@ -481,6 +488,8 @@ pub mod header {
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
+            use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+
             // no extension headers filled
             {
                 let some_data = [1,2,3,4];
@@ -500,21 +509,29 @@ pub mod header {
 
                 if e.exts_hop_by_hop_error() {
                     // a hop by hop header that is not at the start triggers an error
-                    assert_matches!(
+                    assert_eq!(
                         Ipv6Extensions::from_slice(ip_numbers[0], e.slice()).unwrap_err(),
-                        ReadError::Ipv6HopByHopHeaderNotAtStart
+                        Content(HopByHopNotAtStart)
                     );
                 } else {
                     // normal read
                     let (header, next, rest) = Ipv6Extensions::from_slice(ip_numbers[0], e.slice()).unwrap();
-                    let (read_len, expected_post_header) = e.assert_extensions(&header);
+                    let (read_len, last_header, expected_post_header) = e.assert_extensions(&header);
                     assert_eq!(next, expected_post_header);
                     assert_eq!(rest, &e.slice()[read_len..]);
 
                     // unexpected end of slice
-                    assert_matches!(
+                    assert_eq!(
                         Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
-                        ReadError::SliceLen(_)
+                        SliceLen(err::SliceLenError {
+                            expected_min_len: read_len,
+                            actual_len: read_len - 1,
+                            layer: match last_header.unwrap() {
+                                AUTH => err::Layer::IpAuthHeader,
+                                IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                _ => err::Layer::Ipv6ExtHeader
+                            },
+                        })
                     );
                 }
             }
@@ -557,6 +574,8 @@ pub mod header {
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
+            use err::ipv6_exts::HeaderError::*;
+
             // no extension headers filled
             {
                 let mut cursor = Cursor::new(&[]);
@@ -577,23 +596,25 @@ pub mod header {
 
                 if e.exts_hop_by_hop_error() {
                     // a hop by hop header that is not at the start triggers an error
-                    assert_matches!(
-                        Ipv6Extensions::read(&mut cursor, ip_numbers[0]).unwrap_err(),
-                        ReadError::Ipv6HopByHopHeaderNotAtStart
+                    assert_eq!(
+                        Ipv6Extensions::read(&mut cursor, ip_numbers[0]).unwrap_err().content_error().unwrap(),
+                        HopByHopNotAtStart
                     );
                 } else {
                     // normal read
                     let (header, next) = Ipv6Extensions::read(&mut cursor, ip_numbers[0]).unwrap();
-                    let (read_len, expected_post_header) = e.assert_extensions(&header);
+                    let (read_len, _, expected_post_header) = e.assert_extensions(&header);
                     assert_eq!(next, expected_post_header);
                     assert_eq!(cursor.position() as usize, read_len);
 
                     // unexpected end of slice
                     {
                         let mut short_cursor = Cursor::new(&e.slice()[..read_len - 1]);
-                        assert_matches!(
-                            Ipv6Extensions::read(&mut short_cursor, ip_numbers[0]).unwrap_err(),
-                            ReadError::IoError(_)
+                        assert!(
+                            Ipv6Extensions::read(&mut short_cursor, ip_numbers[0])
+                            .unwrap_err()
+                            .io_error()
+                            .is_some()
                         );
                     }
                 }
@@ -1121,6 +1142,8 @@ pub mod slice {
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
+            use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+
             // no extension headers filled
             {
                 let some_data = [1,2,3,4];
@@ -1142,9 +1165,9 @@ pub mod slice {
 
                 if e.ip_numbers[1..].iter().any(|&x| x == IPV6_HOP_BY_HOP) {
                     // a hop by hop header that is not at the start triggers an error
-                    assert_matches!(
+                    assert_eq!(
                         Ipv6ExtensionsSlice::from_slice(ip_numbers[0], e.slice()).unwrap_err(),
-                        ReadError::Ipv6HopByHopHeaderNotAtStart
+                        Content(HopByHopNotAtStart)
                     );
                 } else {
                     // normal read
@@ -1155,9 +1178,17 @@ pub mod slice {
                     assert_eq!(rest, &e.slice()[e.slice().len()..]);
 
                     // unexpected end of slice
-                    assert_matches!(
+                    assert_eq!(
                         Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
-                        ReadError::SliceLen(_)
+                        SliceLen(err::SliceLenError {
+                            expected_min_len: e.slice().len(),
+                            actual_len: e.slice().len() - 1,
+                            layer: match ip_numbers[ip_numbers.len() - 2] {
+                                AUTH => err::Layer::IpAuthHeader,
+                                IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                _ => err::Layer::Ipv6ExtHeader
+                            }
+                        })
                     );
                 }
             }

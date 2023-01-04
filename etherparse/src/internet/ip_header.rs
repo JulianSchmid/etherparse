@@ -79,7 +79,14 @@ impl IpHeader {
                         |(ext, next_protocol, rest)| {
                             (IpHeader::Version6(header, ext), next_protocol, rest)
                         },
-                    )
+                    ).map_err(|err| {
+                        use err::ipv6_exts::HeaderSliceError as I;
+                        use ReadError as O;
+                        match err {
+                            I::SliceLen(err) => O::SliceLen(err),
+                            I::Content(err) => O::Ipv6ExtsHeader(err),
+                        }
+                    })
                 }
                 version => Err(ReadError::IpUnsupportedVersion(version)),
             }
@@ -120,6 +127,14 @@ impl IpHeader {
                 let header = Ipv6Header::read_without_version(reader, value & 0xf)?;
                 Ipv6Extensions::read(reader, header.next_header)
                     .map(|(ext, next)| (IpHeader::Version6(header, ext), next))
+                    .map_err(|err| {
+                        use err::ipv6_exts::HeaderReadError as I;
+                        use ReadError as O;
+                        match err {
+                            I::Io(err) => O::IoError(err),
+                            I::Content(err) => O::Ipv6ExtsHeader(err),
+                        }
+                    })
             }
             version => Err(ReadError::IpUnsupportedVersion(version)),
         }

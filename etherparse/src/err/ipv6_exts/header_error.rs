@@ -22,7 +22,11 @@ impl core::fmt::Display for HeaderError {
 
 impl std::error::Error for HeaderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
+        use HeaderError::*;
+        match self {
+            HopByHopNotAtStart => None,
+            IpAuth(err) => Some(err),
+        }
     }
 }
 
@@ -61,7 +65,7 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "IP Authentification Header Error: Payload Length too small (0). The payload length must be at least 1.",
+            "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200.",
             format!("{}", HopByHopNotAtStart)
         );
         {
