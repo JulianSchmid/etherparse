@@ -1,3 +1,5 @@
+use crate::*;
+
 /// Error when decoding the IP header part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
@@ -20,6 +22,9 @@ pub enum HeaderError {
         /// The minimum expected length based on the
         min_expected_length: u16,
     },
+
+    /// Error in the ip authentification header.
+    IpAuth(err::ip_auth::HeaderError),
 }
 
 impl core::fmt::Display for HeaderError {
@@ -29,13 +34,20 @@ impl core::fmt::Display for HeaderError {
             UnexpectedVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
             Ipv4HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
             Ipv4TotalLengthSmallerThanHeader { total_length, min_expected_length } => write!(f, "IPv4 Header Error: The 'total length' value ({} bytes/octets) present in the IPv4 header is smaller then the bytes/octet lenght of the header ({}) itself. 'total length' should describe the bytes/octets count of the IPv4 header and it's payload.", total_length, min_expected_length),
+            IpAuth(err) => err.fmt(f),
         }
     }
 }
 
 impl std::error::Error for HeaderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
+        use HeaderError::*;
+        match self {
+            UnexpectedVersion { version_number: _ } => None,
+            Ipv4HeaderLengthSmallerThanHeader { ihl: _ } => None,
+            Ipv4TotalLengthSmallerThanHeader { total_length: _, min_expected_length: _ } => None,
+            IpAuth(err) => Some(err),
+        }
     }
 }
 
@@ -87,20 +99,37 @@ mod tests {
             "IPv4 Header Error: The 'total length' value (3 bytes/octets) present in the IPv4 header is smaller then the bytes/octet lenght of the header (4) itself. 'total length' should describe the bytes/octets count of the IPv4 header and it's payload.",
             format!("{}", Ipv4TotalLengthSmallerThanHeader{ total_length: 3, min_expected_length: 4 })
         );
+        {
+            let err = err::ip_auth::HeaderError::ZeroPayloadLen;
+            assert_eq!(
+                format!("{}", IpAuth(err.clone())),
+                format!("{}", err)
+            );
+        }
     }
 
     #[test]
     fn source() {
-        let values = [
-            UnexpectedVersion { version_number: 0 },
-            Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
-            Ipv4TotalLengthSmallerThanHeader {
-                total_length: 0,
-                min_expected_length: 0,
-            },
-        ];
-        for v in values {
-            assert!(v.source().is_none());
+        {
+            let values = [
+                UnexpectedVersion { version_number: 0 },
+                Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
+                Ipv4TotalLengthSmallerThanHeader {
+                    total_length: 0,
+                    min_expected_length: 0,
+                },
+            ];
+            for v in values {
+                assert!(v.source().is_none());
+            }
+        }
+        {
+            let values = [
+                IpAuth(err::ip_auth::HeaderError::ZeroPayloadLen)
+            ];
+            for v in values {
+                assert!(v.source().is_none());
+            }
         }
     }
 }
