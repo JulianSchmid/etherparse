@@ -247,6 +247,7 @@
 
 use std::io;
 
+/// Module containing error types that can be triggered.
 pub mod err;
 
 mod link;
