@@ -330,8 +330,8 @@ pub enum ReadError {
     Ipv4Header(err::ipv4::HeaderError),
     /// Error when decoding an IPv6 header.
     Ipv6Header(err::ipv6::HeaderError),
-    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
-    Ipv6HopByHopHeaderNotAtStart,
+    /// Error when decoding a IPv6 extension headers.
+    Ipv6ExtsHeader(err::ipv6_exts::HeaderError),
     /// Error when decoding an IP authentification header.
     IpAuthHeader(err::ip_auth::HeaderError),
     /// Error when decoding a TCP header.
@@ -417,9 +417,7 @@ impl std::fmt::Display for ReadError {
             }
             Ipv4Header(err) => err.fmt(f),
             Ipv6Header(err) => err.fmt(f),
-            Ipv6HopByHopHeaderNotAtStart => {
-                write!(f, "ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200.")
-            }
+            Ipv6ExtsHeader(err) => err.fmt(f),
             IpAuthHeader(err) => err.fmt(f),
             TcpHeader(err) => err.fmt(f),
             Icmpv6PacketTooBig(size) => {
@@ -436,6 +434,7 @@ impl std::error::Error for ReadError {
             ReadError::SliceLen(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
             ReadError::Ipv6Header(err) => Some(err),
+            ReadError::Ipv6ExtsHeader(err) => Some(err),
             ReadError::TcpHeader(err) => Some(err),
             _ => None,
         }

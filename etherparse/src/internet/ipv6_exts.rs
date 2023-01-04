@@ -69,18 +69,18 @@ impl Ipv6Extensions {
     pub fn from_slice(
         start_ip_number: u8,
         slice: &[u8],
-    ) -> Result<(Ipv6Extensions, u8, &[u8]), ReadError> {
+    ) -> Result<(Ipv6Extensions, u8, &[u8]), err::ipv6_exts::HeaderSliceError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut rest = slice;
         let mut next_header = start_ip_number;
 
         use ip_number::*;
-        use ReadError::*;
+        use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
             let slice =
-                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(ReadError::SliceLen)?;
+                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(SliceLen)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -89,7 +89,7 @@ impl Ipv6Extensions {
         loop {
             match next_header {
                 IPV6_HOP_BY_HOP => {
-                    return Err(Ipv6HopByHopHeaderNotAtStart);
+                    return Err(Content(HopByHopNotAtStart));
                 }
                 IPV6_DEST_OPTIONS => {
                     if let Some(ref mut routing) = result.routing {
@@ -100,7 +100,7 @@ impl Ipv6Extensions {
                             return Ok((result, next_header, rest));
                         } else {
                             let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                                .map_err(ReadError::SliceLen)?;
+                                .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
                             rest = &rest[slice.slice().len()..];
                             next_header = slice.next_header();
                             routing.final_destination_options = Some(slice.to_header());
@@ -110,7 +110,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                            .map_err(ReadError::SliceLen)?;
+                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.destination_options = Some(slice.to_header());
@@ -122,7 +122,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                            .map_err(ReadError::SliceLen)?;
+                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.routing = Some(Ipv6RoutingExtensions {
@@ -137,7 +137,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
-                            .map_err(ReadError::SliceLen)?;
+                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.fragment = Some(slice.to_header());
@@ -150,10 +150,10 @@ impl Ipv6Extensions {
                     } else {
                         let slice = IpAuthHeaderSlice::from_slice(rest).map_err(|err| {
                             use err::ip_auth::HeaderSliceError as I;
-                            use ReadError as O;
+                            use err::ipv6_exts::HeaderError as O;
                             match err {
-                                I::SliceLen(err) => O::SliceLen(err),
-                                I::Content(err) => O::IpAuthHeader(err),
+                                I::SliceLen(err) => SliceLen(err.add_offset(slice.len() - rest.len())),
+                                I::Content(err) => Content(O::IpAuth(err)),
                             }
                         })?;
                         rest = &rest[slice.slice().len()..];
@@ -202,16 +202,16 @@ impl Ipv6Extensions {
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
         start_ip_number: u8,
-    ) -> Result<(Ipv6Extensions, u8), ReadError> {
+    ) -> Result<(Ipv6Extensions, u8), err::ipv6_exts::HeaderReadError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut next_protocol = start_ip_number;
 
         use ip_number::*;
-        use ReadError::Ipv6HopByHopHeaderNotAtStart;
+        use err::ipv6_exts::{HeaderError::*, HeaderReadError::*};
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_protocol {
-            let header = Ipv6RawExtHeader::read(reader)?;
+            let header = Ipv6RawExtHeader::read(reader).map_err(Io)?;
             next_protocol = header.next_header;
             result.hop_by_hop_options = Some(header);
         }
@@ -219,7 +219,7 @@ impl Ipv6Extensions {
         loop {
             match next_protocol {
                 IPV6_HOP_BY_HOP => {
-                    return Err(Ipv6HopByHopHeaderNotAtStart);
+                    return Err(Content(HopByHopNotAtStart));
                 }
                 IPV6_DEST_OPTIONS => {
                     if let Some(ref mut routing) = result.routing {
@@ -229,7 +229,7 @@ impl Ipv6Extensions {
                             // more then one header of this type found -> abort parsing
                             return Ok((result, next_protocol));
                         } else {
-                            let header = Ipv6RawExtHeader::read(reader)?;
+                            let header = Ipv6RawExtHeader::read(reader).map_err(Io)?;
                             next_protocol = header.next_header;
                             routing.final_destination_options = Some(header);
                         }
@@ -237,7 +237,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6RawExtHeader::read(reader)?;
+                        let header = Ipv6RawExtHeader::read(reader).map_err(Io)?;
                         next_protocol = header.next_header;
                         result.destination_options = Some(header);
                     }
@@ -247,7 +247,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6RawExtHeader::read(reader)?;
+                        let header = Ipv6RawExtHeader::read(reader).map_err(Io)?;
                         next_protocol = header.next_header;
                         result.routing = Some(Ipv6RoutingExtensions {
                             routing: header,
@@ -260,7 +260,7 @@ impl Ipv6Extensions {
                         // more then one header of this type found -> abort parsing
                         return Ok((result, next_protocol));
                     } else {
-                        let header = Ipv6FragmentHeader::read(reader)?;
+                        let header = Ipv6FragmentHeader::read(reader).map_err(Io)?;
                         next_protocol = header.next_header;
                         result.fragment = Some(header);
                     }
@@ -272,10 +272,9 @@ impl Ipv6Extensions {
                     } else {
                         let header = IpAuthHeader::read(reader).map_err(|err| {
                             use err::ip_auth::HeaderReadError as I;
-                            use ReadError as O;
                             match err {
-                                I::Io(err) => O::IoError(err),
-                                I::Content(err) => O::IpAuthHeader(err),
+                                I::Io(err) => Io(err),
+                                I::Content(err) => Content(IpAuth(err)),
                             }
                         })?;
                         next_protocol = header.next_header;

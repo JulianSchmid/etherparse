@@ -69,10 +69,10 @@ proptest! {
             );
         }
 
-        //Ipv6HopByHopHeaderNotAtStart
+        //Ipv6ExtsHeader
         assert_eq!(
-            &format!("ReadError: Encountered an IPv6 hop-by-hop header somwhere else then directly after the IPv6 header. This is not allowed according to RFC 8200."),
-            &format!("{}", Ipv6HopByHopHeaderNotAtStart)
+            &format!("{}", err::ipv6_exts::HeaderError::HopByHopNotAtStart),
+            &format!("{}", Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart))
         );
 
         //IpAuthHeader
@@ -124,6 +124,11 @@ fn read_error_source() {
             .is_some()
     );
     assert!(
+        Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart)
+            .source()
+            .is_some()
+    );
+    assert!(
         TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 })
             .source()
             .is_some()
@@ -135,7 +140,6 @@ fn read_error_source() {
             actual: 0,
         },
         IpUnsupportedVersion(0),
-        Ipv6HopByHopHeaderNotAtStart,
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         Icmpv6PacketTooBig(0),
     ];
@@ -163,7 +167,7 @@ fn read_error_debug() {
         IpUnsupportedVersion(0),
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
-        Ipv6HopByHopHeaderNotAtStart,
+        Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
         Icmpv6PacketTooBig(0),

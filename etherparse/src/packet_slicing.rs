@@ -490,7 +490,14 @@ impl<'a> CursorSlice<'a> {
         //extension headers
         let (ip_ext, next_header, rest) =
             Ipv6ExtensionsSlice::from_slice(ip.next_header(), self.slice)
-                .map_err(|err| err.add_slice_offset(self.offset))?;
+                .map_err(|err| {
+                    use err::ipv6_exts::HeaderSliceError as I;
+                    use ReadError as O;
+                    match err {
+                        I::SliceLen(err) => O::SliceLen(err.add_offset(self.offset)),
+                        I::Content(err) => O::Ipv6ExtsHeader(err),
+                    }
+                })?;
         let fragmented = ip_ext.is_fragmenting_payload();
 
         // set the new data

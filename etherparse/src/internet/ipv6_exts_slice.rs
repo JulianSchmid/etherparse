@@ -32,18 +32,18 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     pub fn from_slice(
         start_ip_number: u8,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv6ExtensionsSlice, u8, &'a [u8]), ReadError> {
+    ) -> Result<(Ipv6ExtensionsSlice, u8, &'a [u8]), err::ipv6_exts::HeaderSliceError> {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
         let mut fragmented = false;
 
         use ip_number::*;
-        use ReadError::*;
+        use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
             let slice =
-                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(ReadError::SliceLen)?;
+                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(SliceLen)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
         }
@@ -51,11 +51,11 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         loop {
             match next_header {
                 IPV6_HOP_BY_HOP => {
-                    return Err(Ipv6HopByHopHeaderNotAtStart);
+                    return Err(Content(HopByHopNotAtStart));
                 }
                 IPV6_DEST_OPTIONS | IPV6_ROUTE => {
                     let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                        .map_err(ReadError::SliceLen)?;
+                        .map_err(|err| SliceLen(err.add_offset(start_slice.len() - rest.len())))?;
                     // SAFETY:
                     // Ipv6RawExtHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed
@@ -68,7 +68,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                 }
                 IPV6_FRAG => {
                     let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
-                        .map_err(|err| ReadError::SliceLen(err))?;
+                        .map_err(|err| SliceLen(err.add_offset(start_slice.len() - rest.len())))?;
                     // SAFETY:
                     // Ipv6FragmentHeaderSlice::from_slice always generates
                     // a subslice from the given slice rest. Therefor it is guranteed
@@ -85,10 +85,9 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                 AUTH => {
                     let slice = IpAuthHeaderSlice::from_slice(rest).map_err(|err| {
                         use err::ip_auth::HeaderSliceError as I;
-                        use ReadError as O;
                         match err {
-                            I::SliceLen(err) => O::SliceLen(err),
-                            I::Content(err) => O::IpAuthHeader(err),
+                            I::SliceLen(err) => SliceLen(err.add_offset(start_slice.len() - rest.len())),
+                            I::Content(err) => Content(IpAuth(err)),
                         }
                     })?;
                     // SAFETY:
