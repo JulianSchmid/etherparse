@@ -61,7 +61,7 @@ mod test {
 
     #[test]
     fn debug() {
-        let err = HeaderError::UnexpectedVersion { version_number: 6 };
+        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -81,7 +81,7 @@ mod test {
             );
         }
         {
-            let err = HeaderError::UnexpectedVersion { version_number: 6 };
+            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -96,7 +96,7 @@ mod test {
         .source()
         .is_some());
         assert!(
-            Content(HeaderError::UnexpectedVersion { version_number: 6 })
+            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );
@@ -111,7 +111,7 @@ mod test {
         .io_error()
         .is_some());
         assert!(
-            Content(HeaderError::UnexpectedVersion { version_number: 6 })
+            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .io_error()
                 .is_none()
         );
@@ -128,7 +128,7 @@ mod test {
             .content_error()
         );
         {
-            let err = HeaderError::UnexpectedVersion { version_number: 6 };
+            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }
     }

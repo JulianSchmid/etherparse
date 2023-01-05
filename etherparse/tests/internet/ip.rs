@@ -5,6 +5,8 @@ mod ip_header {
 
     #[test]
     fn read_ip_header_version_error() {
+        use err::ip::{HeaderError::*, HeaderSliceError::*};
+
         use std::io::Cursor;
         let input = Ipv6Header {
             traffic_class: 1,
@@ -28,29 +30,27 @@ mod ip_header {
         //deserialize with read
         {
             let mut cursor = Cursor::new(&buffer);
-            assert_matches!(
-                IpHeader::read(&mut cursor),
-                Err(ReadError::IpUnsupportedVersion(0xf))
+            assert_eq!(
+                IpHeader::read(&mut cursor).unwrap_err().content_error().unwrap(),
+                UnsupportedIpVersion { version_number: 0xf }
             );
         }
 
         //deserialize with read_from_slice
-        assert_matches!(
-            IpHeader::from_slice(&buffer),
-            Err(ReadError::IpUnsupportedVersion(0xf))
+        assert_eq!(
+            IpHeader::from_slice(&buffer).unwrap_err(),
+            Content(UnsupportedIpVersion { version_number: 0xf })
         );
         //also check that an error is thrown when the slice is too small
         //to even read the version
         assert_eq!(
             IpHeader::from_slice(&buffer[buffer.len()..])
-                .unwrap_err()
-                .slice_len()
-                .unwrap(),
-            err::SliceLenError {
+                .unwrap_err(),
+            SliceLen(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: 0,
                 layer: err::Layer::IpHeader
-            }
+            })
         );
     }
 } // mod ip_header

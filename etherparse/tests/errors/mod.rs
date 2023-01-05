@@ -41,11 +41,14 @@ proptest! {
             &format!("{}", UnexpectedLenOfSlice{ expected: arg_usize, actual: arg2_usize })
         );
 
-        //IpUnsupportedVersion
-        assert_eq!(
-            &format!("ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", arg_u8),
-            &format!("{}", IpUnsupportedVersion(arg_u8))
-        );
+        //IpHeader
+        {
+            let inner = err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
+            assert_eq!(
+                &format!("{}", inner),
+                &format!("{}", IpHeader(inner))
+            );
+        }
 
         //Ipv4HeaderError
         {
@@ -106,13 +109,18 @@ fn read_error_source() {
             .source()
             .is_some()
     );
-    assert!(SliceLen(err::SliceLenError {
-        expected_min_len: 0,
-        actual_len: 0,
-        layer: err::Layer::Ethernet2Header,
-    })
-    .source()
-    .is_some());
+    assert!(
+        SliceLen(err::SliceLenError {
+            expected_min_len: 0,
+            actual_len: 0,
+            layer: err::Layer::Ethernet2Header,
+        }).source().is_some()
+    );
+    assert!(
+        IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 })
+            .source()
+            .is_some()
+    );
     assert!(
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 })
             .source()
@@ -139,7 +147,6 @@ fn read_error_source() {
             expected: 0,
             actual: 0,
         },
-        IpUnsupportedVersion(0),
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         Icmpv6PacketTooBig(0),
     ];
@@ -164,7 +171,7 @@ fn read_error_debug() {
             expected: 0,
             actual: 0,
         },
-        IpUnsupportedVersion(0),
+        IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }),
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),

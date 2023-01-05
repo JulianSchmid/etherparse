@@ -415,7 +415,7 @@ impl<'a> CursorSlice<'a> {
             match self.slice[0] >> 4 {
                 4 => self.slice_ipv4(),
                 6 => self.slice_ipv6(),
-                version => Err(IpUnsupportedVersion(version)),
+                version_number => Err(IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number })),
             }
         }
     }

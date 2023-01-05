@@ -70,14 +70,14 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(HeaderError::UnexpectedVersion { version_number: 1 }).add_slice_offset(200),
-            Content(HeaderError::UnexpectedVersion { version_number: 1 })
+            Content(HeaderError::UnsupportedIpVersion { version_number: 1 }).add_slice_offset(200),
+            Content(HeaderError::UnsupportedIpVersion { version_number: 1 })
         );
     }
 
     #[test]
     fn debug() {
-        let err = HeaderError::UnexpectedVersion { version_number: 6 };
+        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -86,7 +86,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(HeaderError::UnexpectedVersion { version_number: 6 });
+        let err = Content(HeaderError::UnsupportedIpVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -113,7 +113,7 @@ mod tests {
             )
         );
         {
-            let err = HeaderError::UnexpectedVersion { version_number: 6 };
+            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -128,7 +128,7 @@ mod tests {
         .source()
         .is_some());
         assert!(
-            Content(HeaderError::UnexpectedVersion { version_number: 6 })
+            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );
