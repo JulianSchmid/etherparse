@@ -36,3 +36,82 @@ impl RedirectCode {
         *self as u8
     }
 }
+
+#[cfg(test)]
+
+mod test {
+    use crate::icmpv4::{*, RedirectCode::*};
+
+    #[test]
+    fn from_u8() {
+        let tests = [
+            (CODE_REDIRECT_FOR_NETWORK, RedirectForNetwork),
+            (CODE_REDIRECT_FOR_HOST, RedirectForHost),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK,
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST,
+                RedirectForTypeOfServiceAndHost,
+            ),
+        ];
+        for t in tests {
+            assert_eq!(Some(t.1), RedirectCode::from_u8(t.0));
+        }
+        for code_u8 in 4..=u8::MAX {
+            assert_eq!(None, RedirectCode::from_u8(code_u8));
+        }
+    }
+
+    #[test]
+    fn code_u8() {
+        let tests = [
+            (CODE_REDIRECT_FOR_NETWORK, RedirectForNetwork),
+            (CODE_REDIRECT_FOR_HOST, RedirectForHost),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK,
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST,
+                RedirectForTypeOfServiceAndHost,
+            ),
+        ];
+        for t in tests {
+            assert_eq!(t.1.code_u8(), t.0);
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let tests = [
+            RedirectForNetwork,
+            RedirectForHost,
+            RedirectForTypeOfServiceAndNetwork,
+            RedirectForTypeOfServiceAndHost,
+        ];
+        for t in tests {
+            assert_eq!(t.clone(), t);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            ("RedirectForNetwork", RedirectForNetwork),
+            ("RedirectForHost", RedirectForHost),
+            (
+                "RedirectForTypeOfServiceAndNetwork",
+                RedirectForTypeOfServiceAndNetwork,
+            ),
+            (
+                "RedirectForTypeOfServiceAndHost",
+                RedirectForTypeOfServiceAndHost,
+            ),
+        ];
+        for t in tests {
+            assert_eq!(t.0, format!("{:?}", t.1));
+        }
+    }
+}

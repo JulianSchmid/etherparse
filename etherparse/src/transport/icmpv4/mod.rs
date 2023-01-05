@@ -138,3 +138,67 @@ pub const CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION: u8 = 1;
 
 /// ICMPv4 "Parameter Problem" code value for "Bad Length".
 pub const CODE_PARAMETER_PROBLEM_BAD_LENGTH: u8 = 2;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn constants() {
+        // icmp type numbers according to
+        // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-types
+        assert_eq!(TYPE_ECHO_REPLY, 0);
+        assert_eq!(TYPE_DEST_UNREACH, 3);
+        assert_eq!(TYPE_SOURCE_QUENCH, 4);
+        assert_eq!(TYPE_REDIRECT, 5);
+        assert_eq!(TYPE_ALTERNATE_HOST_ADDRESS, 6);
+        assert_eq!(TYPE_ECHO_REQUEST, 8);
+        assert_eq!(TYPE_ROUTER_ADVERTISEMENT, 9);
+        assert_eq!(TYPE_ROUTER_SOLICITATION, 10);
+        assert_eq!(TYPE_TIME_EXCEEDED, 11);
+        assert_eq!(TYPE_PARAMETER_PROBLEM, 12);
+        assert_eq!(TYPE_TIMESTAMP, 13);
+        assert_eq!(TYPE_TIMESTAMP_REPLY, 14);
+        assert_eq!(TYPE_INFO_REQUEST, 15);
+        assert_eq!(TYPE_INFO_REPLY, 16);
+        assert_eq!(TYPE_ADDRESS, 17);
+        assert_eq!(TYPE_ADDRESSREPLY, 18);
+
+        // destination unreachable code numbers according to
+        // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-3
+        assert_eq!(0, CODE_DST_UNREACH_NET);
+        assert_eq!(1, CODE_DST_UNREACH_HOST);
+        assert_eq!(2, CODE_DST_UNREACH_PROTOCOL);
+        assert_eq!(3, CODE_DST_UNREACH_PORT);
+        assert_eq!(4, CODE_DST_UNREACH_NEED_FRAG);
+        assert_eq!(5, CODE_DST_UNREACH_SOURCE_ROUTE_FAILED);
+        assert_eq!(6, CODE_DST_UNREACH_NET_UNKNOWN);
+        assert_eq!(7, CODE_DST_UNREACH_HOST_UNKNOWN);
+        assert_eq!(8, CODE_DST_UNREACH_ISOLATED);
+        assert_eq!(9, CODE_DST_UNREACH_NET_PROHIB);
+        assert_eq!(10, CODE_DST_UNREACH_HOST_PROHIB);
+        assert_eq!(11, CODE_DST_UNREACH_TOS_NET);
+        assert_eq!(12, CODE_DST_UNREACH_TOS_HOST);
+        assert_eq!(13, CODE_DST_UNREACH_FILTER_PROHIB);
+        assert_eq!(14, CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION);
+        assert_eq!(15, CODE_DST_UNREACH_PRECEDENCE_CUTOFF);
+
+        // redirect code numbers according to
+        // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-5
+        assert_eq!(0, CODE_REDIRECT_FOR_NETWORK);
+        assert_eq!(1, CODE_REDIRECT_FOR_HOST);
+        assert_eq!(2, CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK);
+        assert_eq!(3, CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST);
+
+        // time exceeded code numbers according to
+        // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-11
+        assert_eq!(0, CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT);
+        assert_eq!(1, CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED);
+
+        // parameter problem code numbers according to
+        // https://www.iana.org/assignments/icmp-parameters/icmp-parameters.xhtml#icmp-parameters-codes-12
+        assert_eq!(0, CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR);
+        assert_eq!(1, CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION);
+        assert_eq!(2, CODE_PARAMETER_PROBLEM_BAD_LENGTH);
+    }
+}

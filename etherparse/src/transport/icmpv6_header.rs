@@ -11,10 +11,18 @@ pub struct Icmpv6Header {
 }
 
 impl Icmpv6Header {
+
     /// Minimum number of bytes an ICMP header needs to have.
     ///
     /// Note that minimum size can be larger depending on
     /// the type and code.
+    pub const MIN_LEN: usize = 8;
+
+    /// Deprecated, use [`Icmpv6Header::MIN_LEN`] instead.
+    #[deprecated(
+        since = "0.14.0",
+        note = "Please use Icmpv6Header::MIN_LEN instead"
+    )]
     pub const MIN_SERIALIZED_SIZE: usize = 8;
 
     /// Maximum number of bytes/octets an Icmpv6Header takes up
@@ -23,6 +31,13 @@ impl Icmpv6Header {
     /// Currently this number is determined by the biggest
     /// planned ICMPv6 header type, which is currently the
     /// "Neighbor Discovery Protocol" "Redirect" message.
+    pub const MAX_LEN: usize = 8 + 16 + 16;
+
+    /// Deprecated, use [`Icmpv6Header::MAX_LEN`] instead.
+    #[deprecated(
+        since = "0.14.0",
+        note = "Please use Icmpv6Header::MAX_LEN instead"
+    )]
     pub const MAX_SERIALIZED_SIZE: usize = 8 + 16 + 16;
 
     /// Setups a new header with the checksum beeing set to 0.
@@ -102,11 +117,11 @@ impl Icmpv6Header {
 
     /// Returns the header on the wire bytes.
     #[inline]
-    pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+    pub fn to_bytes(&self) -> ArrayVec<u8, { Icmpv6Header::MAX_LEN }> {
         let checksum_be = self.checksum.to_be_bytes();
 
         let return_trivial =
-            |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+            |type_u8: u8, code_u8: u8| -> ArrayVec<u8, { Icmpv6Header::MAX_LEN }> {
                 #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],
@@ -132,7 +147,7 @@ impl Icmpv6Header {
         let return_4u8 = |type_u8: u8,
                           code_u8: u8,
                           bytes5to8: [u8; 4]|
-         -> ArrayVec<u8, { Icmpv6Header::MAX_SERIALIZED_SIZE }> {
+         -> ArrayVec<u8, { Icmpv6Header::MAX_LEN }> {
             #[rustfmt::skip]
             let mut re = ArrayVec::from([
                 type_u8, code_u8, checksum_be[0], checksum_be[1],

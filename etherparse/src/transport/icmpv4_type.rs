@@ -341,3 +341,258 @@ impl Icmpv4Type {
         .to_be()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{*, Icmpv4Type::*, icmpv4::*};
+    use proptest::prelude::*;
+
+    #[test]
+    fn header_len() {
+        let dummy_ts = TimestampMessage {
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0; 4],
+        };
+        let tests = [
+            (
+                8,
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4],
+                },
+            ),
+            (8, EchoReply(dummy_echo)),
+            (8, DestinationUnreachable(DestUnreachableHeader::Network)),
+            (8, Redirect(dummy_redirect)),
+            (8, EchoRequest(dummy_echo)),
+            (8, TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            (8, ParameterProblem(ParameterProblemHeader::BadLength)),
+            (20, TimestampRequest(dummy_ts.clone())),
+            (20, TimestampReply(dummy_ts)),
+        ];
+        for t in tests {
+            assert_eq!(t.0, t.1.header_len());
+        }
+    }
+
+    #[test]
+    fn fixed_payload_size() {
+        use Icmpv4Type::*;
+
+        let dummy_ts = TimestampMessage {
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0; 4],
+        };
+        let tests = [
+            (
+                None,
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4],
+                },
+            ),
+            (None, EchoReply(dummy_echo)),
+            (None, DestinationUnreachable(DestUnreachableHeader::Network)),
+            (None, Redirect(dummy_redirect)),
+            (None, EchoRequest(dummy_echo)),
+            (None, TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            (None, ParameterProblem(ParameterProblemHeader::BadLength)),
+            (Some(0), TimestampRequest(dummy_ts.clone())),
+            (Some(0), TimestampReply(dummy_ts)),
+        ];
+        for t in tests {
+            assert_eq!(t.0, t.1.fixed_payload_size());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn calc_checksum(
+            dest_unreach_code_u8 in 0u8..=15,
+            next_hop_mtu in any::<u16>(),
+            redirect_code_u8 in 0u8..=3,
+            gateway_internet_address in any::<[u8;4]>(),
+            time_exceeded_code_u8 in 0u8..=1,
+            id in any::<u16>(),
+            seq in any::<u16>(),
+            originate_timestamp in any::<u32>(),
+            receive_timestamp in any::<u32>(),
+            transmit_timestamp in any::<u32>(),
+            param_problem_code_u8 in 0u8..=2,
+            pointer in any::<u8>(),
+            unknown_type_u8 in any::<u8>(),
+            unknown_code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+            payload in proptest::collection::vec(any::<u8>(), 0..1024)
+        ) {
+            let ts = TimestampMessage{
+                id,
+                seq,
+                originate_timestamp,
+                receive_timestamp,
+                transmit_timestamp,
+            };
+            let echo = IcmpEchoHeader{
+                id,
+                seq,
+            };
+            let redirect = RedirectHeader{
+                code: RedirectCode::from_u8(redirect_code_u8).unwrap(),
+                gateway_internet_address,
+            };
+            let dest_unreach = DestUnreachableHeader::from_values(dest_unreach_code_u8, next_hop_mtu).unwrap();
+            let param_prob = ParameterProblemHeader::from_values(param_problem_code_u8, pointer).unwrap();
+            let values = [
+                Unknown {
+                    type_u8: unknown_type_u8,
+                    code_u8: unknown_code_u8,
+                    bytes5to8: bytes5to8,
+                },
+                EchoReply(echo.clone()),
+                DestinationUnreachable(dest_unreach),
+                Redirect(redirect),
+                EchoRequest(echo),
+                TimeExceeded(TimeExceededCode::from_u8(time_exceeded_code_u8).unwrap()),
+                ParameterProblem(param_prob),
+                TimestampRequest(ts.clone()),
+                TimestampReply(ts),
+            ];
+
+            for t in values {
+                let bytes = Icmpv4Header{
+                    icmp_type: t.clone(),
+                    checksum: 0, // use zero so the checksum calculation from the bytes works
+                }.to_bytes();
+                let expected = crate::checksum::Sum16BitWords::new()
+                    .add_slice(bytes.as_ref())
+                    .add_slice(&payload)
+                    .ones_complement()
+                    .to_be();
+                assert_eq!(expected, t.calc_checksum(&payload));
+            }
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let dummy_ts = TimestampMessage {
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0; 4],
+        };
+        let tests = [
+            Unknown {
+                type_u8: 0,
+                code_u8: 0,
+                bytes5to8: [0; 4],
+            },
+            EchoReply(dummy_echo),
+            DestinationUnreachable(DestUnreachableHeader::Network),
+            Redirect(dummy_redirect),
+            EchoRequest(dummy_echo),
+            TimeExceeded(TimeExceededCode::TtlExceededInTransit),
+            ParameterProblem(ParameterProblemHeader::BadLength),
+            TimestampRequest(dummy_ts.clone()),
+            TimestampReply(dummy_ts),
+        ];
+        for t in tests {
+            assert_eq!(t.clone(), t);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let dummy_ts = TimestampMessage {
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+
+        assert_eq!(
+            format!(
+                "{:?}",
+                Unknown {
+                    type_u8: 0,
+                    code_u8: 0,
+                    bytes5to8: [0; 4]
+                }
+            ),
+            format!(
+                "Unknown {{ type_u8: {:?}, code_u8: {:?}, bytes5to8: {:?} }}",
+                0u8, 0u8, [0u8; 4]
+            )
+        );
+        assert_eq!(
+            format!("{:?}", EchoReply(dummy_echo)),
+            format!("EchoReply({:?})", dummy_echo)
+        );
+        assert_eq!(
+            format!(
+                "{:?}",
+                DestinationUnreachable(DestUnreachableHeader::Network)
+            ),
+            format!(
+                "DestinationUnreachable({:?})",
+                DestUnreachableHeader::Network
+            )
+        );
+        {
+            let dummy_redirect = RedirectHeader {
+                code: RedirectCode::RedirectForNetwork,
+                gateway_internet_address: [0; 4],
+            };
+            assert_eq!(
+                format!("{:?}", Redirect(dummy_redirect.clone())),
+                format!("Redirect({:?})", dummy_redirect)
+            );
+        }
+        assert_eq!(
+            format!("{:?}", EchoRequest(dummy_echo)),
+            format!("EchoRequest({:?})", dummy_echo)
+        );
+        assert_eq!(
+            format!("{:?}", TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            format!("TimeExceeded({:?})", TimeExceededCode::TtlExceededInTransit)
+        );
+        assert_eq!(
+            format!("{:?}", ParameterProblem(ParameterProblemHeader::BadLength)),
+            format!("ParameterProblem({:?})", ParameterProblemHeader::BadLength)
+        );
+        assert_eq!(
+            format!("{:?}", TimestampRequest(dummy_ts.clone())),
+            format!("TimestampRequest({:?})", dummy_ts)
+        );
+        assert_eq!(
+            format!("{:?}", TimestampReply(dummy_ts.clone())),
+            format!("TimestampReply({:?})", dummy_ts)
+        );
+    }
+}

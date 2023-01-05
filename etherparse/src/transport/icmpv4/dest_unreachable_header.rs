@@ -112,3 +112,123 @@ impl DestUnreachableHeader {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::icmpv4::*;
+    use proptest::prelude::*;
+
+    fn conversion_values(next_hop_mtu: u16) -> [(u8, DestUnreachableHeader); 16] {
+        use DestUnreachableHeader::*;
+        [
+            (CODE_DST_UNREACH_NET, Network),
+            (CODE_DST_UNREACH_HOST, Host),
+            (CODE_DST_UNREACH_PROTOCOL, Protocol),
+            (CODE_DST_UNREACH_PORT, Port),
+            (
+                CODE_DST_UNREACH_NEED_FRAG,
+                FragmentationNeeded { next_hop_mtu },
+            ),
+            (CODE_DST_UNREACH_SOURCE_ROUTE_FAILED, SourceRouteFailed),
+            (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
+            (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
+            (CODE_DST_UNREACH_ISOLATED, Isolated),
+            (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
+            (CODE_DST_UNREACH_HOST_PROHIB, HostProhibited),
+            (CODE_DST_UNREACH_TOS_NET, TosNetwork),
+            (CODE_DST_UNREACH_TOS_HOST, TosHost),
+            (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
+            (
+                CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION,
+                HostPrecedenceViolation,
+            ),
+            (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
+        ]
+    }
+
+    proptest! {
+        #[test]
+        fn from_values(
+            next_hop_mtu in any::<u16>(),
+        ) {
+            // valid values
+            {
+                let valid_values = conversion_values(next_hop_mtu);
+                for t in valid_values {
+                    assert_eq!(Some(t.1), DestUnreachableHeader::from_values(t.0, next_hop_mtu));
+                }
+            }
+            // invalid values
+            for code_u8 in 16u8..=u8::MAX {
+                assert_eq!(None, DestUnreachableHeader::from_values(code_u8, next_hop_mtu));
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn code_u8(
+            next_hop_mtu in any::<u16>(),
+        ) {
+            let valid_values = conversion_values(next_hop_mtu);
+            for t in valid_values {
+                assert_eq!(t.0, t.1.code_u8());
+            }
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        use DestUnreachableHeader::*;
+        let values = [
+            Network,
+            Host,
+            Protocol,
+            Port,
+            FragmentationNeeded { next_hop_mtu: 0 },
+            SourceRouteFailed,
+            NetworkUnknown,
+            HostUnknown,
+            Isolated,
+            NetworkProhibited,
+            HostProhibited,
+            TosNetwork,
+            TosHost,
+            FilterProhibited,
+            HostPrecedenceViolation,
+            PrecedenceCutoff,
+        ];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        use DestUnreachableHeader::*;
+        let tests = [
+            ("Network", Network),
+            ("Host", Host),
+            ("Protocol", Protocol),
+            ("Port", Port),
+            (
+                "FragmentationNeeded { next_hop_mtu: 0 }",
+                FragmentationNeeded { next_hop_mtu: 0 },
+            ),
+            ("SourceRouteFailed", SourceRouteFailed),
+            ("NetworkUnknown", NetworkUnknown),
+            ("HostUnknown", HostUnknown),
+            ("Isolated", Isolated),
+            ("NetworkProhibited", NetworkProhibited),
+            ("HostProhibited", HostProhibited),
+            ("TosNetwork", TosNetwork),
+            ("TosHost", TosHost),
+            ("FilterProhibited", FilterProhibited),
+            ("HostPrecedenceViolation", HostPrecedenceViolation),
+            ("PrecedenceCutoff", PrecedenceCutoff),
+        ];
+        for t in tests {
+            assert_eq!(t.0, format!("{:?}", t.1));
+        }
+    }
+}
