@@ -287,9 +287,15 @@ pub use crate::internet::ipv6_raw_ext_header_slice::*;
 pub use crate::internet::ipv6_routing_exts::*;
 
 mod transport;
-pub use crate::transport::icmp::*;
-pub use crate::transport::icmpv4_impl::*;
-pub use crate::transport::icmpv6_impl::*;
+pub use crate::transport::icmp_echo_header::*;
+pub use crate::transport::icmpv4;
+pub use crate::transport::icmpv4_header::*;
+pub use crate::transport::icmpv4_slice::*;
+pub use crate::transport::icmpv4_type::*;
+pub use crate::transport::icmpv6;
+pub use crate::transport::icmpv6_header::*;
+pub use crate::transport::icmpv6_slice::*;
+pub use crate::transport::icmpv6_type::*;
 pub use crate::transport::tcp_header::*;
 pub use crate::transport::tcp_header_slice::*;
 pub use crate::transport::tcp_option_element::*;
