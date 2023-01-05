@@ -70,3 +70,66 @@ impl DestUnreachableCode {
         *self as u8
     }
 }
+
+#[cfg(test)]
+pub(crate) mod dest_unreachable_code_test_consts {
+    use super::{*, DestUnreachableCode::*};
+
+    pub const VALID_VALUES: [(DestUnreachableCode, u8); 7] = [
+        (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
+        (Prohibited, CODE_DST_UNREACH_PROHIBITED),
+        (BeyondScope, CODE_DST_UNREACH_BEYOND_SCOPE),
+        (Address, CODE_DST_UNREACH_ADDR),
+        (Port, CODE_DST_UNREACH_PORT),
+        (
+            SourceAddressFailedPolicy,
+            CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY,
+        ),
+        (RejectRoute, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST),
+    ];
+}
+
+#[cfg(test)]
+mod test {
+    use super::{*, dest_unreachable_code_test_consts::*, DestUnreachableCode::*};
+
+    #[test]
+    fn from_u8() {
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(code, DestUnreachableCode::from_u8(code_u8).unwrap());
+        }
+        for code_u8 in 7u8..=0xff {
+            assert!(DestUnreachableCode::from_u8(code_u8).is_none());
+        }
+    }
+
+    #[test]
+    fn code_u8() {
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(code.code_u8(), code_u8);
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        for (code, _) in VALID_VALUES {
+            assert_eq!(code.clone(), code);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (NoRoute, "NoRoute"),
+            (Prohibited, "Prohibited"),
+            (BeyondScope, "BeyondScope"),
+            (Address, "Address"),
+            (Port, "Port"),
+            (SourceAddressFailedPolicy, "SourceAddressFailedPolicy"),
+            (RejectRoute, "RejectRoute"),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
+    }
+}

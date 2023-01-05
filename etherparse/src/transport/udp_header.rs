@@ -264,7 +264,7 @@ impl UdpHeader {
 }
 
 #[cfg(test)]
-mod udp_header {
+mod test {
     use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::Cursor;
