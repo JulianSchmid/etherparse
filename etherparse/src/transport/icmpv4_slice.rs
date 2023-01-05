@@ -20,9 +20,9 @@ impl<'a> Icmpv4Slice<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
         // check length
         use ReadError::*;
-        if slice.len() < Icmpv4Header::MIN_SERIALIZED_SIZE {
+        if slice.len() < Icmpv4Header::MIN_LEN {
             return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Icmpv4Header::MIN_SERIALIZED_SIZE,
+                expected_min_len: Icmpv4Header::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::Icmpv4,
             }));
@@ -30,7 +30,7 @@ impl<'a> Icmpv4Slice<'a> {
 
         // SAFETY:
         // Safe as it is previously checked that the slice has
-        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_LEN (8).
         let icmp_type: u8 = unsafe { *slice.get_unchecked(0) };
         let icmp_code: u8 = unsafe { *slice.get_unchecked(1) };
 
@@ -108,7 +108,7 @@ impl<'a> Icmpv4Slice<'a> {
                         return DestinationUnreachable(FragmentationNeeded {
                             // SAFETY:
                             // Safe as the contructor checks that the slice has
-                            // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+                            // at least the length of Icmpv4Header::MIN_LEN (8).
                             next_hop_mtu: unsafe {
                                 get_unchecked_be_u16(self.slice.as_ptr().add(6))
                             },
@@ -180,7 +180,7 @@ impl<'a> Icmpv4Slice<'a> {
                         return ParameterProblem(PointerIndicatesError(
                             // SAFETY:
                             // Safe as the contructor checks that the slice has
-                            // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+                            // at least the length of Icmpv4Header::MIN_LEN (8).
                             unsafe { *self.slice.get_unchecked(4) },
                         ));
                     }
@@ -228,7 +228,7 @@ impl<'a> Icmpv4Slice<'a> {
     pub fn type_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_LEN (8).
         unsafe { *self.slice.get_unchecked(0) }
     }
 
@@ -237,7 +237,7 @@ impl<'a> Icmpv4Slice<'a> {
     pub fn code_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_LEN (8).
         unsafe { *self.slice.get_unchecked(1) }
     }
 
@@ -246,7 +246,7 @@ impl<'a> Icmpv4Slice<'a> {
     pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_LEN (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
@@ -259,7 +259,7 @@ impl<'a> Icmpv4Slice<'a> {
     pub fn bytes5to8(&self) -> [u8; 4] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv4Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv4Header::MIN_LEN (8).
         unsafe {
             [
                 *self.slice.get_unchecked(4),
@@ -319,5 +319,560 @@ impl<'a> Icmpv4Slice<'a> {
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::prelude::*;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn from_slice() {
+        use ReadError::*;
+
+        // normal case
+        {
+            let bytes = [0u8; 8];
+            let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+            assert_eq!(slice.slice(), &bytes);
+        }
+
+        // smaller then min size error
+        for bad_len in 0..8 {
+            let bytes = [0u8; 8];
+            assert_eq!(
+                Icmpv4Slice::from_slice(&bytes[..bad_len])
+                    .unwrap_err()
+                    .slice_len()
+                    .unwrap(),
+                err::SliceLenError {
+                    expected_min_len: Icmpv4Header::MIN_LEN,
+                    actual_len: bad_len,
+                    layer: err::Layer::Icmpv4
+                }
+            );
+        }
+
+        // timestamp tests
+        for ts_type_u8 in [TYPE_TIMESTAMP, TYPE_TIMESTAMP_REPLY] {
+            let bytes = {
+                let mut bytes = [0u8; 26];
+                bytes[0] = ts_type_u8;
+                bytes
+            };
+
+            // valid timestamps
+            {
+                let slice = Icmpv4Slice::from_slice(&bytes[..20]).unwrap();
+                assert_eq!(slice.slice(), &bytes[..20]);
+            }
+
+            // too short timestamps
+            for bad_len in 8..20 {
+                assert_matches!(
+                    Icmpv4Slice::from_slice(&bytes[..bad_len]),
+                    Err(UnexpectedLenOfSlice {
+                        expected: TimestampMessage::LEN,
+                        actual: _
+                    })
+                );
+            }
+
+            // too large timestamps
+            for bad_len in 21..26 {
+                assert_matches!(
+                    Icmpv4Slice::from_slice(&bytes[..bad_len]),
+                    Err(UnexpectedLenOfSlice {
+                        expected: TimestampMessage::LEN,
+                        actual: _
+                    })
+                );
+            }
+
+            // timestamp with a non zero code
+            for code_u8 in 1..=u8::MAX {
+                let mut bytes = [0u8; 20];
+                bytes[0] = ts_type_u8;
+                bytes[1] = code_u8;
+                let slice = Icmpv4Slice::from_slice(&bytes[..8]).unwrap();
+                assert_eq!(slice.slice(), &bytes[..8]);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header(bytes in any::<[u8;20]>()) {
+            let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                Icmpv4Header {
+                    icmp_type: slice.icmp_type(),
+                    checksum: slice.checksum(),
+                },
+                slice.header()
+            );
+        }
+    }
+
+    #[test]
+    fn header_len() {
+        use Icmpv4Type::*;
+        let dummy_ts = TimestampMessage {
+            id: 0,
+            seq: 0,
+            originate_timestamp: 0,
+            receive_timestamp: 0,
+            transmit_timestamp: 0,
+        };
+        let dummy_echo = IcmpEchoHeader { id: 0, seq: 0 };
+        let dummy_redirect = RedirectHeader {
+            code: RedirectCode::RedirectForNetwork,
+            gateway_internet_address: [0; 4],
+        };
+        let tests = [
+            (Unknown {
+                type_u8: u8::MAX,
+                code_u8: 0,
+                bytes5to8: [0; 4],
+            }),
+            (EchoReply(dummy_echo)),
+            (DestinationUnreachable(DestUnreachableHeader::Network)),
+            (Redirect(dummy_redirect)),
+            (EchoRequest(dummy_echo)),
+            (TimeExceeded(TimeExceededCode::TtlExceededInTransit)),
+            (ParameterProblem(ParameterProblemHeader::BadLength)),
+            (TimestampRequest(dummy_ts.clone())),
+            // check that a non zero code value return 8
+            (Unknown {
+                type_u8: TYPE_TIMESTAMP,
+                code_u8: 1,
+                bytes5to8: [0; 4],
+            }),
+            (TimestampReply(dummy_ts)),
+            // check that a non zero code value return 8
+            (Unknown {
+                type_u8: TYPE_TIMESTAMP_REPLY,
+                code_u8: 1,
+                bytes5to8: [0; 4],
+            }),
+        ];
+        for t in tests {
+            assert_eq!(
+                t.header_len(),
+                Icmpv4Slice::from_slice(&Icmpv4Header::new(t).to_bytes())
+                    .unwrap()
+                    .header_len()
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn icmp_type(base_bytes in any::<[u8;20]>()) {
+
+            use Icmpv4Type::*;
+
+            let gen_bytes = |type_u8: u8, code_u8: u8| -> [u8;20] {
+                let mut bytes = base_bytes;
+                bytes[0] = type_u8;
+                bytes[1] = code_u8;
+                bytes
+            };
+
+            let assert_unknown = |type_u8: u8, code_u8: u8| {
+                let bytes = gen_bytes(type_u8, code_u8);
+                let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                assert_eq!(
+                    slice.icmp_type(),
+                    Unknown{
+                        type_u8,
+                        code_u8,
+                        bytes5to8: slice.bytes5to8(),
+                    }
+                );
+            };
+
+            // unknown types
+            for type_u8 in 0..=u8::MAX{
+                match type_u8 {
+                    TYPE_ECHO_REPLY | TYPE_DEST_UNREACH | TYPE_REDIRECT |
+                    TYPE_ECHO_REQUEST | TYPE_TIME_EXCEEDED | TYPE_PARAMETER_PROBLEM |
+                    TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {},
+                    type_u8 => {
+                        assert_unknown(type_u8, base_bytes[1]);
+                    }
+                }
+            }
+
+            // echo reply
+            {
+                // matching code
+                {
+                    let bytes = gen_bytes(TYPE_ECHO_REPLY, 0);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        EchoReply(IcmpEchoHeader::from_bytes(slice.bytes5to8()))
+                    );
+                }
+
+                // unknown code
+                for unknow_code in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, unknow_code);
+                }
+            }
+
+            // destination unreachable
+            {
+                use DestUnreachableHeader::*;
+                // trivial code values
+                {
+                    let trivial_tests = [
+                        (CODE_DST_UNREACH_NET, Network),
+                        (CODE_DST_UNREACH_HOST, Host),
+                        (CODE_DST_UNREACH_PROTOCOL, Protocol),
+                        (CODE_DST_UNREACH_PORT, Port),
+                        // need frag skipped as contains an additional value
+                        (CODE_DST_UNREACH_SOURCE_ROUTE_FAILED, SourceRouteFailed),
+                        (CODE_DST_UNREACH_NET_UNKNOWN, NetworkUnknown),
+                        (CODE_DST_UNREACH_HOST_UNKNOWN, HostUnknown),
+                        (CODE_DST_UNREACH_ISOLATED, Isolated),
+                        (CODE_DST_UNREACH_NET_PROHIB, NetworkProhibited),
+                        (CODE_DST_UNREACH_HOST_PROHIB, HostProhibited),
+                        (CODE_DST_UNREACH_TOS_NET, TosNetwork),
+                        (CODE_DST_UNREACH_TOS_HOST, TosHost),
+                        (CODE_DST_UNREACH_FILTER_PROHIB, FilterProhibited),
+                        (CODE_DST_UNREACH_HOST_PRECEDENCE_VIOLATION, HostPrecedenceViolation),
+                        (CODE_DST_UNREACH_PRECEDENCE_CUTOFF, PrecedenceCutoff),
+                    ];
+
+                    for (code_u8, expected) in trivial_tests {
+                        let bytes = gen_bytes(TYPE_DEST_UNREACH, code_u8);
+                        let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                        assert_eq!(
+                            slice.icmp_type(),
+                            DestinationUnreachable(expected)
+                        );
+                    }
+                }
+
+                // need frag
+                {
+                    let bytes = gen_bytes(TYPE_DEST_UNREACH, CODE_DST_UNREACH_NEED_FRAG);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        DestinationUnreachable(FragmentationNeeded {
+                            next_hop_mtu: u16::from_be_bytes([bytes[6], bytes[7]])
+                        })
+                    );
+                }
+
+                // unknown codes
+                for unknow_code in 16..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, unknow_code);
+                }
+            }
+
+            // redirect
+            {
+                use RedirectCode::*;
+                // known codes
+                {
+                    let trivial_tests = [
+                        (CODE_REDIRECT_FOR_NETWORK, RedirectForNetwork),
+                        (CODE_REDIRECT_FOR_HOST, RedirectForHost),
+                        (CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK, RedirectForTypeOfServiceAndNetwork),
+                        (CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST, RedirectForTypeOfServiceAndHost),
+                    ];
+
+                    for (code_u8, expected) in trivial_tests {
+                        let bytes = gen_bytes(TYPE_REDIRECT, code_u8);
+                        let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                        assert_eq!(
+                            slice.icmp_type(),
+                            Redirect(RedirectHeader{
+                                code: expected,
+                                gateway_internet_address: slice.bytes5to8(),
+                            })
+                        );
+                    }
+                }
+
+                // unknown codes
+                for unknow_code in 4..=u8::MAX {
+                    assert_unknown(TYPE_REDIRECT, unknow_code);
+                }
+            }
+
+            // echo request
+            {
+                // matching code
+                {
+                    let bytes = gen_bytes(TYPE_ECHO_REQUEST, 0);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        EchoRequest(IcmpEchoHeader::from_bytes(slice.bytes5to8()))
+                    );
+                }
+
+                // unknown code
+                for unknow_code in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REQUEST, unknow_code);
+                }
+            }
+
+            // time exceeded
+            {
+                use TimeExceededCode::*;
+                // known codes
+                {
+                    let trivial_tests = [
+                        (CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT, TtlExceededInTransit),
+                        (CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED, FragmentReassemblyTimeExceeded),
+                    ];
+
+                    for (code_u8, expected) in trivial_tests {
+                        let bytes = gen_bytes(TYPE_TIME_EXCEEDED, code_u8);
+                        let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                        assert_eq!(
+                            slice.icmp_type(),
+                            TimeExceeded(expected)
+                        );
+                    }
+                }
+
+                // unknown code
+                for unknow_code in 2..=u8::MAX {
+                    assert_unknown(TYPE_TIME_EXCEEDED, unknow_code);
+                }
+            }
+
+            // parameter porblem
+            {
+                use ParameterProblemHeader::*;
+                // trivial code values
+                {
+                    let trivial_tests = [
+                        (CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION, MissingRequiredOption),
+                        (CODE_PARAMETER_PROBLEM_BAD_LENGTH, BadLength),
+                    ];
+
+                    for (code_u8, expected) in trivial_tests {
+                        let bytes = gen_bytes(TYPE_PARAMETER_PROBLEM, code_u8);
+                        let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                        assert_eq!(
+                            slice.icmp_type(),
+                            ParameterProblem(expected)
+                        );
+                    }
+                }
+
+                // with pointer
+                {
+                    let bytes = gen_bytes(TYPE_PARAMETER_PROBLEM, CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        ParameterProblem(PointerIndicatesError(bytes[4]))
+                    );
+                }
+
+                // unknown codes
+                for unknow_code in 3..=u8::MAX {
+                    assert_unknown(TYPE_PARAMETER_PROBLEM, unknow_code);
+                }
+            }
+
+            // timestamp
+            {
+                // matching code
+                {
+                    let bytes = gen_bytes(TYPE_TIMESTAMP, 0);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        TimestampRequest(TimestampMessage::from_bytes([
+                            bytes[4], bytes[5], bytes[6], bytes[7],
+                            bytes[8], bytes[9], bytes[10], bytes[11],
+                            bytes[12], bytes[13], bytes[14], bytes[15],
+                            bytes[16], bytes[17], bytes[18], bytes[19],
+                        ]))
+                    );
+                }
+
+                // unknown code
+                for unknow_code in 1..=u8::MAX {
+                    assert_unknown(TYPE_TIMESTAMP, unknow_code);
+                }
+            }
+
+            // timestamp reply
+            {
+                // matching code
+                {
+                    let bytes = gen_bytes(TYPE_TIMESTAMP_REPLY, 0);
+                    let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+                    assert_eq!(
+                        slice.icmp_type(),
+                        TimestampReply(TimestampMessage::from_bytes([
+                            bytes[4], bytes[5], bytes[6], bytes[7],
+                            bytes[8], bytes[9], bytes[10], bytes[11],
+                            bytes[12], bytes[13], bytes[14], bytes[15],
+                            bytes[16], bytes[17], bytes[18], bytes[19],
+                        ]))
+                    );
+                }
+
+                // unknown code
+                for unknow_code in 1..=u8::MAX {
+                    assert_unknown(TYPE_TIMESTAMP_REPLY, unknow_code);
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn type_u8(bytes in any::<[u8;20]>()) {
+            assert_eq!(
+                bytes[0],
+                Icmpv4Slice::from_slice(&bytes).unwrap().type_u8(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn code_u8(bytes in any::<[u8;20]>()) {
+            assert_eq!(
+                bytes[1],
+                Icmpv4Slice::from_slice(&bytes).unwrap().code_u8(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn checksum(bytes in any::<[u8;20]>()) {
+            assert_eq!(
+                u16::from_be_bytes([bytes[2], bytes[3]]),
+                Icmpv4Slice::from_slice(&bytes).unwrap().checksum(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn bytes5to8(bytes in any::<[u8;20]>()) {
+            assert_eq!(
+                [bytes[4], bytes[5], bytes[6], bytes[7]],
+                Icmpv4Slice::from_slice(&bytes).unwrap().bytes5to8(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn payload(
+            payload in proptest::collection::vec(any::<u8>(), 8..26)
+        ) {
+            use Icmpv4Type::*;
+            let dummy_ts = TimestampMessage{
+                id: 0,
+                seq: 0,
+                originate_timestamp: 0,
+                receive_timestamp: 0,
+                transmit_timestamp: 0,
+            };
+            let dummy_echo = IcmpEchoHeader{
+                id: 0,
+                seq: 0,
+            };
+            let dummy_redirect = RedirectHeader{
+                code: RedirectCode::RedirectForNetwork,
+                gateway_internet_address: [0;4],
+            };
+            // tests with variable payloads
+            {
+                let var_tests = [
+                    Unknown{type_u8: 0, code_u8: 0, bytes5to8: [0;4]},
+                    EchoReply(dummy_echo),
+                    DestinationUnreachable(DestUnreachableHeader::Network),
+                    Redirect(dummy_redirect),
+                    EchoRequest(dummy_echo),
+                    TimeExceeded(TimeExceededCode::TtlExceededInTransit),
+                    ParameterProblem(ParameterProblemHeader::BadLength),
+                    // timestamps with non-zero code values
+                    Unknown{type_u8: TYPE_TIMESTAMP, code_u8: 1, bytes5to8: [0;4]},
+                    Unknown{type_u8: TYPE_TIMESTAMP_REPLY, code_u8: 1, bytes5to8: [0;4]},
+                ];
+                for t in var_tests {
+
+                    let mut bytes = Vec::with_capacity(t.header_len() + payload.len());
+                    Icmpv4Header::new(t.clone()).write(&mut bytes).unwrap();
+                    bytes.extend_from_slice(&payload);
+
+                    assert_eq!(
+                        &payload[..],
+                        Icmpv4Slice::from_slice(&bytes).unwrap().payload()
+                    );
+                }
+            }
+            // tests with fixed payload sizes
+            {
+                let fixed_tests = [
+                    (0, TimestampRequest(dummy_ts.clone())),
+                    (0, TimestampReply(dummy_ts)),
+                ];
+                for t in fixed_tests {
+                    let mut bytes = Vec::with_capacity(t.1.header_len() + t.0);
+                    Icmpv4Header::new(t.1.clone()).write(&mut bytes).unwrap();
+                    bytes.extend_from_slice(&payload[..t.0]);
+
+                    assert_eq!(
+                        &payload[..t.0],
+                        Icmpv4Slice::from_slice(&bytes).unwrap().payload()
+                    );
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn slice(bytes in proptest::collection::vec(any::<u8>(), 20..1024)) {
+            let slice = if bytes[0] == TYPE_TIMESTAMP || bytes[0] == TYPE_TIMESTAMP_REPLY {
+                &bytes[..20]
+            } else {
+                &bytes[..]
+            };
+            assert_eq!(
+                slice,
+                Icmpv4Slice::from_slice(slice).unwrap().slice(),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(bytes in any::<[u8;20]>()) {
+            let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+            assert_eq!(slice, slice.clone());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn debug(bytes in any::<[u8;20]>()) {
+            let slice = Icmpv4Slice::from_slice(&bytes).unwrap();
+            assert_eq!(
+                format!("{:?}", slice),
+                format!("Icmpv4Slice {{ slice: {:?} }}", &bytes[..])
+            );
+        }
     }
 }

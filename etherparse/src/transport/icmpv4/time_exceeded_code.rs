@@ -31,3 +31,58 @@ impl TimeExceededCode {
         *self as u8
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::icmpv4::{*, TimeExceededCode::*};
+
+    #[test]
+    fn from_u8() {
+        assert_eq!(
+            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT),
+            Some(TtlExceededInTransit)
+        );
+        assert_eq!(
+            TimeExceededCode::from_u8(CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED),
+            Some(FragmentReassemblyTimeExceeded)
+        );
+
+        for code_u8 in 2..=u8::MAX {
+            assert_eq!(None, TimeExceededCode::from_u8(code_u8));
+        }
+    }
+
+    #[test]
+    fn code_u8() {
+        assert_eq!(
+            TtlExceededInTransit.code_u8(),
+            CODE_TIME_EXCEEDED_TTL_EXCEEDED_IN_TRANSIT
+        );
+        assert_eq!(
+            FragmentReassemblyTimeExceeded.code_u8(),
+            CODE_TIME_EXCEEDED_FRAG_REASSEMBLY_TIME_EXCEEDED
+        );
+    }
+
+    #[test]
+    fn debug() {
+        let values = [
+            ("TtlExceededInTransit", TtlExceededInTransit),
+            (
+                "FragmentReassemblyTimeExceeded",
+                FragmentReassemblyTimeExceeded,
+            ),
+        ];
+        for (expected, input) in values {
+            assert_eq!(expected, format!("{:?}", input));
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let values = [TtlExceededInTransit, FragmentReassemblyTimeExceeded];
+        for value in values {
+            assert_eq!(value.clone(), value);
+        }
+    }
+}

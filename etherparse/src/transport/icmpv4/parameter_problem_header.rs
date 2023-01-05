@@ -30,3 +30,48 @@ impl ParameterProblemHeader {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::icmpv4::{*, ParameterProblemHeader::*};
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn from_values(pointer in any::<u8>()) {
+            {
+                let tests = [
+                    (CODE_PARAMETER_PROBLEM_POINTER_INDICATES_ERROR, PointerIndicatesError(pointer)),
+                    (CODE_PARAMETER_PROBLEM_MISSING_REQUIRED_OPTION, MissingRequiredOption),
+                    (CODE_PARAMETER_PROBLEM_BAD_LENGTH, BadLength),
+                ];
+                for t in tests {
+                    assert_eq!(Some(t.1), ParameterProblemHeader::from_values(t.0, pointer));
+                }
+            }
+            for code_u8 in 3..=u8::MAX {
+                assert_eq!(None, ParameterProblemHeader::from_values(code_u8, pointer));
+            }
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        let tests = [PointerIndicatesError(0), MissingRequiredOption, BadLength];
+        for t in tests {
+            assert_eq!(t.clone(), t);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            ("PointerIndicatesError(0)", PointerIndicatesError(0)),
+            ("MissingRequiredOption", MissingRequiredOption),
+            ("BadLength", BadLength),
+        ];
+        for t in tests {
+            assert_eq!(t.0, format!("{:?}", t.1));
+        }
+    }
+}
