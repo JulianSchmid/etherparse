@@ -1,6 +1,14 @@
-pub mod icmp;
-pub mod icmpv4_impl;
-pub mod icmpv6_impl;
+pub mod icmp_echo_header;
+/// Module containing ICMPv4 related types and constants.
+pub mod icmpv4;
+pub mod icmpv4_header;
+pub mod icmpv4_slice;
+pub mod icmpv4_type;
+/// Module containing ICMPv6 related types and constants
+pub mod icmpv6;
+pub mod icmpv6_header;
+pub mod icmpv6_slice;
+pub mod icmpv6_type;
 pub mod tcp_header;
 pub mod tcp_header_slice;
 pub mod tcp_option_element;
