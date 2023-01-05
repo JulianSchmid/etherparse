@@ -4,7 +4,7 @@ use crate::*;
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the IP header version field is not equal to 4 or 6.
-    UnexpectedVersion {
+    UnsupportedIpVersion {
         /// The unexpected version number in the IP header.
         version_number: u8,
     },
@@ -23,18 +23,22 @@ pub enum HeaderError {
         min_expected_length: u16,
     },
 
-    /// Error in the ip authentification header.
-    IpAuth(err::ip_auth::HeaderError),
+    /// Error in the IPv4 extension headers (only authentification header).
+    Ipv4Exts(err::ip_auth::HeaderError),
+
+    /// Error in the IPv6 extension headers.
+    Ipv6Exts(err::ipv6_exts::HeaderError),
 }
 
 impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
         use HeaderError::*;
         match self {
-            UnexpectedVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
+            UnsupportedIpVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
             Ipv4HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
             Ipv4TotalLengthSmallerThanHeader { total_length, min_expected_length } => write!(f, "IPv4 Header Error: The 'total length' value ({} bytes/octets) present in the IPv4 header is smaller then the bytes/octet lenght of the header ({}) itself. 'total length' should describe the bytes/octets count of the IPv4 header and it's payload.", total_length, min_expected_length),
-            IpAuth(err) => err.fmt(f),
+            Ipv4Exts(err) => err.fmt(f),
+            Ipv6Exts(err) => err.fmt(f),
         }
     }
 }
@@ -43,10 +47,11 @@ impl std::error::Error for HeaderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderError::*;
         match self {
-            UnexpectedVersion { version_number: _ } => None,
+            UnsupportedIpVersion { version_number: _ } => None,
             Ipv4HeaderLengthSmallerThanHeader { ihl: _ } => None,
             Ipv4TotalLengthSmallerThanHeader { total_length: _, min_expected_length: _ } => None,
-            IpAuth(err) => Some(err),
+            Ipv4Exts(err) => Some(err),
+            Ipv6Exts(err) => Some(err),
         }
     }
 }
@@ -63,14 +68,14 @@ mod tests {
     #[test]
     fn debug() {
         assert_eq!(
-            "UnexpectedVersion { version_number: 6 }",
-            format!("{:?}", UnexpectedVersion { version_number: 6 })
+            "UnsupportedIpVersion { version_number: 6 }",
+            format!("{:?}", UnsupportedIpVersion { version_number: 6 })
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = HeaderError::UnexpectedVersion { version_number: 6 };
+        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -89,7 +94,7 @@ mod tests {
     fn fmt() {
         assert_eq!(
             "IP Header Error: Encountered '1' as IP version number in the IP header (only '4' or '6' are supported).",
-            format!("{}", UnexpectedVersion{ version_number: 1 })
+            format!("{}", UnsupportedIpVersion{ version_number: 1 })
         );
         assert_eq!(
             "IPv4 Header Error: The 'internet header length' value '2' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.",
@@ -102,7 +107,14 @@ mod tests {
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
             assert_eq!(
-                format!("{}", IpAuth(err.clone())),
+                format!("{}", Ipv4Exts(err.clone())),
+                format!("{}", err)
+            );
+        }
+        {
+            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
+            assert_eq!(
+                format!("{}", Ipv6Exts(err.clone())),
                 format!("{}", err)
             );
         }
@@ -112,7 +124,7 @@ mod tests {
     fn source() {
         {
             let values = [
-                UnexpectedVersion { version_number: 0 },
+                UnsupportedIpVersion { version_number: 0 },
                 Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
                 Ipv4TotalLengthSmallerThanHeader {
                     total_length: 0,
@@ -125,7 +137,8 @@ mod tests {
         }
         {
             let values = [
-                IpAuth(err::ip_auth::HeaderError::ZeroPayloadLen)
+                Ipv4Exts(err::ip_auth::HeaderError::ZeroPayloadLen),
+                Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
             ];
             for v in values {
                 assert!(v.source().is_some());

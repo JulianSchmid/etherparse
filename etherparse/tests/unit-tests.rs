@@ -49,7 +49,7 @@ fn test_debug_write() {
                 actual_len: 0,
                 layer: err::Layer::Icmpv4,
             }),
-            IpUnsupportedVersion(0),
+            IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
             Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
             TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
@@ -199,7 +199,7 @@ mod read_error {
                 .unwrap()
                 .kind()
         );
-        assert!(ReadError::IpUnsupportedVersion(0).io_error().is_none());
+        assert!(ReadError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }).io_error().is_none());
     }
 
     #[test]

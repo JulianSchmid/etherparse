@@ -448,7 +448,15 @@ impl<'a> PacketHeaders<'a> {
         };
 
         let (transport_proto, rest) = {
-            let (ip, transport_proto, rest) = IpHeader::from_slice(packet)?;
+            let (ip, transport_proto, rest) = IpHeader::from_slice(packet)
+                .map_err(|err| {
+                    use err::ip::HeaderSliceError as I;
+                    use ReadError as O;
+                    match err {
+                        I::SliceLen(err) => O::SliceLen(err),
+                        I::Content(err) => O::IpHeader(err),
+                    }
+                })?;
             // update output
             result.ip = Some(ip);
             (transport_proto, rest)

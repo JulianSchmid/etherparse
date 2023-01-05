@@ -16,15 +16,16 @@ impl IpHeader {
     /// Renamed to `IpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), err::ip::HeaderSliceError> {
         IpHeader::from_slice(slice)
     }
 
     /// Read an IpvHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), err::ip::HeaderSliceError> {
+        use err::ip::{HeaderError::*, HeaderSliceError::*};
+
         if slice.is_empty() {
-            use crate::ReadError::SliceLen as U;
-            Err(U(err::SliceLenError {
+            Err(SliceLen(err::SliceLenError {
                 expected_min_len: 1,
                 actual_len: slice.len(),
                 layer: err::Layer::IpHeader,
@@ -32,30 +33,84 @@ impl IpHeader {
         } else {
             match slice[0] >> 4 {
                 4 => {
-                    let (header, rest) = Ipv4Header::from_slice(slice).map_err(|err| {
-                        use err::ipv4::HeaderSliceError as I;
-                        use ReadError as O;
-                        match err {
-                            I::SliceLen(err) => O::SliceLen(err),
-                            I::Content(err) => O::Ipv4Header(err),
+                    let (header, rest) = {
+                        // check length
+                        if slice.len() < Ipv4Header::MIN_LEN {
+                            return Err(SliceLen(err::SliceLenError {
+                                expected_min_len: Ipv4Header::MIN_LEN,
+                                actual_len: slice.len(),
+                                layer: err::Layer::Ipv4Header,
+                            }));
                         }
-                    })?;
+
+                        // read ihl
+                        //
+                        // SAFETY:
+                        // Safe as the slice length is checked to be at least
+                        // Ipv4Header::MIN_LEN (20) at the start.
+                        let ihl = unsafe { slice.get_unchecked(0) } & 0xf;
+
+                        //check that the ihl is correct
+                        if ihl < 5 {
+                            return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        }
+
+                        // check that the slice contains enough data for the entire header + options
+                        let header_length = usize::from(ihl) * 4;
+                        if slice.len() < header_length {
+                            return Err(SliceLen(err::SliceLenError {
+                                expected_min_len: header_length,
+                                actual_len: slice.len(),
+                                layer: err::Layer::Ipv4Header,
+                            }));
+                        }
+
+                        // check the total_length can contain the header
+                        //
+                        // SAFETY:
+                        // Safe as the slice length is checked to be at least
+                        // Ipv4Header::MIN_LEN (20) at the start.
+                        let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
+
+                        if total_length < header_length as u16 {
+                            return Err(Content(Ipv4TotalLengthSmallerThanHeader {
+                                total_length,
+                                min_expected_length: header_length as u16,
+                            }));
+                        }
+
+                        unsafe {
+                            (
+                                // SAFETY: Safe as all IPv4 slice preconditions were validated.
+                                Ipv4HeaderSlice::from_slice_unchecked(
+                                    core::slice::from_raw_parts(
+                                        slice.as_ptr(),
+                                        header_length
+                                    )
+                                ).to_header(),
+                                // SAFETY: Safe as the slice length was validated to be at least header_length
+                                core::slice::from_raw_parts(
+                                    slice.as_ptr().add(header_length),
+                                    slice.len() - header_length
+                                )
+                            )
+                        }
+                    };
+
                     Ipv4Extensions::from_slice(header.protocol, rest)
                         .map(|(ext, next_protocol, rest)| {
                             (IpHeader::Version4(header, ext), next_protocol, rest)
                         })
                         .map_err(|err| {
                             use err::ip_auth::HeaderSliceError as I;
-                            use ReadError as O;
                             match err {
-                                I::SliceLen(err) => O::SliceLen(err),
-                                I::Content(err) => O::IpAuthHeader(err),
+                                I::SliceLen(err) => SliceLen(err),
+                                I::Content(err) => Content(Ipv4Exts(err)),
                             }
-                        })
+                        }) 
                 }
                 6 => {
                     if slice.len() < Ipv6Header::LEN {
-                        use ReadError::SliceLen;
                         return Err(SliceLen(err::SliceLenError {
                             expected_min_len: Ipv6Header::LEN,
                             actual_len: slice.len(),
@@ -81,14 +136,13 @@ impl IpHeader {
                         },
                     ).map_err(|err| {
                         use err::ipv6_exts::HeaderSliceError as I;
-                        use ReadError as O;
                         match err {
-                            I::SliceLen(err) => O::SliceLen(err),
-                            I::Content(err) => O::Ipv6ExtsHeader(err),
+                            I::SliceLen(err) => SliceLen(err),
+                            I::Content(err) => Content(Ipv6Exts(err)),
                         }
                     })
                 }
-                version => Err(ReadError::IpUnsupportedVersion(version)),
+                version_number => Err(Content(UnsupportedIpVersion{ version_number })),
             }
         }
     }
@@ -96,47 +150,68 @@ impl IpHeader {
     ///Reads an IP (v4 or v6) header from the current position.
     pub fn read<T: io::Read + io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<(IpHeader, u8), ReadError> {
+    ) -> Result<(IpHeader, u8), err::ip::HeaderReadError> {
+        use err::ip::{HeaderError::*, HeaderReadError::*};
+
         let value = {
             let mut buf = [0; 1];
-            reader.read_exact(&mut buf)?;
+            reader.read_exact(&mut buf).map_err(Io)?;
             buf[0]
         };
         match value >> 4 {
             4 => {
-                let header =
-                    Ipv4Header::read_without_version(reader, value & 0xf).map_err(|err| {
-                        use err::ipv4::HeaderReadError::*;
-                        match err {
-                            Io(err) => ReadError::IoError(err),
-                            Content(err) => ReadError::Ipv4Header(err),
-                        }
-                    })?;
+                // get internet header length
+                let ihl = value & 0xf;
+
+                // check that the ihl is correct
+                if ihl < 5 {
+                    return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                }
+
+                // read the rest of the header
+                let header_len_u16 = u16::from(ihl)*4;
+                let header_len = usize::from(header_len_u16);
+                let mut buffer = [0u8;Ipv4Header::MAX_LEN];
+                buffer[0] = value;
+                reader.read_exact(&mut buffer[1..header_len]).map_err(Io)?;
+
+                // validate the total length
+                let total_length = u16::from_be_bytes([buffer[2], buffer[3]]);
+                if total_length < header_len_u16 {
+                    return Err(Content(Ipv4TotalLengthSmallerThanHeader {
+                        total_length,
+                        min_expected_length: header_len_u16,
+                    }));
+                }
+
+                let header = unsafe {
+                    Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len])
+                }.to_header();
+
+                // read the extension headers if present
                 Ipv4Extensions::read(reader, header.protocol)
                     .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
                     .map_err(|err| {
                         use err::ip_auth::HeaderReadError as I;
-                        use ReadError as O;
                         match err {
-                            I::Io(err) => O::IoError(err),
-                            I::Content(err) => O::IpAuthHeader(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Content(Ipv4Exts(err)),
                         }
                     })
             }
             6 => {
-                let header = Ipv6Header::read_without_version(reader, value & 0xf)?;
+                let header = Ipv6Header::read_without_version(reader, value & 0xf).map_err(Io)?;
                 Ipv6Extensions::read(reader, header.next_header)
                     .map(|(ext, next)| (IpHeader::Version6(header, ext), next))
                     .map_err(|err| {
                         use err::ipv6_exts::HeaderReadError as I;
-                        use ReadError as O;
                         match err {
-                            I::Io(err) => O::IoError(err),
-                            I::Content(err) => O::Ipv6ExtsHeader(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Content(Ipv6Exts(err)),
                         }
                     })
             }
-            version => Err(ReadError::IpUnsupportedVersion(version)),
+            version_number => Err(Content(UnsupportedIpVersion{ version_number })),
         }
     }
 

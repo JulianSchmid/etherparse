@@ -324,8 +324,8 @@ pub enum ReadError {
     SliceLen(err::SliceLenError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
-    /// Error when the ip header version is not supported (only 4 & 6 are supported). The value is the version that was received.
-    IpUnsupportedVersion(u8),
+    /// Error when decoding an IP header.
+    IpHeader(err::ip::HeaderError),
     /// Error when decoding an IPv4 header.
     Ipv4Header(err::ipv4::HeaderError),
     /// Error when decoding an IPv6 header.
@@ -412,9 +412,7 @@ impl std::fmt::Display for ReadError {
             UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
             }
-            IpUnsupportedVersion(version_number) => {
-                write!(f, "ReadError: Unsupported IP version number. The IP header contained the unsupported version number {}.", version_number)
-            }
+            IpHeader(err) => err.fmt(f),
             Ipv4Header(err) => err.fmt(f),
             Ipv6Header(err) => err.fmt(f),
             Ipv6ExtsHeader(err) => err.fmt(f),
@@ -432,6 +430,7 @@ impl std::error::Error for ReadError {
         match self {
             ReadError::IoError(err) => Some(err),
             ReadError::SliceLen(err) => Some(err),
+            ReadError::IpHeader(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
             ReadError::Ipv6Header(err) => Some(err),
             ReadError::Ipv6ExtsHeader(err) => Some(err),
