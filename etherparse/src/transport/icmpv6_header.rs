@@ -82,8 +82,8 @@ impl Icmpv6Header {
     }
 
     /// Write the ICMPv6 header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        writer.write_all(&self.to_bytes())
     }
 
     /// Serialized length of the header in bytes/octets.
