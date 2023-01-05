@@ -21,7 +21,7 @@ impl<'a> VlanSlice<'a> {
 }
 
 #[cfg(test)]
-mod vlan_slice {
+mod test {
     use crate::{test_gens::*, *};
     use proptest::prelude::*;
 

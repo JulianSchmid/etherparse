@@ -63,3 +63,107 @@ impl ParameterProblemCode {
         *self as u8
     }
 }
+
+#[cfg(test)]
+pub(crate) mod parameter_problem_code_test_consts {
+    use super::*;
+    use ParameterProblemCode::*;
+
+    pub const VALID_VALUES: [(ParameterProblemCode, u8); 11] = [
+        (ErroneousHeaderField, CODE_PARAM_PROBLEM_ERR_HEADER_FIELD),
+        (
+            UnrecognizedNextHeader,
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER,
+        ),
+        (
+            UnrecognizedIpv6Option,
+            CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION,
+        ),
+        (
+            Ipv6FirstFragmentIncompleteHeaderChain,
+            CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN,
+        ),
+        (
+            SrUpperLayerHeaderError,
+            CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR,
+        ),
+        (
+            UnrecognizedNextHeaderByIntermediateNode,
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE,
+        ),
+        (ExtensionHeaderTooBig, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG),
+        (
+            ExtensionHeaderChainTooLong,
+            CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG,
+        ),
+        (
+            TooManyExtensionHeaders,
+            CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS,
+        ),
+        (
+            TooManyOptionsInExtensionHeader,
+            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER,
+        ),
+        (OptionTooBig, CODE_PARAM_PROBLEM_OPTION_TOO_BIG),
+    ];
+}
+
+#[cfg(test)]
+mod test {
+    use super::{*, ParameterProblemCode::*, parameter_problem_code_test_consts::*};
+
+    #[test]
+    fn from_u8() {
+        for t in VALID_VALUES {
+            assert_eq!(Some(t.0), ParameterProblemCode::from_u8(t.1));
+        }
+
+        for code_u8 in 11..=u8::MAX {
+            assert_eq!(None, ParameterProblemCode::from_u8(code_u8));
+        }
+    }
+
+    #[test]
+    fn code_u8() {
+        for t in VALID_VALUES {
+            assert_eq!(t.0.code_u8(), t.1);
+        }
+    }
+    #[test]
+    fn clone_eq() {
+        for (value, _) in VALID_VALUES {
+            assert_eq!(value.clone(), value);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (ErroneousHeaderField, "ErroneousHeaderField"),
+            (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
+            (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
+            (UnrecognizedNextHeader, "UnrecognizedNextHeader"),
+            (UnrecognizedIpv6Option, "UnrecognizedIpv6Option"),
+            (
+                Ipv6FirstFragmentIncompleteHeaderChain,
+                "Ipv6FirstFragmentIncompleteHeaderChain",
+            ),
+            (SrUpperLayerHeaderError, "SrUpperLayerHeaderError"),
+            (
+                UnrecognizedNextHeaderByIntermediateNode,
+                "UnrecognizedNextHeaderByIntermediateNode",
+            ),
+            (ExtensionHeaderTooBig, "ExtensionHeaderTooBig"),
+            (ExtensionHeaderChainTooLong, "ExtensionHeaderChainTooLong"),
+            (TooManyExtensionHeaders, "TooManyExtensionHeaders"),
+            (
+                TooManyOptionsInExtensionHeader,
+                "TooManyOptionsInExtensionHeader",
+            ),
+            (OptionTooBig, "OptionTooBig"),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
+    }
+}

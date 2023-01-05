@@ -142,3 +142,65 @@ pub const CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER: u8 = 9;
 
 /// ICMPv6 parameter problem code for "Option too big" (from [RFC 8883](https://tools.ietf.org/html/rfc8883)).
 pub const CODE_PARAM_PROBLEM_OPTION_TOO_BIG: u8 = 10;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn constants() {
+        // type values according to
+        // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-16
+        assert_eq!(1, TYPE_DST_UNREACH);
+        assert_eq!(2, TYPE_PACKET_TOO_BIG);
+        assert_eq!(3, TYPE_TIME_EXCEEDED);
+        assert_eq!(4, TYPE_PARAMETER_PROBLEM);
+        assert_eq!(128, TYPE_ECHO_REQUEST);
+        assert_eq!(129, TYPE_ECHO_REPLY);
+        assert_eq!(130, TYPE_MULTICAST_LISTENER_QUERY);
+        assert_eq!(131, TYPE_MULTICAST_LISTENER_REPORT);
+        assert_eq!(132, TYPE_MULTICAST_LISTENER_REDUCTION);
+        assert_eq!(133, TYPE_ROUTER_SOLICITATION);
+        assert_eq!(134, TYPE_ROUTER_ADVERTISEMENT);
+        assert_eq!(135, TYPE_NEIGHBOR_SOLICITATION);
+        assert_eq!(136, TYPE_NEIGHBOR_ADVERTISEMENT);
+        assert_eq!(137, TYPE_REDIRECT_MESSAGE);
+        assert_eq!(138, TYPE_ROUTER_RENUMBERING);
+        assert_eq!(141, TYPE_INVERSE_NEIGHBOR_DISCOVERY_SOLICITATION);
+        assert_eq!(142, TYPE_INVERSE_NEIGHBOR_DISCOVERY_ADVERTISEMENT);
+        assert_eq!(160, TYPE_EXT_ECHO_REQUEST);
+        assert_eq!(161, TYPE_EXT_ECHO_REPLY);
+
+        // destination unreachable code values according to
+        // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-2
+        assert_eq!(0, CODE_DST_UNREACH_NO_ROUTE);
+        assert_eq!(1, CODE_DST_UNREACH_PROHIBITED);
+        assert_eq!(2, CODE_DST_UNREACH_BEYOND_SCOPE);
+        assert_eq!(3, CODE_DST_UNREACH_ADDR);
+        assert_eq!(4, CODE_DST_UNREACH_PORT);
+        assert_eq!(5, CODE_DST_UNREACH_SOURCE_ADDRESS_FAILED_POLICY);
+        assert_eq!(6, CODE_DST_UNREACH_REJECT_ROUTE_TO_DEST);
+
+        // time exceeded code values according to
+        // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-4
+        assert_eq!(0, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED);
+        assert_eq!(1, CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED);
+
+        // parameter problem codes according to
+        // https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5
+        assert_eq!(0, CODE_PARAM_PROBLEM_ERR_HEADER_FIELD);
+        assert_eq!(1, CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER);
+        assert_eq!(2, CODE_PARAM_PROBLEM_UNRECOG_IPV6_OPTION);
+        assert_eq!(3, CODE_PARAM_PROBLEM_IPV6_FIRST_FRAG_INCOMP_HEADER_CHAIN);
+        assert_eq!(4, CODE_PARAM_PROBLEM_SR_UPPER_LAYER_HEADER_ERROR);
+        assert_eq!(
+            5,
+            CODE_PARAM_PROBLEM_UNRECOG_NEXT_HEADER_BY_INTERMEDIATE_NODE
+        );
+        assert_eq!(6, CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG);
+        assert_eq!(7, CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG);
+        assert_eq!(8, CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS);
+        assert_eq!(9, CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER);
+        assert_eq!(10, CODE_PARAM_PROBLEM_OPTION_TOO_BIG);
+    }
+}

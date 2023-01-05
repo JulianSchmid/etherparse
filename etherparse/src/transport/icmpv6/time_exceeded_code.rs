@@ -31,3 +31,59 @@ impl TimeExceededCode {
         *self as u8
     }
 }
+
+#[cfg(test)]
+pub(crate) mod time_exceeded_code_test_consts {
+    use super::{*, TimeExceededCode::*};
+
+    pub const VALID_VALUES: [(TimeExceededCode, u8); 2] = [
+        (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
+        (
+            FragmentReassemblyTimeExceeded,
+            CODE_TIME_EXCEEDED_FRAGMENT_REASSEMBLY_TIME_EXCEEDED,
+        ),
+    ];
+}
+
+#[cfg(test)]
+mod test {
+    use super::{*, TimeExceededCode::*, time_exceeded_code_test_consts::*};
+
+    #[test]
+    fn from_u8() {
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(Some(code), TimeExceededCode::from_u8(code_u8));
+        }
+        for code_u8 in 2..=u8::MAX {
+            assert_eq!(None, TimeExceededCode::from_u8(code_u8));
+        }
+    }
+
+    #[test]
+    fn from_enum() {
+        for (code, code_u8) in VALID_VALUES {
+            assert_eq!(code.code_u8(), code_u8);
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        for (code, _) in VALID_VALUES {
+            assert_eq!(code.clone(), code);
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let tests = [
+            (HopLimitExceeded, "HopLimitExceeded"),
+            (
+                FragmentReassemblyTimeExceeded,
+                "FragmentReassemblyTimeExceeded",
+            ),
+        ];
+        for test in tests {
+            assert_eq!(format!("{:?}", test.0), test.1);
+        }
+    }
+}

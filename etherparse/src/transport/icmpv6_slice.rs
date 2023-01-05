@@ -21,9 +21,9 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv6Slice<'a>, ReadError> {
         //check length
         use crate::ReadError::*;
-        if slice.len() < Icmpv6Header::MIN_SERIALIZED_SIZE {
+        if slice.len() < Icmpv6Header::MIN_LEN {
             return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Icmpv6Header::MIN_SERIALIZED_SIZE,
+                expected_min_len: Icmpv6Header::MIN_LEN,
                 actual_len: slice.len(),
                 layer: err::Layer::Icmpv6,
             }));
@@ -180,5 +180,430 @@ impl<'a> Icmpv6Slice<'a> {
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE(8).
         unsafe { core::slice::from_raw_parts(self.slice.as_ptr().add(8), self.slice.len() - 8) }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{*, icmpv6::*, test_gens::*, Icmpv6Type::*};
+    use proptest::prelude::*;
+    use assert_matches::assert_matches;
+
+    proptest! {
+        #[test]
+        fn from_slice(slice in proptest::collection::vec(any::<u8>(), 8..1024)) {
+            // ok case
+            assert_eq!(Icmpv6Slice::from_slice(&slice[..]).unwrap().slice(), &slice[..]);
+
+            // too small size error case
+            for len in 0..8 {
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().slice_len().unwrap(),
+                    err::SliceLenError{
+                        expected_min_len: Icmpv6Header::MIN_LEN,
+                        actual_len: len,
+                        layer: err::Layer::Icmpv6
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        /// This error can only occur on systems with a pointer size
+        /// bigger then 64 bits.
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
+        #[test]
+        fn from_slice_too_big_error(
+            bad_len in ((std::u32::MAX as usize) + 1)..=std::usize::MAX,
+        ) {
+            // too large packet error case
+            {
+                // SAFETY: In case the error is not triggered
+                //         a segmentation fault will be triggered.
+                let too_big_slice = unsafe {
+                    //NOTE: The pointer must be initialized with a non null value
+                    //      otherwise a key constraint of slices is not fullfilled
+                    //      which can lead to crashes in release mode.
+                    use std::ptr::NonNull;
+                    std::slice::from_raw_parts(
+                        NonNull::<u8>::dangling().as_ptr(),
+                        bad_len
+                    )
+                };
+                assert_matches!(
+                    Icmpv6Slice::from_slice(too_big_slice),
+                    Err(ReadError::Icmpv6PacketTooBig(_))
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header(
+            icmp_type in icmpv6_type_any(),
+            checksum in any::<u16>()
+        ) {
+            let expected = Icmpv6Header {
+                icmp_type,
+                checksum
+            };
+            assert_eq!(
+                Icmpv6Slice::from_slice(&expected.to_bytes()).unwrap().header(),
+                expected
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn icmp_type(
+            checksum in any::<[u8;2]>(),
+            bytes5to8 in any::<[u8;4]>()
+        ) {
+            use Icmpv6Type::*;
+
+            let gen_bytes = |type_u8: u8, code_u8: u8| -> [u8;8] {
+                [
+                    type_u8, code_u8, checksum[0], checksum[1],
+                    bytes5to8[0], bytes5to8[1], bytes5to8[2], bytes5to8[3]
+                ]
+            };
+
+            let assert_unknown = |type_u8: u8, code_u8: u8| {
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(type_u8, code_u8)).unwrap().icmp_type(),
+                    Unknown{
+                        type_u8,
+                        code_u8,
+                        bytes5to8,
+                    }
+                );
+            };
+
+            // destination unreachable
+            {
+                // known codes
+                for (code, code_u8) in dest_unreachable_code_test_consts::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_DST_UNREACH, code_u8)).unwrap().icmp_type(),
+                        DestinationUnreachable(code)
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 7..=u8::MAX {
+                    assert_unknown(TYPE_DST_UNREACH, code_u8);
+                }
+            }
+
+            // packet too big
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_PACKET_TOO_BIG, 0)).unwrap().icmp_type(),
+                    PacketTooBig {
+                        mtu: u32::from_be_bytes(bytes5to8)
+                    }
+                );
+
+                // unknown code
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_PACKET_TOO_BIG, code_u8);
+                }
+            }
+
+            // time exceeded
+            {
+                // known codes
+                for (code, code_u8) in time_exceeded_code_test_consts::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_TIME_EXCEEDED, code_u8)).unwrap().icmp_type(),
+                        TimeExceeded(code)
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 2..=u8::MAX {
+                    assert_unknown(TYPE_TIME_EXCEEDED, code_u8);
+                }
+            }
+
+            // parameter problem
+            {
+                // known codes
+                for (code, code_u8) in parameter_problem_code_test_consts::VALID_VALUES {
+                    assert_eq!(
+                        Icmpv6Slice::from_slice(&gen_bytes(TYPE_PARAMETER_PROBLEM, code_u8)).unwrap().icmp_type(),
+                        ParameterProblem(ParameterProblemHeader{
+                            code,
+                            pointer: u32::from_be_bytes(bytes5to8),
+                        })
+                    );
+                }
+
+                // unknown codes
+                for code_u8 in 11..=u8::MAX {
+                    assert_unknown(TYPE_PARAMETER_PROBLEM, code_u8);
+                }
+            }
+
+            // echo request
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_ECHO_REQUEST, 0)).unwrap().icmp_type(),
+                    EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, code_u8);
+                }
+            }
+
+            // echo reply
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_ECHO_REPLY, 0)).unwrap().icmp_type(),
+                    EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_ECHO_REPLY, code_u8);
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+        ) {
+            let len_8_types = [
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
+                PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
+                TimeExceeded(TimeExceededCode::HopLimitExceeded),
+                ParameterProblem(
+                    ParameterProblemHeader{
+                        code: ParameterProblemCode::OptionTooBig,
+                        pointer: u32::from_be_bytes(bytes5to8),
+                    }
+                ),
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ];
+
+            for t in len_8_types {
+                assert_eq!(
+                    t.header_len(),
+                    Icmpv6Slice::from_slice(
+                        &Icmpv6Header::new(t).to_bytes()
+                    ).unwrap().header_len()
+                );
+            }
+
+            for t in 0..=u8::MAX {
+                let header = Icmpv6Header::new(
+                    Unknown{
+                        type_u8: t,
+                        code_u8,
+                        bytes5to8,
+                    }
+                );
+                assert_eq!(
+                    8,
+                    Icmpv6Slice::from_slice(
+                        &header.to_bytes()
+                    ).unwrap().header_len()
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn type_u8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice[..]).unwrap().type_u8(),
+                slice[0]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn code_u8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice[..]).unwrap().code_u8(),
+                slice[1]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn checksum(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice[..]).unwrap().checksum(),
+                u16::from_be_bytes([slice[2], slice[3]])
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn is_checksum_valid(
+            ip_header in ipv6_any(),
+            icmp_type in icmpv6_type_any(),
+            payload in proptest::collection::vec(any::<u8>(), 0..1024),
+            flip_byte in 0usize..1032,
+        ) {
+            // generate slice with a correct checksum
+            let header = Icmpv6Header::with_checksum(icmp_type, ip_header.source, ip_header.destination, &payload).unwrap();
+            let bytes = {
+                let mut bytes = Vec::with_capacity(header.header_len() + payload.len());
+                header.write(&mut bytes).unwrap();
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+
+            // check that the checksum gets reported as ok
+            assert!(
+                Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+            );
+
+            // corrupt icmp packet
+            {
+                let mut corrupted_bytes = bytes.clone();
+                let i = flip_byte % corrupted_bytes.len();
+                corrupted_bytes[i] = !corrupted_bytes[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&corrupted_bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+                );
+            }
+
+            // corrupt ip source
+            {
+                let mut corrupted_source = ip_header.source;
+                let i = flip_byte % corrupted_source.len();
+                corrupted_source[i] = !corrupted_source[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(corrupted_source, ip_header.destination)
+                );
+            }
+
+            // corrupt ip destination
+            {
+                let mut corrupted_dest = ip_header.destination;
+                let i = flip_byte % corrupted_dest.len();
+                corrupted_dest[i] = !corrupted_dest[i];
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&bytes).unwrap().is_checksum_valid(ip_header.source, corrupted_dest)
+                );
+            }
+
+            // corrupt length
+            {
+                let mut larger_bytes = bytes.clone();
+                larger_bytes.push(0);
+                larger_bytes.push(0);
+
+                assert_eq!(
+                    false,
+                    Icmpv6Slice::from_slice(&larger_bytes).unwrap().is_checksum_valid(ip_header.source, ip_header.destination)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn bytes5to8(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice[..]).unwrap().bytes5to8(),
+                [slice[4], slice[5], slice[6], slice[7]]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn slice(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice[..]).unwrap().slice(),
+                &slice[..]
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn payload(
+            type_u8 in any::<u8>(),
+            code_u8 in any::<u8>(),
+            bytes5to8 in any::<[u8;4]>(),
+            payload in proptest::collection::vec(any::<u8>(), 8..16)
+        ) {
+            let len_8_types = [
+                Unknown{
+                    type_u8,
+                    code_u8,
+                    bytes5to8,
+                },
+                DestinationUnreachable(DestUnreachableCode::Prohibited),
+                PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), },
+                TimeExceeded(TimeExceededCode::HopLimitExceeded),
+                ParameterProblem(
+                    ParameterProblemHeader{
+                        code: ParameterProblemCode::ExtensionHeaderChainTooLong,
+                        pointer: u32::from_be_bytes(bytes5to8),
+                    }
+                ),
+                EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
+                EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+            ];
+
+            for t in len_8_types {
+                let mut bytes = Vec::with_capacity(t.header_len() + payload.len());
+                Icmpv6Header::new(t.clone()).write(&mut bytes).unwrap();
+                bytes.extend_from_slice(&payload);
+
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&bytes[..]).unwrap().payload(),
+                    &payload[..]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let data = [0u8; 8];
+        assert_eq!(
+            format!("{:?}", Icmpv6Slice::from_slice(&data).unwrap()),
+            format!("Icmpv6Slice {{ slice: {:?} }}", &data)
+        );
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(slice in proptest::collection::vec(any::<u8>(), 8..16)) {
+            assert_eq!(
+                Icmpv6Slice::from_slice(&slice).unwrap().clone(),
+                Icmpv6Slice::from_slice(&slice).unwrap()
+            );
+        }
     }
 }
