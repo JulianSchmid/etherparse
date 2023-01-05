@@ -96,8 +96,8 @@ impl Icmpv4Header {
     }
 
     /// Write the ICMPv4 header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()).map_err(WriteError::from)
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        writer.write_all(&self.to_bytes())
     }
 
     /// Length in bytes/octets of this header type.

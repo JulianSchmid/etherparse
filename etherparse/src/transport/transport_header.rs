@@ -157,13 +157,13 @@ impl TransportHeader {
     }
 
     /// Write the transport header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         use crate::TransportHeader::*;
         match self {
             Icmpv4(value) => value.write(writer),
             Icmpv6(value) => value.write(writer),
-            Udp(value) => value.write(writer).map_err(WriteError::IoError),
-            Tcp(value) => value.write(writer).map_err(WriteError::IoError),
+            Udp(value) => value.write(writer),
+            Tcp(value) => value.write(writer),
         }
     }
 }
@@ -533,9 +533,10 @@ mod test {
                 //trigger an error
                 {
                     let mut a: [u8;0] = [];
-                    assert_matches!(
-                        TransportHeader::Udp(udp.clone()).write(&mut Cursor::new(&mut a[..])),
-                        Err(WriteError::IoError(_))
+                    assert!(
+                        TransportHeader::Udp(udp.clone())
+                        .write(&mut Cursor::new(&mut a[..]))
+                        .is_err()
                     );
                 }
             }
@@ -558,8 +559,11 @@ mod test {
                 //trigger an error
                 {
                     let mut a: [u8;0] = [];
-                    assert_matches!(TransportHeader::Tcp(tcp.clone()).write(&mut Cursor::new(&mut a[..])),
-                                    Err(WriteError::IoError(_)));
+                    assert!(
+                        TransportHeader::Tcp(tcp.clone())
+                        .write(&mut Cursor::new(&mut a[..]))
+                        .is_err()
+                    );
                 }
             }
 
@@ -583,9 +587,10 @@ mod test {
                 // error during write
                 {
                     let mut a: [u8;0] = [];
-                    assert_matches!(
-                        TransportHeader::Icmpv4(icmpv4.clone()).write(&mut Cursor::new(&mut a[..])),
-                        Err(WriteError::IoError(_))
+                    assert!(
+                        TransportHeader::Icmpv4(icmpv4.clone())
+                        .write(&mut Cursor::new(&mut a[..]))
+                        .is_err()
                     );
                 }
             }
@@ -610,9 +615,10 @@ mod test {
                 // error during write
                 {
                     let mut a: [u8;0] = [];
-                    assert_matches!(
-                        TransportHeader::Icmpv6(icmpv6.clone()).write(&mut Cursor::new(&mut a[..])),
-                        Err(WriteError::IoError(_))
+                    assert!(
+                        TransportHeader::Icmpv6(icmpv6.clone())
+                        .write(&mut Cursor::new(&mut a[..]))
+                        .is_err()
                     );
                 }
             }
