@@ -390,8 +390,8 @@ mod test {
                             } else {
                                 header.header_len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::IpAuthHeader,
                             layer_start_offset: 0,
                         })

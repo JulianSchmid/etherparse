@@ -16,8 +16,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         if slice.len() < Ethernet2Header::LEN {
             return Err(err::LenError {
                 required_len: Ethernet2Header::LEN,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ethernet2Header,
                 layer_start_offset: 0,
             });
@@ -120,8 +120,8 @@ mod test {
                     Ethernet2HeaderSlice::from_slice(&buffer[..len]),
                     Err(err::LenError{
                         required_len: Ethernet2Header::LEN,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::Ethernet2Header,
                         layer_start_offset: 0,
                     })

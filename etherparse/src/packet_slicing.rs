@@ -408,8 +408,8 @@ impl<'a> CursorSlice<'a> {
         if self.slice.is_empty() {
             Err(SliceLen(err::LenError {
                 required_len: 1,
-                actual_len: self.slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: self.slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: self.offset,
             }))

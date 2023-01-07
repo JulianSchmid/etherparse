@@ -42,8 +42,8 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
         if slice.len() < 8 {
             return Err(err::LenError {
                 required_len: 8,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
                 layer_start_offset: 0,
             });
@@ -56,8 +56,8 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
         if slice.len() < len {
             return Err(err::LenError {
                 required_len: len,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
                 layer_start_offset: 0,
             });
@@ -192,8 +192,8 @@ mod test {
                             } else {
                                 header.header_len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }

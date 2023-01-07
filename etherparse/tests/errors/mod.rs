@@ -26,8 +26,8 @@ proptest! {
         {
             let err = LenError{
                 required_len: arg_usize,
-                actual_len: arg2_usize,
-                actual_len_source: err::LenSource::Slice,
+                len: arg2_usize,
+                len_source: err::LenSource::Slice,
                 layer: err_layer,
                 layer_start_offset: 0,
             };
@@ -114,8 +114,8 @@ fn read_error_source() {
     assert!(
         SliceLen(err::LenError {
             required_len: 0,
-            actual_len: 0,
-            actual_len_source: err::LenSource::Slice,
+            len: 0,
+            len_source: err::LenSource::Slice,
             layer: err::Layer::Ethernet2Header,
             layer_start_offset: 0,
         }).source().is_some()
@@ -168,8 +168,8 @@ fn read_error_debug() {
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
         SliceLen(err::LenError {
             required_len: 0,
-            actual_len: 0,
-            actual_len_source: err::LenSource::Slice,
+            len: 0,
+            len_source: err::LenSource::Slice,
             layer: err::Layer::Ethernet2Header,
             layer_start_offset: 0,
         }),

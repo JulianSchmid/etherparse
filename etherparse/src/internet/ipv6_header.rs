@@ -123,8 +123,8 @@ impl Ipv6Header {
             if slice.len() < len {
                 Err(err::LenError {
                     required_len: len,
-                    actual_len: slice.len(),
-                    actual_len_source: err::LenSource::Slice,
+                    len: slice.len(),
+                    len_source: err::LenSource::Slice,
                     layer: err::Layer::Ipv6ExtHeader,
                     layer_start_offset: 0,
                 })
@@ -134,8 +134,8 @@ impl Ipv6Header {
         } else {
             Err(err::LenError {
                 required_len: 2,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
                 layer_start_offset: 0,
             })
@@ -411,8 +411,8 @@ mod test {
                             .unwrap_err(),
                         Len(err::LenError{
                             required_len: Ipv6Header::LEN,
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         })
@@ -457,8 +457,8 @@ mod test {
                             .unwrap_err(),
                         Len(err::LenError{
                             required_len: Ipv6Header::LEN,
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         })
@@ -573,8 +573,8 @@ mod test {
                             } else {
                                 bytes.len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -600,8 +600,8 @@ mod test {
                             } else {
                                 bytes.len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -628,8 +628,8 @@ mod test {
                             } else {
                                 bytes.len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -781,8 +781,8 @@ mod test {
                             .unwrap_err(),
                         err::LenError {
                             required_len: get_expected(len) - get_offset(len),
-                            actual_len: len - get_offset(len),
-                            actual_len_source: err::LenSource::Slice,
+                            len: len - get_offset(len),
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: get_offset(len),
                         }

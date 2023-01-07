@@ -18,8 +18,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
         if slice.len() < Ipv4Header::MIN_LEN {
             return Err(Len(err::LenError {
                 required_len: Ipv4Header::MIN_LEN,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
                 layer_start_offset: 0,
             }));
@@ -46,8 +46,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
         if slice.len() < header_length {
             return Err(Len(err::LenError {
                 required_len: header_length,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
                 layer_start_offset: 0,
             }));
@@ -349,8 +349,8 @@ mod test {
                             } else {
                                 header.header_len()
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }))

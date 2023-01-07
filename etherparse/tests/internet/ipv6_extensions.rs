@@ -539,8 +539,8 @@ pub mod header {
                             Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
                             Len(err::LenError {
                                 required_len: read_len - offset,
-                                actual_len: read_len - offset - 1,
-                                actual_len_source: err::LenSource::Slice,
+                                len: read_len - offset - 1,
+                                len_source: err::LenSource::Slice,
                                 layer: match last_header.unwrap() {
                                     AUTH => err::Layer::IpAuthHeader,
                                     IPV6_FRAG => err::Layer::Ipv6FragHeader,
@@ -1202,8 +1202,8 @@ pub mod slice {
                             Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
                             Len(err::LenError {
                                 required_len: e.slice().len() - offset,
-                                actual_len: e.slice().len() - offset - 1,
-                                actual_len_source: err::LenSource::Slice,
+                                len: e.slice().len() - offset - 1,
+                                len_source: err::LenSource::Slice,
                                 layer: match ip_numbers[ip_numbers.len() - 2] {
                                     AUTH => err::Layer::IpAuthHeader,
                                     IPV6_FRAG => err::Layer::Ipv6FragHeader,

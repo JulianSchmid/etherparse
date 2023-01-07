@@ -10,9 +10,9 @@ use crate::err::{Layer, LenSource};
 /// be used as an ICMP packet length).
 /// 
 /// When the error is caused by not enough data beeing available
-/// `required_len > outer_len` must be true. While when the length from
+/// `required_len > len` must be true. While when the length from
 /// the upper layer is too big for the lower layer the inverse 
-/// (`required_len < outer_len`) must be true.
+/// (`required_len < len`) must be true.
 /// 
 /// # Examples:
 /// 
@@ -28,10 +28,10 @@ use crate::err::{Layer, LenSource};
 ///     // Could not decode the UDP header:
 ///     layer: err::Layer::UdpHeader,
 ///     // There was only 1 byte left (not enough for an UDP header):
-///     actual_len: 1,
+///     len: 1,
 ///     // The provided length was determined by the total length field in the
 ///     // IPv4 header:
-///     actual_len_source: err::LenSource::Ipv4HeaderTotalLen,
+///     len_source: err::LenSource::Ipv4HeaderTotalLen,
 ///     // Offset in bytes from the start of decoding (ethernet in this) case
 ///     // to the expected UDP header start:
 ///     layer_start_offset: Ethernet2Header::LEN + Ipv4Header::MIN_LEN
@@ -44,11 +44,11 @@ pub struct LenError {
     pub required_len: usize,
 
     /// Length limiting or exceeding the required length.
-    pub actual_len: usize,
+    pub len: usize,
 
     /// Source of the outer length (e.g. Slice or a length specified by
     /// an upper level protocol).
-    pub actual_len_source: LenSource,
+    pub len_source: LenSource,
 
     /// Layer in which the length error was encountered.
     pub layer: Layer,
@@ -65,8 +65,8 @@ impl LenError {
         LenError {
             required_len: self.required_len,
             layer: self.layer,
-            actual_len: self.actual_len,
-            actual_len_source: self.actual_len_source,
+            len: self.len,
+            len_source: self.len_source,
             layer_start_offset: self.layer_start_offset + offset,
         }
     }
@@ -77,7 +77,7 @@ impl core::fmt::Display for LenError {
 
         let len_source: &'static str = {
             use LenSource::*;
-            match self.actual_len_source {
+            match self.len_source {
                 Slice => "slice length",
                 Ipv4HeaderTotalLen => "length calculated from the IPv4 header 'total length' field",
                 Ipv6HeaderPayloadLen => "length calculated from the IPv6 header 'payload length' field",
@@ -86,7 +86,7 @@ impl core::fmt::Display for LenError {
             }
         };
 
-        if self.required_len > self.actual_len {
+        if self.required_len > self.len {
             if self.layer_start_offset > 0 {
                 write!(
                     f,
@@ -94,7 +94,7 @@ impl core::fmt::Display for LenError {
                     self.layer.error_title(),
                     self.layer,
                     self.required_len,
-                    self.actual_len,
+                    self.len,
                     len_source,
                     self.layer,
                     self.layer_start_offset
@@ -106,7 +106,7 @@ impl core::fmt::Display for LenError {
                     self.layer.error_title(),
                     self.layer,
                     self.required_len,
-                    self.actual_len,
+                    self.len,
                     len_source
                 )
             }
@@ -116,7 +116,7 @@ impl core::fmt::Display for LenError {
                     f,
                     "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length ('{}' starts at overall parsed byte {}).",
                     self.layer.error_title(),
-                    self.actual_len,
+                    self.len,
                     self.layer,
                     self.required_len,
                     len_source,
@@ -128,7 +128,7 @@ impl core::fmt::Display for LenError {
                     f,
                     "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length.",
                     self.layer.error_title(),
-                    self.actual_len,
+                    self.len,
                     self.layer,
                     self.required_len,
                     len_source
@@ -160,16 +160,16 @@ mod test {
             LenError {
                 required_len: 2,
                 layer: Layer::Icmpv4,
-                actual_len: 1,
-                actual_len_source: LenSource::Slice,
+                len: 1,
+                len_source: LenSource::Slice,
                 layer_start_offset: 20,
             }
             .add_offset(100),
             LenError {
                 required_len: 2,
                 layer: Layer::Icmpv4,
-                actual_len: 1,
-                actual_len_source: LenSource::Slice,
+                len: 1,
+                len_source: LenSource::Slice,
                 layer_start_offset: 120,
             }
         );
@@ -183,13 +183,13 @@ mod test {
                 LenError {
                     required_len: 2,
                     layer: Layer::Ipv4Header,
-                    actual_len: 1,
-                    actual_len_source: LenSource::Slice,
+                    len: 1,
+                    len_source: LenSource::Slice,
                     layer_start_offset: 0
                 }
             ),
             format!(
-                "LenError {{ required_len: {:?}, actual_len: {:?}, actual_len_source: {:?}, layer: {:?}, layer_start_offset: {:?} }}",
+                "LenError {{ required_len: {:?}, len: {:?}, len_source: {:?}, layer: {:?}, layer_start_offset: {:?} }}",
                 2, 1, LenSource::Slice, Layer::Ipv4Header, 0
             ),
         );
@@ -200,8 +200,8 @@ mod test {
         let err = LenError {
             required_len: 2,
             layer: Layer::Icmpv4,
-            actual_len: 1,
-            actual_len_source: LenSource::Slice,
+            len: 1,
+            len_source: LenSource::Slice,
             layer_start_offset: 20,
         };
         assert_eq!(err, err.clone());
@@ -240,8 +240,8 @@ mod test {
                         LenError{
                             required_len: 2,
                             layer: Layer::Ipv4Header,
-                            actual_len: 1,
-                            actual_len_source: test.0,
+                            len: 1,
+                            len_source: test.0,
                             layer_start_offset: 0
                         }
                     )
@@ -256,8 +256,8 @@ mod test {
                 "{}",
                 LenError{
                     required_len: 2,
-                    actual_len: 1,
-                    actual_len_source: LenSource::Slice,
+                    len: 1,
+                    len_source: LenSource::Slice,
                     layer: Layer::Ipv4Header,
                     layer_start_offset: 4
                 }
@@ -283,8 +283,8 @@ mod test {
                         LenError{
                             required_len: 1,
                             layer: Layer::Ipv4Header,
-                            actual_len: 2,
-                            actual_len_source: test.0,
+                            len: 2,
+                            len_source: test.0,
                             layer_start_offset: 0
                         }
                     )
@@ -299,8 +299,8 @@ mod test {
                 "{}",
                 LenError{
                     required_len: 1,
-                    actual_len: 2,
-                    actual_len_source: LenSource::Slice,
+                    len: 2,
+                    len_source: LenSource::Slice,
                     layer: Layer::Ipv4Header,
                     layer_start_offset: 4
                 }
@@ -313,8 +313,8 @@ mod test {
     fn source() {
         assert!(LenError {
             required_len: 0,
-            actual_len: 0,
-            actual_len_source: LenSource::Slice,
+            len: 0,
+            len_source: LenSource::Slice,
             layer: Layer::Ipv4Header,
             layer_start_offset: 0
         }

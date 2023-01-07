@@ -27,8 +27,8 @@ impl IpHeader {
         if slice.is_empty() {
             Err(Len(err::LenError {
                 required_len: 1,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             }))
@@ -40,8 +40,8 @@ impl IpHeader {
                         if slice.len() < Ipv4Header::MIN_LEN {
                             return Err(Len(err::LenError {
                                 required_len: Ipv4Header::MIN_LEN,
-                                actual_len: slice.len(),
-                                actual_len_source: err::LenSource::Slice,
+                                len: slice.len(),
+                                len_source: err::LenSource::Slice,
                                 layer: err::Layer::Ipv4Header,
                                 layer_start_offset: 0,
                             }));
@@ -64,8 +64,8 @@ impl IpHeader {
                         if slice.len() < header_length {
                             return Err(Len(err::LenError {
                                 required_len: header_length,
-                                actual_len: slice.len(),
-                                actual_len_source: err::LenSource::Slice,
+                                len: slice.len(),
+                                len_source: err::LenSource::Slice,
                                 layer: err::Layer::Ipv4Header,
                                 layer_start_offset: 0,
                             }));
@@ -119,8 +119,8 @@ impl IpHeader {
                     if slice.len() < Ipv6Header::LEN {
                         return Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
-                            actual_len: slice.len(),
-                            actual_len_source: err::LenSource::Slice,
+                            len: slice.len(),
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         }));

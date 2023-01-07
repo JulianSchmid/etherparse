@@ -48,8 +48,8 @@ mod ip_header {
                 .unwrap_err(),
             Len(err::LenError {
                 required_len: 1,
-                actual_len: 0,
-                actual_len_source: err::LenSource::Slice,
+                len: 0,
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             })

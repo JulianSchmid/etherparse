@@ -18,8 +18,8 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
         if slice.len() < DoubleVlanHeader::LEN {
             return Err(Len(err::LenError {
                 required_len: DoubleVlanHeader::LEN,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::VlanHeader,
                 layer_start_offset: 0,
             }));
@@ -128,8 +128,8 @@ mod test {
 
                         Len(err::LenError{
                             required_len: 8,
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::VlanHeader,
                             layer_start_offset: 0,
                         })

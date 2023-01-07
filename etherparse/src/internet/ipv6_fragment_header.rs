@@ -236,8 +236,8 @@ mod test {
                     Ipv6FragmentHeader::from_slice(&buffer[0..len]).unwrap_err(),
                     err::LenError{
                         required_len: Ipv6FragmentHeader::LEN,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::Ipv6FragHeader,
                         layer_start_offset: 0,
                     }
