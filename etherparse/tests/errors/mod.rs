@@ -22,7 +22,7 @@ proptest! {
             );
         }
 
-        //UnexpectedEndOfSlice
+        //LenError
         {
             let err = LenError{
                 required_len: arg_usize,
@@ -36,12 +36,6 @@ proptest! {
                 &format!("{}", Len(err))
             );
         }
-
-        //UnexpectedLenOfSlice
-        assert_eq!(
-            &format!("ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", arg2_usize, arg_usize),
-            &format!("{}", UnexpectedLenOfSlice{ expected: arg_usize, actual: arg2_usize })
-        );
 
         //IpHeader
         {
@@ -139,18 +133,11 @@ fn read_error_source() {
             .source()
             .is_some()
     );
-
-    let none_values = [
-        UnexpectedLenOfSlice {
-            expected: 0,
-            actual: 0,
-        },
-        IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
-    ];
-
-    for value in &none_values {
-        assert_matches!(value.source(), None);
-    }
+    assert!(
+        IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen)
+            .source()
+            .is_some()
+    );
 }
 
 #[test]
@@ -166,10 +153,6 @@ fn read_error_debug() {
             layer: err::Layer::Ethernet2Header,
             layer_start_offset: 0,
         }),
-        UnexpectedLenOfSlice {
-            expected: 0,
-            actual: 0,
-        },
         IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }),
         Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
