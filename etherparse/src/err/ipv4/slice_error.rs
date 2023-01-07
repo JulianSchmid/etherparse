@@ -1,4 +1,4 @@
-use crate::err::SliceLenError;
+use crate::err::LenError;
 
 use super::HeaderSliceError;
 
@@ -9,5 +9,5 @@ pub enum SliceError {
     Header(HeaderSliceError),
 
     /// Error while slicing the payload of the packet.
-    Payload(SliceLenError),
+    Payload(LenError),
 }

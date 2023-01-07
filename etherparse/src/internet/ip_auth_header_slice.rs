@@ -23,10 +23,12 @@ impl<'a> IpAuthHeaderSlice<'a> {
 
         // check slice length
         if slice.len() < IpAuthHeader::MIN_LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: IpAuthHeader::MIN_LEN,
+            return Err(Len(err::LenError {
+                required_len: IpAuthHeader::MIN_LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::IpAuthHeader,
+                layer_start_offset: 0,
             }));
         }
 
@@ -45,10 +47,12 @@ impl<'a> IpAuthHeaderSlice<'a> {
         //       headers the length is in 4 octets.
         let len = ((payload_len_enc as usize) + 2) * 4;
         if slice.len() < len {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: len,
+            return Err(Len(err::LenError {
+                required_len: len,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::IpAuthHeader,
+                layer_start_offset: 0,
             }));
         }
 
@@ -183,14 +187,16 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         IpAuthHeaderSlice::from_slice(&bytes[..len]).unwrap_err(),
-                        SliceLen(err::SliceLenError{
-                            expected_min_len: if len < IpAuthHeader::MIN_LEN {
+                        Len(err::LenError{
+                            required_len: if len < IpAuthHeader::MIN_LEN {
                                 IpAuthHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::IpAuthHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }

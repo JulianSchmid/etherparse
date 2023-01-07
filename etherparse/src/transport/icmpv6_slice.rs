@@ -22,10 +22,12 @@ impl<'a> Icmpv6Slice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Icmpv6Header::MIN_LEN,
+            return Err(SliceLen(err::LenError {
+                required_len: Icmpv6Header::MIN_LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv6,
+                layer_start_offset: 0,
             }));
         }
         if slice.len() > icmpv6::MAX_ICMPV6_BYTE_LEN {
@@ -199,10 +201,12 @@ mod test {
             for len in 0..8 {
                 assert_eq!(
                     Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().slice_len().unwrap(),
-                    err::SliceLenError{
-                        expected_min_len: Icmpv6Header::MIN_LEN,
+                    err::LenError{
+                        required_len: Icmpv6Header::MIN_LEN,
                         actual_len: len,
-                        layer: err::Layer::Icmpv6
+                        actual_len_source: err::LenSource::Slice,
+                        layer: err::Layer::Icmpv6,
+                        layer_start_offset: 0,
                     }
                 );
             }

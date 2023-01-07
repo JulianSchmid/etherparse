@@ -16,10 +16,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
         //check length
         if slice.len() < Ipv4Header::MIN_LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Ipv4Header::MIN_LEN,
+            return Err(Len(err::LenError {
+                required_len: Ipv4Header::MIN_LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
+                layer_start_offset: 0,
             }));
         }
 
@@ -42,10 +44,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
         //check that the slice contains enough data for the entire header + options
         let header_length = (usize::from(ihl)) * 4;
         if slice.len() < header_length {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: header_length,
+            return Err(Len(err::LenError {
+                required_len: header_length,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
+                layer_start_offset: 0,
             }));
         }
 
@@ -339,14 +343,16 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         Ipv4HeaderSlice::from_slice(&buffer[..len]),
-                        Err(SliceLen(err::SliceLenError{
-                            expected_min_len: if len < Ipv4Header::MIN_LEN {
+                        Err(Len(err::LenError{
+                            required_len: if len < Ipv4Header::MIN_LEN {
                                 Ipv4Header::MIN_LEN
                             } else {
                                 header.header_len()
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
+                            layer_start_offset: 0,
                         }))
                     );
                 }

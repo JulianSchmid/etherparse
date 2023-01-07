@@ -36,15 +36,17 @@ pub mod header {
 
         // too small
         {
-            use err::ip_auth::HeaderSliceError::SliceLen;
+            use err::ip_auth::HeaderSliceError::Len;
             const AUTH_HEADER_LEN: usize = 12;
             assert_eq!(
                 Ipv4Extensions::from_slice(AUTH, &buffer[..auth_header.header_len() - 1])
                     .unwrap_err(),
-                SliceLen(err::SliceLenError {
-                    expected_min_len: AUTH_HEADER_LEN,
+                Len(err::LenError {
+                    required_len: AUTH_HEADER_LEN,
                     actual_len: auth_header.header_len() - 1,
+                    actual_len_source: err::LenSource::Slice,
                     layer: err::Layer::IpAuthHeader,
+                    layer_start_offset: 0,
                 })
             );
         }
@@ -335,13 +337,15 @@ mod slice {
 
             // Error unexpected end of slice
             {
-                use err::ip_auth::HeaderSliceError::SliceLen;
+                use err::ip_auth::HeaderSliceError::Len;
                 assert_eq!(
                     Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
-                    SliceLen(err::SliceLenError{
-                        expected_min_len: IpAuthHeader::MIN_LEN,
+                    Len(err::LenError{
+                        required_len: IpAuthHeader::MIN_LEN,
                         actual_len: 0,
-                        layer: err::Layer::IpAuthHeader
+                        actual_len_source: err::LenSource::Slice,
+                        layer: err::Layer::IpAuthHeader,
+                        layer_start_offset: 0,
                     })
                 );
             }

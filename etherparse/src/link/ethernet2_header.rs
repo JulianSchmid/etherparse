@@ -20,7 +20,7 @@ impl Ethernet2Header {
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
-    ) -> Result<(Ethernet2Header, &[u8]), err::SliceLenError> {
+    ) -> Result<(Ethernet2Header, &[u8]), err::LenError> {
         Ethernet2Header::from_slice(slice)
     }
 
@@ -28,7 +28,7 @@ impl Ethernet2Header {
     #[inline]
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(Ethernet2Header, &[u8]), err::SliceLenError> {
+    ) -> Result<(Ethernet2Header, &[u8]), err::LenError> {
         Ok((
             Ethernet2HeaderSlice::from_slice(slice)?.to_header(),
             &slice[Ethernet2Header::LEN..],
@@ -144,10 +144,12 @@ mod test {
             for len in 0..=13 {
                 assert_eq!(
                     Ethernet2Header::from_slice(&buffer[..len]),
-                    Err(err::SliceLenError{
-                        expected_min_len: Ethernet2Header::LEN,
+                    Err(err::LenError{
+                        required_len: Ethernet2Header::LEN,
                         actual_len: len,
-                        layer: err::Layer::Ethernet2Header
+                        actual_len_source: err::LenSource::Slice,
+                        layer: err::Layer::Ethernet2Header,
+                        layer_start_offset: 0,
                     })
                 );
             }

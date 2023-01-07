@@ -16,6 +16,7 @@ const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
 /// extension header data.
 struct ExtensionTestPayload {
     ip_numbers: Vec<u8>,
+    lengths: Vec<usize>,
     data: Vec<u8>,
 }
 
@@ -26,6 +27,7 @@ impl ExtensionTestPayload {
 
         let mut result = ExtensionTestPayload {
             ip_numbers: ip_numbers.to_vec(),
+            lengths: Vec::with_capacity(ip_numbers.len() - 1),
             data: Vec::with_capacity((ip_numbers.len() - 1) * (0xff * 8 + 8)),
         };
         for i in 0..ip_numbers.len() - 1 {
@@ -53,6 +55,7 @@ impl ExtensionTestPayload {
                 // insert payload
                 self.data
                     .extend_from_slice(&raw[..8 + usize::from(header_ext_len) * 8]);
+                self.lengths.push(8 + usize::from(header_ext_len) * 8);
             }
             IPV6_FRAG => {
                 // generate payload
@@ -62,6 +65,7 @@ impl ExtensionTestPayload {
 
                 // insert payload
                 self.data.extend_from_slice(&raw[..8]);
+                self.lengths.push(8);
             }
             AUTH => {
                 let mut raw: [u8; 0xff * 4 + 8] = [0; 0xff * 4 + 8];
@@ -77,6 +81,7 @@ impl ExtensionTestPayload {
                     4
                 } + 8;
                 self.data.extend_from_slice(&raw[..len]);
+                self.lengths.push(len);
             }
             _ => unreachable!(),
         }
@@ -521,18 +526,30 @@ pub mod header {
                     assert_eq!(rest, &e.slice()[read_len..]);
 
                     // unexpected end of slice
-                    assert_eq!(
-                        Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
-                        SliceLen(err::SliceLenError {
-                            expected_min_len: read_len,
-                            actual_len: read_len - 1,
-                            layer: match last_header.unwrap() {
-                                AUTH => err::Layer::IpAuthHeader,
-                                IPV6_FRAG => err::Layer::Ipv6FragHeader,
-                                _ => err::Layer::Ipv6ExtHeader
-                            },
-                        })
-                    );
+                    {
+                        let mut offset: usize = 0;
+                        for l in &e.lengths {
+                            if offset + l >= read_len {
+                                break;
+                            }
+                            offset += l;
+                        }
+
+                        assert_eq!(
+                            Ipv6Extensions::from_slice(ip_numbers[0], &e.slice()[..read_len - 1]).unwrap_err(),
+                            Len(err::LenError {
+                                required_len: read_len - offset,
+                                actual_len: read_len - offset - 1,
+                                actual_len_source: err::LenSource::Slice,
+                                layer: match last_header.unwrap() {
+                                    AUTH => err::Layer::IpAuthHeader,
+                                    IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                    _ => err::Layer::Ipv6ExtHeader
+                                },
+                                layer_start_offset: offset,
+                            })
+                        );
+                    }
                 }
             }
 
@@ -1178,18 +1195,24 @@ pub mod slice {
                     assert_eq!(rest, &e.slice()[e.slice().len()..]);
 
                     // unexpected end of slice
-                    assert_eq!(
-                        Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
-                        SliceLen(err::SliceLenError {
-                            expected_min_len: e.slice().len(),
-                            actual_len: e.slice().len() - 1,
-                            layer: match ip_numbers[ip_numbers.len() - 2] {
-                                AUTH => err::Layer::IpAuthHeader,
-                                IPV6_FRAG => err::Layer::Ipv6FragHeader,
-                                _ => err::Layer::Ipv6ExtHeader
-                            }
-                        })
-                    );
+                    {
+                        let offset: usize = e.lengths[..e.lengths.len() - 1].into_iter().sum();
+
+                        assert_eq!(
+                            Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
+                            Len(err::LenError {
+                                required_len: e.slice().len() - offset,
+                                actual_len: e.slice().len() - offset - 1,
+                                actual_len_source: err::LenSource::Slice,
+                                layer: match ip_numbers[ip_numbers.len() - 2] {
+                                    AUTH => err::Layer::IpAuthHeader,
+                                    IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                    _ => err::Layer::Ipv6ExtHeader
+                                },
+                                layer_start_offset: offset,
+                            })
+                        );
+                    }
                 }
             }
 

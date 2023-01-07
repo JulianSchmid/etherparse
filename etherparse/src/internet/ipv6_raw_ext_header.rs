@@ -113,7 +113,7 @@ impl Ipv6RawExtHeader {
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(Ipv6RawExtHeader, &[u8]), err::SliceLenError> {
+    ) -> Result<(Ipv6RawExtHeader, &[u8]), err::LenError> {
         let s = Ipv6RawExtHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();
@@ -305,14 +305,16 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6RawExtHeader::from_slice(&bytes[..len]).unwrap_err(),
-                        err::SliceLenError{
-                            expected_min_len: if len < Ipv6RawExtHeader::MIN_LEN {
+                        err::LenError{
+                            required_len: if len < Ipv6RawExtHeader::MIN_LEN {
                                 Ipv6RawExtHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
+                            layer_start_offset: 0,
                         }
                     );
                 }

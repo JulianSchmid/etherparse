@@ -44,10 +44,12 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            SliceLen(err::SliceLenError {
-                expected_min_len: 0,
+            SliceLen(err::LenError {
+                required_len: 0,
                 actual_len: 0,
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
+                layer_start_offset: 0,
             }),
             IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }),
             Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
@@ -155,18 +157,22 @@ mod read_error {
     fn add_slice_offset() {
         use super::*;
         assert_eq!(
-            ReadError::SliceLen(err::SliceLenError {
-                expected_min_len: 1,
+            ReadError::SliceLen(err::LenError {
+                required_len: 1,
                 actual_len: 2,
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
+                layer_start_offset: 3,
             })
-            .add_slice_offset(3)
+            .add_slice_offset(4)
             .slice_len()
             .unwrap(),
-            err::SliceLenError {
-                expected_min_len: 4,
-                actual_len: 5,
+            err::LenError {
+                required_len: 1,
+                actual_len: 2,
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
+                layer_start_offset: 7,
             }
         );
         assert_matches!(
@@ -211,10 +217,12 @@ mod read_error {
                 .is_none()
         );
         {
-            let err = err::SliceLenError {
-                expected_min_len: 1,
+            let err = err::LenError {
+                required_len: 1,
                 actual_len: 2,
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
+                layer_start_offset: 0,
             };
             assert_eq!(
                 err.clone(),

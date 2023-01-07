@@ -125,7 +125,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => {
+                        I::Len(err) => {
                             O::SliceLen(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
@@ -137,7 +137,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::SliceLen(err) => O::SliceLen(
+                            I::Len(err) => O::SliceLen(
                                 err.add_offset(packet.len() - ip_rest.len()),
                             ),
                             I::Content(err) => O::IpAuthHeader(err),
@@ -165,7 +165,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv6::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => {
+                        I::Len(err) => {
                             O::SliceLen(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),
@@ -177,7 +177,7 @@ impl<'a> PacketHeaders<'a> {
                             use err::ipv6_exts::HeaderSliceError as I;
                             use ReadError as O;
                             match err {
-                                I::SliceLen(err) => {
+                                I::Len(err) => {
                                     O::SliceLen(err.add_offset(packet.len() - ip_rest.len()))
                                 },
                                 I::Content(err) => O::Ipv6ExtsHeader(err),
@@ -315,7 +315,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv4::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => {
+                        I::Len(err) => {
                             O::SliceLen(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
@@ -327,7 +327,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::SliceLen(err) => {
+                            I::Len(err) => {
                                 O::SliceLen(err.add_offset(data.len() - rest.len()))
                             }
                             I::Content(err) => O::IpAuthHeader(err),
@@ -355,7 +355,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ipv6::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => {
+                        I::Len(err) => {
                             O::SliceLen(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),
@@ -367,7 +367,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ipv6_exts::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::SliceLen(err) => {
+                            I::Len(err) => {
                                 O::SliceLen(err.add_offset(data.len() - ip_rest.len()))
                             },
                             I::Content(err) => O::Ipv6ExtsHeader(err),
@@ -453,7 +453,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ip::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => O::SliceLen(err),
+                        I::Len(err) => O::SliceLen(err),
                         I::Content(err) => O::IpHeader(err),
                     }
                 })?;
@@ -524,7 +524,7 @@ fn read_transport(
                 use err::tcp::HeaderSliceError as I;
                 use ReadError as O;
                 match err  {
-                    I::SliceLen(err) => O::SliceLen(err.add_offset(offset)),
+                    I::Len(err) => O::SliceLen(err.add_offset(offset)),
                     I::Content(err) => O::TcpHeader(err),
                 }
             })

@@ -212,10 +212,12 @@ mod sliced_packet {
                 .unwrap_err()
                 .slice_len()
                 .unwrap(),
-            err::SliceLenError {
-                expected_min_len: 1,
+            err::LenError {
+                required_len: 1,
                 actual_len: 0,
-                layer: err::Layer::IpHeader
+                actual_len_source: err::LenSource::Slice,
+                layer: err::Layer::IpHeader,
+                layer_start_offset: 0,
             }
         );
 

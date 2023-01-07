@@ -143,10 +143,12 @@ mod test {
                 assert_eq!(
                     DoubleVlanHeader::from_slice(&buffer[..len])
                         .unwrap_err(),
-                    SliceLen(err::SliceLenError{
-                        expected_min_len: 8,
+                    Len(err::LenError{
+                        required_len: 8,
                         actual_len: len,
-                        layer:  err::Layer::VlanHeader
+                        actual_len_source: err::LenSource::Slice,
+                        layer:  err::Layer::VlanHeader,
+                        layer_start_offset: 0,
                     })
                 );
             }

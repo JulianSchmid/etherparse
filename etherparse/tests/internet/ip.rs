@@ -46,10 +46,12 @@ mod ip_header {
         assert_eq!(
             IpHeader::from_slice(&buffer[buffer.len()..])
                 .unwrap_err(),
-            SliceLen(err::SliceLenError {
-                expected_min_len: 1,
+            Len(err::LenError {
+                required_len: 1,
                 actual_len: 0,
-                layer: err::Layer::IpHeader
+                actual_len_source: err::LenSource::Slice,
+                layer: err::Layer::IpHeader,
+                layer_start_offset: 0,
             })
         );
     }

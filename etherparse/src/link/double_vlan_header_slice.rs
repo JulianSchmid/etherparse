@@ -16,10 +16,12 @@ impl<'a> DoubleVlanHeaderSlice<'a> {
 
         // check length
         if slice.len() < DoubleVlanHeader::LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: DoubleVlanHeader::LEN,
+            return Err(Len(err::LenError {
+                required_len: DoubleVlanHeader::LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::VlanHeader,
+                layer_start_offset: 0,
             }));
         }
 
@@ -124,10 +126,12 @@ mod test {
                         DoubleVlanHeaderSlice::from_slice(&buffer[..len])
                             .unwrap_err(),
 
-                        SliceLen(err::SliceLenError{
-                            expected_min_len: 8,
+                        Len(err::LenError{
+                            required_len: 8,
                             actual_len: len,
-                            layer:  err::Layer::VlanHeader
+                            actual_len_source: err::LenSource::Slice,
+                            layer: err::Layer::VlanHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }
