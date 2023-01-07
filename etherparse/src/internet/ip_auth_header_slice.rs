@@ -22,9 +22,9 @@ impl<'a> IpAuthHeaderSlice<'a> {
         use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
 
         // check slice length
-        if slice.len() < IpAuthHeader::MIN_BYTE_LEN {
+        if slice.len() < IpAuthHeader::MIN_LEN {
             return Err(Len(err::LenError {
-                required_len: IpAuthHeader::MIN_BYTE_LEN,
+                required_len: IpAuthHeader::MIN_LEN,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::IpAuthHeader,
@@ -188,8 +188,8 @@ mod test {
                     assert_eq!(
                         IpAuthHeaderSlice::from_slice(&bytes[..len]).unwrap_err(),
                         Len(err::LenError{
-                            required_len: if len < IpAuthHeader::MIN_BYTE_LEN {
-                                IpAuthHeader::MIN_BYTE_LEN
+                            required_len: if len < IpAuthHeader::MIN_LEN {
+                                IpAuthHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
