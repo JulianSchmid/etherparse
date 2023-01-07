@@ -56,7 +56,7 @@ impl Eq for IpAuthHeader {}
 
 impl<'a> IpAuthHeader {
     /// Minimum length of an IP authentifcation header in bytes/octets.
-    pub const MIN_BYTE_LEN: usize = 4 + 4 + 4;
+    pub const MIN_LEN: usize = 4 + 4 + 4;
 
     /// Maximum length of an IP authentifcation header in bytes/octets.
     ///
@@ -64,7 +64,7 @@ impl<'a> IpAuthHeader {
     /// that the "payload length" field supports (0xff) adding 2 and
     /// multiplying the sum by 4 as the "payload length" specifies how
     /// many 4 bytes words are present in the header.
-    pub const MAX_BYTE_LEN: usize = 4 * (0xff + 2);
+    pub const MAX_LEN: usize = 4 * (0xff + 2);
 
     /// The maximum amount of bytes/octets that can be stored in the ICV
     /// part of an IP authentification header.
@@ -199,11 +199,11 @@ impl<'a> IpAuthHeader {
     }
 
     /// Returns the serialized header.
-    pub fn to_bytes(&self) -> ArrayVec<u8, { IpAuthHeader::MAX_BYTE_LEN }> {
+    pub fn to_bytes(&self) -> ArrayVec<u8, { IpAuthHeader::MAX_LEN }> {
         let spi_be = self.spi.to_be_bytes();
         let seq_be = self.sequence_number.to_be_bytes();
 
-        let mut result = ArrayVec::<u8, { IpAuthHeader::MAX_BYTE_LEN }>::new();
+        let mut result = ArrayVec::<u8, { IpAuthHeader::MAX_LEN }>::new();
         result.extend([
             self.next_header,
             self.raw_icv_len + 1,
@@ -368,7 +368,7 @@ mod test {
 
             // ok
             {
-                let mut bytes = ArrayVec::<u8, {IpAuthHeader::MAX_BYTE_LEN + 2}>::new();
+                let mut bytes = ArrayVec::<u8, {IpAuthHeader::MAX_LEN + 2}>::new();
                 bytes.extend(header.to_bytes());
                 bytes.push(1);
                 bytes.push(2);
@@ -385,8 +385,8 @@ mod test {
                     assert_eq!(
                         IpAuthHeader::from_slice(&bytes[..len]).unwrap_err(),
                         Len(err::LenError{
-                            required_len: if len < IpAuthHeader::MIN_BYTE_LEN {
-                                IpAuthHeader::MIN_BYTE_LEN
+                            required_len: if len < IpAuthHeader::MIN_LEN {
+                                IpAuthHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
@@ -463,7 +463,7 @@ mod test {
 
             // io error
             for len in 0..header.header_len() {
-                let mut buffer = [0u8;IpAuthHeader::MAX_BYTE_LEN];
+                let mut buffer = [0u8;IpAuthHeader::MAX_LEN];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
                 assert!(header.write(&mut cursor).is_err());
             }

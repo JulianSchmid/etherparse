@@ -341,7 +341,7 @@ mod slice {
                 assert_eq!(
                     Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
                     Len(err::LenError{
-                        required_len: IpAuthHeader::MIN_BYTE_LEN,
+                        required_len: IpAuthHeader::MIN_LEN,
                         len: 0,
                         len_source: err::LenSource::Slice,
                         layer: err::Layer::IpAuthHeader,

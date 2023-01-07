@@ -674,7 +674,7 @@ mod test {
             // setup a buffer with all extension headers present
             let buffer = {
                 let mut buffer = ArrayVec::<u8, {
-                    Ipv6RawExtHeader::MAX_LEN * 8 + IpAuthHeader::MAX_BYTE_LEN
+                    Ipv6RawExtHeader::MAX_LEN * 8 + IpAuthHeader::MAX_LEN
                 }>::new();
 
                 // based on RFC 8200 4.1. Extension Header Order
@@ -868,7 +868,7 @@ mod test {
             // setup a buffer with all extension headers present
             let buffer = {
                 let mut buffer = ArrayVec::<u8, {
-                    Ipv6RawExtHeader::MAX_LEN * 8 + IpAuthHeader::MAX_BYTE_LEN
+                    Ipv6RawExtHeader::MAX_LEN * 8 + IpAuthHeader::MAX_LEN
                 }>::new();
 
                 // based on RFC 8200 4.1. Extension Header Order
