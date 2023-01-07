@@ -22,7 +22,7 @@ impl<'a> Icmpv6Slice<'a> {
         //check length
         use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_LEN {
-            return Err(SliceLen(err::LenError {
+            return Err(Len(err::LenError {
                 required_len: Icmpv6Header::MIN_LEN,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
@@ -200,7 +200,7 @@ mod test {
             // too small size error case
             for len in 0..8 {
                 assert_eq!(
-                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().slice_len().unwrap(),
+                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().len_error().unwrap(),
                     err::LenError{
                         required_len: Icmpv6Header::MIN_LEN,
                         len: len,
