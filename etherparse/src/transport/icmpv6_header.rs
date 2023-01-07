@@ -67,7 +67,7 @@ impl Icmpv6Header {
     /// Reads an icmp6 header from a slice directly and returns a tuple
     /// containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv6Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv6Header, &[u8]), err::LenError> {
         let header = Icmpv6Slice::from_slice(slice)?.header();
         let len = header.header_len();
         Ok((header, &slice[len..]))
@@ -282,9 +282,15 @@ mod test {
 
             // size error case
             for length in 0..8 {
-                assert_matches!(
-                    Icmpv6Header::from_slice(&bytes[..length]),
-                    Err(ReadError::Len(_))
+                assert_eq!(
+                    Icmpv6Header::from_slice(&bytes[..length]).unwrap_err(),
+                    err::LenError{
+                        required_len: bytes.len(),
+                        len: length,
+                        len_source: err::LenSource::Slice,
+                        layer: err::Layer::Icmpv6,
+                        layer_start_offset: 0
+                    }
                 );
             }
         }
