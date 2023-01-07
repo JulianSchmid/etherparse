@@ -175,17 +175,6 @@ mod read_error {
                 layer_start_offset: 7,
             }
         );
-        assert_matches!(
-            ReadError::UnexpectedLenOfSlice {
-                expected: 7,
-                actual: 10
-            }
-            .add_slice_offset(2),
-            ReadError::UnexpectedLenOfSlice {
-                expected: 9,
-                actual: 12
-            }
-        );
         {
             use err::ipv4::HeaderError::UnexpectedVersion;
             assert_matches!(

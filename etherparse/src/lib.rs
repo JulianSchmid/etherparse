@@ -328,8 +328,6 @@ pub enum ReadError {
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
     Len(err::LenError),
-    /// Error when a slice has a different size then expected.
-    UnexpectedLenOfSlice { expected: usize, actual: usize },
     /// Error when decoding an IP header.
     IpHeader(err::ip::HeaderError),
     /// Error when decoding an IPv4 header.
@@ -356,10 +354,6 @@ impl ReadError {
                 layer: value.layer,
                 layer_start_offset: value.layer_start_offset + offset,
             }),
-            UnexpectedLenOfSlice { expected, actual } => UnexpectedLenOfSlice {
-                expected: expected + offset,
-                actual: actual + offset,
-            },
             value => value,
         }
     }
@@ -412,9 +406,6 @@ impl std::fmt::Display for ReadError {
         match self {
             IoError(err) => err.fmt(f),
             Len(err) => err.fmt(f),
-            UnexpectedLenOfSlice { expected, actual } => {
-                write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
-            }
             IpHeader(err) => err.fmt(f),
             Ipv4Header(err) => err.fmt(f),
             Ipv6Header(err) => err.fmt(f),
@@ -435,7 +426,7 @@ impl std::error::Error for ReadError {
             ReadError::Ipv6Header(err) => Some(err),
             ReadError::Ipv6ExtsHeader(err) => Some(err),
             ReadError::TcpHeader(err) => Some(err),
-            _ => None,
+            ReadError::IpAuthHeader(err) => Some(err),
         }
     }
 }
