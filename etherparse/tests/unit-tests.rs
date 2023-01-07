@@ -46,8 +46,8 @@ fn test_debug_write() {
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
             SliceLen(err::LenError {
                 required_len: 0,
-                actual_len: 0,
-                actual_len_source: err::LenSource::Slice,
+                len: 0,
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
@@ -159,8 +159,8 @@ mod read_error {
         assert_eq!(
             ReadError::SliceLen(err::LenError {
                 required_len: 1,
-                actual_len: 2,
-                actual_len_source: err::LenSource::Slice,
+                len: 2,
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 3,
             })
@@ -169,8 +169,8 @@ mod read_error {
             .unwrap(),
             err::LenError {
                 required_len: 1,
-                actual_len: 2,
-                actual_len_source: err::LenSource::Slice,
+                len: 2,
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 7,
             }
@@ -219,8 +219,8 @@ mod read_error {
         {
             let err = err::LenError {
                 required_len: 1,
-                actual_len: 2,
-                actual_len_source: err::LenSource::Slice,
+                len: 2,
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 0,
             };

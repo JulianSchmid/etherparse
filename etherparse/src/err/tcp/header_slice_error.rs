@@ -60,15 +60,15 @@ mod tests {
             Len(LenError {
                 required_len: 1,
                 layer: Layer::Icmpv4,
-                actual_len: 2,
-                actual_len_source: LenSource::Slice,
+                len: 2,
+                len_source: LenSource::Slice,
                 layer_start_offset: 3
             }).add_slice_offset(200),
             Len(LenError {
                 required_len: 1,
                 layer: Layer::Icmpv4,
-                actual_len: 2,
-                actual_len_source: LenSource::Slice,
+                len: 2,
+                len_source: LenSource::Slice,
                 layer_start_offset: 203
             })
         );
@@ -110,8 +110,8 @@ mod tests {
             let err = LenError{
                 required_len: 1,
                 layer: Layer::Icmpv4,
-                actual_len: 2,
-                actual_len_source: LenSource::Slice,
+                len: 2,
+                len_source: LenSource::Slice,
                 layer_start_offset: 3
             };
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
@@ -127,8 +127,8 @@ mod tests {
         assert!(Len(LenError {
             required_len: 1,
             layer: Layer::Icmpv4,
-            actual_len: 2,
-            actual_len_source: LenSource::Slice,
+            len: 2,
+            len_source: LenSource::Slice,
             layer_start_offset: 3
         })
         .source()

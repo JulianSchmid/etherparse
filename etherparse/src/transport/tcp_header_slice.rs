@@ -15,8 +15,8 @@ impl<'a> TcpHeaderSlice<'a> {
         if slice.len() < TcpHeader::MIN_LEN {
             return Err(Len(err::LenError {
                 required_len: TcpHeader::MIN_LEN,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::TcpHeader,
                 layer_start_offset: 0,
             }));
@@ -33,8 +33,8 @@ impl<'a> TcpHeaderSlice<'a> {
         } else if slice.len() < len {
             Err(Len(err::LenError {
                 required_len: len,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::TcpHeader,
                 layer_start_offset: 0,
             }))
@@ -435,8 +435,8 @@ mod test {
                             } else {
                                 header.header_len() as usize
                             },
-                            actual_len: len,
-                            actual_len_source: err::LenSource::Slice,
+                            len: len,
+                            len_source: err::LenSource::Slice,
                             layer: err::Layer::TcpHeader,
                             layer_start_offset: 0,
                         })

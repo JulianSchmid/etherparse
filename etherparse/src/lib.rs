@@ -356,8 +356,8 @@ impl ReadError {
         match self {
             SliceLen(value) => SliceLen(err::LenError {
                 required_len: value.required_len,
-                actual_len: value.actual_len,
-                actual_len_source: value.actual_len_source,
+                len: value.len,
+                len_source: value.len_source,
                 layer: value.layer,
                 layer_start_offset: value.layer_start_offset + offset,
             }),

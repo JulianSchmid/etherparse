@@ -43,8 +43,8 @@ pub mod header {
                     .unwrap_err(),
                 Len(err::LenError {
                     required_len: AUTH_HEADER_LEN,
-                    actual_len: auth_header.header_len() - 1,
-                    actual_len_source: err::LenSource::Slice,
+                    len: auth_header.header_len() - 1,
+                    len_source: err::LenSource::Slice,
                     layer: err::Layer::IpAuthHeader,
                     layer_start_offset: 0,
                 })
@@ -342,8 +342,8 @@ mod slice {
                     Ipv4ExtensionsSlice::from_slice(AUTH, &[]).unwrap_err(),
                     Len(err::LenError{
                         required_len: IpAuthHeader::MIN_LEN,
-                        actual_len: 0,
-                        actual_len_source: err::LenSource::Slice,
+                        len: 0,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::IpAuthHeader,
                         layer_start_offset: 0,
                     })

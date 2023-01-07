@@ -146,8 +146,8 @@ mod test {
                     Ethernet2Header::from_slice(&buffer[..len]),
                     Err(err::LenError{
                         required_len: Ethernet2Header::LEN,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::Ethernet2Header,
                         layer_start_offset: 0,
                     })

@@ -145,8 +145,8 @@ mod test {
                         .unwrap_err(),
                     Len(err::LenError{
                         required_len: 8,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer:  err::Layer::VlanHeader,
                         layer_start_offset: 0,
                     })

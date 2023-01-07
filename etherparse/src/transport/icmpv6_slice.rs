@@ -24,8 +24,8 @@ impl<'a> Icmpv6Slice<'a> {
         if slice.len() < Icmpv6Header::MIN_LEN {
             return Err(SliceLen(err::LenError {
                 required_len: Icmpv6Header::MIN_LEN,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv6,
                 layer_start_offset: 0,
             }));
@@ -203,8 +203,8 @@ mod test {
                     Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().slice_len().unwrap(),
                     err::LenError{
                         required_len: Icmpv6Header::MIN_LEN,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::Icmpv6,
                         layer_start_offset: 0,
                     }

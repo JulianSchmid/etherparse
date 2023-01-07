@@ -17,8 +17,8 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
         if slice.len() < 8 {
             Err(err::LenError {
                 required_len: 8,
-                actual_len: slice.len(),
-                actual_len_source: err::LenSource::Slice,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6FragHeader,
                 layer_start_offset: 0,
             })
@@ -223,8 +223,8 @@ mod test {
                     Ipv6FragmentHeaderSlice::from_slice(&buffer[0..len]).unwrap_err(),
                     err::LenError{
                         required_len: 8,
-                        actual_len: len,
-                        actual_len_source: err::LenSource::Slice,
+                        len: len,
+                        len_source: err::LenSource::Slice,
                         layer: err::Layer::Ipv6FragHeader,
                         layer_start_offset: 0,
                     }
