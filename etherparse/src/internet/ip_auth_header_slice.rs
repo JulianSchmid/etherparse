@@ -172,7 +172,7 @@ mod test {
 
             // ok
             {
-                let mut bytes = ArrayVec::<u8, {IpAuthHeader::MAX_BYTE_LEN + 2}>::new();
+                let mut bytes = ArrayVec::<u8, {IpAuthHeader::MAX_LEN + 2}>::new();
                 bytes.extend(header.to_bytes());
                 bytes.push(1);
                 bytes.push(2);

@@ -428,8 +428,8 @@ impl<'a> CursorSlice<'a> {
         let ip_header = Ipv4HeaderSlice::from_slice(self.slice).map_err(|err| {
             use err::ipv4::HeaderSliceError as I;
             use ReadError as O;
-            match err.add_slice_offset(self.offset) {
-                I::Len(err) => O::Len(err),
+            match err {
+                I::Len(err) => O::Len(err.add_offset(self.offset)),
                 I::Content(err) => O::Ipv4Header(err),
             }
         })?;
@@ -530,7 +530,7 @@ impl<'a> CursorSlice<'a> {
         use crate::TransportSlice::*;
 
         let result =
-            Icmpv4Slice::from_slice(self.slice).map_err(|err| err.add_slice_offset(self.offset))?;
+            Icmpv4Slice::from_slice(self.slice).map_err(|err| ReadError::Len(err.add_offset(self.offset)))?;
 
         //set the new data
         self.move_by_slice(result.slice());
