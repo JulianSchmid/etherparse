@@ -14,24 +14,29 @@ impl<'a> Icmpv6Slice<'a> {
     ///
     /// # Errors
     ///
-    /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
-    /// if the given slice is too small (smaller then `Icmpv6Header::MIN_SERIALIZED_SIZE`) or
-    /// too large (bigger then `icmpv6::MAX_ICMPV6_BYTE_LEN`).
+    /// The function will return an `Err` [`err::LenError`]
+    /// if the given slice is too small (smaller then [`Icmpv6Header::MIN_LEN`]) or
+    /// too large (bigger then [`icmpv6::MAX_ICMPV6_BYTE_LEN`]).
     #[inline]
-    pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv6Slice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv6Slice<'a>, err::LenError> {
         //check length
-        use crate::ReadError::*;
         if slice.len() < Icmpv6Header::MIN_LEN {
-            return Err(Len(err::LenError {
+            return Err(err::LenError {
                 required_len: Icmpv6Header::MIN_LEN,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv6,
                 layer_start_offset: 0,
-            }));
+            });
         }
         if slice.len() > icmpv6::MAX_ICMPV6_BYTE_LEN {
-            return Err(Icmpv6PacketTooBig(slice.len()));
+            return Err(err::LenError {
+                required_len: icmpv6::MAX_ICMPV6_BYTE_LEN,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
+                layer: err::Layer::Icmpv6,
+                layer_start_offset: 0,
+            });
         }
 
         //done
@@ -108,7 +113,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn type_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_LEN (8).
         unsafe { *self.slice.get_unchecked(0) }
     }
 
@@ -117,7 +122,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn code_u8(&self) -> u8 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE (8).
+        // at least the length of Icmpv6Header::MIN_LEN (8).
         unsafe { *self.slice.get_unchecked(1) }
     }
 
@@ -126,7 +131,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn checksum(&self) -> u16 {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
+        // at least the length of Icmpv6Header::MIN_LEN  (8).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
@@ -158,7 +163,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn bytes5to8(&self) -> [u8; 4] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE  (8).
+        // at least the length of Icmpv6Header::MIN_LEN  (8).
         unsafe {
             [
                 *self.slice.get_unchecked(4),
@@ -180,7 +185,7 @@ impl<'a> Icmpv6Slice<'a> {
     pub fn payload(&self) -> &'a [u8] {
         // SAFETY:
         // Safe as the contructor checks that the slice has
-        // at least the length of Icmpv6Header::MIN_SERIALIZED_SIZE(8).
+        // at least the length of Icmpv6Header::MIN_LEN(8).
         unsafe { core::slice::from_raw_parts(self.slice.as_ptr().add(8), self.slice.len() - 8) }
     }
 }
@@ -189,7 +194,6 @@ impl<'a> Icmpv6Slice<'a> {
 mod test {
     use crate::{*, icmpv6::*, test_gens::*, Icmpv6Type::*};
     use proptest::prelude::*;
-    use assert_matches::assert_matches;
 
     proptest! {
         #[test]
@@ -200,7 +204,7 @@ mod test {
             // too small size error case
             for len in 0..8 {
                 assert_eq!(
-                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err().len_error().unwrap(),
+                    Icmpv6Slice::from_slice(&slice[..len]).unwrap_err(),
                     err::LenError{
                         required_len: Icmpv6Header::MIN_LEN,
                         len: len,
@@ -235,9 +239,15 @@ mod test {
                         bad_len
                     )
                 };
-                assert_matches!(
-                    Icmpv6Slice::from_slice(too_big_slice),
-                    Err(ReadError::Icmpv6PacketTooBig(_))
+                assert_eq!(
+                    Icmpv6Slice::from_slice(too_big_slice).unwrap_err(),
+                    err::LenError{
+                        required_len: u32::MAX as usize,
+                        len: bad_len,
+                        len_source: err::LenSource::Slice,
+                        layer: err::Layer::Icmpv6,
+                        layer_start_offset: 0
+                    }
                 );
             }
         }

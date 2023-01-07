@@ -342,11 +342,6 @@ pub enum ReadError {
     IpAuthHeader(err::ip_auth::HeaderError),
     /// Error when decoding a TCP header.
     TcpHeader(err::tcp::HeaderError),
-    /// Error when the packet size is too big (e.g larger then can be represendted in a length field).
-    ///
-    /// This error can be triggered by
-    /// * `Icmpv6Slice::from_slice`
-    Icmpv6PacketTooBig(usize),
 }
 
 impl ReadError {
@@ -426,9 +421,6 @@ impl std::fmt::Display for ReadError {
             Ipv6ExtsHeader(err) => err.fmt(f),
             IpAuthHeader(err) => err.fmt(f),
             TcpHeader(err) => err.fmt(f),
-            Icmpv6PacketTooBig(size) => {
-                write!(f, "ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", size)
-            }
         }
     }
 }

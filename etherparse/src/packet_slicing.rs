@@ -544,7 +544,8 @@ impl<'a> CursorSlice<'a> {
         use crate::TransportSlice::*;
 
         let result =
-            Icmpv6Slice::from_slice(self.slice).map_err(|err| err.add_slice_offset(self.offset))?;
+            Icmpv6Slice::from_slice(self.slice)
+            .map_err(|err| ReadError::Len(err.add_offset(self.offset)))?;
 
         //set the new data
         self.move_by_slice(result.slice());

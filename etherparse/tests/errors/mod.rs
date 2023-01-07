@@ -91,12 +91,6 @@ proptest! {
             &format!("{}", err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
             &format!("{}", TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }))
         );
-
-        //TcpDataOffsetTooSmall
-        assert_eq!(
-            &format!("ReadError: ICMPv6 packet length {} is bigger then can be represented in an u32.", arg_usize),
-            &format!("{}", Icmpv6PacketTooBig(arg_usize))
-        );
     }
 }
 
@@ -152,7 +146,6 @@ fn read_error_source() {
             actual: 0,
         },
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
-        Icmpv6PacketTooBig(0),
     ];
 
     for value in &none_values {
@@ -183,7 +176,6 @@ fn read_error_debug() {
         Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
         TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
-        Icmpv6PacketTooBig(0),
     ];
 
     for value in &values {
