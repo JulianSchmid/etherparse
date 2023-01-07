@@ -37,13 +37,15 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// Creates a generic ipv6 extension header slice from a slice.
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::SliceLenError> {
+    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::LenError> {
         //check length
         if slice.len() < 8 {
-            return Err(err::SliceLenError {
-                expected_min_len: 8,
+            return Err(err::LenError {
+                required_len: 8,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
+                layer_start_offset: 0,
             });
         }
 
@@ -52,10 +54,12 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
 
         //check the length again now that the expected length is known
         if slice.len() < len {
-            return Err(err::SliceLenError {
-                expected_min_len: len,
+            return Err(err::LenError {
+                required_len: len,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
+                layer_start_offset: 0,
             });
         }
 
@@ -182,14 +186,16 @@ mod test {
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6RawExtHeader::from_slice(&bytes[..len]).unwrap_err(),
-                        err::SliceLenError{
-                            expected_min_len: if len < Ipv6RawExtHeader::MIN_LEN {
+                        err::LenError{
+                            required_len: if len < Ipv6RawExtHeader::MIN_LEN {
                                 Ipv6RawExtHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
+                            layer_start_offset: 0,
                         }
                     );
                 }

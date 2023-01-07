@@ -1487,14 +1487,16 @@ mod test {
                     assert_eq!(
                         TcpHeader::read_from_slice(&bytes[..len])
                             .unwrap_err(),
-                        SliceLen(err::SliceLenError {
-                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                        Len(err::LenError {
+                            required_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
                                 header.header_len() as usize
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::TcpHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }
@@ -1540,14 +1542,16 @@ mod test {
                     assert_eq!(
                         TcpHeader::from_slice(&bytes[..len])
                             .unwrap_err(),
-                        SliceLen(err::SliceLenError {
-                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                        Len(err::LenError {
+                            required_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
                                 header.header_len() as usize
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::TcpHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }

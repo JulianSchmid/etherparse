@@ -1,11 +1,12 @@
 use super::HeaderError;
-use crate::err::SliceLenError;
+use crate::err::LenError;
 
 /// Error when decoding a double VLAN header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderSliceError {
-    /// Error when an unexpected end of a slice is reached even though more data was expected to be present.
-    SliceLen(SliceLenError),
+    /// Error when an length error is encountered (e.g. unexpected
+    /// end of slice).
+    Len(LenError),
 
     /// Error caused by the contents of the header.
     Content(HeaderError),
@@ -17,7 +18,7 @@ impl HeaderSliceError {
     pub const fn add_slice_offset(self, offset: usize) -> Self {
         use HeaderSliceError::*;
         match self {
-            SliceLen(err) => SliceLen(err.add_offset(offset)),
+            Len(err) => Len(err.add_offset(offset)),
             Content(err) => Content(err),
         }
     }
@@ -27,17 +28,18 @@ impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderSliceError::*;
         match self {
-            SliceLen(err) => write!(f, "Double VLAN Error: Not enough data to decode. Length of the slice ({} bytes/octets) is too small to contain two VLAN headers. The slice must at least contain {} bytes/octets.", err.actual_len, err.expected_min_len),
-            Content(value) => value.fmt(f),
+            Len(err) => err.fmt(f),
+            Content(err) => err.fmt(f),
         }
     }
 }
 
 impl std::error::Error for HeaderSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use HeaderSliceError::*;
         match self {
-            HeaderSliceError::SliceLen(_) => None,
-            HeaderSliceError::Content(err) => Some(err),
+            Len(err) => Some(err),
+            Content(err) => Some(err),
         }
     }
 }
@@ -45,7 +47,7 @@ impl std::error::Error for HeaderSliceError {
 #[cfg(test)]
 mod tests {
     use super::{HeaderSliceError::*, *};
-    use crate::err::Layer;
+    use crate::err::{Layer, LenError, LenSource};
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -54,18 +56,20 @@ mod tests {
 
     #[test]
     fn add_slice_offset() {
-        use HeaderSliceError::*;
         assert_eq!(
-            SliceLen(SliceLenError {
-                expected_min_len: 1,
+            Len(LenError {
+                required_len: 1,
+                layer: Layer::Icmpv4,
                 actual_len: 2,
-                layer: Layer::Icmpv4
-            })
-            .add_slice_offset(200),
-            SliceLen(SliceLenError {
-                expected_min_len: 201,
-                actual_len: 202,
-                layer: Layer::Icmpv4
+                actual_len_source: LenSource::Slice,
+                layer_start_offset: 3
+            }).add_slice_offset(200),
+            Len(LenError {
+                required_len: 1,
+                layer: Layer::Icmpv4,
+                actual_len: 2,
+                actual_len_source: LenSource::Slice,
+                layer_start_offset: 203
             })
         );
         assert_eq!(
@@ -111,15 +115,16 @@ mod tests {
 
     #[test]
     fn fmt() {
-        assert_eq!(
-            "Double VLAN Error: Not enough data to decode. Length of the slice (1 bytes/octets) is too small to contain two VLAN headers. The slice must at least contain 2 bytes/octets.",
-            format!(
-                "{}",
-                SliceLen(
-                    SliceLenError{ expected_min_len: 2, actual_len: 1, layer: Layer::Ipv4Header }
-                )
-            )
-        );
+        {
+            let err = LenError{
+                required_len: 1,
+                layer: Layer::Icmpv4,
+                actual_len: 2,
+                actual_len_source: LenSource::Slice,
+                layer_start_offset: 3
+            };
+            assert_eq!(format!("{}", &err), format!("{}", Len(err)));
+        }
         {
             let err = HeaderError::NonVlanEtherType {
                 unexpected_ether_type: 1,
@@ -130,13 +135,15 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(SliceLen(SliceLenError {
-            expected_min_len: 0,
-            actual_len: 0,
-            layer: Layer::Ipv4Header
+        assert!(Len(LenError {
+            required_len: 1,
+            layer: Layer::Icmpv4,
+            actual_len: 2,
+            actual_len_source: LenSource::Slice,
+            layer_start_offset: 3
         })
         .source()
-        .is_none());
+        .is_some());
         assert!(Content(HeaderError::NonVlanEtherType {
             unexpected_ether_type: 1
         })

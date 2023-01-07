@@ -21,10 +21,12 @@ impl<'a> Icmpv4Slice<'a> {
         // check length
         use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Icmpv4Header::MIN_LEN,
+            return Err(SliceLen(err::LenError {
+                required_len: Icmpv4Header::MIN_LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
+                layer_start_offset: 0,
             }));
         }
 
@@ -347,10 +349,12 @@ mod test {
                     .unwrap_err()
                     .slice_len()
                     .unwrap(),
-                err::SliceLenError {
-                    expected_min_len: Icmpv4Header::MIN_LEN,
+                err::LenError {
+                    required_len: Icmpv4Header::MIN_LEN,
                     actual_len: bad_len,
-                    layer: err::Layer::Icmpv4
+                    actual_len_source: err::LenSource::Slice,
+                    layer: err::Layer::Icmpv4,
+                    layer_start_offset: 0,
                 }
             );
         }

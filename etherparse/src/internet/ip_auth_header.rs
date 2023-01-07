@@ -384,14 +384,16 @@ mod test {
                 for len in 0..header.header_len() {
                     assert_eq!(
                         IpAuthHeader::from_slice(&bytes[..len]).unwrap_err(),
-                        SliceLen(err::SliceLenError{
-                            expected_min_len: if len < IpAuthHeader::MIN_LEN {
+                        Len(err::LenError{
+                            required_len: if len < IpAuthHeader::MIN_LEN {
                                 IpAuthHeader::MIN_LEN
                             } else {
                                 header.header_len()
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::IpAuthHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }

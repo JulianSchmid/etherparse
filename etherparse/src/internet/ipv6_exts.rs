@@ -80,7 +80,7 @@ impl Ipv6Extensions {
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
             let slice =
-                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(SliceLen)?;
+                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(Len)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -100,7 +100,7 @@ impl Ipv6Extensions {
                             return Ok((result, next_header, rest));
                         } else {
                             let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                                .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
+                                .map_err(|err| Len(err.add_offset(slice.len() - rest.len())))?;
                             rest = &rest[slice.slice().len()..];
                             next_header = slice.next_header();
                             routing.final_destination_options = Some(slice.to_header());
@@ -110,7 +110,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
+                            .map_err(|err| Len(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.destination_options = Some(slice.to_header());
@@ -122,7 +122,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6RawExtHeaderSlice::from_slice(rest)
-                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
+                            .map_err(|err| Len(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.routing = Some(Ipv6RoutingExtensions {
@@ -137,7 +137,7 @@ impl Ipv6Extensions {
                         return Ok((result, next_header, rest));
                     } else {
                         let slice = Ipv6FragmentHeaderSlice::from_slice(rest)
-                            .map_err(|err| SliceLen(err.add_offset(slice.len() - rest.len())))?;
+                            .map_err(|err| Len(err.add_offset(slice.len() - rest.len())))?;
                         rest = &rest[slice.slice().len()..];
                         next_header = slice.next_header();
                         result.fragment = Some(slice.to_header());
@@ -152,7 +152,7 @@ impl Ipv6Extensions {
                             use err::ip_auth::HeaderSliceError as I;
                             use err::ipv6_exts::HeaderError as O;
                             match err {
-                                I::SliceLen(err) => SliceLen(err.add_offset(slice.len() - rest.len())),
+                                I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
                                 I::Content(err) => Content(O::IpAuth(err)),
                             }
                         })?;

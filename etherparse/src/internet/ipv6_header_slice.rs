@@ -14,10 +14,12 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
         // check length
         if slice.len() < Ipv6Header::LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: Ipv6Header::LEN,
+            return Err(Len(err::LenError {
+                required_len: Ipv6Header::LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv6Header,
+                layer_start_offset: 0,
             }));
         }
 
@@ -239,10 +241,12 @@ mod test {
                     assert_eq!(
                         Ipv6HeaderSlice::from_slice(&bytes[..len])
                             .unwrap_err(),
-                        SliceLen(err::SliceLenError{
-                            expected_min_len: Ipv6Header::LEN,
+                        Len(err::LenError{
+                            required_len: Ipv6Header::LEN,
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
+                            layer_start_offset: 0,
                         })
                     );
                 }

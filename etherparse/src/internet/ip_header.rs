@@ -25,10 +25,12 @@ impl IpHeader {
         use err::ip::{HeaderError::*, HeaderSliceError::*};
 
         if slice.is_empty() {
-            Err(SliceLen(err::SliceLenError {
-                expected_min_len: 1,
+            Err(Len(err::LenError {
+                required_len: 1,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
+                layer_start_offset: 0,
             }))
         } else {
             match slice[0] >> 4 {
@@ -36,10 +38,12 @@ impl IpHeader {
                     let (header, rest) = {
                         // check length
                         if slice.len() < Ipv4Header::MIN_LEN {
-                            return Err(SliceLen(err::SliceLenError {
-                                expected_min_len: Ipv4Header::MIN_LEN,
+                            return Err(Len(err::LenError {
+                                required_len: Ipv4Header::MIN_LEN,
                                 actual_len: slice.len(),
+                                actual_len_source: err::LenSource::Slice,
                                 layer: err::Layer::Ipv4Header,
+                                layer_start_offset: 0,
                             }));
                         }
 
@@ -58,10 +62,12 @@ impl IpHeader {
                         // check that the slice contains enough data for the entire header + options
                         let header_length = usize::from(ihl) * 4;
                         if slice.len() < header_length {
-                            return Err(SliceLen(err::SliceLenError {
-                                expected_min_len: header_length,
+                            return Err(Len(err::LenError {
+                                required_len: header_length,
                                 actual_len: slice.len(),
+                                actual_len_source: err::LenSource::Slice,
                                 layer: err::Layer::Ipv4Header,
+                                layer_start_offset: 0,
                             }));
                         }
 
@@ -104,17 +110,19 @@ impl IpHeader {
                         .map_err(|err| {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
-                                I::SliceLen(err) => SliceLen(err),
+                                I::Len(err) => Len(err),
                                 I::Content(err) => Content(Ipv4Exts(err)),
                             }
                         }) 
                 }
                 6 => {
                     if slice.len() < Ipv6Header::LEN {
-                        return Err(SliceLen(err::SliceLenError {
-                            expected_min_len: Ipv6Header::LEN,
+                        return Err(Len(err::LenError {
+                            required_len: Ipv6Header::LEN,
                             actual_len: slice.len(),
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
+                            layer_start_offset: 0,
                         }));
                     }
                     let header = {
@@ -137,7 +145,7 @@ impl IpHeader {
                     ).map_err(|err| {
                         use err::ipv6_exts::HeaderSliceError as I;
                         match err {
-                            I::SliceLen(err) => SliceLen(err),
+                            I::Len(err) => Len(err),
                             I::Content(err) => Content(Ipv6Exts(err)),
                         }
                     })

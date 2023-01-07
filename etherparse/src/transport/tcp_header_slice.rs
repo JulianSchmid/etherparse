@@ -13,10 +13,12 @@ impl<'a> TcpHeaderSlice<'a> {
 
         //check length
         if slice.len() < TcpHeader::MIN_LEN {
-            return Err(SliceLen(err::SliceLenError {
-                expected_min_len: TcpHeader::MIN_LEN,
+            return Err(Len(err::LenError {
+                required_len: TcpHeader::MIN_LEN,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::TcpHeader,
+                layer_start_offset: 0,
             }));
         }
 
@@ -29,10 +31,12 @@ impl<'a> TcpHeaderSlice<'a> {
         if data_offset < TcpHeader::MIN_DATA_OFFSET {
             Err(Content(DataOffsetTooSmall{ data_offset }))
         } else if slice.len() < len {
-            Err(SliceLen(err::SliceLenError {
-                expected_min_len: len,
+            Err(Len(err::LenError {
+                required_len: len,
                 actual_len: slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::TcpHeader,
+                layer_start_offset: 0,
             }))
         } else {
             //done
@@ -425,14 +429,16 @@ mod test {
                     assert_eq!(
                         TcpHeaderSlice::from_slice(&bytes[..len])
                             .unwrap_err(),
-                        SliceLen(err::SliceLenError {
-                            expected_min_len: if len < TcpHeader::MIN_LEN {
+                        Len(err::LenError {
+                            required_len: if len < TcpHeader::MIN_LEN {
                                 TcpHeader::MIN_LEN
                             } else {
                                 header.header_len() as usize
                             },
                             actual_len: len,
+                            actual_len_source: err::LenSource::Slice,
                             layer: err::Layer::TcpHeader,
+                            layer_start_offset: 0,
                         })
                     );
                 }

@@ -406,10 +406,12 @@ impl<'a> CursorSlice<'a> {
         use ReadError::*;
 
         if self.slice.is_empty() {
-            Err(SliceLen(err::SliceLenError {
-                expected_min_len: self.offset + 1,
-                actual_len: self.offset + self.slice.len(),
+            Err(SliceLen(err::LenError {
+                required_len: 1,
+                actual_len: self.slice.len(),
+                actual_len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
+                layer_start_offset: self.offset,
             }))
         } else {
             match self.slice[0] >> 4 {
@@ -427,7 +429,7 @@ impl<'a> CursorSlice<'a> {
             use err::ipv4::HeaderSliceError as I;
             use ReadError as O;
             match err.add_slice_offset(self.offset) {
-                I::SliceLen(err) => O::SliceLen(err),
+                I::Len(err) => O::SliceLen(err),
                 I::Content(err) => O::Ipv4Header(err),
             }
         })?;
@@ -442,7 +444,7 @@ impl<'a> CursorSlice<'a> {
                 use err::ip_auth::HeaderSliceError as I;
                 use ReadError as O;
                 match err {
-                    I::SliceLen(err) => {
+                    I::Len(err) => {
                         O::SliceLen(err.add_offset(self.offset))
                     }
                     I::Content(err) => O::IpAuthHeader(err),
@@ -478,7 +480,7 @@ impl<'a> CursorSlice<'a> {
             use ReadError as O;
             match err {
                 I::Content(err) => O::Ipv6Header(err),
-                I::SliceLen(err) => {
+                I::Len(err) => {
                     O::SliceLen(err.add_offset(self.offset))
                 }
             }
@@ -494,7 +496,7 @@ impl<'a> CursorSlice<'a> {
                     use err::ipv6_exts::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::SliceLen(err) => O::SliceLen(err.add_offset(self.offset)),
+                        I::Len(err) => O::SliceLen(err.add_offset(self.offset)),
                         I::Content(err) => O::Ipv6ExtsHeader(err),
                     }
                 })?;
@@ -574,7 +576,7 @@ impl<'a> CursorSlice<'a> {
                 use err::tcp::HeaderSliceError as I;
                 use ReadError as O;
                 match err {
-                    I::SliceLen(err) => O::SliceLen(err.add_offset(self.offset)),
+                    I::Len(err) => O::SliceLen(err.add_offset(self.offset)),
                     I::Content(err) => O::TcpHeader(err),
                 }
             })?;

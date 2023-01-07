@@ -9,5 +9,8 @@ pub mod tcp;
 mod layer;
 pub use layer::*;
 
-mod slice_len_error;
-pub use slice_len_error::*;
+mod len_error;
+pub use len_error::*;
+
+mod len_source;
+pub use len_source::*;

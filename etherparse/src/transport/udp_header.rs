@@ -193,13 +193,13 @@ impl UdpHeader {
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
-    ) -> Result<(UdpHeader, &[u8]), err::SliceLenError> {
+    ) -> Result<(UdpHeader, &[u8]), err::LenError> {
         UdpHeader::from_slice(slice)
     }
 
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::SliceLenError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::LenError> {
         Ok((
             UdpHeaderSlice::from_slice(slice)?.to_header(),
             &slice[UdpHeader::LEN..],
@@ -890,10 +890,12 @@ mod test {
             for len in 0..8 {
                 assert_eq!(
                     UdpHeader::from_slice(&buffer[0..len]).unwrap_err(),
-                    err::SliceLenError{
-                        expected_min_len: UdpHeader::LEN,
+                    err::LenError{
+                        required_len: UdpHeader::LEN,
                         actual_len: len,
+                        actual_len_source: err::LenSource::Slice,
                         layer: err::Layer::UdpHeader,
+                        layer_start_offset: 0,
                     }
                 );
             }

@@ -49,26 +49,6 @@ impl Layer {
             Icmpv6 => "ICMPv6 Packet Error",
         }
     }
-
-    /// Returns true if the layer name start with a vocal
-    pub fn name_starts_with_vocal(&self) -> bool {
-        use Layer::*;
-        match self {
-            Ethernet2Header => true,
-            VlanHeader => false,
-            IpHeader => true,
-            Ipv4Header => true,
-            Ipv4Packet => true,
-            IpAuthHeader => true,
-            Ipv6Header => true,
-            Ipv6FragHeader => true,
-            Ipv6ExtHeader => true,
-            UdpHeader => true,
-            TcpHeader => false,
-            Icmpv4 => true,
-            Icmpv6 => true,
-        }
-    }
 }
 
 impl core::fmt::Display for Layer {
@@ -144,28 +124,6 @@ mod test {
         ];
         for test in tests {
             assert_eq!(test.0.error_title(), test.1);
-        }
-    }
-
-    #[test]
-    fn name_starts_with_vocal() {
-        let tests = [
-            (Ethernet2Header, true),
-            (VlanHeader, false),
-            (IpHeader, true),
-            (Ipv4Header, true),
-            (Ipv4Packet, true),
-            (IpAuthHeader, true),
-            (Ipv6Header, true),
-            (Ipv6FragHeader, true),
-            (Ipv6ExtHeader, true),
-            (UdpHeader, true),
-            (TcpHeader, false),
-            (Icmpv4, true),
-            (Icmpv6, true),
-        ];
-        for test in tests {
-            assert_eq!(test.0.name_starts_with_vocal(), test.1);
         }
     }
 
