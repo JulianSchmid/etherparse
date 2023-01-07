@@ -19,7 +19,7 @@ impl Ipv4Extensions {
     pub const MIN_LEN: usize = 0;
 
     /// Maximum summed up length of all extension headers in bytes/octets.
-    pub const MAX_LEN: usize = IpAuthHeader::MAX_LEN;
+    pub const MAX_LEN: usize = IpAuthHeader::MAX_BYTE_LEN;
 
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
