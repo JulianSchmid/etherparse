@@ -44,7 +44,7 @@ fn test_debug_write() {
         use crate::ReadError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            SliceLen(err::LenError {
+            Len(err::LenError {
                 required_len: 0,
                 len: 0,
                 len_source: err::LenSource::Slice,
@@ -157,7 +157,7 @@ mod read_error {
     fn add_slice_offset() {
         use super::*;
         assert_eq!(
-            ReadError::SliceLen(err::LenError {
+            ReadError::Len(err::LenError {
                 required_len: 1,
                 len: 2,
                 len_source: err::LenSource::Slice,
@@ -165,7 +165,7 @@ mod read_error {
                 layer_start_offset: 3,
             })
             .add_slice_offset(4)
-            .slice_len()
+            .len_error()
             .unwrap(),
             err::LenError {
                 required_len: 1,
@@ -213,7 +213,7 @@ mod read_error {
         use super::*;
         assert!(
             ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .slice_len()
+                .len_error()
                 .is_none()
         );
         {
@@ -226,8 +226,8 @@ mod read_error {
             };
             assert_eq!(
                 err.clone(),
-                ReadError::SliceLen(err.clone())
-                    .slice_len()
+                ReadError::Len(err.clone())
+                    .len_error()
                     .unwrap()
             );
         }

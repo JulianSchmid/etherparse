@@ -68,7 +68,7 @@ impl<'a> PacketHeaders<'a> {
     /// ```
     pub fn from_ethernet_slice(packet: &[u8]) -> Result<PacketHeaders, ReadError> {
         let (ethernet, mut rest) = Ethernet2Header::from_slice(packet)
-            .map_err(|err| ReadError::SliceLen(err))?;
+            .map_err(|err| ReadError::Len(err))?;
         let mut ether_type = ethernet.ether_type;
 
         let mut result = PacketHeaders {
@@ -86,7 +86,7 @@ impl<'a> PacketHeaders<'a> {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
                 let (outer, outer_rest) = SingleVlanHeader::from_slice(rest).map_err(|err| {
-                    ReadError::SliceLen(err.add_offset(packet.len() - rest.len()))
+                    ReadError::Len(err.add_offset(packet.len() - rest.len()))
                 })?;
 
                 //set the rest & ether_type for the following operations
@@ -99,7 +99,7 @@ impl<'a> PacketHeaders<'a> {
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                         let (inner, inner_rest) =
                             SingleVlanHeader::from_slice(rest).map_err(|err| {
-                                ReadError::SliceLen(
+                                ReadError::Len(
                                     err.add_offset(packet.len() - rest.len()),
                                 )
                             })?;
@@ -126,7 +126,7 @@ impl<'a> PacketHeaders<'a> {
                     use ReadError as O;
                     match err {
                         I::Len(err) => {
-                            O::SliceLen(err.add_offset(packet.len() - rest.len()))
+                            O::Len(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
                     }
@@ -137,7 +137,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::ip_auth::HeaderSliceError as I;
                         use ReadError as O;
                         match err {
-                            I::Len(err) => O::SliceLen(
+                            I::Len(err) => O::Len(
                                 err.add_offset(packet.len() - ip_rest.len()),
                             ),
                             I::Content(err) => O::IpAuthHeader(err),
@@ -166,7 +166,7 @@ impl<'a> PacketHeaders<'a> {
                     use ReadError as O;
                     match err {
                         I::Len(err) => {
-                            O::SliceLen(err.add_offset(packet.len() - rest.len()))
+                            O::Len(err.add_offset(packet.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),
                     }
@@ -178,7 +178,7 @@ impl<'a> PacketHeaders<'a> {
                             use ReadError as O;
                             match err {
                                 I::Len(err) => {
-                                    O::SliceLen(err.add_offset(packet.len() - ip_rest.len()))
+                                    O::Len(err.add_offset(packet.len() - ip_rest.len()))
                                 },
                                 I::Content(err) => O::Ipv6ExtsHeader(err),
                             }
@@ -281,7 +281,7 @@ impl<'a> PacketHeaders<'a> {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
                 let (outer, outer_rest) = SingleVlanHeader::from_slice(rest)
-                    .map_err(|err| ReadError::SliceLen(err))?;
+                    .map_err(|err| ReadError::Len(err))?;
 
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
@@ -292,7 +292,7 @@ impl<'a> PacketHeaders<'a> {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
-                            .map_err(|err| ReadError::SliceLen(err))?;
+                            .map_err(|err| ReadError::Len(err))?;
 
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
@@ -316,7 +316,7 @@ impl<'a> PacketHeaders<'a> {
                     use ReadError as O;
                     match err {
                         I::Len(err) => {
-                            O::SliceLen(err.add_offset(data.len() - rest.len()))
+                            O::Len(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv4Header(err),
                     }
@@ -328,7 +328,7 @@ impl<'a> PacketHeaders<'a> {
                         use ReadError as O;
                         match err {
                             I::Len(err) => {
-                                O::SliceLen(err.add_offset(data.len() - rest.len()))
+                                O::Len(err.add_offset(data.len() - rest.len()))
                             }
                             I::Content(err) => O::IpAuthHeader(err),
                         }
@@ -356,7 +356,7 @@ impl<'a> PacketHeaders<'a> {
                     use ReadError as O;
                     match err {
                         I::Len(err) => {
-                            O::SliceLen(err.add_offset(data.len() - rest.len()))
+                            O::Len(err.add_offset(data.len() - rest.len()))
                         }
                         I::Content(err) => O::Ipv6Header(err),
                     }
@@ -368,7 +368,7 @@ impl<'a> PacketHeaders<'a> {
                         use ReadError as O;
                         match err {
                             I::Len(err) => {
-                                O::SliceLen(err.add_offset(data.len() - ip_rest.len()))
+                                O::Len(err.add_offset(data.len() - ip_rest.len()))
                             },
                             I::Content(err) => O::Ipv6ExtsHeader(err),
                         }
@@ -453,7 +453,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::ip::HeaderSliceError as I;
                     use ReadError as O;
                     match err {
-                        I::Len(err) => O::SliceLen(err),
+                        I::Len(err) => O::Len(err),
                         I::Content(err) => O::IpHeader(err),
                     }
                 })?;
@@ -517,14 +517,14 @@ fn read_transport(
             .map_err(|err| err.add_slice_offset(offset))
             .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1))?,
         UDP => UdpHeader::from_slice(rest)
-            .map_err(|err| ReadError::SliceLen(err.add_offset(offset)))
+            .map_err(|err| ReadError::Len(err.add_offset(offset)))
             .map(|value| (Some(TransportHeader::Udp(value.0)), value.1))?,
         TCP => TcpHeader::from_slice(rest)
             .map_err(|err| {
                 use err::tcp::HeaderSliceError as I;
                 use ReadError as O;
                 match err  {
-                    I::Len(err) => O::SliceLen(err.add_offset(offset)),
+                    I::Len(err) => O::Len(err.add_offset(offset)),
                     I::Content(err) => O::TcpHeader(err),
                 }
             })

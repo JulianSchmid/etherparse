@@ -284,7 +284,7 @@ mod test {
             for length in 0..8 {
                 assert_matches!(
                     Icmpv6Header::from_slice(&bytes[..length]),
-                    Err(ReadError::SliceLen(_))
+                    Err(ReadError::Len(_))
                 );
             }
         }

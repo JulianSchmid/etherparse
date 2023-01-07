@@ -327,7 +327,7 @@ pub enum ReadError {
     /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
     IoError(std::io::Error),
     /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    SliceLen(err::LenError),
+    Len(err::LenError),
     /// Error when a slice has a different size then expected.
     UnexpectedLenOfSlice { expected: usize, actual: usize },
     /// Error when decoding an IP header.
@@ -354,7 +354,7 @@ impl ReadError {
     pub fn add_slice_offset(self, offset: usize) -> ReadError {
         use crate::ReadError::*;
         match self {
-            SliceLen(value) => SliceLen(err::LenError {
+            Len(value) => Len(err::LenError {
                 required_len: value.required_len,
                 len: value.len,
                 len_source: value.len_source,
@@ -378,9 +378,9 @@ impl ReadError {
         }
     }
     /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
-    pub fn slice_len(self) -> Option<err::LenError> {
+    pub fn len_error(self) -> Option<err::LenError> {
         match self {
-            ReadError::SliceLen(value) => Some(value),
+            ReadError::Len(value) => Some(value),
             _ => None,
         }
     }
@@ -416,7 +416,7 @@ impl std::fmt::Display for ReadError {
 
         match self {
             IoError(err) => err.fmt(f),
-            SliceLen(err) => err.fmt(f),
+            Len(err) => err.fmt(f),
             UnexpectedLenOfSlice { expected, actual } => {
                 write!(f, "ReadError: Unexpected length of slice. The given slice contained {} bytes but {} bytes were required.", actual, expected)
             }
@@ -437,7 +437,7 @@ impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ReadError::IoError(err) => Some(err),
-            ReadError::SliceLen(err) => Some(err),
+            ReadError::Len(err) => Some(err),
             ReadError::IpHeader(err) => Some(err),
             ReadError::Ipv4Header(err) => Some(err),
             ReadError::Ipv6Header(err) => Some(err),

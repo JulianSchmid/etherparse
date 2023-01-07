@@ -33,7 +33,7 @@ proptest! {
             };
             assert_eq!(
                 &format!("{}", err),
-                &format!("{}", SliceLen(err))
+                &format!("{}", Len(err))
             );
         }
 
@@ -112,7 +112,7 @@ fn read_error_source() {
             .is_some()
     );
     assert!(
-        SliceLen(err::LenError {
+        Len(err::LenError {
             required_len: 0,
             len: 0,
             len_source: err::LenSource::Slice,
@@ -166,7 +166,7 @@ fn read_error_debug() {
 
     let values = [
         IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")),
-        SliceLen(err::LenError {
+        Len(err::LenError {
             required_len: 0,
             len: 0,
             len_source: err::LenSource::Slice,

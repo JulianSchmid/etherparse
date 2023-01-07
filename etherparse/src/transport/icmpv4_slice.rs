@@ -21,7 +21,7 @@ impl<'a> Icmpv4Slice<'a> {
         // check length
         use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_LEN {
-            return Err(SliceLen(err::LenError {
+            return Err(Len(err::LenError {
                 required_len: Icmpv4Header::MIN_LEN,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
@@ -347,7 +347,7 @@ mod test {
             assert_eq!(
                 Icmpv4Slice::from_slice(&bytes[..bad_len])
                     .unwrap_err()
-                    .slice_len()
+                    .len_error()
                     .unwrap(),
                 err::LenError {
                     required_len: Icmpv4Header::MIN_LEN,
