@@ -36,7 +36,7 @@ impl Ipv6Extensions {
     pub const MAX_LEN: usize = Ipv6RawExtHeader::MAX_LEN * 2 
         + Ipv6RoutingExtensions::MAX_LEN
         + Ipv6FragmentHeader::LEN
-        + IpAuthHeader::MAX_LEN;
+        + IpAuthHeader::MAX_BYTE_LEN;
 
     /// Reads as many extension headers as possible from the slice.
     ///
