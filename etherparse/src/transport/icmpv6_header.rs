@@ -74,7 +74,7 @@ impl Icmpv6Header {
     }
 
     /// Read a ICMPv6 header from the given reader
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, ReadError> {
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, std::io::Error> {
         // read the initial 8 bytes
         let mut start = [0u8; 8];
         reader.read_exact(&mut start)?;
