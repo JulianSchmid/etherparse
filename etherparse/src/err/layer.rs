@@ -25,6 +25,10 @@ pub enum Layer {
     TcpHeader,
     /// Error occured while parsing an ICMP packet.
     Icmpv4,
+    /// Error occured while parsing an ICMP timestamp packet.
+    Icmpv4Timestamp,
+    /// Error occured while parsing an ICMP timestamp reply packet.
+    Icmpv4TimestampReply,
     /// Error occured while parsing an ICMPv6 packet.
     Icmpv6,
 }
@@ -46,6 +50,8 @@ impl Layer {
             UdpHeader => "UDP Header Error",
             TcpHeader => "TCP Header Error",
             Icmpv4 => "ICMP Packet Error",
+            Icmpv4Timestamp => "ICMP Timestamp Error",
+            Icmpv4TimestampReply => "ICMP Timestamp Reply Error",
             Icmpv6 => "ICMPv6 Packet Error",
         }
     }
@@ -67,6 +73,8 @@ impl core::fmt::Display for Layer {
             UdpHeader => write!(f, "UDP header"),
             TcpHeader => write!(f, "TCP header"),
             Icmpv4 => write!(f, "ICMP packet"),
+            Icmpv4Timestamp => write!(f, "ICMP timestamp message"),
+            Icmpv4TimestampReply => write!(f, "ICMP timestamp reply message"),
             Icmpv6 => write!(f, "ICMPv6 packet"),
         }
     }
@@ -120,6 +128,8 @@ mod test {
             (UdpHeader, "UDP Header Error"),
             (TcpHeader, "TCP Header Error"),
             (Icmpv4, "ICMP Packet Error"),
+            (Icmpv4Timestamp, "ICMP Timestamp Error"),
+            (Icmpv4TimestampReply, "ICMP Timestamp Reply Error"),
             (Icmpv6, "ICMPv6 Packet Error"),
         ];
         for test in tests {
@@ -142,6 +152,8 @@ mod test {
             (UdpHeader, "UDP header"),
             (TcpHeader, "TCP header"),
             (Icmpv4, "ICMP packet"),
+            (Icmpv4Timestamp, "ICMP timestamp message"),
+            (Icmpv4TimestampReply, "ICMP timestamp reply message"),
             (Icmpv6, "ICMPv6 packet"),
         ];
         for test in tests {

@@ -14,20 +14,20 @@ impl<'a> Icmpv4Slice<'a> {
     ///
     /// # Errors
     ///
-    /// The function will return an `Err` `ReadError::UnexpectedEndOfSlice`
-    /// if the given slice is too small.
+    /// The function will return an `Err` `err::LenError`
+    /// if the given slice is too small or does not match the expected
+    /// length in case of a timestamp message.
     #[inline]
-    pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv4Slice<'a>, ReadError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Icmpv4Slice<'a>, err::LenError> {
         // check length
-        use ReadError::*;
         if slice.len() < Icmpv4Header::MIN_LEN {
-            return Err(Len(err::LenError {
+            return Err(err::LenError {
                 required_len: Icmpv4Header::MIN_LEN,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 0,
-            }));
+            });
         }
 
         // SAFETY:
@@ -38,11 +38,25 @@ impl<'a> Icmpv4Slice<'a> {
 
         // check type specific length
         match icmp_type {
-            TYPE_TIMESTAMP_REPLY | TYPE_TIMESTAMP => {
+            TYPE_TIMESTAMP => {
                 if 0 == icmp_code && TimestampMessage::LEN != slice.len() {
-                    return Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::LEN,
-                        actual: slice.len(),
+                    return Err(err::LenError {
+                        required_len: TimestampMessage::LEN,
+                        len: slice.len(),
+                        len_source: err::LenSource::Slice,
+                        layer: err::Layer::Icmpv4Timestamp,
+                        layer_start_offset: 0,
+                    });
+                }
+            }
+            TYPE_TIMESTAMP_REPLY => {
+                if 0 == icmp_code && TimestampMessage::LEN != slice.len() {
+                    return Err(err::LenError {
+                        required_len: TimestampMessage::LEN,
+                        len: slice.len(),
+                        len_source: err::LenSource::Slice,
+                        layer: err::Layer::Icmpv4TimestampReply,
+                        layer_start_offset: 0,
                     });
                 }
             }
@@ -328,12 +342,9 @@ impl<'a> Icmpv4Slice<'a> {
 mod test {
     use super::*;
     use proptest::prelude::*;
-    use assert_matches::assert_matches;
 
     #[test]
     fn from_slice() {
-        use ReadError::*;
-
         // normal case
         {
             let bytes = [0u8; 8];
@@ -346,9 +357,7 @@ mod test {
             let bytes = [0u8; 8];
             assert_eq!(
                 Icmpv4Slice::from_slice(&bytes[..bad_len])
-                    .unwrap_err()
-                    .len_error()
-                    .unwrap(),
+                    .unwrap_err(),
                 err::LenError {
                     required_len: Icmpv4Header::MIN_LEN,
                     len: bad_len,
@@ -375,23 +384,37 @@ mod test {
 
             // too short timestamps
             for bad_len in 8..20 {
-                assert_matches!(
-                    Icmpv4Slice::from_slice(&bytes[..bad_len]),
-                    Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::LEN,
-                        actual: _
-                    })
+                assert_eq!(
+                    Icmpv4Slice::from_slice(&bytes[..bad_len]).unwrap_err(),
+                    err::LenError {
+                        required_len: TimestampMessage::LEN,
+                        len: bad_len,
+                        len_source: err::LenSource::Slice,
+                        layer: if ts_type_u8 == TYPE_TIMESTAMP {
+                            err::Layer::Icmpv4Timestamp
+                        } else {
+                            err::Layer::Icmpv4TimestampReply
+                        },
+                        layer_start_offset: 0,
+                    }
                 );
             }
 
             // too large timestamps
             for bad_len in 21..26 {
-                assert_matches!(
-                    Icmpv4Slice::from_slice(&bytes[..bad_len]),
-                    Err(UnexpectedLenOfSlice {
-                        expected: TimestampMessage::LEN,
-                        actual: _
-                    })
+                assert_eq!(
+                    Icmpv4Slice::from_slice(&bytes[..bad_len]).unwrap_err(),
+                    err::LenError {
+                        required_len: TimestampMessage::LEN,
+                        len: bad_len,
+                        len_source: err::LenSource::Slice,
+                        layer: if ts_type_u8 == TYPE_TIMESTAMP {
+                            err::Layer::Icmpv4Timestamp
+                        } else {
+                            err::Layer::Icmpv4TimestampReply
+                        },
+                        layer_start_offset: 0,
+                    }
                 );
             }
 

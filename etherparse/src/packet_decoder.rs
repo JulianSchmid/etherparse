@@ -511,7 +511,7 @@ fn read_transport(
     use crate::ip_number::*;
     Ok(match protocol {
         ICMP => Icmpv4Header::from_slice(rest)
-            .map_err(|err| err.add_slice_offset(offset))
+            .map_err(|err| ReadError::Len(err.add_offset(offset)))
             .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1))?,
         IPV6_ICMP => Icmpv6Header::from_slice(rest)
             .map_err(|err| ReadError::Len(err.add_offset(offset)))

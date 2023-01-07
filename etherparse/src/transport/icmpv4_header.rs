@@ -63,7 +63,7 @@ impl Icmpv4Header {
 
     /// Reads an icmp4 header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), ReadError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Icmpv4Header, &[u8]), err::LenError> {
         let header = Icmpv4Slice::from_slice(slice)?.header();
         let rest = &slice[header.header_len()..];
         Ok((header, rest))
