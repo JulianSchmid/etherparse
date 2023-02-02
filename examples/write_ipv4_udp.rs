@@ -1,4 +1,3 @@
-extern crate etherparse;
 use etherparse::*;
 use std::io::Write;
 
