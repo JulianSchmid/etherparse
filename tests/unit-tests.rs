@@ -1,10 +1,7 @@
 extern crate etherparse;
 use etherparse::*;
 
-#[macro_use]
-extern crate assert_matches;
-
-extern crate proptest;
+use assert_matches::assert_matches;
 
 use std::io;
 

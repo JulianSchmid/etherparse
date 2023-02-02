@@ -2,7 +2,7 @@
 name = "etherparse"
 version = "0.13.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
-edition = "2018"
+edition = "2021"
 repository = "https://github.com/JulianSchmid/etherparse"
 description = "A library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...)."
 categories = ["network-programming", "parser-implementations"]

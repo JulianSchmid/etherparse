@@ -1,4 +1,3 @@
-extern crate etherparse;
 use etherparse::*;
 
 fn main() {
