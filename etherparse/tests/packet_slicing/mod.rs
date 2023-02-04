@@ -204,24 +204,22 @@ mod sliced_packet {
 
     #[test]
     fn from_ip_errors() {
-        use crate::ReadError::*;
+        use crate::err::packet::IpSliceError::*;
 
-        //slice length error
+        // slice length error
         assert_eq!(
             SlicedPacket::from_ip(&[])
-                .unwrap_err()
-                .len_error()
-                .unwrap(),
-            err::LenError {
+                .unwrap_err(),
+            Len(err::LenError {
                 required_len: 1,
                 len: 0,
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
-            }
+            })
         );
 
-        //bad protocol number
+        // bad protocol number
         for i in 0u8..std::u8::MAX {
             if i >> 4 != 4 && i >> 4 != 6 {
                 assert_matches!(
