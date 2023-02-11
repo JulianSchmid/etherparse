@@ -11,6 +11,7 @@ To run the scripts in this folder you have to install a few tools on your system
 rustup toolchain install nightly
 
 # llvm toolchain for nightly
+rustup component add llvm-tools-preview
 rustup component add --toolchain nightly llvm-tools-preview
 
 # cargo-binutils and rustfilt for nightly
