@@ -16,6 +16,22 @@ impl<'a> InternetSlice<'a> {
             InternetSlice::Ipv6(_, v6_ext) => v6_ext.is_fragmenting_payload(),
         }
     }
+
+    /// Return the source address as an std::net::Ipvddr
+    pub fn source_addr(&self) -> std::net::IpAddr {
+        match self {
+            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.source_addr().into(),
+            InternetSlice::Ipv6(v6_hdr, _) => v6_hdr.source_addr().into(),
+        }
+    }
+
+    /// Return the destination address as an std::net::IpAddr
+    pub fn destination_addr(&self) -> std::net::IpAddr {
+        match self {
+            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.destination_addr().into(),
+            InternetSlice::Ipv6(v6_hdr, _) => v6_hdr.destination_addr().into(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
