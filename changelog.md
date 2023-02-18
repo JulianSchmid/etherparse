@@ -12,6 +12,7 @@
   * `Ipv4Header`
   * TODO Add to all headers that have write methods
 * Added `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
+* Added `InternetSlice::source_addr` & `InternetSlice::destination_addr` to get the source & destination as `std::net::IpAddr` (thanks to @nagy)
 
 ### Changes in Behavior
 
@@ -26,10 +27,7 @@
 
 ### Bugfixes
 
-* `PacketHeaders::from_ip_slice` now only tries to decode
-the transport layer if the packet is not fragmented.
-Previously it would also try to decode the transport layer
-even if the packet contained only a fragment.
+* `PacketHeaders::from_ip_slice` now only tries to decode the transport layer if the packet is not fragmented. Previously it would also try to decode the transport layer even if the packet contained only a fragment.
 * The IPv6 extension header skipping functions were previously checking that the slice length is at least 2 before checking if an extension header is even present. If less then two bytes were present an error was returned. This was wrong behavior, as there are no gurantees for other protocols that there are 2 bytes of data present. A check has been added, that validates the header type before checking the slice length. The following functions were corrected:
   * `Ipv6Header::skip_header_extension_in_slice`
   * `Ipv6Header::skip_all_header_extensions_in_slice`
