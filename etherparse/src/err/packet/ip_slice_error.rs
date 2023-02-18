@@ -7,10 +7,6 @@ pub enum IpSliceError {
     Len(err::LenError),
     /// Error when decoding an IP header (v4 or v6).
     IpHeader(err::ip::HeaderError),
-    /// Error when decoding a IPv6 extension headers.
-    Ipv6ExtsHeader(err::ipv6_exts::HeaderError),
-    /// Error when decoding an IP authentification header.
-    IpAuthHeader(err::ip_auth::HeaderError),
     /// Error when decoding a TCP header.
     TcpHeader(err::tcp::HeaderError),
 }
@@ -22,8 +18,6 @@ impl std::fmt::Display for IpSliceError {
         match self {
             Len(err) => err.fmt(f),
             IpHeader(err) => err.fmt(f),
-            Ipv6ExtsHeader(err) => err.fmt(f),
-            IpAuthHeader(err) => err.fmt(f),
             TcpHeader(err) => err.fmt(f),
         }
     }
@@ -35,9 +29,7 @@ impl std::error::Error for IpSliceError {
         match self {
             Len(err) => Some(err),
             IpHeader(err) => Some(err),
-            Ipv6ExtsHeader(err) => Some(err),
             TcpHeader(err) => Some(err),
-            IpAuthHeader(err) => Some(err),
         }
     }
 }
@@ -104,18 +96,6 @@ mod tests {
             assert_eq!(format!("{}", err), format!("{}", IpHeader(err)));
         }
 
-        // Ipv6ExtsHeader
-        {
-            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert_eq!(format!("{}", err), format!("{}", Ipv6ExtsHeader(err)));
-        }
-        
-        // IpAuthHeader
-        {
-            let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(format!("{}", err), format!("{}", IpAuthHeader(err)));
-        }
-        
         // TcpHeader
         {
             let err = err::tcp::HeaderError::DataOffsetTooSmall{
@@ -145,18 +125,6 @@ mod tests {
                 version_number: 1,
             };
             assert!(IpHeader(err).source().is_some());
-        }
-        
-        // Ipv6ExtsHeader
-        {
-            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert!(Ipv6ExtsHeader(err).source().is_some());
-        }
-        
-        // IpAuthHeader
-        {
-            let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert!(IpAuthHeader(err).source().is_some());
         }
         
         // TcpHeader

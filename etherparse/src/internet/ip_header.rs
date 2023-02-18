@@ -110,10 +110,10 @@ impl IpHeader {
                         .map_err(|err| {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
-                                I::Len(err) => Len(err),
+                                I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
                                 I::Content(err) => Content(Ipv4Exts(err)),
                             }
-                        }) 
+                        })
                 }
                 6 => {
                     if slice.len() < Ipv6Header::LEN {
@@ -145,7 +145,7 @@ impl IpHeader {
                     ).map_err(|err| {
                         use err::ipv6_exts::HeaderSliceError as I;
                         match err {
-                            I::Len(err) => Len(err),
+                            I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
                             I::Content(err) => Content(Ipv6Exts(err)),
                         }
                     })
@@ -302,6 +302,15 @@ impl IpHeader {
                     Err(Ipv6PayloadLengthTooLarge(len))
                 }
             }
+        }
+    }
+
+    /// Returns true if the payload is fragmented based on the IPv4 header
+    /// or the IPv6 fragment header.
+    pub fn is_fragmenting_payload(&self) -> bool {
+        match self {
+            IpHeader::Version4(ipv4, _) => ipv4.is_fragmenting_payload(),
+            IpHeader::Version6(_, exts) => exts.is_fragmenting_payload(),
         }
     }
 }
@@ -738,4 +747,25 @@ mod test {
         }
     }
 
+    proptest! {
+        #[test]
+        fn is_fragmenting_payload(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any()
+        ) {
+            // ipv4
+            assert_eq!(
+                v4.is_fragmenting_payload(),
+                IpHeader::Version4(v4.clone(), v4_exts.clone()).is_fragmenting_payload()
+            );
+
+            // ipv6
+            assert_eq!(
+                v6_exts.is_fragmenting_payload(),
+                IpHeader::Version6(v6.clone(), v6_exts.clone()).is_fragmenting_payload()
+            );
+        }
+    }
 }

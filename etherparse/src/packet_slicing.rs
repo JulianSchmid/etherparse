@@ -474,7 +474,7 @@ impl<'a> CursorSlice<'a> {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
                                 I::Len(err) => Len(err.add_offset(self.offset)),
-                                I::Content(err) => IpAuthHeader(err),
+                                I::Content(err) => IpHeader(err::ip::HeaderError::Ipv4Exts(err)),
                             }
                         })?;
 
@@ -532,7 +532,7 @@ impl<'a> CursorSlice<'a> {
                                 use err::ipv6_exts::HeaderSliceError as I;
                                 match err {
                                     I::Len(err) => Len(err.add_offset(self.offset)),
-                                    I::Content(err) => Ipv6ExtsHeader(err),
+                                    I::Content(err) => IpHeader(err::ip::HeaderError::Ipv6Exts(err)),
                                 }
                             })?;
                     let fragmented = ip_ext.is_fragmenting_payload();
@@ -642,9 +642,11 @@ impl<'a> CursorSlice<'a> {
             Ipv6ExtensionsSlice::from_slice(ip.next_header(), self.slice)
                 .map_err(|err| {
                     use err::ipv6_exts::HeaderSliceError as I;
+                    use err::ipv6_exts::HeaderError as E;
                     match err {
                         I::Len(err) => Len(err.add_offset(self.offset)),
-                        I::Content(err) => Ipv6ExtsHeader(err),
+                        I::Content(E::HopByHopNotAtStart) => Ipv6HopByHopNotAtStart,
+                        I::Content(E::IpAuth(err)) => IpAuthHeader(err),
                     }
                 })?;
         let fragmented = ip_ext.is_fragmenting_payload();
