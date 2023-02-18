@@ -321,6 +321,9 @@ pub use crate::packet_slicing::*;
 
 pub mod packet_filter;
 
+#[cfg(test)]
+pub(crate) mod test_packet;
+
 /// Errors that can occur when reading.
 #[derive(Debug)]
 pub enum ReadError {

@@ -9,8 +9,8 @@ pub enum EthSliceError {
     Ipv4Header(err::ipv4::HeaderError),
     /// Error when decoding an IPv6 header.
     Ipv6Header(err::ipv6::HeaderError),
-    /// Error when decoding a IPv6 extension headers.
-    Ipv6ExtsHeader(err::ipv6_exts::HeaderError),
+    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
+    Ipv6HopByHopNotAtStart,
     /// Error when decoding an IP authentification header.
     IpAuthHeader(err::ip_auth::HeaderError),
     /// Error when decoding a TCP header.
@@ -25,7 +25,7 @@ impl std::fmt::Display for EthSliceError {
             Len(err) => err.fmt(f),
             Ipv4Header(err) => err.fmt(f),
             Ipv6Header(err) => err.fmt(f),
-            Ipv6ExtsHeader(err) => err.fmt(f),
+            Ipv6HopByHopNotAtStart => write!(f, "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200."),
             IpAuthHeader(err) => err.fmt(f),
             TcpHeader(err) => err.fmt(f),
         }
@@ -39,7 +39,7 @@ impl std::error::Error for EthSliceError {
             Len(err) => Some(err),
             Ipv4Header(err) => Some(err),
             Ipv6Header(err) => Some(err),
-            Ipv6ExtsHeader(err) => Some(err),
+            Ipv6HopByHopNotAtStart => None,
             TcpHeader(err) => Some(err),
             IpAuthHeader(err) => Some(err),
         }
@@ -115,12 +115,12 @@ mod tests {
             };
             assert_eq!(format!("{}", err), format!("{}", Ipv6Header(err)));
         }
-        
-        // Ipv6ExtsHeader
-        {
-            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert_eq!(format!("{}", err), format!("{}", Ipv6ExtsHeader(err)));
-        }
+
+        // Ipv6HopByHopNotAtStart
+        assert_eq!(
+            "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200.",
+            format!("{}", Ipv6HopByHopNotAtStart)
+        );
         
         // IpAuthHeader
         {
@@ -169,8 +169,7 @@ mod tests {
         
         // Ipv6ExtsHeader
         {
-            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert!(Ipv6ExtsHeader(err).source().is_some());
+            assert!(Ipv6HopByHopNotAtStart.source().is_none());
         }
         
         // IpAuthHeader
