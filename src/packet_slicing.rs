@@ -2,7 +2,7 @@ use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum InternetSlice<'a> {
-    /// The ipv6 header & the decoded extension headers.
+    /// The ipv4 header & the decoded extension headers.
     Ipv4(Ipv4HeaderSlice<'a>, Ipv4ExtensionsSlice<'a>),
     /// The ipv6 header & the decoded extension headers.
     Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionsSlice<'a>),
