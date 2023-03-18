@@ -1,3 +1,4 @@
+pub mod internet_slice;
 pub mod ip_header;
 pub mod ip_auth_header;
 pub mod ip_auth_header_slice;
