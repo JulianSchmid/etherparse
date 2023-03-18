@@ -1,40 +1,6 @@
 use super::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum InternetSlice<'a> {
-    /// The ipv4 header & the decoded extension headers.
-    Ipv4(Ipv4HeaderSlice<'a>, Ipv4ExtensionsSlice<'a>),
-    /// The ipv6 header & the decoded extension headers.
-    Ipv6(Ipv6HeaderSlice<'a>, Ipv6ExtensionsSlice<'a>),
-}
-
-impl<'a> InternetSlice<'a> {
-    /// Returns true if the payload is fragmented.
-    pub fn is_fragmenting_payload(&self) -> bool {
-        match self {
-            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.is_fragmenting_payload(),
-            InternetSlice::Ipv6(_, v6_ext) => v6_ext.is_fragmenting_payload(),
-        }
-    }
-
-    /// Return the source address as an std::net::Ipvddr
-    pub fn source_addr(&self) -> std::net::IpAddr {
-        match self {
-            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.source_addr().into(),
-            InternetSlice::Ipv6(v6_hdr, _) => v6_hdr.source_addr().into(),
-        }
-    }
-
-    /// Return the destination address as an std::net::IpAddr
-    pub fn destination_addr(&self) -> std::net::IpAddr {
-        match self {
-            InternetSlice::Ipv4(v4_hdr, _) => v4_hdr.destination_addr().into(),
-            InternetSlice::Ipv6(v6_hdr, _) => v6_hdr.destination_addr().into(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
     /// A slice containing an Icmp4 header
     Icmpv4(Icmpv4Slice<'a>),
@@ -746,8 +712,6 @@ impl<'a> CursorSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use std::any::Any;
-
     use super::*;
     use crate::{test_packet::TestPacket};
     use crate::err::{LenError, packet::{EthSliceError, IpSliceError}};
@@ -760,7 +724,6 @@ mod test {
 
     #[test]
     fn from_x_slice() {
-
         // no eth
         from_x_slice_vlan_variants(
             &TestPacket{
@@ -967,7 +930,7 @@ mod test {
                     }
                 }
 
-                // ipv4 content error
+                // ipv4 content error (ihl lenght too small)
                 {
                     let mut data = test.to_vec(&[]);
                     let ipv4_offset = data.len() - ipv4.header_len();
@@ -983,6 +946,27 @@ mod test {
                         ),
                         IpSliceError::IpHeader(
                             err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 }
+                        )
+                    );
+                }
+
+                // ipv4 content error (total length too small)
+                {
+                    let mut data = test.to_vec(&[]);
+                    let ipv4_offset = data.len() - ipv4.header_len();
+                    
+                    // set the total length to 0 to trigger a content error
+                    data[ipv4_offset + 2] = 0;
+                    data[ipv4_offset + 3] = 0;
+
+                    from_slice_assert_err(
+                        &test,
+                        &data,
+                        EthSliceError::Ipv4Header(
+                            err::ipv4::HeaderError::TotalLengthSmallerThanHeader { total_length: 0, min_expected_length: ipv4.header_len() as u16 }
+                        ),
+                        IpSliceError::IpHeader(
+                            err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader { total_length: 0, min_expected_length: ipv4.header_len() as u16 }
                         )
                     );
                 }
@@ -1422,121 +1406,101 @@ mod test {
 
     fn from_x_slice_assert_ok(test: &TestPacket) {
 
-        fn ip_to_headers(s: InternetSlice) -> IpHeader {
-            match s {
-                InternetSlice::Ipv4(ipv4, exts) => IpHeader::Version4(ipv4.to_header(), exts.to_header()),
-                InternetSlice::Ipv6(ipv6, exts) => IpHeader::Version6(
-                    ipv6.to_header(),
-                    Ipv6Extensions::from_slice(ipv6.next_header(), exts.slice()).unwrap().0
-                ),
-            }
-        }
+        fn assert_test_result(test: &TestPacket, expected_payload: &[u8], data: &[u8], result: &SlicedPacket) {
+            // check if fragmenting
+            let is_fragmented = test.is_ip_payload_fragmented();
 
-        fn eq_transport_headers(t: &Option<TransportSlice>, h: &Option<TransportHeader>) -> bool {
-            use TransportSlice as S;
-            use TransportHeader as H;
-            match t {
-                Some(S::Icmpv4(s)) => h == &Some(H::Icmpv4(s.header())),
-                Some(S::Icmpv6(s)) => h == &Some(H::Icmpv6(s.header())),
-                Some(S::Udp(s)) => h == &Some(H::Udp(s.to_header())),
-                Some(S::Tcp(s)) => h == &Some(H::Tcp(s.to_header())),
-                Some(S::Unknown(_)) => h == &None,
-                None => h == &None,
+            // check headers
+            assert_eq!(test.link, result.link.as_ref().map(|e| e.to_header()));
+            assert_eq!(test.vlan, result.vlan.as_ref().map(|e| e.to_header()));
+            assert_eq!(test.ip, result.ip.as_ref().map(|s: &InternetSlice| -> IpHeader {
+                match s {
+                    InternetSlice::Ipv4(ipv4, exts) => IpHeader::Version4(ipv4.to_header(), exts.to_header()),
+                    InternetSlice::Ipv6(ipv6, exts) => IpHeader::Version6(
+                        ipv6.to_header(),
+                        Ipv6Extensions::from_slice(ipv6.next_header(), exts.slice()).unwrap().0
+                    ),
+                }
+            }));
+
+            // check transport header & payload
+            if is_fragmented {
+                assert_eq!(result.transport, None);
+                let transport_len = test.transport.as_ref().map_or(
+                    0, |t| t.header_len()
+                );
+                assert_eq!(
+                    result.payload,
+                    &data[data.len() - expected_payload.len() - transport_len..]
+                );
+            } else {
+                use TransportSlice as S;
+                use TransportHeader as H;
+                match &result.transport {
+                    Some(S::Icmpv4(icmpv4)) => {
+                        assert_eq!(&test.transport, &Some(H::Icmpv4(icmpv4.header())));
+                        assert_eq!(icmpv4.payload(), expected_payload);
+                        assert_eq!(result.payload, &[]);
+                    },
+                    Some(S::Icmpv6(icmpv6)) => {
+                        assert_eq!(&test.transport, &Some(H::Icmpv6(icmpv6.header())));
+                        assert_eq!(icmpv6.payload(), expected_payload);
+                        assert_eq!(result.payload, &[]);
+                    },
+                    Some(S::Udp(s)) => {
+                        assert_eq!(&test.transport, &Some(H::Udp(s.to_header())));
+                        assert_eq!(result.payload, expected_payload);
+                    },
+                    Some(S::Tcp(s)) => {
+                        assert_eq!(&test.transport, &Some(H::Tcp(s.to_header())));
+                        assert_eq!(result.payload, expected_payload);
+                    },
+                    Some(S::Unknown(next_ip_number)) => {
+                        assert_eq!(&test.transport, &None);
+                        assert_eq!(*next_ip_number, test.ip.as_ref().unwrap().next_header().unwrap());
+                        assert_eq!(result.payload, expected_payload);
+                    },
+                    None => {
+                        assert_eq!(&test.transport, &None);
+                        assert_eq!(result.payload, expected_payload);
+                    },
+                }
             }
         }
         
-        // check if fragmenting
-        let is_fragmented = test.is_ip_payload_fragmented();
-
         // write data
-        let data = test.to_vec(&[1,2,3,4]);
+        let payload = [1,2,3,4];
+        let data = test.to_vec(&payload);
 
         // from_ethernet
         if test.link.is_some() {
             let result = SlicedPacket::from_ethernet(&data).unwrap();
-            assert_eq!(test.link, result.link.map(|e| e.to_header()));
-            assert_eq!(test.vlan, result.vlan.map(|e| e.to_header()));
-            assert_eq!(test.ip, result.ip.map(ip_to_headers));
-            if is_fragmented {
-                assert_eq!(result.transport, None);
-            } else {
-                // check headers
-                assert!(eq_transport_headers(&result.transport, &test.transport));
-
-                // check payloads
-                use TransportSlice as T;
-                match &result.transport {
-                    Some(t) => match t {
-                        T::Udp(_) | T::Tcp(_) => {
-                            assert_eq!(result.payload, &[1,2,3,4]);
-                        },
-                        T::Icmpv4(icmpv4) => {
-                            assert_eq!(icmpv4.payload(), &[1,2,3,4]);
-                            assert_eq!(result.payload, &[]);
-                        },
-                        T::Icmpv6(icmpv6) => {
-                            assert_eq!(icmpv6.payload(), &[1,2,3,4]);
-                            assert_eq!(result.payload, &[]);
-                        },
-                        T::Unknown(next_ip_number) => {
-                            assert_eq!(*next_ip_number, test.ip.as_ref().unwrap().next_header().unwrap());
-                            assert_eq!(result.payload, &[1,2,3,4]);
-                        }
-                    },
-                    None => {
-                        assert_eq!(result.payload, &[1,2,3,4]);
-                    },
-                }
-            }
+            assert_test_result(test, &payload, &data, &result);
         }
         // from_ether_type (vlan at start)
         if test.link.is_none() && test.vlan.is_some() {
             for ether_type in VLAN_ETHER_TYPES {
-                let result = PacketHeaders::from_ether_type(ether_type, &data).unwrap();
-                assert_eq!(result.link, test.link);
-                assert_eq!(result.vlan, test.vlan);
-                assert_eq!(result.ip, test.ip);
-                if is_fragmented {
-                    assert_eq!(result.transport, None);
-                } else {
-                    assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload, &[1,2,3,4]);
-                }
+                let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
+                assert_test_result(test, &payload, &data, &result);
             }
         }
         // from_ether_type (ip at start)
         if test.link.is_none() && test.vlan.is_none() {
             if let Some(ip) = &test.ip {
-                let result = PacketHeaders::from_ether_type(
+                let result = SlicedPacket::from_ether_type(
                     match ip {
                         IpHeader::Version4(_, _) => ether_type::IPV4,
                         IpHeader::Version6(_, _) => ether_type::IPV6,
                     },
                     &data
                 ).unwrap();
-                assert_eq!(result.link, test.link);
-                assert_eq!(result.vlan, test.vlan);
-                assert_eq!(result.ip, test.ip);
-                if is_fragmented {
-                    assert_eq!(result.transport, None);
-                } else {
-                    assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload, &[1,2,3,4]);
-                }
+                assert_test_result(test, &payload, &data, &result);
             }
         }
         // from_ip_slice
         if test.link.is_none() && test.vlan.is_none() && test.ip.is_some() {
-            let result = PacketHeaders::from_ip_slice(&data).unwrap();
-            assert_eq!(result.link, test.link);
-            assert_eq!(result.vlan, test.vlan);
-            assert_eq!(result.ip, test.ip);
-            if is_fragmented {
-                assert_eq!(result.transport, None);
-            } else {
-                assert_eq!(result.transport, test.transport);
-                assert_eq!(result.payload, &[1,2,3,4]);
-            }
+            let result = SlicedPacket::from_ip(&data).unwrap();
+            assert_test_result(test, &payload, &data, &result);
         }
     }
 
@@ -1552,7 +1516,7 @@ mod test {
         if test.link.is_some() {
             assert_eq!(
                 eth_err.clone(),
-                PacketHeaders::from_ethernet_slice(&data).unwrap_err()
+                SlicedPacket::from_ethernet(&data).unwrap_err()
             );
         }
         // from_ether_type (vlan at start)
@@ -1560,14 +1524,14 @@ mod test {
             for ether_type in VLAN_ETHER_TYPES {
                 assert_eq!(
                     eth_err.clone(),
-                    PacketHeaders::from_ether_type(ether_type, &data).unwrap_err()
+                    SlicedPacket::from_ether_type(ether_type, &data).unwrap_err()
                 );
             }
         }
         // from_ether_type (ip at start)
         if test.link.is_none() && test.vlan.is_none() {
             if let Some(ip) = &test.ip {
-                let err = PacketHeaders::from_ether_type(
+                let err = SlicedPacket::from_ether_type(
                     match ip {
                         IpHeader::Version4(_, _) => ether_type::IPV4,
                         IpHeader::Version6(_, _) => ether_type::IPV6,
@@ -1581,7 +1545,7 @@ mod test {
         if test.link.is_none() && test.vlan.is_none() && test.ip.is_some() {
             assert_eq!(
                 ip_err,
-                PacketHeaders::from_ip_slice(&data).unwrap_err()
+                SlicedPacket::from_ip(&data).unwrap_err()
             );
         }
     }
