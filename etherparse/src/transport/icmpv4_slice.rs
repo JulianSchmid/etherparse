@@ -315,7 +315,7 @@ impl<'a> Icmpv4Slice<'a> {
                 }
             }
             // SAFETY:
-            // Lneght safe as the contructor checks that the slice has
+            // Lenght safe as the contructor checks that the slice has
             // at least the length of Icmpv4Header::MIN_LEN(8) for
             // all message types.
             _ => 8,

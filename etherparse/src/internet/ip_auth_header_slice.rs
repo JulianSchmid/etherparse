@@ -9,7 +9,7 @@ use core::slice::from_raw_parts;
 pub type IpAuthenticationHeaderSlice<'a> = IpAuthHeaderSlice<'a>;
 
 /// A slice containing an IP Authentication Header (rfc4302)
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct IpAuthHeaderSlice<'a> {
     slice: &'a [u8],
 }

@@ -7,7 +7,7 @@ use crate::*;
 ///
 /// Currently not supported:
 /// * Encapsulating Security Payload Header (ESP)
-#[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv4ExtensionsSlice<'a> {
     pub auth: Option<IpAuthHeaderSlice<'a>>,
 }
