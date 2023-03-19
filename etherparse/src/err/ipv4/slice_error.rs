@@ -1,4 +1,4 @@
-use crate::err::LenError;
+use crate::err::{LenError, ip_auth};
 
 use super::HeaderSliceError;
 
@@ -7,6 +7,9 @@ use super::HeaderSliceError;
 pub enum SliceError {
     /// Error while slicing the header.
     Header(HeaderSliceError),
+
+    /// Error while slicing an ipv4 extension header.
+    Extensions(ip_auth::HeaderSliceError),
 
     /// Error while slicing the payload of the packet.
     Payload(LenError),
