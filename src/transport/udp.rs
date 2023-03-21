@@ -332,4 +332,73 @@ impl<'a> UdpHeaderSlice<'a> {
             checksum: self.checksum()
         }
     }
+
+    /// Calculates the upd header checksum based on a ipv4 header.
+    pub fn calc_checksum_ipv4(&self, ip_header: &Ipv4HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
+    }
+
+    /// Calculates the upd header checksum based on a ipv4 header.
+    pub fn calc_checksum_ipv4_raw(&self, source: [u8;4], destination: [u8;4], payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
+
+        Ok(self.calc_checksum_ipv4_internal(source, destination, payload))
+    }
+
+    /// Calculates the upd header checksum based on a ipv4 header.
+    fn calc_checksum_ipv4_internal(&self, source: [u8;4], destination: [u8;4], payload: &[u8]) -> u16 {
+
+        self.calc_checksum_post_ip(
+            //pseudo header
+            checksum::Sum16BitWords::new()
+                .add_4bytes(source)
+                .add_4bytes(destination)
+                .add_2bytes([0, ip_number::UDP])
+                .add_2bytes(self.length().to_be_bytes()),
+            payload
+        )
+    }
+
+    /// Calculates the checksum of the current udp header given an ipv6 header and the payload.
+    pub fn calc_checksum_ipv6(&self, ip_header: &Ipv6HeaderSlice, payload: &[u8]) -> Result<u16, ValueError> {
+        self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
+    }
+
+    /// Calculates the checksum of the current udp header given an ipv6 source & destination address plus the payload.
+    pub fn calc_checksum_ipv6_raw(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> Result<u16, ValueError> {
+        //check that the total length fits into the field
+        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - UdpHeader::SERIALIZED_SIZE;
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        }
+
+        Ok(self.calc_checksum_ipv6_internal(source, destination, payload))
+    }
+
+    fn calc_checksum_ipv6_internal(&self, source: [u8;16], destination: [u8;16], payload: &[u8]) -> u16 {
+        self.calc_checksum_post_ip(
+            //pseudo header
+            checksum::Sum16BitWords::new()
+                .add_16bytes(source)
+                .add_16bytes(destination)
+                .add_2bytes([0, ip_number::UDP])
+                .add_2bytes(self.length().to_be_bytes()),
+            payload
+        )
+    }
+
+    /// This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords, payload: &[u8]) -> u16 {
+        ip_pseudo_header_sum
+            .add_2bytes(self.source_port().to_be_bytes())
+            .add_2bytes(self.destination_port().to_be_bytes())
+            .add_2bytes(self.length().to_be_bytes())
+            .add_slice(payload)
+            .to_ones_complement_with_no_zero()
+            .to_be()
+    }
 }
