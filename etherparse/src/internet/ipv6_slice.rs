@@ -106,6 +106,12 @@ impl<'a> Ipv6Slice<'a> {
     pub fn payload_ip_number(&self) -> u8 {
         self.payload_ip_number
     }
+
+    /// Returns true if the payload is flagged as beeing fragmented.
+    #[inline]
+    pub fn is_payload_fragmented(&self) -> bool {
+        self.exts.is_fragmenting_payload()
+    }
 }
 
 #[cfg(test)]
@@ -114,6 +120,7 @@ mod test {
     use crate::{
         ip_number::{AUTH, IGMP, UDP},
         test_gens::*,
+        Ipv6FragmentHeader,
     };
     use proptest::prelude::*;
 
@@ -357,6 +364,58 @@ mod test {
                     ))
                 );
             }
+        }
+    }
+
+    #[test]
+    fn is_payload_fragmented() {
+        use crate::ip_number::{IPV6_FRAG, UDP};
+
+        // not fragmented
+        {
+            let data = Ipv6Header {
+                traffic_class: 0,
+                flow_label: 1,
+                payload_length: 0,
+                next_header: UDP,
+                hop_limit: 4,
+                source: [0; 16],
+                destination: [0; 16],
+            }
+            .to_bytes()
+            .unwrap();
+            assert_eq!(
+                false,
+                Ipv6Slice::from_slice(&data)
+                    .unwrap()
+                    .is_payload_fragmented()
+            );
+        }
+
+        // fragmented
+        {
+            let ipv6_frag = Ipv6FragmentHeader {
+                next_header: UDP,
+                fragment_offset: 0,
+                more_fragments: true,
+                identification: 0,
+            };
+            let ipv6 = Ipv6Header {
+                traffic_class: 0,
+                flow_label: 1,
+                payload_length: ipv6_frag.header_len() as u16,
+                next_header: IPV6_FRAG,
+                hop_limit: 4,
+                source: [0; 16],
+                destination: [0; 16],
+            };
+
+            let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
+            data.extend_from_slice(&ipv6.to_bytes().unwrap());
+            data.extend_from_slice(&ipv6_frag.to_bytes().unwrap());
+            assert!(Ipv6Slice::from_slice(&data)
+                .unwrap()
+                .is_payload_fragmented());
         }
     }
 }

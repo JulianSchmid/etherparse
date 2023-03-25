@@ -1,19 +1,5 @@
 use super::*;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum TransportSlice<'a> {
-    /// A slice containing an Icmp4 header
-    Icmpv4(Icmpv4Slice<'a>),
-    /// A slice containing an Icmp6 header
-    Icmpv6(Icmpv6Slice<'a>),
-    /// A slice containing an UDP header.
-    Udp(UdpHeaderSlice<'a>),
-    /// A slice containing a TCP header.
-    Tcp(TcpHeaderSlice<'a>),
-    /// Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
-    Unknown(u8),
-}
-
 /// Packet slice split into multiple slices containing the different headers & payload.
 ///
 /// Everything that could not be parsed is stored in a slice in the field "payload".
