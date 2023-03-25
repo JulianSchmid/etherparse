@@ -34,7 +34,7 @@ impl TimeExceededCode {
 
 #[cfg(test)]
 pub(crate) mod time_exceeded_code_test_consts {
-    use super::{*, TimeExceededCode::*};
+    use super::{TimeExceededCode::*, *};
 
     pub const VALID_VALUES: [(TimeExceededCode, u8); 2] = [
         (HopLimitExceeded, CODE_TIME_EXCEEDED_HOP_LIMIT_EXCEEDED),
@@ -47,7 +47,7 @@ pub(crate) mod time_exceeded_code_test_consts {
 
 #[cfg(test)]
 mod test {
-    use super::{*, TimeExceededCode::*, time_exceeded_code_test_consts::*};
+    use super::{time_exceeded_code_test_consts::*, TimeExceededCode::*, *};
 
     #[test]
     fn from_u8() {

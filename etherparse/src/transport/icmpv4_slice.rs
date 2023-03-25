@@ -1,4 +1,4 @@
-use crate::{*, icmpv4::*};
+use crate::{icmpv4::*, *};
 
 /// A slice containing an ICMPv4 network package.
 ///
@@ -356,8 +356,7 @@ mod test {
         for bad_len in 0..8 {
             let bytes = [0u8; 8];
             assert_eq!(
-                Icmpv4Slice::from_slice(&bytes[..bad_len])
-                    .unwrap_err(),
+                Icmpv4Slice::from_slice(&bytes[..bad_len]).unwrap_err(),
                 err::LenError {
                     required_len: Icmpv4Header::MIN_LEN,
                     len: bad_len,

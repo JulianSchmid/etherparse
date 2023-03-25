@@ -95,11 +95,7 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(
-            Content(HeaderError::HopByHopNotAtStart)
-                .source()
-                .is_some()
-        );
+        assert!(Content(HeaderError::HopByHopNotAtStart).source().is_some());
     }
 
     #[test]
@@ -110,11 +106,9 @@ mod test {
         ))
         .io_error()
         .is_some());
-        assert!(
-            Content(HeaderError::HopByHopNotAtStart)
-                .io_error()
-                .is_none()
-        );
+        assert!(Content(HeaderError::HopByHopNotAtStart)
+            .io_error()
+            .is_none());
     }
 
     #[test]

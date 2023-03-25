@@ -13,7 +13,6 @@ pub struct Ipv4Extensions {
 }
 
 impl Ipv4Extensions {
-
     /// Minimum length required for extension header in bytes/octets.
     /// Which is zero as no extension headers are required.
     pub const MIN_LEN: usize = 0;

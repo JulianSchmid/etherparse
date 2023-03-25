@@ -32,8 +32,8 @@ impl std::error::Error for HeaderError {
 
 #[cfg(test)]
 mod tests {
-    use crate::*;
     use super::HeaderError::*;
+    use crate::*;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -70,10 +70,7 @@ mod tests {
         );
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(
-                format!("{}", err),
-                format!("{}", IpAuth(err))
-            );
+            assert_eq!(format!("{}", err), format!("{}", IpAuth(err)));
         }
     }
 

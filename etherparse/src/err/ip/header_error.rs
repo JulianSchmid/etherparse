@@ -49,7 +49,10 @@ impl std::error::Error for HeaderError {
         match self {
             UnsupportedIpVersion { version_number: _ } => None,
             Ipv4HeaderLengthSmallerThanHeader { ihl: _ } => None,
-            Ipv4TotalLengthSmallerThanHeader { total_length: _, min_expected_length: _ } => None,
+            Ipv4TotalLengthSmallerThanHeader {
+                total_length: _,
+                min_expected_length: _,
+            } => None,
             Ipv4Exts(err) => Some(err),
             Ipv6Exts(err) => Some(err),
         }
@@ -106,17 +109,11 @@ mod tests {
         );
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(
-                format!("{}", Ipv4Exts(err.clone())),
-                format!("{}", err)
-            );
+            assert_eq!(format!("{}", Ipv4Exts(err.clone())), format!("{}", err));
         }
         {
             let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert_eq!(
-                format!("{}", Ipv6Exts(err.clone())),
-                format!("{}", err)
-            );
+            assert_eq!(format!("{}", Ipv6Exts(err.clone())), format!("{}", err));
         }
     }
 

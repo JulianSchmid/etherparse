@@ -1,4 +1,4 @@
-use crate::err::{LenError, ipv6, ipv6_exts};
+use crate::err::{ipv6, ipv6_exts, LenError};
 
 /// Errors that can occur when slicing the IPv6 part of a packet.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -38,7 +38,7 @@ impl std::error::Error for SliceError {
 #[cfg(test)]
 mod tests {
     use super::{super::HeaderError, SliceError::*, *};
-    use crate::err::{Layer, LenError, LenSource, ip_auth};
+    use crate::err::{ip_auth, Layer, LenError, LenSource};
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -56,9 +56,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Header(
-            HeaderError::UnexpectedVersion { version_number: 6 }
-        );
+        let err = Header(HeaderError::UnexpectedVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -77,12 +75,12 @@ mod tests {
     fn fmt() {
         // len
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 1,
                 layer: Layer::Ipv6Packet,
                 len: 2,
                 len_source: LenSource::Slice,
-                layer_start_offset: 3
+                layer_start_offset: 3,
             };
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
@@ -100,22 +98,22 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(
-            Len(LenError{
-                required_len: 1,
-                layer: Layer::Ipv4Packet,
-                len: 2,
-                len_source: LenSource::Slice,
-                layer_start_offset: 3
-            }).source().is_some()
-        );
-        assert!(
-            Header(HeaderError::UnexpectedVersion { version_number: 6 }).source().is_some()
-        );
-        assert!(
-            Extensions(
-                ipv6_exts::HeaderError::IpAuth(ip_auth::HeaderError::ZeroPayloadLen)
-            ).source().is_some()
-        );
+        assert!(Len(LenError {
+            required_len: 1,
+            layer: Layer::Ipv4Packet,
+            len: 2,
+            len_source: LenSource::Slice,
+            layer_start_offset: 3
+        })
+        .source()
+        .is_some());
+        assert!(Header(HeaderError::UnexpectedVersion { version_number: 6 })
+            .source()
+            .is_some());
+        assert!(Extensions(ipv6_exts::HeaderError::IpAuth(
+            ip_auth::HeaderError::ZeroPayloadLen
+        ))
+        .source()
+        .is_some());
     }
 }

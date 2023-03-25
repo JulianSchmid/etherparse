@@ -10,9 +10,7 @@ pub struct UdpHeaderSlice<'a> {
 impl<'a> UdpHeaderSlice<'a> {
     /// Creates a slice containing an udp header.
     #[inline]
-    pub fn from_slice(
-        slice: &'a [u8],
-    ) -> Result<UdpHeaderSlice<'a>, err::LenError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<UdpHeaderSlice<'a>, err::LenError> {
         //check length
         if slice.len() < UdpHeader::LEN {
             return Err(err::LenError {

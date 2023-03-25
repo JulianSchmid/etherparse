@@ -332,7 +332,7 @@ impl Icmpv6Type {
     /// Returns the type value (first byte of the ICMPv6 header) of this type.
     #[inline]
     pub fn type_u8(&self) -> u8 {
-        use crate::{Icmpv6Type::*, icmpv6::*};
+        use crate::{icmpv6::*, Icmpv6Type::*};
         match self {
             Unknown {
                 type_u8,
@@ -407,7 +407,7 @@ impl Icmpv6Type {
             .add_2bytes([0, ip_number::IPV6_ICMP])
             .add_4bytes((msg_len as u32).to_be_bytes());
 
-        use crate::{Icmpv6Type::*, icmpv6::*};
+        use crate::{icmpv6::*, Icmpv6Type::*};
         Ok(match self {
             Unknown {
                 type_u8,
@@ -495,9 +495,9 @@ impl Icmpv6Type {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, icmpv6::*, Icmpv6Type::*, test_gens::*};
-    use proptest::prelude::*;
+    use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *};
     use assert_matches::assert_matches;
+    use proptest::prelude::*;
 
     proptest! {
         #[test]

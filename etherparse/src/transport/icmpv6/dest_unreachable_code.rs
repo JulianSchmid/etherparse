@@ -73,7 +73,7 @@ impl DestUnreachableCode {
 
 #[cfg(test)]
 pub(crate) mod dest_unreachable_code_test_consts {
-    use super::{*, DestUnreachableCode::*};
+    use super::{DestUnreachableCode::*, *};
 
     pub const VALID_VALUES: [(DestUnreachableCode, u8); 7] = [
         (NoRoute, CODE_DST_UNREACH_NO_ROUTE),
@@ -91,7 +91,7 @@ pub(crate) mod dest_unreachable_code_test_consts {
 
 #[cfg(test)]
 mod test {
-    use super::{*, dest_unreachable_code_test_consts::*, DestUnreachableCode::*};
+    use super::{dest_unreachable_code_test_consts::*, DestUnreachableCode::*, *};
 
     #[test]
     fn from_u8() {

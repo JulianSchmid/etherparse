@@ -1,4 +1,3 @@
-
 /// Different kinds of options that can be present in the options part of a tcp header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TcpOptionElement {

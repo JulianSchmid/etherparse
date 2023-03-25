@@ -49,9 +49,7 @@ impl ParameterProblemCode {
             CODE_PARAM_PROBLEM_EXT_HEADER_TOO_BIG => Some(ExtensionHeaderTooBig),
             CODE_PARAM_PROBLEM_EXT_HEADER_CHAIN_TOO_LONG => Some(ExtensionHeaderChainTooLong),
             CODE_PARAM_PROBLEM_TOO_MANY_EXT_HEADERS => Some(TooManyExtensionHeaders),
-            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => {
-                Some(TooManyOptionsInExtensionHeader)
-            }
+            CODE_PARAM_PROBLEM_TOO_MANY_OPTIONS_EXT_HEADER => Some(TooManyOptionsInExtensionHeader),
             CODE_PARAM_PROBLEM_OPTION_TOO_BIG => Some(OptionTooBig),
             _ => None,
         }
@@ -110,7 +108,7 @@ pub(crate) mod parameter_problem_code_test_consts {
 
 #[cfg(test)]
 mod test {
-    use super::{*, ParameterProblemCode::*, parameter_problem_code_test_consts::*};
+    use super::{parameter_problem_code_test_consts::*, ParameterProblemCode::*, *};
 
     #[test]
     fn from_u8() {

@@ -63,7 +63,8 @@ mod tests {
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 3
-            }).add_slice_offset(200),
+            })
+            .add_slice_offset(200),
             Len(LenError {
                 required_len: 1,
                 layer: Layer::Icmpv4,
@@ -107,12 +108,12 @@ mod tests {
     #[test]
     fn fmt() {
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 1,
                 layer: Layer::Icmpv4,
                 len: 2,
                 len_source: LenSource::Slice,
-                layer_start_offset: 3
+                layer_start_offset: 3,
             };
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
@@ -133,10 +134,6 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(
-            Content(HeaderError::HopByHopNotAtStart)
-                .source()
-                .is_some()
-        );
+        assert!(Content(HeaderError::HopByHopNotAtStart).source().is_some());
     }
 }

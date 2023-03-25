@@ -1,4 +1,3 @@
-
 #[deprecated(since = "0.10.1", note = "Please use tcp_option::KIND_END instead")]
 /// Deprecated please use [tcp_option::KIND_END] instead.
 pub const TCP_OPTION_ID_END: u8 = 0;

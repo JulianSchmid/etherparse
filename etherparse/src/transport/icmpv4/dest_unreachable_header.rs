@@ -1,4 +1,3 @@
-
 /// "Destination Unreachable" ICMP header for IPv4 (without the invoking packet).
 ///
 /// # Description in RFC 792:
@@ -66,7 +65,7 @@ impl DestUnreachableHeader {
     ///
     /// Returns [`None`] in case the code value is not known as a destination unreachable code.
     pub fn from_values(code_u8: u8, next_hop_mtu: u16) -> Option<DestUnreachableHeader> {
-        use crate::icmpv4::{*, DestUnreachableHeader::*};
+        use crate::icmpv4::{DestUnreachableHeader::*, *};
         match code_u8 {
             CODE_DST_UNREACH_NET => Some(Network),
             CODE_DST_UNREACH_HOST => Some(Host),
@@ -91,7 +90,7 @@ impl DestUnreachableHeader {
     /// Returns the icmp code value of the destination unreachable packet.
     #[inline]
     pub fn code_u8(&self) -> u8 {
-        use crate::icmpv4::{*, DestUnreachableHeader::*};
+        use crate::icmpv4::{DestUnreachableHeader::*, *};
         match self {
             Network => CODE_DST_UNREACH_NET,
             Host => CODE_DST_UNREACH_HOST,

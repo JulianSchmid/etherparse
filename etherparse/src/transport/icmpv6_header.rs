@@ -11,7 +11,6 @@ pub struct Icmpv6Header {
 }
 
 impl Icmpv6Header {
-
     /// Minimum number of bytes an ICMP header needs to have.
     ///
     /// Note that minimum size can be larger depending on
@@ -19,10 +18,7 @@ impl Icmpv6Header {
     pub const MIN_LEN: usize = 8;
 
     /// Deprecated, use [`Icmpv6Header::MIN_LEN`] instead.
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use Icmpv6Header::MIN_LEN instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use Icmpv6Header::MIN_LEN instead")]
     pub const MIN_SERIALIZED_SIZE: usize = Icmpv6Header::MIN_LEN;
 
     /// Maximum number of bytes/octets an Icmpv6Header takes up
@@ -34,10 +30,7 @@ impl Icmpv6Header {
     pub const MAX_LEN: usize = 8 + 16 + 16;
 
     /// Deprecated, use [`Icmpv6Header::MAX_LEN`] instead.
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use Icmpv6Header::MAX_LEN instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use Icmpv6Header::MAX_LEN instead")]
     pub const MAX_SERIALIZED_SIZE: usize = Icmpv6Header::MAX_LEN;
 
     /// Setups a new header with the checksum beeing set to 0.
@@ -170,7 +163,7 @@ impl Icmpv6Header {
             re
         };
 
-        use crate::{Icmpv6Type::*, icmpv6::*};
+        use crate::{icmpv6::*, Icmpv6Type::*};
         match self.icmp_type {
             Unknown {
                 type_u8,
@@ -191,13 +184,12 @@ impl Icmpv6Header {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*, icmpv6::*};
+    use crate::{icmpv6::*, test_gens::*, *};
     use arrayvec::ArrayVec;
-    use proptest::prelude::*;
     use assert_matches::assert_matches;
+    use proptest::prelude::*;
 
     proptest! {
         #[test]

@@ -1,4 +1,4 @@
-use crate::{Ethernet2Header, VlanHeader, IpHeader, TransportHeader};
+use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
 
 #[derive(Clone, Debug)]
 pub(crate) struct TestPacket {
@@ -9,13 +9,12 @@ pub(crate) struct TestPacket {
 }
 
 impl TestPacket {
-
     pub fn len(&self, payload: &[u8]) -> usize {
-        self.link.as_ref().map_or(0, |x| x.header_len()) +
-        self.vlan.as_ref().map_or(0, |x| x.header_len()) +
-        self.ip.as_ref().map_or(0, |x| x.header_len()) +
-        self.transport.as_ref().map_or(0, |x| x.header_len()) +
-        payload.len()
+        self.link.as_ref().map_or(0, |x| x.header_len())
+            + self.vlan.as_ref().map_or(0, |x| x.header_len())
+            + self.ip.as_ref().map_or(0, |x| x.header_len())
+            + self.transport.as_ref().map_or(0, |x| x.header_len())
+            + payload.len()
     }
 
     pub fn to_vec(&self, payload: &[u8]) -> Vec<u8> {
@@ -31,11 +30,11 @@ impl TestPacket {
                 IpHeader::Version4(ipv4, exts) => {
                     ipv4.write_raw(&mut result).unwrap();
                     exts.write(&mut result, ipv4.protocol).unwrap();
-                },
+                }
                 IpHeader::Version6(ipv6, exts) => {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
-                },
+                }
             }
         }
         if let Some(transport) = &self.transport {
@@ -51,10 +50,10 @@ impl TestPacket {
             match vlan {
                 Single(single) => {
                     single.ether_type = ether_type;
-                },
+                }
                 Double(double) => {
                     double.inner.ether_type = ether_type;
-                },
+                }
             }
         } else if let Some(link) = &mut self.link {
             link.ether_type = ether_type;
@@ -62,6 +61,8 @@ impl TestPacket {
     }
 
     pub fn is_ip_payload_fragmented(&self) -> bool {
-        self.ip.as_ref().map_or(false, |ip| ip.is_fragmenting_payload())
+        self.ip
+            .as_ref()
+            .map_or(false, |ip| ip.is_fragmenting_payload())
     }
 }

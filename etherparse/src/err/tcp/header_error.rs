@@ -1,12 +1,9 @@
-
 /// Errors that can be encountered while decoding a TCP header.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the data_offset is so small that the data would
     /// start within the TCP header itself.
-    DataOffsetTooSmall{
-        data_offset: u8
-    },
+    DataOffsetTooSmall { data_offset: u8 },
 }
 
 impl core::fmt::Display for HeaderError {
@@ -39,12 +36,15 @@ mod tests {
 
     #[test]
     fn debug() {
-        assert_eq!("DataOffsetTooSmall { data_offset: 1 }", format!("{:?}", DataOffsetTooSmall{ data_offset: 1 }));
+        assert_eq!(
+            "DataOffsetTooSmall { data_offset: 1 }",
+            format!("{:?}", DataOffsetTooSmall { data_offset: 1 })
+        );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = DataOffsetTooSmall{ data_offset: 1 };
+        let err = DataOffsetTooSmall { data_offset: 1 };
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -69,6 +69,6 @@ mod tests {
 
     #[test]
     fn source() {
-        assert!(DataOffsetTooSmall{ data_offset: 0 }.source().is_none());
+        assert!(DataOffsetTooSmall { data_offset: 0 }.source().is_none());
     }
 }

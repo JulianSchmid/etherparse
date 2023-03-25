@@ -37,13 +37,12 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         let mut next_header = start_ip_number;
         let mut fragmented = false;
 
-        use ip_number::*;
         use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+        use ip_number::*;
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice =
-                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(Len)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest).map_err(Len)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
         }

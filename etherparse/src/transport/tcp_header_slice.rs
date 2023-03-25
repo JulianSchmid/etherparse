@@ -29,7 +29,7 @@ impl<'a> TcpHeaderSlice<'a> {
         let len = data_offset as usize * 4;
 
         if data_offset < TcpHeader::MIN_DATA_OFFSET {
-            Err(Content(DataOffsetTooSmall{ data_offset }))
+            Err(Content(DataOffsetTooSmall { data_offset }))
         } else if slice.len() < len {
             Err(Len(err::LenError {
                 required_len: len,
@@ -363,14 +363,14 @@ impl<'a> TcpHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        *,
+        err::tcp::{HeaderError::*, HeaderSliceError::*},
         test_gens::*,
         TcpOptionElement::*,
-        err::tcp::{HeaderError::*, HeaderSliceError::*}
+        *,
     };
     use proptest::prelude::*;
 
-    proptest!{
+    proptest! {
         #[test]
         fn debug(header in tcp_any()) {
             let buffer = header.to_bytes();
@@ -382,7 +382,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn clone_eq(header in tcp_any()) {
             let bytes = header.to_bytes();
@@ -391,7 +391,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice(header in tcp_any()) {
             // ok case
@@ -403,7 +403,7 @@ mod test {
                     ).unwrap();
                     bytes
                 };
-                
+
                 let slice = TcpHeaderSlice::from_slice(&bytes[..]).unwrap();
                 assert_eq!(slice.slice(), &bytes[..header.header_len() as usize]);
                 assert_eq!(slice.to_header(), header);
@@ -446,7 +446,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn getters(header in tcp_any()) {
             let bytes = header.to_bytes();
@@ -473,7 +473,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn options_iterator(header in tcp_any()) {
             let bytes = header.to_bytes();
@@ -485,7 +485,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn to_header(header in tcp_any()) {
             let bytes = header.to_bytes();
@@ -521,7 +521,10 @@ mod test {
             let tcp_bytes = tcp.to_bytes();
             let tcp_slice = TcpHeaderSlice::from_slice(&tcp_bytes).unwrap();
 
-            assert_eq!(Ok(0x0), tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload));
+            assert_eq!(
+                Ok(0x0),
+                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
+            );
         }
 
         //a header with options
@@ -679,11 +682,7 @@ mod test {
 
             assert_eq!(
                 Ok(0xdeeb),
-                tcp_slice.calc_checksum_ipv4_raw(
-                    [192, 168, 1, 42],
-                    [192, 168, 1, 1],
-                    &tcp_payload
-                )
+                tcp_slice.calc_checksum_ipv4_raw([192, 168, 1, 42], [192, 168, 1, 1], &tcp_payload)
             );
         }
 
@@ -712,11 +711,7 @@ mod test {
 
             assert_eq!(
                 Ok(0xd5ea),
-                tcp_slice.calc_checksum_ipv4_raw(
-                    [192, 168, 1, 42],
-                    [192, 168, 1, 1],
-                    &tcp_payload
-                )
+                tcp_slice.calc_checksum_ipv4_raw([192, 168, 1, 42], [192, 168, 1, 1], &tcp_payload)
             );
         }
 
@@ -734,7 +729,7 @@ mod test {
 
             assert_eq!(
                 Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
-                tcp_slice.calc_checksum_ipv4_raw([0;4], [0;4], &tcp_payload)
+                tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
             );
         }
     }
@@ -817,7 +812,7 @@ mod test {
                     21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,
                 ],
             };
-            
+
             // setup slices
             let mut ip_buffer = Vec::new();
             ip_header.write(&mut ip_buffer).unwrap();

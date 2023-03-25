@@ -49,7 +49,7 @@ impl std::error::Error for EthSliceError {
 #[cfg(test)]
 mod tests {
     use super::{EthSliceError::*, *};
-    use crate::err::{LenSource, Layer};
+    use crate::err::{Layer, LenSource};
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -58,9 +58,7 @@ mod tests {
 
     #[test]
     fn debug() {
-        let err = err::ipv4::HeaderError::UnexpectedVersion{
-            version_number: 1,
-        };
+        let err = err::ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
         assert_eq!(
             format!("Ipv4Header({:?})", err.clone()),
             format!("{:?}", Ipv4Header(err))
@@ -69,9 +67,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion{
-            version_number: 1,
-        });
+        let err = Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 1 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -90,7 +86,7 @@ mod tests {
     fn fmt() {
         // Len
         {
-            let err = err::LenError{
+            let err = err::LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -102,17 +98,13 @@ mod tests {
 
         // Ipv4Header
         {
-            let err = err::ipv4::HeaderError::UnexpectedVersion{
-                version_number: 1,
-            };
+            let err = err::ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             assert_eq!(format!("{}", err), format!("{}", Ipv4Header(err)));
         }
 
         // Ipv6Header
         {
-            let err = err::ipv6::HeaderError::UnexpectedVersion{
-                version_number: 1,
-            };
+            let err = err::ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
             assert_eq!(format!("{}", err), format!("{}", Ipv6Header(err)));
         }
 
@@ -121,18 +113,16 @@ mod tests {
             "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200.",
             format!("{}", Ipv6HopByHopNotAtStart)
         );
-        
+
         // IpAuthHeader
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
             assert_eq!(format!("{}", err), format!("{}", IpAuthHeader(err)));
         }
-        
+
         // TcpHeader
         {
-            let err = err::tcp::HeaderError::DataOffsetTooSmall{
-                data_offset: 1,
-            };
+            let err = err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
             assert_eq!(format!("{}", err), format!("{}", TcpHeader(err)));
         }
     }
@@ -141,7 +131,7 @@ mod tests {
     fn source() {
         // Len
         {
-            let err = err::LenError{
+            let err = err::LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -153,36 +143,30 @@ mod tests {
 
         // Ipv4Header
         {
-            let err = err::ipv4::HeaderError::UnexpectedVersion{
-                version_number: 1,
-            };
+            let err = err::ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             assert!(Ipv4Header(err).source().is_some());
         }
-        
+
         // Ipv6Header
         {
-            let err = err::ipv6::HeaderError::UnexpectedVersion{
-                version_number: 1,
-            };
+            let err = err::ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
             assert!(Ipv6Header(err).source().is_some());
         }
-        
+
         // Ipv6ExtsHeader
         {
             assert!(Ipv6HopByHopNotAtStart.source().is_none());
         }
-        
+
         // IpAuthHeader
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
             assert!(IpAuthHeader(err).source().is_some());
         }
-        
+
         // TcpHeader
         {
-            let err = err::tcp::HeaderError::DataOffsetTooSmall{
-                data_offset: 1,
-            };
+            let err = err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
             assert!(TcpHeader(err).source().is_some());
         }
     }

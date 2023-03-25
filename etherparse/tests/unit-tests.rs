@@ -194,7 +194,11 @@ mod read_error {
                 .unwrap()
                 .kind()
         );
-        assert!(ReadError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }).io_error().is_none());
+        assert!(
+            ReadError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 })
+                .io_error()
+                .is_none()
+        );
     }
 
     #[test]
@@ -215,9 +219,7 @@ mod read_error {
             };
             assert_eq!(
                 err.clone(),
-                ReadError::Len(err.clone())
-                    .len_error()
-                    .unwrap()
+                ReadError::Len(err.clone()).len_error().unwrap()
             );
         }
     }

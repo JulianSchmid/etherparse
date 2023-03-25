@@ -1,4 +1,3 @@
-
 /// This type has been deprecated please use [IpNumber] instead.
 ///
 /// IPv6 headers have a field called `traffic_class` which has nothing

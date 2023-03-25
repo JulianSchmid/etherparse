@@ -241,7 +241,7 @@ impl Icmpv4Type {
 
     /// Calculate the ICMP checksum value.
     pub fn calc_checksum(&self, payload: &[u8]) -> u16 {
-        use crate::{Icmpv4Type::*, icmpv4::*};
+        use crate::{icmpv4::*, Icmpv4Type::*};
         match self {
             Unknown {
                 type_u8,
@@ -344,7 +344,7 @@ impl Icmpv4Type {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, Icmpv4Type::*, icmpv4::*};
+    use crate::{icmpv4::*, Icmpv4Type::*, *};
     use proptest::prelude::*;
 
     #[test]

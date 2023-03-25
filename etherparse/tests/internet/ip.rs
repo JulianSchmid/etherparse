@@ -31,21 +31,27 @@ mod ip_header {
         {
             let mut cursor = Cursor::new(&buffer);
             assert_eq!(
-                IpHeader::read(&mut cursor).unwrap_err().content_error().unwrap(),
-                UnsupportedIpVersion { version_number: 0xf }
+                IpHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .content_error()
+                    .unwrap(),
+                UnsupportedIpVersion {
+                    version_number: 0xf
+                }
             );
         }
 
         //deserialize with read_from_slice
         assert_eq!(
             IpHeader::from_slice(&buffer).unwrap_err(),
-            Content(UnsupportedIpVersion { version_number: 0xf })
+            Content(UnsupportedIpVersion {
+                version_number: 0xf
+            })
         );
         //also check that an error is thrown when the slice is too small
         //to even read the version
         assert_eq!(
-            IpHeader::from_slice(&buffer[buffer.len()..])
-                .unwrap_err(),
+            IpHeader::from_slice(&buffer[buffer.len()..]).unwrap_err(),
             Len(err::LenError {
                 required_len: 1,
                 len: 0,

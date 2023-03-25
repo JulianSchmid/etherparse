@@ -52,7 +52,7 @@ impl core::fmt::Display for TcpOptionReadError {
 mod test {
     use crate::*;
     use proptest::prelude::*;
-    
+
     #[test]
     fn debug() {
         use TcpOptionReadError::*;
@@ -80,7 +80,7 @@ mod test {
         assert_eq!(value, value.clone());
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn source(
             arg_u8_0 in any::<u8>(),
@@ -96,7 +96,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn fmt(
             arg_u8_0 in any::<u8>(),
@@ -104,7 +104,7 @@ mod test {
             arg_usize in any::<usize>()
         ) {
             use crate::TcpOptionReadError::*;
-    
+
             assert_eq!(
                 &format!("TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", arg_u8_0, arg_u8_1, arg_usize),
                 &format!("{}", UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize})
