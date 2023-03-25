@@ -199,7 +199,7 @@ mod test {
                 data
             };
 
-            // parsing without extensions
+            // parsing without extensions (normal length)
             {
                 let actual = Ipv6Slice::from_slice(&data_without_ext).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data_without_ext[..ipv6_base.header_len()]);
@@ -208,7 +208,7 @@ mod test {
                 prop_assert_eq!(actual.payload(), payload);
             }
 
-            // parsing with extensions
+            // parsing with extensions (normal length)
             {
                 let actual = Ipv6Slice::from_slice(&data_with_ext).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data_with_ext[..ipv6_base.header_len()]);
@@ -221,7 +221,37 @@ mod test {
                 prop_assert_eq!(actual.payload(), payload);
             }
 
-            // header error
+            // parsing without extensions (zero length, fallback to slice length)
+            {
+                // inject zero as payload length
+                let mut data = data_without_ext.clone();
+                data[4] = 0;
+                data[5] = 0;
+                let actual = Ipv6Slice::from_slice(&data).unwrap();
+                prop_assert_eq!(actual.header().slice(), &data[..ipv6_base.header_len()]);
+                prop_assert!(actual.extensions().first_header().is_none());
+                prop_assert_eq!(actual.payload_ip_number(), UDP);
+                prop_assert_eq!(actual.payload(), &data[ipv6_base.header_len()..]);
+            }
+
+            // parsing with extensions (zero length, fallback to slice length)
+            {
+                // inject zero as payload length
+                let mut data = data_with_ext.clone();
+                data[4] = 0;
+                data[5] = 0;
+                let actual = Ipv6Slice::from_slice(&data).unwrap();
+                prop_assert_eq!(actual.header().slice(), &data[..ipv6_base.header_len()]);
+                let (expected, _, _) = Ipv6ExtensionsSlice::from_slice(AUTH, &data[ipv6_base.header_len()..]).unwrap();
+                prop_assert_eq!(
+                    actual.extensions(),
+                    &expected
+                );
+                prop_assert_eq!(actual.payload_ip_number(), UDP);
+                prop_assert_eq!(actual.payload(), &data[ipv6_base.header_len() + auth_base.header_len()..]);
+            }
+
+            // header content error
             {
                 use crate::err::ipv6::HeaderError;
                 // inject invalid ip version
@@ -231,6 +261,22 @@ mod test {
                     Ipv6Slice::from_slice(&data).unwrap_err(),
                     SliceError::Header(
                         HeaderError::UnexpectedVersion{ version_number: 0 }
+                    )
+                );
+            }
+
+            // header length error
+            for len in 0..Ipv6Header::LEN {
+                prop_assert_eq!(
+                    Ipv6Slice::from_slice(&data_without_ext[..len]).unwrap_err(),
+                    SliceError::Len(
+                        LenError{
+                            required_len: Ipv6Header::LEN,
+                            len,
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv6Header,
+                            layer_start_offset: 0
+                        }
                     )
                 );
             }
@@ -273,7 +319,7 @@ mod test {
             {
                 use crate::err::{LenError, LenSource, Layer};
 
-                // inject a total_length that is smaller then the auth header
+                // inject payload length that is smaller then the auth header
                 let mut data = data_with_ext.clone();
                 let payload_len_too_small = auth_base.header_len() - 1;
                 {
@@ -295,7 +341,7 @@ mod test {
                     )
                 );
             }
-            /*
+
             // auth content error
             {
                 use crate::err::{ip_auth, ipv6_exts};
@@ -310,7 +356,7 @@ mod test {
                         ip_auth::HeaderError::ZeroPayloadLen
                     ))
                 );
-            }*/
+            }
         }
     }
 }

@@ -120,7 +120,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_gens::*;
+    use crate::{test_gens::*, Ipv4Header};
     use proptest::prelude::*;
 
     proptest! {
@@ -222,7 +222,23 @@ mod test {
                 prop_assert_eq!(actual.payload(), payload);
             }
 
-            // header error
+            // header length error
+            for len in 0..Ipv4Header::MIN_LEN {
+                prop_assert_eq!(
+                    Ipv4Slice::from_slice(&data_without_ext[..len]).unwrap_err(),
+                    SliceError::Len(
+                        LenError{
+                            required_len: Ipv4Header::MIN_LEN,
+                            len,
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv4Header,
+                            layer_start_offset: 0,
+                        }
+                    )
+                );
+            }
+
+            // header content error
             {
                 use crate::err::ipv4::HeaderError;
                 // inject invalid icv
