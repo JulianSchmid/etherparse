@@ -2,7 +2,7 @@ use crate::*;
 use core::slice::from_raw_parts;
 
 /// A slice containing an ipv6 header of a network package.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6HeaderSlice<'a> {
     slice: &'a [u8],
 }

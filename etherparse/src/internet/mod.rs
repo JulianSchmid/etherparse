@@ -19,3 +19,4 @@ pub mod ipv6_header_slice;
 pub mod ipv6_raw_ext_header;
 pub mod ipv6_raw_ext_header_slice;
 pub mod ipv6_routing_exts;
+pub mod ipv6_slice;

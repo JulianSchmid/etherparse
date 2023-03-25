@@ -287,6 +287,7 @@ pub use crate::internet::ipv6_header_slice::*;
 pub use crate::internet::ipv6_raw_ext_header::*;
 pub use crate::internet::ipv6_raw_ext_header_slice::*;
 pub use crate::internet::ipv6_routing_exts::*;
+pub use crate::internet::ipv6_slice::*;
 
 mod transport;
 pub use crate::transport::icmp_echo_header::*;
