@@ -45,11 +45,6 @@ impl TestWriter {
             error_kind,
         }
     }
-
-    /// The error kind produced if the size is exceeded
-    pub fn error_kind(&self) -> io::ErrorKind {
-        self.error_kind
-    }
 }
 
 impl io::Write for TestWriter {

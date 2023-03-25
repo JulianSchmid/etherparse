@@ -2,19 +2,6 @@ use crate::*;
 use proptest::prelude::*;
 use proptest::*;
 
-pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
-    use ErrorField::*;
-    prop_oneof![
-        Just(Ipv4PayloadLength),
-        Just(Ipv4Dscp),
-        Just(Ipv4Ecn),
-        Just(Ipv4FragmentsOffset),
-        Just(Ipv6FlowLabel),
-        Just(VlanTagPriorityCodePoint),
-        Just(VlanTagVlanId)
-    ]
-}
-
 pub fn vlan_ethertype_any() -> impl Strategy<Value = u16> {
     prop_oneof![
         Just(ether_type::VLAN_TAGGED_FRAME),
@@ -209,26 +196,6 @@ prop_compose! {
     }
 }
 
-const IPV4_KNOWN_PROTOCOLS: [u8;5] = [
-    ip_number::ICMP,
-    ip_number::UDP,
-    ip_number::TCP,
-    ip_number::AUTH,
-    ip_number::IPV6_ICMP,
-];
-
-prop_compose! {
-    pub fn ipv4_unknown()
-        (protocol in any::<u8>().prop_filter("protocol must be unknown",
-            |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
-        )
-        (header in ipv4_with(protocol)
-    ) -> Ipv4Header
-    {
-        header
-    }
-}
-
 prop_compose! {
     pub fn ipv4_extensions_with(next_header: u8)
     (
@@ -253,21 +220,6 @@ prop_compose! {
                (protocol in any::<u8>())
                (result in ipv4_extensions_with(protocol))
                -> Ipv4Extensions
-    {
-        result
-    }
-}
-
-prop_compose! {
-    pub fn ipv4_extensions_unknown()
-        (
-            next_header in any::<u8>().prop_filter(
-                "next_header must be unknown",
-                |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x)
-            )
-        ) (
-            result in ipv4_extensions_with(next_header)
-        ) -> Ipv4Extensions
     {
         result
     }
@@ -304,49 +256,6 @@ prop_compose! {
     ) -> Ipv6Header
     {
         result
-    }
-}
-
-const IPV6_KNOWN_NEXT_HEADERS: [u8;12] = [
-    ip_number::ICMP,
-    ip_number::UDP,
-    ip_number::TCP,
-    ip_number::IPV6_HOP_BY_HOP,
-    ip_number::IPV6_ICMP,
-    ip_number::IPV6_ROUTE,
-    ip_number::IPV6_FRAG,
-    ip_number::AUTH,
-    ip_number::IPV6_DEST_OPTIONS,
-    ip_number::MOBILITY,
-    ip_number::HIP,
-    ip_number::SHIM6,
-    // currently not supported:
-    // - EncapsulatingSecurityPayload
-    // - ExperimentalAndTesting0
-    // - ExperimentalAndTesting1
-];
-
-prop_compose! {
-    pub fn ipv6_unknown()(
-        source in prop::array::uniform16(any::<u8>()),
-        dest in prop::array::uniform16(any::<u8>()),
-        traffic_class in any::<u8>(),
-        flow_label in prop::bits::u32::between(0,20),
-        payload_length in any::<u16>(),
-        hop_limit in any::<u8>(),
-        next_header in any::<u8>().prop_filter("next_header must be unknown",
-            |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x))
-    ) -> Ipv6Header
-    {
-        Ipv6Header {
-            traffic_class: traffic_class,
-            flow_label: flow_label,
-            payload_length: payload_length,
-            next_header: next_header,
-            hop_limit: hop_limit,
-            source: source,
-            destination: dest
-        }
     }
 }
 
@@ -444,21 +353,6 @@ prop_compose! {
         ) (
             result in ipv6_extensions_with(next_header)
     ) -> Ipv6Extensions
-    {
-        result
-    }
-}
-
-prop_compose! {
-    pub fn ipv6_extensions_unknown()
-        (
-            next_header in any::<u8>().prop_filter(
-                "next_header must be unknown",
-                |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)
-            )
-        ) (
-            result in ipv6_extensions_with(next_header)
-        ) -> Ipv6Extensions
     {
         result
     }
@@ -582,156 +476,6 @@ prop_compose! {
     }
 }
 
-pub fn ip_number_any() -> impl Strategy<Value = IpNumber> {
-    use IpNumber::*;
-    prop_oneof![
-        Just(IPv6HeaderHopByHop),
-        Just(Icmp),
-        Just(Igmp),
-        Just(Ggp),
-        Just(IPv4),
-        Just(Stream),
-        Just(Tcp),
-        Just(Cbt),
-        Just(Egp),
-        Just(Igp),
-        Just(BbnRccMon),
-        Just(NvpII),
-        Just(Pup),
-        Just(Argus),
-        Just(Emcon),
-        Just(Xnet),
-        Just(Chaos),
-        Just(Udp),
-        Just(Mux),
-        Just(DcnMeas),
-        Just(Hmp),
-        Just(Prm),
-        Just(XnsIdp),
-        Just(Trunk1),
-        Just(Trunk2),
-        Just(Leaf1),
-        Just(Leaf2),
-        Just(Rdp),
-        Just(Irtp),
-        Just(IsoTp4),
-        Just(NetBlt),
-        Just(MfeNsp),
-        Just(MeritInp),
-        Just(Dccp),
-        Just(ThirdPartyConnectProtocol),
-        Just(Idpr),
-        Just(Xtp),
-        Just(Ddp),
-        Just(IdprCmtp),
-        Just(TpPlusPlus),
-        Just(Il),
-        Just(Ipv6),
-        Just(Sdrp),
-        Just(IPv6RouteHeader),
-        Just(IPv6FragmentationHeader),
-        Just(Idrp),
-        Just(Rsvp),
-        Just(Gre),
-        Just(Dsr),
-        Just(Bna),
-        Just(EncapsulatingSecurityPayload),
-        Just(AuthenticationHeader),
-        Just(Inlsp),
-        Just(Swipe),
-        Just(Narp),
-        Just(Mobile),
-        Just(Tlsp),
-        Just(Skip),
-        Just(IPv6Icmp),
-        Just(IPv6NoNextHeader),
-        Just(IPv6DestinationOptions),
-        Just(AnyHostInternalProtocol),
-        Just(Cftp),
-        Just(AnyLocalNetwork),
-        Just(SatExpak),
-        Just(Krytolan),
-        Just(Rvd),
-        Just(Ippc),
-        Just(AnyDistributedFileSystem),
-        Just(SatMon),
-        Just(Visa),
-        Just(Ipcv),
-        Just(Cpnx),
-        Just(Cphb),
-        Just(Wsn),
-        Just(Pvp),
-        Just(BrSatMon),
-        Just(SunNd),
-        Just(WbMon),
-        Just(WbExpak),
-        Just(IsoIp),
-        Just(Vmtp),
-        Just(SecureVmtp),
-        Just(Vines),
-        Just(TtpOrIptm),
-        Just(NsfnetIgp),
-        Just(Dgp),
-        Just(Tcf),
-        Just(Eigrp),
-        Just(Ospfigp),
-        Just(SpriteRpc),
-        Just(Larp),
-        Just(Mtp),
-        Just(Ax25),
-        Just(Ipip),
-        Just(Micp),
-        Just(SccSp),
-        Just(EtherIp),
-        Just(Encap),
-        Just(Gmtp),
-        Just(Ifmp),
-        Just(Pnni),
-        Just(Pim),
-        Just(Aris),
-        Just(Scps),
-        Just(Qnx),
-        Just(ActiveNetworks),
-        Just(IpComp),
-        Just(SitraNetworksProtocol),
-        Just(CompaqPeer),
-        Just(IpxInIp),
-        Just(Vrrp),
-        Just(Pgm),
-        Just(AnyZeroHopProtocol),
-        Just(Layer2TunnelingProtocol),
-        Just(Ddx),
-        Just(Iatp),
-        Just(Stp),
-        Just(Srp),
-        Just(Uti),
-        Just(SimpleMessageProtocol),
-        Just(Sm),
-        Just(Ptp),
-        Just(IsisOverIpv4),
-        Just(Fire),
-        Just(Crtp),
-        Just(Crudp),
-        Just(Sscopmce),
-        Just(Iplt),
-        Just(Sps),
-        Just(Pipe),
-        Just(Sctp),
-        Just(Fc),
-        Just(RsvpE2eIgnore),
-        Just(MobilityHeader),
-        Just(UdpLite),
-        Just(MplsInIp),
-        Just(Manet),
-        Just(Hip),
-        Just(Shim6),
-        Just(Wesp),
-        Just(Rohc),
-        Just(ExperimentalAndTesting0),
-        Just(ExperimentalAndTesting1)
-    ]
-}
-
 prop_compose! {
     pub fn icmpv4_type_any()
         (
@@ -770,23 +514,4 @@ prop_compose! {
     {
         Icmpv6Header::from_slice(&bytes).unwrap().0
     }
-}
-
-pub fn err_layer_any() -> impl Strategy<Value = err::Layer> {
-    use err::Layer::*;
-    prop_oneof![
-        Just(Ethernet2Header),
-        Just(VlanHeader),
-        Just(IpHeader),
-        Just(Ipv4Header),
-        Just(Ipv4Packet),
-        Just(IpAuthHeader),
-        Just(Ipv6Header),
-        Just(Ipv6FragHeader),
-        Just(Ipv6ExtHeader),
-        Just(UdpHeader),
-        Just(TcpHeader),
-        Just(Icmpv4),
-        Just(Icmpv6),
-    ]
 }
