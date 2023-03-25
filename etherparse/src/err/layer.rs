@@ -15,6 +15,8 @@ pub enum Layer {
     IpAuthHeader,
     /// Error occured in the IPv6 layer.
     Ipv6Header,
+    /// Error occured verifying the payload length of an IPv6 packet.
+    Ipv6Packet,
     /// Error occured while decoding an IPv6 fragment header.
     Ipv6FragHeader,
     /// Error occured while decoding a generic IPv6 extension header.
@@ -45,6 +47,7 @@ impl Layer {
             Ipv4Packet => "IPv4 Packet Error",
             IpAuthHeader => "IP Authentification Header Error",
             Ipv6Header => "IPv6 Header Error",
+            Ipv6Packet => "IPv6 Packet Error",
             Ipv6FragHeader => "IPv6 Fragment Header Error",
             Ipv6ExtHeader => "IPv6 Extension Header Error",
             UdpHeader => "UDP Header Error",
@@ -68,6 +71,7 @@ impl core::fmt::Display for Layer {
             Ipv4Packet => write!(f, "IPv4 packet"),
             IpAuthHeader => write!(f, "IP authentification header"),
             Ipv6Header => write!(f, "IPv6 header"),
+            Ipv6Packet => write!(f, "IPv6 packet"),
             Ipv6FragHeader => write!(f, "IPv6 fragment header"),
             Ipv6ExtHeader => write!(f, "IPv6 extension header"),
             UdpHeader => write!(f, "UDP header"),
@@ -123,6 +127,7 @@ mod test {
             (Ipv4Packet, "IPv4 Packet Error"),
             (IpAuthHeader, "IP Authentification Header Error"),
             (Ipv6Header, "IPv6 Header Error"),
+            (Ipv6Packet, "IPv6 Packet Error"),
             (Ipv6FragHeader, "IPv6 Fragment Header Error"),
             (Ipv6ExtHeader, "IPv6 Extension Header Error"),
             (UdpHeader, "UDP Header Error"),
@@ -147,6 +152,7 @@ mod test {
             (Ipv4Packet, "IPv4 packet"),
             (IpAuthHeader, "IP authentification header"),
             (Ipv6Header, "IPv6 header"),
+            (Ipv6Packet, "IPv6 packet"),
             (Ipv6FragHeader, "IPv6 fragment header"),
             (Ipv6ExtHeader, "IPv6 extension header"),
             (UdpHeader, "UDP header"),

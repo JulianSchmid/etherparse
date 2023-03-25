@@ -17,19 +17,24 @@ impl<'a> Ipv4Slice<'a> {
 
         // decode the header
         let header = Ipv4HeaderSlice::from_slice(slice)
-            .map_err(|err| SliceError::Header(err))?;
+            .map_err(|err| {
+                use crate::err::ipv4::HeaderSliceError::*;
+                match err {
+                    Len(err) => SliceError::Len(err),
+                    Content(err) => SliceError::Header(err),
+                }
+            })?;
 
         // check length based on the total length
         let header_total_len: usize = header.total_len().into();
         let header_payload = if slice.len() < header_total_len {
-            return Err(SliceError::Payload(LenError{
+            return Err(SliceError::Len(LenError{
                 required_len: header_total_len,
                 len: slice.len(),
                 len_source: LenSource::Slice,
                 layer: Layer::Ipv4Packet,
                 layer_start_offset: 0,
-            }
-            ));
+            }));
         } else {
             unsafe {
                 core::slice::from_raw_parts(
@@ -52,9 +57,9 @@ impl<'a> Ipv4Slice<'a> {
                             // change the length source to the ipv4 header
                             l.len_source = LenSource::Ipv4HeaderTotalLen;
                             l.layer_start_offset += header.slice().len();
-                            return Err(SliceError::Extensions(E::Len(l)));
+                            return Err(SliceError::Len(l));
                         },
-                        other => return Err(SliceError::Extensions(other)),
+                        E::Content(err) => return Err(SliceError::Extensions(err)),
                     },
                 };
 
@@ -223,16 +228,14 @@ mod test {
 
             // header error
             {
-                use crate::err::ipv4::{HeaderSliceError, HeaderError};
+                use crate::err::ipv4::HeaderError;
                 // inject invalid icv
                 let mut data = data_without_ext.clone();
                 data[0] = data[0] & 0xf0; // icv 0
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data).unwrap_err(),
                     SliceError::Header(
-                        HeaderSliceError::Content(
-                            HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 }
-                        )
+                        HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 }
                     )
                 );
             }
@@ -244,7 +247,7 @@ mod test {
                 let required_len = ipv4_base.header_len() + payload.len();
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data_without_ext[..required_len - 1]).unwrap_err(),
-                    SliceError::Payload(LenError{
+                    SliceError::Len(LenError{
                         required_len: required_len,
                         len: required_len - 1,
                         len_source: LenSource::Slice,
@@ -261,7 +264,7 @@ mod test {
                 let required_len = ipv4_base.header_len() + auth.header_len() + payload.len();
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data_with_ext[..required_len - 1]).unwrap_err(),
-                    SliceError::Payload(LenError{
+                    SliceError::Len(LenError{
                         required_len: required_len,
                         len: required_len - 1,
                         len_source: LenSource::Slice,
@@ -273,7 +276,7 @@ mod test {
 
             // auth length error
             {
-                use crate::err::{LenError, LenSource, Layer, ip_auth};
+                use crate::err::{LenError, LenSource, Layer};
 
                 // inject a total_length that is smaller then the auth header
                 let mut data = data_with_ext.clone();
@@ -286,7 +289,7 @@ mod test {
 
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data).unwrap_err(),
-                    SliceError::Extensions(ip_auth::HeaderSliceError::Len(
+                    SliceError::Len(
                         LenError{
                             required_len: auth.header_len(),
                             len: auth.header_len() - 1,
@@ -294,13 +297,13 @@ mod test {
                             layer: Layer::IpAuthHeader,
                             layer_start_offset: ipv4_base.header_len(),
                         }
-                    ))
+                    )
                 );
             }
 
             // auth content error
             {
-                use crate::err::ip_auth::{HeaderError, HeaderSliceError};
+                use crate::err::ip_auth::HeaderError;
 
                 // inject zero as auth header length
                 let mut data = data_with_ext.clone();
@@ -309,9 +312,7 @@ mod test {
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data).unwrap_err(),
                     SliceError::Extensions(
-                        HeaderSliceError::Content(
-                            HeaderError::ZeroPayloadLen
-                        )
+                        HeaderError::ZeroPayloadLen
                     )
                 );
             }

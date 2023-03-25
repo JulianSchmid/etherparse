@@ -1,16 +1,16 @@
-use crate::err::{LenError, ipv4, ip_auth};
+use crate::err::{LenError, ipv6, ipv6_exts};
 
-/// Errors that can occur when slicing the IPv4 part of a packet.
+/// Errors that can occur when slicing the IPv6 part of a packet.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum SliceError {
     /// Length related errors (e.g. not enough data in slice).
     Len(LenError),
 
     /// Error while slicing the header.
-    Header(ipv4::HeaderError),
+    Header(ipv6::HeaderError),
 
-    /// Error while slicing an ipv4 extension header.
-    Extensions(ip_auth::HeaderError),
+    /// Error while slicing an ipv6 extension header.
+    Extensions(ipv6_exts::HeaderError),
 }
 
 impl core::fmt::Display for SliceError {
@@ -38,7 +38,7 @@ impl std::error::Error for SliceError {
 #[cfg(test)]
 mod tests {
     use super::{super::HeaderError, SliceError::*, *};
-    use crate::err::{Layer, LenError, LenSource};
+    use crate::err::{Layer, LenError, LenSource, ip_auth};
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -79,7 +79,7 @@ mod tests {
         {
             let err = LenError{
                 required_len: 1,
-                layer: Layer::Ipv4Packet,
+                layer: Layer::Ipv6Packet,
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 3
@@ -93,10 +93,9 @@ mod tests {
         }
         // extensions
         {
-            let err = ip_auth::HeaderError::ZeroPayloadLen;
+            let err = ipv6_exts::HeaderError::IpAuth(ip_auth::HeaderError::ZeroPayloadLen);
             assert_eq!(format!("{}", &err), format!("{}", Extensions(err.clone())));
         }
-        
     }
 
     #[test]
@@ -111,13 +110,11 @@ mod tests {
             }).source().is_some()
         );
         assert!(
-            Header(
-                HeaderError::UnexpectedVersion { version_number: 6 }
-            ).source().is_some()
+            Header(HeaderError::UnexpectedVersion { version_number: 6 }).source().is_some()
         );
         assert!(
             Extensions(
-                ip_auth::HeaderError::ZeroPayloadLen
+                ipv6_exts::HeaderError::IpAuth(ip_auth::HeaderError::ZeroPayloadLen)
             ).source().is_some()
         );
     }
