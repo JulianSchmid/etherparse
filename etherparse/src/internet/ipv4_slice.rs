@@ -115,6 +115,12 @@ impl<'a> Ipv4Slice<'a> {
     pub fn payload_ip_number(&self) -> u8 {
         self.payload_ip_number
     }
+
+    /// Returns true if the payload is flagged as beeing fragmented.
+    #[inline]
+    pub fn is_payload_fragmented(&self) -> bool {
+        self.header.is_fragmenting_payload()
+    }
 }
 
 #[cfg(test)]
@@ -328,6 +334,41 @@ mod test {
                     )
                 );
             }
+        }
+    }
+
+    #[test]
+    fn is_payload_fragmented() {
+        use crate::ip_number::UDP;
+        // non-fragmented
+        {
+            let payload: [u8; 6] = [1, 2, 3, 4, 5, 6];
+            let ipv4 = Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
+            let data = {
+                let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
+                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&payload);
+                data
+            };
+
+            let slice = Ipv4Slice::from_slice(&data).unwrap();
+            assert!(false == slice.is_payload_fragmented());
+        }
+        // fragmented
+        {
+            let payload: [u8; 6] = [1, 2, 3, 4, 5, 6];
+            let mut ipv4 =
+                Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
+            ipv4.fragments_offset = 123;
+            let data = {
+                let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
+                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&payload);
+                data
+            };
+
+            let slice = Ipv4Slice::from_slice(&data).unwrap();
+            assert!(slice.is_payload_fragmented());
         }
     }
 }

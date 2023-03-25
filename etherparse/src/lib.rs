@@ -307,6 +307,7 @@ pub use crate::transport::tcp_option_read_error::*;
 pub use crate::transport::tcp_option_write_error::*;
 pub use crate::transport::tcp_options_iterator::*;
 pub use crate::transport::transport_header::*;
+pub use crate::transport::transport_slice::*;
 pub use crate::transport::udp_header::*;
 pub use crate::transport::udp_header_slice::*;
 pub use crate::transport::udp_slice::*;
