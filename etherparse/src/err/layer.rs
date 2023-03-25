@@ -23,6 +23,8 @@ pub enum Layer {
     Ipv6ExtHeader,
     /// Error occured while decoding an UDP header.
     UdpHeader,
+    /// Error occured verifying the length of the UDP payload.
+    UdpPayload,
     /// Error occured while decoding a TCP header.
     TcpHeader,
     /// Error occured while parsing an ICMP packet.
@@ -51,6 +53,7 @@ impl Layer {
             Ipv6FragHeader => "IPv6 Fragment Header Error",
             Ipv6ExtHeader => "IPv6 Extension Header Error",
             UdpHeader => "UDP Header Error",
+            UdpPayload => "UDP Payload Error",
             TcpHeader => "TCP Header Error",
             Icmpv4 => "ICMP Packet Error",
             Icmpv4Timestamp => "ICMP Timestamp Error",
@@ -75,6 +78,7 @@ impl core::fmt::Display for Layer {
             Ipv6FragHeader => write!(f, "IPv6 fragment header"),
             Ipv6ExtHeader => write!(f, "IPv6 extension header"),
             UdpHeader => write!(f, "UDP header"),
+            UdpPayload => write!(f, "UDP payload"),
             TcpHeader => write!(f, "TCP header"),
             Icmpv4 => write!(f, "ICMP packet"),
             Icmpv4Timestamp => write!(f, "ICMP timestamp message"),
@@ -131,6 +135,7 @@ mod test {
             (Ipv6FragHeader, "IPv6 Fragment Header Error"),
             (Ipv6ExtHeader, "IPv6 Extension Header Error"),
             (UdpHeader, "UDP Header Error"),
+            (UdpPayload, "UDP Payload Error"),
             (TcpHeader, "TCP Header Error"),
             (Icmpv4, "ICMP Packet Error"),
             (Icmpv4Timestamp, "ICMP Timestamp Error"),
@@ -156,6 +161,7 @@ mod test {
             (Ipv6FragHeader, "IPv6 fragment header"),
             (Ipv6ExtHeader, "IPv6 extension header"),
             (UdpHeader, "UDP header"),
+            (UdpPayload, "UDP payload"),
             (TcpHeader, "TCP header"),
             (Icmpv4, "ICMP packet"),
             (Icmpv4Timestamp, "ICMP timestamp message"),

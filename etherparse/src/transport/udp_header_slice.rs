@@ -4,7 +4,7 @@ use core::slice::from_raw_parts;
 ///A slice containing an udp header of a network package. Struct allows the selective read of fields in the header.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UdpHeaderSlice<'a> {
-    slice: &'a [u8],
+    pub(crate) slice: &'a [u8],
 }
 
 impl<'a> UdpHeaderSlice<'a> {
