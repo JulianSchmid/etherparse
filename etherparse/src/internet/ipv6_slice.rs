@@ -1,5 +1,5 @@
-use crate::{Ipv6HeaderSlice, Ipv6ExtensionsSlice, Ipv6Header};
-use crate::err::{LenError, LenSource, Layer, ipv6::SliceError};
+use crate::err::{ipv6::SliceError, Layer, LenError, LenSource};
+use crate::{Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
 
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,16 +14,14 @@ impl<'a> Ipv6Slice<'a> {
     /// Decode IPv6 header, extension headers and determine the payload
     /// length based on the `payload_length` field in the IPv6 header.
     pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6Slice<'a>, SliceError> {
-
         // try reading the header
-        let header = Ipv6HeaderSlice::from_slice(slice)
-            .map_err(|err| {
-                use crate::err::ipv6::HeaderSliceError::*;
-                match err {
-                    Len(err) => SliceError::Len(err),
-                    Content(err) => SliceError::Header(err),
-                }
-            })?;
+        let header = Ipv6HeaderSlice::from_slice(slice).map_err(|err| {
+            use crate::err::ipv6::HeaderSliceError::*;
+            match err {
+                Len(err) => SliceError::Len(err),
+                Content(err) => SliceError::Header(err),
+            }
+        })?;
 
         // restrict slice by the length specified in the header
         let header_payload = if 0 == header.payload_length() {
@@ -35,14 +33,14 @@ impl<'a> Ipv6Slice<'a> {
             unsafe {
                 core::slice::from_raw_parts(
                     slice.as_ptr().add(Ipv6Header::LEN),
-                    slice.len() - Ipv6Header::LEN
+                    slice.len() - Ipv6Header::LEN,
                 )
             }
         } else {
             let payload_len = usize::from(header.payload_length());
             let expected_len = Ipv6Header::LEN + payload_len;
             if slice.len() < expected_len {
-                return Err(SliceError::Len(LenError{
+                return Err(SliceError::Len(LenError {
                     required_len: expected_len,
                     len: slice.len(),
                     len_source: LenSource::Slice,
@@ -51,37 +49,35 @@ impl<'a> Ipv6Slice<'a> {
                 }));
             } else {
                 unsafe {
-                    core::slice::from_raw_parts(
-                        slice.as_ptr().add(Ipv6Header::LEN),
-                        payload_len
-                    )
+                    core::slice::from_raw_parts(slice.as_ptr().add(Ipv6Header::LEN), payload_len)
                 }
             }
         };
 
         // parse extension headers
-        let (exts, payload_ip_number, payload) = Ipv6ExtensionsSlice::from_slice(header.next_header(), header_payload)
-            .map_err(|err| {
-                // modify length errors
-                use crate::err::ipv6_exts::HeaderSliceError::*;
-                match err {
-                    Len(mut err) => {
-                        err.len_source = LenSource::Ipv6HeaderPayloadLen;
-                        err.layer_start_offset = Ipv6Header::LEN;
-                        SliceError::Len(err)
-                    },
-                    Content(err) => SliceError::Extensions(err),
-                }
-            })?;
+        let (exts, payload_ip_number, payload) =
+            Ipv6ExtensionsSlice::from_slice(header.next_header(), header_payload).map_err(
+                |err| {
+                    // modify length errors
+                    use crate::err::ipv6_exts::HeaderSliceError::*;
+                    match err {
+                        Len(mut err) => {
+                            err.len_source = LenSource::Ipv6HeaderPayloadLen;
+                            err.layer_start_offset = Ipv6Header::LEN;
+                            SliceError::Len(err)
+                        }
+                        Content(err) => SliceError::Extensions(err),
+                    }
+                },
+            )?;
 
-        Ok(Ipv6Slice{
+        Ok(Ipv6Slice {
             header,
             exts,
             payload_ip_number,
             payload,
         })
     }
-
 
     /// Returns a slice containing the IPv6 header.
     #[inline]
@@ -103,7 +99,7 @@ impl<'a> Ipv6Slice<'a> {
     }
 
     /// Returns the ip number the type of payload of the IPv6 packet.
-    /// 
+    ///
     /// This function returns the ip number stored in the last
     /// IPv6 header or extension header.
     #[inline]
@@ -112,11 +108,13 @@ impl<'a> Ipv6Slice<'a> {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_gens::*, ip_number::{AUTH, UDP, IGMP}};
+    use crate::{
+        ip_number::{AUTH, IGMP, UDP},
+        test_gens::*,
+    };
     use proptest::prelude::*;
 
     proptest! {
@@ -316,4 +314,3 @@ mod test {
         }
     }
 }
-

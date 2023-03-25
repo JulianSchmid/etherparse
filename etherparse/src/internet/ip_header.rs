@@ -9,14 +9,15 @@ pub enum IpHeader {
 }
 
 impl IpHeader {
-
     /// Maximum summed up length of all extension headers in bytes/octets.
     pub const MAX_LEN: usize = Ipv6Header::LEN + Ipv6Extensions::MAX_LEN;
 
     /// Renamed to `IpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
     #[inline]
-    pub fn read_from_slice(slice: &[u8]) -> Result<(IpHeader, u8, &[u8]), err::ip::HeaderSliceError> {
+    pub fn read_from_slice(
+        slice: &[u8],
+    ) -> Result<(IpHeader, u8, &[u8]), err::ip::HeaderSliceError> {
         IpHeader::from_slice(slice)
     }
 
@@ -88,17 +89,16 @@ impl IpHeader {
                         unsafe {
                             (
                                 // SAFETY: Safe as all IPv4 slice preconditions were validated.
-                                Ipv4HeaderSlice::from_slice_unchecked(
-                                    core::slice::from_raw_parts(
-                                        slice.as_ptr(),
-                                        header_length
-                                    )
-                                ).to_header(),
+                                Ipv4HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
+                                    slice.as_ptr(),
+                                    header_length,
+                                ))
+                                .to_header(),
                                 // SAFETY: Safe as the slice length was validated to be at least header_length
                                 core::slice::from_raw_parts(
                                     slice.as_ptr().add(header_length),
-                                    slice.len() - header_length
-                                )
+                                    slice.len() - header_length,
+                                ),
                             )
                         }
                     };
@@ -138,19 +138,19 @@ impl IpHeader {
                     }
                     .to_header();
                     let rest = &slice[Ipv6Header::LEN..];
-                    Ipv6Extensions::from_slice(header.next_header, rest).map(
-                        |(ext, next_protocol, rest)| {
+                    Ipv6Extensions::from_slice(header.next_header, rest)
+                        .map(|(ext, next_protocol, rest)| {
                             (IpHeader::Version6(header, ext), next_protocol, rest)
-                        },
-                    ).map_err(|err| {
-                        use err::ipv6_exts::HeaderSliceError as I;
-                        match err {
-                            I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
-                            I::Content(err) => Content(Ipv6Exts(err)),
-                        }
-                    })
+                        })
+                        .map_err(|err| {
+                            use err::ipv6_exts::HeaderSliceError as I;
+                            match err {
+                                I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
+                                I::Content(err) => Content(Ipv6Exts(err)),
+                            }
+                        })
                 }
-                version_number => Err(Content(UnsupportedIpVersion{ version_number })),
+                version_number => Err(Content(UnsupportedIpVersion { version_number })),
             }
         }
     }
@@ -177,9 +177,9 @@ impl IpHeader {
                 }
 
                 // read the rest of the header
-                let header_len_u16 = u16::from(ihl)*4;
+                let header_len_u16 = u16::from(ihl) * 4;
                 let header_len = usize::from(header_len_u16);
-                let mut buffer = [0u8;Ipv4Header::MAX_LEN];
+                let mut buffer = [0u8; Ipv4Header::MAX_LEN];
                 buffer[0] = value;
                 reader.read_exact(&mut buffer[1..header_len]).map_err(Io)?;
 
@@ -192,9 +192,9 @@ impl IpHeader {
                     }));
                 }
 
-                let header = unsafe {
-                    Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len])
-                }.to_header();
+                let header =
+                    unsafe { Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len]) }
+                        .to_header();
 
                 // read the extension headers if present
                 Ipv4Extensions::read(reader, header.protocol)
@@ -219,7 +219,7 @@ impl IpHeader {
                         }
                     })
             }
-            version_number => Err(Content(UnsupportedIpVersion{ version_number })),
+            version_number => Err(Content(UnsupportedIpVersion { version_number })),
         }
     }
 
@@ -317,7 +317,7 @@ impl IpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, ip_number::*, test_gens::*};
+    use crate::{ip_number::*, test_gens::*, *};
     use proptest::prelude::*;
     use std::io::Cursor;
 
@@ -641,7 +641,7 @@ mod test {
             );
         }
     }
-    
+
     proptest! {
         #[test]
         fn next_header(
@@ -674,7 +674,7 @@ mod test {
             }
         }
     }
-    
+
     // TODO set_next_headers
 
     proptest! {

@@ -111,9 +111,7 @@ impl Ipv6RawExtHeader {
     }
 
     /// Read an Ipv6ExtensionHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(
-        slice: &[u8],
-    ) -> Result<(Ipv6RawExtHeader, &[u8]), err::LenError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6RawExtHeader, &[u8]), err::LenError> {
         let s = Ipv6RawExtHeaderSlice::from_slice(slice)?;
         let rest = &slice[s.slice().len()..];
         let header = s.to_header();

@@ -192,7 +192,7 @@ impl<'a> Icmpv6Slice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, icmpv6::*, test_gens::*, Icmpv6Type::*};
+    use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *};
     use proptest::prelude::*;
 
     proptest! {

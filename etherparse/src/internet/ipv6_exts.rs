@@ -27,13 +27,12 @@ pub struct Ipv6Extensions {
 }
 
 impl Ipv6Extensions {
-
     /// Minimum length required for extension header in bytes/octets.
     /// Which is zero as no extension headers are required.
     pub const MIN_LEN: usize = 0;
 
     /// Maximum summed up length of all extension headers in bytes/octets.
-    pub const MAX_LEN: usize = Ipv6RawExtHeader::MAX_LEN * 2 
+    pub const MAX_LEN: usize = Ipv6RawExtHeader::MAX_LEN * 2
         + Ipv6RoutingExtensions::MAX_LEN
         + Ipv6FragmentHeader::LEN
         + IpAuthHeader::MAX_LEN;
@@ -74,13 +73,12 @@ impl Ipv6Extensions {
         let mut rest = slice;
         let mut next_header = start_ip_number;
 
-        use ip_number::*;
         use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+        use ip_number::*;
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_header {
-            let slice =
-                Ipv6RawExtHeaderSlice::from_slice(rest).map_err(Len)?;
+            let slice = Ipv6RawExtHeaderSlice::from_slice(rest).map_err(Len)?;
             rest = &rest[slice.slice().len()..];
             next_header = slice.next_header();
             result.hop_by_hop_options = Some(slice.to_header());
@@ -206,8 +204,8 @@ impl Ipv6Extensions {
         let mut result: Ipv6Extensions = Default::default();
         let mut next_protocol = start_ip_number;
 
-        use ip_number::*;
         use err::ipv6_exts::{HeaderError::*, HeaderReadError::*};
+        use ip_number::*;
 
         // the hop by hop header is required to occur directly after the ipv6 header
         if IPV6_HOP_BY_HOP == next_protocol {

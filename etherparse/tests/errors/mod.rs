@@ -99,15 +99,15 @@ fn read_error_source() {
             .source()
             .is_some()
     );
-    assert!(
-        Len(err::LenError {
-            required_len: 0,
-            len: 0,
-            len_source: err::LenSource::Slice,
-            layer: err::Layer::Ethernet2Header,
-            layer_start_offset: 0,
-        }).source().is_some()
-    );
+    assert!(Len(err::LenError {
+        required_len: 0,
+        len: 0,
+        len_source: err::LenSource::Slice,
+        layer: err::Layer::Ethernet2Header,
+        layer_start_offset: 0,
+    })
+    .source()
+    .is_some());
     assert!(
         IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 })
             .source()
@@ -129,15 +129,13 @@ fn read_error_source() {
             .is_some()
     );
     assert!(
-        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 })
+        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 0 })
             .source()
             .is_some()
     );
-    assert!(
-        IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen)
-            .source()
-            .is_some()
-    );
+    assert!(IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen)
+        .source()
+        .is_some());
 }
 
 #[test]
@@ -158,7 +156,7 @@ fn read_error_debug() {
         Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
         Ipv6ExtsHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
         IpAuthHeader(err::ip_auth::HeaderError::ZeroPayloadLen),
-        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall{ data_offset: 0 }),
+        TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 0 }),
     ];
 
     for value in &values {

@@ -203,7 +203,7 @@ impl<'a> core::fmt::Debug for TcpOptionsIterator<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, tcp_option::*};
+    use crate::{tcp_option::*, *};
 
     #[test]
     fn debug() {
@@ -242,11 +242,7 @@ mod test {
 
     #[test]
     fn from_slice_and_rest() {
-        let buffer = [
-            KIND_NOOP, 
-            KIND_NOOP,
-            KIND_MAXIMUM_SEGMENT_SIZE, 4
-        ];
+        let buffer = [KIND_NOOP, KIND_NOOP, KIND_MAXIMUM_SEGMENT_SIZE, 4];
         let it = TcpOptionsIterator::from_slice(&buffer);
         assert_eq!(it.rest(), &buffer[..]);
     }

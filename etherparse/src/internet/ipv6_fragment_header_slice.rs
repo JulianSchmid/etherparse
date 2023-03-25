@@ -10,9 +10,7 @@ pub struct Ipv6FragmentHeaderSlice<'a> {
 
 impl<'a> Ipv6FragmentHeaderSlice<'a> {
     /// Creates a hop by hop header slice from a slice.
-    pub fn from_slice(
-        slice: &'a [u8],
-    ) -> Result<Ipv6FragmentHeaderSlice<'a>, err::LenError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6FragmentHeaderSlice<'a>, err::LenError> {
         // the fragmentation header has the exact size of 8 bytes
         if slice.len() < 8 {
             Err(err::LenError {
@@ -169,9 +167,9 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
-    
+
     proptest! {
         #[test]
         fn debug(input in ipv6_fragment_any()) {
@@ -232,7 +230,7 @@ mod test {
             }
         }
     }
-    
+
     proptest! {
         #[test]
         fn from_slice_unchecked(
@@ -251,7 +249,7 @@ mod test {
             }
         }
     }
-    
+
     proptest! {
         #[test]
         fn getters(input in ipv6_fragment_any()) {
@@ -264,7 +262,7 @@ mod test {
             assert_eq!(input.identification, slice.identification());
         }
     }
-    
+
     proptest! {
         #[test]
         fn is_fragmenting_payload(

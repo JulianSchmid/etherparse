@@ -1,4 +1,3 @@
-
 /// Code value in an ICMPv4 Redirect message.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RedirectCode {
@@ -18,13 +17,11 @@ impl RedirectCode {
     /// Returns [`None`] in case the code value is not known as a redirect code.
     #[inline]
     pub fn from_u8(code_u8: u8) -> Option<RedirectCode> {
-        use crate::icmpv4::{*, RedirectCode::*};
+        use crate::icmpv4::{RedirectCode::*, *};
         match code_u8 {
             CODE_REDIRECT_FOR_NETWORK => Some(RedirectForNetwork),
             CODE_REDIRECT_FOR_HOST => Some(RedirectForHost),
-            CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => {
-                Some(RedirectForTypeOfServiceAndNetwork)
-            }
+            CODE_REDIRECT_TYPE_OF_SERVICE_AND_NETWORK => Some(RedirectForTypeOfServiceAndNetwork),
             CODE_REDIRECT_TYPE_OF_SERVICE_AND_HOST => Some(RedirectForTypeOfServiceAndHost),
             _ => None,
         }
@@ -40,7 +37,7 @@ impl RedirectCode {
 #[cfg(test)]
 
 mod test {
-    use crate::icmpv4::{*, RedirectCode::*};
+    use crate::icmpv4::{RedirectCode::*, *};
 
     #[test]
     fn from_u8() {

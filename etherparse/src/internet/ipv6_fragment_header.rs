@@ -40,9 +40,7 @@ impl Ipv6FragmentHeader {
     }
 
     /// Read an Ipv6FragmentHeader from a slice and return the header & unused parts of the slice.
-    pub fn from_slice(
-        slice: &[u8],
-    ) -> Result<(Ipv6FragmentHeader, &[u8]), err::LenError> {
+    pub fn from_slice(slice: &[u8]) -> Result<(Ipv6FragmentHeader, &[u8]), err::LenError> {
         let s = Ipv6FragmentHeaderSlice::from_slice(slice)?;
         let rest = &slice[8..];
         let header = s.to_header();
@@ -165,7 +163,7 @@ impl Ipv6FragmentHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*};
+    use crate::{test_gens::*, *};
     use proptest::prelude::*;
     use std::io::Cursor;
 

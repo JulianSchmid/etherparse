@@ -35,9 +35,7 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     }
 
     /// Creates a generic ipv6 extension header slice from a slice.
-    pub fn from_slice(
-        slice: &'a [u8],
-    ) -> Result<Ipv6RawExtHeaderSlice<'a>, err::LenError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6RawExtHeaderSlice<'a>, err::LenError> {
         //check length
         if slice.len() < 8 {
             return Err(err::LenError {

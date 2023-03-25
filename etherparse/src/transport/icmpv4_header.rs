@@ -15,16 +15,12 @@ pub struct Icmpv4Header {
 }
 
 impl Icmpv4Header {
-
     /// Minimum number of bytes/octets an Icmpv4Header takes up
     /// in serialized form.
     pub const MIN_LEN: usize = 8;
 
     /// Deprecated, use [`Icmpv4Header::MIN_LEN`] instead.
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use Icmpv4Header::MIN_LEN instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use Icmpv4Header::MIN_LEN instead")]
     pub const MIN_SERIALIZED_SIZE: usize = 8;
 
     /// Maximum number of bytes/octets an Icmpv4Header takes up
@@ -36,10 +32,7 @@ impl Icmpv4Header {
     pub const MAX_LEN: usize = 20;
 
     /// Deprecated, use [`Icmpv4Header::MAX_LEN`] instead.
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use Icmpv4Header::MAX_LEN instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use Icmpv4Header::MAX_LEN instead")]
     pub const MAX_SERIALIZED_SIZE: usize = 20;
 
     /// Constructs an [`Icmpv4Header`] using the given type
@@ -272,12 +265,11 @@ impl Icmpv4Header {
     }
 }
 
-
 #[cfg(test)]
 mod test {
-    use crate::{*, test_gens::*, icmpv4::*};
-    use proptest::prelude::*;
+    use crate::{icmpv4::*, test_gens::*, *};
     use assert_matches::assert_matches;
+    use proptest::prelude::*;
 
     #[test]
     #[allow(deprecated)]

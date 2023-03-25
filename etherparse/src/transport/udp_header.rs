@@ -191,9 +191,7 @@ impl UdpHeader {
     /// Reads a udp header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     #[deprecated(since = "0.10.1", note = "Use UdpHeader::from_slice instead.")]
     #[inline]
-    pub fn read_from_slice(
-        slice: &[u8],
-    ) -> Result<(UdpHeader, &[u8]), err::LenError> {
+    pub fn read_from_slice(slice: &[u8]) -> Result<(UdpHeader, &[u8]), err::LenError> {
         UdpHeader::from_slice(slice)
     }
 

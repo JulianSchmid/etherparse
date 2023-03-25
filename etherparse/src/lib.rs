@@ -267,15 +267,15 @@ pub(crate) mod test_gens;
 
 mod internet;
 pub use crate::internet::internet_slice::*;
-pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_auth_header::*;
 pub use crate::internet::ip_auth_header_slice::*;
+pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_number_impl::*;
 pub use crate::internet::ipv4_exts::*;
 pub use crate::internet::ipv4_exts_slice::*;
 pub use crate::internet::ipv4_header::*;
-pub use crate::internet::ipv4_slice::*;
 pub use crate::internet::ipv4_header_slice::*;
+pub use crate::internet::ipv4_slice::*;
 pub use crate::internet::ipv6_ext_slice::*;
 pub use crate::internet::ipv6_ext_slice_iter::*;
 pub use crate::internet::ipv6_exts::*;

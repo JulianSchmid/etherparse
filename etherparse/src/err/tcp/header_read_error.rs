@@ -61,7 +61,7 @@ mod test {
 
     #[test]
     fn debug() {
-        let err = HeaderError::DataOffsetTooSmall{ data_offset: 1 };
+        let err = HeaderError::DataOffsetTooSmall { data_offset: 1 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -81,7 +81,7 @@ mod test {
             );
         }
         {
-            let err = HeaderError::DataOffsetTooSmall{ data_offset: 1 };
+            let err = HeaderError::DataOffsetTooSmall { data_offset: 1 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -95,7 +95,9 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 }).source().is_some());
+        assert!(Content(HeaderError::DataOffsetTooSmall { data_offset: 1 })
+            .source()
+            .is_some());
     }
 
     #[test]
@@ -106,7 +108,9 @@ mod test {
         ))
         .io_error()
         .is_some());
-        assert!(Content(HeaderError::DataOffsetTooSmall{ data_offset: 1 }).io_error().is_none());
+        assert!(Content(HeaderError::DataOffsetTooSmall { data_offset: 1 })
+            .io_error()
+            .is_none());
     }
 
     #[test]
@@ -120,7 +124,7 @@ mod test {
             .content_error()
         );
         {
-            let err = HeaderError::DataOffsetTooSmall{ data_offset: 1 };
+            let err = HeaderError::DataOffsetTooSmall { data_offset: 1 };
             assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }
     }

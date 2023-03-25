@@ -30,7 +30,7 @@ impl core::fmt::Display for TcpOptionWriteError {
 mod test {
     use crate::*;
     use proptest::prelude::*;
-    
+
     #[test]
     fn debug() {
         use TcpOptionWriteError::*;
@@ -44,7 +44,7 @@ mod test {
         assert_eq!(value, value.clone());
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn source(arg_usize in any::<usize>()) {
             use std::error::Error;
@@ -54,7 +54,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn fmt(arg_usize in any::<usize>()) {
             use crate::TcpOptionWriteError::*;

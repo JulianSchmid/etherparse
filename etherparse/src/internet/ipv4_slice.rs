@@ -1,4 +1,7 @@
-use crate::{err::{LenError, LenSource, Layer, ipv4::SliceError}, Ipv4ExtensionsSlice, Ipv4HeaderSlice, IpAuthHeaderSlice};
+use crate::{
+    err::{ipv4::SliceError, Layer, LenError, LenSource},
+    IpAuthHeaderSlice, Ipv4ExtensionsSlice, Ipv4HeaderSlice,
+};
 
 /// Slice containing the IPv4 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -16,19 +19,18 @@ impl<'a> Ipv4Slice<'a> {
         use crate::ip_number::AUTH;
 
         // decode the header
-        let header = Ipv4HeaderSlice::from_slice(slice)
-            .map_err(|err| {
-                use crate::err::ipv4::HeaderSliceError::*;
-                match err {
-                    Len(err) => SliceError::Len(err),
-                    Content(err) => SliceError::Header(err),
-                }
-            })?;
+        let header = Ipv4HeaderSlice::from_slice(slice).map_err(|err| {
+            use crate::err::ipv4::HeaderSliceError::*;
+            match err {
+                Len(err) => SliceError::Len(err),
+                Content(err) => SliceError::Header(err),
+            }
+        })?;
 
         // check length based on the total length
         let header_total_len: usize = header.total_len().into();
         let header_payload = if slice.len() < header_total_len {
-            return Err(SliceError::Len(LenError{
+            return Err(SliceError::Len(LenError {
                 required_len: header_total_len,
                 len: slice.len(),
                 len_source: LenSource::Slice,
@@ -39,7 +41,7 @@ impl<'a> Ipv4Slice<'a> {
             unsafe {
                 core::slice::from_raw_parts(
                     slice.as_ptr().add(header.slice().len()),
-                    header_total_len - header.slice().len()
+                    header_total_len - header.slice().len(),
                 )
             }
         };
@@ -58,7 +60,7 @@ impl<'a> Ipv4Slice<'a> {
                             l.len_source = LenSource::Ipv4HeaderTotalLen;
                             l.layer_start_offset += header.slice().len();
                             return Err(SliceError::Len(l));
-                        },
+                        }
                         E::Content(err) => return Err(SliceError::Extensions(err)),
                     },
                 };
@@ -67,28 +69,22 @@ impl<'a> Ipv4Slice<'a> {
                 let payload = unsafe {
                     core::slice::from_raw_parts(
                         header_payload.as_ptr().add(auth.slice().len()),
-                        header_payload.len() - auth.slice().len()
+                        header_payload.len() - auth.slice().len(),
                     )
                 };
-                Ok(Ipv4Slice{
+                Ok(Ipv4Slice {
                     header,
-                    exts: Ipv4ExtensionsSlice{
-                        auth: Some(auth),
-                    },
+                    exts: Ipv4ExtensionsSlice { auth: Some(auth) },
                     payload_ip_number: auth.next_header(),
                     payload,
                 })
-            },
-            payload_ip_number => {
-                Ok(Ipv4Slice{
-                    header,
-                    exts: Ipv4ExtensionsSlice{
-                        auth: None,
-                    },
-                    payload_ip_number,
-                    payload: header_payload,
-                })
-            },
+            }
+            payload_ip_number => Ok(Ipv4Slice {
+                header,
+                exts: Ipv4ExtensionsSlice { auth: None },
+                payload_ip_number,
+                payload: header_payload,
+            }),
         }
     }
 
@@ -112,7 +108,7 @@ impl<'a> Ipv4Slice<'a> {
     }
 
     /// Returns the ip number the type of payload of the IPv4 packet.
-    /// 
+    ///
     /// This function returns the ip number stored in the last
     /// IPv4 header or extension header.
     #[inline]

@@ -1,4 +1,3 @@
-
 /// A ICMPv4 timestamp or timestamp response message.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimestampMessage {
@@ -24,9 +23,7 @@ impl TimestampMessage {
             seq: u16::from_be_bytes([bytes[2], bytes[3]]),
             originate_timestamp: u32::from_be_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]),
             receive_timestamp: u32::from_be_bytes([bytes[8], bytes[9], bytes[10], bytes[11]]),
-            transmit_timestamp: u32::from_be_bytes([
-                bytes[12], bytes[13], bytes[14], bytes[15],
-            ]),
+            transmit_timestamp: u32::from_be_bytes([bytes[12], bytes[13], bytes[14], bytes[15]]),
         }
     }
 }

@@ -2,26 +2,26 @@ use crate::err::{Layer, LenSource};
 
 /// Error when different lengths are conflicting with each other (e.g. not
 /// enough data in a slice to decode a header).
-/// 
+///
 /// This error is triggered whenever there is not enough data to decode
 /// an element (e.g. if a slice is too small to decode an header) or
 /// if a length that is inhered from an upper layer is too big for the
-/// lower layer (e.g. length inherited from an IP header is too big to 
+/// lower layer (e.g. length inherited from an IP header is too big to
 /// be used as an ICMP packet length).
-/// 
+///
 /// When the error is caused by not enough data beeing available
 /// `required_len > len` must be true. While when the length from
-/// the upper layer is too big for the lower layer the inverse 
+/// the upper layer is too big for the lower layer the inverse
 /// (`required_len < len`) must be true.
-/// 
+///
 /// # Examples:
-/// 
+///
 /// An example for an error that could be returned when there is not enough
 /// data available to decode an UDP header would be:
-/// 
+///
 /// ```
 /// use etherparse::*;
-/// 
+///
 /// err::LenError{
 ///     // Expected to have at least the length of an UDP header present:
 ///     required_len: UdpHeader::LEN,
@@ -39,7 +39,7 @@ use crate::err::{Layer, LenSource};
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct LenError {
-    /// Expected minimum or maximum length conflicting with the 
+    /// Expected minimum or maximum length conflicting with the
     /// `actual_len` value.
     pub required_len: usize,
 
@@ -74,13 +74,14 @@ impl LenError {
 
 impl core::fmt::Display for LenError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
         let len_source: &'static str = {
             use LenSource::*;
             match self.len_source {
                 Slice => "slice length",
                 Ipv4HeaderTotalLen => "length calculated from the IPv4 header 'total length' field",
-                Ipv6HeaderPayloadLen => "length calculated from the IPv6 header 'payload length' field",
+                Ipv6HeaderPayloadLen => {
+                    "length calculated from the IPv6 header 'payload length' field"
+                }
                 UdpHeaderLen => "length calculated from the UDP header 'length' field",
                 TcpHeaderLen => "length calculated from the TCP header 'length' field",
             }
@@ -220,7 +221,6 @@ mod test {
 
     #[test]
     fn fmt() {
-
         // len sources based tests (not enough data)
         {
             use LenSource::*;
@@ -237,7 +237,7 @@ mod test {
                     test.1,
                     format!(
                         "{}",
-                        LenError{
+                        LenError {
                             required_len: 2,
                             layer: Layer::Ipv4Header,
                             len: 1,
@@ -280,7 +280,7 @@ mod test {
                     test.1,
                     format!(
                         "{}",
-                        LenError{
+                        LenError {
                             required_len: 1,
                             layer: Layer::Ipv4Header,
                             len: 2,
@@ -306,7 +306,6 @@ mod test {
                 }
             )
         );
-        
     }
 
     #[test]

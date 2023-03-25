@@ -39,7 +39,7 @@ pub struct TcpHeader {
     ///
     /// This indicates where the data begins.  The TCP header (even one including options) is an
     /// integral number of 32 bits long.
-    pub (crate) _data_offset: u8,
+    pub(crate) _data_offset: u8,
     /// ECN-nonce - concealment protection (experimental: see RFC 3540)
     pub ns: bool,
     /// No more data from sender
@@ -315,7 +315,9 @@ impl TcpHeader {
     }
 
     /// Read a tcp header from the current position
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<TcpHeader, err::tcp::HeaderReadError> {
+    pub fn read<T: io::Read + Sized>(
+        reader: &mut T,
+    ) -> Result<TcpHeader, err::tcp::HeaderReadError> {
         use err::tcp::{HeaderError::*, HeaderReadError::*};
 
         let raw = {
@@ -352,7 +354,7 @@ impl TcpHeader {
             urgent_pointer: u16::from_be_bytes([raw[18], raw[19]]),
             options_buffer: {
                 if data_offset < TcpHeader::MIN_DATA_OFFSET {
-                    return Err(Content(DataOffsetTooSmall{ data_offset }));
+                    return Err(Content(DataOffsetTooSmall { data_offset }));
                 } else {
                     let mut buffer: [u8; 40] = [0; 40];
                     //convert to bytes minus the tcp header size itself
@@ -448,7 +450,6 @@ impl TcpHeader {
 
     /// Returns the serialized header.
     pub fn to_bytes(&self) -> ArrayVec<u8, { TcpHeader::MAX_LEN }> {
-
         //check that the data offset is within range
         debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
         debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
@@ -739,11 +740,11 @@ impl core::cmp::Eq for TcpHeader {}
 #[cfg(test)]
 mod test {
     use crate::{
-        *,
-        test_gens::*,
+        err::tcp::{HeaderError::*, HeaderSliceError::*},
         tcp_option::*,
+        test_gens::*,
         TcpOptionElement::*,
-        err::tcp::{HeaderError::*, HeaderSliceError::*}
+        *,
     };
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -779,7 +780,7 @@ mod test {
             // normal debug printing
             assert_eq!(
                 format!(
-                    "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {}, options: {:?} }}", 
+                    "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {}, options: {:?} }}",
                     header.source_port,
                     header.destination_port,
                     header.sequence_number,
@@ -1357,7 +1358,7 @@ mod test {
                         Noop // + 2 = 41
                     ])
                 );
-        
+
                 //test with all fields filled of the selective ack
                 assert_eq!(
                     Err(TcpOptionWriteError::NotEnoughSpace(41)),
@@ -1428,7 +1429,10 @@ mod test {
     fn options_iterator() {
         let options = [
             TcpOptionElement::Timestamp(0x00102030, 0x01112131), //10
-            TcpOptionElement::SelectiveAcknowledgement((0x02122232, 0x03132333), [None, None, None]), //20
+            TcpOptionElement::SelectiveAcknowledgement(
+                (0x02122232, 0x03132333),
+                [None, None, None],
+            ), //20
             TcpOptionElement::Timestamp(0x04142434, 0x05152535), //30
             TcpOptionElement::Timestamp(0x06162636, 0x07172737), //40
         ];
@@ -1461,7 +1465,7 @@ mod test {
                     ).unwrap();
                     bytes
                 };
-                
+
                 let (actual_header, actual_rest) = TcpHeader::read_from_slice(&bytes[..]).unwrap();
                 assert_eq!(actual_header, header);
                 assert_eq!(actual_rest, &bytes[header.header_len() as usize..]);
@@ -1516,7 +1520,7 @@ mod test {
                     ).unwrap();
                     bytes
                 };
-                
+
                 let (actual_header, actual_rest) = TcpHeader::from_slice(&bytes[..]).unwrap();
                 assert_eq!(actual_header, header);
                 assert_eq!(actual_rest, &bytes[header.header_len() as usize..]);
@@ -1608,7 +1612,7 @@ mod test {
                 let len = {
                     let mut cursor = Cursor::new(&mut bytes[..]);
                     header.write(&mut cursor).unwrap();
-                    
+
                     cursor.position() as usize
                 };
                 assert_eq!(header.header_len() as usize, len);
@@ -1750,10 +1754,8 @@ mod test {
         }
     }
 
-
     #[test]
     fn calc_checksum_ipv4_raw() {
-
         // checksum == 0xf (no carries) (aka sum == 0xffff)
         {
             let tcp_payload = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -1833,7 +1835,6 @@ mod test {
 
     #[test]
     fn calc_checksum_ipv6() {
-        
         // ok case
         {
             let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
@@ -1908,7 +1909,6 @@ mod test {
 
     #[test]
     fn calc_checksum_ipv6_raw() {
-        
         // ok case
         {
             let tcp_payload = [51, 52, 53, 54, 55, 56, 57, 58];
@@ -1935,7 +1935,7 @@ mod test {
             assert_eq!(
                 Ok(0x786e),
                 tcp.calc_checksum_ipv6_raw(
-                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 
+                    [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                     [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
                     &tcp_payload
                 )

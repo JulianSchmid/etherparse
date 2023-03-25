@@ -10,9 +10,7 @@ pub struct SingleVlanHeaderSlice<'a> {
 impl<'a> SingleVlanHeaderSlice<'a> {
     ///Creates a vlan header slice from a slice.
     #[inline]
-    pub fn from_slice(
-        slice: &'a [u8],
-    ) -> Result<SingleVlanHeaderSlice<'a>, err::LenError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<SingleVlanHeaderSlice<'a>, err::LenError> {
         //check length
         if slice.len() < SingleVlanHeader::LEN {
             return Err(err::LenError {
