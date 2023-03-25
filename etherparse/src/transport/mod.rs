@@ -19,3 +19,4 @@ pub mod tcp_options_iterator;
 pub mod transport_header;
 pub mod udp_header;
 pub mod udp_header_slice;
+pub mod udp_slice;
