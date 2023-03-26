@@ -6,15 +6,16 @@ use crate::{
 /// Slice containing the IPv4 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv4Slice<'a> {
-    header: Ipv4HeaderSlice<'a>,
-    exts: Ipv4ExtensionsSlice<'a>,
-    payload_ip_number: u8,
-    payload: &'a [u8],
+    pub(crate) header: Ipv4HeaderSlice<'a>,
+    pub(crate) exts: Ipv4ExtensionsSlice<'a>,
+    pub(crate) payload_ip_number: u8,
+    pub(crate) payload: &'a [u8],
 }
 
 impl<'a> Ipv4Slice<'a> {
-    /// Decode IPv4 header, extension headers and determine the payload
-    /// length based on the `total_length` field in the IPv4 header.
+    /// Seperates and validates IPv4 headers (including extension headers)
+    /// in the given slice and determine the sub-slice containing the payload
+    /// of the IPv4 packet.
     pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
         use crate::ip_number::AUTH;
 
@@ -103,7 +104,7 @@ impl<'a> Ipv4Slice<'a> {
     /// Returns a slice containing the data after the IPv4 header
     /// and IPv4 extensions headers.
     #[inline]
-    pub fn payload(&self) -> &[u8] {
+    pub fn payload(&self) -> &'a [u8] {
         self.payload
     }
 

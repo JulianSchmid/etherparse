@@ -60,6 +60,65 @@ impl TestPacket {
         }
     }
 
+    pub fn set_payload_len(&mut self, payload_len: usize) {
+        use IpHeader::*;
+        match &mut self.ip {
+            None => {},
+            Some(Version4(ref mut header, ref mut exts)) => {
+                header.set_payload_len(
+                    exts.header_len() +
+                    self.transport.as_ref().map_or(0, |t| t.header_len()) +
+                    payload_len
+                ).unwrap();
+            }
+            Some(Version6(ref mut header, ref mut exts)) => {
+                header.set_payload_length(
+                    exts.header_len() +
+                    self.transport.as_ref().map_or(0, |t| t.header_len()) +
+                    payload_len
+                ).unwrap();
+            }
+        }
+
+        use TransportHeader::*;
+        match &mut self.transport {
+            None => {},
+            Some(Udp(ref mut udp)) => {
+                udp.length = payload_len as u16;
+            },
+            Some(Tcp(_)) => {},
+            Some(Icmpv4(_)) => {},
+            Some(Icmpv6(_)) => {},
+        }
+    }
+
+    /// Set the length relative to the end of the ip headers.
+    pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
+        use IpHeader::*;
+        match &mut self.ip {
+            None => {},
+            Some(Version4(ref mut header, ref mut exts)) => {
+                header.set_payload_len(
+                    (exts.header_len() as isize + payload_len_from_ip_on) as usize
+                ).unwrap();
+            }
+            Some(Version6(ref mut header, ref mut exts)) => {
+                header.set_payload_length(
+                    (exts.header_len() as isize + payload_len_from_ip_on) as usize
+                ).unwrap();
+            }
+        }
+    }
+
+    /// Sets the payload length in the IP header without checking
+    /// the extension headers.
+    pub fn set_ip_header_payload_len(&mut self, len: usize) {
+        match self.ip.as_mut().unwrap() {
+            IpHeader::Version4(ipv4, _) => ipv4.set_payload_len(len).unwrap(),
+            IpHeader::Version6(ipv6, _) => ipv6.set_payload_length(len).unwrap(),
+        }
+    }
+
     pub fn is_ip_payload_fragmented(&self) -> bool {
         self.ip
             .as_ref()

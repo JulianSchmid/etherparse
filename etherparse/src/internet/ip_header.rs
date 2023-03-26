@@ -111,7 +111,7 @@ impl IpHeader {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
                                 I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
-                                I::Content(err) => Content(Ipv4Exts(err)),
+                                I::Content(err) => Content(Ipv4Ext(err)),
                             }
                         })
                 }
@@ -146,7 +146,7 @@ impl IpHeader {
                             use err::ipv6_exts::HeaderSliceError as I;
                             match err {
                                 I::Len(err) => Len(err.add_offset(slice.len() - rest.len())),
-                                I::Content(err) => Content(Ipv6Exts(err)),
+                                I::Content(err) => Content(Ipv6Ext(err)),
                             }
                         })
                 }
@@ -203,7 +203,7 @@ impl IpHeader {
                         use err::ip_auth::HeaderReadError as I;
                         match err {
                             I::Io(err) => Io(err),
-                            I::Content(err) => Content(Ipv4Exts(err)),
+                            I::Content(err) => Content(Ipv4Ext(err)),
                         }
                     })
             }
@@ -215,7 +215,7 @@ impl IpHeader {
                         use err::ipv6_exts::HeaderReadError as I;
                         match err {
                             I::Io(err) => Io(err),
-                            I::Content(err) => Content(Ipv6Exts(err)),
+                            I::Content(err) => Content(Ipv6Ext(err)),
                         }
                     })
             }

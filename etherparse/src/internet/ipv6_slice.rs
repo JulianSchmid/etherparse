@@ -4,10 +4,10 @@ use crate::{Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6Slice<'a> {
-    header: Ipv6HeaderSlice<'a>,
-    exts: Ipv6ExtensionsSlice<'a>,
-    payload_ip_number: u8,
-    payload: &'a [u8],
+    pub(crate) header: Ipv6HeaderSlice<'a>,
+    pub(crate) exts: Ipv6ExtensionsSlice<'a>,
+    pub(crate) payload_ip_number: u8,
+    pub(crate) payload: &'a [u8],
 }
 
 impl<'a> Ipv6Slice<'a> {
@@ -63,7 +63,7 @@ impl<'a> Ipv6Slice<'a> {
                     match err {
                         Len(mut err) => {
                             err.len_source = LenSource::Ipv6HeaderPayloadLen;
-                            err.layer_start_offset = Ipv6Header::LEN;
+                            err.layer_start_offset += Ipv6Header::LEN;
                             SliceError::Len(err)
                         }
                         Content(err) => SliceError::Extensions(err),
@@ -94,7 +94,7 @@ impl<'a> Ipv6Slice<'a> {
     /// Returns a slice containing the data after the IPv6 header
     /// and IPv6 extensions headers.
     #[inline]
-    pub fn payload(&self) -> &[u8] {
+    pub fn payload(&self) -> &'a [u8] {
         self.payload
     }
 

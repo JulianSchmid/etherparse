@@ -76,19 +76,43 @@ impl ComponentTest {
     /// * `PacketHeaders::from_ethernet_slice`
     /// * `PacketHeaders::from_ip_slice`
     fn run(&self) {
+
+        // clone the test so the length fields can be adapted
+        let mut test = self.clone();
+
+        // set the payload length
+        if let Some(ip) = test.ip.as_mut() {
+            match ip {
+                IpHeader::Version4(ipv4, exts) => {
+                    ipv4.set_payload_len(
+                        exts.header_len() +
+                        self.transport.as_ref().map_or(0, |t| t.header_len()) +
+                        self.payload.len()
+                    ).unwrap();
+                },
+                IpHeader::Version6(ipv6, exts) => {
+                    ipv6.set_payload_length(
+                        exts.header_len() +
+                        self.transport.as_ref().map_or(0, |t| t.header_len()) +
+                        self.payload.len()
+                    ).unwrap();
+                },
+            }
+        }
+
         //packet with ethernet2 & vlan headers
         {
             //serialize to buffer
-            let buffer = self.serialize();
+            let buffer = test.serialize();
 
             // PacketHeaders::from_ethernet_slice
-            self.assert_headers(PacketHeaders::from_ethernet_slice(&buffer).unwrap());
+            test.assert_headers(PacketHeaders::from_ethernet_slice(&buffer).unwrap());
 
             // SlicedPacket::from_ethernet
-            self.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
+            test.assert_sliced_packet(SlicedPacket::from_ethernet(&buffer).unwrap());
 
             // create unexpected end of slice errors for the different headers
-            for len in self.invalid_ser_lengths() {
+            for len in test.invalid_ser_lengths() {
                 if let Some(len) = len {
                     assert_matches!(PacketHeaders::from_ethernet_slice(&buffer[..len]), Err(_));
                     assert_matches!(SlicedPacket::from_ethernet(&buffer[..len]), Err(_));
@@ -100,7 +124,7 @@ impl ComponentTest {
         {
             // remove the link layer
             let ether_down = {
-                let mut ether_down = self.clone();
+                let mut ether_down = test.clone();
                 ether_down.link = None;
                 ether_down
             };
@@ -110,13 +134,13 @@ impl ComponentTest {
 
             // PacketHeaders::from_ether_type
             ether_down.assert_headers(
-                PacketHeaders::from_ether_type(self.link.as_ref().unwrap().ether_type, &buffer[..])
+                PacketHeaders::from_ether_type(test.link.as_ref().unwrap().ether_type, &buffer[..])
                     .unwrap(),
             );
 
             // SlicedPacket::from_ether_type
             ether_down.assert_sliced_packet(
-                SlicedPacket::from_ether_type(self.link.as_ref().unwrap().ether_type, &buffer[..])
+                SlicedPacket::from_ether_type(test.link.as_ref().unwrap().ether_type, &buffer[..])
                     .unwrap(),
             );
 
@@ -125,14 +149,14 @@ impl ComponentTest {
                 if let Some(len) = len {
                     assert_matches!(
                         PacketHeaders::from_ether_type(
-                            self.link.as_ref().unwrap().ether_type,
+                            test.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
                         ),
                         Err(_)
                     );
                     assert_matches!(
                         SlicedPacket::from_ether_type(
-                            self.link.as_ref().unwrap().ether_type,
+                            test.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
                         ),
                         Err(_)
@@ -142,10 +166,10 @@ impl ComponentTest {
         }
 
         // packet from the internet layer down (without ethernet2 & vlan headers)
-        if self.ip.is_some() {
+        if test.ip.is_some() {
             // serialize from the ip layer downwards
             let ip_down = {
-                let mut ip_down = self.clone();
+                let mut ip_down = test.clone();
                 ip_down.link = None;
                 ip_down.vlan = None;
                 ip_down
@@ -155,7 +179,7 @@ impl ComponentTest {
             let buffer = ip_down.serialize();
 
             // PacketHeaders::from_ip_slice
-            ip_down.assert_headers(PacketHeaders::from_ip_slice(&buffer[..]).unwrap());
+            ip_down.assert_headers(PacketHeaders::from_ip_slice(&buffer).unwrap());
 
             // SlicedPacket::from_ip
             ip_down.assert_sliced_packet(SlicedPacket::from_ip(&buffer).unwrap());
@@ -163,8 +187,8 @@ impl ComponentTest {
             // create unexpected end of slice errors for the different headers
             for len in ip_down.invalid_ser_lengths() {
                 if let Some(len) = len {
-                    assert_matches!(PacketHeaders::from_ip_slice(&buffer[..len]), Err(_));
-                    assert_matches!(SlicedPacket::from_ip(&buffer[..len]), Err(_));
+                    assert!(PacketHeaders::from_ip_slice(&buffer[..len]).is_err());
+                    assert!(SlicedPacket::from_ip(&buffer[..len]).is_err());
                 }
             }
         }
@@ -266,17 +290,17 @@ impl ComponentTest {
             use self::IpHeader::*;
             use crate::InternetSlice::*;
             match result.ip {
-                Some(Ipv4(actual_header, actual_extensions)) => Some(Version4(
-                    actual_header.to_header(),
+                Some(Ipv4(actual)) => Some(Version4(
+                    actual.header().to_header(),
                     Ipv4Extensions {
-                        auth: actual_extensions.auth.map(|ref x| x.to_header()),
+                        auth: actual.extensions().auth.map(|ref x| x.to_header()),
                     },
                 )),
-                Some(Ipv6(actual_header, actual_extensions)) => Some(Version6(
-                    actual_header.to_header(),
+                Some(Ipv6(actual)) => Some(Version6(
+                    actual.header().to_header(),
                     Ipv6Extensions::from_slice(
-                        actual_header.next_header(),
-                        actual_extensions.slice(),
+                        actual.header().next_header(),
+                        actual.extensions().slice(),
                     )
                     .unwrap()
                     .0,
