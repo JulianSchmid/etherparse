@@ -901,7 +901,9 @@ mod test {
                 for len in 0..auth.header_len() {
                     // set payload length
                     let mut test = test.clone();
-                    test.set_ip_header_payload_len(len);
+                    test.set_payload_le_from_ip_on(
+                        -1*(auth.header_len() as isize) + (len as isize)
+                    );
 
                     let data = test.to_vec(&[]);
                     let base_len = test.len(&[]) - auth.header_len();
@@ -909,10 +911,7 @@ mod test {
                     let err = LenError {
                         required_len: auth.header_len(),
                         len,
-                        len_source: match test.ip.as_ref().unwrap() {
-                            IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                            IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
-                        },
+                        len_source: err::LenSource::Ipv4HeaderTotalLen,
                         layer: err::Layer::IpAuthHeader,
                         layer_start_offset: base_len,
                     };
@@ -1065,10 +1064,7 @@ mod test {
                     let err = LenError {
                         required_len: auth.header_len(),
                         len,
-                        len_source: match test.ip.as_ref().unwrap() {
-                            IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                            IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
-                        },
+                        len_source: err::LenSource::Ipv6HeaderPayloadLen,
                         layer: err::Layer::IpAuthHeader,
                         layer_start_offset: base_len,
                     };

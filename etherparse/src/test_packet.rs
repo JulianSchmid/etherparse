@@ -1,6 +1,6 @@
 use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub(crate) struct TestPacket {
     pub link: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
@@ -95,27 +95,17 @@ impl TestPacket {
     /// Set the length relative to the end of the ip headers.
     pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
         use IpHeader::*;
-        match &mut self.ip {
-            None => {},
-            Some(Version4(ref mut header, ref mut exts)) => {
+        match self.ip.as_mut().unwrap() {
+            Version4(ref mut header, ref mut exts) => {
                 header.set_payload_len(
                     (exts.header_len() as isize + payload_len_from_ip_on) as usize
                 ).unwrap();
             }
-            Some(Version6(ref mut header, ref mut exts)) => {
+            Version6(ref mut header, ref mut exts) => {
                 header.set_payload_length(
                     (exts.header_len() as isize + payload_len_from_ip_on) as usize
                 ).unwrap();
             }
-        }
-    }
-
-    /// Sets the payload length in the IP header without checking
-    /// the extension headers.
-    pub fn set_ip_header_payload_len(&mut self, len: usize) {
-        match self.ip.as_mut().unwrap() {
-            IpHeader::Version4(ipv4, _) => ipv4.set_payload_len(len).unwrap(),
-            IpHeader::Version6(ipv6, _) => ipv6.set_payload_length(len).unwrap(),
         }
     }
 
