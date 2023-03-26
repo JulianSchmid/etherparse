@@ -24,10 +24,10 @@ pub enum HeaderError {
     },
 
     /// Error in the IPv4 extension headers (only authentification header).
-    Ipv4Exts(err::ip_auth::HeaderError),
+    Ipv4Ext(err::ip_auth::HeaderError),
 
     /// Error in the IPv6 extension headers.
-    Ipv6Exts(err::ipv6_exts::HeaderError),
+    Ipv6Ext(err::ipv6_exts::HeaderError),
 }
 
 impl core::fmt::Display for HeaderError {
@@ -37,8 +37,8 @@ impl core::fmt::Display for HeaderError {
             UnsupportedIpVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
             Ipv4HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
             Ipv4TotalLengthSmallerThanHeader { total_length, min_expected_length } => write!(f, "IPv4 Header Error: The 'total length' value ({} bytes/octets) present in the IPv4 header is smaller then the bytes/octet lenght of the header ({}) itself. 'total length' should describe the bytes/octets count of the IPv4 header and it's payload.", total_length, min_expected_length),
-            Ipv4Exts(err) => err.fmt(f),
-            Ipv6Exts(err) => err.fmt(f),
+            Ipv4Ext(err) => err.fmt(f),
+            Ipv6Ext(err) => err.fmt(f),
         }
     }
 }
@@ -53,8 +53,8 @@ impl std::error::Error for HeaderError {
                 total_length: _,
                 min_expected_length: _,
             } => None,
-            Ipv4Exts(err) => Some(err),
-            Ipv6Exts(err) => Some(err),
+            Ipv4Ext(err) => Some(err),
+            Ipv6Ext(err) => Some(err),
         }
     }
 }
@@ -109,11 +109,11 @@ mod tests {
         );
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(format!("{}", Ipv4Exts(err.clone())), format!("{}", err));
+            assert_eq!(format!("{}", Ipv4Ext(err.clone())), format!("{}", err));
         }
         {
             let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
-            assert_eq!(format!("{}", Ipv6Exts(err.clone())), format!("{}", err));
+            assert_eq!(format!("{}", Ipv6Ext(err.clone())), format!("{}", err));
         }
     }
 
@@ -134,8 +134,8 @@ mod tests {
         }
         {
             let values = [
-                Ipv4Exts(err::ip_auth::HeaderError::ZeroPayloadLen),
-                Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
+                Ipv4Ext(err::ip_auth::HeaderError::ZeroPayloadLen),
+                Ipv6Ext(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
             ];
             for v in values {
                 assert!(v.source().is_some());

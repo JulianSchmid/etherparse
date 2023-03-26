@@ -58,24 +58,24 @@ fn main() {
             }
 
             match value.ip {
-                Some(Ipv4(value, extensions)) => {
+                Some(Ipv4(ipv4)) => {
                     println!(
                         "  Ipv4 {:?} => {:?}",
-                        value.source_addr(),
-                        value.destination_addr()
+                        ipv4.header().source_addr(),
+                        ipv4.header().destination_addr()
                     );
-                    if false == extensions.is_empty() {
-                        println!("    {:?}", extensions);
+                    if false == ipv4.extensions().is_empty() {
+                        println!("    {:?}", ipv4.extensions());
                     }
                 }
-                Some(Ipv6(value, extensions)) => {
+                Some(Ipv6(ipv6)) => {
                     println!(
                         "  Ipv6 {:?} => {:?}",
-                        value.source_addr(),
-                        value.destination_addr()
+                        ipv6.header().source_addr(),
+                        ipv6.header().destination_addr()
                     );
-                    if false == extensions.is_empty() {
-                        println!("    {:?}", extensions);
+                    if false == ipv6.extensions().is_empty() {
+                        println!("    {:?}", ipv6.extensions());
                     }
                 }
                 None => {}

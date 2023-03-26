@@ -13,3 +13,56 @@ pub enum TransportSlice<'a> {
     /// Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
     Unknown(u8),
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::{TcpHeader, UdpHeader, ip_number::{IGMP}};
+
+    #[test]
+    fn debug_clone_eq() {
+        // udp
+        {
+            let header: UdpHeader = Default::default();
+            let raw = header.to_bytes();
+            let u = UdpHeaderSlice::from_slice(&raw).unwrap();
+            let slice = TransportSlice::Udp(u.clone());
+
+            // clone & eq
+            assert_eq!(slice.clone(), slice);
+
+            // debug
+            assert_eq!(format!("{:?}", slice), format!("Udp({:?})", u));
+        }
+        // tcp
+        {
+            let header: TcpHeader = Default::default();
+            let buffer = {
+                let mut buffer = Vec::with_capacity(header.header_len() as usize);
+                header.write(&mut buffer).unwrap();
+                buffer
+            };
+            let t = TcpHeaderSlice::from_slice(&buffer).unwrap();
+            let slice = TransportSlice::Tcp(t.clone());
+
+            // clone & eq
+            assert_eq!(slice.clone(), slice);
+
+            // debug
+            assert_eq!(format!("{:?}", slice), format!("Tcp({:?})", t));
+        }
+        // unknown
+        {
+            let slice = TransportSlice::Unknown(IGMP);
+
+            // clone & eq
+            assert_eq!(slice.clone(), slice);
+
+            // debug
+            assert_eq!(
+                format!("{:?}", slice),
+                format!("Unknown({:?})", IGMP)
+            );
+        }
+    }
+}

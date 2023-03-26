@@ -9,10 +9,10 @@ pub enum EthSliceError {
     Ipv4Header(err::ipv4::HeaderError),
     /// Error when decoding an IPv6 header.
     Ipv6Header(err::ipv6::HeaderError),
-    /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
-    Ipv6HopByHopNotAtStart,
-    /// Error when decoding an IP authentification header.
-    IpAuthHeader(err::ip_auth::HeaderError),
+    /// Error when decoding an IPv4 extension header.
+    Ipv4ExtHeader(err::ip_auth::HeaderError),
+    /// Error when decoding an IPv6 extension header.
+    Ipv6ExtHeader(err::ipv6_exts::HeaderError),
     /// Error when decoding a TCP header.
     TcpHeader(err::tcp::HeaderError),
 }
@@ -25,8 +25,8 @@ impl std::fmt::Display for EthSliceError {
             Len(err) => err.fmt(f),
             Ipv4Header(err) => err.fmt(f),
             Ipv6Header(err) => err.fmt(f),
-            Ipv6HopByHopNotAtStart => write!(f, "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200."),
-            IpAuthHeader(err) => err.fmt(f),
+            Ipv4ExtHeader(err) => err.fmt(f),
+            Ipv6ExtHeader(err) => err.fmt(f),
             TcpHeader(err) => err.fmt(f),
         }
     }
@@ -39,9 +39,9 @@ impl std::error::Error for EthSliceError {
             Len(err) => Some(err),
             Ipv4Header(err) => Some(err),
             Ipv6Header(err) => Some(err),
-            Ipv6HopByHopNotAtStart => None,
+            Ipv4ExtHeader(err) => Some(err),
+            Ipv6ExtHeader(err) => Some(err),
             TcpHeader(err) => Some(err),
-            IpAuthHeader(err) => Some(err),
         }
     }
 }
@@ -108,17 +108,17 @@ mod tests {
             assert_eq!(format!("{}", err), format!("{}", Ipv6Header(err)));
         }
 
-        // Ipv6HopByHopNotAtStart
-        assert_eq!(
-            "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200.",
-            format!("{}", Ipv6HopByHopNotAtStart)
-        );
-
-        // IpAuthHeader
+        // Ipv4ExtHeader
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(format!("{}", err), format!("{}", IpAuthHeader(err)));
+            assert_eq!(format!("{}", err), format!("{}", Ipv4ExtHeader(err)));
         }
+
+        // Ipv6ExtHeader
+        {
+            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
+            assert_eq!(format!("{}", err), format!("{}", Ipv6ExtHeader(err)));
+        };
 
         // TcpHeader
         {
@@ -153,16 +153,17 @@ mod tests {
             assert!(Ipv6Header(err).source().is_some());
         }
 
-        // Ipv6ExtsHeader
-        {
-            assert!(Ipv6HopByHopNotAtStart.source().is_none());
-        }
-
-        // IpAuthHeader
+        // Ipv4ExtHeader
         {
             let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-            assert!(IpAuthHeader(err).source().is_some());
+            assert!(Ipv4ExtHeader(err).source().is_some());
         }
+
+        // Ipv6ExtHeader
+        {
+            let err = err::ipv6_exts::HeaderError::HopByHopNotAtStart;
+            assert!(Ipv6ExtHeader(err).source().is_some());
+        };
 
         // TcpHeader
         {

@@ -132,7 +132,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(packet.len() - ip_rest.len())),
-                            I::Content(err) => O::IpAuthHeader(err),
+                            I::Content(err) => O::Ipv4ExtHeader(err),
                         }
                     })?;
 
@@ -173,13 +173,11 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
                     Ipv6Extensions::from_slice(ip.next_header, ip_rest).map_err(|err| {
-                        use err::ipv6_exts::HeaderError as E;
                         use err::ipv6_exts::HeaderSliceError as I;
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(packet.len() - ip_rest.len())),
-                            I::Content(E::HopByHopNotAtStart) => O::Ipv6HopByHopNotAtStart,
-                            I::Content(E::IpAuth(err)) => O::IpAuthHeader(err),
+                            I::Content(err) => O::Ipv6ExtHeader(err),
                         }
                     })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
@@ -336,7 +334,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(data.len() - ip_rest.len())),
-                            I::Content(err) => O::IpAuthHeader(err),
+                            I::Content(err) => O::Ipv4ExtHeader(err),
                         }
                     })?;
 
@@ -377,13 +375,11 @@ impl<'a> PacketHeaders<'a> {
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
                     Ipv6Extensions::from_slice(ip.next_header, ip_rest).map_err(|err| {
-                        use err::ipv6_exts::HeaderError as E;
                         use err::ipv6_exts::HeaderSliceError as I;
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(data.len() - ip_rest.len())),
-                            I::Content(E::HopByHopNotAtStart) => O::Ipv6HopByHopNotAtStart,
-                            I::Content(E::IpAuth(err)) => O::IpAuthHeader(err),
+                            I::Content(err) => O::Ipv6ExtHeader(err),
                         }
                     })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
@@ -850,8 +846,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::IpAuthHeader(err.clone()),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv4Exts(err.clone())),
+                        EthSliceError::Ipv4ExtHeader(err.clone()),
+                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv4Ext(err.clone())),
                     );
                 }
             }
@@ -993,8 +989,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::IpAuthHeader(err.clone()),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Exts(
+                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
+                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::IpAuth(err.clone()),
                         )),
                     );
@@ -1011,8 +1007,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6HopByHopNotAtStart,
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Exts(
+                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
+                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::HopByHopNotAtStart,
                         )),
                     );

@@ -320,17 +320,19 @@ impl PacketFilterTest {
             },
             ip: match &self.ip {
                 Some(IpHeader::Version4(header, _)) => {
+                    let mut header = header.clone();
+                    header.set_payload_len(0).unwrap();
                     header.write(&mut ip_data).unwrap();
                     Some(InternetSlice::Ipv4(
-                        Ipv4HeaderSlice::from_slice(&ip_data[..]).unwrap(),
-                        Default::default(),
+                        Ipv4Slice::from_slice(&ip_data).unwrap()
                     ))
                 }
                 Some(IpHeader::Version6(header, _)) => {
+                    let mut header = header.clone();
+                    header.payload_length = 0;
                     header.write(&mut ip_data).unwrap();
                     Some(InternetSlice::Ipv6(
-                        Ipv6HeaderSlice::from_slice(&ip_data[..]).unwrap(),
-                        Default::default(),
+                        Ipv6Slice::from_slice(&ip_data).unwrap()
                     ))
                 }
 
@@ -383,8 +385,16 @@ fn test_compositions() {
                 re
             },
             &Default::default(),
-            &Default::default(),
-            &Default::default(),
+            &{
+                let mut re: Ipv4Header = Default::default();
+                re.protocol = ip_number::HIP;
+                (re, Vec::new())
+            },
+            &{
+                let mut re: Ipv6Header = Default::default();
+                re.next_header = ip_number::HIP;
+                re
+            },
             &Default::default(),
             &Default::default(),
         );
@@ -402,8 +412,16 @@ fn test_compositions() {
                 re
             },
             &Default::default(),
-            &Default::default(),
-            &Default::default(),
+            &{
+                let mut re: Ipv4Header = Default::default();
+                re.protocol = ip_number::HIP;
+                (re, Vec::new())
+            },
+            &{
+                let mut re: Ipv6Header = Default::default();
+                re.next_header = ip_number::HIP;
+                re
+            },
             &Default::default(),
             &Default::default(),
         );
@@ -539,6 +557,18 @@ mod ip_filter {
         fn applies_to_slice(ref ipv4 in ipv4_unknown(),
                             ref ipv6 in ipv6_unknown())
         {
+            // set payload length to 0
+            let ipv4 = {
+                let mut ipv4 = ipv4.clone();
+                ipv4.set_payload_len(0).unwrap();
+                ipv4
+            };
+            let ipv6 = {
+                let mut ipv6 = ipv6.clone();
+                ipv6.payload_length = 0;
+                ipv6
+            };
+
             use self::IpFilter::*;
             //create the slices the filters can be checked against
             let ipv4_data = {
@@ -546,16 +576,14 @@ mod ip_filter {
                 ipv4.write(&mut ipv4_data).unwrap();
                 ipv4_data };
             let ipv4_slice = InternetSlice::Ipv4(
-                Ipv4HeaderSlice::from_slice(&ipv4_data[..]).unwrap(),
-                Default::default()
+                Ipv4Slice::from_slice(&ipv4_data[..]).unwrap()
             );
             let ipv6_data = {
                 let mut ipv6_data = Vec::new();
                 ipv6.write(&mut ipv6_data).unwrap();
                 ipv6_data };
             let ipv6_slice = InternetSlice::Ipv6(
-                Ipv6HeaderSlice::from_slice(&ipv6_data[..]).unwrap(),
-                Default::default()
+                Ipv6Slice::from_slice(&ipv6_data[..]).unwrap()
             );
 
             //test ipv4 filter with wildcards
