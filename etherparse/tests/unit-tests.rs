@@ -39,28 +39,6 @@ fn test_debug_write() {
         input.write(&mut buffer).unwrap();
         println!("{:?}", Ethernet2HeaderSlice::from_slice(&buffer));
     }
-    //read error
-    {
-        use crate::ReadError::*;
-        for value in [
-            IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            Len(err::LenError {
-                required_len: 0,
-                len: 0,
-                len_source: err::LenSource::Slice,
-                layer: err::Layer::Icmpv4,
-                layer_start_offset: 0,
-            }),
-            IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 }),
-            Ipv4Header(err::ipv4::HeaderError::UnexpectedVersion { version_number: 0 }),
-            Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion { version_number: 0 }),
-            TcpHeader(err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
-        ]
-        .iter()
-        {
-            println!("{:?}", value);
-        }
-    }
     //write error
     {
         use crate::ValueError::Ipv4OptionsLengthBad;
@@ -141,88 +119,6 @@ fn test_io_error_to_write_error() {
         WriteError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
         WriteError::IoError(_)
     );
-}
-
-#[test]
-fn test_io_error_to_read_error() {
-    assert_matches!(
-        ReadError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-        ReadError::IoError(_)
-    );
-}
-
-mod read_error {
-
-    #[test]
-    fn add_slice_offset() {
-        use super::*;
-        assert_eq!(
-            ReadError::Len(err::LenError {
-                required_len: 1,
-                len: 2,
-                len_source: err::LenSource::Slice,
-                layer: err::Layer::Icmpv4,
-                layer_start_offset: 3,
-            })
-            .add_slice_offset(4)
-            .len_error()
-            .unwrap(),
-            err::LenError {
-                required_len: 1,
-                len: 2,
-                len_source: err::LenSource::Slice,
-                layer: err::Layer::Icmpv4,
-                layer_start_offset: 7,
-            }
-        );
-        {
-            use err::ipv4::HeaderError::UnexpectedVersion;
-            assert_matches!(
-                ReadError::Ipv4Header(UnexpectedVersion { version_number: 0 }).add_slice_offset(3),
-                ReadError::Ipv4Header(UnexpectedVersion { version_number: 0 })
-            );
-        }
-    }
-
-    #[test]
-    fn io_error() {
-        use super::*;
-        assert_eq!(
-            std::io::ErrorKind::Other,
-            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .io_error()
-                .unwrap()
-                .kind()
-        );
-        assert!(
-            ReadError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 0 })
-                .io_error()
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn unexpected_end_of_slice_min_expected_size() {
-        use super::*;
-        assert!(
-            ReadError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .len_error()
-                .is_none()
-        );
-        {
-            let err = err::LenError {
-                required_len: 1,
-                len: 2,
-                len_source: err::LenSource::Slice,
-                layer: err::Layer::Icmpv4,
-                layer_start_offset: 0,
-            };
-            assert_eq!(
-                err.clone(),
-                ReadError::Len(err.clone()).len_error().unwrap()
-            );
-        }
-    }
 }
 
 mod write_error {

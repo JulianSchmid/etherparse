@@ -329,122 +329,6 @@ pub mod packet_filter;
 #[cfg(test)]
 pub(crate) mod test_packet;
 
-/// Errors that can occur when reading.
-#[derive(Debug)]
-pub enum ReadError {
-    /// Whenever an std::io::Error gets triggerd during a write it gets forwarded via this enum value.
-    IoError(std::io::Error),
-    /// Error when an unexpected end of a slice was reached even though more data was expected to be present.
-    Len(err::LenError),
-    /// Error when decoding an IP header.
-    IpHeader(err::ip::HeaderError),
-    /// Error when decoding an IPv4 header.
-    Ipv4Header(err::ipv4::HeaderError),
-    /// Error when decoding an IPv6 header.
-    Ipv6Header(err::ipv6::HeaderError),
-    /// Error when decoding a IPv6 extension headers.
-    Ipv6ExtsHeader(err::ipv6_exts::HeaderError),
-    /// Error when decoding an IP authentification header.
-    IpAuthHeader(err::ip_auth::HeaderError),
-    /// Error when decoding a TCP header.
-    TcpHeader(err::tcp::HeaderError),
-}
-
-impl ReadError {
-    /// Adds an offset value to the UnexpectedEndOfSlice error.
-    pub fn add_slice_offset(self, offset: usize) -> ReadError {
-        use crate::ReadError::*;
-        match self {
-            Len(value) => Len(err::LenError {
-                required_len: value.required_len,
-                len: value.len,
-                len_source: value.len_source,
-                layer: value.layer,
-                layer_start_offset: value.layer_start_offset + offset,
-            }),
-            value => value,
-        }
-    }
-
-    /// Returns the `std::io::Error` value if the `ReadError` is an `IoError`.
-    /// Otherwise `None is returned.
-    pub fn io_error(self) -> Option<std::io::Error> {
-        match self {
-            ReadError::IoError(value) => Some(value),
-            _ => None,
-        }
-    }
-    /// Returns the `err::UnexpectedEndOfSliceError` value if the `ReadError` is an `UnexpectedEndOfSlice`.
-    pub fn len_error(self) -> Option<err::LenError> {
-        match self {
-            ReadError::Len(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the `err::ipv4::HeaderError` value if the `ReadError` is an `Ipv4Header`.
-    pub fn ipv4_header(self) -> Option<err::ipv4::HeaderError> {
-        match self {
-            ReadError::Ipv4Header(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the `err::ip_auth::HeaderError` value if the `ReadError` is an `IpAuthHeader`.
-    pub fn ip_auth_header(self) -> Option<err::ip_auth::HeaderError> {
-        match self {
-            ReadError::IpAuthHeader(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the `err::tcp::HeaderError` value if the `ReadError` is a `TcpHeader`.
-    pub fn tcp_header(self) -> Option<err::tcp::HeaderError> {
-        match self {
-            ReadError::TcpHeader(value) => Some(value),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for ReadError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use ReadError::*;
-
-        match self {
-            IoError(err) => err.fmt(f),
-            Len(err) => err.fmt(f),
-            IpHeader(err) => err.fmt(f),
-            Ipv4Header(err) => err.fmt(f),
-            Ipv6Header(err) => err.fmt(f),
-            Ipv6ExtsHeader(err) => err.fmt(f),
-            IpAuthHeader(err) => err.fmt(f),
-            TcpHeader(err) => err.fmt(f),
-        }
-    }
-}
-
-impl std::error::Error for ReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ReadError::IoError(err) => Some(err),
-            ReadError::Len(err) => Some(err),
-            ReadError::IpHeader(err) => Some(err),
-            ReadError::Ipv4Header(err) => Some(err),
-            ReadError::Ipv6Header(err) => Some(err),
-            ReadError::Ipv6ExtsHeader(err) => Some(err),
-            ReadError::TcpHeader(err) => Some(err),
-            ReadError::IpAuthHeader(err) => Some(err),
-        }
-    }
-}
-
-impl From<std::io::Error> for ReadError {
-    fn from(err: std::io::Error) -> ReadError {
-        ReadError::IoError(err)
-    }
-}
-
 ///Errors that can occur when writing.
 #[derive(Debug)]
 pub enum WriteError {
@@ -656,9 +540,9 @@ pub enum ErrorField {
     Ipv6FlowLabel,
     /// Ipv6 fragment header fragment offset field.
     Ipv6FragmentOffset,
-    ///VlanTaggingHeader.priority_code_point
+    /// VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,
-    ///VlanTaggingHeader.vlan_identifier
+    /// VlanTaggingHeader.vlan_identifier
     VlanTagVlanId,
 }
 

@@ -63,7 +63,7 @@ impl Icmpv4Header {
     }
 
     /// Reads an ICMPv4 header from the given reader.
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, ReadError> {
+    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, std::io::Error> {
         let mut bytes = [0u8; Icmpv4Header::MAX_LEN];
 
         // try reading the initial 8 bytes
