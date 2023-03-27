@@ -206,6 +206,7 @@
 //! # References
 //! * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
 //! * Internet Protocol, Version 6 (IPv6) Specification [RFC 8200](https://tools.ietf.org/html/rfc8200)
+//! * [IANA 802 EtherTypes](https://www.iana.org/assignments/ieee-802-numbers/ieee-802-numbers.xhtml)
 //! * [IANA Protocol Numbers](https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml)
 //! * [Internet Protocol Version 6 (IPv6) Parameters](https://www.iana.org/assignments/ipv6-parameters/ipv6-parameters.xhtml)
 //! * [Wikipedia IEEE_802.1Q](https://en.wikipedia.org/w/index.php?title=IEEE_802.1Q&oldid=820983900)

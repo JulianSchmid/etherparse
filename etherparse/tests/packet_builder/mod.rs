@@ -410,7 +410,7 @@ fn udp_builder_eth_ipv6_udp() {
         Ethernet2Header {
             source: [1, 2, 3, 4, 5, 6],
             destination: [7, 8, 9, 10, 11, 12],
-            ether_type: EtherType::Ipv6 as u16
+            ether_type: ether_type::IPV6
         }
     );
 
@@ -475,7 +475,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
         Ethernet2Header {
             source: [1, 2, 3, 4, 5, 6],
             destination: [7, 8, 9, 10, 11, 12],
-            ether_type: EtherType::VlanTaggedFrame as u16
+            ether_type: ether_type::VLAN_TAGGED_FRAME
         }
     );
 
@@ -556,7 +556,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
         Ethernet2Header {
             source: [1, 2, 3, 4, 5, 6],
             destination: [7, 8, 9, 10, 11, 12],
-            ether_type: EtherType::ProviderBridging as u16
+            ether_type: ether_type::PROVIDER_BRIDGING,
         }
     );
 
@@ -567,7 +567,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
             priority_code_point: 0,
             drop_eligible_indicator: false,
             vlan_identifier: 0x123,
-            ether_type: EtherType::VlanTaggedFrame as u16
+            ether_type: ether_type::VLAN_TAGGED_FRAME
         }
     );
 
@@ -578,7 +578,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
             priority_code_point: 0,
             drop_eligible_indicator: false,
             vlan_identifier: 0x234,
-            ether_type: EtherType::Ipv6 as u16
+            ether_type: ether_type::IPV6
         }
     );
 
@@ -655,7 +655,7 @@ fn udp_builder_eth_ip_udp() {
         Ethernet2Header {
             source: [1, 2, 3, 4, 5, 6],
             destination: [7, 8, 9, 10, 11, 12],
-            ether_type: EtherType::Ipv6 as u16
+            ether_type: ether_type::IPV6
         }
     );
 
@@ -742,7 +742,7 @@ fn udp_builder_eth_vlan_ip_udp() {
         Ethernet2Header {
             source: [1, 2, 3, 4, 5, 6],
             destination: [7, 8, 9, 10, 11, 12],
-            ether_type: EtherType::VlanTaggedFrame as u16
+            ether_type: ether_type::VLAN_TAGGED_FRAME
         }
     );
 
@@ -753,7 +753,7 @@ fn udp_builder_eth_vlan_ip_udp() {
             priority_code_point: 1,
             drop_eligible_indicator: true,
             vlan_identifier: 0x123,
-            ether_type: EtherType::Ipv6 as u16
+            ether_type: ether_type::IPV6
         }
     );
 
@@ -986,7 +986,7 @@ proptest! {
                    Ethernet2Header{
                         source: [1,2,3,4,5,6],
                         destination: [7,8,9,10,11,12],
-                        ether_type: EtherType::Ipv6 as u16
+                        ether_type: ether_type::IPV6
                    });
 
         //ip header

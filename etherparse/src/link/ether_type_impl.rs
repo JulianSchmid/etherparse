@@ -1,28 +1,40 @@
-/// Ether type enum present in ethernet II header.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum EtherType {
-    Ipv4 = 0x0800,
-    Ipv6 = 0x86dd,
-    Arp = 0x0806,
-    WakeOnLan = 0x0842,
-    VlanTaggedFrame = 0x8100,
-    ProviderBridging = 0x88A8,
-    VlanDoubleTaggedFrame = 0x9100,
-}
+/// Represents an "Ethertype" present in a Ethernet II header.
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct EtherType(pub u16);
 
 impl EtherType {
-    /// Tries to convert a raw ether type value to the enum. Returns None if the value does not exist in the enum.
-    pub fn from_u16(value: u16) -> Option<EtherType> {
-        use self::EtherType::*;
-        match value {
-            0x0800 => Some(Ipv4),
-            0x86dd => Some(Ipv6),
-            0x0806 => Some(Arp),
-            0x0842 => Some(WakeOnLan),
-            0x88A8 => Some(ProviderBridging),
-            0x8100 => Some(VlanTaggedFrame),
-            0x9100 => Some(VlanDoubleTaggedFrame),
-            _ => None,
+    pub const IPV4: EtherType = Self(0x0800);
+    pub const IPV6: EtherType = Self(0x86dd);
+    pub const ARP: EtherType = Self(0x0806);
+    pub const WAKE_ON_LAN: EtherType = Self(0x0842);
+    pub const VLAN_TAGGED_FRAME: EtherType = Self(0x8100);
+    pub const PROVIDER_BRIDGING: EtherType = Self(0x88A8);
+    pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = Self(0x9100);
+}
+
+impl From<u16> for EtherType {
+    fn from(val: u16) -> Self {
+        EtherType(val)
+    }
+}
+
+impl From<EtherType> for u16 {
+    fn from(val: EtherType) -> Self {
+        val.0
+    }
+}
+
+impl core::fmt::Debug for EtherType {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            Self::IPV4 => write!(f, "Ipv4({:#06X})", self.0),
+            Self::IPV6 => write!(f, "Ipv6({:#06X})", self.0),
+            Self::ARP => write!(f, "Arp({:#06X})", self.0),
+            Self::WAKE_ON_LAN => write!(f, "WakeOnLan({:#06X})", self.0),
+            Self::VLAN_TAGGED_FRAME => write!(f, "VlanTaggedFrame({:#06X})", self.0),
+            Self::PROVIDER_BRIDGING => write!(f, "ProviderBridging({:#06X})", self.0),
+            Self::VLAN_DOUBLE_TAGGED_FRAME => write!(f, "VlanDoubleTaggedFrame({:#06X})", self.0),
+            _ => write!(f, "UnknownType({:#06X})", self.0),
         }
     }
 }
@@ -32,102 +44,105 @@ impl EtherType {
 /// `ether_type` values are used in the Ethernet II header and the
 /// vlan headers to identify the next header type.
 ///
-/// The constants are equivalent if values of the enum type [`EtherType`] get cast
-/// to a u16 value.
-///
+/// Although there is a [`EtherType`] representation for every u16 value,
+/// the constants in this module are limited to the known values supported
+/// by the current implementation.
+/// 
+/// 
 /// ```
 /// use etherparse::{ether_type, EtherType};
 ///
-/// assert_eq!(ether_type::IPV4, EtherType::Ipv4 as u16);
+/// assert_eq!(ether_type::IPV4, EtherType::IPV4.0);
+/// assert_eq!(ether_type::IPV4, u16::from(EtherType::IPV4));
 /// ```
 pub mod ether_type {
-    use crate::EtherType::*;
-    pub const IPV4: u16 = Ipv4 as u16;
-    pub const IPV6: u16 = Ipv6 as u16;
-    pub const ARP: u16 = Arp as u16;
-    pub const WAKE_ON_LAN: u16 = WakeOnLan as u16;
-    pub const VLAN_TAGGED_FRAME: u16 = VlanTaggedFrame as u16;
-    pub const PROVIDER_BRIDGING: u16 = ProviderBridging as u16;
-    pub const VLAN_DOUBLE_TAGGED_FRAME: u16 = VlanDoubleTaggedFrame as u16;
+    use super::EtherType;
+
+    pub const IPV4: u16 = EtherType::IPV4.0;
+    pub const IPV6: u16 = EtherType::IPV6.0;
+    pub const ARP: u16 = EtherType::ARP.0;
+    pub const WAKE_ON_LAN: u16 = EtherType::WAKE_ON_LAN.0;
+    pub const VLAN_TAGGED_FRAME: u16 = EtherType::VLAN_TAGGED_FRAME.0;
+    pub const PROVIDER_BRIDGING: u16 = EtherType::PROVIDER_BRIDGING.0;
+    pub const VLAN_DOUBLE_TAGGED_FRAME: u16 = EtherType::VLAN_DOUBLE_TAGGED_FRAME.0;
 }
 
 #[cfg(test)]
 mod test {
-    use super::*;
 
     #[test]
     fn to_u16() {
-        use crate::EtherType::*;
-        assert_eq!(0x0800, Ipv4 as u16);
-        assert_eq!(0x86dd, Ipv6 as u16);
-        assert_eq!(0x0806, Arp as u16);
-        assert_eq!(0x0842, WakeOnLan as u16);
-        assert_eq!(0x8100, VlanTaggedFrame as u16);
-        assert_eq!(0x88A8, ProviderBridging as u16);
-        assert_eq!(0x9100, VlanDoubleTaggedFrame as u16);
+        use crate::EtherType;
+        assert_eq!(0x0800, u16::from(EtherType::IPV4));
+        assert_eq!(0x86dd, u16::from(EtherType::IPV6));
+        assert_eq!(0x0806, u16::from(EtherType::ARP));
+        assert_eq!(0x0842, u16::from(EtherType::WAKE_ON_LAN));
+        assert_eq!(0x8100, u16::from(EtherType::VLAN_TAGGED_FRAME));
+        assert_eq!(0x88A8, u16::from(EtherType::PROVIDER_BRIDGING));
+        assert_eq!(0x9100, u16::from(EtherType::VLAN_DOUBLE_TAGGED_FRAME));
     }
 
     #[test]
     fn from_u16() {
-        use crate::EtherType::*;
-        assert_eq!(EtherType::from_u16(0x0800), Some(Ipv4));
-        assert_eq!(EtherType::from_u16(0x86dd), Some(Ipv6));
-        assert_eq!(EtherType::from_u16(0x0806), Some(Arp));
-        assert_eq!(EtherType::from_u16(0x0842), Some(WakeOnLan));
-        assert_eq!(EtherType::from_u16(0x8100), Some(VlanTaggedFrame));
-        assert_eq!(EtherType::from_u16(0x88A8), Some(ProviderBridging));
-        assert_eq!(EtherType::from_u16(0x9100), Some(VlanDoubleTaggedFrame));
-        assert_eq!(EtherType::from_u16(0x1234), None);
+        use crate::EtherType;
+        assert_eq!(EtherType::from(0x0800), EtherType::IPV4);
+        assert_eq!(EtherType::from(0x86dd), EtherType::IPV6);
+        assert_eq!(EtherType::from(0x0806), EtherType::ARP);
+        assert_eq!(EtherType::from(0x0842), EtherType::WAKE_ON_LAN);
+        assert_eq!(EtherType::from(0x8100), EtherType::VLAN_TAGGED_FRAME);
+        assert_eq!(EtherType::from(0x88A8), EtherType::PROVIDER_BRIDGING);
+        assert_eq!(EtherType::from(0x9100), EtherType::VLAN_DOUBLE_TAGGED_FRAME);
+        assert_eq!(EtherType::from(0x1234), EtherType(0x1234));
     }
 
     #[test]
     fn constants() {
         use crate::ether_type::*;
-        use crate::EtherType::*;
+        use crate::EtherType;
         let pairs = &[
-            (Ipv4, IPV4),
-            (Ipv6, IPV6),
-            (Arp, ARP),
-            (WakeOnLan, WAKE_ON_LAN),
-            (VlanTaggedFrame, VLAN_TAGGED_FRAME),
-            (ProviderBridging, PROVIDER_BRIDGING),
-            (VlanDoubleTaggedFrame, VLAN_DOUBLE_TAGGED_FRAME),
+            (EtherType::IPV4, IPV4),
+            (EtherType::IPV6, IPV6),
+            (EtherType::ARP, ARP),
+            (EtherType::WAKE_ON_LAN, WAKE_ON_LAN),
+            (EtherType::VLAN_TAGGED_FRAME, VLAN_TAGGED_FRAME),
+            (EtherType::PROVIDER_BRIDGING, PROVIDER_BRIDGING),
+            (EtherType::VLAN_DOUBLE_TAGGED_FRAME, VLAN_DOUBLE_TAGGED_FRAME),
         ];
 
-        for (enum_value, constant) in pairs {
-            assert_eq!(enum_value.clone() as u16, *constant);
+        for (ether_type, constant) in pairs {
+            assert_eq!(u16::from(ether_type.clone()), *constant);
         }
     }
 
     #[test]
     fn dbg() {
-        use crate::EtherType::*;
+        use crate::EtherType;
         let pairs = &[
-            (Ipv4, "Ipv4"),
-            (Ipv6, "Ipv6"),
-            (Arp, "Arp"),
-            (WakeOnLan, "WakeOnLan"),
-            (VlanTaggedFrame, "VlanTaggedFrame"),
-            (ProviderBridging, "ProviderBridging"),
-            (VlanDoubleTaggedFrame, "VlanDoubleTaggedFrame"),
+            (EtherType::IPV4, "Ipv4(0x0800)"),
+            (EtherType::IPV6, "Ipv6(0x86DD)"),
+            (EtherType::ARP, "Arp(0x0806)"),
+            (EtherType::WAKE_ON_LAN, "WakeOnLan(0x0842)"),
+            (EtherType::VLAN_TAGGED_FRAME, "VlanTaggedFrame(0x8100)"),
+            (EtherType::PROVIDER_BRIDGING, "ProviderBridging(0x88A8)"),
+            (EtherType::VLAN_DOUBLE_TAGGED_FRAME, "VlanDoubleTaggedFrame(0x9100)"),
         ];
 
-        for (enum_value, str_value) in pairs {
-            assert_eq!(str_value, &format!("{:?}", enum_value));
+        for (ether_type, str_value) in pairs {
+            assert_eq!(str_value, &format!("{:?}", ether_type));
         }
     }
 
     #[test]
     fn clone_eq() {
-        use crate::EtherType::*;
+        use crate::EtherType;
         let values = &[
-            Ipv4,
-            Ipv6,
-            Arp,
-            WakeOnLan,
-            VlanTaggedFrame,
-            ProviderBridging,
-            VlanDoubleTaggedFrame,
+            EtherType::IPV4,
+            EtherType::IPV6,
+            EtherType::ARP,
+            EtherType::WAKE_ON_LAN,
+            EtherType::VLAN_TAGGED_FRAME,
+            EtherType::PROVIDER_BRIDGING,
+            EtherType::VLAN_DOUBLE_TAGGED_FRAME,
         ];
 
         // clone

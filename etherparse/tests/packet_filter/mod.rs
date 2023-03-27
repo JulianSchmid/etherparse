@@ -381,7 +381,7 @@ fn test_compositions() {
             &{
                 //explicitly set the outer vlan ether_type id
                 let mut re: SingleVlanHeader = Default::default();
-                re.ether_type = EtherType::VlanTaggedFrame as u16;
+                re.ether_type = ether_type::VLAN_TAGGED_FRAME;
                 re
             },
             &Default::default(),
@@ -408,7 +408,7 @@ fn test_compositions() {
             &{
                 //explicitly set the outer vlan ether_type id
                 let mut re: SingleVlanHeader = Default::default();
-                re.ether_type = EtherType::VlanTaggedFrame as u16;
+                re.ether_type = ether_type::VLAN_TAGGED_FRAME;
                 re
             },
             &Default::default(),
@@ -484,7 +484,7 @@ mod vlan_filter {
     use super::*;
     proptest! {
         #[test]
-        fn applies_to_slice(ref vlan_outer in vlan_single_with(EtherType::VlanTaggedFrame as u16),
+        fn applies_to_slice(ref vlan_outer in vlan_single_with(ether_type::VLAN_TAGGED_FRAME),
                             ref vlan_inner in vlan_single_unknown())
         {
             use self::VlanFilter::*;
