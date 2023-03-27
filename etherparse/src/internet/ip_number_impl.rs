@@ -17,296 +17,298 @@ pub type IpTrafficClass = IpNumber;
 /// `u8` contants of the ip numbers can be found in the module [`ip_number`].
 ///
 /// The list was extracted from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum IpNumber {
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct IpNumber(pub u8);
+
+impl IpNumber {
     ///IPv6 Hop-by-Hop Option \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    IPv6HeaderHopByHop = 0,
+    pub const IPV6_HEADER_HOP_BY_HOP: IpNumber = Self(0);
     ///Internet Control Message \[[RFC792](https://datatracker.ietf.org/doc/html/rfc792)\]
-    Icmp = 1,
+    pub const ICMP: IpNumber = Self(1);
     ///Internet Group Management \[[RFC1112](https://datatracker.ietf.org/doc/html/rfc1112)\]
-    Igmp = 2,
+    pub const IGMP: IpNumber = Self(2);
     ///Gateway-to-Gateway \[[RFC823](https://datatracker.ietf.org/doc/html/rfc823)\]
-    Ggp = 3,
+    pub const GGP: IpNumber = Self(3);
     ///IPv4 encapsulation \[[RFC2003](https://datatracker.ietf.org/doc/html/rfc2003)\]
-    IPv4 = 4,
+    pub const IPV4: IpNumber = Self(4);
     ///Stream \[[RFC1190](https://datatracker.ietf.org/doc/html/rfc1190)\] \[[RFC1819](https://datatracker.ietf.org/doc/html/rfc1819)\]
-    Stream = 5,
+    pub const STREAM: IpNumber = Self(5);
     ///Transmission Control \[[RFC793](https://datatracker.ietf.org/doc/html/rfc793)\]
-    Tcp = 6,
+    pub const TCP: IpNumber = Self(6);
     ///CBT \[Tony_Ballardie\]
-    Cbt = 7,
+    pub const CBT: IpNumber = Self(7);
     ///Exterior Gateway Protocol \[[RFC888](https://datatracker.ietf.org/doc/html/rfc888)\] \[David_Mills\]
-    Egp = 8,
+    pub const EGP: IpNumber = Self(8);
     ///any private interior gateway (used by Cisco for their IGRP) \[Internet_Assigned_Numbers_Authority\]
-    Igp = 9,
+    pub const IGP: IpNumber = Self(9);
     ///BBN RCC Monitoring \[Steve_Chipman\]
-    BbnRccMon = 10,
+    pub const BBN_RCC_MON: IpNumber = Self(10);
     ///Network Voice Protocol \[[RFC741](https://datatracker.ietf.org/doc/html/rfc741)\]\[Steve_Casner\]
-    NvpII = 11,
+    pub const NVP_II: IpNumber = Self(11);
     ///PUP
-    Pup = 12,
+    pub const PUP: IpNumber = Self(12);
     ///ARGUS (deprecated) \[Robert_W_Scheifler\]
-    Argus = 13,
+    pub const ARGUS: IpNumber = Self(13);
     ///EMCON \[mystery contact\]
-    Emcon = 14,
+    pub const EMCON: IpNumber = Self(14);
     ///Cross Net Debugger \[Haverty, J., "XNET Formats for Internet Protocol Version 4", IEN 158, October 1980.\]\[Jack_Haverty\]
-    Xnet = 15,
+    pub const XNET: IpNumber = Self(15);
     ///Chaos \[J_Noel_Chiappa\]
-    Chaos = 16,
+    pub const CHAOS: IpNumber = Self(16);
     ///User Datagram \[[RFC768](https://datatracker.ietf.org/doc/html/rfc768)\]\[Jon_Postel\]
-    Udp = 17,
+    pub const UDP: IpNumber = Self(17);
     ///Multiplexing \[Cohen, D. and J. Postel, "Multiplexing Protocol", IEN 90, USC/Information Sciences Institute, May 1979.\]\[Jon_Postel\]
-    Mux = 18,
+    pub const MUX: IpNumber = Self(18);
     ///DCN Measurement Subsystems \[David_Mills\]
-    DcnMeas = 19,
+    pub const DCN_MEAS: IpNumber = Self(19);
     ///Host Monitoring \[[RFC869](https://datatracker.ietf.org/doc/html/rfc869)\]\[Bob_Hinden\]
-    Hmp = 20,
+    pub const HMP: IpNumber = Self(20);
     ///Packet Radio Measurement \[Zaw_Sing_Su\]
-    Prm = 21,
+    pub const PRM: IpNumber = Self(21);
     ///XEROX NS IDP
-    XnsIdp = 22,
+    pub const XNS_IDP: IpNumber = Self(22);
     ///Trunk-1 \[Barry_Boehm\]
-    Trunk1 = 23,
+    pub const TRUNK1: IpNumber = Self(23);
     ///Trunk-2 \[Barry_Boehm\]
-    Trunk2 = 24,
+    pub const TRUNK2: IpNumber = Self(24);
     ///Leaf-1 \[Barry_Boehm\]
-    Leaf1 = 25,
+    pub const LEAF1: IpNumber = Self(25);
     ///Leaf-2 \[Barry_Boehm\]
-    Leaf2 = 26,
+    pub const LEAF2: IpNumber = Self(26);
     ///Reliable Data Protocol \[[RFC908](https://datatracker.ietf.org/doc/html/rfc908)\] \[Bob_Hinden\]
-    Rdp = 27,
+    pub const RDP: IpNumber = Self(27);
     ///Internet Reliable Transaction \[[RFC938](https://datatracker.ietf.org/doc/html/rfc938)\] \[Trudy_Miller\]
-    Irtp = 28,
+    pub const IRTP: IpNumber = Self(28);
     ///ISO Transport Protocol Class 4 \[[RFC905](https://datatracker.ietf.org/doc/html/rfc905)\] \[<mystery contact>\]
-    IsoTp4 = 29,
+    pub const ISO_TP4: IpNumber = Self(29);
     ///Bulk Data Transfer Protocol \[[RFC969](https://datatracker.ietf.org/doc/html/rfc969)\] \[David_Clark\]
-    NetBlt = 30,
+    pub const NET_BLT: IpNumber = Self(30);
     ///MFE Network Services Protocol \[Shuttleworth, B., "A Documentary of MFENet, a National Computer Network", UCRL-52317, Lawrence Livermore Labs, Livermore, California, June 1977.\] \[Barry_Howard\]
-    MfeNsp = 31,
+    pub const MFE_NSP: IpNumber = Self(31);
     ///MERIT Internodal Protocol \[Hans_Werner_Braun\]
-    MeritInp = 32,
+    pub const MERIT_INP: IpNumber = Self(32);
     ///Datagram Congestion Control Protocol \[[RFC4340](https://datatracker.ietf.org/doc/html/rfc4340)\]
-    Dccp = 33,
+    pub const DCCP: IpNumber = Self(33);
     ///Third Party Connect Protocol \[Stuart_A_Friedberg\]
-    ThirdPartyConnectProtocol = 34,
+    pub const THIRD_PARTY_CONNECT_PROTOCOL: IpNumber = Self(34);
     ///Inter-Domain Policy Routing Protocol \[Martha_Steenstrup\]
-    Idpr = 35,
+    pub const IDPR: IpNumber = Self(35);
     ///XTP \[Greg_Chesson\]
-    Xtp = 36,
+    pub const XTP: IpNumber = Self(36);
     ///Datagram Delivery Protocol \[Wesley_Craig\]
-    Ddp = 37,
+    pub const DDP: IpNumber = Self(37);
     ///IDPR Control Message Transport Proto \[Martha_Steenstrup\]
-    IdprCmtp = 38,
+    pub const IDPR_CMTP: IpNumber = Self(38);
     ///TP++ Transport Protocol \[Dirk_Fromhein\]
-    TpPlusPlus = 39,
+    pub const TP_PLUS_PLUS: IpNumber = Self(39);
     ///IL Transport Protocol \[Dave_Presotto\]
-    Il = 40,
+    pub const IL: IpNumber = Self(40);
     ///IPv6 encapsulation \[[RFC2473](https://datatracker.ietf.org/doc/html/rfc2473)\]
-    Ipv6 = 41,
+    pub const IPV6: IpNumber = Self(41);
     ///Source Demand Routing Protocol \[Deborah_Estrin\]
-    Sdrp = 42,
+    pub const SDRP: IpNumber = Self(42);
     ///Routing Header for IPv6 \[Steve_Deering\]
-    IPv6RouteHeader = 43,
+    pub const IPV6_ROUTE_HEADER: IpNumber = Self(43);
     ///Fragment Header for IPv6 \[Steve_Deering\]
-    IPv6FragmentationHeader = 44,
+    pub const IPV6_FRAGMENTATION_HEADER: IpNumber = Self(44);
     ///Inter-Domain Routing Protocol \[Sue_Hares\]
-    Idrp = 45,
+    pub const IDRP: IpNumber = Self(45);
     ///Reservation Protocol \[[RFC2205](https://datatracker.ietf.org/doc/html/rfc2205)\]\[[RFC3209](https://datatracker.ietf.org/doc/html/rfc3209)\]\[Bob_Braden\]
-    Rsvp = 46,
+    pub const RSVP: IpNumber = Self(46);
     ///Generic Routing Encapsulation \[[RFC2784](https://datatracker.ietf.org/doc/html/rfc2784)\]\[Tony_Li\]
-    Gre = 47,
+    pub const GRE: IpNumber = Self(47);
     ///Dynamic Source Routing Protocol \[[RFC4728](https://datatracker.ietf.org/doc/html/rfc4728)\]
-    Dsr = 48,
+    pub const DSR: IpNumber = Self(48);
     ///BNA \[Gary Salamon\]
-    Bna = 49,
+    pub const BNA: IpNumber = Self(49);
     ///Encapsulating Security Payload \[[RFC4303](https://datatracker.ietf.org/doc/html/rfc4303)\]
-    EncapsulatingSecurityPayload = 50,
+    pub const ENCAPSULATING_SECURITY_PAYLOAD: IpNumber = Self(50);
     ///Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
-    AuthenticationHeader = 51,
+    pub const AUTHENTICATION_HEADER: IpNumber = Self(51);
     ///Integrated Net Layer Security  TUBA \[K_Robert_Glenn\]
-    Inlsp = 52,
+    pub const INLSP: IpNumber = Self(52);
     ///IP with Encryption (deprecated) \[John_Ioannidis\]
-    Swipe = 53,
+    pub const SWIPE: IpNumber = Self(53);
     ///NBMA Address Resolution Protocol \[[RFC1735](https://datatracker.ietf.org/doc/html/rfc1735)\]
-    Narp = 54,
+    pub const NARP: IpNumber = Self(54);
     ///IP Mobility \[Charlie_Perkins\]
-    Mobile = 55,
+    pub const MOBILE: IpNumber = Self(55);
     ///Transport Layer Security Protocol using Kryptonet key management \[Christer_Oberg\]
-    Tlsp = 56,
+    pub const TLSP: IpNumber = Self(56);
     ///SKIP \[Tom_Markson\]
-    Skip = 57,
+    pub const SKIP: IpNumber = Self(57);
     ///ICMP for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    IPv6Icmp = 58,
+    pub const IPV6_ICMP: IpNumber = Self(58);
     ///No Next Header for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    IPv6NoNextHeader = 59,
+    pub const IPV6_NO_NEXT_HEADER: IpNumber = Self(59);
     ///Destination Options for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    IPv6DestinationOptions = 60,
+    pub const IPV6_DESTINATION_OPTIONS: IpNumber = Self(60);
     ///any host internal protocol \[Internet_Assigned_Numbers_Authority\]
-    AnyHostInternalProtocol = 61,
+    pub const ANY_HOST_INTERNAL_PROTOCOL: IpNumber = Self(61);
     ///CFTP \[Forsdick, H., "CFTP", Network Message, Bolt Beranek and Newman, January 1982.\]\[Harry_Forsdick\]
-    Cftp = 62,
+    pub const CFTP: IpNumber = Self(62);
     ///any local network \[Internet_Assigned_Numbers_Authority\]
-    AnyLocalNetwork = 63,
+    pub const ANY_LOCAL_NETWORK: IpNumber = Self(63);
     ///SATNET and Backroom EXPAK \[Steven_Blumenthal\]
-    SatExpak = 64,
+    pub const SAT_EXPAK: IpNumber = Self(64);
     ///Kryptolan \[Paul Liu\]
-    Krytolan = 65,
+    pub const KRYTOLAN: IpNumber = Self(65);
     ///MIT Remote Virtual Disk Protocol \[Michael_Greenwald\]
-    Rvd = 66,
+    pub const RVD: IpNumber = Self(66);
     ///Internet Pluribus Packet Core \[Steven_Blumenthal\]
-    Ippc = 67,
+    pub const IPPC: IpNumber = Self(67);
     ///any distributed file system \[Internet_Assigned_Numbers_Authority\]
-    AnyDistributedFileSystem = 68,
+    pub const ANY_DISTRIBUTED_FILE_SYSTEM: IpNumber = Self(68);
     ///SATNET Monitoring \[Steven_Blumenthal\]
-    SatMon = 69,
+    pub const SAT_MON: IpNumber = Self(69);
     ///VISA Protocol \[Gene_Tsudik\]
-    Visa = 70,
+    pub const VISA: IpNumber = Self(70);
     ///Internet Packet Core Utility \[Steven_Blumenthal\]
-    Ipcv = 71,
+    pub const IPCV: IpNumber = Self(71);
     ///Computer Protocol Network Executive \[David Mittnacht\]
-    Cpnx = 72,
+    pub const CPNX: IpNumber = Self(72);
     ///Computer Protocol Heart Beat \[David Mittnacht\]
-    Cphb = 73,
+    pub const CPHB: IpNumber = Self(73);
     ///Wang Span Network \[Victor Dafoulas\]
-    Wsn = 74,
+    pub const WSN: IpNumber = Self(74);
     ///Packet Video Protocol \[Steve_Casner\]
-    Pvp = 75,
+    pub const PVP: IpNumber = Self(75);
     ///Backroom SATNET Monitoring \[Steven_Blumenthal\]
-    BrSatMon = 76,
+    pub const BR_SAT_MON: IpNumber = Self(76);
     ///SUN ND PROTOCOL-Temporary \[William_Melohn\]
-    SunNd = 77,
+    pub const SUN_ND: IpNumber = Self(77);
     ///WIDEBAND Monitoring \[Steven_Blumenthal\]
-    WbMon = 78,
+    pub const WB_MON: IpNumber = Self(78);
     ///WIDEBAND EXPAK \[Steven_Blumenthal\]
-    WbExpak = 79,
+    pub const WB_EXPAK: IpNumber = Self(79);
     ///ISO Internet Protocol \[Marshall_T_Rose\]
-    IsoIp = 80,
+    pub const ISO_IP: IpNumber = Self(80);
     ///VMTP \[Dave_Cheriton\]
-    Vmtp = 81,
+    pub const VMTP: IpNumber = Self(81);
     ///SECURE-VMTP \[Dave_Cheriton\]
-    SecureVmtp = 82,
+    pub const SECURE_VMTP: IpNumber = Self(82);
     ///VINES \[Brian Horn\]
-    Vines = 83,
+    pub const VINES: IpNumber = Self(83);
     ///Transaction Transport Protocol or Internet Protocol Traffic Manager \[Jim_Stevens\]
-    TtpOrIptm = 84,
+    pub const TTP_OR_IPTM: IpNumber = Self(84);
     ///NSFNET-IGP \[Hans_Werner_Braun\]
-    NsfnetIgp = 85,
+    pub const NSFNET_IGP: IpNumber = Self(85);
     ///Dissimilar Gateway Protocol \[M/A-COM Government Systems, "Dissimilar Gateway Protocol Specification, Draft Version", Contract no. CS901145, November 16, 1987.\]\[Mike_Little\]
-    Dgp = 86,
+    pub const DGP: IpNumber = Self(86);
     ///TCF \[Guillermo_A_Loyola\]
-    Tcf = 87,
+    pub const TCF: IpNumber = Self(87);
     ///EIGRP \[[RFC7868](https://datatracker.ietf.org/doc/html/rfc7868)\]
-    Eigrp = 88,
+    pub const EIGRP: IpNumber = Self(88);
     ///OSPFIGP \[[RFC1583](https://datatracker.ietf.org/doc/html/rfc1583)\]\[[RFC2328](https://datatracker.ietf.org/doc/html/rfc2328)\]\[[RFC5340](https://datatracker.ietf.org/doc/html/rfc5340)\]\[John_Moy\]
-    Ospfigp = 89,
+    pub const OSPFIGP: IpNumber = Self(89);
     ///Sprite RPC Protocol \[Welch, B., "The Sprite Remote Procedure Call System", Technical Report, UCB/Computer Science Dept., 86/302, University of California at Berkeley, June 1986.\]\[Bruce Willins\]
-    SpriteRpc = 90,
+    pub const SPRITE_RPC: IpNumber = Self(90);
     ///Locus Address Resolution Protocol \[Brian Horn\]
-    Larp = 91,
+    pub const LARP: IpNumber = Self(91);
     ///Multicast Transport Protocol \[Susie_Armstrong\]
-    Mtp = 92,
+    pub const MTP: IpNumber = Self(92);
     ///AX.25 Frames \[Brian_Kantor\]
-    Ax25 = 93,
+    pub const AX25: IpNumber = Self(93);
     ///IP-within-IP Encapsulation Protocol \[John_Ioannidis\]
-    Ipip = 94,
+    pub const IPIP: IpNumber = Self(94);
     ///Mobile Internetworking Control Pro. (deprecated) \[John_Ioannidis\]
-    Micp = 95,
+    pub const MICP: IpNumber = Self(95);
     ///Semaphore Communications Sec. Pro. \[Howard_Hart\]
-    SccSp = 96,
+    pub const SCC_SP: IpNumber = Self(96);
     ///Ethernet-within-IP Encapsulation \[[RFC3378](https://datatracker.ietf.org/doc/html/rfc3378)\]
-    EtherIp = 97,
+    pub const ETHER_IP: IpNumber = Self(97);
     ///Encapsulation Header \[[RFC1241](https://datatracker.ietf.org/doc/html/rfc1241)\]\[Robert_Woodburn\]
-    Encap = 98,
+    pub const ENCAP: IpNumber = Self(98);
     ///GMTP \[\[RXB5\]\]
-    Gmtp = 100,
+    pub const GMTP: IpNumber = Self(100);
     ///Ipsilon Flow Management Protocol \[Bob_Hinden\]\[November 1995, 1997.\]
-    Ifmp = 101,
+    pub const IFMP: IpNumber = Self(101);
     ///PNNI over IP \[Ross_Callon\]
-    Pnni = 102,
+    pub const PNNI: IpNumber = Self(102);
     ///Protocol Independent Multicast \[[RFC7761](https://datatracker.ietf.org/doc/html/rfc7761)\]\[Dino_Farinacci\]
-    Pim = 103,
+    pub const PIM: IpNumber = Self(103);
     ///ARIS \[Nancy_Feldman\]
-    Aris = 104,
+    pub const ARIS: IpNumber = Self(104);
     ///SCPS \[Robert_Durst\]
-    Scps = 105,
+    pub const SCPS: IpNumber = Self(105);
     ///QNX \[Michael_Hunter\]
-    Qnx = 106,
+    pub const QNX: IpNumber = Self(106);
     ///Active Networks \[Bob_Braden\]
-    ActiveNetworks = 107,
+    pub const ACTIVE_NETWORKS: IpNumber = Self(107);
     ///IP Payload Compression Protocol \[[RFC2393](https://datatracker.ietf.org/doc/html/rfc2393)\]
-    IpComp = 108,
+    pub const IP_COMP: IpNumber = Self(108);
     ///Sitara Networks Protocol \[Manickam_R_Sridhar\]
-    SitraNetworksProtocol = 109,
+    pub const SITRA_NETWORKS_PROTOCOL: IpNumber = Self(109);
     ///Compaq Peer Protocol \[Victor_Volpe\]
-    CompaqPeer = 110,
+    pub const COMPAQ_PEER: IpNumber = Self(110);
     ///IPX in IP \[CJ_Lee\]
-    IpxInIp = 111,
+    pub const IPX_IN_IP: IpNumber = Self(111);
     ///Virtual Router Redundancy Protocol \[[RFC5798](https://datatracker.ietf.org/doc/html/rfc5798)\]
-    Vrrp = 112,
+    pub const VRRP: IpNumber = Self(112);
     ///PGM Reliable Transport Protocol \[Tony_Speakman\]
-    Pgm = 113,
+    pub const PGM: IpNumber = Self(113);
     ///any 0-hop protocol \[Internet_Assigned_Numbers_Authority\]
-    AnyZeroHopProtocol = 114,
+    pub const ANY_ZERO_HOP_PROTOCOL: IpNumber = Self(114);
     ///Layer Two Tunneling Protocol \[[RFC3931](https://datatracker.ietf.org/doc/html/rfc3931)\]\[Bernard_Aboba\]
-    Layer2TunnelingProtocol = 115,
+    pub const LAYER2_TUNNELING_PROTOCOL: IpNumber = Self(115);
     ///D-II Data Exchange (DDX) \[John_Worley\]
-    Ddx = 116,
+    pub const DDX: IpNumber = Self(116);
     ///Interactive Agent Transfer Protocol \[John_Murphy\]
-    Iatp = 117,
+    pub const IATP: IpNumber = Self(117);
     ///Schedule Transfer Protocol \[Jean_Michel_Pittet\]
-    Stp = 118,
+    pub const STP: IpNumber = Self(118);
     ///SpectraLink Radio Protocol \[Mark_Hamilton\]
-    Srp = 119,
+    pub const SRP: IpNumber = Self(119);
     ///UTI \[Peter_Lothberg\]
-    Uti = 120,
+    pub const UTI: IpNumber = Self(120);
     ///Simple Message Protocol \[Leif_Ekblad\]
-    SimpleMessageProtocol = 121,
+    pub const SIMPLE_MESSAGE_PROTOCOL: IpNumber = Self(121);
     ///Simple Multicast Protocol (deprecated) \[Jon_Crowcroft\]\[draft-perlman-simple-multicast\]
-    Sm = 122,
+    pub const SM: IpNumber = Self(122);
     ///Performance Transparency Protocol \[Michael_Welzl\]
-    Ptp = 123,
+    pub const PTP: IpNumber = Self(123);
     ///ISIS over IPv4 \[Tony_Przygienda\]
-    IsisOverIpv4 = 124,
+    pub const ISIS_OVER_IPV4: IpNumber = Self(124);
     ///FIRE \[Criag_Partridge\]
-    Fire = 125,
+    pub const FIRE: IpNumber = Self(125);
     ///Combat Radio Transport Protocol \[Robert_Sautter\]
-    Crtp = 126,
+    pub const CRTP: IpNumber = Self(126);
     ///Combat Radio User Datagram \[Robert_Sautter\]
-    Crudp = 127,
+    pub const CRUDP: IpNumber = Self(127);
     ///SSCOPMCE \[Kurt_Waber\]
-    Sscopmce = 128,
+    pub const SSCOPMCE: IpNumber = Self(128);
     ///IPLT \[\[Hollbach\]\]
-    Iplt = 129,
+    pub const IPLT: IpNumber = Self(129);
     ///Secure Packet Shield \[Bill_McIntosh\]
-    Sps = 130,
+    pub const SPS: IpNumber = Self(130);
     ///Private IP Encapsulation within IP \[Bernhard_Petri\]
-    Pipe = 131,
+    pub const PIPE: IpNumber = Self(131);
     ///Stream Control Transmission Protocol \[Randall_R_Stewart\]
-    Sctp = 132,
+    pub const SCTP: IpNumber = Self(132);
     ///Fibre Channel \[Murali_Rajagopal\]\[[RFC6172](https://datatracker.ietf.org/doc/html/rfc6172)\]
-    Fc = 133,
+    pub const FC: IpNumber = Self(133);
     ///RSVP-E2E-IGNORE \[[RFC3175](https://datatracker.ietf.org/doc/html/rfc3175)\]
-    RsvpE2eIgnore = 134,
+    pub const RSVP_E2E_IGNORE: IpNumber = Self(134);
     ///MobilityHeader \[[RFC6275](https://datatracker.ietf.org/doc/html/rfc6275)\]
-    MobilityHeader = 135,
+    pub const MOBILITY_HEADER: IpNumber = Self(135);
     ///UDPLite \[[RFC3828](https://datatracker.ietf.org/doc/html/rfc3828)\]
-    UdpLite = 136,
+    pub const UDP_LITE: IpNumber = Self(136);
     /// \[[RFC4023](https://datatracker.ietf.org/doc/html/rfc4023)\]
-    MplsInIp = 137,
+    pub const MPLS_IN_IP: IpNumber = Self(137);
     ///MANET Protocols \[[RFC5498](https://datatracker.ietf.org/doc/html/rfc5498)\]
-    Manet = 138,
+    pub const MANET: IpNumber = Self(138);
     ///Host Identity Protocol \[[RFC7401](https://datatracker.ietf.org/doc/html/rfc7401)\]
-    Hip = 139,
+    pub const HIP: IpNumber = Self(139);
     ///Shim6 Protocol \[[RFC5533](https://datatracker.ietf.org/doc/html/rfc5533)\]
-    Shim6 = 140,
+    pub const SHIM6: IpNumber = Self(140);
     ///Wrapped Encapsulating Security Payload \[[RFC5840](https://datatracker.ietf.org/doc/html/rfc5840)\]
-    Wesp = 141,
+    pub const WESP: IpNumber = Self(141);
     ///Robust Header Compression \[[RFC5858](https://datatracker.ietf.org/doc/html/rfc5858)\]
-    Rohc = 142,
+    pub const ROHC: IpNumber = Self(142);
     ///Use for experimentation and testing
-    ExperimentalAndTesting0 = 253,
+    pub const EXPERIMENTAL_AND_TESTING_0: IpNumber = Self(253);
     ///Use for experimentation and testing
-    ExperimentalAndTesting1 = 254,
+    pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = Self(254);
 }
 
 impl IpNumber {
@@ -330,60 +332,101 @@ impl IpNumber {
     }
 }
 
+impl From<u8> for IpNumber {
+    fn from(val: u8) -> Self {
+        Self(val)
+    }
+}
+
+impl From<IpNumber> for u8 {
+    fn from(val: IpNumber) -> Self {
+        val.0
+    }
+}
+
+impl core::fmt::Debug for IpNumber {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match *self {
+            Self::IPV6_HEADER_HOP_BY_HOP => write!(f, "Ipv6HeaderHopByHop({})", self.0),
+            Self::ICMP => write!(f, "ICMP({})", self.0),
+            Self::IGMP => write!(f, "IGMP({})", self.0),
+            Self::GGP => write!(f, "GGP({})", self.0),
+            Self::IPV4 => write!(f, "Ipv4({})", self.0),
+            Self::STREAM => write!(f, "Stream({})", self.0),
+            Self::TCP => write!(f, "TCP({})", self.0),
+            Self::UDP => write!(f, "UDP({})", self.0),
+            Self::IPV6 => write!(f, "Ipv6({})", self.0),
+            Self::IPV6_ROUTE_HEADER => write!(f, "Ipv6RouteHeader({})", self.0),
+            Self::IPV6_FRAGMENTATION_HEADER => write!(f, "Ipv6FragmentationHeader({})", self.0),
+            Self::ENCAPSULATING_SECURITY_PAYLOAD => write!(f, "EncapsulatingSecurityPayload({})", self.0),
+            Self::AUTHENTICATION_HEADER => write!(f, "AuthenticationHeader({})", self.0),
+            Self::IPV6_ICMP => write!(f, "Ipv6_ICMP({})", self.0),
+            Self::IPV6_DESTINATION_OPTIONS => write!(f, "Ipv6DestinationOptions({})", self.0),
+            Self::MOBILITY_HEADER => write!(f, "MobilityHeader({})", self.0),
+            Self::HIP => write!(f, "HIP({})", self.0),
+            Self::SHIM6 => write!(f, "SHIM6({})", self.0),
+            _ => write!(f, "IpNumber({})", self.0),
+        }
+    }
+
+}
+
 /// `u8` constants for the most used ip protocol numbers.
 ///
 /// The constants only exist for convenience. You can get equivalent values by
-/// casting the enum values of [`IpNumber`] to a u8 value.
+/// retrieving the single u8 field of the struct [`IpNumber`] or by relying on
+/// its `Into<u8>` implementation.
 ///
 /// ```
 /// use etherparse::{ip_number, IpNumber};
 ///
-/// assert_eq!(ip_number::TCP, IpNumber::Tcp as u8);
+/// assert_eq!(ip_number::TCP, IpNumber::TCP.0);
+/// assert_eq!(ip_number::TCP, u8::from(IpNumber::TCP));
 /// ```
 ///
 /// The list original values were copied from
 /// <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
 pub mod ip_number {
-    use crate::IpNumber::*;
+    use crate::IpNumber;
 
     ///IPv6 Hop-by-Hop Option \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    pub const IPV6_HOP_BY_HOP: u8 = IPv6HeaderHopByHop as u8; //0
+    pub const IPV6_HOP_BY_HOP: u8 = IpNumber::IPV6_HEADER_HOP_BY_HOP.0; //0
     ///Internet Control Message \[[RFC792](https://datatracker.ietf.org/doc/html/rfc792)\]
-    pub const ICMP: u8 = Icmp as u8; //1
+    pub const ICMP: u8 = IpNumber::ICMP.0; //1
     ///Internet Group Management \[[RFC1112](https://datatracker.ietf.org/doc/html/rfc1112)\]
-    pub const IGMP: u8 = Igmp as u8; //2
+    pub const IGMP: u8 = IpNumber::IGMP.0; //2
     ///Gateway-to-Gateway \[[RFC823](https://datatracker.ietf.org/doc/html/rfc823)\]
-    pub const GGP: u8 = Ggp as u8; //3
+    pub const GGP: u8 = IpNumber::GGP.0; //3
     ///IPv4 encapsulation \[[RFC2003](https://datatracker.ietf.org/doc/html/rfc2003)\]
-    pub const IPV4: u8 = IPv4 as u8; //4
+    pub const IPV4: u8 = IpNumber::IPV4.0; //4
     ///Stream \[[RFC1190](https://datatracker.ietf.org/doc/html/rfc1190)\] \[[RFC1819](https://datatracker.ietf.org/doc/html/rfc1819)\]
-    pub const STREAM: u8 = Stream as u8; //5
+    pub const STREAM: u8 = IpNumber::STREAM.0; //5
     ///Transmission Control \[[RFC793](https://datatracker.ietf.org/doc/html/rfc793)\]
-    pub const TCP: u8 = Tcp as u8; //6
+    pub const TCP: u8 = IpNumber::TCP.0; //6
     ///User Datagram \[[RFC768](https://datatracker.ietf.org/doc/html/rfc768)\] \[Jon_Postel\]
-    pub const UDP: u8 = Udp as u8; //17
+    pub const UDP: u8 = IpNumber::UDP.0; //17
     ///IPv6 encapsulation \[[RFC2473](https://datatracker.ietf.org/doc/html/rfc2473)\]
-    pub const IPV6: u8 = Ipv6 as u8; //41
+    pub const IPV6: u8 = IpNumber::IPV6.0; //41
     ///Routing Header for IPv6 \[Steve_Deering\]
-    pub const IPV6_ROUTE: u8 = IPv6RouteHeader as u8; //43
+    pub const IPV6_ROUTE: u8 = IpNumber::IPV6_ROUTE_HEADER.0; //43
     ///Fragment Header for IPv6 \[Steve_Deering\]
-    pub const IPV6_FRAG: u8 = IPv6FragmentationHeader as u8; //44
+    pub const IPV6_FRAG: u8 = IpNumber::IPV6_FRAGMENTATION_HEADER.0; //44
     ///Encapsulating Security Payload \[[RFC4303](https://datatracker.ietf.org/doc/html/rfc4303)\]
-    pub const ENCAP_SEC: u8 = EncapsulatingSecurityPayload as u8; //50
+    pub const ENCAP_SEC: u8 = IpNumber::ENCAPSULATING_SECURITY_PAYLOAD.0; //50
     ///Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
-    pub const AUTH: u8 = AuthenticationHeader as u8; //51
+    pub const AUTH: u8 = IpNumber::AUTHENTICATION_HEADER.0; //51
     ///IPv6 ICMP next-header type \[[RFC4443](https://datatracker.ietf.org/doc/html/rfc4443)\]
-    pub const IPV6_ICMP: u8 = IPv6Icmp as u8; // 58
+    pub const IPV6_ICMP: u8 = IpNumber::IPV6_ICMP.0; //58
     ///Destination Options for IPv6 \[[RFC8200](https://datatracker.ietf.org/doc/html/rfc8200)\]
-    pub const IPV6_DEST_OPTIONS: u8 = IPv6DestinationOptions as u8; //60
+    pub const IPV6_DEST_OPTIONS: u8 = IpNumber::IPV6_DESTINATION_OPTIONS.0; //60
     ///MobilityHeader \[[RFC6275](https://datatracker.ietf.org/doc/html/rfc6275)\]
-    pub const MOBILITY: u8 = MobilityHeader as u8; //135
+    pub const MOBILITY: u8 = IpNumber::MOBILITY_HEADER.0; //135
     ///Host Identity Protocol \[[RFC7401](https://datatracker.ietf.org/doc/html/rfc7401)\]
-    pub const HIP: u8 = Hip as u8; //139
+    pub const HIP: u8 = IpNumber::HIP.0; //139
     ///Shim6 Protocol \[[RFC5533](https://datatracker.ietf.org/doc/html/rfc5533)\]
-    pub const SHIM6: u8 = Shim6 as u8; //140
+    pub const SHIM6: u8 = IpNumber::SHIM6.0; //140
     ///Use for experimentation and testing
-    pub const EXP0: u8 = ExperimentalAndTesting0 as u8; //253
+    pub const EXP0: u8 = IpNumber::EXPERIMENTAL_AND_TESTING_0.0; //253
     ///Use for experimentation and testing
-    pub const EXP1: u8 = ExperimentalAndTesting1 as u8; //254
+    pub const EXP1: u8 = IpNumber::EXPERIMENTAL_AND_TESTING_1.0; //254
 }

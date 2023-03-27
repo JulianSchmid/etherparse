@@ -346,7 +346,6 @@ impl ExtensionTestHeaders {
         assert!(self.ip_numbers.len() >= 2);
 
         // set the next_header of the last extension header and return the id
-        use IpNumber::*;
         if self.ip_numbers.len() >= 3 {
             match self.ip_numbers[self.ip_numbers.len() - 3] {
                 IPV6_HOP_BY_HOP => {
@@ -381,11 +380,11 @@ impl ExtensionTestHeaders {
                 _ => unreachable!(),
             }
             match self.ip_numbers[self.ip_numbers.len() - 2] {
-                IPV6_HOP_BY_HOP => IPv6HeaderHopByHop,
-                IPV6_DEST_OPTIONS => IPv6DestinationOptions,
-                IPV6_ROUTE => IPv6RouteHeader,
-                IPV6_FRAG => IPv6FragmentationHeader,
-                AUTH => AuthenticationHeader,
+                IPV6_HOP_BY_HOP => IpNumber::IPV6_HEADER_HOP_BY_HOP,
+                IPV6_DEST_OPTIONS => IpNumber::IPV6_DESTINATION_OPTIONS,
+                IPV6_ROUTE => IpNumber::IPV6_ROUTE_HEADER,
+                IPV6_FRAG => IpNumber::IPV6_FRAGMENTATION_HEADER,
+                AUTH => IpNumber::AUTHENTICATION_HEADER,
                 _ => unreachable!(),
             }
         } else {
@@ -393,11 +392,11 @@ impl ExtensionTestHeaders {
             let missing = self.ip_numbers[0];
             self.ip_numbers[0] = new_header;
             match missing {
-                IPV6_HOP_BY_HOP => IPv6HeaderHopByHop,
-                IPV6_DEST_OPTIONS => IPv6DestinationOptions,
-                IPV6_ROUTE => IPv6RouteHeader,
-                IPV6_FRAG => IPv6FragmentationHeader,
-                AUTH => AuthenticationHeader,
+                IPV6_HOP_BY_HOP => IpNumber::IPV6_HEADER_HOP_BY_HOP,
+                IPV6_DEST_OPTIONS => IpNumber::IPV6_DESTINATION_OPTIONS,
+                IPV6_ROUTE => IpNumber::IPV6_ROUTE_HEADER,
+                IPV6_FRAG => IpNumber::IPV6_FRAGMENTATION_HEADER,
+                AUTH => IpNumber::AUTHENTICATION_HEADER,
                 _ => unreachable!(),
             }
         }

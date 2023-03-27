@@ -130,7 +130,7 @@ pub mod header {
             assert_matches!(
                 err,
                 WriteError::ValueError(ValueError::Ipv4ExtensionNotReferenced(
-                    IpNumber::AuthenticationHeader
+                    IpNumber::AUTHENTICATION_HEADER
                 ))
             );
         }
@@ -212,7 +212,7 @@ pub mod header {
 
             // auth not referenced (error)
             assert_eq!(
-                ValueError::Ipv4ExtensionNotReferenced(IpNumber::AuthenticationHeader),
+                ValueError::Ipv4ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER),
                 exts.next_header(TCP).unwrap_err()
             );
         }
