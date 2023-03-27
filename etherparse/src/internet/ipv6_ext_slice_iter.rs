@@ -13,7 +13,7 @@ impl<'a> Default for Ipv6ExtensionSliceIter<'a> {
         Ipv6ExtensionSliceIter {
             // don't use 0 as this is the reserved value
             // for the hop by hop header
-            next_header: IpNumber::IPv6NoNextHeader as u8,
+            next_header: u8::from(IpNumber::IPV6_NO_NEXT_HEADER),
             rest: &[],
         }
     }

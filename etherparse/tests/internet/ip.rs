@@ -79,9 +79,9 @@ mod ip_number {
             IPV6_DEST_OPTIONS,
             MOBILITY,
             HIP,
-            SHIM6 as u8,
-            EXP0 as u8,
-            EXP1 as u8,
+            SHIM6,
+            EXP0,
+            EXP1,
         ];
 
         for i in 0..std::u8::MAX {
@@ -92,44 +92,66 @@ mod ip_number {
     #[test]
     fn ip_number_eq_check() {
         use crate::ip_number::*;
-        use crate::IpNumber::*;
+        use crate::IpNumber;
         let pairs = &[
-            (IPV6_HOP_BY_HOP, IPv6HeaderHopByHop),
-            (ICMP, Icmp),
-            (IGMP, Igmp),
-            (GGP, Ggp),
-            (IPV4, IPv4),
-            (STREAM, Stream),
-            (TCP, Tcp),
-            (UDP, Udp),
-            (IPV6, Ipv6),
-            (IPV6_ROUTE, IPv6RouteHeader),
-            (IPV6_FRAG, IPv6FragmentationHeader),
-            (ENCAP_SEC, EncapsulatingSecurityPayload),
-            (AUTH, AuthenticationHeader),
-            (IPV6_DEST_OPTIONS, IPv6DestinationOptions),
-            (MOBILITY, MobilityHeader),
-            (HIP, Hip),
-            (SHIM6, Shim6),
-            (EXP0, ExperimentalAndTesting0),
-            (EXP1, ExperimentalAndTesting1),
+            (IPV6_HOP_BY_HOP, IpNumber::IPV6_HEADER_HOP_BY_HOP),
+            (ICMP, IpNumber::ICMP),
+            (IGMP, IpNumber::IGMP),
+            (GGP, IpNumber::GGP),
+            (IPV4, IpNumber::IPV4),
+            (STREAM, IpNumber::STREAM),
+            (TCP, IpNumber::TCP),
+            (UDP, IpNumber::UDP),
+            (IPV6, IpNumber::IPV6),
+            (IPV6_ROUTE, IpNumber::IPV6_ROUTE_HEADER),
+            (IPV6_FRAG, IpNumber::IPV6_FRAGMENTATION_HEADER),
+            (ENCAP_SEC, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
+            (AUTH, IpNumber::AUTHENTICATION_HEADER),
+            (IPV6_DEST_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
+            (MOBILITY, IpNumber::MOBILITY_HEADER),
+            (HIP, IpNumber::HIP),
+            (SHIM6, IpNumber::SHIM6),
+            (EXP0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
+            (EXP1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
         ];
         for (raw, enum_value) in pairs {
-            assert_eq!(*raw, *enum_value as u8);
+            assert_eq!(*raw, u8::from(*enum_value));
         }
     }
 
     #[test]
     fn debug() {
-        assert_eq!(
-            "IPv6HeaderHopByHop",
-            &format!("{:?}", IpNumber::IPv6HeaderHopByHop)
-        );
+        let pairs = &[
+            (IpNumber::IPV6_HEADER_HOP_BY_HOP, "Ipv6HeaderHopByHop(0)"),
+            (IpNumber::ICMP, "ICMP(1)"),
+            (IpNumber::IGMP, "IGMP(2)"),
+            (IpNumber::GGP, "GGP(3)"),
+            (IpNumber::IPV4, "Ipv4(4)"),
+            (IpNumber::STREAM, "Stream(5)"),
+            (IpNumber::TCP, "TCP(6)"),
+            (IpNumber::UDP, "UDP(17)"),
+            (IpNumber::IPV6, "Ipv6(41)"),
+            (IpNumber::IPV6_ROUTE_HEADER, "Ipv6RouteHeader(43)"),
+            (IpNumber::IPV6_FRAGMENTATION_HEADER, "Ipv6FragmentationHeader(44)"),
+            (IpNumber::ENCAPSULATING_SECURITY_PAYLOAD, "EncapsulatingSecurityPayload(50)"),
+            (IpNumber::AUTHENTICATION_HEADER, "AuthenticationHeader(51)"),
+            (IpNumber::IPV6_ICMP, "Ipv6_ICMP(58)"),
+            (IpNumber::IPV6_DESTINATION_OPTIONS, "Ipv6DestinationOptions(60)"),
+            (IpNumber::MOBILITY_HEADER, "MobilityHeader(135)"),
+            (IpNumber::HIP, "HIP(139)"),
+            (IpNumber::SHIM6, "SHIM6(140)"),
+            (IpNumber::EXPERIMENTAL_AND_TESTING_0, "IpNumber(253)"),
+            (IpNumber::EXPERIMENTAL_AND_TESTING_1, "IpNumber(254)"),
+        ];
+        
+        for (ip_number, debug_str) in pairs {
+            assert_eq!(format!("{:?}", ip_number), *debug_str);
+        }
     }
 
     #[test]
     fn clone_eq() {
-        let value = IpNumber::IPv6HeaderHopByHop;
+        let value = IpNumber::IPV6_HEADER_HOP_BY_HOP;
         assert_eq!(value, value.clone());
     }
 } // mod ip_number

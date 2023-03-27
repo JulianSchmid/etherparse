@@ -53,14 +53,13 @@ impl Ipv4Extensions {
         start_ip_number: u8,
     ) -> Result<(), WriteError> {
         use ip_number::*;
-        use IpNumber::*;
         use ValueError::*;
         match self.auth {
             Some(ref header) => {
                 if AUTH == start_ip_number {
                     header.write(writer).map_err(WriteError::IoError)
                 } else {
-                    Err(Ipv4ExtensionNotReferenced(AuthenticationHeader).into())
+                    Err(Ipv4ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER).into())
                 }
             }
             None => Ok(()),
@@ -107,7 +106,7 @@ impl Ipv4Extensions {
                 Ok(auth.next_header)
             } else {
                 Err(ValueError::Ipv4ExtensionNotReferenced(
-                    IpNumber::AuthenticationHeader,
+                    IpNumber::AUTHENTICATION_HEADER,
                 ))
             }
         } else {

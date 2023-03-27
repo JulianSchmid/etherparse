@@ -300,7 +300,6 @@ impl Ipv6Extensions {
         first_header: u8,
     ) -> Result<(), WriteError> {
         use ip_number::*;
-        use IpNumber::*;
         use ValueError::*;
 
         /// Struct flagging if a header needs to be written.
@@ -422,17 +421,17 @@ impl Ipv6Extensions {
 
         // check that all header have been written
         if needs_write.hop_by_hop_options {
-            Err(Ipv6ExtensionNotReferenced(IPv6HeaderHopByHop).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_HEADER_HOP_BY_HOP).into())
         } else if needs_write.destination_options {
-            Err(Ipv6ExtensionNotReferenced(IPv6DestinationOptions).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS).into())
         } else if needs_write.routing {
-            Err(Ipv6ExtensionNotReferenced(IPv6RouteHeader).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_ROUTE_HEADER).into())
         } else if needs_write.fragment {
-            Err(Ipv6ExtensionNotReferenced(IPv6FragmentationHeader).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_FRAGMENTATION_HEADER).into())
         } else if needs_write.auth {
-            Err(Ipv6ExtensionNotReferenced(AuthenticationHeader).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER).into())
         } else if needs_write.final_destination_options {
-            Err(Ipv6ExtensionNotReferenced(IPv6DestinationOptions).into())
+            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS).into())
         } else {
             Ok(())
         }
@@ -635,24 +634,24 @@ impl Ipv6Extensions {
 
         // assume all done
         if outstanding_refs.hop_by_hop_options {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPv6HeaderHopByHop));
+            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_HEADER_HOP_BY_HOP));
         }
         if outstanding_refs.destination_options {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions));
+            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS));
         }
         if outstanding_refs.routing {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPv6RouteHeader));
+            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_ROUTE_HEADER));
         }
         if outstanding_refs.fragment {
             return Err(Ipv6ExtensionNotReferenced(
-                IpNumber::IPv6FragmentationHeader,
+                IpNumber::IPV6_FRAGMENTATION_HEADER,
             ));
         }
         if outstanding_refs.auth {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::AuthenticationHeader));
+            return Err(Ipv6ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER));
         }
         if outstanding_refs.final_destination_options {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPv6DestinationOptions));
+            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS));
         }
 
         Ok(next)
