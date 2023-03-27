@@ -10,9 +10,9 @@ struct ComponentTest {
 }
 
 static VLAN_ETHER_TYPES: &'static [u16] = &[
-    EtherType::VlanTaggedFrame as u16,
-    EtherType::ProviderBridging as u16,
-    EtherType::VlanDoubleTaggedFrame as u16,
+    EtherType::VLAN_TAGGED_FRAME.0,
+    EtherType::PROVIDER_BRIDGING.0,
+    EtherType::VLAN_DOUBLE_TAGGED_FRAME.0,
 ];
 
 impl ComponentTest {
@@ -583,8 +583,8 @@ proptest! {
 
         //ethernet 2: standalone, ipv4, ipv6
         setup_eth(eth.ether_type).run();
-        setup_eth(EtherType::Ipv4 as u16).run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
-        setup_eth(EtherType::Ipv6 as u16).run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
+        setup_eth(ether_type::IPV4).run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
+        setup_eth(ether_type::IPV6).run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
 
         //vlans
         for ether_type in VLAN_ETHER_TYPES {
