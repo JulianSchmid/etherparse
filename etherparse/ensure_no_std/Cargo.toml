@@ -1,0 +1,16 @@
+[package]
+name = "ensure_no_std"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+etherparse = { path = "..", default-features = false }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+[workspace]
