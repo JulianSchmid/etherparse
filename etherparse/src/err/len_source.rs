@@ -17,6 +17,7 @@ pub enum LenSource {
 #[cfg(test)]
 mod test {
     use super::LenSource::*;
+    use alloc::format;
     use std::{
         cmp::{Ord, Ordering},
         collections::hash_map::DefaultHasher,

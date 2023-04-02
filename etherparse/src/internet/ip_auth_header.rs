@@ -33,7 +33,7 @@ pub struct IpAuthHeader {
 }
 
 impl Debug for IpAuthHeader {
-    fn fmt(&self, formatter: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result<(), core::fmt::Error> {
         let mut s = formatter.debug_struct("IpAuthHeader");
         s.field("next_header", &self.next_header);
         s.field("spi", &self.spi);
@@ -111,7 +111,8 @@ impl<'a> IpAuthHeader {
     }
 
     /// Read an authentication header from the current reader position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderReadError> {
         use err::ip_auth::HeaderError::*;
@@ -170,7 +171,8 @@ impl<'a> IpAuthHeader {
     }
 
     /// Writes the given authentication header to the current position.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         let spi_be = self.spi.to_be_bytes();
         let sequence_number_be = self.sequence_number.to_be_bytes();
         debug_assert!(self.raw_icv_len != 0xff);
@@ -233,6 +235,7 @@ impl<'a> IpAuthHeader {
 mod test {
     use super::*;
     use crate::test_gens::*;
+    use alloc::{format, vec::Vec};
     use err::ip_auth::HeaderError::*;
     use proptest::prelude::*;
     use std::io::Cursor;

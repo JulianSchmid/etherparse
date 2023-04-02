@@ -197,7 +197,8 @@ impl Ipv6Extensions {
     /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
     /// the hop by hop header is required to be located directly after the IPv6 header according
     /// to RFC 8200.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         start_ip_number: u8,
     ) -> Result<(Ipv6Extensions, u8), err::ipv6_exts::HeaderReadError> {
@@ -294,7 +295,8 @@ impl Ipv6Extensions {
     ///
     /// It is required that all next header are correctly set in the headers and no other ipv6 header
     /// extensions follow this header. If this is not the case a `ValueError::Ipv6ExtensionNotReferenced`
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,
         first_header: u8,

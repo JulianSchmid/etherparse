@@ -204,6 +204,7 @@ impl<'a> core::fmt::Debug for TcpOptionsIterator<'a> {
 #[cfg(test)]
 mod test {
     use crate::{tcp_option::*, *};
+    use alloc::format;
 
     #[test]
     fn debug() {

@@ -17,8 +17,8 @@ pub enum EthSliceError {
     TcpHeader(err::tcp::HeaderError),
 }
 
-impl std::fmt::Display for EthSliceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for EthSliceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use EthSliceError::*;
 
         match self {
@@ -32,6 +32,7 @@ impl std::fmt::Display for EthSliceError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for EthSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use EthSliceError::*;
@@ -50,6 +51,7 @@ impl std::error::Error for EthSliceError {
 mod tests {
     use super::{EthSliceError::*, *};
     use crate::err::{Layer, LenSource};
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -127,6 +129,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         // Len

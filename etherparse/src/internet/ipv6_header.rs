@@ -46,7 +46,8 @@ impl Ipv6Header {
     }
 
     ///Reads an IPv6 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv6Header, err::ipv6::HeaderReadError> {
         use err::ipv6::{HeaderError::*, HeaderReadError::*};
@@ -61,7 +62,8 @@ impl Ipv6Header {
     }
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
-    pub fn read_without_version<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read_without_version<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         version_rest: u8,
     ) -> Result<Ipv6Header, std::io::Error> {
@@ -187,7 +189,8 @@ impl Ipv6Header {
     }
 
     ///Skips the ipv6 header extension and returns the next ip protocol number
-    pub fn skip_header_extension<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn skip_header_extension<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         next_header: u8,
     ) -> Result<u8, std::io::Error> {
@@ -221,7 +224,7 @@ impl Ipv6Header {
         //The only option, to detect that we are in an invalid state, is to move the
         //seek offset to one byte before the end and then execute a normal read to
         //trigger an error.
-        reader.seek(io::SeekFrom::Current(rest_length - 1))?;
+        reader.seek(std::io::SeekFrom::Current(rest_length - 1))?;
         {
             let mut buf = [0; 1];
             reader.read_exact(&mut buf)?;
@@ -230,7 +233,8 @@ impl Ipv6Header {
     }
 
     ///Skips all ipv6 header extensions and returns the next ip protocol number
-    pub fn skip_all_header_extensions<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn skip_all_header_extensions<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         next_header: u8,
     ) -> Result<u8, std::io::Error> {
@@ -246,18 +250,21 @@ impl Ipv6Header {
     }
 
     ///Writes a given IPv6 header to the current position.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         writer.write_all(&self.to_bytes()?)?;
         Ok(())
     }
 
     /// Return the ipv6 source address as an std::net::Ipv6Addr
+    #[cfg(feature = "std")]
     #[inline]
     pub fn source_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.source)
     }
 
     /// Return the ipv6 destination address as an std::net::Ipv6Addr
+    #[cfg(feature = "std")]
     #[inline]
     pub fn destination_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.destination)
@@ -275,7 +282,7 @@ impl Ipv6Header {
     /// Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
     pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = std::u16::MAX as usize;
+        const MAX_PAYLOAD_LENGTH: usize = core::u16::MAX as usize;
         if MAX_PAYLOAD_LENGTH < size {
             return Err(ValueError::Ipv6PayloadLengthTooLarge(size));
         }
@@ -334,6 +341,7 @@ mod test {
     use crate::{
         err::ipv6::HeaderError::*, err::ipv6::HeaderSliceError::*, ip_number::*, test_gens::*, *,
     };
+    use alloc::format;
     use arrayvec::ArrayVec;
     use proptest::*;
     use std::io::Cursor;

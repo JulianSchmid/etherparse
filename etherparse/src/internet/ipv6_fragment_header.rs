@@ -48,7 +48,8 @@ impl Ipv6FragmentHeader {
     }
 
     /// Read an fragment header from the current reader position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv6FragmentHeader, std::io::Error> {
         let buffer = {
@@ -69,7 +70,8 @@ impl Ipv6FragmentHeader {
     }
 
     /// Writes a given IPv6 fragment header to the current position.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         Ok(writer.write_all(&self.to_bytes()?)?)
     }
 
@@ -164,6 +166,7 @@ impl Ipv6FragmentHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
 

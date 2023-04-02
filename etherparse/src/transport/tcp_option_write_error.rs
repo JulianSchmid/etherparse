@@ -9,6 +9,7 @@ pub enum TcpOptionWriteError {
     NotEnoughSpace(usize),
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for TcpOptionWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
@@ -29,6 +30,7 @@ impl core::fmt::Display for TcpOptionWriteError {
 #[cfg(test)]
 mod test {
     use crate::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     #[test]
@@ -44,6 +46,7 @@ mod test {
         assert_eq!(value, value.clone());
     }
 
+    #[cfg(feature = "std")]
     proptest! {
         #[test]
         fn source(arg_usize in any::<usize>()) {

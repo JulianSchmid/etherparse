@@ -140,6 +140,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
 mod test {
     use super::*;
     use crate::test_gens::*;
+    use alloc::format;
     use arrayvec::ArrayVec;
     use err::ip_auth::{HeaderError::*, HeaderSliceError::*};
     use proptest::prelude::*;

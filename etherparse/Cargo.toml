@@ -18,8 +18,12 @@ exclude = [
     "appveyor.yml"
 ]
 
+[features]
+default = ["std"]
+std = ["arrayvec/std"]
+
 [dependencies]
-arrayvec = "0.7.2"
+arrayvec = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
 assert_matches = "1.5.0"

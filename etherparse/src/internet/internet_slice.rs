@@ -19,6 +19,7 @@ impl<'a> InternetSlice<'a> {
     }
 
     /// Return the source address as an std::net::Ipvddr
+    #[cfg(feature = "std")]
     pub fn source_addr(&self) -> std::net::IpAddr {
         match self {
             InternetSlice::Ipv4(s) => s.header().source_addr().into(),
@@ -27,6 +28,7 @@ impl<'a> InternetSlice<'a> {
     }
 
     /// Return the destination address as an std::net::IpAddr
+    #[cfg(feature = "std")]
     pub fn destination_addr(&self) -> std::net::IpAddr {
         match self {
             InternetSlice::Ipv4(s) => s.header().destination_addr().into(),
@@ -273,6 +275,7 @@ impl<'a> InternetSlice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use alloc::{format, vec::Vec};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
@@ -369,6 +372,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source_addr() {
         // ipv4
@@ -405,6 +409,7 @@ mod test {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn destination_addr() {
         use crate::ip_number::UDP;

@@ -1,4 +1,5 @@
 use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
+use alloc::vec::Vec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {

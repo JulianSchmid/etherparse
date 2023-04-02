@@ -31,6 +31,7 @@ impl TimestampMessage {
 #[cfg(test)]
 mod test {
     use crate::icmpv4::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     #[test]

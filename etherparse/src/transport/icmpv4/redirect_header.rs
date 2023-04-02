@@ -9,6 +9,7 @@ pub struct RedirectHeader {
 #[cfg(test)]
 mod test {
     use crate::icmpv4::{RedirectCode::*, *};
+    use alloc::format;
 
     #[test]
     fn clone_eq() {

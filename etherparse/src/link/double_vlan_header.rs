@@ -37,7 +37,8 @@ impl DoubleVlanHeader {
     }
 
     /// Read a double tagging header from the given source
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<DoubleVlanHeader, err::double_vlan::HeaderReadError> {
         use err::double_vlan::{HeaderError::*, HeaderReadError::*};
@@ -60,7 +61,8 @@ impl DoubleVlanHeader {
     }
 
     /// Write the double IEEE 802.1Q VLAN tagging header
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         self.outer.write(writer)?;
         self.inner.write(writer)
     }
@@ -100,6 +102,7 @@ impl Default for DoubleVlanHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 

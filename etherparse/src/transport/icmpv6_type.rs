@@ -391,7 +391,7 @@ impl Icmpv6Type {
         // their own length information (like ICMPv6), is "the Payload Length
         // from the IPv6 header, minus the length of any extension headers present
         // between the IPv6 header and the upper-layer header."
-        let max_payload_len: usize = (std::u32::MAX as usize) - self.header_len();
+        let max_payload_len: usize = (core::u32::MAX as usize) - self.header_len();
         if max_payload_len < payload.len() {
             return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
         }
@@ -496,6 +496,7 @@ impl Icmpv6Type {
 #[cfg(test)]
 mod test {
     use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *};
+    use alloc::format;
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 
@@ -596,7 +597,7 @@ mod test {
             code_u8 in any::<u8>(),
             bytes5to8 in any::<[u8;4]>(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
             payload in proptest::collection::vec(any::<u8>(), 0..64)
         ) {
             use Icmpv6Type::*;
@@ -609,8 +610,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -701,7 +702,7 @@ mod test {
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
             // size error case
@@ -712,8 +713,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )

@@ -11,8 +11,8 @@ pub enum IpSliceError {
     TcpHeader(err::tcp::HeaderError),
 }
 
-impl std::fmt::Display for IpSliceError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for IpSliceError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use IpSliceError::*;
 
         match self {
@@ -23,6 +23,7 @@ impl std::fmt::Display for IpSliceError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for IpSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use IpSliceError::*;
@@ -38,6 +39,7 @@ impl std::error::Error for IpSliceError {
 mod tests {
     use super::{IpSliceError::*, *};
     use crate::err::{Layer, LenSource};
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -97,6 +99,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         // Len

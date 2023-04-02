@@ -1663,6 +1663,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
 #[cfg(test)]
 mod whitebox_tests {
     use super::*;
+    use alloc::vec::Vec;
 
     //whitebox tests that need internal access
     #[test]

@@ -298,7 +298,7 @@ impl<'a> TcpHeaderSlice<'a> {
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         let tcp_length = self.slice.len() + payload.len();
-        if (std::u16::MAX as usize) < tcp_length {
+        if (core::u16::MAX as usize) < tcp_length {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
@@ -331,7 +331,7 @@ impl<'a> TcpHeaderSlice<'a> {
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
         let tcp_length = (self.data_offset() as usize) * 4 + payload.len();
-        if (std::u32::MAX as usize) < tcp_length {
+        if (core::u32::MAX as usize) < tcp_length {
             return Err(ValueError::TcpLengthTooLarge(tcp_length));
         }
 
@@ -368,6 +368,7 @@ mod test {
         TcpOptionElement::*,
         *,
     };
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {
@@ -619,7 +620,7 @@ mod test {
         {
             // write the tcp header
             let tcp: TcpHeader = Default::default();
-            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
             let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]);
@@ -632,7 +633,7 @@ mod test {
             let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
 
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)),
                 tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
             );
         }
@@ -719,7 +720,7 @@ mod test {
         {
             // write the tcp header
             let tcp: TcpHeader = Default::default();
-            let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
 
@@ -728,7 +729,7 @@ mod test {
             let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
 
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)),
+                Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)),
                 tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
             );
         }
@@ -790,7 +791,7 @@ mod test {
         {
             //write the udp header
             let tcp: TcpHeader = Default::default();
-            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+            let len = (core::u32::MAX - tcp.header_len() as u32) as usize + 1;
 
             //lets create a slice of that size that points to zero
             //(as most systems can not allocate blocks of the size of u32::MAX)
@@ -824,7 +825,7 @@ mod test {
 
             // check for an error during checksum calc
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)),
                 tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload)
             );
         }
@@ -874,7 +875,7 @@ mod test {
         {
             //write the udp header
             let tcp: TcpHeader = Default::default();
-            let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+            let len = (core::u32::MAX - tcp.header_len() as u32) as usize + 1;
 
             //lets create a slice of that size that points to zero
             //(as most systems can not allocate blocks of the size of u32::MAX)
@@ -892,7 +893,7 @@ mod test {
 
             // expect an length error
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)),
+                Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)),
                 tcp_slice.calc_checksum_ipv6_raw(
                     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                     [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],

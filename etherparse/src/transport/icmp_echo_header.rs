@@ -40,6 +40,7 @@ impl IcmpEchoHeader {
 #[cfg(test)]
 mod test {
     use crate::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     proptest! {

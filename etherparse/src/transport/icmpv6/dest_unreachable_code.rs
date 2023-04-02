@@ -92,6 +92,7 @@ pub(crate) mod dest_unreachable_code_test_consts {
 #[cfg(test)]
 mod test {
     use super::{dest_unreachable_code_test_consts::*, DestUnreachableCode::*, *};
+    use alloc::format;
 
     #[test]
     fn from_u8() {

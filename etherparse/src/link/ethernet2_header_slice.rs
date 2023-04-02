@@ -1,5 +1,5 @@
 use crate::*;
-use std::slice::from_raw_parts;
+use core::slice::from_raw_parts;
 
 ///A slice containing an ethernet 2 header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -94,6 +94,7 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use proptest::prelude::*;
+    use alloc::{format, vec::Vec};
 
     proptest! {
         #[test]

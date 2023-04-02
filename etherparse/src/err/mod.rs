@@ -15,3 +15,6 @@ pub use len_error::*;
 
 mod len_source;
 pub use len_source::*;
+
+mod slice_write_space_error;
+pub use slice_write_space_error::*;

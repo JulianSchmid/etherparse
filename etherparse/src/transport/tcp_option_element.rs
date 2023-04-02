@@ -31,6 +31,7 @@ pub enum TcpOptionElement {
 #[cfg(test)]
 mod test {
     use crate::*;
+    use alloc::format;
 
     #[test]
     fn clone_eq() {

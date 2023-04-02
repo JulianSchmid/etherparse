@@ -64,7 +64,7 @@ impl Layer {
 }
 
 impl core::fmt::Display for Layer {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use Layer::*;
         match self {
             Ethernet2Header => write!(f, "Ethernet 2 header"),
@@ -91,6 +91,7 @@ impl core::fmt::Display for Layer {
 #[cfg(test)]
 mod test {
     use super::Layer::*;
+    use alloc::format;
     use std::{
         cmp::{Ord, Ordering},
         collections::hash_map::DefaultHasher,

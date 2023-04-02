@@ -31,6 +31,7 @@ impl ParameterProblemHeader {
 #[cfg(test)]
 mod test {
     use crate::icmpv4::{ParameterProblemHeader::*, *};
+    use alloc::format;
     use proptest::prelude::*;
 
     proptest! {

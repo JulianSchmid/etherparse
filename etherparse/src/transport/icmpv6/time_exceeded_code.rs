@@ -48,6 +48,7 @@ pub(crate) mod time_exceeded_code_test_consts {
 #[cfg(test)]
 mod test {
     use super::{time_exceeded_code_test_consts::*, TimeExceededCode::*, *};
+    use alloc::format;
 
     #[test]
     fn from_u8() {

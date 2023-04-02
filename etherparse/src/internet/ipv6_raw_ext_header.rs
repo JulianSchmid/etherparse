@@ -36,7 +36,7 @@ pub struct Ipv6RawExtHeader {
 }
 
 impl Debug for Ipv6RawExtHeader {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), core::fmt::Error> {
         let mut s = f.debug_struct("Ipv6RawExtHeader");
         s.field("next_header", &self.next_header);
         s.field("payload", &self.payload());
@@ -148,7 +148,8 @@ impl Ipv6RawExtHeader {
     }
 
     /// Read an fragment header from the current reader position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv6RawExtHeader, std::io::Error> {
         let (next_header, header_length) = {
@@ -169,7 +170,8 @@ impl Ipv6RawExtHeader {
     }
 
     /// Writes a given IPv6 extension header to the current position.
-    pub fn write<W: io::Write + Sized>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<W: std::io::Write + Sized>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         writer.write_all(&[self.next_header, self.header_length])?;
         writer.write_all(self.payload())?;
         Ok(())
@@ -197,6 +199,7 @@ impl Ipv6RawExtHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
 

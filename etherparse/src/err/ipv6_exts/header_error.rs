@@ -11,7 +11,7 @@ pub enum HeaderError {
 }
 
 impl core::fmt::Display for HeaderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
             HopByHopNotAtStart => write!(f, "IPv6 Extension Header Error: Encountered an IPv6 hop-by-hop header not directly after the IPv6 header. This is not allowed according to RFC 8200."),
@@ -20,6 +20,7 @@ impl core::fmt::Display for HeaderError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for HeaderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderError::*;
@@ -34,6 +35,7 @@ impl std::error::Error for HeaderError {
 mod tests {
     use super::HeaderError::*;
     use crate::*;
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -74,6 +76,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         use err::ip_auth::HeaderError::ZeroPayloadLen;

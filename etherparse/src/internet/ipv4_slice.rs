@@ -128,6 +128,7 @@ impl<'a> Ipv4Slice<'a> {
 mod test {
     use super::*;
     use crate::{test_gens::*, Ipv4Header};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {

@@ -277,7 +277,7 @@ impl<'a> CursorSlice<'a> {
 
     fn move_by_slice(&mut self, other: &'a [u8]) {
         unsafe {
-            use std::slice::from_raw_parts;
+            use core::slice::from_raw_parts;
             self.slice = from_raw_parts(
                 self.slice.as_ptr().add(other.len()),
                 self.slice.len() - other.len(),

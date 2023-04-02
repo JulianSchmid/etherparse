@@ -40,7 +40,7 @@ use crate::err::{Layer, LenSource};
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct LenError {
     /// Expected minimum or maximum length conflicting with the
-    /// `actual_len` value.
+    /// `len` value.
     pub required_len: usize,
 
     /// Length limiting or exceeding the required length.
@@ -59,7 +59,7 @@ pub struct LenError {
 }
 
 impl LenError {
-    /// Adds an offset value to the `expected_min_len` & `actual_len` fields to the UnexpectedEndOfSliceError.
+    /// Adds an offset value to the `layer_start_offset` field.
     #[inline]
     pub const fn add_offset(self, offset: usize) -> Self {
         LenError {
@@ -73,7 +73,7 @@ impl LenError {
 }
 
 impl core::fmt::Display for LenError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let len_source: &'static str = {
             use LenSource::*;
             match self.len_source {
@@ -139,6 +139,7 @@ impl core::fmt::Display for LenError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for LenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
@@ -149,6 +150,7 @@ impl std::error::Error for LenError {
 mod test {
     use super::*;
     use crate::err::Layer;
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -308,6 +310,7 @@ mod test {
         );
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         assert!(LenError {

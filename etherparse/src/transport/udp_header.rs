@@ -27,7 +27,7 @@ impl UdpHeader {
         payload_length: usize,
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload_length {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload_length));
         }
@@ -48,7 +48,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -81,7 +81,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -115,7 +115,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH <= payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -148,7 +148,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueError> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (std::u32::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (core::u32::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
         }
@@ -216,7 +216,8 @@ impl UdpHeader {
     }
 
     /// Tries to read an udp header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, io::Error> {
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, std::io::Error> {
         let bytes = {
             let mut bytes: [u8; 8] = [0; 8];
             reader.read_exact(&mut bytes)?;
@@ -226,7 +227,8 @@ impl UdpHeader {
     }
 
     /// Write the udp header without recalculating the checksum or length.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())?;
         Ok(())
     }
@@ -264,6 +266,7 @@ impl UdpHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{vec::Vec, format};
     use proptest::prelude::*;
     use std::io::Cursor;
 
@@ -272,8 +275,8 @@ mod test {
         fn without_ipv4_checksum(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
-            good_payload_length in 0..=((std::u16::MAX as usize) - UdpHeader::LEN),
-            bad_payload_length in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            good_payload_length in 0..=((core::u16::MAX as usize) - UdpHeader::LEN),
+            bad_payload_length in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
 
             // normal working call
@@ -339,7 +342,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -412,8 +415,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -439,7 +442,7 @@ mod test {
             dummy_checksum in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             {
@@ -517,8 +520,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -565,7 +568,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -638,8 +641,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -664,7 +667,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             assert_eq!(
@@ -737,8 +740,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -764,7 +767,7 @@ mod test {
             dummy_checksum in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((std::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
         ) {
             // normal case
             {
@@ -842,8 +845,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )

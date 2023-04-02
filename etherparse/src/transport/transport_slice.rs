@@ -18,6 +18,7 @@ pub enum TransportSlice<'a> {
 mod test {
     use super::*;
     use crate::{TcpHeader, UdpHeader, ip_number::{IGMP}};
+    use alloc::{format, vec::Vec};
 
     #[test]
     fn debug_clone_eq() {

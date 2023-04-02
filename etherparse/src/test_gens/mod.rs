@@ -126,7 +126,7 @@ prop_compose! {
         more_fragments in any::<bool>(),
         fragments_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
-        payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::MIN_LEN as u16)),
+        payload_len in 0..(core::u16::MAX - u16::from(ihl*4) - (Ipv4Header::MIN_LEN as u16)),
         protocol in proptest::strategy::Just(protocol),
         options_len in proptest::strategy::Just(ihl*4),
         options_part0 in prop::array::uniform32(any::<u8>()),

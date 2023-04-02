@@ -35,6 +35,7 @@ impl TimeExceededCode {
 #[cfg(test)]
 mod test {
     use crate::icmpv4::{TimeExceededCode::*, *};
+    use alloc::format;
 
     #[test]
     fn from_u8() {

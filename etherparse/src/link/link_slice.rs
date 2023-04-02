@@ -22,6 +22,7 @@ impl<'a> LinkSlice<'a> {
 mod test {
     use super::*;
     use crate::test_gens::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     proptest! {

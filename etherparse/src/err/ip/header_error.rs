@@ -31,7 +31,7 @@ pub enum HeaderError {
 }
 
 impl core::fmt::Display for HeaderError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
             UnsupportedIpVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
@@ -43,6 +43,7 @@ impl core::fmt::Display for HeaderError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for HeaderError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderError::*;
@@ -62,6 +63,7 @@ impl std::error::Error for HeaderError {
 #[cfg(test)]
 mod tests {
     use super::{HeaderError::*, *};
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -117,6 +119,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         {

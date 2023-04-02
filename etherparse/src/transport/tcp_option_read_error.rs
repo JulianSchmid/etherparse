@@ -17,6 +17,7 @@ pub enum TcpOptionReadError {
     UnknownId(u8),
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for TcpOptionReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
@@ -51,6 +52,7 @@ impl core::fmt::Display for TcpOptionReadError {
 #[cfg(test)]
 mod test {
     use crate::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     #[test]
@@ -80,6 +82,7 @@ mod test {
         assert_eq!(value, value.clone());
     }
 
+    #[cfg(feature = "std")]
     proptest! {
         #[test]
         fn source(

@@ -18,6 +18,7 @@ pub struct ParameterProblemHeader {
 #[cfg(test)]
 mod test {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn clone_eq() {

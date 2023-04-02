@@ -149,6 +149,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     }
 
     /// Return the ipv6 source address as an std::net::Ipv6Addr
+    #[cfg(feature = "std")]
     #[inline]
     pub fn source_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.source())
@@ -165,6 +166,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     }
 
     /// Return the ipv6 destination address as an std::net::Ipv6Addr
+    #[cfg(feature = "std")]
     #[inline]
     pub fn destination_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.destination())
@@ -187,6 +189,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{err::ipv6::HeaderError::*, err::ipv6::HeaderSliceError::*, test_gens::*, *};
+    use alloc::format;
     use proptest::*;
 
     #[test]
@@ -278,8 +281,17 @@ mod test {
             assert_eq!(actual.next_header(), header.next_header);
             assert_eq!(actual.hop_limit(), header.hop_limit);
             assert_eq!(actual.source(), header.source);
-            assert_eq!(actual.source_addr(), std::net::Ipv6Addr::from(header.source));
             assert_eq!(actual.destination(), header.destination);
+        }
+    }
+
+    #[cfg(feature = "std")]
+    proptest! {
+        #[test]
+        fn getters_std(header in ipv6_any()) {
+            let bytes = header.to_bytes().unwrap();
+            let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
+            assert_eq!(actual.source_addr(), std::net::Ipv6Addr::from(header.source));
             assert_eq!(actual.destination_addr(), std::net::Ipv6Addr::from(header.destination));
         }
     }

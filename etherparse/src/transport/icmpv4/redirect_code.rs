@@ -38,6 +38,7 @@ impl RedirectCode {
 
 mod test {
     use crate::icmpv4::{RedirectCode::*, *};
+    use alloc::format;
 
     #[test]
     fn from_u8() {

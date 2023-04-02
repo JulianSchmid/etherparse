@@ -142,6 +142,7 @@ impl Sum16BitWords {
 #[cfg(test)]
 mod sum16_bit_words_tests {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn new() {
