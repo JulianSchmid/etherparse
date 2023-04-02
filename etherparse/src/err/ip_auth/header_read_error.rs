@@ -15,7 +15,7 @@ pub enum HeaderReadError {
 #[cfg(feature = "std")]
 impl HeaderReadError {
     /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn io_error(self) -> Option<std::io::Error> {
         use HeaderReadError::*;
@@ -26,7 +26,7 @@ impl HeaderReadError {
     }
 
     /// Returns the `err::ip_auth::HeaderError` value if it is of value `Content`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn content_error(self) -> Option<HeaderError> {
         use HeaderReadError::*;

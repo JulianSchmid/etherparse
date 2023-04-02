@@ -143,14 +143,16 @@ impl Ipv4Header {
         Ipv4Header::from_slice(slice)
     }
 
-    /// Read an Ipv4Header from a slice and return the header & unused parts of the slice.
+    /// Read an Ipv4Header from a slice and return the header & unused parts
+    /// of the slice (requires crate feature `std`).
     pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), err::ipv4::HeaderSliceError> {
         let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();
         let rest = &slice[header.header_len()..];
         Ok((header, rest))
     }
 
-    /// Reads an IPv4 header from the current position.
+    /// Reads an IPv4 header from the current position (requires
+    /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
@@ -168,7 +170,8 @@ impl Ipv4Header {
         Ipv4Header::read_without_version(reader, first_byte[0])
     }
 
-    /// Reads an IPv4 header assuming the version & ihl field have already been read.
+    /// Reads an IPv4 header assuming the version & ihl field have already
+    /// been read (requires crate feature `std`).
     #[cfg(feature = "std")]
     pub fn read_without_version<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
@@ -270,7 +273,8 @@ impl Ipv4Header {
         Ok(())
     }
 
-    /// Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
+    /// Writes a given IPv4 header to the current position (this method automatically calculates
+    /// the header length and checksum).
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
@@ -280,7 +284,8 @@ impl Ipv4Header {
         self.write_ipv4_header_internal(writer, self.calc_header_checksum_unchecked())
     }
 
-    /// Writes a given IPv4 header to the current position (this method just writes the specified checksum and does note compute it).
+    /// Writes a given IPv4 header to the current position (this method just writes the specified
+    /// checksum and does note compute it).
     #[cfg(feature = "std")]
     pub fn write_raw<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
