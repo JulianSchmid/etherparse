@@ -85,6 +85,36 @@ jobs:
         command: test
         args: --target ${{ matrix.target }}
 
+    - name: cargo build --no-default-features
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --no-default-features
+
+    - name: cross build --no-default-features
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --target ${{ matrix.target }} --no-default-features
+
+    - name: cargo test --no-default-features
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --no-default-features
+
+    - name: cross test --no-default-features
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: test
+        args: --target ${{ matrix.target }} --no-default-features
+
   no_std_build:
     name: no_std build
     runs-on: ubuntu-latest
