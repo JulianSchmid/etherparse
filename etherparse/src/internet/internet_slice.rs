@@ -18,7 +18,8 @@ impl<'a> InternetSlice<'a> {
         }
     }
 
-    /// Return the source address as an std::net::Ipvddr
+    /// Return the source address as an std::net::Ipvddr (requires
+    /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn source_addr(&self) -> std::net::IpAddr {
         match self {
@@ -27,7 +28,8 @@ impl<'a> InternetSlice<'a> {
         }
     }
 
-    /// Return the destination address as an std::net::IpAddr
+    /// Return the destination address as an std::net::IpAddr (requires
+    /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn destination_addr(&self) -> std::net::IpAddr {
         match self {

@@ -155,7 +155,8 @@ impl IpHeader {
         }
     }
 
-    ///Reads an IP (v4 or v6) header from the current position.
+    /// Reads an IP (v4 or v6) header from the current position (requires
+    /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
@@ -224,7 +225,8 @@ impl IpHeader {
         }
     }
 
-    ///Writes an IP (v4 or v6) header to the current position
+    /// Writes an IP (v4 or v6) header to the current position (requires
+    /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use crate::IpHeader::*;

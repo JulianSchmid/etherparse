@@ -1,6 +1,8 @@
 use super::HeaderError;
 
 /// Error when decoding two VLAN headers via a `std::io::Read` source.
+///
+/// Requires crate feature `std`.
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
@@ -15,7 +17,7 @@ pub enum HeaderReadError {
 #[cfg(feature = "std")]
 impl HeaderReadError {
     /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn io_error(self) -> Option<std::io::Error> {
         use HeaderReadError::*;
@@ -26,7 +28,7 @@ impl HeaderReadError {
     }
 
     /// Returns the `err::double_vlan::HeaderError` value if the `HeaderReadError` is `Content`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn content_error(self) -> Option<HeaderError> {
         use HeaderReadError::*;
