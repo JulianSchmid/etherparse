@@ -156,7 +156,8 @@ impl IpHeader {
     }
 
     ///Reads an IP (v4 or v6) header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<(IpHeader, u8), err::ip::HeaderReadError> {
         use err::ip::{HeaderError::*, HeaderReadError::*};
@@ -224,7 +225,8 @@ impl IpHeader {
     }
 
     ///Writes an IP (v4 or v6) header to the current position
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         use crate::IpHeader::*;
         match *self {
             Version4(ref header, ref extensions) => {
@@ -318,6 +320,7 @@ impl IpHeader {
 #[cfg(test)]
 mod test {
     use crate::{ip_number::*, test_gens::*, *};
+    use alloc::{format, vec::Vec, borrow::ToOwned};
     use proptest::prelude::*;
     use std::io::Cursor;
 

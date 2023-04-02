@@ -122,6 +122,7 @@ mod test {
         test_gens::*,
         Ipv6FragmentHeader,
     };
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {

@@ -115,6 +115,7 @@ impl DestUnreachableHeader {
 #[cfg(test)]
 mod test {
     use crate::icmpv4::*;
+    use alloc::format;
     use proptest::prelude::*;
 
     fn conversion_values(next_hop_mtu: u16) -> [(u8, DestUnreachableHeader); 16] {

@@ -69,6 +69,7 @@ pub mod ether_type {
 
 #[cfg(test)]
 mod test {
+    use alloc::format;
 
     #[test]
     fn to_u16() {

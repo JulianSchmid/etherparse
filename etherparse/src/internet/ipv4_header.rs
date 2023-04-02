@@ -106,7 +106,7 @@ impl Ipv4Header {
 
     /// Returns the maximum payload size based on the current options size.
     pub fn max_payload_len(&self) -> u16 {
-        std::u16::MAX - u16::from(self.options_len) - (Ipv4Header::MIN_LEN as u16)
+        core::u16::MAX - u16::from(self.options_len) - (Ipv4Header::MIN_LEN as u16)
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).
@@ -151,7 +151,8 @@ impl Ipv4Header {
     }
 
     /// Reads an IPv4 header from the current position.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
         use err::ipv4::HeaderReadError::*;
@@ -168,7 +169,8 @@ impl Ipv4Header {
     }
 
     /// Reads an IPv4 header assuming the version & ihl field have already been read.
-    pub fn read_without_version<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read_without_version<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         first_byte: u8,
     ) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
@@ -269,7 +271,8 @@ impl Ipv4Header {
     }
 
     /// Writes a given IPv4 header to the current position (this method automatically calculates the header length and checksum).
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
         self.check_ranges()?;
 
@@ -278,7 +281,8 @@ impl Ipv4Header {
     }
 
     /// Writes a given IPv4 header to the current position (this method just writes the specified checksum and does note compute it).
-    pub fn write_raw<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write_raw<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         //check ranges
         self.check_ranges()?;
 
@@ -351,7 +355,8 @@ impl Ipv4Header {
     }
 
     /// Write the given header with the  checksum and header length specified in the seperate arguments
-    fn write_ipv4_header_internal<T: io::Write>(
+    #[cfg(feature = "std")]
+    fn write_ipv4_header_internal<T: std::io::Write>(
         &self,
         write: &mut T,
         header_checksum: u16,
@@ -485,7 +490,7 @@ impl Default for Ipv4Header {
 }
 
 impl Debug for Ipv4Header {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), std::fmt::Error> {
+    fn fmt(&self, f: &mut Formatter) -> Result<(), core::fmt::Error> {
         let mut s = f.debug_struct("Ipv4Header");
         s.field("ihl", &self.ihl());
         s.field(
@@ -511,7 +516,7 @@ impl Debug for Ipv4Header {
     }
 }
 
-impl std::cmp::PartialEq for Ipv4Header {
+impl core::cmp::PartialEq for Ipv4Header {
     fn eq(&self, other: &Ipv4Header) -> bool {
         self.differentiated_services_code_point == other.differentiated_services_code_point
             && self.explicit_congestion_notification == other.explicit_congestion_notification
@@ -530,11 +535,12 @@ impl std::cmp::PartialEq for Ipv4Header {
     }
 }
 
-impl std::cmp::Eq for Ipv4Header {}
+impl core::cmp::Eq for Ipv4Header {}
 
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -777,9 +783,9 @@ mod test {
         assert_eq!(header.total_len(), 24);
 
         //max check
-        const MAX: usize = (std::u16::MAX as usize) - Ipv4Header::MIN_LEN - 4;
+        const MAX: usize = (core::u16::MAX as usize) - Ipv4Header::MIN_LEN - 4;
         assert!(header.set_payload_len(MAX).is_ok());
-        assert_eq!(header.total_len(), std::u16::MAX);
+        assert_eq!(header.total_len(), core::u16::MAX);
 
         const OVER_MAX: usize = MAX + 1;
         assert_eq!(
@@ -791,7 +797,7 @@ mod test {
     proptest! {
         #[test]
         fn max_payload_len(header in ipv4_any()) {
-            assert_eq!(header.max_payload_len(), std::u16::MAX - 20 - (header.options().len() as u16));
+            assert_eq!(header.max_payload_len(), core::u16::MAX - 20 - (header.options().len() as u16));
         }
     }
 

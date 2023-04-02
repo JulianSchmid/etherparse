@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::Layer, err::SliceWriteSpaceError};
 
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -42,6 +42,7 @@ impl Ethernet2Header {
     }
 
     /// Reads an Ethernet-II header from the current position of the read argument.
+    #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ethernet2Header, std::io::Error> {
@@ -58,11 +59,15 @@ impl Ethernet2Header {
     }
 
     /// Serialize the header to a given slice. Returns the unused part of the slice.
-    pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], WriteError> {
-        use self::WriteError::*;
-        //length check
+    pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], SliceWriteSpaceError> {
+        // length check
         if slice.len() < Ethernet2Header::LEN {
-            Err(SliceTooSmall(Ethernet2Header::LEN))
+            Err(SliceWriteSpaceError{
+                required_len: Ethernet2Header::LEN,
+                len: slice.len(),
+                layer: Layer::Ethernet2Header,
+                layer_start_offset: 0,
+            })
         } else {
             slice[..Ethernet2Header::LEN].copy_from_slice(&self.to_bytes());
             Ok(&mut slice[Ethernet2Header::LEN..])
@@ -70,6 +75,7 @@ impl Ethernet2Header {
     }
 
     /// Writes a given Ethernet-II header to the current position of the write argument.
+    #[cfg(feature = "std")]
     #[inline]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
@@ -109,6 +115,7 @@ impl Ethernet2Header {
 mod test {
     use super::*;
     use crate::test_gens::*;
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 
@@ -207,11 +214,13 @@ mod test {
             for len in 0..14 {
                 let mut buffer: [u8;14] = [0;14];
                 assert_eq!(
-                    input.write_to_slice(&mut buffer[..len])
-                        .unwrap_err()
-                        .slice_too_small_size()
-                        .unwrap(),
-                    Ethernet2Header::LEN
+                    SliceWriteSpaceError {
+                        required_len: Ethernet2Header::LEN,
+                        len,
+                        layer: Layer::Ethernet2Header,
+                        layer_start_offset: 0,
+                    },
+                    input.write_to_slice(&mut buffer[..len]).unwrap_err()
                 );
             }
         }

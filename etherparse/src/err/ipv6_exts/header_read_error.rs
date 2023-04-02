@@ -1,6 +1,7 @@
 use super::HeaderError;
 
 /// Error when decoding IPv6 extension headers via a `std::io::Read` source.
+#[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
     /// Error when an unexpected end of a slice is reached
@@ -11,6 +12,7 @@ pub enum HeaderReadError {
     Content(HeaderError),
 }
 
+#[cfg(feature = "std")]
 impl HeaderReadError {
     /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
     /// Otherwise `None is returned.
@@ -35,6 +37,7 @@ impl HeaderReadError {
     }
 }
 
+#[cfg(feature = "std")]
 impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
@@ -45,6 +48,7 @@ impl core::fmt::Display for HeaderReadError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for HeaderReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderReadError::*;
@@ -55,9 +59,10 @@ impl std::error::Error for HeaderReadError {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod test {
     use super::{HeaderReadError::*, *};
+    use alloc::format;
 
     #[test]
     fn debug() {

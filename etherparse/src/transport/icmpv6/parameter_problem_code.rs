@@ -109,6 +109,7 @@ pub(crate) mod parameter_problem_code_test_consts {
 #[cfg(test)]
 mod test {
     use super::{parameter_problem_code_test_consts::*, ParameterProblemCode::*, *};
+    use alloc::format;
 
     #[test]
     fn from_u8() {

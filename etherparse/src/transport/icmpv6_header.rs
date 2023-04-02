@@ -67,7 +67,8 @@ impl Icmpv6Header {
     }
 
     /// Read a ICMPv6 header from the given reader
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, std::io::Error> {
         // read the initial 8 bytes
         let mut start = [0u8; 8];
         reader.read_exact(&mut start)?;
@@ -75,7 +76,8 @@ impl Icmpv6Header {
     }
 
     /// Write the ICMPv6 header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }
 
@@ -187,6 +189,7 @@ impl Icmpv6Header {
 #[cfg(test)]
 mod test {
     use crate::{icmpv6::*, test_gens::*, *};
+    use alloc::{vec::Vec, format};
     use arrayvec::ArrayVec;
     use assert_matches::assert_matches;
     use proptest::prelude::*;
@@ -210,7 +213,7 @@ mod test {
             ip_header in ipv6_any(),
             icmp_type in icmpv6_type_any(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
 
@@ -222,8 +225,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )
@@ -385,7 +388,7 @@ mod test {
             icmp_type in icmpv6_type_any(),
             start_checksum in any::<u16>(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (std::u32::MAX - 7) as usize..=std::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
 
@@ -397,8 +400,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )

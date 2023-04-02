@@ -341,6 +341,7 @@ impl<'a> Icmpv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use alloc::{vec::Vec, format};
     use proptest::prelude::*;
 
     #[test]

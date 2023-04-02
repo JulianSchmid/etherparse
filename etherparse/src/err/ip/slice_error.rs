@@ -20,6 +20,7 @@ impl core::fmt::Display for SliceError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for SliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use SliceError::*;
@@ -34,6 +35,7 @@ impl std::error::Error for SliceError {
 mod tests {
     use super::{super::HeaderError, SliceError::*};
     use crate::err::{Layer, LenError, LenSource, ip};
+    use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
@@ -86,6 +88,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn source() {
         assert!(Len(LenError {

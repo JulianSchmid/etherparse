@@ -157,7 +157,8 @@ impl TransportHeader {
     }
 
     /// Write the transport header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         use crate::TransportHeader::*;
         match self {
             Icmpv4(value) => value.write(writer),
@@ -171,6 +172,7 @@ impl TransportHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use assert_matches::assert_matches;
     use core::slice;
     use proptest::prelude::*;
@@ -327,12 +329,12 @@ mod test {
                 // error case
                 {
                     let mut transport = Udp(udp.clone());
-                    let len = (std::u16::MAX as usize) - UdpHeader::LEN + 1;
+                    let len = (core::u16::MAX as usize) - UdpHeader::LEN + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
                         //      which can lead to crashes in release mode.
-                        use std::ptr::NonNull;
+                        use core::ptr::NonNull;
                         slice::from_raw_parts(
                             NonNull::<u8>::dangling().as_ptr(),
                             len
@@ -354,18 +356,18 @@ mod test {
                 //error case
                 {
                     let mut transport = Tcp(tcp.clone());
-                    let len = (std::u16::MAX - tcp.header_len()) as usize + 1;
+                    let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
                         //      which can lead to crashes in release mode.
-                        use std::ptr::NonNull;
+                        use core::ptr::NonNull;
                         slice::from_raw_parts(
                             NonNull::<u8>::dangling().as_ptr(),
                             len
                         )
                     };
-                    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
+                    assert_eq!(Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
                 }
             }
 
@@ -413,12 +415,12 @@ mod test {
                 //error case
                 {
                     let mut transport = Udp(udp.clone());
-                    let len = (std::u32::MAX as usize) - UdpHeader::LEN + 1;
+                    let len = (core::u32::MAX as usize) - UdpHeader::LEN + 1;
                     let payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
                         //      which can lead to crashes in release mode.
-                        use std::ptr::NonNull;
+                        use core::ptr::NonNull;
                         slice::from_raw_parts(
                             NonNull::<u8>::dangling().as_ptr(),
                             len
@@ -443,18 +445,18 @@ mod test {
                 //error case
                 {
                     let mut transport = Tcp(tcp.clone());
-                    let len = (std::u32::MAX - tcp.header_len() as u32) as usize + 1;
+                    let len = (core::u32::MAX - tcp.header_len() as u32) as usize + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
                         //      which can lead to crashes in release mode.
-                        use std::ptr::NonNull;
+                        use core::ptr::NonNull;
                         slice::from_raw_parts(
                             NonNull::<u8>::dangling().as_ptr(),
                             len
                         )
                     };
-                    assert_eq!(Err(ValueError::TcpLengthTooLarge(std::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ipv6, &tcp_payload));
+                    assert_eq!(Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ipv6, &tcp_payload));
                 }
             }
 
@@ -491,10 +493,10 @@ mod test {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fullfilled
                         //      which can lead to crashes in release mode.
-                        use std::ptr::NonNull;
-                        std::slice::from_raw_parts(
+                        use core::ptr::NonNull;
+                        core::slice::from_raw_parts(
                             NonNull::<u8>::dangling().as_ptr(),
-                            (std::u32::MAX - 7) as usize
+                            (core::u32::MAX - 7) as usize
                         )
                     };
                     assert_matches!(

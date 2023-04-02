@@ -193,6 +193,7 @@ impl<'a> Icmpv6Slice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *};
+    use alloc::{vec::Vec, format};
     use proptest::prelude::*;
 
     proptest! {
@@ -223,7 +224,7 @@ mod test {
         #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         #[test]
         fn from_slice_too_big_error(
-            bad_len in ((std::u32::MAX as usize) + 1)..=std::usize::MAX,
+            bad_len in ((core::u32::MAX as usize) + 1)..=core::usize::MAX,
         ) {
             // too large packet error case
             {
@@ -233,8 +234,8 @@ mod test {
                     //NOTE: The pointer must be initialized with a non null value
                     //      otherwise a key constraint of slices is not fullfilled
                     //      which can lead to crashes in release mode.
-                    use std::ptr::NonNull;
-                    std::slice::from_raw_parts(
+                    use core::ptr::NonNull;
+                    core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
                         bad_len
                     )

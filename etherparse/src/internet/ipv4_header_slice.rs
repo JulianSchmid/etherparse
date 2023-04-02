@@ -1,4 +1,6 @@
-use std::{net::Ipv4Addr, slice::from_raw_parts};
+#[cfg(feature = "std")]
+use std::net::Ipv4Addr;
+use core::slice::from_raw_parts;
 
 use crate::*;
 
@@ -229,6 +231,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     /// Return the ipv4 source address as an std::net::Ipv4Addr
+    #[cfg(feature = "std")]
+    #[inline]
     pub fn source_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.source())
     }
@@ -243,6 +247,8 @@ impl<'a> Ipv4HeaderSlice<'a> {
     }
 
     /// Return the ipv4 destination address as an std::net::Ipv4Addr
+    #[cfg(feature = "std")]
+    #[inline]
     pub fn destination_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.destination())
     }
@@ -295,6 +301,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use proptest::prelude::*;
 
@@ -417,8 +424,6 @@ mod test {
     proptest! {
         #[test]
         fn getters(header in ipv4_any()) {
-            use std::net::Ipv4Addr;
-
             let buffer = header.to_bytes().unwrap();
             let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
 
@@ -437,10 +442,22 @@ mod test {
             assert_eq!(slice.protocol(), header.protocol);
             assert_eq!(slice.header_checksum(), header.header_checksum);
             assert_eq!(slice.source(), header.source);
-            assert_eq!(slice.source_addr(), Ipv4Addr::from(header.source));
             assert_eq!(slice.destination(), header.destination);
-            assert_eq!(slice.destination_addr(), Ipv4Addr::from(header.destination));
             assert_eq!(slice.options(), header.options());
+        }
+    }
+
+    #[cfg(feature = "std")]
+    proptest! {
+        #[test]
+        fn getters_std(header in ipv4_any()) {
+            use std::net::Ipv4Addr;
+
+            let buffer = header.to_bytes().unwrap();
+            let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
+
+            assert_eq!(slice.source_addr(), Ipv4Addr::from(header.source));
+            assert_eq!(slice.destination_addr(), Ipv4Addr::from(header.destination));
         }
     }
 

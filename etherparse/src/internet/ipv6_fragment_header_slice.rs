@@ -168,6 +168,7 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {

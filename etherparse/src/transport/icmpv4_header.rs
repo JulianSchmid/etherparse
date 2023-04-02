@@ -63,7 +63,8 @@ impl Icmpv4Header {
     }
 
     /// Reads an ICMPv4 header from the given reader.
-    pub fn read<T: io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, std::io::Error> {
         let mut bytes = [0u8; Icmpv4Header::MAX_LEN];
 
         // try reading the initial 8 bytes
@@ -89,7 +90,8 @@ impl Icmpv4Header {
     }
 
     /// Write the ICMPv4 header to the given writer.
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }
 
@@ -268,6 +270,7 @@ impl Icmpv4Header {
 #[cfg(test)]
 mod test {
     use crate::{icmpv4::*, test_gens::*, *};
+    use alloc::{vec::Vec, format};
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 

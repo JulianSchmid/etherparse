@@ -48,9 +48,10 @@ impl SingleVlanHeader {
     }
 
     /// Read a IEEE 802.1Q VLAN tagging header
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<SingleVlanHeader, io::Error> {
+    ) -> Result<SingleVlanHeader, std::io::Error> {
         let buffer = {
             let mut buffer: [u8; SingleVlanHeader::LEN] = [0; SingleVlanHeader::LEN];
             reader.read_exact(&mut buffer)?;
@@ -65,7 +66,8 @@ impl SingleVlanHeader {
 
     /// Write the IEEE 802.1Q VLAN tagging header
     #[inline]
-    pub fn write<T: io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
         writer.write_all(&self.to_bytes()?)?;
         Ok(())
     }
@@ -104,6 +106,7 @@ impl SingleVlanHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 

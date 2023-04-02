@@ -246,7 +246,15 @@
 // character '!'.
 #![allow(clippy::bool_comparison)]
 
-use std::io;
+// Removes all std and alloc default imports & enables "non std" support.
+#![no_std]
+
+#[cfg(test)]
+extern crate alloc;
+#[cfg(test)]
+extern crate proptest;
+#[cfg(any(feature = "std", test))]
+extern crate std;
 
 /// Module containing error types that can be triggered.
 pub mod err;
@@ -316,7 +324,9 @@ pub use crate::transport::udp_slice::*;
 /// Helpers for calculating checksums.
 pub mod checksum;
 
+#[cfg(feature = "std")]
 mod packet_builder;
+#[cfg(feature = "std")]
 pub use crate::packet_builder::*;
 
 mod packet_decoder;
@@ -331,6 +341,7 @@ pub mod packet_filter;
 pub(crate) mod test_packet;
 
 ///Errors that can occur when writing.
+#[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum WriteError {
     IoError(std::io::Error),
@@ -340,6 +351,7 @@ pub enum WriteError {
     SliceTooSmall(usize),
 }
 
+#[cfg(feature = "std")]
 impl WriteError {
     /// Returns the `std::io::Error` value if the `WriteError` is an `IoError`.
     /// Otherwise `None is returned.
@@ -367,20 +379,23 @@ impl WriteError {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<ValueError> for WriteError {
     fn from(err: ValueError) -> WriteError {
         WriteError::ValueError(err)
     }
 }
 
+#[cfg(feature = "std")]
 impl From<std::io::Error> for WriteError {
     fn from(err: std::io::Error) -> WriteError {
         WriteError::IoError(err)
     }
 }
 
-impl std::fmt::Display for WriteError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+#[cfg(feature = "std")]
+impl core::fmt::Display for WriteError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use WriteError::*;
         match self {
             IoError(err) => err.fmt(f),
@@ -394,6 +409,7 @@ impl std::fmt::Display for WriteError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for WriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use WriteError::*;
@@ -458,10 +474,11 @@ pub enum ValueError {
     Icmpv6InIpv4,
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ValueError {}
 
-impl std::fmt::Display for ValueError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ValueError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use ValueError::*;
         match self {
             Ipv4OptionsLengthBad(options_len) => {
@@ -547,8 +564,8 @@ pub enum ErrorField {
     VlanTagVlanId,
 }
 
-impl std::fmt::Display for ErrorField {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ErrorField {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use ErrorField::*;
         match self {
             Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),

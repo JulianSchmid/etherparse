@@ -32,7 +32,8 @@ impl Ipv4Extensions {
     /// Reads the known ipv4 extension headers from the reader and returns the
     /// headers together with the internet protocol number identifying the protocol
     /// that will be next.
-    pub fn read<T: io::Read + io::Seek + Sized>(
+    #[cfg(feature = "std")]
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         start_ip_number: u8,
     ) -> Result<(Ipv4Extensions, u8), err::ip_auth::HeaderReadError> {
@@ -47,7 +48,8 @@ impl Ipv4Extensions {
     }
 
     /// Write the extensions to the writer.
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,
         start_ip_number: u8,

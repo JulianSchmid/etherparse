@@ -345,6 +345,7 @@ impl Icmpv4Type {
 #[cfg(test)]
 mod test {
     use crate::{icmpv4::*, Icmpv4Type::*, *};
+    use alloc::format;
     use proptest::prelude::*;
 
     #[test]
