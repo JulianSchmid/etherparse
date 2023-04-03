@@ -66,7 +66,7 @@ impl<'a> Ipv6Slice<'a> {
                             err.layer_start_offset += Ipv6Header::LEN;
                             SliceError::Len(err)
                         }
-                        Content(err) => SliceError::Extensions(err),
+                        Content(err) => SliceError::Exts(err),
                     }
                 },
             )?;
@@ -360,7 +360,7 @@ mod test {
 
                 prop_assert_eq!(
                     Ipv6Slice::from_slice(&data).unwrap_err(),
-                    SliceError::Extensions(ipv6_exts::HeaderError::IpAuth(
+                    SliceError::Exts(ipv6_exts::HeaderError::IpAuth(
                         ip_auth::HeaderError::ZeroPayloadLen
                     ))
                 );

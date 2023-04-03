@@ -10,7 +10,7 @@ pub enum SliceError {
     Header(ipv4::HeaderError),
 
     /// Error while slicing an ipv4 extension header.
-    Extensions(ip_auth::HeaderError),
+    Exts(ip_auth::HeaderError),
 }
 
 impl core::fmt::Display for SliceError {
@@ -19,7 +19,7 @@ impl core::fmt::Display for SliceError {
         match self {
             Len(value) => value.fmt(f),
             Header(err) => err.fmt(f),
-            Extensions(value) => value.fmt(f),
+            Exts(value) => value.fmt(f),
         }
     }
 }
@@ -31,7 +31,7 @@ impl std::error::Error for SliceError {
         match self {
             Len(err) => Some(err),
             Header(err) => Some(err),
-            Extensions(err) => Some(err),
+            Exts(err) => Some(err),
         }
     }
 }
@@ -94,7 +94,7 @@ mod tests {
         // extensions
         {
             let err = ip_auth::HeaderError::ZeroPayloadLen;
-            assert_eq!(format!("{}", &err), format!("{}", Extensions(err.clone())));
+            assert_eq!(format!("{}", &err), format!("{}", Exts(err.clone())));
         }
     }
 
@@ -113,7 +113,7 @@ mod tests {
         assert!(Header(HeaderError::UnexpectedVersion { version_number: 6 })
             .source()
             .is_some());
-        assert!(Extensions(ip_auth::HeaderError::ZeroPayloadLen)
+        assert!(Exts(ip_auth::HeaderError::ZeroPayloadLen)
             .source()
             .is_some());
     }

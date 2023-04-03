@@ -122,7 +122,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::packet::EthSliceError as O;
                     match err {
                         I::Len(err) => O::Len(err.add_offset(packet.len() - rest.len())),
-                        I::Content(err) => O::Ipv4Header(err),
+                        I::Content(err) => O::Ipv4(err),
                     }
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
@@ -132,7 +132,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(packet.len() - ip_rest.len())),
-                            I::Content(err) => O::Ipv4ExtHeader(err),
+                            I::Content(err) => O::Ipv4Exts(err),
                         }
                     })?;
 
@@ -152,7 +152,7 @@ impl<'a> PacketHeaders<'a> {
                                 match err {
                                     // offset addition not needed (already added in transport parsing code)
                                     I::Len(err) => O::Len(err),
-                                    I::Content(err) => O::TcpHeader(err),
+                                    I::Content(err) => O::Tcp(err),
                                 }
                             },
                         )?;
@@ -168,7 +168,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::packet::EthSliceError as O;
                     match err {
                         I::Len(err) => O::Len(err.add_offset(packet.len() - rest.len())),
-                        I::Content(err) => O::Ipv6Header(err),
+                        I::Content(err) => O::Ipv6(err),
                     }
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
@@ -177,7 +177,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(packet.len() - ip_rest.len())),
-                            I::Content(err) => O::Ipv6ExtHeader(err),
+                            I::Content(err) => O::Ipv6Exts(err),
                         }
                     })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
@@ -198,7 +198,7 @@ impl<'a> PacketHeaders<'a> {
                                 match err {
                                     // offset addition not needed (already added in transport parsing code)
                                     I::Len(err) => O::Len(err),
-                                    I::Content(err) => O::TcpHeader(err),
+                                    I::Content(err) => O::Tcp(err),
                                 }
                             },
                         )?;
@@ -324,7 +324,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::packet::EthSliceError as O;
                     match err {
                         I::Len(err) => O::Len(err.add_offset(data.len() - rest.len())),
-                        I::Content(err) => O::Ipv4Header(err),
+                        I::Content(err) => O::Ipv4(err),
                     }
                 })?;
                 let fragmented = ip.is_fragmenting_payload();
@@ -334,7 +334,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(data.len() - ip_rest.len())),
-                            I::Content(err) => O::Ipv4ExtHeader(err),
+                            I::Content(err) => O::Ipv4Exts(err),
                         }
                     })?;
 
@@ -354,7 +354,7 @@ impl<'a> PacketHeaders<'a> {
                                 match err {
                                     // offset addition not needed (already added in transport parsing code)
                                     I::Len(err) => O::Len(err),
-                                    I::Content(err) => O::TcpHeader(err),
+                                    I::Content(err) => O::Tcp(err),
                                 }
                             },
                         )?;
@@ -370,7 +370,7 @@ impl<'a> PacketHeaders<'a> {
                     use err::packet::EthSliceError as O;
                     match err {
                         I::Len(err) => O::Len(err.add_offset(data.len() - rest.len())),
-                        I::Content(err) => O::Ipv6Header(err),
+                        I::Content(err) => O::Ipv6(err),
                     }
                 })?;
                 let (ip_ext, next_header, ip_ext_rest) =
@@ -379,7 +379,7 @@ impl<'a> PacketHeaders<'a> {
                         use err::packet::EthSliceError as O;
                         match err {
                             I::Len(err) => O::Len(err.add_offset(data.len() - ip_rest.len())),
-                            I::Content(err) => O::Ipv6ExtHeader(err),
+                            I::Content(err) => O::Ipv6Exts(err),
                         }
                     })?;
                 let fragmented = ip_ext.is_fragmenting_payload();
@@ -400,7 +400,7 @@ impl<'a> PacketHeaders<'a> {
                                 match err {
                                     // offset addition not needed (already added in transport parsing code)
                                     I::Len(err) => O::Len(err),
-                                    I::Content(err) => O::TcpHeader(err),
+                                    I::Content(err) => O::Tcp(err),
                                 }
                             },
                         )?;
@@ -472,7 +472,7 @@ impl<'a> PacketHeaders<'a> {
                 use err::packet::IpSliceError as O;
                 match err {
                     I::Len(err) => O::Len(err),
-                    I::Content(err) => O::IpHeader(err),
+                    I::Content(err) => O::Ip(err),
                 }
             })?;
             let is_fragmenting_payload = ip.is_fragmenting_payload();
@@ -492,7 +492,7 @@ impl<'a> PacketHeaders<'a> {
                 match err {
                     // offset addition not needed (already added in transport parsing code)
                     I::Len(err) => O::Len(err),
-                    I::Content(err) => O::TcpHeader(err),
+                    I::Content(err) => O::Tcp(err),
                 }
             })?
         };
@@ -780,10 +780,10 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4Header(
+                        EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::IpHeader(
+                        IpSliceError::Ip(
                             err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
                     );
@@ -846,8 +846,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4ExtHeader(err.clone()),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv4Ext(err.clone())),
+                        EthSliceError::Ipv4Exts(err.clone()),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv4Ext(err.clone())),
                     );
                 }
             }
@@ -917,10 +917,10 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion {
+                        EthSliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
                             version_number: 0,
                         }),
-                        IpSliceError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
+                        IpSliceError::Ip(err::ip::HeaderError::UnsupportedIpVersion {
                             version_number: 0,
                         }),
                     );
@@ -989,8 +989,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
+                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::IpAuth(err.clone()),
                         )),
                     );
@@ -1007,8 +1007,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
+                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::HopByHopNotAtStart,
                         )),
                     );
@@ -1115,8 +1115,8 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data,
-                            EthSliceError::TcpHeader(err.clone()),
-                            IpSliceError::TcpHeader(err.clone()),
+                            EthSliceError::Tcp(err.clone()),
+                            IpSliceError::Tcp(err.clone()),
                         );
                     }
                 }

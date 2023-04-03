@@ -62,7 +62,7 @@ impl<'a> Ipv4Slice<'a> {
                             l.layer_start_offset += header.slice().len();
                             return Err(SliceError::Len(l));
                         }
-                        E::Content(err) => return Err(SliceError::Extensions(err)),
+                        E::Content(err) => return Err(SliceError::Exts(err)),
                     },
                 };
 
@@ -331,7 +331,7 @@ mod test {
 
                 prop_assert_eq!(
                     Ipv4Slice::from_slice(&data).unwrap_err(),
-                    SliceError::Extensions(
+                    SliceError::Exts(
                         HeaderError::ZeroPayloadLen
                     )
                 );

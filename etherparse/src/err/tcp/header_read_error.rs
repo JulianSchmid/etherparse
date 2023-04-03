@@ -4,8 +4,7 @@ use super::HeaderError;
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
-    /// Error when an unexpected end of a slice is reached
-    /// even though more data was expected to be present.
+    /// IO error was encoutered while reading header.
     Io(std::io::Error),
 
     /// Error caused by the contents of the header.

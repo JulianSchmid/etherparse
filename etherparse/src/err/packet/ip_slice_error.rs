@@ -6,9 +6,9 @@ pub enum IpSliceError {
     /// Length related errors (e.g. not enough data in slice).
     Len(err::LenError),
     /// Error when decoding an IP header (v4 or v6).
-    IpHeader(err::ip::HeaderError),
+    Ip(err::ip::HeaderError),
     /// Error when decoding a TCP header.
-    TcpHeader(err::tcp::HeaderError),
+    Tcp(err::tcp::HeaderError),
 }
 
 impl core::fmt::Display for IpSliceError {
@@ -17,8 +17,8 @@ impl core::fmt::Display for IpSliceError {
 
         match self {
             Len(err) => err.fmt(f),
-            IpHeader(err) => err.fmt(f),
-            TcpHeader(err) => err.fmt(f),
+            Ip(err) => err.fmt(f),
+            Tcp(err) => err.fmt(f),
         }
     }
 }
@@ -29,8 +29,8 @@ impl std::error::Error for IpSliceError {
         use IpSliceError::*;
         match self {
             Len(err) => Some(err),
-            IpHeader(err) => Some(err),
-            TcpHeader(err) => Some(err),
+            Ip(err) => Some(err),
+            Tcp(err) => Some(err),
         }
     }
 }
@@ -50,14 +50,14 @@ mod tests {
     fn debug() {
         let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
         assert_eq!(
-            format!("IpHeader({:?})", err.clone()),
-            format!("{:?}", IpHeader(err))
+            format!("Ip({:?})", err.clone()),
+            format!("{:?}", Ip(err))
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = IpHeader(err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 });
+        let err = Ip(err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -89,13 +89,13 @@ mod tests {
         // IpHeader
         {
             let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
-            assert_eq!(format!("{}", err), format!("{}", IpHeader(err)));
+            assert_eq!(format!("{}", err), format!("{}", Ip(err)));
         }
 
         // TcpHeader
         {
             let err = err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
-            assert_eq!(format!("{}", err), format!("{}", TcpHeader(err)));
+            assert_eq!(format!("{}", err), format!("{}", Tcp(err)));
         }
     }
 
@@ -117,13 +117,13 @@ mod tests {
         // IpHeader
         {
             let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
-            assert!(IpHeader(err).source().is_some());
+            assert!(Ip(err).source().is_some());
         }
 
         // TcpHeader
         {
             let err = err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
-            assert!(TcpHeader(err).source().is_some());
+            assert!(Tcp(err).source().is_some());
         }
     }
 }
