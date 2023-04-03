@@ -4,8 +4,7 @@ use super::HeaderError;
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
-    /// Error when an unexpected end of a slice is reached
-    /// even though more data was expected to be present.
+    /// IO error was encoutered while reading header.
     Io(std::io::Error),
 
     /// Error caused by the contents of the header.
@@ -15,7 +14,7 @@ pub enum HeaderReadError {
 #[cfg(feature = "std")]
 impl HeaderReadError {
     /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn io_error(self) -> Option<std::io::Error> {
         use HeaderReadError::*;
@@ -26,7 +25,7 @@ impl HeaderReadError {
     }
 
     /// Returns the `err::ipv6_exts::HeaderError` value if the `HeaderReadError` is `Content`.
-    /// Otherwise `None is returned.
+    /// Otherwise `None` is returned.
     #[inline]
     pub fn content_error(self) -> Option<HeaderError> {
         use HeaderReadError::*;

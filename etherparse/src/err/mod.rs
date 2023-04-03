@@ -16,5 +16,10 @@ pub use len_error::*;
 mod len_source;
 pub use len_source::*;
 
+#[cfg(feature = "std")]
+mod read_error;
+#[cfg(feature = "std")]
+pub use read_error::*;
+
 mod slice_write_space_error;
 pub use slice_write_space_error::*;

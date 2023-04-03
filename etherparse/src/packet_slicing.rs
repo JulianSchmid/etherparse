@@ -369,7 +369,7 @@ impl<'a> CursorSlice<'a> {
                     err.layer_start_offset += self.offset;
                     Len(err)
                 },
-                I::IpHeader(err) => IpHeader(err),
+                I::IpHeader(err) => Ip(err),
             }
         })?;
 
@@ -403,7 +403,7 @@ impl<'a> CursorSlice<'a> {
                     use err::tcp::HeaderSliceError as I;
                     match err {
                         I::Len(err) => Len(err),
-                        I::Content(err) => TcpHeader(err),
+                        I::Content(err) => Tcp(err),
                     }
                 }),
                 ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
@@ -418,7 +418,6 @@ impl<'a> CursorSlice<'a> {
 
     pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
         use err::packet::EthSliceError::*;
-        use InternetSlice::*;
 
         // slice ipv4 header & extension headers
         let ipv4 = Ipv4Slice::from_slice(self.slice).map_err(|err| {
@@ -428,8 +427,8 @@ impl<'a> CursorSlice<'a> {
                     err.layer_start_offset += self.offset;
                     Len(err)
                 },
-                I::Header(err) => Ipv4Header(err),
-                I::Extensions(err) => Ipv4ExtHeader(err),
+                I::Header(err) => Ipv4(err),
+                I::Exts(err) => Ipv4Exts(err),
             }
         })?;
 
@@ -446,7 +445,7 @@ impl<'a> CursorSlice<'a> {
         };
         self.len_source = LenSource::Ipv4HeaderTotalLen;
         self.slice = ipv4.payload();
-        self.result.ip = Some(Ipv4(ipv4));
+        self.result.ip = Some(InternetSlice::Ipv4(ipv4));
 
         if fragmenting {
             Ok(self.slice_payload())
@@ -457,7 +456,7 @@ impl<'a> CursorSlice<'a> {
                     use err::tcp::HeaderSliceError as I;
                     match err {
                         I::Len(err) => Len(err),
-                        I::Content(err) => TcpHeader(err),
+                        I::Content(err) => Tcp(err),
                     }
                 }),
                 ip_number::ICMP => self.slice_icmp4().map_err(Len),
@@ -472,7 +471,6 @@ impl<'a> CursorSlice<'a> {
     }
 
     pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use crate::InternetSlice::*;
         use err::packet::EthSliceError::*;
 
         let ipv6 = Ipv6Slice::from_slice(self.slice).map_err(|err| {
@@ -482,8 +480,8 @@ impl<'a> CursorSlice<'a> {
                     err.layer_start_offset += self.offset;
                     Len(err)
                 },
-                I::Header(err) => Ipv6Header(err),
-                I::Extensions(err) => Ipv6ExtHeader(err),
+                I::Header(err) => Ipv6(err),
+                I::Exts(err) => Ipv6Exts(err),
             }
         })?;
 
@@ -500,7 +498,7 @@ impl<'a> CursorSlice<'a> {
         };
         self.len_source = LenSource::Ipv6HeaderPayloadLen;
         self.slice = ipv6.payload();
-        self.result.ip = Some(Ipv6(ipv6));
+        self.result.ip = Some(InternetSlice::Ipv6(ipv6));
 
         // only try to decode the transport layer if the payload
         // is not fragmented
@@ -515,7 +513,7 @@ impl<'a> CursorSlice<'a> {
                     use err::tcp::HeaderSliceError as I;
                     match err {
                         I::Len(err) => Len(err),
-                        I::Content(err) => TcpHeader(err),
+                        I::Content(err) => Tcp(err),
                     }
                 }),
                 ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
@@ -839,10 +837,10 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4Header(
+                        EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::IpHeader(
+                        IpSliceError::Ip(
                             err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
                     );
@@ -860,13 +858,13 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4Header(
+                        EthSliceError::Ipv4(
                             err::ipv4::HeaderError::TotalLengthSmallerThanHeader {
                                 total_length: 0,
                                 min_expected_length: ipv4.header_len() as u16,
                             },
                         ),
-                        IpSliceError::IpHeader(
+                        IpSliceError::Ip(
                             err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader {
                                 total_length: 0,
                                 min_expected_length: ipv4.header_len() as u16,
@@ -938,8 +936,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4ExtHeader(err.clone()),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv4Ext(err.clone())),
+                        EthSliceError::Ipv4Exts(err.clone()),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv4Ext(err.clone())),
                     );
                 }
             }
@@ -1010,10 +1008,10 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6Header(err::ipv6::HeaderError::UnexpectedVersion {
+                        EthSliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
                             version_number: 0,
                         }),
-                        IpSliceError::IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
+                        IpSliceError::Ip(err::ip::HeaderError::UnsupportedIpVersion {
                             version_number: 0,
                         }),
                     );
@@ -1087,8 +1085,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
+                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::IpAuth(err.clone()),
                         )),
                     );
@@ -1105,8 +1103,8 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6ExtHeader(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
-                        IpSliceError::IpHeader(err::ip::HeaderError::Ipv6Ext(
+                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::HopByHopNotAtStart,
                         )),
                     );
@@ -1234,8 +1232,8 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data,
-                            EthSliceError::TcpHeader(err.clone()),
-                            IpSliceError::TcpHeader(err.clone()),
+                            EthSliceError::Tcp(err.clone()),
+                            IpSliceError::Tcp(err.clone()),
                         );
                     }
                 }
