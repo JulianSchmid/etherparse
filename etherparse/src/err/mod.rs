@@ -7,6 +7,9 @@ pub mod ipv6_exts;
 pub mod packet;
 pub mod tcp;
 
+mod from_slice_error;
+pub use from_slice_error::*;
+
 mod layer;
 pub use layer::*;
 
