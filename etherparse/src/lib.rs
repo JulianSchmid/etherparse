@@ -340,6 +340,13 @@ pub mod packet_filter;
 #[cfg(test)]
 pub(crate) mod test_packet;
 
+/// Deprecated use [err::ReadError] instead or to the error type returned by operation you are using.
+#[deprecated(
+    since = "0.14.0",
+    note = "Please use the type err::ReadError instead or to the error type returned by operation you are using."
+)]
+pub type ReadError = err::ReadError;
+
 ///Errors that can occur when writing.
 #[cfg(feature = "std")]
 #[derive(Debug)]
