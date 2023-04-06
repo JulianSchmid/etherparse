@@ -251,6 +251,14 @@ impl<'a> SlicedPacket<'a> {
     }
 }
 
+impl std::ops::Deref for SlicedPacket<'_> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.payload
+    }
+}
+
 ///Helper class for slicing packets
 struct CursorSlice<'a> {
     pub slice: &'a [u8],

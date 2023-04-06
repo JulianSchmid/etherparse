@@ -61,6 +61,19 @@ mod sliced_packet {
         assert_eq!(header.clone(), header);
     }
 
+    #[test]
+    fn deref() {
+        let header = SlicedPacket {
+            link: None,
+            vlan: None,
+            ip: None,
+            transport: None,
+            payload: &[1, 2, 3],
+        };
+        let derefed: &[u8] = &header;
+        assert_eq!(&[1, 2, 3], derefed);
+    }
+
     proptest! {
         #[test]
         fn payload_ether_type(
