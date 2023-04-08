@@ -1,6 +1,6 @@
 use crate::{
     err::{ipv4::SliceError, Layer, LenError, LenSource},
-    IpAuthHeaderSlice, Ipv4ExtensionsSlice, Ipv4HeaderSlice,
+    IpAuthHeaderSlice, Ipv4ExtensionsSlice, Ipv4HeaderSlice, IpPayload, IpNumber,
 };
 
 /// Slice containing the IPv4 headers & payload.
@@ -8,8 +8,7 @@ use crate::{
 pub struct Ipv4Slice<'a> {
     pub(crate) header: Ipv4HeaderSlice<'a>,
     pub(crate) exts: Ipv4ExtensionsSlice<'a>,
-    pub(crate) payload_ip_number: u8,
-    pub(crate) payload: &'a [u8],
+    pub(crate) payload: IpPayload<'a>,
 }
 
 impl<'a> Ipv4Slice<'a> {
@@ -48,6 +47,7 @@ impl<'a> Ipv4Slice<'a> {
         };
 
         // decode the authentification header if needed
+        let fragmented = header.is_fragmenting_payload();
         match header.protocol() {
             AUTH => {
                 use crate::err::ip_auth::HeaderSliceError as E;
@@ -73,18 +73,27 @@ impl<'a> Ipv4Slice<'a> {
                         header_payload.len() - auth.slice().len(),
                     )
                 };
+                let ip_number = auth.next_header();
                 Ok(Ipv4Slice {
                     header,
                     exts: Ipv4ExtensionsSlice { auth: Some(auth) },
-                    payload_ip_number: auth.next_header(),
-                    payload,
+                    payload: IpPayload {
+                        ip_number: ip_number.into(),
+                        fragmented,
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        payload
+                    }
                 })
             }
-            payload_ip_number => Ok(Ipv4Slice {
+            ip_number => Ok(Ipv4Slice {
                 header,
                 exts: Ipv4ExtensionsSlice { auth: None },
-                payload_ip_number,
-                payload: header_payload,
+                payload: IpPayload {
+                    ip_number: ip_number.into(),
+                    fragmented,
+                    len_source: LenSource::Ipv4HeaderTotalLen,
+                    payload: header_payload
+                },
             }),
         }
     }
@@ -104,8 +113,8 @@ impl<'a> Ipv4Slice<'a> {
     /// Returns a slice containing the data after the IPv4 header
     /// and IPv4 extensions headers.
     #[inline]
-    pub fn payload(&self) -> &'a [u8] {
-        self.payload
+    pub fn payload(&self) -> &IpPayload<'a> {
+        &self.payload
     }
 
     /// Returns the ip number the type of payload of the IPv4 packet.
@@ -113,8 +122,8 @@ impl<'a> Ipv4Slice<'a> {
     /// This function returns the ip number stored in the last
     /// IPv4 header or extension header.
     #[inline]
-    pub fn payload_ip_number(&self) -> u8 {
-        self.payload_ip_number
+    pub fn payload_ip_number(&self) -> IpNumber {
+        self.payload.ip_number
     }
 
     /// Returns true if the payload is flagged as beeing fragmented.
@@ -127,7 +136,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_gens::*, Ipv4Header};
+    use crate::{test_gens::*, Ipv4Header, ip_number};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
@@ -157,10 +166,9 @@ mod test {
             prop_assert_eq!(
                 format!("{:?}", slice),
                 format!(
-                    "Ipv4Slice {{ header: {:?}, exts: {:?}, payload_ip_number: {:?}, payload: {:?} }}",
+                    "Ipv4Slice {{ header: {:?}, exts: {:?}, payload: {:?} }}",
                     slice.header(),
                     slice.extensions(),
-                    slice.payload_ip_number(),
                     slice.payload()
                 )
             );
@@ -214,8 +222,15 @@ mod test {
                 let actual = Ipv4Slice::from_slice(&data_without_ext).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data_without_ext[..ipv4_base.header_len()]);
                 prop_assert!(actual.extensions().auth.is_none());
-                prop_assert_eq!(actual.payload_ip_number(), crate::ip_number::UDP);
-                prop_assert_eq!(actual.payload(), payload);
+                prop_assert_eq!(
+                    actual.payload,
+                    IpPayload{
+                        ip_number: ip_number::UDP.into(),
+                        fragmented: ipv4_base.is_fragmenting_payload(),
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        payload: &payload
+                    }
+                );
             }
 
             // parsing with extensions
@@ -226,8 +241,15 @@ mod test {
                     actual.extensions().auth.unwrap(),
                     IpAuthHeaderSlice::from_slice(&data_with_ext[ipv4_base.header_len()..]).unwrap()
                 );
-                prop_assert_eq!(actual.payload_ip_number(), auth.next_header);
-                prop_assert_eq!(actual.payload(), payload);
+                prop_assert_eq!(
+                    actual.payload,
+                    IpPayload{
+                        ip_number: auth.next_header.into(),
+                        fragmented: ipv4_base.is_fragmenting_payload(),
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        payload: &payload
+                    }
+                );
             }
 
             // header length error

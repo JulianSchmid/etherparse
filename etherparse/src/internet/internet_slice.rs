@@ -41,7 +41,7 @@ impl<'a> InternetSlice<'a> {
     /// Returns a slice containing the data after the IP header
     /// and IP extensions headers.
     #[inline]
-    pub fn payload(&self) -> &'a [u8] {
+    pub fn payload(&self) -> &IpPayload<'a> {
         use InternetSlice::*;
         match self {
             Ipv4(ipv4) => ipv4.payload(),
@@ -54,11 +54,11 @@ impl<'a> InternetSlice<'a> {
     /// This function returns the ip number stored in the last
     /// IP header or extension header.
     #[inline]
-    pub fn payload_ip_number(&self) -> u8 {
+    pub fn payload_ip_number(&self) -> IpNumber {
         use InternetSlice::*;
         match self {
-            Ipv4(ipv4) => ipv4.payload_ip_number(),
-            Ipv6(ipv6) => ipv6.payload_ip_number(),
+            Ipv4(ipv4) => ipv4.payload().ip_number,
+            Ipv6(ipv6) => ipv6.payload().ip_number,
         }
     }
 
@@ -152,6 +152,7 @@ impl<'a> InternetSlice<'a> {
 
                     // slice extension headers
                     // decode the authentification header if needed
+                    let fragmented = header.is_fragmenting_payload();
                     match header.protocol() {
                         AUTH => {
                             use crate::err::ip_auth::HeaderSliceError as E;
@@ -180,15 +181,23 @@ impl<'a> InternetSlice<'a> {
                             Ok(Ipv4(Ipv4Slice {
                                 header,
                                 exts: Ipv4ExtensionsSlice { auth: Some(auth) },
-                                payload_ip_number: auth.next_header(),
-                                payload,
+                                payload: IpPayload{
+                                    ip_number: auth.next_header().into(),
+                                    fragmented,
+                                    len_source: LenSource::Ipv4HeaderTotalLen,
+                                    payload,
+                                },
                             }))
                         }
-                        payload_ip_number => Ok(Ipv4(Ipv4Slice {
+                        ip_number => Ok(Ipv4(Ipv4Slice {
                             header,
                             exts: Ipv4ExtensionsSlice { auth: None },
-                            payload_ip_number,
-                            payload: header_payload,
+                            payload: IpPayload {
+                                ip_number: ip_number.into(),
+                                fragmented,
+                                len_source: LenSource::Ipv4HeaderTotalLen,
+                                payload: header_payload,
+                            },
                         })),
                     }
                 }
@@ -212,18 +221,19 @@ impl<'a> InternetSlice<'a> {
                     };
 
                     // restrict slice by the length specified in the header
-                    let header_payload = if 0 == header.payload_length() {
+                    let (header_payload, len_source) = if 0 == header.payload_length() && slice.len() > Ipv6Header::LEN {
                         // In case the payload_length is 0 assume that the entire
                         // rest of the slice is part of the packet until the jumbogram
                         // parameters can be parsed.
 
                         // TODO: Add payload length parsing from the jumbogram
-                        unsafe {
-                            core::slice::from_raw_parts(
+                        (
+                            unsafe {core::slice::from_raw_parts(
                                 slice.as_ptr().add(Ipv6Header::LEN),
                                 slice.len() - Ipv6Header::LEN,
-                            )
-                        }
+                            )},
+                            LenSource::Slice
+                        )
                     } else {
                         let payload_len = usize::from(header.payload_length());
                         let expected_len = Ipv6Header::LEN + payload_len;
@@ -236,9 +246,13 @@ impl<'a> InternetSlice<'a> {
                                 layer_start_offset: 0,
                             }));
                         } else {
-                            unsafe {
-                                core::slice::from_raw_parts(slice.as_ptr().add(Ipv6Header::LEN), payload_len)
-                            }
+                            (
+                                unsafe {core::slice::from_raw_parts(
+                                    slice.as_ptr().add(Ipv6Header::LEN),
+                                    payload_len
+                                )},
+                                LenSource::Ipv6HeaderPayloadLen
+                            )
                         }
                     };
 
@@ -259,11 +273,16 @@ impl<'a> InternetSlice<'a> {
                             },
                         )?;
 
+                    let fragmented = exts.is_fragmenting_payload();
                     Ok(Ipv6(Ipv6Slice {
                         header,
                         exts,
-                        payload_ip_number,
-                        payload,
+                        payload: IpPayload {
+                            ip_number: payload_ip_number.into(),
+                            fragmented,
+                            len_source,
+                            payload,
+                        }
                     }))
                 }
                 version_number => Err(IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
@@ -465,10 +484,15 @@ mod test {
             data.extend_from_slice(&header.to_bytes().unwrap());
             data.extend_from_slice(&payload);
             assert_eq!(
-                payload,
                 InternetSlice::Ipv4(
                     Ipv4Slice::from_slice(&data[..]).unwrap()
-                ).payload()
+                ).payload(),
+                &IpPayload{
+                    ip_number: ip_number::UDP.into(),
+                    fragmented: header.is_fragmenting_payload(),
+                    len_source: LenSource::Ipv4HeaderTotalLen,
+                    payload: &payload,
+                }
             );
         }
 
@@ -487,10 +511,15 @@ mod test {
             data.extend_from_slice(&header.to_bytes().unwrap());
             data.extend_from_slice(&payload);
             assert_eq!(
-                &payload,
                 InternetSlice::Ipv6(
                     Ipv6Slice::from_slice(&data[..]).unwrap()
-                ).payload()
+                ).payload(),
+                &IpPayload{
+                    ip_number: ip_number::UDP.into(),
+                    fragmented: false,
+                    len_source: LenSource::Ipv6HeaderPayloadLen,
+                    payload: &payload,
+                }
             );
         }
     }
@@ -507,7 +536,7 @@ mod test {
             assert_eq!(
                 UDP,
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap())
-                    .payload_ip_number()
+                    .payload_ip_number().0
             );
         }
 
@@ -527,7 +556,7 @@ mod test {
                 IGMP,
                 InternetSlice::Ipv6(
                     Ipv6Slice::from_slice(&data).unwrap()
-                ).payload_ip_number()
+                ).payload_ip_number().0
             );
         }
     }

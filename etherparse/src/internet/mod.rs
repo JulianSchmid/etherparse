@@ -3,6 +3,7 @@ pub mod ip_auth_header;
 pub mod ip_auth_header_slice;
 pub mod ip_header;
 pub mod ip_number_impl;
+pub mod ip_payload;
 pub mod ipv4_exts;
 pub mod ipv4_exts_slice;
 pub mod ipv4_header;

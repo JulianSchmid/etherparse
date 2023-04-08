@@ -280,6 +280,7 @@ pub use crate::internet::ip_auth_header::*;
 pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_number_impl::*;
+pub use crate::internet::ip_payload::*;
 pub use crate::internet::ipv4_exts::*;
 pub use crate::internet::ipv4_exts_slice::*;
 pub use crate::internet::ipv4_header::*;
