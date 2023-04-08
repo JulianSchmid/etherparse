@@ -17,6 +17,7 @@
 ### Changes in Behavior
 
 * Removed `ReadError::Ipv6TooManyHeaderExtensions` error when calling `Ipv6Header::skip_all_header_extensions` and `Ipv6Header::skip_all_header_extensions_in_slice`.
+* The slice returned by `IpHeader::from_slice`is now the payload of the IP packet (determined by the length specified in the IP header). Previously whatever was left over from the input slice after parsing the IP header and extensions was returned. Now the slice length is limited based on the "payload lenght" field (IPv6) or "total length" field IPv4.
 
 ### Breaking Changes:
 

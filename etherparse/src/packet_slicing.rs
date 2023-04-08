@@ -374,29 +374,24 @@ impl<'a> CursorSlice<'a> {
         })?;
 
         // safe data needed
-        let payload = ip.payload();
-        let payload_ip_number = ip.payload_ip_number();
-        let fragmenting = ip.is_fragmenting_payload();
+        let payload = ip.payload().clone();
 
         // set the new data
         self.offset += unsafe {
             // SAFETY: The payload is a subslice of self.slice.
             // therefor calculating the offset from it is safe and
             // the result should always be a positive number.
-            payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
+            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
         };
-        self.len_source = match &ip {
-            InternetSlice::Ipv4(_) => LenSource::Ipv4HeaderTotalLen,
-            InternetSlice::Ipv6(_) => LenSource::Ipv6HeaderPayloadLen,
-        };
-        self.slice = payload;
+        self.len_source = payload.len_source;
+        self.slice = payload.payload;
         self.result.ip = Some(ip);
 
         // continue to the lower layers
-        if fragmenting {
+        if payload.fragmented {
             Ok(self.slice_payload())
         } else {
-            match payload_ip_number {
+            match payload.ip_number.0 {
                 ip_number::ICMP => self.slice_icmp4().map_err(Len),
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
@@ -433,24 +428,23 @@ impl<'a> CursorSlice<'a> {
         })?;
 
         // safe data needed in following steps
-        let payload_ip_number = ipv4.payload_ip_number();
-        let fragmenting = ipv4.is_payload_fragmented();
+        let payload = ipv4.payload().clone();
 
         // set the new data
         self.offset += unsafe {
             // SAFETY: The payload is a subslice of self.slice.
             // therefor calculating the offset from it is safe and
             // the result should always be a positive number.
-            ipv4.payload().as_ptr().offset_from(self.slice.as_ptr()) as usize
+            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
         };
-        self.len_source = LenSource::Ipv4HeaderTotalLen;
-        self.slice = ipv4.payload();
+        self.len_source = payload.len_source;
+        self.slice = payload.payload;
         self.result.ip = Some(InternetSlice::Ipv4(ipv4));
 
-        if fragmenting {
+        if payload.fragmented {
             Ok(self.slice_payload())
         } else {
-            match payload_ip_number {
+            match payload.ip_number.0 {
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
                     use err::tcp::HeaderSliceError as I;
@@ -486,27 +480,27 @@ impl<'a> CursorSlice<'a> {
         })?;
 
         // safe data needed in following steps
-        let payload_ip_number = ipv6.payload_ip_number();
-        let fragmenting = ipv6.is_payload_fragmented();
+        let payload_ip_number = ipv6.payload().ip_number;
+        let fragmented = ipv6.payload().fragmented;
 
         // set the new data
         self.offset += unsafe {
             // SAFETY: The payload is a subslice of self.slice.
             // therefor calculating the offset from it is safe and
             // the result should always be a positive number.
-            ipv6.payload().as_ptr().offset_from(self.slice.as_ptr()) as usize
+            ipv6.payload().payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
         };
-        self.len_source = LenSource::Ipv6HeaderPayloadLen;
-        self.slice = ipv6.payload();
+        self.len_source = ipv6.payload().len_source;
+        self.slice = ipv6.payload().payload;
         self.result.ip = Some(InternetSlice::Ipv6(ipv6));
 
         // only try to decode the transport layer if the payload
         // is not fragmented
-        if fragmenting {
+        if fragmented {
             Ok(self.slice_payload())
         } else {
             //parse the data bellow
-            match payload_ip_number {
+            match payload_ip_number.0 {
                 ip_number::ICMP => self.slice_icmp4().map_err(Len),
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
@@ -620,7 +614,7 @@ mod test {
     use super::*;
     use crate::err::{
         packet::{EthSliceError, IpSliceError},
-        LenError,
+        LenError, Layer,
     };
     use crate::test_packet::TestPacket;
 
@@ -664,8 +658,8 @@ mod test {
                     let err = LenError {
                         required_len: eth.header_len(),
                         len,
-                        len_source: err::LenSource::Slice,
-                        layer: err::Layer::Ethernet2Header,
+                        len_source: LenSource::Slice,
+                        layer: Layer::Ethernet2Header,
                         layer_start_offset: 0,
                     };
 
@@ -710,8 +704,8 @@ mod test {
                         let err = LenError {
                             required_len: single.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
-                            layer: err::Layer::VlanHeader,
+                            len_source: LenSource::Slice,
+                            layer: Layer::VlanHeader,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(
@@ -758,8 +752,8 @@ mod test {
                         let err = LenError {
                             required_len: SingleVlanHeader::LEN,
                             len,
-                            len_source: err::LenSource::Slice,
-                            layer: err::Layer::VlanHeader,
+                            len_source: LenSource::Slice,
+                            layer: Layer::VlanHeader,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(
@@ -804,8 +798,8 @@ mod test {
                         let err = LenError {
                             required_len: ipv4.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
-                            layer: err::Layer::Ipv4Header,
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv4Header,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(
@@ -816,7 +810,7 @@ mod test {
                                 if len < 1 {
                                     let mut err = err.clone();
                                     err.required_len = 1;
-                                    err.layer = err::Layer::IpHeader;
+                                    err.layer = Layer::IpHeader;
                                     err
                                 } else {
                                     err.clone()
@@ -909,8 +903,8 @@ mod test {
                     let err = LenError {
                         required_len: auth.header_len(),
                         len,
-                        len_source: err::LenSource::Ipv4HeaderTotalLen,
-                        layer: err::Layer::IpAuthHeader,
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        layer: Layer::IpAuthHeader,
                         layer_start_offset: base_len,
                     };
 
@@ -974,8 +968,8 @@ mod test {
                         let err = err::LenError {
                             required_len: ipv6.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
-                            layer: err::Layer::Ipv6Header,
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv6Header,
                             layer_start_offset: base_len,
                         };
 
@@ -987,7 +981,7 @@ mod test {
                                 if len < 1 {
                                     let mut err = err.clone();
                                     err.required_len = 1;
-                                    err.layer = err::Layer::IpHeader;
+                                    err.layer = Layer::IpHeader;
                                     err
                                 } else {
                                     err.clone()
@@ -1062,8 +1056,8 @@ mod test {
                     let err = LenError {
                         required_len: auth.header_len(),
                         len,
-                        len_source: err::LenSource::Ipv6HeaderPayloadLen,
-                        layer: err::Layer::IpAuthHeader,
+                        len_source: LenSource::Ipv6HeaderPayloadLen,
+                        layer: Layer::IpAuthHeader,
                         layer_start_offset: base_len,
                     };
                     from_slice_assert_err(
@@ -1157,10 +1151,10 @@ mod test {
                             required_len: udp.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
+                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
-                            layer: err::Layer::UdpHeader,
+                            layer: Layer::UdpHeader,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(
@@ -1205,10 +1199,10 @@ mod test {
                                 required_len: tcp.header_len() as usize,
                                 len,
                                 len_source: match test.ip.as_ref().unwrap() {
-                                    IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                                    IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
+                                    IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                    IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                                 },
-                                layer: err::Layer::TcpHeader,
+                                layer: Layer::TcpHeader,
                                 layer_start_offset: base_len,
                             };
                             from_slice_assert_err(
@@ -1269,10 +1263,10 @@ mod test {
                             required_len: icmpv4.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
+                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
-                            layer: err::Layer::Icmpv4,
+                            layer: Layer::Icmpv4,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(
@@ -1315,10 +1309,10 @@ mod test {
                             required_len: icmpv6.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => err::LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => err::LenSource::Ipv6HeaderPayloadLen,
+                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
-                            layer: err::Layer::Icmpv6,
+                            layer: Layer::Icmpv6,
                             layer_start_offset: base_len,
                         };
                         from_slice_assert_err(

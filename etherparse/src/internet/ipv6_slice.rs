@@ -1,13 +1,12 @@
 use crate::err::{ipv6::SliceError, Layer, LenError, LenSource};
-use crate::{Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
+use crate::{Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice, IpPayload, IpNumber};
 
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6Slice<'a> {
     pub(crate) header: Ipv6HeaderSlice<'a>,
     pub(crate) exts: Ipv6ExtensionsSlice<'a>,
-    pub(crate) payload_ip_number: u8,
-    pub(crate) payload: &'a [u8],
+    pub(crate) payload: IpPayload<'a>,
 }
 
 impl<'a> Ipv6Slice<'a> {
@@ -24,18 +23,19 @@ impl<'a> Ipv6Slice<'a> {
         })?;
 
         // restrict slice by the length specified in the header
-        let header_payload = if 0 == header.payload_length() {
+        let (header_payload, len_source) = if 0 == header.payload_length() && slice.len() > Ipv6Header::LEN {
             // In case the payload_length is 0 assume that the entire
             // rest of the slice is part of the packet until the jumbogram
             // parameters can be parsed.
 
             // TODO: Add payload length parsing from the jumbogram
-            unsafe {
-                core::slice::from_raw_parts(
+            (
+                unsafe { core::slice::from_raw_parts(
                     slice.as_ptr().add(Ipv6Header::LEN),
                     slice.len() - Ipv6Header::LEN,
-                )
-            }
+                )},
+                LenSource::Slice
+            )
         } else {
             let payload_len = usize::from(header.payload_length());
             let expected_len = Ipv6Header::LEN + payload_len;
@@ -48,9 +48,12 @@ impl<'a> Ipv6Slice<'a> {
                     layer_start_offset: 0,
                 }));
             } else {
-                unsafe {
-                    core::slice::from_raw_parts(slice.as_ptr().add(Ipv6Header::LEN), payload_len)
-                }
+                (
+                    unsafe { core::slice::from_raw_parts(
+                        slice.as_ptr().add(Ipv6Header::LEN), payload_len
+                    )},
+                    LenSource::Ipv6HeaderPayloadLen
+                )
             }
         };
 
@@ -71,46 +74,42 @@ impl<'a> Ipv6Slice<'a> {
                 },
             )?;
 
+        let fragmented = exts.is_fragmenting_payload();
         Ok(Ipv6Slice {
             header,
             exts,
-            payload_ip_number,
-            payload,
+            payload: IpPayload{
+                ip_number: IpNumber(payload_ip_number),
+                fragmented,
+                len_source,
+                payload,
+            },
         })
     }
 
     /// Returns a slice containing the IPv6 header.
     #[inline]
-    pub fn header(&self) -> Ipv6HeaderSlice {
+    pub fn header(&self) -> Ipv6HeaderSlice<'a> {
         self.header
     }
 
     /// Returns a slice containing the IPv6 extension headers.
     #[inline]
-    pub fn extensions(&self) -> &Ipv6ExtensionsSlice {
+    pub fn extensions(&self) -> &Ipv6ExtensionsSlice<'a> {
         &self.exts
     }
 
     /// Returns a slice containing the data after the IPv6 header
     /// and IPv6 extensions headers.
     #[inline]
-    pub fn payload(&self) -> &'a [u8] {
-        self.payload
-    }
-
-    /// Returns the ip number the type of payload of the IPv6 packet.
-    ///
-    /// This function returns the ip number stored in the last
-    /// IPv6 header or extension header.
-    #[inline]
-    pub fn payload_ip_number(&self) -> u8 {
-        self.payload_ip_number
+    pub fn payload(&self) -> &IpPayload<'a> {
+        &self.payload
     }
 
     /// Returns true if the payload is flagged as beeing fragmented.
     #[inline]
     pub fn is_payload_fragmented(&self) -> bool {
-        self.exts.is_fragmenting_payload()
+        self.payload.fragmented
     }
 }
 
@@ -153,10 +152,9 @@ mod test {
             prop_assert_eq!(
                 format!("{:?}", slice),
                 format!(
-                    "Ipv6Slice {{ header: {:?}, exts: {:?}, payload_ip_number: {:?}, payload: {:?} }}",
+                    "Ipv6Slice {{ header: {:?}, exts: {:?}, payload: {:?} }}",
                     slice.header(),
                     slice.extensions(),
-                    slice.payload_ip_number(),
                     slice.payload()
                 )
             );
@@ -212,8 +210,15 @@ mod test {
                 let actual = Ipv6Slice::from_slice(&data_without_ext).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data_without_ext[..ipv6_base.header_len()]);
                 prop_assert!(actual.extensions().first_header().is_none());
-                prop_assert_eq!(actual.payload_ip_number(), UDP);
-                prop_assert_eq!(actual.payload(), payload);
+                prop_assert_eq!(
+                    actual.payload(),
+                    &IpPayload{
+                        ip_number: UDP.into(),
+                        fragmented: false,
+                        len_source: LenSource::Ipv6HeaderPayloadLen,
+                        payload: &payload,
+                    }
+                );
             }
 
             // parsing with extensions (normal length)
@@ -225,8 +230,15 @@ mod test {
                     actual.extensions(),
                     &expected
                 );
-                prop_assert_eq!(actual.payload_ip_number(), UDP);
-                prop_assert_eq!(actual.payload(), payload);
+                prop_assert_eq!(
+                    actual.payload(),
+                    &IpPayload{
+                        ip_number: UDP.into(),
+                        fragmented: false,
+                        len_source: LenSource::Ipv6HeaderPayloadLen,
+                        payload: &payload,
+                    }
+                );
             }
 
             // parsing without extensions (zero length, fallback to slice length)
@@ -238,8 +250,15 @@ mod test {
                 let actual = Ipv6Slice::from_slice(&data).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data[..ipv6_base.header_len()]);
                 prop_assert!(actual.extensions().first_header().is_none());
-                prop_assert_eq!(actual.payload_ip_number(), UDP);
-                prop_assert_eq!(actual.payload(), &data[ipv6_base.header_len()..]);
+                prop_assert_eq!(
+                    actual.payload(),
+                    &IpPayload{
+                        ip_number: UDP.into(),
+                        fragmented: false,
+                        len_source: LenSource::Slice,
+                        payload: &data[ipv6_base.header_len()..],
+                    }
+                );
             }
 
             // parsing with extensions (zero length, fallback to slice length)
@@ -255,8 +274,15 @@ mod test {
                     actual.extensions(),
                     &expected
                 );
-                prop_assert_eq!(actual.payload_ip_number(), UDP);
-                prop_assert_eq!(actual.payload(), &data[ipv6_base.header_len() + auth_base.header_len()..]);
+                prop_assert_eq!(
+                    actual.payload(),
+                    &IpPayload{
+                        ip_number: UDP.into(),
+                        fragmented: false,
+                        len_source: LenSource::Slice,
+                        payload: &data[ipv6_base.header_len() + auth_base.header_len()..],
+                    }
+                );
             }
 
             // header content error

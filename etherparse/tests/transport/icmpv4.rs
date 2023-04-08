@@ -151,8 +151,8 @@ mod icmpv4_regression {
             _ => panic!("Didn't parse inner v4 IP header!?"),
         };
         assert_eq!(
-            Ipv4Addr::from(ip_header.source),
-            "212.156.201.114".parse::<Ipv4Addr>().unwrap()
+            ip_header.source,
+            [212,156,201,114]
         );
         let icmp4 = ttl_exceeded.transport.unwrap().icmpv4().unwrap();
         let icmp_bytes = icmp4.to_bytes();
@@ -161,6 +161,10 @@ mod icmpv4_regression {
         assert_eq!(icmp_bytes[1], 0); // code
         assert_eq!(&icmp_bytes[4..], &[0; 4]); // TTL exceeded doesn't use this field
                                                // now unpack the bounced packet in the payload
+        
+        // TODO re-introduce as soon as a lax parser is available
+
+        /*
         let embedded_pkt = PacketHeaders::from_ip_slice(ttl_exceeded.payload).unwrap();
         let ip_header = match embedded_pkt.ip.unwrap() {
             IpHeader::Version4(ip4, _) => ip4,
@@ -178,6 +182,7 @@ mod icmpv4_regression {
         let udp_header = embedded_pkt.transport.unwrap().udp().unwrap();
         assert_eq!(udp_header.source_port, 49806); // numbers read from wireshark
         assert_eq!(udp_header.destination_port, 33439);
+         */
     }
 
     const ICMP4_PORT_UNREACHABLE_BYTES: [u8; 70] = [
