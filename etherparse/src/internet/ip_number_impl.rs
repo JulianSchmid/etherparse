@@ -17,7 +17,7 @@ pub type IpTrafficClass = IpNumber;
 /// `u8` contants of the ip numbers can be found in the module [`ip_number`].
 ///
 /// The list was extracted from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
-#[derive(PartialEq, Eq, Clone, Copy)]
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub struct IpNumber(pub u8);
 
 impl IpNumber {
@@ -360,7 +360,7 @@ impl core::fmt::Debug for IpNumber {
             Self::IPV6_FRAGMENTATION_HEADER => write!(f, "Ipv6FragmentationHeader({})", self.0),
             Self::ENCAPSULATING_SECURITY_PAYLOAD => write!(f, "EncapsulatingSecurityPayload({})", self.0),
             Self::AUTHENTICATION_HEADER => write!(f, "AuthenticationHeader({})", self.0),
-            Self::IPV6_ICMP => write!(f, "Ipv6_ICMP({})", self.0),
+            Self::IPV6_ICMP => write!(f, "ICMPv6({})", self.0),
             Self::IPV6_DESTINATION_OPTIONS => write!(f, "Ipv6DestinationOptions({})", self.0),
             Self::MOBILITY_HEADER => write!(f, "MobilityHeader({})", self.0),
             Self::HIP => write!(f, "HIP({})", self.0),
@@ -429,4 +429,116 @@ pub mod ip_number {
     pub const EXP0: u8 = IpNumber::EXPERIMENTAL_AND_TESTING_0.0; //253
     ///Use for experimentation and testing
     pub const EXP1: u8 = IpNumber::EXPERIMENTAL_AND_TESTING_1.0; //254
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::{hash::{Hash, Hasher}, cmp::Ordering};
+    use std::{format, collections::hash_map::DefaultHasher};
+
+    #[test]
+    fn is_ipv6_ext_header_value() {
+        use crate::ip_number::*;
+        use crate::IpNumber;
+        let ext_ids = [
+            IPV6_HOP_BY_HOP,
+            IPV6_ROUTE,
+            IPV6_FRAG,
+            ENCAP_SEC,
+            AUTH,
+            IPV6_DEST_OPTIONS,
+            MOBILITY,
+            HIP,
+            SHIM6,
+            EXP0,
+            EXP1,
+        ];
+
+        for i in 0..std::u8::MAX {
+            assert_eq!(ext_ids.contains(&i), IpNumber::is_ipv6_ext_header_value(i));
+        }
+    }
+
+    #[test]
+    fn ip_number_eq_check() {
+        use crate::ip_number::*;
+        use crate::IpNumber;
+        let pairs = &[
+            (IPV6_HOP_BY_HOP, IpNumber::IPV6_HEADER_HOP_BY_HOP),
+            (ICMP, IpNumber::ICMP),
+            (IGMP, IpNumber::IGMP),
+            (GGP, IpNumber::GGP),
+            (IPV4, IpNumber::IPV4),
+            (STREAM, IpNumber::STREAM),
+            (TCP, IpNumber::TCP),
+            (UDP, IpNumber::UDP),
+            (IPV6, IpNumber::IPV6),
+            (IPV6_ROUTE, IpNumber::IPV6_ROUTE_HEADER),
+            (IPV6_FRAG, IpNumber::IPV6_FRAGMENTATION_HEADER),
+            (ENCAP_SEC, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
+            (AUTH, IpNumber::AUTHENTICATION_HEADER),
+            (IPV6_DEST_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
+            (MOBILITY, IpNumber::MOBILITY_HEADER),
+            (HIP, IpNumber::HIP),
+            (SHIM6, IpNumber::SHIM6),
+            (EXP0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
+            (EXP1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
+        ];
+        for (raw, enum_value) in pairs {
+            assert_eq!(*raw, u8::from(*enum_value));
+        }
+    }
+
+    #[test]
+    fn debug() {
+        let pairs = &[
+            (IpNumber::IPV6_HEADER_HOP_BY_HOP, "Ipv6HeaderHopByHop(0)"),
+            (IpNumber::ICMP, "ICMP(1)"),
+            (IpNumber::IGMP, "IGMP(2)"),
+            (IpNumber::GGP, "GGP(3)"),
+            (IpNumber::IPV4, "Ipv4(4)"),
+            (IpNumber::STREAM, "Stream(5)"),
+            (IpNumber::TCP, "TCP(6)"),
+            (IpNumber::UDP, "UDP(17)"),
+            (IpNumber::IPV6, "Ipv6(41)"),
+            (IpNumber::IPV6_ROUTE_HEADER, "Ipv6RouteHeader(43)"),
+            (IpNumber::IPV6_FRAGMENTATION_HEADER, "Ipv6FragmentationHeader(44)"),
+            (IpNumber::ENCAPSULATING_SECURITY_PAYLOAD, "EncapsulatingSecurityPayload(50)"),
+            (IpNumber::AUTHENTICATION_HEADER, "AuthenticationHeader(51)"),
+            (IpNumber::IPV6_ICMP, "ICMPv6(58)"),
+            (IpNumber::IPV6_DESTINATION_OPTIONS, "Ipv6DestinationOptions(60)"),
+            (IpNumber::MOBILITY_HEADER, "MobilityHeader(135)"),
+            (IpNumber::HIP, "HIP(139)"),
+            (IpNumber::SHIM6, "SHIM6(140)"),
+            (IpNumber::EXPERIMENTAL_AND_TESTING_0, "IpNumber(253)"),
+            (IpNumber::EXPERIMENTAL_AND_TESTING_1, "IpNumber(254)"),
+        ];
+        
+        for (ip_number, debug_str) in pairs {
+            assert_eq!(format!("{:?}", ip_number), *debug_str);
+        }
+    }
+
+    #[test]
+    fn clone_eq_hash_ord() {
+        // clone eq
+        let value = IpNumber::IPV6_HEADER_HOP_BY_HOP;
+        assert_eq!(value, value.clone());
+        // hash
+        let a_hash = {
+            let mut s = DefaultHasher::new();
+            value.hash(&mut s);
+            s.finish()
+        };
+        let b_hash = {
+            let mut s = DefaultHasher::new();
+            value.hash(&mut s);
+            s.finish()
+        };
+        assert_eq!(a_hash, b_hash);
+        // order
+        assert_eq!(value.cmp(&value.clone()), Ordering::Equal);
+        assert!(value.ge(&value.clone()));
+    }
 }
