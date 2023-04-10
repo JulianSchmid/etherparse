@@ -310,8 +310,33 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 #[cfg(test)]
 mod tests {
     use super::{*, FromSliceError::*};
+    use core::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
     use std::format;
     use std::error::Error;
+
+    #[test]
+    fn clone_eq_hash() {
+        let value = Len(LenError{
+            required_len: 0,
+            len: 0,
+            len_source: LenSource::Slice,
+            layer: Layer::Icmpv4,
+            layer_start_offset: 0,
+        });
+        assert_eq!(value, value.clone());
+        let h1 = {
+            let mut h = DefaultHasher::new();
+            value.hash(&mut h);
+            h.finish()
+        };
+        let h2 = {
+            let mut h = DefaultHasher::new();
+            value.clone().hash(&mut h);
+            h.finish()
+        };
+        assert_eq!(h1, h2);
+    }
 
     #[test]
     fn debug_source() {
