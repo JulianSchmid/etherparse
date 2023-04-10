@@ -711,11 +711,7 @@ mod test {
                         IpPayload{
                             ip_number: IpNumber(header.next_header().unwrap()),
                             fragmented: header.is_fragmenting_payload(),
-                            len_source: if v6.payload_length == 0 {
-                                LenSource::Slice
-                            } else {
-                                LenSource::Ipv6HeaderPayloadLen
-                            },
+                            len_source: LenSource::Ipv6HeaderPayloadLen,
                             payload: &payload
                         }
                     );
