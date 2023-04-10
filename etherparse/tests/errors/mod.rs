@@ -5,7 +5,7 @@ use proptest::prelude::*;
 #[test]
 fn write_error_display() {
     use ValueError::Ipv4OptionsLengthBad;
-    use WriteError::{IoError, SliceTooSmall};
+    use WriteError::IoError;
 
     //IoError
     {
@@ -24,21 +24,12 @@ fn write_error_display() {
             &format!("{}", WriteError::ValueError(value_error))
         );
     }
-
-    //SliceTooSmall
-    {
-        let size = 1234;
-        assert_eq!(
-            &format!("SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size),
-            &format!("{}", SliceTooSmall(size))
-        );
-    }
 }
 
 /// Check the write error display fmt generate the expected strings
 #[test]
 fn write_error_source() {
-    use super::WriteError::{IoError, SliceTooSmall};
+    use super::WriteError::IoError;
     use std::error::Error;
 
     assert_matches!(
@@ -50,8 +41,6 @@ fn write_error_source() {
         WriteError::ValueError(ValueError::Ipv4OptionsLengthBad(0)).source(),
         Some(_)
     );
-
-    assert_matches!(SliceTooSmall(0).source(), None);
 }
 
 /// Check that all values return None as source

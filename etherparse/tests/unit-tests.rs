@@ -45,8 +45,7 @@ fn test_debug_write() {
         use crate::WriteError::*;
         for value in [
             IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            ValueError(Ipv4OptionsLengthBad(0)),
-            SliceTooSmall(0),
+            ValueError(Ipv4OptionsLengthBad(0))
         ]
         .iter()
         {
