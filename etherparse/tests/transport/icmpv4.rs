@@ -150,10 +150,7 @@ mod icmpv4_regression {
             IpHeader::Version4(ip4, _) => ip4,
             _ => panic!("Didn't parse inner v4 IP header!?"),
         };
-        assert_eq!(
-            ip_header.source,
-            [212,156,201,114]
-        );
+        assert_eq!(ip_header.source, [212, 156, 201, 114]);
         let icmp4 = ttl_exceeded.transport.unwrap().icmpv4().unwrap();
         let icmp_bytes = icmp4.to_bytes();
         assert_eq!(8, icmp_bytes.len());
@@ -161,7 +158,7 @@ mod icmpv4_regression {
         assert_eq!(icmp_bytes[1], 0); // code
         assert_eq!(&icmp_bytes[4..], &[0; 4]); // TTL exceeded doesn't use this field
                                                // now unpack the bounced packet in the payload
-        
+
         // TODO re-introduce as soon as a lax parser is available
 
         /*

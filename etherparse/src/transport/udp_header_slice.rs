@@ -88,7 +88,7 @@ impl<'a> UdpHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
-    use alloc::{vec::Vec, format};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {

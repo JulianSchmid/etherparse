@@ -47,8 +47,8 @@ impl core::fmt::Debug for EtherType {
 /// Although there is a [`EtherType`] representation for every u16 value,
 /// the constants in this module are limited to the known values supported
 /// by the current implementation.
-/// 
-/// 
+///
+///
 /// ```
 /// use etherparse::{ether_type, EtherType};
 ///
@@ -107,7 +107,10 @@ mod test {
             (EtherType::WAKE_ON_LAN, WAKE_ON_LAN),
             (EtherType::VLAN_TAGGED_FRAME, VLAN_TAGGED_FRAME),
             (EtherType::PROVIDER_BRIDGING, PROVIDER_BRIDGING),
-            (EtherType::VLAN_DOUBLE_TAGGED_FRAME, VLAN_DOUBLE_TAGGED_FRAME),
+            (
+                EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                VLAN_DOUBLE_TAGGED_FRAME,
+            ),
         ];
 
         for (ether_type, constant) in pairs {
@@ -125,7 +128,10 @@ mod test {
             (EtherType::WAKE_ON_LAN, "WakeOnLan(0x0842)"),
             (EtherType::VLAN_TAGGED_FRAME, "VlanTaggedFrame(0x8100)"),
             (EtherType::PROVIDER_BRIDGING, "ProviderBridging(0x88A8)"),
-            (EtherType::VLAN_DOUBLE_TAGGED_FRAME, "VlanDoubleTaggedFrame(0x9100)"),
+            (
+                EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                "VlanDoubleTaggedFrame(0x9100)",
+            ),
         ];
 
         for (ether_type, str_value) in pairs {

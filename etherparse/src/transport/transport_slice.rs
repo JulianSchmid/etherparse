@@ -17,7 +17,7 @@ pub enum TransportSlice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{TcpHeader, UdpHeader, ip_number::{IGMP}};
+    use crate::{ip_number::IGMP, TcpHeader, UdpHeader};
     use alloc::{format, vec::Vec};
 
     #[test]
@@ -60,10 +60,7 @@ mod test {
             assert_eq!(slice.clone(), slice);
 
             // debug
-            assert_eq!(
-                format!("{:?}", slice),
-                format!("Unknown({:?})", IGMP)
-            );
+            assert_eq!(format!("{:?}", slice), format!("Unknown({:?})", IGMP));
         }
     }
 }

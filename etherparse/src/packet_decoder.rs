@@ -1,4 +1,4 @@
-use crate::err::{LenSource, LenError};
+use crate::err::{LenError, LenSource};
 
 use super::*;
 
@@ -68,7 +68,9 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ethernet_slice(slice: &'a [u8]) -> Result<PacketHeaders, err::packet::EthSliceError> {
+    pub fn from_ethernet_slice(
+        slice: &'a [u8],
+    ) -> Result<PacketHeaders, err::packet::EthSliceError> {
         use err::packet::EthSliceError::Len;
 
         let (ethernet, rest) = Ethernet2Header::from_slice(slice).map_err(Len)?;
@@ -198,15 +200,14 @@ impl<'a> PacketHeaders<'a> {
         match ether_type {
             IPV4 => {
                 // read ipv4 header & extensions and payload slice
-                let (ip, ip_payload) = IpHeader::ipv4_from_slice(rest)
-                    .map_err(|err| {
-                        use err::ipv4::SliceError as I;
-                        match err {
-                            I::Len(err) => Len(add_offset(err, rest)),
-                            I::Header(err) => Ipv4(err),
-                            I::Exts(err) => Ipv4Exts(err),
-                        }
-                    })?;
+                let (ip, ip_payload) = IpHeader::ipv4_from_slice(rest).map_err(|err| {
+                    use err::ipv4::SliceError as I;
+                    match err {
+                        I::Len(err) => Len(add_offset(err, rest)),
+                        I::Header(err) => Ipv4(err),
+                        I::Exts(err) => Ipv4Exts(err),
+                    }
+                })?;
 
                 // set the next
                 rest = ip_payload.payload;
@@ -225,17 +226,15 @@ impl<'a> PacketHeaders<'a> {
                 result.transport = transport;
             }
             IPV6 => {
-
                 // read ipv6 header & extensions and payload slice
-                let (ip, ip_payload) = IpHeader::ipv6_from_slice(rest)
-                    .map_err(|err|{
-                        use err::ipv6::SliceError as I;
-                        match err {
-                            I::Len(err) => Len(add_offset(err, rest)),
-                            I::Header(err) => Ipv6(err),
-                            I::Exts(err) => Ipv6Exts(err),
-                        }
-                    })?;
+                let (ip, ip_payload) = IpHeader::ipv6_from_slice(rest).map_err(|err| {
+                    use err::ipv6::SliceError as I;
+                    match err {
+                        I::Len(err) => Len(add_offset(err, rest)),
+                        I::Header(err) => Ipv6(err),
+                        I::Exts(err) => Ipv6Exts(err),
+                    }
+                })?;
 
                 //set the ip result & rest
                 rest = ip_payload.payload;
@@ -305,14 +304,13 @@ impl<'a> PacketHeaders<'a> {
         use err::packet::IpSliceError::*;
 
         // read ip headers
-        let (ip_header, ip_payload) = IpHeader::from_slice(slice)
-            .map_err(|err| {
-                use err::ip::HeaderSliceError as I;
-                match err {
-                    I::Len(err) => Len(err),
-                    I::Content(err) => Ip(err),
-                }
-            })?;
+        let (ip_header, ip_payload) = IpHeader::from_slice(slice).map_err(|err| {
+            use err::ip::HeaderSliceError as I;
+            match err {
+                I::Len(err) => Len(err),
+                I::Content(err) => Ip(err),
+            }
+        })?;
 
         let mut result = PacketHeaders {
             link: None,
@@ -335,7 +333,7 @@ impl<'a> PacketHeaders<'a> {
                         rest.as_ptr().offset_from(slice.as_ptr()) as usize
                     };
                     Len(err)
-                },
+                }
                 I::Content(err) => Tcp(err),
             }
         })?;
@@ -379,7 +377,7 @@ impl<'a> PacketHeaders<'a> {
 
 /// helper function to process transport headers
 fn read_transport(
-    ip_payload: IpPayload
+    ip_payload: IpPayload,
 ) -> Result<(Option<TransportHeader>, &[u8]), err::tcp::HeaderSliceError> {
     if ip_payload.fragmented {
         Ok((None, ip_payload.payload))
@@ -405,11 +403,9 @@ fn read_transport(
                 .map_err(add_len_source)
                 .map(|value| (Some(TransportHeader::Udp(value.0)), value.1)),
             TCP => TcpHeader::from_slice(ip_payload.payload)
-                .map_err(|err| {
-                    match err {
-                        Len(err) => add_len_source(err),
-                        Content(err) => Content(err),
-                    }
+                .map_err(|err| match err {
+                    Len(err) => add_len_source(err),
+                    Content(err) => Content(err),
                 })
                 .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1)),
             _ => Ok((None, ip_payload.payload)),
@@ -641,9 +637,9 @@ mod test {
                         EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::Ip(
-                            err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
-                        ),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader {
+                            ihl: 0,
+                        }),
                     );
                 }
             }
@@ -674,7 +670,7 @@ mod test {
                     // set payload length
                     let mut test = test.clone();
                     test.set_payload_le_from_ip_on(
-                        -1*(auth.header_len() as isize) + (len as isize)
+                        -1 * (auth.header_len() as isize) + (len as isize),
                     );
 
                     let data = test.to_vec(&[]);
@@ -826,7 +822,7 @@ mod test {
                     // set payload length
                     let mut test = test.clone();
                     test.set_payload_le_from_ip_on(
-                        -1*(auth.header_len() as isize) + (len as isize)
+                        -1 * (auth.header_len() as isize) + (len as isize),
                     );
 
                     let data = test.to_vec(&[]);
@@ -914,14 +910,13 @@ mod test {
 
                 // length error
                 if false == test.is_ip_payload_fragmented() {
-                    
                     for len in 0..udp.header_len() {
                         // build new test packet
                         let mut test = test.clone();
 
                         // set payload length
                         test.set_payload_le_from_ip_on(len as isize);
-                        
+
                         // generate data
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - udp.header_len();
@@ -989,7 +984,7 @@ mod test {
                             IpSliceError::Len(err.clone()),
                         );
                     }
-                
+
                     // content error
                     {
                         let mut data = test.to_vec(&[]);
@@ -1030,7 +1025,7 @@ mod test {
                         // set payload length
                         let mut test = test.clone();
                         test.set_payload_le_from_ip_on(len as isize);
-                        
+
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv4.header_len();
 
@@ -1075,7 +1070,7 @@ mod test {
                         // set payload length
                         let mut test = test.clone();
                         test.set_payload_le_from_ip_on(len as isize);
-                        
+
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv6.header_len();
 
@@ -1102,8 +1097,7 @@ mod test {
     }
 
     fn from_x_slice_assert_ok(test_base: &TestPacket) {
-
-        let payload = [1,2,3,4];
+        let payload = [1, 2, 3, 4];
 
         // set length fields in ip headers
         let test = {

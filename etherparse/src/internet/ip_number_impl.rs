@@ -358,7 +358,9 @@ impl core::fmt::Debug for IpNumber {
             Self::IPV6 => write!(f, "Ipv6({})", self.0),
             Self::IPV6_ROUTE_HEADER => write!(f, "Ipv6RouteHeader({})", self.0),
             Self::IPV6_FRAGMENTATION_HEADER => write!(f, "Ipv6FragmentationHeader({})", self.0),
-            Self::ENCAPSULATING_SECURITY_PAYLOAD => write!(f, "EncapsulatingSecurityPayload({})", self.0),
+            Self::ENCAPSULATING_SECURITY_PAYLOAD => {
+                write!(f, "EncapsulatingSecurityPayload({})", self.0)
+            }
             Self::AUTHENTICATION_HEADER => write!(f, "AuthenticationHeader({})", self.0),
             Self::IPV6_ICMP => write!(f, "ICMPv6({})", self.0),
             Self::IPV6_DESTINATION_OPTIONS => write!(f, "Ipv6DestinationOptions({})", self.0),
@@ -368,7 +370,6 @@ impl core::fmt::Debug for IpNumber {
             _ => write!(f, "IpNumber({})", self.0),
         }
     }
-
 }
 
 /// `u8` constants for the most used ip protocol numbers.
@@ -434,8 +435,11 @@ pub mod ip_number {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::{hash::{Hash, Hasher}, cmp::Ordering};
-    use std::{format, collections::hash_map::DefaultHasher};
+    use core::{
+        cmp::Ordering,
+        hash::{Hash, Hasher},
+    };
+    use std::{collections::hash_map::DefaultHasher, format};
 
     #[test]
     fn is_ipv6_ext_header_value() {
@@ -503,18 +507,27 @@ mod tests {
             (IpNumber::UDP, "UDP(17)"),
             (IpNumber::IPV6, "Ipv6(41)"),
             (IpNumber::IPV6_ROUTE_HEADER, "Ipv6RouteHeader(43)"),
-            (IpNumber::IPV6_FRAGMENTATION_HEADER, "Ipv6FragmentationHeader(44)"),
-            (IpNumber::ENCAPSULATING_SECURITY_PAYLOAD, "EncapsulatingSecurityPayload(50)"),
+            (
+                IpNumber::IPV6_FRAGMENTATION_HEADER,
+                "Ipv6FragmentationHeader(44)",
+            ),
+            (
+                IpNumber::ENCAPSULATING_SECURITY_PAYLOAD,
+                "EncapsulatingSecurityPayload(50)",
+            ),
             (IpNumber::AUTHENTICATION_HEADER, "AuthenticationHeader(51)"),
             (IpNumber::IPV6_ICMP, "ICMPv6(58)"),
-            (IpNumber::IPV6_DESTINATION_OPTIONS, "Ipv6DestinationOptions(60)"),
+            (
+                IpNumber::IPV6_DESTINATION_OPTIONS,
+                "Ipv6DestinationOptions(60)",
+            ),
             (IpNumber::MOBILITY_HEADER, "MobilityHeader(135)"),
             (IpNumber::HIP, "HIP(139)"),
             (IpNumber::SHIM6, "SHIM6(140)"),
             (IpNumber::EXPERIMENTAL_AND_TESTING_0, "IpNumber(253)"),
             (IpNumber::EXPERIMENTAL_AND_TESTING_1, "IpNumber(254)"),
         ];
-        
+
         for (ip_number, debug_str) in pairs {
             assert_eq!(format!("{:?}", ip_number), *debug_str);
         }

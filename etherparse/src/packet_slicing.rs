@@ -368,7 +368,7 @@ impl<'a> CursorSlice<'a> {
                 I::Len(mut err) => {
                     err.layer_start_offset += self.offset;
                     Len(err)
-                },
+                }
                 I::IpHeader(err) => Ip(err),
             }
         })?;
@@ -421,7 +421,7 @@ impl<'a> CursorSlice<'a> {
                 I::Len(mut err) => {
                     err.layer_start_offset += self.offset;
                     Len(err)
-                },
+                }
                 I::Header(err) => Ipv4(err),
                 I::Exts(err) => Ipv4Exts(err),
             }
@@ -473,7 +473,7 @@ impl<'a> CursorSlice<'a> {
                 I::Len(mut err) => {
                     err.layer_start_offset += self.offset;
                     Len(err)
-                },
+                }
                 I::Header(err) => Ipv6(err),
                 I::Exts(err) => Ipv6Exts(err),
             }
@@ -488,7 +488,10 @@ impl<'a> CursorSlice<'a> {
             // SAFETY: The payload is a subslice of self.slice.
             // therefor calculating the offset from it is safe and
             // the result should always be a positive number.
-            ipv6.payload().payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
+            ipv6.payload()
+                .payload
+                .as_ptr()
+                .offset_from(self.slice.as_ptr()) as usize
         };
         self.len_source = ipv6.payload().len_source;
         self.slice = ipv6.payload().payload;
@@ -561,14 +564,13 @@ impl<'a> CursorSlice<'a> {
     pub fn slice_udp(mut self) -> Result<SlicedPacket<'a>, err::LenError> {
         use crate::TransportSlice::*;
 
-        let result =
-            UdpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
-                err.layer_start_offset += self.offset;
-                if LenSource::Slice == err.len_source {
-                    err.len_source = self.len_source;
-                }
-                err
-            })?;
+        let result = UdpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
+            err.layer_start_offset += self.offset;
+            if LenSource::Slice == err.len_source {
+                err.len_source = self.len_source;
+            }
+            err
+        })?;
 
         //set the new data
         self.move_by_slice(result.slice());
@@ -589,8 +591,8 @@ impl<'a> CursorSlice<'a> {
                     if LenSource::Slice == err.len_source {
                         err.len_source = self.len_source;
                     }
-                },
-                _ => {},
+                }
+                _ => {}
             }
             err
         })?;
@@ -614,7 +616,7 @@ mod test {
     use super::*;
     use crate::err::{
         packet::{EthSliceError, IpSliceError},
-        LenError, Layer,
+        Layer, LenError,
     };
     use crate::test_packet::TestPacket;
 
@@ -834,9 +836,9 @@ mod test {
                         EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::Ip(
-                            err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
-                        ),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader {
+                            ihl: 0,
+                        }),
                     );
                 }
 
@@ -852,18 +854,14 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4(
-                            err::ipv4::HeaderError::TotalLengthSmallerThanHeader {
-                                total_length: 0,
-                                min_expected_length: ipv4.header_len() as u16,
-                            },
-                        ),
-                        IpSliceError::Ip(
-                            err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader {
-                                total_length: 0,
-                                min_expected_length: ipv4.header_len() as u16,
-                            },
-                        ),
+                        EthSliceError::Ipv4(err::ipv4::HeaderError::TotalLengthSmallerThanHeader {
+                            total_length: 0,
+                            min_expected_length: ipv4.header_len() as u16,
+                        }),
+                        IpSliceError::Ip(err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader {
+                            total_length: 0,
+                            min_expected_length: ipv4.header_len() as u16,
+                        }),
                     );
                 }
             }
@@ -894,7 +892,7 @@ mod test {
                     // set payload length
                     let mut test = test.clone();
                     test.set_payload_le_from_ip_on(
-                        -1*(auth.header_len() as isize) + (len as isize)
+                        -1 * (auth.header_len() as isize) + (len as isize),
                     );
 
                     let data = test.to_vec(&[]);
@@ -915,7 +913,6 @@ mod test {
                         IpSliceError::Len(err.clone()),
                     );
                 }
-            
 
                 // ipv4 extension content error
                 {
@@ -1047,7 +1044,7 @@ mod test {
                     // set payload length
                     let mut test = test.clone();
                     test.set_payload_le_from_ip_on(
-                        -1*(auth.header_len() as isize) + (len as isize)
+                        -1 * (auth.header_len() as isize) + (len as isize),
                     );
 
                     let data = test.to_vec(&[]);
@@ -1135,7 +1132,6 @@ mod test {
 
                 // length error
                 if false == test.is_ip_payload_fragmented() {
-                    
                     for len in 0..udp.header_len() {
                         // build new test packet
                         let mut test = test.clone();
@@ -1187,7 +1183,6 @@ mod test {
                     // length error
                     {
                         for len in 0..(tcp.header_len() as usize) {
-                            
                             // set payload length
                             let mut test = test.clone();
                             test.set_payload_le_from_ip_on(len as isize);
@@ -1344,17 +1339,18 @@ mod test {
                 test.ip,
                 result.ip.as_ref().map(|s: &InternetSlice| -> IpHeader {
                     match s {
-                        InternetSlice::Ipv4(ipv4) => {
-                            IpHeader::Version4(
-                                ipv4.header().to_header(),
-                                ipv4.extensions().to_header()
-                            )
-                        }
+                        InternetSlice::Ipv4(ipv4) => IpHeader::Version4(
+                            ipv4.header().to_header(),
+                            ipv4.extensions().to_header(),
+                        ),
                         InternetSlice::Ipv6(ipv6) => IpHeader::Version6(
                             ipv6.header().to_header(),
                             Ipv6Extensions::from_slice(
-                                ipv6.header().next_header(), ipv6.extensions().slice()
-                            ).unwrap().0,
+                                ipv6.header().next_header(),
+                                ipv6.extensions().slice(),
+                            )
+                            .unwrap()
+                            .0,
                         ),
                     }
                 })

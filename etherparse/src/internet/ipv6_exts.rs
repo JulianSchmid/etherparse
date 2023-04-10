@@ -639,7 +639,9 @@ impl Ipv6Extensions {
             return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_HEADER_HOP_BY_HOP));
         }
         if outstanding_refs.destination_options {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS));
+            return Err(Ipv6ExtensionNotReferenced(
+                IpNumber::IPV6_DESTINATION_OPTIONS,
+            ));
         }
         if outstanding_refs.routing {
             return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_ROUTE_HEADER));
@@ -653,7 +655,9 @@ impl Ipv6Extensions {
             return Err(Ipv6ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER));
         }
         if outstanding_refs.final_destination_options {
-            return Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS));
+            return Err(Ipv6ExtensionNotReferenced(
+                IpNumber::IPV6_DESTINATION_OPTIONS,
+            ));
         }
 
         Ok(next)

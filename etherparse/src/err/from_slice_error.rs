@@ -309,15 +309,15 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{*, FromSliceError::*};
+    use super::{FromSliceError::*, *};
     use core::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
-    use std::format;
     use std::error::Error;
+    use std::format;
 
     #[test]
     fn clone_eq_hash() {
-        let value = Len(LenError{
+        let value = Len(LenError {
             required_len: 0,
             len: 0,
             len_source: LenSource::Slice,
@@ -340,21 +340,46 @@ mod tests {
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, FromSliceError);8] = [
-            ("Len", Len(LenError{
-                required_len: 0,
-                len: 0,
-                len_source: LenSource::Slice,
-                layer: Layer::Icmpv4,
-                layer_start_offset: 0,
-            })),
-            ("DoubleVlan", DoubleVlan(double_vlan::HeaderError::NonVlanEtherType { unexpected_ether_type: 123 })),
-            ("Ip", Ip(ip::HeaderError::UnsupportedIpVersion { version_number: 123 })),
+        let test_values: [(&str, FromSliceError); 8] = [
+            (
+                "Len",
+                Len(LenError {
+                    required_len: 0,
+                    len: 0,
+                    len_source: LenSource::Slice,
+                    layer: Layer::Icmpv4,
+                    layer_start_offset: 0,
+                }),
+            ),
+            (
+                "DoubleVlan",
+                DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
+                    unexpected_ether_type: 123,
+                }),
+            ),
+            (
+                "Ip",
+                Ip(ip::HeaderError::UnsupportedIpVersion {
+                    version_number: 123,
+                }),
+            ),
             ("IpAuth", IpAuth(ip_auth::HeaderError::ZeroPayloadLen)),
-            ("Ipv4", Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 })),
-            ("Ipv6", Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 })),
-            ("Ipv6Exts", Ipv6Exts(ipv6_exts::HeaderError::HopByHopNotAtStart)),
-            ("Tcp", Tcp(tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 })),
+            (
+                "Ipv4",
+                Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 }),
+            ),
+            (
+                "Ipv6",
+                Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 }),
+            ),
+            (
+                "Ipv6Exts",
+                Ipv6Exts(ipv6_exts::HeaderError::HopByHopNotAtStart),
+            ),
+            (
+                "Tcp",
+                Tcp(tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
+            ),
         ];
         for (prefix, value) in &test_values {
             // display
@@ -367,16 +392,20 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [FromSliceError;8] = [
-            Len(LenError{
+        let test_values: [FromSliceError; 8] = [
+            Len(LenError {
                 required_len: 0,
                 len: 0,
                 len_source: LenSource::Slice,
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
-            DoubleVlan(double_vlan::HeaderError::NonVlanEtherType { unexpected_ether_type: 123 }),
-            Ip(ip::HeaderError::UnsupportedIpVersion { version_number: 123 }),
+            DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 123,
+            }),
+            Ip(ip::HeaderError::UnsupportedIpVersion {
+                version_number: 123,
+            }),
             IpAuth(ip_auth::HeaderError::ZeroPayloadLen),
             Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 }),
             Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 }),
@@ -385,53 +414,39 @@ mod tests {
         ];
         for value in &test_values {
             // display
-            assert_eq!(
-                format!("{}", value),
-                format!("{}", value.source().unwrap())
-            );
+            assert_eq!(format!("{}", value), format!("{}", value.source().unwrap()));
         }
     }
 
     #[test]
     fn accessors() {
         use FromSliceError::*;
-        let len_error = || {
-            LenError {
-                required_len: 0,
-                len: 0,
-                len_source: LenSource::Slice,
-                layer: Layer::Icmpv4,
-                layer_start_offset: 0
-            }
+        let len_error = || LenError {
+            required_len: 0,
+            len: 0,
+            len_source: LenSource::Slice,
+            layer: Layer::Icmpv4,
+            layer_start_offset: 0,
         };
-        let double_vlan_error = || {
-            double_vlan::HeaderError::NonVlanEtherType { unexpected_ether_type: 1 }
+        let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
+            unexpected_ether_type: 1,
         };
-        let ip_error = || {
-            ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen)
-        };
-        let ipv4_error = || {
-            ipv4::HeaderError::UnexpectedVersion { version_number: 1 }
-        };
-        let ipv6_error = || {
-            ipv6::HeaderError::UnexpectedVersion { version_number: 1 }
-        };
-        let ip_auth_error = || {
-            ip_auth::HeaderError::ZeroPayloadLen
-        };
-        let ipv6_exts_error = || {
-            ipv6_exts::HeaderError::HopByHopNotAtStart
-        };
-        let tcp_error = || {
-            tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }
-        };
+        let ip_error = || ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+        let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
+        let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
+        let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
+        let ipv6_exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+        let tcp_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
 
         // len
         assert_eq!(Len(len_error()).len(), Some(&len_error()));
         assert_eq!(Ipv4(ipv4_error()).len(), None);
-        
+
         // double_vlan
-        assert_eq!(DoubleVlan(double_vlan_error()).double_vlan(), Some(&double_vlan_error()));
+        assert_eq!(
+            DoubleVlan(double_vlan_error()).double_vlan(),
+            Some(&double_vlan_error())
+        );
         assert_eq!(Ipv4(ipv4_error()).double_vlan(), None);
 
         // ip
@@ -449,9 +464,12 @@ mod tests {
         // ipv6
         assert_eq!(Ipv6(ipv6_error()).ipv6(), Some(&ipv6_error()));
         assert_eq!(IpAuth(ip_auth_error()).ipv6(), None);
-        
+
         // ipv6_exts
-        assert_eq!(Ipv6Exts(ipv6_exts_error()).ipv6_exts(), Some(&ipv6_exts_error()));
+        assert_eq!(
+            Ipv6Exts(ipv6_exts_error()).ipv6_exts(),
+            Some(&ipv6_exts_error())
+        );
         assert_eq!(IpAuth(ip_auth_error()).ipv6_exts(), None);
 
         // tcp
@@ -467,329 +485,329 @@ mod tests {
                 len: 0,
                 len_source: LenSource::Slice,
                 layer: Layer::Icmpv4,
-                layer_start_offset: 0
+                layer_start_offset: 0,
             }
         };
-        
+
         // len
-        assert_eq!(&len_error(), FromSliceError::from(len_error()).len().unwrap());
+        assert_eq!(
+            &len_error(),
+            FromSliceError::from(len_error()).len().unwrap()
+        );
 
         // double vlan errors
         {
-            let header_error = || {
-                double_vlan::HeaderError::NonVlanEtherType { unexpected_ether_type: 123 }
+            let header_error = || double_vlan::HeaderError::NonVlanEtherType {
+                unexpected_ether_type: 123,
             };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).double_vlan().unwrap());
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    double_vlan::HeaderSliceError::Content(header_error())
-                ).double_vlan().unwrap()
+                FromSliceError::from(header_error()).double_vlan().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(double_vlan::HeaderSliceError::Content(header_error()))
+                    .double_vlan()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    double_vlan::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(double_vlan::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    double_vlan::HeaderSliceError::Content(header_error())
-                ).double_vlan().unwrap()
+                FromSliceError::from(double_vlan::HeaderSliceError::Content(header_error()))
+                    .double_vlan()
+                    .unwrap()
             );
         }
 
         // ip errors
         {
-            let header_error = || {
-                ip::HeaderError::UnsupportedIpVersion { version_number: 123 }
+            let header_error = || ip::HeaderError::UnsupportedIpVersion {
+                version_number: 123,
             };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).ip().unwrap());
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ip::HeaderSliceError::Content(header_error())
-                ).ip().unwrap()
+                FromSliceError::from(header_error()).ip().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(ip::HeaderSliceError::Content(header_error()))
+                    .ip()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ip::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ip::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ip::HeaderSliceError::Content(header_error())
-                ).ip().unwrap()
+                FromSliceError::from(ip::HeaderSliceError::Content(header_error()))
+                    .ip()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ip::SliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ip::SliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ip::SliceError::IpHeader(header_error())
-                ).ip().unwrap()
+                FromSliceError::from(ip::SliceError::IpHeader(header_error()))
+                    .ip()
+                    .unwrap()
             );
         }
 
         // ip auth errors
         {
-            let header_error = || {
-                ip_auth::HeaderError::ZeroPayloadLen
-            };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).ip_auth().unwrap());
+            let header_error = || ip_auth::HeaderError::ZeroPayloadLen;
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ip_auth::HeaderSliceError::Content(header_error())
-                ).ip_auth().unwrap()
+                FromSliceError::from(header_error()).ip_auth().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(ip_auth::HeaderSliceError::Content(header_error()))
+                    .ip_auth()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ip_auth::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ip_auth::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ip_auth::HeaderSliceError::Content(header_error())
-                ).ip_auth().unwrap()
+                FromSliceError::from(ip_auth::HeaderSliceError::Content(header_error()))
+                    .ip_auth()
+                    .unwrap()
             );
         }
 
         // ipv4 errors
         {
-            let header_error = || {
-                ipv4::HeaderError::UnexpectedVersion { version_number: 123 }
+            let header_error = || ipv4::HeaderError::UnexpectedVersion {
+                version_number: 123,
             };
-            let exts_error = || {
-                ip_auth::HeaderError::ZeroPayloadLen
-            };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).ipv4().unwrap());
+            let exts_error = || ip_auth::HeaderError::ZeroPayloadLen;
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv4::HeaderSliceError::Content(header_error())
-                ).ipv4().unwrap()
+                FromSliceError::from(header_error()).ipv4().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(ipv4::HeaderSliceError::Content(header_error()))
+                    .ipv4()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ipv4::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ipv4::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv4::HeaderSliceError::Content(header_error())
-                ).ipv4().unwrap()
+                FromSliceError::from(ipv4::HeaderSliceError::Content(header_error()))
+                    .ipv4()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ipv4::SliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ipv4::SliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv4::SliceError::Header(header_error())
-                ).ipv4().unwrap()
+                FromSliceError::from(ipv4::SliceError::Header(header_error()))
+                    .ipv4()
+                    .unwrap()
             );
             assert_eq!(
                 &exts_error(),
-                FromSliceError::from(
-                    ipv4::SliceError::Exts(exts_error())
-                ).ip_auth().unwrap()
+                FromSliceError::from(ipv4::SliceError::Exts(exts_error()))
+                    .ip_auth()
+                    .unwrap()
             );
         }
 
         // ipv6 errors
         {
-            let header_error = || {
-                ipv6::HeaderError::UnexpectedVersion { version_number: 123 }
+            let header_error = || ipv6::HeaderError::UnexpectedVersion {
+                version_number: 123,
             };
-            let exts_error = || {
-                ipv6_exts::HeaderError::HopByHopNotAtStart
-            };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).ipv6().unwrap());
+            let exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv6::HeaderSliceError::Content(header_error())
-                ).ipv6().unwrap()
+                FromSliceError::from(header_error()).ipv6().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(ipv6::HeaderSliceError::Content(header_error()))
+                    .ipv6()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ipv6::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ipv6::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv6::HeaderSliceError::Content(header_error())
-                ).ipv6().unwrap()
+                FromSliceError::from(ipv6::HeaderSliceError::Content(header_error()))
+                    .ipv6()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ipv6::SliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ipv6::SliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv6::SliceError::Header(header_error())
-                ).ipv6().unwrap()
+                FromSliceError::from(ipv6::SliceError::Header(header_error()))
+                    .ipv6()
+                    .unwrap()
             );
             assert_eq!(
                 &exts_error(),
-                FromSliceError::from(
-                    ipv6::SliceError::Exts(exts_error())
-                ).ipv6_exts().unwrap()
+                FromSliceError::from(ipv6::SliceError::Exts(exts_error()))
+                    .ipv6_exts()
+                    .unwrap()
             );
         }
 
         // ipv6 exts errors
         {
-            let header_error = || {
-                ipv6_exts::HeaderError::HopByHopNotAtStart
-            };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).ipv6_exts().unwrap());
+            let header_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv6_exts::HeaderSliceError::Content(header_error())
-                ).ipv6_exts().unwrap()
+                FromSliceError::from(header_error()).ipv6_exts().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(ipv6_exts::HeaderSliceError::Content(header_error()))
+                    .ipv6_exts()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    ipv6_exts::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(ipv6_exts::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    ipv6_exts::HeaderSliceError::Content(header_error())
-                ).ipv6_exts().unwrap()
+                FromSliceError::from(ipv6_exts::HeaderSliceError::Content(header_error()))
+                    .ipv6_exts()
+                    .unwrap()
             );
         }
 
         // packet error
         {
-            let ip_error = || {
-                ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen)
-            };
-            let ipv4_error = || {
-                ipv4::HeaderError::UnexpectedVersion { version_number: 1 }
-            };
-            let ipv6_error = || {
-                ipv6::HeaderError::UnexpectedVersion { version_number: 1 }
-            };
-            let ip_auth_error = || {
-                ip_auth::HeaderError::ZeroPayloadLen
-            };
-            let ipv6_exts_error = || {
-                ipv6_exts::HeaderError::HopByHopNotAtStart
-            };
-            let tcp_error = || {
-                tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }
-            };
+            let ip_error = || ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+            let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
+            let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
+            let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
+            let ipv6_exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+            let tcp_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
 
             // EthSliceError
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(packet::EthSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &ipv4_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Ipv4(ipv4_error())
-                ).ipv4().unwrap()
+                FromSliceError::from(packet::EthSliceError::Ipv4(ipv4_error()))
+                    .ipv4()
+                    .unwrap()
             );
             assert_eq!(
                 &ipv6_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Ipv6(ipv6_error())
-                ).ipv6().unwrap()
+                FromSliceError::from(packet::EthSliceError::Ipv6(ipv6_error()))
+                    .ipv6()
+                    .unwrap()
             );
             assert_eq!(
                 &ip_auth_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Ipv4Exts(ip_auth_error())
-                ).ip_auth().unwrap()
+                FromSliceError::from(packet::EthSliceError::Ipv4Exts(ip_auth_error()))
+                    .ip_auth()
+                    .unwrap()
             );
             assert_eq!(
                 &ipv6_exts_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Ipv6Exts(ipv6_exts_error())
-                ).ipv6_exts().unwrap()
+                FromSliceError::from(packet::EthSliceError::Ipv6Exts(ipv6_exts_error()))
+                    .ipv6_exts()
+                    .unwrap()
             );
             assert_eq!(
                 &tcp_error(),
-                FromSliceError::from(
-                    packet::EthSliceError::Tcp(tcp_error())
-                ).tcp().unwrap()
+                FromSliceError::from(packet::EthSliceError::Tcp(tcp_error()))
+                    .tcp()
+                    .unwrap()
             );
 
             // IpSliceError
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    packet::IpSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(packet::IpSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &ip_error(),
-                FromSliceError::from(
-                    packet::IpSliceError::Ip(ip_error())
-                ).ip().unwrap()
+                FromSliceError::from(packet::IpSliceError::Ip(ip_error()))
+                    .ip()
+                    .unwrap()
             );
             assert_eq!(
                 &tcp_error(),
-                FromSliceError::from(
-                    packet::IpSliceError::Tcp(tcp_error())
-                ).tcp().unwrap()
+                FromSliceError::from(packet::IpSliceError::Tcp(tcp_error()))
+                    .tcp()
+                    .unwrap()
             );
         }
 
         // tcp errors
         {
-            let header_error = || {
-                tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }
-            };
-            assert_eq!(&header_error(), FromSliceError::from(header_error()).tcp().unwrap());
+            let header_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    tcp::HeaderSliceError::Content(header_error())
-                ).tcp().unwrap()
+                FromSliceError::from(header_error()).tcp().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(tcp::HeaderSliceError::Content(header_error()))
+                    .tcp()
+                    .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(
-                    tcp::HeaderSliceError::Len(len_error())
-                ).len().unwrap()
+                FromSliceError::from(tcp::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(
-                    tcp::HeaderSliceError::Content(header_error())
-                ).tcp().unwrap()
+                FromSliceError::from(tcp::HeaderSliceError::Content(header_error()))
+                    .tcp()
+                    .unwrap()
             );
         }
-
     }
-
 } // mod tests

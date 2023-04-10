@@ -49,10 +49,7 @@ mod tests {
     #[test]
     fn debug() {
         let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
-        assert_eq!(
-            format!("Ip({:?})", err.clone()),
-            format!("{:?}", Ip(err))
-        );
+        assert_eq!(format!("Ip({:?})", err.clone()), format!("{:?}", Ip(err)));
     }
 
     #[test]
