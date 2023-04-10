@@ -34,7 +34,7 @@ impl std::error::Error for SliceError {
 #[cfg(test)]
 mod tests {
     use super::{super::HeaderError, SliceError::*};
-    use crate::err::{Layer, LenError, LenSource, ip};
+    use crate::err::{ip, Layer, LenError, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -100,8 +100,10 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(IpHeader(HeaderError::UnsupportedIpVersion { version_number: 6 })
-            .source()
-            .is_some());
+        assert!(
+            IpHeader(HeaderError::UnsupportedIpVersion { version_number: 6 })
+                .source()
+                .is_some()
+        );
     }
 }

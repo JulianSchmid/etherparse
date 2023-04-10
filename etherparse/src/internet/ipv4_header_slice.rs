@@ -1,6 +1,6 @@
+use core::slice::from_raw_parts;
 #[cfg(feature = "std")]
 use std::net::Ipv4Addr;
-use core::slice::from_raw_parts;
 
 use crate::*;
 

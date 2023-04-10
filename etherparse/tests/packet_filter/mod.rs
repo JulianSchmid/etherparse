@@ -324,7 +324,7 @@ impl PacketFilterTest {
                     header.set_payload_len(0).unwrap();
                     header.write(&mut ip_data).unwrap();
                     Some(InternetSlice::Ipv4(
-                        Ipv4Slice::from_slice(&ip_data).unwrap()
+                        Ipv4Slice::from_slice(&ip_data).unwrap(),
                     ))
                 }
                 Some(IpHeader::Version6(header, _)) => {
@@ -332,7 +332,7 @@ impl PacketFilterTest {
                     header.payload_length = 0;
                     header.write(&mut ip_data).unwrap();
                     Some(InternetSlice::Ipv6(
-                        Ipv6Slice::from_slice(&ip_data).unwrap()
+                        Ipv6Slice::from_slice(&ip_data).unwrap(),
                     ))
                 }
 

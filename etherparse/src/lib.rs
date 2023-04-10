@@ -245,7 +245,6 @@
 // is more visually striking and is not as easy to overlook as the single
 // character '!'.
 #![allow(clippy::bool_comparison)]
-
 // Removes all std and alloc default imports & enables "non std" support.
 #![no_std]
 

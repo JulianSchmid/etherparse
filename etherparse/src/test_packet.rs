@@ -64,32 +64,36 @@ impl TestPacket {
     pub fn set_payload_len(&mut self, payload_len: usize) {
         use IpHeader::*;
         match &mut self.ip {
-            None => {},
+            None => {}
             Some(Version4(ref mut header, ref mut exts)) => {
-                header.set_payload_len(
-                    exts.header_len() +
-                    self.transport.as_ref().map_or(0, |t| t.header_len()) +
-                    payload_len
-                ).unwrap();
+                header
+                    .set_payload_len(
+                        exts.header_len()
+                            + self.transport.as_ref().map_or(0, |t| t.header_len())
+                            + payload_len,
+                    )
+                    .unwrap();
             }
             Some(Version6(ref mut header, ref mut exts)) => {
-                header.set_payload_length(
-                    exts.header_len() +
-                    self.transport.as_ref().map_or(0, |t| t.header_len()) +
-                    payload_len
-                ).unwrap();
+                header
+                    .set_payload_length(
+                        exts.header_len()
+                            + self.transport.as_ref().map_or(0, |t| t.header_len())
+                            + payload_len,
+                    )
+                    .unwrap();
             }
         }
 
         use TransportHeader::*;
         match &mut self.transport {
-            None => {},
+            None => {}
             Some(Udp(ref mut udp)) => {
                 udp.length = payload_len as u16;
-            },
-            Some(Tcp(_)) => {},
-            Some(Icmpv4(_)) => {},
-            Some(Icmpv6(_)) => {},
+            }
+            Some(Tcp(_)) => {}
+            Some(Icmpv4(_)) => {}
+            Some(Icmpv6(_)) => {}
         }
     }
 
@@ -98,14 +102,16 @@ impl TestPacket {
         use IpHeader::*;
         match self.ip.as_mut().unwrap() {
             Version4(ref mut header, ref mut exts) => {
-                header.set_payload_len(
-                    (exts.header_len() as isize + payload_len_from_ip_on) as usize
-                ).unwrap();
+                header
+                    .set_payload_len((exts.header_len() as isize + payload_len_from_ip_on) as usize)
+                    .unwrap();
             }
             Version6(ref mut header, ref mut exts) => {
-                header.set_payload_length(
-                    (exts.header_len() as isize + payload_len_from_ip_on) as usize
-                ).unwrap();
+                header
+                    .set_payload_length(
+                        (exts.header_len() as isize + payload_len_from_ip_on) as usize,
+                    )
+                    .unwrap();
             }
         }
     }

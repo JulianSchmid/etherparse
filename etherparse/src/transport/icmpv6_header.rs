@@ -189,7 +189,7 @@ impl Icmpv6Header {
 #[cfg(test)]
 mod test {
     use crate::{icmpv6::*, test_gens::*, *};
-    use alloc::{vec::Vec, format};
+    use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use assert_matches::assert_matches;
     use proptest::prelude::*;

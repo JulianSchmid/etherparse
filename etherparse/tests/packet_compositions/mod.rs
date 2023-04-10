@@ -76,7 +76,6 @@ impl ComponentTest {
     /// * `PacketHeaders::from_ethernet_slice`
     /// * `PacketHeaders::from_ip_slice`
     fn run(&self) {
-
         // clone the test so the length fields can be adapted
         let mut test = self.clone();
 
@@ -85,18 +84,20 @@ impl ComponentTest {
             match ip {
                 IpHeader::Version4(ipv4, exts) => {
                     ipv4.set_payload_len(
-                        exts.header_len() +
-                        self.transport.as_ref().map_or(0, |t| t.header_len()) +
-                        self.payload.len()
-                    ).unwrap();
-                },
+                        exts.header_len()
+                            + self.transport.as_ref().map_or(0, |t| t.header_len())
+                            + self.payload.len(),
+                    )
+                    .unwrap();
+                }
                 IpHeader::Version6(ipv6, exts) => {
                     ipv6.set_payload_length(
-                        exts.header_len() +
-                        self.transport.as_ref().map_or(0, |t| t.header_len()) +
-                        self.payload.len()
-                    ).unwrap();
-                },
+                        exts.header_len()
+                            + self.transport.as_ref().map_or(0, |t| t.header_len())
+                            + self.payload.len(),
+                    )
+                    .unwrap();
+                }
             }
         }
 

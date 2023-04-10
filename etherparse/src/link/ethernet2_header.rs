@@ -1,4 +1,4 @@
-use crate::{*, err::Layer, err::SliceWriteSpaceError};
+use crate::{err::Layer, err::SliceWriteSpaceError, *};
 
 ///Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -59,10 +59,13 @@ impl Ethernet2Header {
     }
 
     /// Serialize the header to a given slice. Returns the unused part of the slice.
-    pub fn write_to_slice<'a>(&self, slice: &'a mut [u8]) -> Result<&'a mut [u8], SliceWriteSpaceError> {
+    pub fn write_to_slice<'a>(
+        &self,
+        slice: &'a mut [u8],
+    ) -> Result<&'a mut [u8], SliceWriteSpaceError> {
         // length check
         if slice.len() < Ethernet2Header::LEN {
-            Err(SliceWriteSpaceError{
+            Err(SliceWriteSpaceError {
                 required_len: Ethernet2Header::LEN,
                 len: slice.len(),
                 layer: Layer::Ethernet2Header,

@@ -270,7 +270,7 @@ impl Icmpv4Header {
 #[cfg(test)]
 mod test {
     use crate::{icmpv4::*, test_gens::*, *};
-    use alloc::{vec::Vec, format};
+    use alloc::{format, vec::Vec};
     use assert_matches::assert_matches;
     use proptest::prelude::*;
 

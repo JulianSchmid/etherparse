@@ -1,4 +1,4 @@
-use crate::err::{LenSource, Layer, LenError};
+use crate::err::{Layer, LenError, LenSource};
 
 use super::super::*;
 
@@ -27,11 +27,13 @@ impl IpHeader {
     /// Read an IpHeaders from a slice and return the header & slice
     /// containing the rest of the payload of IP packet (determined based
     /// on the header).
-    /// 
+    ///
     /// Note that his function verfies `total_length` for IPv4 and
     /// `payload_lenght` for IPv6 and that the extension headers are contained
     /// within.
-    pub fn from_slice<'a>(slice: &'a [u8]) -> Result<(IpHeader, IpPayload<'a>), err::ip::HeaderSliceError> {
+    pub fn from_slice<'a>(
+        slice: &'a [u8],
+    ) -> Result<(IpHeader, IpPayload<'a>), err::ip::HeaderSliceError> {
         use err::ip::{HeaderError::*, HeaderSliceError::*};
 
         if slice.is_empty() {
@@ -102,7 +104,7 @@ impl IpHeader {
                             len: header_length,
                             len_source: LenSource::Slice,
                             layer: Layer::Ipv4Packet,
-                            layer_start_offset: 0
+                            layer_start_offset: 0,
                         }));
                     }
 
@@ -111,7 +113,8 @@ impl IpHeader {
                         Ipv4HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
                             slice.as_ptr(),
                             header_length,
-                        )).to_header()
+                        ))
+                        .to_header()
                     };
 
                     let rest = unsafe {
@@ -123,28 +126,28 @@ impl IpHeader {
                         )
                     };
 
-                    let (exts, next_protocol, rest) = Ipv4Extensions::from_slice(header.protocol, rest)
-                        .map_err(|err| {
+                    let (exts, next_protocol, rest) =
+                        Ipv4Extensions::from_slice(header.protocol, rest).map_err(|err| {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
                                 I::Len(mut err) => {
                                     err.layer_start_offset += header_length;
                                     err.len_source = LenSource::Ipv4HeaderTotalLen;
                                     Len(err)
-                                },
+                                }
                                 I::Content(err) => Content(Ipv4Ext(err)),
                             }
                         })?;
-                    
+
                     let fragmented = header.is_fragmenting_payload();
                     Ok((
                         IpHeader::Version4(header, exts),
-                        IpPayload{
+                        IpPayload {
                             ip_number: IpNumber(next_protocol),
                             fragmented,
                             len_source: LenSource::Ipv4HeaderTotalLen,
                             payload: rest,
-                        }
+                        },
                     ))
                 }
                 6 => {
@@ -165,69 +168,76 @@ impl IpHeader {
                             Ipv6HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
                                 slice.as_ptr(),
                                 Ipv6Header::LEN,
-                            )).to_header()
+                            ))
+                            .to_header()
                         }
                     };
 
                     // restrict slice by the length specified in the header
-                    let (header_payload, len_source) = if 0 == header.payload_length && slice.len() > Ipv6Header::LEN {
-                        // In case the payload_length is 0 assume that the entire
-                        // rest of the slice is part of the packet until the jumbogram
-                        // parameters can be parsed.
+                    let (header_payload, len_source) =
+                        if 0 == header.payload_length && slice.len() > Ipv6Header::LEN {
+                            // In case the payload_length is 0 assume that the entire
+                            // rest of the slice is part of the packet until the jumbogram
+                            // parameters can be parsed.
 
-                        // TODO: Add payload length parsing from the jumbogram
-                        unsafe {
-                            (
-                                core::slice::from_raw_parts(
-                                    slice.as_ptr().add(Ipv6Header::LEN),
-                                    slice.len() - Ipv6Header::LEN,
-                                ),
-                                LenSource::Slice
-                            )
-                        }
-                    } else {
-                        let payload_len: usize = header.payload_length.into();
-                        let expected_len = Ipv6Header::LEN + payload_len;
-                        if slice.len() < expected_len {
-                            return Err(Len(LenError {
-                                required_len: expected_len,
-                                len: slice.len(),
-                                len_source: LenSource::Slice,
-                                layer: Layer::Ipv6Packet,
-                                layer_start_offset: 0,
-                            }));
-                        } else {
+                            // TODO: Add payload length parsing from the jumbogram
                             unsafe {
                                 (
-                                    core::slice::from_raw_parts(slice.as_ptr().add(Ipv6Header::LEN), payload_len),
-                                    LenSource::Ipv6HeaderPayloadLen
+                                    core::slice::from_raw_parts(
+                                        slice.as_ptr().add(Ipv6Header::LEN),
+                                        slice.len() - Ipv6Header::LEN,
+                                    ),
+                                    LenSource::Slice,
                                 )
                             }
-                        }
-                    };
-                    
-                    let (exts, next_header, rest) = Ipv6Extensions::from_slice(header.next_header, header_payload)
-                        .map_err(|err| {
-                            use err::ipv6_exts::HeaderSliceError as I;
-                            match err {
-                                I::Len(mut err) => {
-                                    err.layer_start_offset += Ipv6Header::LEN;
-                                    err.len_source = len_source;
-                                    Len(err)
-                                },
-                                I::Content(err) => Content(Ipv6Ext(err)),
+                        } else {
+                            let payload_len: usize = header.payload_length.into();
+                            let expected_len = Ipv6Header::LEN + payload_len;
+                            if slice.len() < expected_len {
+                                return Err(Len(LenError {
+                                    required_len: expected_len,
+                                    len: slice.len(),
+                                    len_source: LenSource::Slice,
+                                    layer: Layer::Ipv6Packet,
+                                    layer_start_offset: 0,
+                                }));
+                            } else {
+                                unsafe {
+                                    (
+                                        core::slice::from_raw_parts(
+                                            slice.as_ptr().add(Ipv6Header::LEN),
+                                            payload_len,
+                                        ),
+                                        LenSource::Ipv6HeaderPayloadLen,
+                                    )
+                                }
                             }
-                        })?;
-                    
+                        };
+
+                    let (exts, next_header, rest) =
+                        Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(
+                            |err| {
+                                use err::ipv6_exts::HeaderSliceError as I;
+                                match err {
+                                    I::Len(mut err) => {
+                                        err.layer_start_offset += Ipv6Header::LEN;
+                                        err.len_source = len_source;
+                                        Len(err)
+                                    }
+                                    I::Content(err) => Content(Ipv6Ext(err)),
+                                }
+                            },
+                        )?;
+
                     let fragmented = exts.is_fragmenting_payload();
                     Ok((
                         IpHeader::Version6(header, exts),
-                        IpPayload{
+                        IpPayload {
                             ip_number: IpNumber(next_header),
                             fragmented,
                             len_source,
                             payload: rest,
-                        }
+                        },
                     ))
                 }
                 version_number => Err(Content(UnsupportedIpVersion { version_number })),
@@ -237,9 +247,11 @@ impl IpHeader {
 
     /// Read an IPv4 header & extension headers from a slice and return the slice containing the payload
     /// according to the total_length field in the IPv4 header.
-    pub fn ipv4_from_slice<'a>(slice: &'a [u8]) -> Result<(IpHeader, IpPayload<'a>), err::ipv4::SliceError> {
+    pub fn ipv4_from_slice<'a>(
+        slice: &'a [u8],
+    ) -> Result<(IpHeader, IpPayload<'a>), err::ipv4::SliceError> {
         use err::ipv4::SliceError::*;
-        
+
         // read the header
         let (header, header_rest) = Ipv4Header::from_slice(slice).map_err(|err| {
             use err::ipv4::HeaderSliceError as I;
@@ -252,15 +264,13 @@ impl IpHeader {
         // limit rest based on ipv4 total length
         let payload_len: usize = header.payload_len.into();
         if payload_len > header_rest.len() {
-            return Err(
-                Len(err::LenError{
-                    required_len: payload_len + header.header_len(),
-                    len: slice.len(),
-                    len_source: LenSource::Slice,
-                    layer: Layer::Ipv4Packet,
-                    layer_start_offset: 0,
-                })
-            );
+            return Err(Len(err::LenError {
+                required_len: payload_len + header.header_len(),
+                len: slice.len(),
+                len_source: LenSource::Slice,
+                layer: Layer::Ipv4Packet,
+                layer_start_offset: 0,
+            }));
         }
         let header_rest = unsafe {
             // Safe as the payload_len <= header_rest.len is verfied above
@@ -276,7 +286,7 @@ impl IpHeader {
                         err.layer_start_offset += header.header_len();
                         err.len_source = LenSource::Ipv4HeaderTotalLen;
                         Len(err)
-                    },
+                    }
                     I::Content(err) => Exts(err),
                 }
             })?;
@@ -284,23 +294,25 @@ impl IpHeader {
         let fragmented = header.is_fragmenting_payload();
         Ok((
             IpHeader::Version4(header, exts),
-            IpPayload{
+            IpPayload {
                 ip_number: IpNumber(next_header),
                 fragmented,
                 len_source: LenSource::Ipv4HeaderTotalLen,
                 payload: exts_rest,
-            }
+            },
         ))
     }
 
     /// Read an IPv6 header & extension headers from a slice and return the slice
     /// containing the payload (e.g. TCP, UDP etc.) length limited by payload_length
     /// field in the IPv6 header.
-    /// 
+    ///
     /// Note that slice length is used as a fallback value in case the
     /// payload_length in the IPv6 is set to zero. This is a temporary workaround
     /// to partially support jumbograms.
-    pub fn ipv6_from_slice<'a>(slice: &'a [u8]) -> Result<(IpHeader, IpPayload<'a>), err::ipv6::SliceError> {
+    pub fn ipv6_from_slice<'a>(
+        slice: &'a [u8],
+    ) -> Result<(IpHeader, IpPayload<'a>), err::ipv6::SliceError> {
         use err::ipv6::SliceError::*;
 
         // read ipv6 header
@@ -313,56 +325,57 @@ impl IpHeader {
         })?;
 
         // restrict slice by the length specified in the header
-        let (header_payload, len_source) = if 0 == header.payload_length && slice.len() > Ipv6Header::LEN {
-            // In case the payload_length is 0 assume that the entire
-            // rest of the slice is part of the packet until the jumbogram
-            // parameters can be parsed.
+        let (header_payload, len_source) =
+            if 0 == header.payload_length && slice.len() > Ipv6Header::LEN {
+                // In case the payload_length is 0 assume that the entire
+                // rest of the slice is part of the packet until the jumbogram
+                // parameters can be parsed.
 
-            // TODO: Add payload length parsing from the jumbogram
-            (header_rest, LenSource::Slice)
-        } else {
-            let payload_len: usize = header.payload_length.into();
-            if header_rest.len() < payload_len {
-                return Err(Len(LenError {
-                    required_len: payload_len + Ipv6Header::LEN,
-                    len: slice.len(),
-                    len_source: LenSource::Slice,
-                    layer: Layer::Ipv6Packet,
-                    layer_start_offset: 0,
-                }));
+                // TODO: Add payload length parsing from the jumbogram
+                (header_rest, LenSource::Slice)
             } else {
-                unsafe {
-                    (
-                        core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
-                        LenSource::Ipv6HeaderPayloadLen
-                    )
+                let payload_len: usize = header.payload_length.into();
+                if header_rest.len() < payload_len {
+                    return Err(Len(LenError {
+                        required_len: payload_len + Ipv6Header::LEN,
+                        len: slice.len(),
+                        len_source: LenSource::Slice,
+                        layer: Layer::Ipv6Packet,
+                        layer_start_offset: 0,
+                    }));
+                } else {
+                    unsafe {
+                        (
+                            core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
+                            LenSource::Ipv6HeaderPayloadLen,
+                        )
+                    }
                 }
-            }
-        };
+            };
 
         // read ipv6 extensions headers
         let (exts, next_header, exts_rest) =
-        Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(|err| {
-            use err::ipv6_exts::HeaderSliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += Ipv6Header::LEN;
-                    err.len_source = len_source;
-                    Len(err)
-                },
-                I::Content(err) => Exts(err),
-            }
-        })?;
+            Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(|err| {
+                use err::ipv6_exts::HeaderSliceError as I;
+                match err {
+                    I::Len(mut err) => {
+                        err.layer_start_offset += Ipv6Header::LEN;
+                        err.len_source = len_source;
+                        Len(err)
+                    }
+                    I::Content(err) => Exts(err),
+                }
+            })?;
 
         let fragmented = exts.is_fragmenting_payload();
         Ok((
             IpHeader::Version6(header, exts),
-            IpPayload{
+            IpPayload {
                 ip_number: IpNumber(next_header),
                 fragmented,
                 len_source,
                 payload: exts_rest,
-            }
+            },
         ))
     }
 
@@ -532,8 +545,8 @@ impl IpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{ip_number::*, test_gens::*, *, err::LenSource};
-    use alloc::{format, vec::Vec, borrow::ToOwned};
+    use crate::{err::LenSource, ip_number::*, test_gens::*, *};
+    use alloc::{borrow::ToOwned, format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
 
@@ -694,7 +707,7 @@ mod test {
                     let actual = IpHeader::from_slice(&buffer).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
-                        actual.1, 
+                        actual.1,
                         IpPayload{
                             ip_number: IpNumber(header.next_header().unwrap()),
                             fragmented: header.is_fragmenting_payload(),

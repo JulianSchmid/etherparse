@@ -217,7 +217,9 @@ impl UdpHeader {
 
     /// Tries to read an udp header from the current position.
     #[cfg(feature = "std")]
-    pub fn read<T: std::io::Read + std::io::Seek + Sized>(reader: &mut T) -> Result<UdpHeader, std::io::Error> {
+    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
+        reader: &mut T,
+    ) -> Result<UdpHeader, std::io::Error> {
         let bytes = {
             let mut bytes: [u8; 8] = [0; 8];
             reader.read_exact(&mut bytes)?;
@@ -266,7 +268,7 @@ impl UdpHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
-    use alloc::{vec::Vec, format};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
 

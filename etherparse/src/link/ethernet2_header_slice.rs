@@ -94,8 +94,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
 mod test {
     use super::*;
     use crate::test_gens::*;
-    use proptest::prelude::*;
     use alloc::{format, vec::Vec};
+    use proptest::prelude::*;
 
     proptest! {
         #[test]

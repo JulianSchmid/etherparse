@@ -1,6 +1,6 @@
 use crate::{
     err::{ipv4::SliceError, Layer, LenError, LenSource},
-    IpAuthHeaderSlice, Ipv4ExtensionsSlice, Ipv4HeaderSlice, IpPayload, IpNumber,
+    IpAuthHeaderSlice, IpNumber, IpPayload, Ipv4ExtensionsSlice, Ipv4HeaderSlice,
 };
 
 /// Slice containing the IPv4 headers & payload.
@@ -81,8 +81,8 @@ impl<'a> Ipv4Slice<'a> {
                         ip_number: ip_number.into(),
                         fragmented,
                         len_source: LenSource::Ipv4HeaderTotalLen,
-                        payload
-                    }
+                        payload,
+                    },
                 })
             }
             ip_number => Ok(Ipv4Slice {
@@ -92,7 +92,7 @@ impl<'a> Ipv4Slice<'a> {
                     ip_number: ip_number.into(),
                     fragmented,
                     len_source: LenSource::Ipv4HeaderTotalLen,
-                    payload: header_payload
+                    payload: header_payload,
                 },
             }),
         }
@@ -136,7 +136,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_gens::*, Ipv4Header, ip_number};
+    use crate::{ip_number, test_gens::*, Ipv4Header};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
