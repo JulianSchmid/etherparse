@@ -10,6 +10,24 @@ pub enum InternetSlice<'a> {
 
 impl<'a> InternetSlice<'a> {
 
+    /// Returns a refernce to the `Ipv4Slice` if `self` is a `InternetSlice::Ipv4`.
+    pub fn ipv4(&self) -> Option<&Ipv4Slice> {
+        use InternetSlice::*;
+        match self {
+            Ipv4(slice) => Some(slice),
+            Ipv6(_) => None,
+        }
+    }
+
+    /// Returns a refernce to the `Ipv6Slice` if `self` is a `InternetSlice::Ipv6`.
+    pub fn ipv6(&self) -> Option<&Ipv6Slice> {
+        use InternetSlice::*;
+        match self {
+            Ipv4(_) => None,
+            Ipv6(slice) => Some(slice),
+        }
+    }
+
     /// Returns true if the payload is fragmented.
     pub fn is_fragmenting_payload(&self) -> bool {
         match self {
@@ -298,6 +316,8 @@ mod test {
     use super::*;
     use alloc::{format, vec::Vec};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use proptest::prelude::*;
+    use crate::test_gens::*;
 
     #[test]
     fn debug_clone_eq() {
@@ -558,6 +578,142 @@ mod test {
                     Ipv6Slice::from_slice(&data).unwrap()
                 ).payload_ip_number().0
             );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice(
+            ipv4_header in ipv4_any(),
+            ipv4_exts in ipv4_extensions_with(ip_number::UDP),
+            ipv6_header in ipv6_any(),
+            mut ipv6_exts in ipv6_extensions_with(ip_number::UDP)
+        ) {
+            let payload = [1,2,3,4];
+
+            // setup header length & fields
+            let ipv4_header = {
+                let mut header = ipv4_header;
+                header.protocol = if ipv4_exts.auth.is_some() {
+                    ip_number::AUTH
+                } else {
+                    ip_number::UDP
+                };
+                header.payload_len = (ipv4_exts.header_len() + payload.len()) as u16;
+                header.header_checksum = header.calc_header_checksum().unwrap();
+                header
+            };
+            
+            let ipv4 = IpHeader::Version4(
+                ipv4_header.clone(),
+                ipv4_exts.clone()
+            );
+
+            let ipv6_header = {
+                let mut header = ipv6_header;
+                header.next_header = ipv6_exts.set_next_headers(ip_number::UDP);
+                header.payload_length = (ipv6_exts.header_len() + payload.len()) as u16;
+                header
+            };
+
+            let ipv6 = IpHeader::Version6(
+                ipv6_header.clone(),
+                ipv6_exts.clone()
+            );
+
+            // happy path v4
+            {
+                // build packet
+                let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
+                ipv4.write(&mut data).unwrap();
+                data.extend_from_slice(&payload);
+
+                // run test
+                let actual = InternetSlice::from_ip_slice(&data).unwrap();
+                assert!(actual.ipv6().is_none());
+                let actual = actual.ipv4().unwrap().clone();
+                assert_eq!(actual.header.to_header(), ipv4_header);
+                assert_eq!(actual.extensions().to_header(), ipv4_exts);
+                assert_eq!(
+                    actual.payload,
+                    IpPayload{
+                        ip_number: ip_number::UDP.into(),
+                        fragmented: ipv4_header.is_fragmenting_payload(),
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        payload: &payload 
+                    }
+                );
+            }
+
+            // happy path v6
+            {
+                // build packet
+                let mut data = Vec::with_capacity(ipv6.header_len() + payload.len());
+                ipv6.write(&mut data).unwrap();
+                data.extend_from_slice(&payload);
+
+                // run test
+                let actual = crate::InternetSlice::from_ip_slice(&data).unwrap();
+                assert!(actual.ipv4().is_none());
+                let actual = actual.ipv6().unwrap().clone();
+                assert_eq!(actual.header.to_header(), ipv6_header);
+                assert_eq!(
+                    Ipv6Extensions::from_slice(
+                        ipv6_header.next_header,
+                        actual.extensions().slice()
+                    ).unwrap().0,
+                    ipv6_exts
+                );
+                assert_eq!(
+                    actual.payload,
+                    IpPayload{
+                        ip_number: ip_number::UDP.into(),
+                        fragmented: ipv6_exts.is_fragmenting_payload(),
+                        len_source: LenSource::Ipv6HeaderPayloadLen,
+                        payload: &payload 
+                    }
+                );
+            }
+
+            // ipv6 with zero payload length (should fallback to the slice length)
+            {
+                let ipv6_header = {
+                    let mut header = ipv6_header.clone();
+                    // set the payload length to zero so the payload identifier
+                    // has to fallback to the slice length
+                    header.payload_length = 0;
+                    header
+                };
+
+                // build packet
+                let mut data = Vec::with_capacity(ipv6.header_len() + payload.len());
+                ipv6_header.write(&mut data).unwrap();
+                ipv6_exts.write(&mut data, ipv6_header.next_header).unwrap();
+                data.extend_from_slice(&payload);
+
+                // run test
+                let actual = crate::InternetSlice::from_ip_slice(&data).unwrap();
+                assert!(actual.ipv4().is_none());
+                let actual = actual.ipv6().unwrap().clone();
+                assert_eq!(actual.header.to_header(), ipv6_header);
+                assert_eq!(
+                    Ipv6Extensions::from_slice(
+                        ipv6_header.next_header,
+                        actual.extensions().slice()
+                    ).unwrap().0,
+                    ipv6_exts
+                );
+                assert_eq!(
+                    actual.payload,
+                    IpPayload{
+                        ip_number: ip_number::UDP.into(),
+                        fragmented: ipv6_exts.is_fragmenting_payload(),
+                        len_source: LenSource::Slice,
+                        payload: &payload 
+                    }
+                );
+            }
+
         }
     }
 
