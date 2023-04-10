@@ -355,8 +355,6 @@ pub enum WriteError {
     IoError(std::io::Error),
     ///Error in the data that was given to write
     ValueError(ValueError),
-    ///Error when a given slice is not big enough to serialize the data.
-    SliceTooSmall(usize),
 }
 
 #[cfg(feature = "std")]
@@ -374,14 +372,6 @@ impl WriteError {
     pub fn value_error(self) -> Option<ValueError> {
         match self {
             WriteError::ValueError(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    /// Returns the expected minimum size if the error is an `SliceTooSmall`.
-    pub fn slice_too_small_size(self) -> Option<usize> {
-        match self {
-            WriteError::SliceTooSmall(value) => Some(value),
             _ => None,
         }
     }
@@ -410,9 +400,6 @@ impl core::fmt::Display for WriteError {
             ValueError(err) => {
                 write!(f, "ValueError: {}", err)
             }
-            SliceTooSmall(size) => {
-                write!(f, "SliceTooSmall: The slice given to write to is too small (required to be at least {} bytes large)", size)
-            }
         }
     }
 }
@@ -424,7 +411,6 @@ impl std::error::Error for WriteError {
         match self {
             IoError(ref err) => Some(err),
             ValueError(ref err) => Some(err),
-            SliceTooSmall(_) => None,
         }
     }
 }
