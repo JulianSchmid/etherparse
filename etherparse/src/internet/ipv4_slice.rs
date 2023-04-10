@@ -223,14 +223,15 @@ mod test {
                 prop_assert_eq!(actual.header().slice(), &data_without_ext[..ipv4_base.header_len()]);
                 prop_assert!(actual.extensions().auth.is_none());
                 prop_assert_eq!(
-                    actual.payload,
-                    IpPayload{
+                    &actual.payload,
+                    &IpPayload{
                         ip_number: ip_number::UDP.into(),
                         fragmented: ipv4_base.is_fragmenting_payload(),
                         len_source: LenSource::Ipv4HeaderTotalLen,
                         payload: &payload
                     }
                 );
+                prop_assert_eq!(actual.payload_ip_number(), ip_number::UDP.into());
             }
 
             // parsing with extensions
@@ -242,14 +243,15 @@ mod test {
                     IpAuthHeaderSlice::from_slice(&data_with_ext[ipv4_base.header_len()..]).unwrap()
                 );
                 prop_assert_eq!(
-                    actual.payload,
-                    IpPayload{
+                    &actual.payload,
+                    &IpPayload{
                         ip_number: auth.next_header.into(),
                         fragmented: ipv4_base.is_fragmenting_payload(),
                         len_source: LenSource::Ipv4HeaderTotalLen,
                         payload: &payload
                     }
                 );
+                prop_assert_eq!(actual.payload_ip_number(), auth.next_header.into());
             }
 
             // header length error
