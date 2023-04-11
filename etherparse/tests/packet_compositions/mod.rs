@@ -373,22 +373,23 @@ impl ComponentTest {
             }));
             result
         };
-        let setup_double = |outer_ether_type: EtherType, inner_ether_type: EtherType| -> ComponentTest {
-            let mut result = self.clone();
-            result.vlan = Some(VlanHeader::Double(DoubleVlanHeader {
-                outer: {
-                    let mut v = outer_vlan.clone();
-                    v.ether_type = outer_ether_type;
-                    v
-                },
-                inner: {
-                    let mut v = inner_vlan.clone();
-                    v.ether_type = inner_ether_type;
-                    v
-                },
-            }));
-            result
-        };
+        let setup_double =
+            |outer_ether_type: EtherType, inner_ether_type: EtherType| -> ComponentTest {
+                let mut result = self.clone();
+                result.vlan = Some(VlanHeader::Double(DoubleVlanHeader {
+                    outer: {
+                        let mut v = outer_vlan.clone();
+                        v.ether_type = outer_ether_type;
+                        v
+                    },
+                    inner: {
+                        let mut v = inner_vlan.clone();
+                        v.ether_type = inner_ether_type;
+                        v
+                    },
+                }));
+                result
+            };
 
         //single
         setup_single(inner_vlan.ether_type).run();

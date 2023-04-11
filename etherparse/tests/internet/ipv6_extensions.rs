@@ -402,7 +402,12 @@ impl ExtensionTestHeaders {
         }
     }
 
-    fn add_payload(&mut self, ip_number: IpNumber, next_header: IpNumber, header_ext_len: u8) -> bool {
+    fn add_payload(
+        &mut self,
+        ip_number: IpNumber,
+        next_header: IpNumber,
+        header_ext_len: u8,
+    ) -> bool {
         match ip_number {
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
                 use Ipv6RawExtHeader as R;

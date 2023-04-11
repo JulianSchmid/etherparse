@@ -548,8 +548,7 @@ mod test {
                 .unwrap();
             assert_eq!(
                 UDP,
-                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap())
-                    .payload_ip_number()
+                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload_ip_number()
             );
         }
 
@@ -569,8 +568,7 @@ mod test {
 
             assert_eq!(
                 IGMP,
-                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap())
-                    .payload_ip_number()
+                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).payload_ip_number()
             );
         }
     }

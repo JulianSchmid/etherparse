@@ -277,7 +277,7 @@ impl PacketBuilder {
     ///             source: [0;16],
     ///             destination: [0;16],
     ///             // payload_length & next_header will be replaced during write
-    ///             ..Default::default() 
+    ///             ..Default::default()
     ///         },
     ///         Default::default()))
     ///    .udp(21,    //source port
@@ -413,7 +413,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///             source: [0;16],
     ///             destination: [0;16],
     ///             // payload_length & next_header will be replaced during write
-    ///             ..Default::default() 
+    ///             ..Default::default()
     ///         },
     ///         Default::default()));
     /// ```
@@ -469,7 +469,7 @@ impl PacketBuilderStep<Ethernet2Header> {
             Ipv6Header {
                 traffic_class: 0,
                 flow_label: 0,
-                payload_length: 0, //filled in on write
+                payload_length: 0,          //filled in on write
                 next_header: IpNumber(255), //filled in on write
                 hop_limit,
                 source,
@@ -669,7 +669,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///             source: [0;16],
     ///             destination: [0;16],
     ///             // payload_length & next_header will be replaced during write
-    ///             ..Default::default() 
+    ///             ..Default::default()
     ///         },
     ///         Default::default() // IPv6 extension headers (default is none)
     ///     ));

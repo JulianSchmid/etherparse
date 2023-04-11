@@ -1,4 +1,4 @@
-use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader, EtherType};
+use crate::{EtherType, Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
 use alloc::vec::Vec;
 
 #[derive(Clone)]

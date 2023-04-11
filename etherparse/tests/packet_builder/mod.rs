@@ -85,7 +85,9 @@ fn ipv4() {
 
     // write
     serialized.reserve(builder.size(in_payload.len()));
-    builder.write(&mut serialized, 200.into(), &in_payload).unwrap();
+    builder
+        .write(&mut serialized, 200.into(), &in_payload)
+        .unwrap();
 
     //check the deserialized size
     assert_eq!(
@@ -167,7 +169,9 @@ fn ipv6() {
     );
 
     // write
-    builder.write(&mut serialized, 200.into(), &in_payload).unwrap();
+    builder
+        .write(&mut serialized, 200.into(), &in_payload)
+        .unwrap();
 
     //check the deserialized size
     assert_eq!(
