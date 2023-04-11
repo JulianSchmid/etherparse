@@ -1,7 +1,8 @@
 use super::*;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
 pub enum ElementFilter<T> {
+    #[default]
     Any,
     No,
     Some(T),
@@ -54,12 +55,6 @@ pub struct Filter {
     pub vlan: ElementFilter<VlanFilter>,
     pub ip: ElementFilter<IpFilter>,
     pub transport: ElementFilter<TransportFilter>,
-}
-
-impl<T> Default for ElementFilter<T> {
-    fn default() -> ElementFilter<T> {
-        ElementFilter::Any
-    }
 }
 
 impl LinkFilter {

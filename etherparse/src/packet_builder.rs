@@ -357,12 +357,11 @@ impl PacketBuilderStep<Ethernet2Header> {
     ) -> PacketBuilderStep<IpHeader> {
         //add ip header
         self.state.ip_header = Some(IpHeader::Version4(
-            {
-                let mut value: Ipv4Header = Default::default();
-                value.source = source;
-                value.destination = destination;
-                value.time_to_live = time_to_live;
-                value
+            Ipv4Header {
+                source,
+                destination,
+                time_to_live,
+                ..Default::default()
             },
             Default::default(),
         ));

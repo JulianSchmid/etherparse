@@ -160,7 +160,7 @@ impl Ipv4Header {
         use err::ipv4::HeaderReadError::*;
 
         let mut first_byte: [u8; 1] = [0; 1];
-        reader.read_exact(&mut first_byte).map_err(|err| Io(err))?;
+        reader.read_exact(&mut first_byte).map_err(Io)?;
 
         let version_number = first_byte[0] >> 4;
         if 4 != version_number {
@@ -186,7 +186,7 @@ impl Ipv4Header {
         header_raw[0] = first_byte;
         reader
             .read_exact(&mut header_raw[1..])
-            .map_err(|err| Io(err))?;
+            .map_err(Io)?;
 
         let ihl = header_raw[0] & 0xf;
 
@@ -247,7 +247,7 @@ impl Ipv4Header {
                 if options_len > 0 {
                     reader
                         .read_exact(&mut values[..options_len])
-                        .map_err(|err| Io(err))?;
+                        .map_err(Io)?;
                 }
                 values
             },

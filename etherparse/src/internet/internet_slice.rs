@@ -204,7 +204,7 @@ impl<'a> InternetSlice<'a> {
                                 header,
                                 exts: Ipv4ExtensionsSlice { auth: Some(auth) },
                                 payload: IpPayload {
-                                    ip_number: auth.next_header().into(),
+                                    ip_number: auth.next_header(),
                                     fragmented,
                                     len_source: LenSource::Ipv4HeaderTotalLen,
                                     payload,
@@ -215,7 +215,7 @@ impl<'a> InternetSlice<'a> {
                             header,
                             exts: Ipv4ExtensionsSlice { auth: None },
                             payload: IpPayload {
-                                ip_number: ip_number.into(),
+                                ip_number,
                                 fragmented,
                                 len_source: LenSource::Ipv4HeaderTotalLen,
                                 payload: header_payload,
@@ -304,7 +304,7 @@ impl<'a> InternetSlice<'a> {
                         header,
                         exts,
                         payload: IpPayload {
-                            ip_number: payload_ip_number.into(),
+                            ip_number: payload_ip_number,
                             fragmented,
                             len_source,
                             payload,

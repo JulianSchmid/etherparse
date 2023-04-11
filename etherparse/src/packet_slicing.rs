@@ -230,23 +230,19 @@ impl<'a> SlicedPacket<'a> {
     pub fn payload_ether_type(&self) -> Option<EtherType> {
         if self.ip.is_some() || self.transport.is_some() {
             None
-        } else {
-            if let Some(vlan) = &self.vlan {
-                use VlanSlice::*;
-                match vlan {
-                    SingleVlan(s) => Some(s.ether_type()),
-                    DoubleVlan(d) => Some(d.inner().ether_type()),
-                }
-            } else {
-                if let Some(link) = &self.link {
-                    use LinkSlice::*;
-                    match link {
-                        Ethernet2(eth) => Some(eth.ether_type()),
-                    }
-                } else {
-                    None
-                }
+        } else if let Some(vlan) = &self.vlan {
+            use VlanSlice::*;
+            match vlan {
+                SingleVlan(s) => Some(s.ether_type()),
+                DoubleVlan(d) => Some(d.inner().ether_type()),
             }
+        } else if let Some(link) = &self.link {
+            use LinkSlice::*;
+            match link {
+                Ethernet2(eth) => Some(eth.ether_type()),
+            }
+        } else {
+            None
         }
     }
 }
@@ -585,14 +581,11 @@ impl<'a> CursorSlice<'a> {
 
         let result = TcpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
             use err::tcp::HeaderSliceError::Len;
-            match &mut err {
-                Len(ref mut err) => {
-                    err.layer_start_offset += self.offset;
-                    if LenSource::Slice == err.len_source {
-                        err.len_source = self.len_source;
-                    }
+            if let Len(err) = &mut err{
+                err.layer_start_offset += self.offset;
+                if LenSource::Slice == err.len_source {
+                    err.len_source = self.len_source;
                 }
-                _ => {}
             }
             err
         })?;

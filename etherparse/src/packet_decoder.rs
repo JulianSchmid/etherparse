@@ -357,20 +357,14 @@ impl<'a> PacketHeaders<'a> {
     pub fn payload_ether_type(&self) -> Option<EtherType> {
         if self.ip.is_some() || self.transport.is_some() {
             None
-        } else {
-            if let Some(vlan) = &self.vlan {
-                use VlanHeader::*;
-                match vlan {
-                    Single(s) => Some(s.ether_type),
-                    Double(d) => Some(d.inner.ether_type),
-                }
-            } else {
-                if let Some(link) = &self.link {
-                    Some(link.ether_type)
-                } else {
-                    None
-                }
+        } else if let Some(vlan) = &self.vlan {
+            use VlanHeader::*;
+            match vlan {
+                Single(s) => Some(s.ether_type),
+                Double(d) => Some(d.inner.ether_type),
             }
+        } else {
+            self.link.as_ref().map(|l| l.ether_type)
         }
     }
 }

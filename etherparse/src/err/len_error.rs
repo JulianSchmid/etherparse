@@ -111,30 +111,28 @@ impl core::fmt::Display for LenError {
                     len_source
                 )
             }
+        } else if self.layer_start_offset > 0 {
+            write!(
+                f,
+                "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length ('{}' starts at overall parsed byte {}).",
+                self.layer.error_title(),
+                self.len,
+                self.layer,
+                self.required_len,
+                len_source,
+                self.layer,
+                self.layer_start_offset
+            )
         } else {
-            if self.layer_start_offset > 0 {
-                write!(
-                    f,
-                    "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length ('{}' starts at overall parsed byte {}).",
-                    self.layer.error_title(),
-                    self.len,
-                    self.layer,
-                    self.required_len,
-                    len_source,
-                    self.layer,
-                    self.layer_start_offset
-                )
-            } else {
-                write!(
-                    f,
-                    "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length.",
-                    self.layer.error_title(),
-                    self.len,
-                    self.layer,
-                    self.required_len,
-                    len_source
-                )
-            }
+            write!(
+                f,
+                "{}: Length of {} byte(s) is too big for an '{}' (maximum is {} bytes). The {} was used to determine the length.",
+                self.layer.error_title(),
+                self.len,
+                self.layer,
+                self.required_len,
+                len_source
+            )
         }
     }
 }
