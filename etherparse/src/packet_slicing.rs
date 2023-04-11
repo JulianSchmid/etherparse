@@ -581,7 +581,7 @@ impl<'a> CursorSlice<'a> {
 
         let result = TcpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
             use err::tcp::HeaderSliceError::Len;
-            if let Len(err) = &mut err{
+            if let Len(err) = &mut err {
                 err.layer_start_offset += self.offset;
                 if LenSource::Slice == err.len_source {
                     err.len_source = self.len_source;
