@@ -77,7 +77,7 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type Unknown(0x0001).",
+            "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type 0x0001.",
             format!("{}", NonVlanEtherType{ unexpected_ether_type: 1.into() })
         );
     }
