@@ -1087,6 +1087,7 @@ mod tests {
         hash::{Hash, Hasher},
     };
     use std::{collections::hash_map::DefaultHasher, format};
+    use proptest::prelude::*;
 
     #[test]
     fn is_ipv6_ext_header_value() {
@@ -1595,6 +1596,34 @@ mod tests {
     fn default() {
         let actual: IpNumber = Default::default();
         assert_eq!(actual, IpNumber(255));
+    }
+
+    proptest!{
+        #[test]
+        fn into(num in any::<u8>()) {
+            {
+                let converted: u8 = IpNumber(num).into();
+                assert_eq!(converted, num);
+            }
+            {
+                let converted: IpNumber = num.into();
+                assert_eq!(converted, IpNumber(num));
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from(num in any::<u8>()) {
+            {
+                let converted: u8 = u8::from(IpNumber(num));
+                assert_eq!(converted, num);
+            }
+            {
+                let converted: IpNumber = IpNumber::from(num);
+                assert_eq!(converted, IpNumber(num));
+            }
+        }
     }
 
     #[test]
