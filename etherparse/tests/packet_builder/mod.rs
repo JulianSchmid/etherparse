@@ -697,7 +697,7 @@ fn udp_builder_eth_vlan_ip_udp() {
             priority_code_point: 1,
             drop_eligible_indicator: true,
             vlan_identifier: 0x123,
-            ether_type: 0, //should be overwritten
+            ether_type: 0.into(), //should be overwritten
         }))
         .ip(IpHeader::Version6(
             Ipv6Header {

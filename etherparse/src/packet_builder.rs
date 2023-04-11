@@ -129,7 +129,7 @@ impl PacketBuilder {
                 ethernet2_header: Some(Ethernet2Header {
                     source,
                     destination,
-                    ether_type: 0, //the type identifier
+                    ether_type: EtherType(0), //the type identifier
                 }),
                 vlan_header: None,
                 ip_header: None,
@@ -502,7 +502,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///             priority_code_point: 0,
     ///             drop_eligible_indicator: false,
     ///             vlan_identifier: 0x123,
-    ///             ether_type: 0 // will be overwritten during write
+    ///             ether_type: 0.into() // will be overwritten during write
     ///         }))
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
@@ -563,7 +563,7 @@ impl PacketBuilderStep<Ethernet2Header> {
             priority_code_point: 0,
             drop_eligible_indicator: false,
             vlan_identifier,
-            ether_type: 0, //will be set automatically during write
+            ether_type: EtherType(0), //will be set automatically during write
         }));
         //return for next step
         PacketBuilderStep {
@@ -612,13 +612,13 @@ impl PacketBuilderStep<Ethernet2Header> {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
                 vlan_identifier: outer_vlan_identifier,
-                ether_type: 0, //will be set automatically during write
+                ether_type: EtherType(0), //will be set automatically during write
             },
             inner: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
                 vlan_identifier: inner_vlan_identifier,
-                ether_type: 0, //will be set automatically during write
+                ether_type: EtherType(0), //will be set automatically during write
             },
         }));
         //return for next step

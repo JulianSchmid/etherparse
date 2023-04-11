@@ -158,7 +158,7 @@ impl<'a> SlicedPacket<'a> {
     /// }
     /// ```
     pub fn from_ether_type(
-        ether_type: u16,
+        ether_type: EtherType,
         data: &'a [u8],
     ) -> Result<SlicedPacket, err::packet::EthSliceError> {
         use ether_type::*;
@@ -227,7 +227,7 @@ impl<'a> SlicedPacket<'a> {
     /// In case that `ip` and/or `transport` fields are the filled None
     /// is returned, as the payload contents then are defined by a
     /// lower layer protocol described in these fields.
-    pub fn payload_ether_type(&self) -> Option<u16> {
+    pub fn payload_ether_type(&self) -> Option<EtherType> {
         if self.ip.is_some() || self.transport.is_some() {
             None
         } else {
@@ -620,7 +620,7 @@ mod test {
     };
     use crate::test_packet::TestPacket;
 
-    const VLAN_ETHER_TYPES: [u16; 3] = [
+    const VLAN_ETHER_TYPES: [EtherType; 3] = [
         ether_type::VLAN_TAGGED_FRAME,
         ether_type::PROVIDER_BRIDGING,
         ether_type::VLAN_DOUBLE_TAGGED_FRAME,
@@ -641,7 +641,7 @@ mod test {
             let eth = Ethernet2Header {
                 source: [1, 2, 3, 4, 5, 6],
                 destination: [1, 2, 3, 4, 5, 6],
-                ether_type: 0,
+                ether_type: 0.into(),
             };
             let test = TestPacket {
                 link: Some(eth.clone()),
@@ -686,7 +686,7 @@ mod test {
                 priority_code_point: 1,
                 drop_eligible_indicator: false,
                 vlan_identifier: 2,
-                ether_type: 3,
+                ether_type: 3.into(),
             };
 
             for vlan_ether_type in VLAN_ETHER_TYPES {
@@ -735,7 +735,7 @@ mod test {
                         priority_code_point: 1,
                         drop_eligible_indicator: false,
                         vlan_identifier: 2,
-                        ether_type: 3,
+                        ether_type: 3.into(),
                     },
                 };
                 let mut test = base.clone();

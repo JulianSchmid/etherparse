@@ -1,4 +1,4 @@
-use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
+use crate::{Ethernet2Header, IpHeader, TransportHeader, VlanHeader, EtherType};
 use alloc::vec::Vec;
 
 #[derive(Clone)]
@@ -45,7 +45,7 @@ impl TestPacket {
         result
     }
 
-    pub fn set_ether_type(&mut self, ether_type: u16) {
+    pub fn set_ether_type(&mut self, ether_type: EtherType) {
         if let Some(vlan) = &mut self.vlan {
             use VlanHeader::*;
             match vlan {

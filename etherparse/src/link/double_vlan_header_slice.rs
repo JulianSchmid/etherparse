@@ -103,7 +103,7 @@ mod test {
         fn from_slice(
             input in vlan_double_any(),
             dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
-            ether_type_non_vlan in any::<u16>().prop_filter(
+            ether_type_non_vlan in ether_type_any().prop_filter(
                 "ether_type must not be a vlan ether type",
                 |v| !VlanHeader::VLAN_ETHER_TYPES.iter().any(|&x| v == &x)
             )

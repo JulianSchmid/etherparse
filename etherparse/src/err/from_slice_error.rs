@@ -309,6 +309,8 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 
 #[cfg(test)]
 mod tests {
+    use crate::EtherType;
+
     use super::{FromSliceError::*, *};
     use core::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
@@ -354,7 +356,7 @@ mod tests {
             (
                 "DoubleVlan",
                 DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                    unexpected_ether_type: 123,
+                    unexpected_ether_type: EtherType(123),
                 }),
             ),
             (
@@ -401,7 +403,7 @@ mod tests {
                 layer_start_offset: 0,
             }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 123,
+                unexpected_ether_type: EtherType(123),
             }),
             Ip(ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
@@ -429,7 +431,7 @@ mod tests {
             layer_start_offset: 0,
         };
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1,
+            unexpected_ether_type: EtherType(1),
         };
         let ip_error = || ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -498,7 +500,7 @@ mod tests {
         // double vlan errors
         {
             let header_error = || double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 123,
+                unexpected_ether_type: EtherType(123),
             };
             assert_eq!(
                 &header_error(),

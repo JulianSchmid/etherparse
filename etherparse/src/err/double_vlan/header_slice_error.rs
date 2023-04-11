@@ -77,11 +77,11 @@ mod tests {
         );
         assert_eq!(
             Content(HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1
+                unexpected_ether_type: 1.into()
             })
             .add_slice_offset(200),
             Content(HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1
+                unexpected_ether_type: 1.into()
             })
         );
     }
@@ -89,7 +89,7 @@ mod tests {
     #[test]
     fn debug() {
         let err = HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1,
+            unexpected_ether_type: 1.into(),
         };
         assert_eq!(
             format!("Content({:?})", err.clone()),
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn clone_eq_hash() {
         let err = Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1,
+            unexpected_ether_type: 1.into(),
         });
         assert_eq!(err, err.clone());
         let hash_a = {
@@ -130,7 +130,7 @@ mod tests {
         }
         {
             let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1,
+                unexpected_ether_type: 1.into(),
             };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
@@ -149,7 +149,7 @@ mod tests {
         .source()
         .is_some());
         assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1
+            unexpected_ether_type: 1.into()
         })
         .source()
         .is_some());

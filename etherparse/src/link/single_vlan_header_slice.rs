@@ -86,10 +86,10 @@ impl<'a> SingleVlanHeaderSlice<'a> {
 
     /// Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.
     #[inline]
-    pub fn ether_type(&self) -> u16 {
+    pub fn ether_type(&self) -> EtherType {
         // SAFETY:
         // Slice len checked in constructor to be at least 4.
-        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
+        EtherType(unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) })
     }
 
     /// Decode all the fields and copy the results to a SingleVlanHeader struct

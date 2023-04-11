@@ -15,12 +15,21 @@ pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
     ]
 }
 
-pub fn vlan_ethertype_any() -> impl Strategy<Value = u16> {
+pub fn vlan_ethertype_any() -> impl Strategy<Value = EtherType> {
     prop_oneof![
         Just(ether_type::VLAN_TAGGED_FRAME),
         Just(ether_type::PROVIDER_BRIDGING),
         Just(ether_type::VLAN_DOUBLE_TAGGED_FRAME),
     ]
+}
+
+prop_compose! {
+    pub fn ether_type_any()
+        (value in any::<u16>())
+        -> EtherType
+    {
+        EtherType(value)
+    }
 }
 
 prop_compose! {
@@ -33,7 +42,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ethernet_2_with(ether_type: u16)(
+    pub fn ethernet_2_with(ether_type: EtherType)(
         source in prop::array::uniform6(any::<u8>()),
         dest in prop::array::uniform6(any::<u8>()),
         ether_type in proptest::strategy::Just(ether_type))
@@ -49,7 +58,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ethernet_2_any()
-        (ether_type in any::<u16>())
+        (ether_type in ether_type_any())
         (result in ethernet_2_with(ether_type))
         -> Ethernet2Header
     {
@@ -57,7 +66,7 @@ prop_compose! {
     }
 }
 
-pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [u16] = &[
+pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
     ether_type::IPV4,
     ether_type::IPV6,
     ether_type::VLAN_TAGGED_FRAME,
@@ -69,7 +78,7 @@ prop_compose! {
     pub fn ethernet_2_unknown()(
         source in prop::array::uniform6(any::<u8>()),
         dest in prop::array::uniform6(any::<u8>()),
-        ether_type in any::<u16>().prop_filter("ether_type must be unknown",
+        ether_type in ether_type_any().prop_filter("ether_type must be unknown",
             |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
         -> Ethernet2Header
     {
@@ -86,7 +95,7 @@ prop_compose! {
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
         vlan_identifier in prop::bits::u16::between(0,12),
-        ether_type in any::<u16>().prop_filter("ether_type must be unknown",
+        ether_type in ether_type_any().prop_filter("ether_type must be unknown",
             |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
         -> SingleVlanHeader
     {
@@ -100,7 +109,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn vlan_single_with(ether_type: u16)(
+    pub fn vlan_single_with(ether_type: EtherType)(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
         vlan_identifier in prop::bits::u16::between(0,12),
@@ -118,7 +127,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_single_any()
-        (ether_type in any::<u16>())
+        (ether_type in ether_type_any())
         (result in vlan_single_with(ether_type))
         -> SingleVlanHeader
     {
@@ -128,7 +137,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_double_any()
-        (ether_type in any::<u16>())
+        (ether_type in ether_type_any())
         (result in vlan_double_with(ether_type))
         -> DoubleVlanHeader
     {
@@ -137,7 +146,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn vlan_double_with(ether_type: u16)(
+    pub fn vlan_double_with(ether_type: EtherType)(
         outer_ethertype in vlan_ethertype_any(),
         inner_ethertype in proptest::strategy::Just(ether_type)
     )(

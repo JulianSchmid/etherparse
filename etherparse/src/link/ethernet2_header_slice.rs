@@ -73,11 +73,11 @@ impl<'a> Ethernet2HeaderSlice<'a> {
 
     /// Read the ether_type field of the header (in system native byte order).
     #[inline]
-    pub fn ether_type(&self) -> u16 {
+    pub fn ether_type(&self) -> EtherType {
         // SAFETY:
         // Safe as the contructor checks that the slice has
         // at least the length of Ethernet2Header::LEN (14).
-        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) }
+        EtherType(unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) })
     }
 
     /// Decode all the fields and copy the results to a Ipv4Header struct

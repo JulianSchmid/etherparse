@@ -1,5 +1,33 @@
 /// Represents an "Ethertype" present in a Ethernet II header.
-#[derive(Clone, Copy, Eq, PartialEq)]
+/// 
+/// You can access the underlying `u16` value by using `.0` and any `u16`
+/// can be converted to an `EtherType`:
+/// 
+/// ```
+/// use etherparse::EtherType;
+///
+/// assert_eq!(EtherType::IPV4.0, 0x0800);
+/// assert_eq!(EtherType::IPV4, EtherType(0x0800));
+/// 
+/// // convert to EtherType using the from & into trait
+/// let ether_type: EtherType = 0x0800.into();
+/// assert_eq!(EtherType::IPV4, ether_type);
+/// 
+/// // convert to u16 using the from & into trait
+/// let num: u16 = EtherType::IPV4.into();
+/// assert_eq!(0x0800, num);
+/// ```
+///
+/// The constants are also defined in the `ether_type` module so they can
+/// be used without the need to write `EtherType::` in front of them:
+/// 
+/// ```
+/// use etherparse::{ether_type::IPV4, EtherType};
+/// 
+/// assert_eq!(IPV4, EtherType::IPV4);
+/// ```
+///
+#[derive(PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub struct EtherType(pub u16);
 
 impl EtherType {
@@ -10,6 +38,12 @@ impl EtherType {
     pub const VLAN_TAGGED_FRAME: EtherType = Self(0x8100);
     pub const PROVIDER_BRIDGING: EtherType = Self(0x88A8);
     pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = Self(0x9100);
+}
+
+impl Default for EtherType {
+    fn default() -> Self {
+        Self(0)
+    }
 }
 
 impl From<u16> for EtherType {
@@ -34,46 +68,47 @@ impl core::fmt::Debug for EtherType {
             Self::VLAN_TAGGED_FRAME => write!(f, "VlanTaggedFrame({:#06X})", self.0),
             Self::PROVIDER_BRIDGING => write!(f, "ProviderBridging({:#06X})", self.0),
             Self::VLAN_DOUBLE_TAGGED_FRAME => write!(f, "VlanDoubleTaggedFrame({:#06X})", self.0),
-            _ => write!(f, "UnknownType({:#06X})", self.0),
+            _ => write!(f, "Unknown({:#06X})", self.0),
         }
     }
 }
 
-/// `u16` constants for the most used `ether_type` values.
+/// Constants for the ethertype values for easy importing (e.g. `use ether_type::*;`).
 ///
-/// `ether_type` values are used in the Ethernet II header and the
-/// vlan headers to identify the next header type.
-///
-/// Although there is a [`EtherType`] representation for every u16 value,
-/// the constants in this module are limited to the known values supported
-/// by the current implementation.
-///
-///
+/// The constants only exist for convenience so you can import them
+/// (`use ether_type::*`) without a need to write `EtherType::` in front
+/// of every constant. 
+/// 
+/// You can access the underlying `u16` value by using `.0` and any `u16`
+/// can be converted to an `EtherType`:
+/// 
 /// ```
-/// use etherparse::{ether_type, EtherType};
+/// use etherparse::{ether_type::IPV4, EtherType};
 ///
-/// assert_eq!(ether_type::IPV4, EtherType::IPV4.0);
-/// assert_eq!(ether_type::IPV4, u16::from(EtherType::IPV4));
+/// assert_eq!(IPV4.0, 0x0800);
+/// assert_eq!(IPV4, EtherType(0x0800));
+/// let num: EtherType = 0x0800.into();
+/// assert_eq!(IPV4, num);
 /// ```
 pub mod ether_type {
     use super::EtherType;
 
-    pub const IPV4: u16 = EtherType::IPV4.0;
-    pub const IPV6: u16 = EtherType::IPV6.0;
-    pub const ARP: u16 = EtherType::ARP.0;
-    pub const WAKE_ON_LAN: u16 = EtherType::WAKE_ON_LAN.0;
-    pub const VLAN_TAGGED_FRAME: u16 = EtherType::VLAN_TAGGED_FRAME.0;
-    pub const PROVIDER_BRIDGING: u16 = EtherType::PROVIDER_BRIDGING.0;
-    pub const VLAN_DOUBLE_TAGGED_FRAME: u16 = EtherType::VLAN_DOUBLE_TAGGED_FRAME.0;
+    pub const IPV4: EtherType = EtherType::IPV4;
+    pub const IPV6: EtherType = EtherType::IPV6;
+    pub const ARP: EtherType = EtherType::ARP;
+    pub const WAKE_ON_LAN: EtherType = EtherType::WAKE_ON_LAN;
+    pub const VLAN_TAGGED_FRAME: EtherType = EtherType::VLAN_TAGGED_FRAME;
+    pub const PROVIDER_BRIDGING: EtherType = EtherType::PROVIDER_BRIDGING;
+    pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = EtherType::VLAN_DOUBLE_TAGGED_FRAME;
 }
 
 #[cfg(test)]
 mod test {
+    use crate::{EtherType, ether_type};
     use alloc::format;
 
     #[test]
     fn to_u16() {
-        use crate::EtherType;
         assert_eq!(0x0800, u16::from(EtherType::IPV4));
         assert_eq!(0x86dd, u16::from(EtherType::IPV6));
         assert_eq!(0x0806, u16::from(EtherType::ARP));
@@ -85,7 +120,6 @@ mod test {
 
     #[test]
     fn from_u16() {
-        use crate::EtherType;
         assert_eq!(EtherType::from(0x0800), EtherType::IPV4);
         assert_eq!(EtherType::from(0x86dd), EtherType::IPV6);
         assert_eq!(EtherType::from(0x0806), EtherType::ARP);
@@ -98,8 +132,7 @@ mod test {
 
     #[test]
     fn constants() {
-        use crate::ether_type::*;
-        use crate::EtherType;
+        use ether_type::*;
         let pairs = &[
             (EtherType::IPV4, IPV4),
             (EtherType::IPV6, IPV6),
@@ -114,13 +147,12 @@ mod test {
         ];
 
         for (ether_type, constant) in pairs {
-            assert_eq!(u16::from(ether_type.clone()), *constant);
+            assert_eq!(ether_type, constant);
         }
     }
 
     #[test]
     fn dbg() {
-        use crate::EtherType;
         let pairs = &[
             (EtherType::IPV4, "Ipv4(0x0800)"),
             (EtherType::IPV6, "Ipv6(0x86DD)"),
@@ -132,6 +164,7 @@ mod test {
                 EtherType::VLAN_DOUBLE_TAGGED_FRAME,
                 "VlanDoubleTaggedFrame(0x9100)",
             ),
+            (EtherType(1), "Unknown(0x0001)"),
         ];
 
         for (ether_type, str_value) in pairs {
@@ -140,8 +173,13 @@ mod test {
     }
 
     #[test]
+    fn default() {
+        let value: EtherType = Default::default();
+        assert_eq!(EtherType(0), value);
+    }
+
+    #[test]
     fn clone_eq() {
-        use crate::EtherType;
         let values = &[
             EtherType::IPV4,
             EtherType::IPV6,
@@ -164,5 +202,32 @@ mod test {
                 assert_eq!(a_pos != b_pos, a != b);
             }
         }
+    }
+
+    #[test]
+    fn hash_ord() {
+        use core::cmp::Ordering;
+        use std::collections::hash_map::DefaultHasher;
+        use core::hash::{Hash, Hasher};
+
+        // hash
+        let a_hash = {
+            let mut s = DefaultHasher::new();
+            EtherType::IPV4.hash(&mut s);
+            s.finish()
+        };
+        let b_hash = {
+            let mut s = DefaultHasher::new();
+            EtherType::IPV4.hash(&mut s);
+            s.finish()
+        };
+        assert_eq!(a_hash, b_hash);
+
+        // order
+        assert_eq!(
+            EtherType::IPV4.cmp(&EtherType::IPV4.clone()),
+            Ordering::Equal
+        );
+        assert!(EtherType::IPV4.ge(&EtherType::IPV4.clone()));
     }
 }
