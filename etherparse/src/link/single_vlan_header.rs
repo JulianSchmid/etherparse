@@ -10,7 +10,7 @@ pub struct SingleVlanHeader {
     /// 12 bits vland identifier.
     pub vlan_identifier: u16,
     /// "Tag protocol identifier": Type id of content after this header. Refer to the "EtherType" for a list of possible supported values.
-    pub ether_type: u16,
+    pub ether_type: EtherType,
 }
 
 impl SingleVlanHeader {
@@ -43,7 +43,7 @@ impl SingleVlanHeader {
             priority_code_point: (bytes[0] >> 5) & 0b0000_0111u8,
             drop_eligible_indicator: 0 != (bytes[0] & 0b0001_0000u8),
             vlan_identifier: u16::from_be_bytes([bytes[0] & 0b0000_1111u8, bytes[1]]),
-            ether_type: u16::from_be_bytes([bytes[2], bytes[3]]),
+            ether_type: EtherType(u16::from_be_bytes([bytes[2], bytes[3]])),
         }
     }
 
@@ -89,7 +89,7 @@ impl SingleVlanHeader {
 
         // serialize
         let id_be = self.vlan_identifier.to_be_bytes();
-        let eth_type_be = self.ether_type.to_be_bytes();
+        let eth_type_be = self.ether_type.0.to_be_bytes();
         Ok([
             (if self.drop_eligible_indicator {
                 id_be[0] | 0x10
@@ -208,7 +208,7 @@ mod test {
                 assert_eq!(&buffer[..], &input.to_bytes().unwrap());
                 {
                     let id_be = input.vlan_identifier.to_be_bytes();
-                    let eth_type_be = input.ether_type.to_be_bytes();
+                    let eth_type_be = input.ether_type.0.to_be_bytes();
                     assert_eq!(
                         input.to_bytes().unwrap(),
                         [
@@ -306,7 +306,7 @@ mod test {
         assert_eq!(0, actual.priority_code_point);
         assert_eq!(false, actual.drop_eligible_indicator);
         assert_eq!(0, actual.vlan_identifier);
-        assert_eq!(0, actual.ether_type);
+        assert_eq!(0, actual.ether_type.0);
     }
 
     proptest! {
@@ -321,7 +321,7 @@ mod test {
         fn dbg(input in vlan_single_any()) {
             assert_eq!(
                 &format!(
-                    "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {}, ether_type: {} }}",
+                    "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {}, ether_type: {:?} }}",
                     input.priority_code_point,
                     input.drop_eligible_indicator,
                     input.vlan_identifier,

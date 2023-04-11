@@ -1,3 +1,5 @@
+use crate::EtherType;
+
 /// Errors in an double vlan header encountered while decoding it.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
@@ -6,7 +8,7 @@ pub enum HeaderError {
     NonVlanEtherType {
         /// Non-VLAN ether type encountered in the outer vlan
         /// header.
-        unexpected_ether_type: u16,
+        unexpected_ether_type: EtherType,
     },
 }
 
@@ -14,7 +16,7 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            NonVlanEtherType { unexpected_ether_type } => write!(f, "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type {}.", unexpected_ether_type),
+            NonVlanEtherType { unexpected_ether_type } => write!(f, "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type {:?}.", unexpected_ether_type),
         }
     }
 }
@@ -28,6 +30,7 @@ impl std::error::Error for HeaderError {
 
 #[cfg(test)]
 mod tests {
+    use crate::EtherType;
     use super::HeaderError::*;
     use alloc::format;
     use std::{
@@ -39,11 +42,14 @@ mod tests {
     #[test]
     fn debug() {
         assert_eq!(
-            "NonVlanEtherType { unexpected_ether_type: 1 }",
+            format!(
+                "NonVlanEtherType {{ unexpected_ether_type: {:?} }}",
+                EtherType(1)
+            ),
             format!(
                 "{:?}",
                 NonVlanEtherType {
-                    unexpected_ether_type: 1
+                    unexpected_ether_type: 1.into()
                 }
             )
         );
@@ -52,7 +58,7 @@ mod tests {
     #[test]
     fn clone_eq_hash() {
         let err = NonVlanEtherType {
-            unexpected_ether_type: 1,
+            unexpected_ether_type: 1.into(),
         };
         assert_eq!(err, err.clone());
         let hash_a = {
@@ -71,8 +77,8 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type 1.",
-            format!("{}", NonVlanEtherType{ unexpected_ether_type: 1 })
+            "Double VLAN Error: Expected two VLAN headers but the outer VLAN header is followed by a non-VLAN header of ether type Unknown(0x0001).",
+            format!("{}", NonVlanEtherType{ unexpected_ether_type: 1.into() })
         );
     }
 
@@ -80,7 +86,7 @@ mod tests {
     #[test]
     fn source() {
         assert!(NonVlanEtherType {
-            unexpected_ether_type: 1
+            unexpected_ether_type: 1.into()
         }
         .source()
         .is_none());

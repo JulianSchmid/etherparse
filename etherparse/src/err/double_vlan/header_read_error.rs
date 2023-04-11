@@ -68,7 +68,7 @@ mod test {
     #[test]
     fn debug() {
         let err = HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1,
+            unexpected_ether_type: 1.into(),
         };
         assert_eq!(
             format!("Content({:?})", err.clone()),
@@ -90,7 +90,7 @@ mod test {
         }
         {
             let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1,
+                unexpected_ether_type: 1.into(),
             };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
@@ -106,7 +106,7 @@ mod test {
         .source()
         .is_some());
         assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1
+            unexpected_ether_type: 1.into()
         })
         .source()
         .is_some());
@@ -121,7 +121,7 @@ mod test {
         .io_error()
         .is_some());
         assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1
+            unexpected_ether_type: 1.into()
         })
         .io_error()
         .is_none());
@@ -139,7 +139,7 @@ mod test {
         );
         {
             let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1,
+                unexpected_ether_type: 1.into(),
             };
             assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }

@@ -11,7 +11,7 @@ pub enum VlanHeader {
 
 impl VlanHeader {
     /// All ether types that identify a vlan header.
-    pub const VLAN_ETHER_TYPES: [u16; 3] = [
+    pub const VLAN_ETHER_TYPES: [EtherType; 3] = [
         ether_type::VLAN_TAGGED_FRAME,
         ether_type::PROVIDER_BRIDGING,
         ether_type::VLAN_DOUBLE_TAGGED_FRAME,

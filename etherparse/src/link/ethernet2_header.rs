@@ -5,7 +5,7 @@ use crate::{err::Layer, err::SliceWriteSpaceError, *};
 pub struct Ethernet2Header {
     pub source: [u8; 6],
     pub destination: [u8; 6],
-    pub ether_type: u16,
+    pub ether_type: EtherType,
 }
 
 impl Ethernet2Header {
@@ -37,7 +37,7 @@ impl Ethernet2Header {
         Ethernet2Header {
             destination: [bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]],
             source: [bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11]],
-            ether_type: u16::from_be_bytes([bytes[12], bytes[13]]),
+            ether_type: EtherType(u16::from_be_bytes([bytes[12], bytes[13]])),
         }
     }
 
@@ -94,7 +94,7 @@ impl Ethernet2Header {
     /// sized byte array.
     #[inline]
     pub fn to_bytes(&self) -> [u8; 14] {
-        let ether_type_be = self.ether_type.to_be_bytes();
+        let ether_type_be = self.ether_type.0.to_be_bytes();
         [
             self.destination[0],
             self.destination[1],
@@ -258,7 +258,7 @@ mod test {
     proptest! {
         #[test]
         fn to_bytes(input in ethernet_2_any()) {
-            let ether_type_be = input.ether_type.to_be_bytes();
+            let ether_type_be = input.ether_type.0.to_be_bytes();
             assert_eq!(
                 input.to_bytes(),
                 [
@@ -293,7 +293,7 @@ mod test {
         fn dbg(input in ethernet_2_any()) {
             assert_eq!(
                 &format!(
-                    "Ethernet2Header {{ source: {:?}, destination: {:?}, ether_type: {} }}",
+                    "Ethernet2Header {{ source: {:?}, destination: {:?}, ether_type: {:?} }}",
                     input.source,
                     input.destination,
                     input.ether_type

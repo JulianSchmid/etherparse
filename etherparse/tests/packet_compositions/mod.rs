@@ -9,10 +9,10 @@ struct ComponentTest {
     payload: Vec<u8>,
 }
 
-static VLAN_ETHER_TYPES: &'static [u16] = &[
-    EtherType::VLAN_TAGGED_FRAME.0,
-    EtherType::PROVIDER_BRIDGING.0,
-    EtherType::VLAN_DOUBLE_TAGGED_FRAME.0,
+static VLAN_ETHER_TYPES: &'static [EtherType] = &[
+    EtherType::VLAN_TAGGED_FRAME,
+    EtherType::PROVIDER_BRIDGING,
+    EtherType::VLAN_DOUBLE_TAGGED_FRAME,
 ];
 
 impl ComponentTest {
@@ -364,7 +364,7 @@ impl ComponentTest {
         icmpv4: &Icmpv4Header,
         icmpv6: &Icmpv6Header,
     ) {
-        let setup_single = |ether_type: u16| -> ComponentTest {
+        let setup_single = |ether_type: EtherType| -> ComponentTest {
             let mut result = self.clone();
             result.vlan = Some(VlanHeader::Single({
                 let mut v = inner_vlan.clone();
@@ -373,7 +373,7 @@ impl ComponentTest {
             }));
             result
         };
-        let setup_double = |outer_ether_type: u16, inner_ether_type: u16| -> ComponentTest {
+        let setup_double = |outer_ether_type: EtherType, inner_ether_type: EtherType| -> ComponentTest {
             let mut result = self.clone();
             result.vlan = Some(VlanHeader::Double(DoubleVlanHeader {
                 outer: {
@@ -568,7 +568,7 @@ proptest! {
                          ref icmpv6 in icmpv6_header_any(),
                          ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
-        let setup_eth = | ether_type: u16 | -> ComponentTest {
+        let setup_eth = | ether_type: EtherType | -> ComponentTest {
             ComponentTest {
                 payload: payload.clone(),
                 link: Some({
@@ -610,7 +610,7 @@ fn test_packet_slicing_panics() {
         link: Some(Ethernet2Header {
             source: [0; 6],
             destination: [0; 6],
-            ether_type: 0,
+            ether_type: 0.into(),
         }),
         vlan: None,
         ip: None,

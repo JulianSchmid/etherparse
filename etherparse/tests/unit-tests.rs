@@ -31,7 +31,7 @@ fn test_debug_write() {
         let input = Ethernet2Header {
             destination: [1, 2, 3, 4, 5, 6],
             source: [10, 11, 12, 13, 14, 15],
-            ether_type: 0x0800,
+            ether_type: 0x0800.into(),
         };
 
         //serialize
