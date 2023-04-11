@@ -44,14 +44,14 @@ prop_compose! {
 prop_compose! {
     pub fn ethernet_2_with(ether_type: EtherType)(
         source in prop::array::uniform6(any::<u8>()),
-        dest in prop::array::uniform6(any::<u8>()),
+        destination in prop::array::uniform6(any::<u8>()),
         ether_type in proptest::strategy::Just(ether_type))
         -> Ethernet2Header
     {
         Ethernet2Header {
-            source: source,
-            destination: dest,
-            ether_type: ether_type
+            source,
+            destination,
+            ether_type,
         }
     }
 }
@@ -66,7 +66,7 @@ prop_compose! {
     }
 }
 
-pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
+pub static ETHERNET_KNOWN_ETHER_TYPES: &[EtherType] = &[
     ether_type::IPV4,
     ether_type::IPV6,
     ether_type::VLAN_TAGGED_FRAME,
@@ -77,15 +77,15 @@ pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
 prop_compose! {
     pub fn ethernet_2_unknown()(
         source in prop::array::uniform6(any::<u8>()),
-        dest in prop::array::uniform6(any::<u8>()),
+        destination in prop::array::uniform6(any::<u8>()),
         ether_type in ether_type_any().prop_filter("ether_type must be unknown",
             |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
         -> Ethernet2Header
     {
         Ethernet2Header {
-            source: source,
-            destination: dest,
-            ether_type: ether_type
+            source,
+            destination,
+            ether_type,
         }
     }
 }
@@ -100,10 +100,10 @@ prop_compose! {
         -> SingleVlanHeader
     {
         SingleVlanHeader {
-            priority_code_point: priority_code_point,
-            drop_eligible_indicator: drop_eligible_indicator,
-            vlan_identifier: vlan_identifier,
-            ether_type: ether_type
+            priority_code_point,
+            drop_eligible_indicator,
+            vlan_identifier,
+            ether_type,
         }
     }
 }
@@ -117,10 +117,10 @@ prop_compose! {
         -> SingleVlanHeader
     {
         SingleVlanHeader {
-            priority_code_point: priority_code_point,
-            drop_eligible_indicator: drop_eligible_indicator,
-            vlan_identifier: vlan_identifier,
-            ether_type: ether_type
+            priority_code_point,
+            drop_eligible_indicator,
+            vlan_identifier,
+            ether_type
         }
     }
 }
@@ -214,7 +214,7 @@ prop_compose! {
         result.source = source;
         result.destination = dest;
 
-        return result;
+        result
     }
 }
 prop_compose! {
@@ -227,7 +227,7 @@ prop_compose! {
     }
 }
 
-static IPV4_KNOWN_PROTOCOLS: &'static [IpNumber] = &[
+static IPV4_KNOWN_PROTOCOLS: &[IpNumber] = &[
     ip_number::ICMP,
     ip_number::UDP,
     ip_number::TCP,
@@ -295,7 +295,7 @@ prop_compose! {
     pub fn ipv6_with(next_header: IpNumber)
     (
         source in prop::array::uniform16(any::<u8>()),
-        dest in prop::array::uniform16(any::<u8>()),
+        destination in prop::array::uniform16(any::<u8>()),
         traffic_class in any::<u8>(),
         flow_label in prop::bits::u32::between(0,20),
         payload_length in any::<u16>(),
@@ -304,13 +304,13 @@ prop_compose! {
     ) -> Ipv6Header
     {
         Ipv6Header {
-            traffic_class: traffic_class,
-            flow_label: flow_label,
-            payload_length: payload_length,
-            next_header: next_header,
-            hop_limit: hop_limit,
-            source: source,
-            destination: dest
+            traffic_class,
+            flow_label,
+            payload_length,
+            next_header,
+            hop_limit,
+            source,
+            destination,
         }
     }
 }
@@ -325,7 +325,7 @@ prop_compose! {
     }
 }
 
-static IPV6_KNOWN_NEXT_HEADERS: &'static [IpNumber] = &[
+static IPV6_KNOWN_NEXT_HEADERS: &[IpNumber] = &[
     ip_number::ICMP,
     ip_number::UDP,
     ip_number::TCP,
@@ -347,7 +347,7 @@ static IPV6_KNOWN_NEXT_HEADERS: &'static [IpNumber] = &[
 prop_compose! {
     pub fn ipv6_unknown()(
         source in prop::array::uniform16(any::<u8>()),
-        dest in prop::array::uniform16(any::<u8>()),
+        destination in prop::array::uniform16(any::<u8>()),
         traffic_class in any::<u8>(),
         flow_label in prop::bits::u32::between(0,20),
         payload_length in any::<u16>(),
@@ -357,13 +357,13 @@ prop_compose! {
     ) -> Ipv6Header
     {
         Ipv6Header {
-            traffic_class: traffic_class,
-            flow_label: flow_label,
-            payload_length: payload_length,
-            next_header: next_header,
-            hop_limit: hop_limit,
-            source: source,
-            destination: dest
+            traffic_class,
+            flow_label,
+            payload_length,
+            next_header,
+            hop_limit,
+            source,
+            destination,
         }
     }
 }
@@ -551,10 +551,10 @@ prop_compose! {
         -> UdpHeader
     {
         UdpHeader {
-            source_port: source_port,
-            destination_port: destination_port,
-            length: length,
-            checksum: checksum
+            source_port,
+            destination_port,
+            length,
+            checksum,
         }
     }
 }

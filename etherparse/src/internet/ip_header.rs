@@ -31,9 +31,9 @@ impl IpHeader {
     /// Note that his function verfies `total_length` for IPv4 and
     /// `payload_lenght` for IPv6 and that the extension headers are contained
     /// within.
-    pub fn from_slice<'a>(
-        slice: &'a [u8],
-    ) -> Result<(IpHeader, IpPayload<'a>), err::ip::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeaderSliceError> {
         use err::ip::{HeaderError::*, HeaderSliceError::*};
 
         if slice.is_empty() {
@@ -247,9 +247,9 @@ impl IpHeader {
 
     /// Read an IPv4 header & extension headers from a slice and return the slice containing the payload
     /// according to the total_length field in the IPv4 header.
-    pub fn ipv4_from_slice<'a>(
-        slice: &'a [u8],
-    ) -> Result<(IpHeader, IpPayload<'a>), err::ipv4::SliceError> {
+    pub fn ipv4_from_slice(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv4::SliceError> {
         use err::ipv4::SliceError::*;
 
         // read the header
@@ -310,9 +310,9 @@ impl IpHeader {
     /// Note that slice length is used as a fallback value in case the
     /// payload_length in the IPv6 is set to zero. This is a temporary workaround
     /// to partially support jumbograms.
-    pub fn ipv6_from_slice<'a>(
-        slice: &'a [u8],
-    ) -> Result<(IpHeader, IpPayload<'a>), err::ipv6::SliceError> {
+    pub fn ipv6_from_slice(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv6::SliceError> {
         use err::ipv6::SliceError::*;
 
         // read ipv6 header

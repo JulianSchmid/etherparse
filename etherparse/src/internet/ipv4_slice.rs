@@ -78,7 +78,7 @@ impl<'a> Ipv4Slice<'a> {
                     header,
                     exts: Ipv4ExtensionsSlice { auth: Some(auth) },
                     payload: IpPayload {
-                        ip_number: ip_number.into(),
+                        ip_number,
                         fragmented,
                         len_source: LenSource::Ipv4HeaderTotalLen,
                         payload,
@@ -89,7 +89,7 @@ impl<'a> Ipv4Slice<'a> {
                 header,
                 exts: Ipv4ExtensionsSlice { auth: None },
                 payload: IpPayload {
-                    ip_number: ip_number.into(),
+                    ip_number,
                     fragmented,
                     len_source: LenSource::Ipv4HeaderTotalLen,
                     payload: header_payload,

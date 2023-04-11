@@ -27,7 +27,7 @@
 /// assert_eq!(IPV4, EtherType::IPV4);
 /// ```
 ///
-#[derive(PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
+#[derive(Default, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
 pub struct EtherType(pub u16);
 
 impl EtherType {
@@ -38,12 +38,6 @@ impl EtherType {
     pub const VLAN_TAGGED_FRAME: EtherType = Self(0x8100);
     pub const PROVIDER_BRIDGING: EtherType = Self(0x88A8);
     pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = Self(0x9100);
-}
-
-impl Default for EtherType {
-    fn default() -> Self {
-        Self(0)
-    }
 }
 
 impl From<u16> for EtherType {
