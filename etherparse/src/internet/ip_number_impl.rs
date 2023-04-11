@@ -359,7 +359,7 @@ impl IpNumber {
 
     /// Returns the "keyword" string if known. Usually this is the abbreviation of the protocol.
     ///
-    /// h2. Example
+    /// # Example
     /// 
     /// ```
     /// use etherparse::IpNumber;
@@ -370,7 +370,7 @@ impl IpNumber {
     /// assert_eq!(IpNumber(145).keyword_str(), None);
     /// ```
     /// 
-    /// h2. Data Source
+    /// # Data Source
     /// 
     /// The strings were copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
     /// on 2023-04-11.
@@ -533,7 +533,7 @@ impl IpNumber {
 
     /// Returns the "protocol" string if known. Usually this the non abbreviated name of the protocol.
     /// 
-    /// h2. Example
+    /// # Example
     /// 
     /// ```
     /// use etherparse::IpNumber;
@@ -544,7 +544,7 @@ impl IpNumber {
     /// assert_eq!(IpNumber(145).protocol_str(), None);
     /// ```
     /// 
-    /// h2. Data Source
+    /// # Data Source
     /// 
     /// 
     /// The string was copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
