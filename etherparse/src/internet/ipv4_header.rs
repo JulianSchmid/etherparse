@@ -184,9 +184,7 @@ impl Ipv4Header {
         // read only after the internet header length was read)
         let mut header_raw = [0u8; 20];
         header_raw[0] = first_byte;
-        reader
-            .read_exact(&mut header_raw[1..])
-            .map_err(Io)?;
+        reader.read_exact(&mut header_raw[1..]).map_err(Io)?;
 
         let ihl = header_raw[0] & 0xf;
 
@@ -245,9 +243,7 @@ impl Ipv4Header {
 
                 let options_len = usize::from(ihl - 5) * 4;
                 if options_len > 0 {
-                    reader
-                        .read_exact(&mut values[..options_len])
-                        .map_err(Io)?;
+                    reader.read_exact(&mut values[..options_len]).map_err(Io)?;
                 }
                 values
             },
