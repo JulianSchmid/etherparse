@@ -162,7 +162,9 @@ mod test {
 
     #[test]
     fn clone_eq() {
-        let buffer = IpAuthHeader::new(0.into(), 0, 0, &[0; 4]).unwrap().to_bytes();
+        let buffer = IpAuthHeader::new(0.into(), 0, 0, &[0; 4])
+            .unwrap()
+            .to_bytes();
         let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(slice.clone(), slice);
     }

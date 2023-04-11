@@ -655,7 +655,10 @@ mod test {
                 | HIP | SHIM6 => true,
                 _ => false,
             };
-            assert_eq!(expected, Ipv6Header::is_skippable_header_extension(IpNumber(i)));
+            assert_eq!(
+                expected,
+                Ipv6Header::is_skippable_header_extension(IpNumber(i))
+            );
         }
     }
 

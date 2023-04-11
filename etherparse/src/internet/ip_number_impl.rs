@@ -16,28 +16,28 @@ pub type IpTrafficClass = IpNumber;
 ///
 /// You can access the underlying `u8` value by using `.0` and any `u8`
 /// can be converted to an `IpNumber`:
-/// 
+///
 /// ```
 /// use etherparse::IpNumber;
 ///
 /// assert_eq!(IpNumber::TCP.0, 6);
 /// assert_eq!(IpNumber::TCP, IpNumber(6));
-/// 
+///
 /// // convert to IpNumber using the from & into trait
 /// let ip_num: IpNumber = 6.into();
 /// assert_eq!(IpNumber::TCP, ip_num);
-/// 
+///
 /// // convert to u8 using the from & into trait
 /// let num: u8 = IpNumber::TCP.into();
 /// assert_eq!(6, num);
 /// ```
-/// 
+///
 /// The constants are also defined in the `ip_number` module so they can
 /// be used without the need to write `IpNumber::` in front of them:
-/// 
+///
 /// ```
 /// use etherparse::{ip_number::TCP, IpNumber};
-/// 
+///
 /// assert_eq!(TCP, IpNumber::TCP);
 /// ```
 ///
@@ -411,11 +411,11 @@ impl core::fmt::Debug for IpNumber {
 ///
 /// The constants only exist for convenience so you can import them
 /// (`use ip_number::*`) without a need to write `IpNumber::` in front
-/// of every constant. 
-/// 
+/// of every constant.
+///
 /// You can access the underlying `u8` value by using `.0` and any `u8`
 /// can be converted to an `IpNumber`:
-/// 
+///
 /// ```
 /// use etherparse::{ip_number::TCP, IpNumber};
 ///
@@ -735,7 +735,8 @@ pub mod ip_number {
     /// Use for experimentation and testing
     pub const EXP1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1; // 254
     /// Use for experimentation and testing
-    pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1; // 254
+    pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1;
+    // 254
 }
 
 #[cfg(test)]
@@ -766,7 +767,10 @@ mod tests {
         ];
 
         for i in 0..std::u8::MAX {
-            assert_eq!(ext_ids.contains(&IpNumber(i)), IpNumber(i).is_ipv6_ext_header_value());
+            assert_eq!(
+                ext_ids.contains(&IpNumber(i)),
+                IpNumber(i).is_ipv6_ext_header_value()
+            );
         }
     }
 
@@ -810,7 +814,10 @@ mod tests {
             (MFE_NSP, IpNumber::MFE_NSP),
             (MERIT_INP, IpNumber::MERIT_INP),
             (DCCP, IpNumber::DCCP),
-            (THIRD_PARTY_CONNECT_PROTOCOL, IpNumber::THIRD_PARTY_CONNECT_PROTOCOL),
+            (
+                THIRD_PARTY_CONNECT_PROTOCOL,
+                IpNumber::THIRD_PARTY_CONNECT_PROTOCOL,
+            ),
             (IDPR, IpNumber::IDPR),
             (XTP, IpNumber::XTP),
             (DDP, IpNumber::DDP),
@@ -821,7 +828,10 @@ mod tests {
             (SDRP, IpNumber::SDRP),
             (IPV6_ROUTE_HEADER, IpNumber::IPV6_ROUTE_HEADER),
             (IPV6_ROUTE, IpNumber::IPV6_ROUTE_HEADER),
-            (IPV6_FRAGMENTATION_HEADER, IpNumber::IPV6_FRAGMENTATION_HEADER),
+            (
+                IPV6_FRAGMENTATION_HEADER,
+                IpNumber::IPV6_FRAGMENTATION_HEADER,
+            ),
             (IPV6_FRAG, IpNumber::IPV6_FRAGMENTATION_HEADER),
             (IDRP, IpNumber::IDRP),
             (RSVP, IpNumber::RSVP),
@@ -829,7 +839,10 @@ mod tests {
             (DSR, IpNumber::DSR),
             (BNA, IpNumber::BNA),
             (ENCAP_SEC, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
-            (ENCAPSULATING_SECURITY_PAYLOAD, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
+            (
+                ENCAPSULATING_SECURITY_PAYLOAD,
+                IpNumber::ENCAPSULATING_SECURITY_PAYLOAD,
+            ),
             (AUTH, IpNumber::AUTHENTICATION_HEADER),
             (AUTHENTICATION_HEADER, IpNumber::AUTHENTICATION_HEADER),
             (INLSP, IpNumber::INLSP),
@@ -842,14 +855,20 @@ mod tests {
             (IPV6_NO_NEXT_HEADER, IpNumber::IPV6_NO_NEXT_HEADER),
             (IPV6_DEST_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
             (IPV6_DESTINATION_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
-            (ANY_HOST_INTERNAL_PROTOCOL, IpNumber::ANY_HOST_INTERNAL_PROTOCOL),
+            (
+                ANY_HOST_INTERNAL_PROTOCOL,
+                IpNumber::ANY_HOST_INTERNAL_PROTOCOL,
+            ),
             (CFTP, IpNumber::CFTP),
             (ANY_LOCAL_NETWORK, IpNumber::ANY_LOCAL_NETWORK),
             (SAT_EXPAK, IpNumber::SAT_EXPAK),
             (KRYTOLAN, IpNumber::KRYTOLAN),
             (RVD, IpNumber::RVD),
             (IPPC, IpNumber::IPPC),
-            (ANY_DISTRIBUTED_FILE_SYSTEM, IpNumber::ANY_DISTRIBUTED_FILE_SYSTEM),
+            (
+                ANY_DISTRIBUTED_FILE_SYSTEM,
+                IpNumber::ANY_DISTRIBUTED_FILE_SYSTEM,
+            ),
             (SAT_MON, IpNumber::SAT_MON),
             (VISA, IpNumber::VISA),
             (IPCV, IpNumber::IPCV),
@@ -895,7 +914,10 @@ mod tests {
             (VRRP, IpNumber::VRRP),
             (PGM, IpNumber::PGM),
             (ANY_ZERO_HOP_PROTOCOL, IpNumber::ANY_ZERO_HOP_PROTOCOL),
-            (LAYER2_TUNNELING_PROTOCOL, IpNumber::LAYER2_TUNNELING_PROTOCOL),
+            (
+                LAYER2_TUNNELING_PROTOCOL,
+                IpNumber::LAYER2_TUNNELING_PROTOCOL,
+            ),
             (DDX, IpNumber::DDX),
             (IATP, IpNumber::IATP),
             (STP, IpNumber::STP),
@@ -925,9 +947,15 @@ mod tests {
             (WESP, IpNumber::WESP),
             (ROHC, IpNumber::ROHC),
             (EXP0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
-            (EXPERIMENTAL_AND_TESTING_0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
+            (
+                EXPERIMENTAL_AND_TESTING_0,
+                IpNumber::EXPERIMENTAL_AND_TESTING_0,
+            ),
             (EXP1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
-            (EXPERIMENTAL_AND_TESTING_1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
+            (
+                EXPERIMENTAL_AND_TESTING_1,
+                IpNumber::EXPERIMENTAL_AND_TESTING_1,
+            ),
         ];
         for (raw, enum_value) in pairs {
             assert_eq!(*raw, *enum_value);

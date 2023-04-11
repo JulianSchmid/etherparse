@@ -30,8 +30,8 @@ impl std::error::Error for HeaderError {
 
 #[cfg(test)]
 mod tests {
-    use crate::EtherType;
     use super::HeaderError::*;
+    use crate::EtherType;
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

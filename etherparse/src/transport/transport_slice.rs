@@ -1,4 +1,4 @@
-use crate::{Icmpv4Slice, Icmpv6Slice, TcpHeaderSlice, UdpHeaderSlice, IpNumber};
+use crate::{Icmpv4Slice, Icmpv6Slice, IpNumber, TcpHeaderSlice, UdpHeaderSlice};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {

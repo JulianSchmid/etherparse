@@ -1,18 +1,18 @@
 /// Represents an "Ethertype" present in a Ethernet II header.
-/// 
+///
 /// You can access the underlying `u16` value by using `.0` and any `u16`
 /// can be converted to an `EtherType`:
-/// 
+///
 /// ```
 /// use etherparse::EtherType;
 ///
 /// assert_eq!(EtherType::IPV4.0, 0x0800);
 /// assert_eq!(EtherType::IPV4, EtherType(0x0800));
-/// 
+///
 /// // convert to EtherType using the from & into trait
 /// let ether_type: EtherType = 0x0800.into();
 /// assert_eq!(EtherType::IPV4, ether_type);
-/// 
+///
 /// // convert to u16 using the from & into trait
 /// let num: u16 = EtherType::IPV4.into();
 /// assert_eq!(0x0800, num);
@@ -20,10 +20,10 @@
 ///
 /// The constants are also defined in the `ether_type` module so they can
 /// be used without the need to write `EtherType::` in front of them:
-/// 
+///
 /// ```
 /// use etherparse::{ether_type::IPV4, EtherType};
-/// 
+///
 /// assert_eq!(IPV4, EtherType::IPV4);
 /// ```
 ///
@@ -77,11 +77,11 @@ impl core::fmt::Debug for EtherType {
 ///
 /// The constants only exist for convenience so you can import them
 /// (`use ether_type::*`) without a need to write `EtherType::` in front
-/// of every constant. 
-/// 
+/// of every constant.
+///
 /// You can access the underlying `u16` value by using `.0` and any `u16`
 /// can be converted to an `EtherType`:
-/// 
+///
 /// ```
 /// use etherparse::{ether_type::IPV4, EtherType};
 ///
@@ -104,7 +104,7 @@ pub mod ether_type {
 
 #[cfg(test)]
 mod test {
-    use crate::{EtherType, ether_type};
+    use crate::{ether_type, EtherType};
     use alloc::format;
 
     #[test]
@@ -207,8 +207,8 @@ mod test {
     #[test]
     fn hash_ord() {
         use core::cmp::Ordering;
-        use std::collections::hash_map::DefaultHasher;
         use core::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
 
         // hash
         let a_hash = {
