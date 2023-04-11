@@ -28,7 +28,7 @@ pub struct Ipv6RawExtHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
-    pub next_header: u8,
+    pub next_header: IpNumber,
     /// Length of the extension header in 8 octets (minus the first 8 octets).
     header_length: u8,
     //// The data contained in the extension header (excluding next_header & hdr length).
@@ -71,7 +71,7 @@ impl Ipv6RawExtHeader {
     pub const MAX_PAYLOAD_LEN: usize = 0xff * 8 + 6;
 
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeader`.
-    pub fn header_type_supported(next_header: u8) -> bool {
+    pub fn header_type_supported(next_header: IpNumber) -> bool {
         use crate::ip_number::*;
         matches!(
             next_header,
@@ -91,7 +91,7 @@ impl Ipv6RawExtHeader {
     /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`).
     ///
     /// If a payload with a non supported length is provided a `ValueError` is returned.
-    pub fn new_raw(next_header: u8, payload: &[u8]) -> Result<Ipv6RawExtHeader, ValueError> {
+    pub fn new_raw(next_header: IpNumber, payload: &[u8]) -> Result<Ipv6RawExtHeader, ValueError> {
         use ValueError::*;
         if payload.len() < Self::MIN_PAYLOAD_LEN {
             Err(Ipv6ExtensionPayloadTooSmall(payload.len()))
@@ -155,7 +155,7 @@ impl Ipv6RawExtHeader {
         let (next_header, header_length) = {
             let mut d: [u8; 2] = [0; 2];
             reader.read_exact(&mut d)?;
-            (d[0], d[1])
+            (IpNumber(d[0]), d[1])
         };
 
         Ok(Ipv6RawExtHeader {
@@ -172,7 +172,7 @@ impl Ipv6RawExtHeader {
     /// Writes a given IPv6 extension header to the current position.
     #[cfg(feature = "std")]
     pub fn write<W: std::io::Write + Sized>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        writer.write_all(&[self.next_header, self.header_length])?;
+        writer.write_all(&[self.next_header.0, self.header_length])?;
         writer.write_all(self.payload())?;
         Ok(())
     }
@@ -180,7 +180,7 @@ impl Ipv6RawExtHeader {
     /// Returns the serialized header.
     pub fn to_bytes(&self) -> ArrayVec<u8, { Ipv6RawExtHeader::MAX_LEN }> {
         let mut result = ArrayVec::new();
-        result.extend([self.next_header, self.header_length]);
+        result.extend([self.next_header.0, self.header_length]);
         // Unwrap Panic Safety:
         // The following unwrap should never panic, as
         // the payload length can at most have the size max
@@ -209,7 +209,7 @@ mod test {
             assert_eq!(
                 format!("{:?}", header),
                 format!(
-                    "Ipv6RawExtHeader {{ next_header: {}, payload: {:?} }}",
+                    "Ipv6RawExtHeader {{ next_header: {:?}, payload: {:?} }}",
                     header.next_header,
                     header.payload()
                 )
@@ -228,13 +228,13 @@ mod test {
     fn header_type_supported() {
         use ip_number::*;
         for value in 0..=u8::MAX {
-            let expected_supported = match value {
+            let expected_supported = match IpNumber(value) {
                 IPV6_HOP_BY_HOP | IPV6_DEST_OPTIONS | IPV6_ROUTE | MOBILITY | HIP | SHIM6 => true,
                 _ => false,
             };
             assert_eq!(
                 expected_supported,
-                Ipv6RawExtHeader::header_type_supported(value)
+                Ipv6RawExtHeader::header_type_supported(IpNumber(value))
             );
         }
     }
@@ -427,7 +427,7 @@ mod test {
         #[test]
         fn to_bytes(header in ipv6_raw_ext_any()) {
             let bytes = header.to_bytes();
-            assert_eq!(bytes[0], header.next_header);
+            assert_eq!(bytes[0], header.next_header.0);
             assert_eq!(bytes[1], header.header_length);
             assert_eq!(&bytes[2..], header.payload());
         }

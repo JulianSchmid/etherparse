@@ -4,7 +4,7 @@ use core::slice::from_raw_parts;
 /// Allows iterating over the IPv6 extension headers present in an [Ipv6ExtensionsSlice].
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6ExtensionSliceIter<'a> {
-    pub(crate) next_header: u8,
+    pub(crate) next_header: IpNumber,
     pub(crate) rest: &'a [u8],
 }
 
@@ -13,7 +13,7 @@ impl<'a> Default for Ipv6ExtensionSliceIter<'a> {
         Ipv6ExtensionSliceIter {
             // don't use 0 as this is the reserved value
             // for the hop by hop header
-            next_header: u8::from(IpNumber::IPV6_NO_NEXT_HEADER),
+            next_header: IpNumber::IPV6_NO_NEXT_HEADER,
             rest: &[],
         }
     }

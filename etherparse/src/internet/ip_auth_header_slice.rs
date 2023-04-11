@@ -91,11 +91,11 @@ impl<'a> IpAuthHeaderSlice<'a> {
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
     #[inline]
-    pub fn next_header(&self) -> u8 {
+    pub fn next_header(&self) -> IpNumber {
         // SAFETY:
         // Safe as slice length is checked in the constructor
         // to be at least 12.
-        unsafe { *self.slice.get_unchecked(0) }
+        IpNumber(unsafe { *self.slice.get_unchecked(0) })
     }
 
     /// Read the security parameters index from the slice
@@ -162,7 +162,7 @@ mod test {
 
     #[test]
     fn clone_eq() {
-        let buffer = IpAuthHeader::new(0, 0, 0, &[0; 4]).unwrap().to_bytes();
+        let buffer = IpAuthHeader::new(0.into(), 0, 0, &[0; 4]).unwrap().to_bytes();
         let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(slice.clone(), slice);
     }

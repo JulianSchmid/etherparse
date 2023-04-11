@@ -18,7 +18,7 @@ pub struct IpAuthHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
-    pub next_header: u8,
+    pub next_header: IpNumber,
     /// Security Parameters Index
     pub spi: u32,
     /// This unsigned 32-bit field contains a counter value that
@@ -79,7 +79,7 @@ impl<'a> IpAuthHeader {
     /// `Err(ValueError::IpAuthenticationHeaderBadIcvLength)` is returned.
     /// If successfull an Ok(()) is returned.
     pub fn new(
-        next_header: u8,
+        next_header: IpNumber,
         spi: u32,
         sequence_number: u32,
         raw_icv: &'a [u8],
@@ -124,7 +124,7 @@ impl<'a> IpAuthHeader {
             start
         };
 
-        let next_header = start[0];
+        let next_header = IpNumber(start[0]);
         let payload_len = start[1];
 
         // payload len must be at least 1
@@ -178,7 +178,7 @@ impl<'a> IpAuthHeader {
         debug_assert!(self.raw_icv_len != 0xff);
 
         writer.write_all(&[
-            self.next_header,
+            self.next_header.0,
             self.raw_icv_len + 1,
             0,
             0,
@@ -207,7 +207,7 @@ impl<'a> IpAuthHeader {
 
         let mut result = ArrayVec::<u8, { IpAuthHeader::MAX_LEN }>::new();
         result.extend([
-            self.next_header,
+            self.next_header.0,
             self.raw_icv_len + 1,
             0,
             0,
@@ -245,7 +245,7 @@ mod test {
         fn debug(input in ip_auth_any()) {
             assert_eq!(
                 &format!(
-                    "IpAuthHeader {{ next_header: {}, spi: {}, sequence_number: {}, raw_icv: {:?} }}",
+                    "IpAuthHeader {{ next_header: {:?}, spi: {}, sequence_number: {}, raw_icv: {:?} }}",
                     input.next_header,
                     input.spi,
                     input.sequence_number,
@@ -257,24 +257,24 @@ mod test {
 
     #[test]
     pub fn clone() {
-        let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
+        let a = IpAuthHeader::new(0.into(), 0, 0, &[0; 4]);
         assert_eq!(a.clone(), a);
     }
 
     #[test]
     pub fn partial_eq() {
-        let a = IpAuthHeader::new(0, 0, 0, &[0; 4]);
+        let a = IpAuthHeader::new(0.into(), 0, 0, &[0; 4]);
 
         //equal
-        assert!(a == IpAuthHeader::new(0, 0, 0, &[0; 4]));
+        assert!(a == IpAuthHeader::new(0.into(), 0, 0, &[0; 4]));
 
         //not equal tests
-        assert!(a != IpAuthHeader::new(1, 0, 0, &[0; 4]));
-        assert!(a != IpAuthHeader::new(0, 1, 0, &[0; 4]));
-        assert!(a != IpAuthHeader::new(0, 0, 1, &[0; 4]));
-        assert!(a != IpAuthHeader::new(0, 0, 0, &[0, 1, 0, 0]));
-        assert!(a != IpAuthHeader::new(0, 0, 1, &[]));
-        assert!(a != IpAuthHeader::new(0, 0, 1, &[0; 8]));
+        assert!(a != IpAuthHeader::new(1.into(), 0, 0, &[0; 4]));
+        assert!(a != IpAuthHeader::new(0.into(), 1, 0, &[0; 4]));
+        assert!(a != IpAuthHeader::new(0.into(), 0, 1, &[0; 4]));
+        assert!(a != IpAuthHeader::new(0.into(), 0, 0, &[0, 1, 0, 0]));
+        assert!(a != IpAuthHeader::new(0.into(), 0, 1, &[]));
+        assert!(a != IpAuthHeader::new(0.into(), 0, 1, &[0; 8]));
     }
 
     #[test]
@@ -332,10 +332,10 @@ mod test {
         for test in tests.iter() {
             // new
             {
-                let a = IpAuthHeader::new(5, 6, 7, test.icv);
+                let a = IpAuthHeader::new(5.into(), 6, 7, test.icv);
                 if test.ok {
                     let unwrapped = a.unwrap();
-                    assert_eq!(5, unwrapped.next_header);
+                    assert_eq!(IpNumber(5), unwrapped.next_header);
                     assert_eq!(6, unwrapped.spi);
                     assert_eq!(7, unwrapped.sequence_number);
                     assert_eq!(test.icv, unwrapped.raw_icv());
@@ -345,9 +345,9 @@ mod test {
             }
             // set_raw_icv
             {
-                let mut header = IpAuthHeader::new(5, 6, 7, &[0; 4]).unwrap();
+                let mut header = IpAuthHeader::new(5.into(), 6, 7, &[0; 4]).unwrap();
                 let result = header.set_raw_icv(test.icv);
-                assert_eq!(5, header.next_header);
+                assert_eq!(IpNumber(5), header.next_header);
                 assert_eq!(6, header.spi);
                 assert_eq!(7, header.sequence_number);
                 if test.ok {
@@ -485,7 +485,7 @@ mod test {
         fn to_bytes(header in ip_auth_any()) {
             let bytes = header.to_bytes();
 
-            assert_eq!(header.next_header, bytes[0]);
+            assert_eq!(header.next_header.0, bytes[0]);
             assert_eq!((header.header_len()/4 - 2) as u8, bytes[1]);
             assert_eq!(0, bytes[2]);
             assert_eq!(0, bytes[3]);

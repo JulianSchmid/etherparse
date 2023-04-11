@@ -11,7 +11,7 @@ pub struct Ipv6Header {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definitions of ids.
-    pub next_header: u8,
+    pub next_header: IpNumber,
     /// The number of hops the packet can take before it is discarded.
     pub hop_limit: u8,
     /// IPv6 source address
@@ -74,7 +74,7 @@ impl Ipv6Header {
             traffic_class: (version_rest << 4) | (buffer[0] >> 4),
             flow_label: u32::from_be_bytes([0, buffer[0] & 0xf, buffer[1], buffer[2]]),
             payload_length: u16::from_be_bytes([buffer[3], buffer[4]]),
-            next_header: buffer[5],
+            next_header: IpNumber(buffer[5]),
             hop_limit: buffer[6],
             #[rustfmt::skip]
             source: [
@@ -96,8 +96,8 @@ impl Ipv6Header {
     ///Takes a slice and skips an ipv6 header extensions and returns the next_header ip number & the slice past the header.
     pub fn skip_header_extension_in_slice(
         slice: &[u8],
-        next_header: u8,
-    ) -> Result<(u8, &[u8]), err::LenError> {
+        next_header: IpNumber,
+    ) -> Result<(IpNumber, &[u8]), err::LenError> {
         use crate::ip_number::*;
 
         // verify that a ipv6 extension is present (before
@@ -131,7 +131,7 @@ impl Ipv6Header {
                     layer_start_offset: 0,
                 })
             } else {
-                Ok((slice[0], &slice[len..]))
+                Ok((IpNumber(slice[0]), &slice[len..]))
             }
         } else {
             Err(err::LenError {
@@ -149,7 +149,7 @@ impl Ipv6Header {
     /// A skippable header extension is an extension header for which it is known how
     /// to determine the protocol number of the following header as well as how many
     /// octets have to be skipped to reach the start of the following header.
-    pub fn is_skippable_header_extension(ip_protocol_number: u8) -> bool {
+    pub fn is_skippable_header_extension(ip_protocol_number: IpNumber) -> bool {
         use crate::ip_number::*;
         //Note: EncapsulatingSecurityPayload & ExperimentalAndTesting0 can not be skipped
         matches!(
@@ -168,8 +168,8 @@ impl Ipv6Header {
     ///Takes a slice & ip protocol number (identifying the first header type) and returns next_header id & the slice past after all ipv6 header extensions.
     pub fn skip_all_header_extensions_in_slice(
         slice: &[u8],
-        next_header: u8,
-    ) -> Result<(u8, &[u8]), err::LenError> {
+        next_header: IpNumber,
+    ) -> Result<(IpNumber, &[u8]), err::LenError> {
         let mut next_header = next_header;
         let mut rest = slice;
         let mut offset = 0;
@@ -192,25 +192,25 @@ impl Ipv6Header {
     #[cfg(feature = "std")]
     pub fn skip_header_extension<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-        next_header: u8,
-    ) -> Result<u8, std::io::Error> {
+        next_header: IpNumber,
+    ) -> Result<IpNumber, std::io::Error> {
         use crate::ip_number::*;
 
         let (next_header, rest_length) = match next_header {
             IPV6_FRAG => {
                 let mut buf = [0; 1];
                 reader.read_exact(&mut buf)?;
-                (buf[0], 7)
+                (IpNumber(buf[0]), 7)
             }
             AUTH => {
                 let mut buf = [0; 2];
                 reader.read_exact(&mut buf)?;
-                (buf[0], i64::from(buf[1]) * 4 + 6)
+                (IpNumber(buf[0]), i64::from(buf[1]) * 4 + 6)
             }
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS | MOBILITY | HIP | SHIM6 => {
                 let mut buf = [0; 2];
                 reader.read_exact(&mut buf)?;
-                (buf[0], i64::from(buf[1]) * 8 + 6)
+                (IpNumber(buf[0]), i64::from(buf[1]) * 8 + 6)
             }
             // not a ipv6 header extension that can be skipped
             _ => return Ok(next_header),
@@ -236,8 +236,8 @@ impl Ipv6Header {
     #[cfg(feature = "std")]
     pub fn skip_all_header_extensions<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-        next_header: u8,
-    ) -> Result<u8, std::io::Error> {
+        next_header: IpNumber,
+    ) -> Result<IpNumber, std::io::Error> {
         let mut next_header = next_header;
 
         loop {
@@ -322,7 +322,7 @@ impl Ipv6Header {
             flow_label_be[3],
             payload_len_be[0],
             payload_len_be[1],
-            self.next_header,
+            self.next_header.0,
             self.hop_limit,
             self.source[0], self.source[1], self.source[2], self.source[3],
             self.source[4], self.source[5], self.source[6], self.source[7],
@@ -352,7 +352,7 @@ mod test {
         assert_eq!(0, header.traffic_class);
         assert_eq!(0, header.flow_label);
         assert_eq!(0, header.payload_length);
-        assert_eq!(0, header.next_header);
+        assert_eq!(255, header.next_header.0);
         assert_eq!(0, header.hop_limit);
         assert_eq!([0u8; 16], header.source);
         assert_eq!([0u8; 16], header.destination);
@@ -364,7 +364,7 @@ mod test {
         assert_eq!(
             format!("{:?}", header),
             format!(
-                "Ipv6Header {{ traffic_class: {}, flow_label: {}, payload_length: {}, next_header: {}, hop_limit: {}, source: {:?}, destination: {:?} }}",
+                "Ipv6Header {{ traffic_class: {}, flow_label: {}, payload_length: {}, next_header: {:?}, hop_limit: {}, source: {:?}, destination: {:?} }}",
                 header.traffic_class,
                 header.flow_label,
                 header.payload_length,
@@ -552,7 +552,7 @@ mod test {
             frag in ipv6_fragment_any(),
             auth in ip_auth_any()
         ) {
-            const GENERICS: [u8;7] = [
+            const GENERICS: [IpNumber;7] = [
                 IPV6_HOP_BY_HOP,
                 IPV6_DEST_OPTIONS,
                 IPV6_ROUTE,
@@ -650,12 +650,12 @@ mod test {
     #[test]
     fn is_skippable_header_extension() {
         for i in 0..0xffu8 {
-            let expected = match i {
+            let expected = match IpNumber(i) {
                 IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_FRAG | AUTH | IPV6_DEST_OPTIONS | MOBILITY
                 | HIP | SHIM6 => true,
                 _ => false,
             };
-            assert_eq!(expected, Ipv6Header::is_skippable_header_extension(i));
+            assert_eq!(expected, Ipv6Header::is_skippable_header_extension(IpNumber(i)));
         }
     }
 
@@ -817,7 +817,7 @@ mod test {
             let mut cursor = Cursor::new(&buffer);
             assert_eq!(
                 Ipv6Header::skip_header_extension(&mut cursor, IPV6_HOP_BY_HOP).unwrap(),
-                0
+                IpNumber(0)
             );
             assert_eq!(8, cursor.position());
         }
@@ -831,7 +831,7 @@ mod test {
             let mut cursor = Cursor::new(&buffer);
             assert_eq!(
                 Ipv6Header::skip_header_extension(&mut cursor, IPV6_ROUTE).unwrap(),
-                4
+                IpNumber(4)
             );
             assert_eq!(8 * 3, cursor.position());
         }
@@ -846,7 +846,7 @@ mod test {
             let mut cursor = Cursor::new(&buffer);
             assert_eq!(
                 Ipv6Header::skip_header_extension(&mut cursor, IPV6_FRAG).unwrap(),
-                4
+                IpNumber(4)
             );
             assert_eq!(8, cursor.position());
         }

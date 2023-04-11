@@ -120,12 +120,12 @@ impl<'a> Ipv6HeaderSlice<'a> {
     /// The next header value specifies what the next header or transport
     /// layer protocol is (see [IpNumber] or [ip_number] for a definitions of ids).
     #[inline]
-    pub fn next_header(&self) -> u8 {
+    pub fn next_header(&self) -> IpNumber {
         // SAFETY:
         // Safe as the slice length is set to
         // Ipv6Header::LEN (40) during construction
         // of the struct.
-        unsafe { *self.slice.get_unchecked(6) }
+        IpNumber(unsafe { *self.slice.get_unchecked(6) })
     }
 
     /// Read the "hop limit" field from the slice. The hop limit specifies the number of hops the packet can take before it is discarded.

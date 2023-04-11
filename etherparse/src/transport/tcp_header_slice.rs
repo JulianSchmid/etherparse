@@ -307,7 +307,7 @@ impl<'a> TcpHeaderSlice<'a> {
             checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
-                .add_2bytes([0, ip_number::TCP])
+                .add_2bytes([0, ip_number::TCP.0])
                 .add_2bytes((tcp_length as u16).to_be_bytes()),
             payload,
         ))
@@ -339,7 +339,7 @@ impl<'a> TcpHeaderSlice<'a> {
             checksum::Sum16BitWords::new()
                 .add_16bytes(source)
                 .add_16bytes(destination)
-                .add_2bytes([0, ip_number::TCP])
+                .add_2bytes([0, ip_number::TCP.0])
                 .add_4bytes((tcp_length as u32).to_be_bytes()),
             payload,
         ))

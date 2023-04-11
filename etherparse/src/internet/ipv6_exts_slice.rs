@@ -19,7 +19,7 @@ use core::slice::from_raw_parts;
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ipv6ExtensionsSlice<'a> {
     /// IP protocol number of the first header present in the slice.
-    first_header: Option<u8>,
+    first_header: Option<IpNumber>,
     /// True if a fragment header is present in the ipv6 header extensions that causes the payload to be fragmented.
     fragmented: bool,
     /// Slice containing ipv6 extension headers.
@@ -30,9 +30,9 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     /// Collects all ipv6 extension headers in a slice & checks if
     /// a fragmentation header that fragments the packet is present.
     pub fn from_slice(
-        start_ip_number: u8,
+        start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv6ExtensionsSlice, u8, &'a [u8]), err::ipv6_exts::HeaderSliceError> {
+    ) -> Result<(Ipv6ExtensionsSlice, IpNumber, &'a [u8]), err::ipv6_exts::HeaderSliceError> {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
         let mut fragmented = false;
@@ -138,7 +138,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     ///
     /// None is only returned if the slice length of this struct is 0.
     #[inline]
-    pub fn first_header(&self) -> Option<u8> {
+    pub fn first_header(&self) -> Option<IpNumber> {
         self.first_header
     }
 

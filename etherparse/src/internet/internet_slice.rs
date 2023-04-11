@@ -418,7 +418,7 @@ mod test {
     fn source_addr() {
         // ipv4
         {
-            let data = Ipv4Header::new(0, 1, 2, [3, 4, 5, 6], [7, 8, 9, 10])
+            let data = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10])
                 .to_bytes()
                 .unwrap();
             assert_eq!(
@@ -550,7 +550,6 @@ mod test {
                 UDP,
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap())
                     .payload_ip_number()
-                    .0
             );
         }
 
@@ -572,7 +571,6 @@ mod test {
                 IGMP,
                 InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap())
                     .payload_ip_number()
-                    .0
             );
         }
     }

@@ -16,9 +16,9 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
     pub fn from_slice(
-        start_ip_number: u8,
+        start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv4ExtensionsSlice, u8, &[u8]), err::ip_auth::HeaderSliceError> {
+    ) -> Result<(Ipv4ExtensionsSlice, IpNumber, &[u8]), err::ip_auth::HeaderSliceError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeaderSlice::from_slice(start_slice)?;

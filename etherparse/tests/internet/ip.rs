@@ -12,7 +12,7 @@ mod ip_header {
             traffic_class: 1,
             flow_label: 0x81806,
             payload_length: 0x8021,
-            next_header: 30,
+            next_header: 30.into(),
             hop_limit: 40,
             source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
             destination: [

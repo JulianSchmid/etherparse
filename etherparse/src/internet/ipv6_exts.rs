@@ -66,9 +66,9 @@ impl Ipv6Extensions {
     /// the hop by hop header is required to be located directly after the IPv6 header according
     /// to RFC 8200.
     pub fn from_slice(
-        start_ip_number: u8,
+        start_ip_number: IpNumber,
         slice: &[u8],
-    ) -> Result<(Ipv6Extensions, u8, &[u8]), err::ipv6_exts::HeaderSliceError> {
+    ) -> Result<(Ipv6Extensions, IpNumber, &[u8]), err::ipv6_exts::HeaderSliceError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut rest = slice;
         let mut next_header = start_ip_number;
@@ -200,8 +200,8 @@ impl Ipv6Extensions {
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-        start_ip_number: u8,
-    ) -> Result<(Ipv6Extensions, u8), err::ipv6_exts::HeaderReadError> {
+        start_ip_number: IpNumber,
+    ) -> Result<(Ipv6Extensions, IpNumber), err::ipv6_exts::HeaderReadError> {
         let mut result: Ipv6Extensions = Default::default();
         let mut next_protocol = start_ip_number;
 
@@ -299,7 +299,7 @@ impl Ipv6Extensions {
     pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,
-        first_header: u8,
+        first_header: IpNumber,
     ) -> Result<(), WriteError> {
         use ip_number::*;
         use ValueError::*;
@@ -471,7 +471,7 @@ impl Ipv6Extensions {
     /// next_header.
     ///
     /// If no extension headers are present the value of the argument is returned.
-    pub fn set_next_headers(&mut self, last_protocol_number: u8) -> u8 {
+    pub fn set_next_headers(&mut self, last_protocol_number: IpNumber) -> IpNumber {
         use ip_number::*;
 
         let mut next = last_protocol_number;
@@ -521,7 +521,7 @@ impl Ipv6Extensions {
 
     /// Return next header based on the extension headers and
     /// the first ip protocol number.
-    pub fn next_header(&self, first_next_header: u8) -> Result<u8, ValueError> {
+    pub fn next_header(&self, first_next_header: IpNumber) -> Result<IpNumber, ValueError> {
         use ip_number::*;
         use ValueError::*;
 

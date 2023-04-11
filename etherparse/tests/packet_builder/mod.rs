@@ -59,7 +59,7 @@ fn eth_ipv4_udp() {
 
 #[test]
 fn ipv4() {
-    let auth_ext = IpAuthHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
+    let auth_ext = IpAuthHeader::new(0.into(), 1, 2, &[3, 4, 5, 6]).unwrap();
 
     //generate
     let in_payload = [22, 23, 24, 25];
@@ -68,7 +68,7 @@ fn ipv4() {
         Ipv4Header::new(
             in_payload.len() as u16,
             21,
-            0,
+            0.into(),
             [13, 14, 15, 16],
             [17, 18, 19, 20],
         ),
@@ -85,7 +85,7 @@ fn ipv4() {
 
     // write
     serialized.reserve(builder.size(in_payload.len()));
-    builder.write(&mut serialized, 200, &in_payload).unwrap();
+    builder.write(&mut serialized, 200.into(), &in_payload).unwrap();
 
     //check the deserialized size
     assert_eq!(
@@ -116,7 +116,7 @@ fn ipv4() {
     assert_eq!(
         auth_actual,
         IpAuthHeader::new(
-            200, // ip number should have been set
+            200.into(), // ip number should have been set
             1,
             2,
             &[3, 4, 5, 6]
@@ -132,7 +132,7 @@ fn ipv4() {
 
 #[test]
 fn ipv6() {
-    let auth_ext = IpAuthHeader::new(0, 1, 2, &[3, 4, 5, 6]).unwrap();
+    let auth_ext = IpAuthHeader::new(0.into(), 1, 2, &[3, 4, 5, 6]).unwrap();
 
     //generate
     let in_payload = [48, 49, 50, 51];
@@ -142,7 +142,7 @@ fn ipv6() {
             traffic_class: 0,
             flow_label: 0,
             payload_length: in_payload.len() as u16,
-            next_header: 0,
+            next_header: 0.into(),
             hop_limit: 47,
             source: [
                 11, 12, 13, 14, 15, 16, 17, 18, 19, 10, 21, 22, 23, 24, 25, 26,
@@ -167,7 +167,7 @@ fn ipv6() {
     );
 
     // write
-    builder.write(&mut serialized, 200, &in_payload).unwrap();
+    builder.write(&mut serialized, 200.into(), &in_payload).unwrap();
 
     //check the deserialized size
     assert_eq!(
@@ -204,7 +204,7 @@ fn ipv6() {
     assert_eq!(
         auth_actual,
         IpAuthHeader::new(
-            200, // ip number should have been set
+            200.into(), // ip number should have been set
             1,
             2,
             &[3, 4, 5, 6]

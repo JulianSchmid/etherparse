@@ -101,7 +101,7 @@ impl UdpHeader {
             checksum::Sum16BitWords::new()
                 .add_4bytes(source)
                 .add_4bytes(destination)
-                .add_2bytes([0, ip_number::UDP])
+                .add_2bytes([0, ip_number::UDP.0])
                 .add_2bytes(self.length.to_be_bytes()),
             payload,
         )
@@ -167,7 +167,7 @@ impl UdpHeader {
             checksum::Sum16BitWords::new()
                 .add_16bytes(source)
                 .add_16bytes(destination)
-                .add_2bytes([0, ip_number::UDP])
+                .add_2bytes([0, ip_number::UDP.0])
                 .add_2bytes(self.length.to_be_bytes()),
             payload,
         )
@@ -325,7 +325,7 @@ mod test {
             // pseudo header
             .add_4bytes(source)
             .add_4bytes(destination)
-            .add_2bytes([0, ip_number::UDP])
+            .add_2bytes([0, ip_number::UDP.0])
             .add_2bytes(udp_header.length.to_be_bytes())
             // udp header
             .add_2bytes(udp_header.source_port.to_be_bytes())
@@ -551,7 +551,7 @@ mod test {
             // pseudo header
             .add_16bytes(source)
             .add_16bytes(destination)
-            .add_2bytes([0, ip_number::UDP])
+            .add_2bytes([0, ip_number::UDP.0])
             .add_4bytes(u32::from(udp_header.length).to_be_bytes())
             // udp header
             .add_2bytes(udp_header.source_port.to_be_bytes())

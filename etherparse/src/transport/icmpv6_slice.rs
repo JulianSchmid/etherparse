@@ -143,7 +143,7 @@ impl<'a> Icmpv6Slice<'a> {
             .add_16bytes(source_ip)
             .add_16bytes(destination_ip)
             .add_4bytes((self.slice().len() as u32).to_be_bytes())
-            .add_2bytes([0, ip_number::IPV6_ICMP])
+            .add_2bytes([0, ip_number::IPV6_ICMP.0])
             // NOTE: From RFC 1071
             // To check a checksum, the 1's complement sum is computed over the
             // same set of octets, including the checksum field.  If the result

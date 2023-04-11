@@ -1,4 +1,4 @@
-use crate::{Icmpv4Slice, Icmpv6Slice, TcpHeaderSlice, UdpHeaderSlice};
+use crate::{Icmpv4Slice, Icmpv6Slice, TcpHeaderSlice, UdpHeaderSlice, IpNumber};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
@@ -11,7 +11,7 @@ pub enum TransportSlice<'a> {
     /// A slice containing a TCP header.
     Tcp(TcpHeaderSlice<'a>),
     /// Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
-    Unknown(u8),
+    Unknown(IpNumber),
 }
 
 #[cfg(test)]

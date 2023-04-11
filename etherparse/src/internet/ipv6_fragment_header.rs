@@ -6,7 +6,7 @@ pub struct Ipv6FragmentHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
-    pub next_header: u8,
+    pub next_header: IpNumber,
     /// Offset in 8 octets
     ///
     /// Note: In the header only 13 bits are used, so the allowed range
@@ -26,7 +26,7 @@ impl Ipv6FragmentHeader {
     ///
     /// Note that the `fragment_offset` can only support values between 0 and 0x1fff (inclusive).
     pub const fn new(
-        next_header: u8,
+        next_header: IpNumber,
         fragment_offset: u16,
         more_fragments: bool,
         identification: u32,
@@ -59,7 +59,7 @@ impl Ipv6FragmentHeader {
         };
 
         Ok(Ipv6FragmentHeader {
-            next_header: buffer[0],
+            next_header: IpNumber(buffer[0]),
             fragment_offset: u16::from_be_bytes([
                 (buffer[2] >> 3) & 0b0001_1111u8,
                 ((buffer[2] << 5) & 0b1110_0000u8) | (buffer[3] & 0b0001_1111u8),
@@ -146,7 +146,7 @@ impl Ipv6FragmentHeader {
         let fo_be: [u8; 2] = self.fragment_offset.to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         Ok([
-            self.next_header,
+            self.next_header.0,
             0,
             (((fo_be[0] << 3) & 0b1111_1000u8) | ((fo_be[1] >> 5) & 0b0000_0111u8)),
             ((fo_be[1] & 0b0001_1111u8)
@@ -175,7 +175,7 @@ mod test {
         fn debug(input in ipv6_fragment_any()) {
             assert_eq!(
                 &format!(
-                    "Ipv6FragmentHeader {{ next_header: {}, fragment_offset: {}, more_fragments: {}, identification: {} }}",
+                    "Ipv6FragmentHeader {{ next_header: {:?}, fragment_offset: {}, more_fragments: {}, identification: {} }}",
                     input.next_header,
                     input.fragment_offset,
                     input.more_fragments,
@@ -196,7 +196,7 @@ mod test {
     proptest! {
         #[test]
         fn new(
-            next_header in any::<u8>(),
+            next_header in ip_number_any(),
             fragment_offset in any::<u16>(),
             more_fragments in any::<bool>(),
             identification in any::<u32>(),
@@ -346,7 +346,7 @@ mod test {
         fn is_fragmenting_payload(
             non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
             identification in any::<u32>(),
-            next_header in any::<u8>(),
+            next_header in ip_number_any(),
 
         ) {
             // negative case
@@ -405,7 +405,7 @@ mod test {
                 assert_eq!(
                     &input.to_bytes().unwrap(),
                     &[
-                        input.next_header,
+                        input.next_header.0,
                         0,
                         (
                             (fragment_offset_be[0] << 3 & 0b1111_1000u8) |
