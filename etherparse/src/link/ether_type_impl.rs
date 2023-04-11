@@ -41,12 +41,14 @@ impl EtherType {
 }
 
 impl From<u16> for EtherType {
+    #[inline]
     fn from(val: u16) -> Self {
         EtherType(val)
     }
 }
 
 impl From<EtherType> for u16 {
+    #[inline]
     fn from(val: EtherType) -> Self {
         val.0
     }
