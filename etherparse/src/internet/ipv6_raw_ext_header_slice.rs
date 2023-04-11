@@ -30,7 +30,7 @@ pub struct Ipv6RawExtHeaderSlice<'a> {
 
 impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// Returns true if the given header type ip number can be represented in an `Ipv6ExtensionHeaderSlice`.
-    pub fn header_type_supported(next_header: u8) -> bool {
+    pub fn header_type_supported(next_header: IpNumber) -> bool {
         Ipv6RawExtHeader::header_type_supported(next_header)
     }
 
@@ -98,8 +98,8 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
     #[inline]
-    pub fn next_header(&self) -> u8 {
-        unsafe { *self.slice.get_unchecked(0) }
+    pub fn next_header(&self) -> IpNumber {
+        IpNumber(unsafe { *self.slice.get_unchecked(0) })
     }
 
     /// Returns a slice containing the payload data of the header.
@@ -153,13 +153,13 @@ mod test {
     fn header_type_supported() {
         use ip_number::*;
         for value in 0..=u8::MAX {
-            let expected_supported = match value {
+            let expected_supported = match IpNumber(value) {
                 IPV6_HOP_BY_HOP | IPV6_DEST_OPTIONS | IPV6_ROUTE | MOBILITY | HIP | SHIM6 => true,
                 _ => false,
             };
             assert_eq!(
                 expected_supported,
-                Ipv6RawExtHeaderSlice::header_type_supported(value)
+                Ipv6RawExtHeaderSlice::header_type_supported(IpNumber(value))
             );
         }
     }

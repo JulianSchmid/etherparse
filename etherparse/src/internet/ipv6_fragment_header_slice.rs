@@ -55,10 +55,10 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
     ///
     /// See [IpNumber] or [ip_number] for a definition of the known values.
     #[inline]
-    pub fn next_header(&self) -> u8 {
+    pub fn next_header(&self) -> IpNumber {
         // SAFETY:
         // Slice size checked to be at least 8 bytes in constructor.
-        unsafe { *self.slice.get_unchecked(0) }
+        IpNumber(unsafe { *self.slice.get_unchecked(0) })
     }
 
     /// Fragment offset in 8 octets.
@@ -269,7 +269,7 @@ mod test {
         fn is_fragmenting_payload(
             non_zero_offset in 1u16..0b0001_1111_1111_1111u16,
             identification in any::<u32>(),
-            next_header in any::<u8>(),
+            next_header in ip_number_any(),
         ) {
             // negative case
             {

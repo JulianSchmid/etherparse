@@ -19,9 +19,9 @@ impl IpHeader {
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, u8, &[u8]), err::ip::HeaderSliceError> {
+    ) -> Result<(IpHeader, IpNumber, &[u8]), err::ip::HeaderSliceError> {
         let (header, payload) = IpHeader::from_slice(slice)?;
-        Ok((header, payload.ip_number.0, payload.payload))
+        Ok((header, payload.ip_number, payload.payload))
     }
 
     /// Read an IpHeaders from a slice and return the header & slice
@@ -143,7 +143,7 @@ impl IpHeader {
                     Ok((
                         IpHeader::Version4(header, exts),
                         IpPayload {
-                            ip_number: IpNumber(next_protocol),
+                            ip_number: next_protocol,
                             fragmented,
                             len_source: LenSource::Ipv4HeaderTotalLen,
                             payload: rest,
@@ -233,7 +233,7 @@ impl IpHeader {
                     Ok((
                         IpHeader::Version6(header, exts),
                         IpPayload {
-                            ip_number: IpNumber(next_header),
+                            ip_number: next_header,
                             fragmented,
                             len_source,
                             payload: rest,
@@ -295,7 +295,7 @@ impl IpHeader {
         Ok((
             IpHeader::Version4(header, exts),
             IpPayload {
-                ip_number: IpNumber(next_header),
+                ip_number: next_header,
                 fragmented,
                 len_source: LenSource::Ipv4HeaderTotalLen,
                 payload: exts_rest,
@@ -371,7 +371,7 @@ impl IpHeader {
         Ok((
             IpHeader::Version6(header, exts),
             IpPayload {
-                ip_number: IpNumber(next_header),
+                ip_number: next_header,
                 fragmented,
                 len_source,
                 payload: exts_rest,
@@ -384,7 +384,7 @@ impl IpHeader {
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<(IpHeader, u8), err::ip::HeaderReadError> {
+    ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
         use err::ip::{HeaderError::*, HeaderReadError::*};
 
         let value = {
@@ -477,7 +477,7 @@ impl IpHeader {
 
     /// Returns the last next header number following the ip header
     /// and header extensions.
-    pub fn next_header(&self) -> Result<u8, ValueError> {
+    pub fn next_header(&self) -> Result<IpNumber, ValueError> {
         use crate::IpHeader::*;
         match *self {
             Version4(ref header, ref extensions) => extensions.next_header(header.protocol),
@@ -491,7 +491,7 @@ impl IpHeader {
     ///
     /// The given number will be set as the last "next_header" or
     /// protocol number.
-    pub fn set_next_headers(&mut self, last_next_header: u8) -> u16 {
+    pub fn set_next_headers(&mut self, last_next_header: IpNumber) -> u16 {
         use IpHeader::*;
         match self {
             Version4(ref mut header, ref mut extensions) => {
@@ -550,7 +550,7 @@ mod test {
     use proptest::prelude::*;
     use std::io::Cursor;
 
-    const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
+    const EXTESION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
         AUTH,
         IPV6_DEST_OPTIONS,
         IPV6_HOP_BY_HOP,
@@ -677,7 +677,7 @@ mod test {
                     assert_eq!(
                         actual.1,
                         IpPayload{
-                            ip_number: IpNumber(header.next_header().unwrap()),
+                            ip_number: header.next_header().unwrap(),
                             fragmented: header.is_fragmenting_payload(),
                             len_source: LenSource::Ipv4HeaderTotalLen,
                             payload: &payload
@@ -709,7 +709,7 @@ mod test {
                     assert_eq!(
                         actual.1,
                         IpPayload{
-                            ip_number: IpNumber(header.next_header().unwrap()),
+                            ip_number: header.next_header().unwrap(),
                             fragmented: header.is_fragmenting_payload(),
                             len_source: LenSource::Ipv6HeaderPayloadLen,
                             payload: &payload
@@ -898,7 +898,7 @@ mod test {
             v4_exts in ipv4_extensions_any(),
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )

@@ -391,7 +391,7 @@ impl<'a> CursorSlice<'a> {
         if payload.fragmented {
             Ok(self.slice_payload())
         } else {
-            match payload.ip_number.0 {
+            match payload.ip_number {
                 ip_number::ICMP => self.slice_icmp4().map_err(Len),
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
@@ -444,7 +444,7 @@ impl<'a> CursorSlice<'a> {
         if payload.fragmented {
             Ok(self.slice_payload())
         } else {
-            match payload.ip_number.0 {
+            match payload.ip_number {
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
                     use err::tcp::HeaderSliceError as I;
@@ -503,7 +503,7 @@ impl<'a> CursorSlice<'a> {
             Ok(self.slice_payload())
         } else {
             //parse the data bellow
-            match payload_ip_number.0 {
+            match payload_ip_number {
                 ip_number::ICMP => self.slice_icmp4().map_err(Len),
                 ip_number::UDP => self.slice_udp().map_err(Len),
                 ip_number::TCP => self.slice_tcp().map_err(|err| {
@@ -777,7 +777,7 @@ mod test {
         // ipv4
         for fragmented in [false, true] {
             let ipv4 = {
-                let mut ipv4 = Ipv4Header::new(0, 1, 2, [3, 4, 5, 6], [7, 8, 9, 10]);
+                let mut ipv4 = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10]);
                 ipv4.more_fragments = fragmented;
                 ipv4
             };
@@ -868,7 +868,7 @@ mod test {
 
             // ipv4 extension content error
             {
-                let auth = IpAuthHeader::new(0, 1, 2, &[]).unwrap();
+                let auth = IpAuthHeader::new(0.into(), 1, 2, &[]).unwrap();
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
@@ -940,7 +940,7 @@ mod test {
                 traffic_class: 0,
                 flow_label: 1,
                 payload_length: 2,
-                next_header: 3,
+                next_header: 3.into(),
                 hop_limit: 4,
                 source: [0; 16],
                 destination: [0; 16],

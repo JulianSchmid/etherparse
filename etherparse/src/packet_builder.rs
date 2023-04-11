@@ -273,11 +273,11 @@ impl PacketBuilder {
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0,
-    ///             payload_length: 0, //will be replaced during write
-    ///             next_header: 0, //will be replaced during write
     ///             hop_limit: 4,
     ///             source: [0;16],
-    ///             destination: [0;16]
+    ///             destination: [0;16],
+    ///             // payload_length & next_header will be replaced during write
+    ///             ..Default::default() 
     ///         },
     ///         Default::default()))
     ///    .udp(21,    //source port
@@ -409,11 +409,11 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0,
-    ///             payload_length: 0, //will be replaced during write
-    ///             next_header: 0, //will be replaced during write
     ///             hop_limit: 4,
     ///             source: [0;16],
-    ///             destination: [0;16]
+    ///             destination: [0;16],
+    ///             // payload_length & next_header will be replaced during write
+    ///             ..Default::default() 
     ///         },
     ///         Default::default()));
     /// ```
@@ -470,7 +470,7 @@ impl PacketBuilderStep<Ethernet2Header> {
                 traffic_class: 0,
                 flow_label: 0,
                 payload_length: 0, //filled in on write
-                next_header: 0,    //filled in on write
+                next_header: IpNumber(255), //filled in on write
                 hop_limit,
                 source,
                 destination,
@@ -665,11 +665,11 @@ impl PacketBuilderStep<VlanHeader> {
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0,
-    ///             payload_length: 0, //will be replaced during write
-    ///             next_header: 0, //will be replaced during write
     ///             hop_limit: 4,
     ///             source: [0;16],
-    ///             destination: [0;16]
+    ///             destination: [0;16],
+    ///             // payload_length & next_header will be replaced during write
+    ///             ..Default::default() 
     ///         },
     ///         Default::default() // IPv6 extension headers (default is none)
     ///     ));
@@ -1267,7 +1267,7 @@ impl PacketBuilderStep<IpHeader> {
     pub fn write<T: io::Write + Sized>(
         mut self,
         writer: &mut T,
-        last_next_header_ip_number: u8,
+        last_next_header_ip_number: IpNumber,
         payload: &[u8],
     ) -> Result<(), WriteError> {
         self.state

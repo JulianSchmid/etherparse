@@ -21,7 +21,7 @@ pub struct Ipv4Header {
     pub more_fragments: bool,
     pub fragments_offset: u16,
     pub time_to_live: u8,
-    pub protocol: u8,
+    pub protocol: IpNumber,
     pub header_checksum: u16,
     pub source: [u8; 4],
     pub destination: [u8; 4],
@@ -53,7 +53,7 @@ impl Ipv4Header {
     pub fn new(
         payload_len: u16,
         time_to_live: u8,
-        protocol: u8,
+        protocol: IpNumber,
         source: [u8; 4],
         destination: [u8; 4],
     ) -> Ipv4Header {
@@ -225,7 +225,7 @@ impl Ipv4Header {
             more_fragments,
             fragments_offset,
             time_to_live: header_raw[8],
-            protocol: header_raw[9],
+            protocol: IpNumber(header_raw[9]),
             header_checksum: u16::from_be_bytes([header_raw[10], header_raw[11]]),
             source: [
                 header_raw[12],
@@ -329,7 +329,7 @@ impl Ipv4Header {
 
             id_be[0], id_be[1], frag_and_flags[0], frag_and_flags[1],
 
-            self.time_to_live, self.protocol, header_checksum_be[0], header_checksum_be[1],
+            self.time_to_live, self.protocol.0, header_checksum_be[0], header_checksum_be[1],
             self.source[0], self.source[1], self.source[2], self.source[3],
 
             self.destination[0], self.destination[1], self.destination[2], self.destination[3],
@@ -394,7 +394,7 @@ impl Ipv4Header {
             frag_and_flags[0],
             frag_and_flags[1],
             self.time_to_live,
-            self.protocol,
+            self.protocol.0,
             header_checksum_be[0],
             header_checksum_be[1],
             self.source[0],
@@ -448,7 +448,7 @@ impl Ipv4Header {
                 };
                 [flags | (frag_off_be[0] & 0x1f), frag_off_be[1]]
             })
-            .add_2bytes([self.time_to_live, self.protocol])
+            .add_2bytes([self.time_to_live, self.protocol.0])
             .add_4bytes(self.source)
             .add_4bytes(self.destination)
             .add_slice(self.options())
@@ -484,7 +484,7 @@ impl Default for Ipv4Header {
             more_fragments: false,
             fragments_offset: 0,
             time_to_live: 0,
-            protocol: 0,
+            protocol: IpNumber(255),
             header_checksum: 0,
             source: [0; 4],
             destination: [0; 4],
@@ -562,7 +562,7 @@ mod test {
         assert_eq!(false, default.more_fragments);
         assert_eq!(0, default.fragments_offset);
         assert_eq!(0, default.time_to_live);
-        assert_eq!(0, default.protocol);
+        assert_eq!(IpNumber(255), default.protocol);
         assert_eq!(0, default.header_checksum);
         assert_eq!([0; 4], default.source);
         assert_eq!([0; 4], default.destination);
@@ -572,7 +572,7 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv4_any()) {
-            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
+            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.ihl(),
                     input.differentiated_services_code_point,
                     input.explicit_congestion_notification,

@@ -23,9 +23,9 @@ impl Ipv4Extensions {
     /// Read all known ipv4 extensions and return an `Ipv4ExtensionSlices` with the
     /// identified slices, the final ip number and a slice pointing to the non parsed data.
     pub fn from_slice(
-        start_protocol: u8,
+        start_protocol: IpNumber,
         slice: &[u8],
-    ) -> Result<(Ipv4Extensions, u8, &[u8]), err::ip_auth::HeaderSliceError> {
+    ) -> Result<(Ipv4Extensions, IpNumber, &[u8]), err::ip_auth::HeaderSliceError> {
         Ipv4ExtensionsSlice::from_slice(start_protocol, slice).map(|v| (v.0.to_header(), v.1, v.2))
     }
 
@@ -35,8 +35,8 @@ impl Ipv4Extensions {
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-        start_ip_number: u8,
-    ) -> Result<(Ipv4Extensions, u8), err::ip_auth::HeaderReadError> {
+        start_ip_number: IpNumber,
+    ) -> Result<(Ipv4Extensions, IpNumber), err::ip_auth::HeaderReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeader::read(reader)?;
@@ -52,7 +52,7 @@ impl Ipv4Extensions {
     pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,
-        start_ip_number: u8,
+        start_ip_number: IpNumber,
     ) -> Result<(), WriteError> {
         use ip_number::*;
         use ValueError::*;
@@ -83,7 +83,7 @@ impl Ipv4Extensions {
     /// protocol_number.
     ///
     /// If no extension headers are present the value of the argument is returned.
-    pub fn set_next_headers(&mut self, last_protocol_number: u8) -> u8 {
+    pub fn set_next_headers(&mut self, last_protocol_number: IpNumber) -> IpNumber {
         use ip_number::*;
 
         let mut next = last_protocol_number;
@@ -101,7 +101,7 @@ impl Ipv4Extensions {
     ///
     /// In case a header is never
     /// referenced a ValueError::Ipv4ExtensionNotReferenced is returned.
-    pub fn next_header(&self, first_next_header: u8) -> Result<u8, ValueError> {
+    pub fn next_header(&self, first_next_header: IpNumber) -> Result<IpNumber, ValueError> {
         use ip_number::*;
         if let Some(ref auth) = self.auth {
             if first_next_header == AUTH {

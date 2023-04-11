@@ -11,6 +11,15 @@ pub fn vlan_ethertype_any() -> impl Strategy<Value = u16> {
 }
 
 prop_compose! {
+    pub fn ip_number_any()
+        (value in any::<u8>())
+        -> IpNumber
+    {
+        IpNumber(value)
+    }
+}
+
+prop_compose! {
     pub fn ethernet_2_with(ether_type: u16)(
         source in prop::array::uniform6(any::<u8>()),
         dest in prop::array::uniform6(any::<u8>()),
@@ -112,7 +121,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv4_with(protocol: u8)
+    pub fn ipv4_with(protocol: IpNumber)
     (
         ihl in 0u8..10,
         protocol in proptest::strategy::Just(protocol))
@@ -170,7 +179,7 @@ prop_compose! {
 }
 prop_compose! {
     pub fn ipv4_any()
-               (protocol in any::<u8>())
+               (protocol in ip_number_any())
                (result in ipv4_with(protocol))
                -> Ipv4Header
     {
@@ -179,7 +188,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv4_extensions_with(next_header: u8)
+    pub fn ipv4_extensions_with(next_header: IpNumber)
     (
         has_auth in any::<bool>(),
         auth in ip_auth_with(next_header)
@@ -199,7 +208,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv4_extensions_any()
-               (protocol in any::<u8>())
+               (protocol in ip_number_any())
                (result in ipv4_extensions_with(protocol))
                -> Ipv4Extensions
     {
@@ -208,7 +217,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_with(next_header: u8)
+    pub fn ipv6_with(next_header: IpNumber)
     (
         source in prop::array::uniform16(any::<u8>()),
         dest in prop::array::uniform16(any::<u8>()),
@@ -233,7 +242,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv6_any()
-        (next_header in any::<u8>())
+        (next_header in ip_number_any())
         (result in ipv6_with(next_header)
     ) -> Ipv6Header
     {
@@ -243,7 +252,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv6_raw_ext_with(
-        next_header: u8,
+        next_header: IpNumber,
         len: u8
     ) (
         next_header in proptest::strategy::Just(next_header),
@@ -260,7 +269,7 @@ prop_compose! {
 prop_compose! {
     pub fn ipv6_raw_ext_any()
         (
-            next_header in any::<u8>(),
+            next_header in ip_number_any(),
             len in any::<u8>()
         ) (
             result in ipv6_raw_ext_with(next_header, len)
@@ -271,7 +280,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn ipv6_extensions_with(next_header: u8)
+    pub fn ipv6_extensions_with(next_header: IpNumber)
     (
         has_hop_by_hop_options in any::<bool>(),
         hop_by_hop_options in ipv6_raw_ext_any(),
@@ -331,7 +340,7 @@ prop_compose! {
 prop_compose! {
     pub fn ipv6_extensions_any()
         (
-            next_header in any::<u8>()
+            next_header in ip_number_any()
         ) (
             result in ipv6_extensions_with(next_header)
     ) -> Ipv6Extensions
@@ -342,7 +351,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv6_fragment_with(
-        next_header: u8
+        next_header: IpNumber
     ) (
         next_header in proptest::strategy::Just(next_header),
         fragment_offset in 0u16..=0b0001_1111_1111_1111u16,
@@ -361,7 +370,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv6_fragment_any()
-        (next_header in any::<u8>())
+        (next_header in ip_number_any())
         (result in ipv6_fragment_with(next_header)
     ) -> Ipv6FragmentHeader
     {
@@ -371,7 +380,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ip_auth_with(
-        next_header: u8
+        next_header: IpNumber
     ) (
         next_header in proptest::strategy::Just(next_header),
         len in 1..0xffu8
@@ -392,7 +401,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ip_auth_any() (
-        next_header in any::<u8>()
+        next_header in ip_number_any()
     ) (
         header in ip_auth_with(next_header)
     ) -> IpAuthHeader {

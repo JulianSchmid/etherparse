@@ -1,5 +1,5 @@
 use crate::err::{ipv6::SliceError, Layer, LenError, LenSource};
-use crate::{IpNumber, IpPayload, Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
+use crate::{IpPayload, Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
 
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -85,7 +85,7 @@ impl<'a> Ipv6Slice<'a> {
             header,
             exts,
             payload: IpPayload {
-                ip_number: IpNumber(payload_ip_number),
+                ip_number: payload_ip_number,
                 fragmented,
                 len_source,
                 payload,

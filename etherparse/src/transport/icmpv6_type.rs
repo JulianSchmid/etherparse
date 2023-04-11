@@ -404,7 +404,7 @@ impl Icmpv6Type {
         let pseudo_sum = checksum::Sum16BitWords::new()
             .add_16bytes(source_ip)
             .add_16bytes(destination_ip)
-            .add_2bytes([0, ip_number::IPV6_ICMP])
+            .add_2bytes([0, ip_number::IPV6_ICMP.0])
             .add_4bytes((msg_len as u32).to_be_bytes());
 
         use crate::{icmpv6::*, Icmpv6Type::*};
@@ -629,7 +629,7 @@ mod test {
                         crate::checksum::Sum16BitWords::new()
                         .add_16bytes(ip_header.source)
                         .add_16bytes(ip_header.destination)
-                        .add_2bytes([0, ip_number::IPV6_ICMP])
+                        .add_2bytes([0, ip_number::IPV6_ICMP.0])
                         .add_4bytes((
                             payload.len() as u32 + icmpv6_type.header_len() as u32
                         ).to_be_bytes())

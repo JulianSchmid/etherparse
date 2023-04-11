@@ -4,7 +4,7 @@ use crate::ip_number::*;
 use std::io::Cursor;
 
 // IP numbers that are assigned ipv6 header extensions.
-const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
+const EXTESION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
     AUTH,
     IPV6_DEST_OPTIONS,
     IPV6_HOP_BY_HOP,
@@ -15,13 +15,13 @@ const EXTESION_KNOWN_IP_NUMBERS: [u8; 5] = [
 /// Helper struct that generates test data with dummy
 /// extension header data.
 struct ExtensionTestPayload {
-    ip_numbers: Vec<u8>,
+    ip_numbers: Vec<IpNumber>,
     lengths: Vec<usize>,
     data: Vec<u8>,
 }
 
 impl ExtensionTestPayload {
-    pub fn new(ip_numbers: &[u8], header_sizes: &[u8]) -> ExtensionTestPayload {
+    pub fn new(ip_numbers: &[IpNumber], header_sizes: &[u8]) -> ExtensionTestPayload {
         assert!(ip_numbers.len() > 1);
         assert!(header_sizes.len() > 0);
 
@@ -44,12 +44,12 @@ impl ExtensionTestPayload {
         &self.data
     }
 
-    fn add_payload(&mut self, ip_number: u8, next_header: u8, header_ext_len: u8) {
+    fn add_payload(&mut self, ip_number: IpNumber, next_header: IpNumber, header_ext_len: u8) {
         match ip_number {
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
                 // insert next header & size
                 let mut raw: [u8; 0xff * 8 + 8] = [0; 0xff * 8 + 8];
-                raw[0] = next_header;
+                raw[0] = next_header.0;
                 raw[1] = header_ext_len;
 
                 // insert payload
@@ -60,7 +60,7 @@ impl ExtensionTestPayload {
             IPV6_FRAG => {
                 // generate payload
                 let mut raw: [u8; 8] = [0; 8];
-                raw[0] = next_header;
+                raw[0] = next_header.0;
                 raw[1] = 0;
 
                 // insert payload
@@ -69,7 +69,7 @@ impl ExtensionTestPayload {
             }
             AUTH => {
                 let mut raw: [u8; 0xff * 4 + 8] = [0; 0xff * 4 + 8];
-                raw[0] = next_header;
+                raw[0] = next_header.0;
                 // authentfication header len is defined as
                 // '32-bit words (4-byteunits), minus "2"'
                 let len = if header_ext_len > 0 {
@@ -162,7 +162,7 @@ impl ExtensionTestPayload {
 
     /// Checks the if the extensions match the expected values based
     /// on this test payload.
-    pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, Option<u8>, u8) {
+    pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, Option<IpNumber>, IpNumber) {
         struct ReadState {
             hop_by_hop: bool,
             dest_opt: bool,
@@ -312,12 +312,12 @@ impl ExtensionTestPayload {
 /// extension header data.
 #[derive(Clone)]
 struct ExtensionTestHeaders {
-    ip_numbers: Vec<u8>,
+    ip_numbers: Vec<IpNumber>,
     data: Ipv6Extensions,
 }
 
 impl ExtensionTestHeaders {
-    pub fn new(ip_numbers: &[u8], header_sizes: &[u8]) -> ExtensionTestHeaders {
+    pub fn new(ip_numbers: &[IpNumber], header_sizes: &[u8]) -> ExtensionTestHeaders {
         assert!(ip_numbers.len() > 1);
         assert!(header_sizes.len() > 0);
 
@@ -342,7 +342,7 @@ impl ExtensionTestHeaders {
         result
     }
 
-    pub fn introduce_missing_ref(&mut self, new_header: u8) -> IpNumber {
+    pub fn introduce_missing_ref(&mut self, new_header: IpNumber) -> IpNumber {
         assert!(self.ip_numbers.len() >= 2);
 
         // set the next_header of the last extension header and return the id
@@ -402,7 +402,7 @@ impl ExtensionTestHeaders {
         }
     }
 
-    fn add_payload(&mut self, ip_number: u8, next_header: u8, header_ext_len: u8) -> bool {
+    fn add_payload(&mut self, ip_number: IpNumber, next_header: IpNumber, header_ext_len: u8) -> bool {
         match ip_number {
             IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
                 use Ipv6RawExtHeader as R;
@@ -487,7 +487,7 @@ pub mod header {
         #[test]
         fn from_slice(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
@@ -504,7 +504,7 @@ pub mod header {
             }
 
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8]) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
                 // setup test payload
                 let e = ExtensionTestPayload::new(
                     ip_numbers,
@@ -585,7 +585,7 @@ pub mod header {
         #[test]
         fn read(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
@@ -602,7 +602,7 @@ pub mod header {
             }
 
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8]) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
                 // setup test payload
                 let e = ExtensionTestPayload::new(
                     ip_numbers,
@@ -669,7 +669,7 @@ pub mod header {
         #[test]
         fn write(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
@@ -683,7 +683,7 @@ pub mod header {
             }
 
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8], post_header: u8) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8], post_header: IpNumber) {
                 use ValueError::*;
 
                 // setup test header
@@ -864,7 +864,7 @@ pub mod header {
             fragment in ipv6_fragment_any(),
             auth in ip_auth_any(),
             final_destination_options in ipv6_raw_ext_any(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 ),
@@ -910,7 +910,7 @@ pub mod header {
         #[test]
         fn next_header(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 ),)
@@ -922,7 +922,7 @@ pub mod header {
             }
 
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8], post_header: u8) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8], post_header: IpNumber) {
                 use ValueError::*;
 
                 // setup test header
@@ -1153,7 +1153,7 @@ pub mod slice {
         #[test]
         fn from_slice(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
@@ -1172,7 +1172,7 @@ pub mod slice {
             }
 
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8]) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
                 // setup test payload
                 let e = ExtensionTestPayload::new(
                     ip_numbers,
@@ -1362,7 +1362,7 @@ pub mod ipv6_routing_extension {
     #[test]
     fn debug() {
         let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
-            routing: Ipv6RawExtHeader::new_raw(0, &[0; 6]).unwrap(),
+            routing: Ipv6RawExtHeader::new_raw(0.into(), &[0; 6]).unwrap(),
             final_destination_options: None,
         };
         assert_eq!(
@@ -1377,7 +1377,7 @@ pub mod ipv6_routing_extension {
     #[test]
     fn clone_eq() {
         let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
-            routing: Ipv6RawExtHeader::new_raw(0, &[0; 6]).unwrap(),
+            routing: Ipv6RawExtHeader::new_raw(0.into(), &[0; 6]).unwrap(),
             final_destination_options: None,
         };
         assert_eq!(a, a.clone());
@@ -1463,13 +1463,13 @@ pub mod slice_iter {
         #[test]
         fn next(
             header_size in any::<u8>(),
-            post_header in any::<u8>()
+            post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
                     |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             /// Run a test with the given ip numbers
-            fn run_test(ip_numbers: &[u8], header_sizes: &[u8]) {
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
                 // setup test payload
                 let e = ExtensionTestPayload::new(
                     ip_numbers,
@@ -1557,8 +1557,11 @@ pub mod slice_iter {
     fn debug() {
         let a: Ipv6ExtensionSliceIter = Default::default();
         assert_eq!(
-            "Ipv6ExtensionSliceIter { next_header: 59, rest: [] }",
-            &format!("{:?}", a)
+            format!(
+                "Ipv6ExtensionSliceIter {{ next_header: {:?}, rest: [] }}",
+                IpNumber(59)
+            ),
+            format!("{:?}", a)
         );
     }
 

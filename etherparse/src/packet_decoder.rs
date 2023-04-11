@@ -392,7 +392,7 @@ fn read_transport(
         };
         use crate::ip_number::*;
         use err::tcp::HeaderSliceError::*;
-        match ip_payload.ip_number.0 {
+        match ip_payload.ip_number {
             ICMP => Icmpv4Header::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
                 .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1)),
@@ -579,7 +579,7 @@ mod test {
         // ipv4
         for fragmented in [false, true] {
             let ipv4 = {
-                let mut ipv4 = Ipv4Header::new(0, 1, 2, [3, 4, 5, 6], [7, 8, 9, 10]);
+                let mut ipv4 = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10]);
                 ipv4.more_fragments = fragmented;
                 ipv4
             };
@@ -646,7 +646,7 @@ mod test {
 
             // ipv4 extension content error
             {
-                let auth = IpAuthHeader::new(0, 1, 2, &[]).unwrap();
+                let auth = IpAuthHeader::new(0.into(), 1, 2, &[]).unwrap();
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
@@ -718,7 +718,7 @@ mod test {
                 traffic_class: 0,
                 flow_label: 1,
                 payload_length: 2,
-                next_header: 3,
+                next_header: 3.into(),
                 hop_limit: 4,
                 source: [0; 16],
                 destination: [0; 16],

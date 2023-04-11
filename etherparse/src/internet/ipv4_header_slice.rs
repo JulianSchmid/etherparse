@@ -205,11 +205,11 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Read the "protocol" field from the slice.
     #[inline]
-    pub fn protocol(&self) -> u8 {
+    pub fn protocol(&self) -> IpNumber {
         // SAFETY:
         // Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
-        unsafe { *self.slice.get_unchecked(9) }
+        IpNumber(unsafe { *self.slice.get_unchecked(9) })
     }
 
     /// Read the "header checksum" field from the slice.
