@@ -41,9 +41,9 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     ///
     /// The caller must ensured that the given slice has the length of
     /// [`Ethernet2Header::LEN`]
-    #[cfg(feature = "std")]
     #[inline]
     pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ethernet2HeaderSlice {
+        debug_assert!(slice.len() == Ethernet2Header::LEN);
         Ethernet2HeaderSlice { slice }
     }
 
@@ -53,7 +53,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         self.slice
     }
 
-    /// Read the destination mac address
+    /// Read the destination MAC address
     #[inline]
     pub fn destination(&self) -> [u8; 6] {
         // SAFETY:
@@ -62,7 +62,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr()) }
     }
 
-    /// Read the source mac address
+    /// Read the source MAC address
     #[inline]
     pub fn source(&self) -> [u8; 6] {
         // SAFETY:
@@ -71,7 +71,8 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr().add(6)) }
     }
 
-    /// Read the ether_type field of the header (in system native byte order).
+    /// Read the ether_type field of the header indicating the protocol
+    /// after the header.
     #[inline]
     pub fn ether_type(&self) -> EtherType {
         // SAFETY:
@@ -80,7 +81,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         EtherType(unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) })
     }
 
-    /// Decode all the fields and copy the results to a Ipv4Header struct
+    /// Decode all the fields and copy the results to a [``] struct
     pub fn to_header(&self) -> Ethernet2Header {
         Ethernet2Header {
             source: self.source(),

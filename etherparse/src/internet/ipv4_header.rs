@@ -3,7 +3,7 @@ use arrayvec::ArrayVec;
 use crate::*;
 use core::fmt::{Debug, Formatter};
 
-/// IPv4 header without options.
+/// IPv4 header with options.
 #[derive(Clone)]
 pub struct Ipv4Header {
     pub differentiated_services_code_point: u8,
@@ -21,9 +21,14 @@ pub struct Ipv4Header {
     pub more_fragments: bool,
     pub fragments_offset: IpFragOffset,
     pub time_to_live: u8,
+    /// IP protocol number specifying the next header or transport layer protocol.
+    ///
+    /// See [IpNumber] or [ip_number] for a definitions of ids.
     pub protocol: IpNumber,
     pub header_checksum: u16,
+    /// IPv4 source address
     pub source: [u8; 4],
+    /// IPv4 destination address
     pub destination: [u8; 4],
     /// Length of the options in the options_buffer in bytes.
     pub(crate) options_len: u8,
