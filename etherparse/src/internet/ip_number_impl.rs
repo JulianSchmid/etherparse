@@ -546,7 +546,6 @@ impl IpNumber {
     /// 
     /// # Data Source
     /// 
-    /// 
     /// The string was copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
     /// on 2023-04-11.
     pub fn protocol_str(self) -> Option<&'static str> {

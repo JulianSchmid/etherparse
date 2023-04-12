@@ -1007,7 +1007,7 @@ mod test {
                 let auth = IpAuthHeader::new(ip_number::GGP, 1, 2, &[]).unwrap();
                 let frag = Ipv6FragmentHeader {
                     next_header: ip_number::AUTH,
-                    fragment_offset: 0,
+                    fragment_offset: 0.try_into().unwrap(),
                     more_fragments: fragment,
                     identification: 3,
                 };

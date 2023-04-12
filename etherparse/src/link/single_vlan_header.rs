@@ -82,7 +82,7 @@ impl SingleVlanHeader {
     /// the header values are outside of range.
     #[inline]
     pub fn to_bytes(&self) -> Result<[u8; 4], ValueError> {
-        use crate::ErrorField::*;
+        use crate::err::ValueType::*;
         // check value ranges
         max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
         max_check_u16(self.vlan_identifier, 0xfff, VlanTagVlanId)?;
@@ -236,7 +236,7 @@ mod test {
                     let expected = ValueError::U8TooLarge{
                         value: bad_input.priority_code_point,
                         max: 0b111,
-                        field: ErrorField::VlanTagPriorityCodePoint
+                        field: err::ValueType::VlanTagPriorityCodePoint
                     };
                     assert_eq!(
                         expected,
@@ -262,7 +262,7 @@ mod test {
                     let expected = ValueError::U16TooLarge{
                         value: bad_input.vlan_identifier,
                         max: 0b1111_1111_1111,
-                        field: ErrorField::VlanTagVlanId
+                        field: err::ValueType::VlanTagVlanId
                     };
                     assert_eq!(
                         expected,

@@ -61,23 +61,20 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
         IpNumber(unsafe { *self.slice.get_unchecked(0) })
     }
 
-    /// Fragment offset in 8 octets.
-    ///
-    /// Note: In the header only 13 bits are used, so the allowed range
-    /// of the value is between 0 and 0x1FFF (inclusive).
+    /// Fragment offset
     #[inline]
-    pub fn fragment_offset(&self) -> u16 {
-        u16::from_be_bytes(
-            // SAFETY:
-            // Slice size checked to be at least 8 bytes in constructor.
-            unsafe {
-                [
-                    (*self.slice.get_unchecked(2) >> 3) & 0b0001_1111u8,
-                    ((*self.slice.get_unchecked(2) << 5) & 0b1110_0000u8)
-                        | (*self.slice.get_unchecked(3) & 0b0001_1111u8),
-                ]
-            },
-        )
+    pub fn fragment_offset(&self) -> IpFragOffset {
+        unsafe {
+            // SAFETY: Safe as the resulting number is guranteed to be only
+            // 13 bit long.
+            IpFragOffset::new_unchecked(u16::from_be_bytes([
+                // SAFETY:
+                // Slice size checked to be at least 8 bytes in constructor.
+                (*self.slice.get_unchecked(2) >> 3) & 0b0001_1111u8,
+                ((*self.slice.get_unchecked(2) << 5) & 0b1110_0000u8)
+                    | (*self.slice.get_unchecked(3) & 0b0001_1111u8),
+            ]))
+        }
     }
 
     /// True if more fragment packets will follow. False if this is the last packet.
@@ -174,7 +171,7 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv6_fragment_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = Ipv6FragmentHeaderSlice::from_slice(
                 &bytes
             ).unwrap();
@@ -191,7 +188,7 @@ mod test {
     proptest! {
         #[test]
         fn clone_eq(input in ipv6_fragment_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = Ipv6FragmentHeaderSlice::from_slice(
                 &bytes
             ).unwrap();
@@ -254,7 +251,7 @@ mod test {
     proptest! {
         #[test]
         fn getters(input in ipv6_fragment_any()) {
-            let buffer = input.to_bytes().unwrap();
+            let buffer = input.to_bytes();
             let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer[..]).unwrap();
 
             assert_eq!(input.next_header, slice.next_header());
@@ -275,12 +272,12 @@ mod test {
             {
                 let header = Ipv6FragmentHeader {
                     next_header,
-                    fragment_offset: 0,
+                    fragment_offset: 0.try_into().unwrap(),
                     more_fragments: false,
                     identification
                 };
                 // slice
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
                 assert!(false == slice.is_fragmenting_payload());
             }
@@ -288,12 +285,12 @@ mod test {
             {
                 let header = Ipv6FragmentHeader {
                     next_header,
-                    fragment_offset: non_zero_offset,
+                    fragment_offset: non_zero_offset.try_into().unwrap(),
                     more_fragments: false,
                     identification
                 };
                 // slice
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
                 assert!(slice.is_fragmenting_payload());
             }
@@ -302,12 +299,12 @@ mod test {
             {
                 let header = Ipv6FragmentHeader {
                     next_header,
-                    fragment_offset: 0,
+                    fragment_offset: 0.try_into().unwrap(),
                     more_fragments: true,
                     identification
                 };
                 // slice
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
                 assert!(slice.is_fragmenting_payload());
             }
@@ -316,12 +313,12 @@ mod test {
             {
                 let header = Ipv6FragmentHeader {
                     next_header,
-                    fragment_offset: non_zero_offset,
+                    fragment_offset: non_zero_offset.try_into().unwrap(),
                     more_fragments: true,
                     identification
                 };
                 // slice
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
                 assert!(slice.is_fragmenting_payload());
             }
@@ -331,7 +328,7 @@ mod test {
     proptest! {
         #[test]
         fn to_header(input in ipv6_fragment_any()) {
-            let buffer = input.to_bytes().unwrap();
+            let buffer = input.to_bytes();
             let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(input, slice.to_header());
         }

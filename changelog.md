@@ -16,15 +16,17 @@
 
 ### Changes in Behavior
 
+* `SlicedPacket` & `PacketHeaders` now also verify the total_length and payload length fields present in the IPv4 & IPv6 header. This means the `*from_slice*` methods newly throw an error not enough data is present and also newly limit the resulting payload size.
 * Removed `ReadError::Ipv6TooManyHeaderExtensions` error when calling `Ipv6Header::skip_all_header_extensions` and `Ipv6Header::skip_all_header_extensions_in_slice`.
 * The slice returned by `IpHeader::from_slice`is now the payload of the IP packet (determined by the length specified in the IP header). Previously whatever was left over from the input slice after parsing the IP header and extensions was returned. Now the slice length is limited based on the "payload lenght" field (IPv6) or "total length" field IPv4.
 
 ### Breaking Changes:
 
-* TODO: Changed packet slicing & reading so the length of the payload is taken into account.
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
 * Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
+* `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
 * Removed `IPV6_MAX_NUM_HEADER_EXTENSIONS` as it is no longer used by the skip functions.
+* Type of `fragment_offset` in `Ipv4Header` & `Ipv6FragmentHeader` changed from `u16` to `IpFragOffset`.
 
 ### Bugfixes
 

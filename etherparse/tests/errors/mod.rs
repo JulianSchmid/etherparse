@@ -63,17 +63,17 @@ fn value_error_source() {
         U8TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         U16TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         U32TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         Icmpv6InIpv4,
     ];
@@ -101,17 +101,17 @@ fn value_error_debug() {
         U8TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         U16TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         U32TooLarge {
             value: 0,
             max: 0,
-            field: ErrorField::Ipv4Dscp,
+            field: err::ValueType::Ipv4Dscp,
         },
         Icmpv6InIpv4,
     ];
@@ -131,7 +131,7 @@ proptest! {
         value_u32 in any::<u32>(),
         max_u32 in any::<u32>(),
         arg_usize in any::<usize>(),
-        field in error_field_any(),
+        field in err_field_any(),
         ip_protocol_number in ip_number_any(),
     ) {
         use ValueError::*;
@@ -252,34 +252,3 @@ proptest! {
     }
 }
 
-#[test]
-fn error_field_display() {
-    use ErrorField::*;
-
-    assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
-    assert_eq!(
-        "Ipv4Header.differentiated_services_code_point",
-        &format!("{}", Ipv4Dscp)
-    );
-    assert_eq!(
-        "Ipv4Header.explicit_congestion_notification",
-        &format!("{}", Ipv4Ecn)
-    );
-    assert_eq!(
-        "Ipv4Header.fragments_offset",
-        &format!("{}", Ipv4FragmentsOffset)
-    );
-    assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
-    assert_eq!(
-        "Ipv6FragmentHeader.fragment_offset",
-        &format!("{}", Ipv6FragmentOffset)
-    );
-    assert_eq!(
-        "SingleVlanHeader.priority_code_point",
-        &format!("{}", VlanTagPriorityCodePoint)
-    );
-    assert_eq!(
-        "SingleVlanHeader.vlan_identifier",
-        &format!("{}", VlanTagVlanId)
-    );
-}

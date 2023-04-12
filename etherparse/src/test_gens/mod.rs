@@ -176,7 +176,7 @@ prop_compose! {
         result.identification = identification;
         result.dont_fragment = dont_fragment;
         result.more_fragments = more_fragments;
-        result.fragments_offset = fragments_offset;
+        result.fragments_offset = fragments_offset.try_into().unwrap();
         result.time_to_live = ttl;
         result.protocol = protocol;
         result.header_checksum = header_checksum;
@@ -370,7 +370,7 @@ prop_compose! {
     {
         Ipv6FragmentHeader::new(
             next_header,
-            fragment_offset,
+            fragment_offset.try_into().unwrap(),
             more_fragments,
             identification
         )

@@ -277,6 +277,7 @@ mod internet;
 pub use crate::internet::internet_slice::*;
 pub use crate::internet::ip_auth_header::*;
 pub use crate::internet::ip_auth_header_slice::*;
+pub use crate::internet::ip_frag_offset::*;
 pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_number_impl::*;
 pub use crate::internet::ip_payload::*;
@@ -347,6 +348,14 @@ pub(crate) mod test_packet;
     note = "Please use the type err::ReadError instead or use the specific error type returned by operation you are using."
 )]
 pub type ReadError = err::ReadError;
+
+/// Deprecated use [err::ReadError] instead or use the specific error type returned by operation you are using.
+#[cfg(feature = "std")]
+#[deprecated(
+    since = "0.14.0",
+    note = "Please use the type err::Field instead."
+)]
+pub type ErrorField = err::ValueType;
 
 ///Errors that can occur when writing.
 #[cfg(feature = "std")]
@@ -450,19 +459,19 @@ pub enum ValueError {
     U8TooLarge {
         value: u8,
         max: u8,
-        field: ErrorField,
+        field: err::ValueType,
     },
     /// Error when a u16 field in a header has a larger value then supported.
     U16TooLarge {
         value: u16,
         max: u16,
-        field: ErrorField,
+        field: err::ValueType,
     },
     /// Error when a u32 field in a header has a larger value then supported.
     U32TooLarge {
         value: u32,
         max: u32,
-        field: ErrorField,
+        field: err::ValueType,
     },
     /// Error when an Icmpv6 payload is found in an IPv4 packet.
     Icmpv6InIpv4,
@@ -542,39 +551,7 @@ impl core::fmt::Display for ValueError {
     }
 }
 
-///Fields that can produce errors when serialized.
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ErrorField {
-    Ipv4PayloadLength,
-    Ipv4Dscp,
-    Ipv4Ecn,
-    Ipv4FragmentsOffset,
-    Ipv6FlowLabel,
-    /// Ipv6 fragment header fragment offset field.
-    Ipv6FragmentOffset,
-    /// VlanTaggingHeader.priority_code_point
-    VlanTagPriorityCodePoint,
-    /// VlanTaggingHeader.vlan_identifier
-    VlanTagVlanId,
-}
-
-impl core::fmt::Display for ErrorField {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use ErrorField::*;
-        match self {
-            Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
-            Ipv4Dscp => write!(f, "Ipv4Header.differentiated_services_code_point"),
-            Ipv4Ecn => write!(f, "Ipv4Header.explicit_congestion_notification"),
-            Ipv4FragmentsOffset => write!(f, "Ipv4Header.fragments_offset"),
-            Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
-            Ipv6FragmentOffset => write!(f, "Ipv6FragmentHeader.fragment_offset"),
-            VlanTagPriorityCodePoint => write!(f, "SingleVlanHeader.priority_code_point"),
-            VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier"),
-        }
-    }
-}
-
-fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError> {
+fn max_check_u8(value: u8, max: u8, field: err::ValueType) -> Result<(), ValueError> {
     use crate::ValueError::U8TooLarge;
     if value <= max {
         Ok(())
@@ -583,7 +560,7 @@ fn max_check_u8(value: u8, max: u8, field: ErrorField) -> Result<(), ValueError>
     }
 }
 
-fn max_check_u16(value: u16, max: u16, field: ErrorField) -> Result<(), ValueError> {
+fn max_check_u16(value: u16, max: u16, field: err::ValueType) -> Result<(), ValueError> {
     use crate::ValueError::U16TooLarge;
     if value <= max {
         Ok(())

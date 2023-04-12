@@ -265,7 +265,7 @@ mod test {
                 let expected = ValueError::U8TooLarge{
                     value: bad_input.outer.priority_code_point,
                     max: 0b111,
-                    field: ErrorField::VlanTagPriorityCodePoint
+                    field: err::ValueType::VlanTagPriorityCodePoint
                 };
 
                 assert_eq!(
@@ -293,7 +293,7 @@ mod test {
                 let expected = ValueError::U8TooLarge{
                     value: bad_input.inner.priority_code_point,
                     max: 0b111,
-                    field: ErrorField::VlanTagPriorityCodePoint
+                    field: err::ValueType::VlanTagPriorityCodePoint
                 };
 
                 assert_eq!(

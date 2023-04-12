@@ -20,8 +20,8 @@ use test_writer::*;
 
 #[test]
 fn test_eq() {
-    assert_eq!(ErrorField::Ipv4PayloadLength, ErrorField::Ipv4PayloadLength);
-    assert_ne!(ErrorField::Ipv4PayloadLength, ErrorField::Ipv4Dscp);
+    assert_eq!(err::ValueType::Ipv4PayloadLength, err::ValueType::Ipv4PayloadLength);
+    assert_ne!(err::ValueType::Ipv4PayloadLength, err::ValueType::Ipv4Dscp);
 }
 
 #[test]
@@ -63,35 +63,18 @@ fn test_debug_write() {
             U8TooLarge {
                 value: 0,
                 max: 0,
-                field: ErrorField::Ipv4Ecn,
+                field: err::ValueType::Ipv4Ecn,
             },
             U16TooLarge {
                 value: 0,
                 max: 0,
-                field: ErrorField::Ipv4Ecn,
+                field: err::ValueType::Ipv4Ecn,
             },
             U32TooLarge {
                 value: 0,
                 max: 0,
-                field: ErrorField::Ipv4Ecn,
+                field: err::ValueType::Ipv4Ecn,
             },
-        ]
-        .iter()
-        {
-            println!("{:?}", value);
-        }
-    }
-    //error field
-    {
-        use crate::ErrorField::*;
-        for value in [
-            Ipv4PayloadLength,
-            Ipv4Dscp,
-            Ipv4Ecn,
-            Ipv4FragmentsOffset,
-            Ipv6FlowLabel,
-            VlanTagPriorityCodePoint,
-            VlanTagVlanId,
         ]
         .iter()
         {

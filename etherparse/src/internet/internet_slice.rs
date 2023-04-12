@@ -372,7 +372,7 @@ mod test {
             {
                 let mut ipv4 = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
                 if fragment {
-                    ipv4.fragments_offset = 123;
+                    ipv4.fragments_offset = 123.try_into().unwrap();
                 }
 
                 let data = ipv4.to_bytes().unwrap();
@@ -387,7 +387,7 @@ mod test {
             {
                 let ipv6_frag = Ipv6FragmentHeader {
                     next_header: UDP,
-                    fragment_offset: 0,
+                    fragment_offset: IpFragOffset::ZERO,
                     more_fragments: fragment,
                     identification: 0,
                 };
@@ -402,7 +402,7 @@ mod test {
                 };
                 let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
                 data.extend_from_slice(&ipv6.to_bytes().unwrap());
-                data.extend_from_slice(&ipv6_frag.to_bytes().unwrap());
+                data.extend_from_slice(&ipv6_frag.to_bytes());
 
                 assert_eq!(
                     fragment,

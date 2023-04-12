@@ -295,8 +295,8 @@ impl Ipv6Header {
     /// sized byte array.
     #[rustfmt::skip]
     pub fn to_bytes(&self) -> Result<[u8;Ipv6Header::LEN], ValueError> {
-        use crate::ErrorField::*;
-        fn max_check_u32(value: u32, max: u32, field: ErrorField) -> Result<(), ValueError> {
+        use crate::err::ValueType::*;
+        fn max_check_u32(value: u32, max: u32, field: err::ValueType) -> Result<(), ValueError> {
             if value <= max {
                 Ok(())
             } else {
@@ -591,7 +591,7 @@ mod test {
             }
             // frag header
             {
-                let bytes = frag.to_bytes().unwrap();
+                let bytes = frag.to_bytes();
                 // ok case
                 {
                     let (next, rest) = Ipv6Header::skip_header_extension_in_slice(&bytes, IPV6_FRAG).unwrap();
@@ -715,7 +715,7 @@ mod test {
 
                 let mut frag = frag.clone();
                 frag.next_header = AUTH;
-                buffer.extend(frag.to_bytes().unwrap());
+                buffer.extend(frag.to_bytes());
 
                 let mut auth = auth.clone();
                 auth.next_header = IPV6_DEST_OPTIONS;
@@ -909,7 +909,7 @@ mod test {
 
                 let mut frag = frag.clone();
                 frag.next_header = AUTH;
-                buffer.extend(frag.to_bytes().unwrap());
+                buffer.extend(frag.to_bytes());
 
                 let mut auth = auth.clone();
                 auth.next_header = IPV6_DEST_OPTIONS;
@@ -1015,7 +1015,7 @@ mod test {
                     ValueError::U32TooLarge {
                         value: bad_flow_label,
                         max: 0b1111_1111_1111_1111_1111,
-                        field: ErrorField::Ipv6FlowLabel,
+                        field: err::ValueType::Ipv6FlowLabel,
                     }
                 );
             }

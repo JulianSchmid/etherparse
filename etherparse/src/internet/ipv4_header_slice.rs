@@ -180,18 +180,18 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Read the "fragment_offset" field from the slice.
     #[inline]
-    pub fn fragments_offset(&self) -> u16 {
-        u16::from_be_bytes(
+    pub fn fragments_offset(&self) -> IpFragOffset {
+        unsafe {
             // SAFETY:
-            // Safe as the slice length is checked to be at least
-            // Ipv4Header::MIN_LEN (20) in the constructor.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(6) & 0x1f,
-                    *self.slice.get_unchecked(7),
-                ]
-            },
-        )
+            // Safe as the value is limited to be 13 bits long bellow.
+            IpFragOffset::new_unchecked(u16::from_be_bytes([
+                // SAFETY:
+                // Safe as the slice length is checked to be at least
+                // Ipv4Header::MIN_LEN (20) in the constructor.
+                *self.slice.get_unchecked(6) & 0x1f,
+                *self.slice.get_unchecked(7),
+            ]))
+        }
     }
 
     /// Read the "time_to_live" field from the slice.
@@ -268,7 +268,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// an fragment offset.
     #[inline]
     pub fn is_fragmenting_payload(&self) -> bool {
-        self.more_fragments() || (0 != self.fragments_offset())
+        self.more_fragments() || (0 != self.fragments_offset().value())
     }
 
     /// Decode all the fields and copy the results to a Ipv4Header struct
@@ -467,7 +467,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 0;
+                header.fragments_offset = 0.try_into().unwrap();
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
@@ -481,7 +481,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 1;
+                header.fragments_offset = 1.try_into().unwrap();
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
@@ -495,7 +495,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 0;
+                header.fragments_offset = 0.try_into().unwrap();
                 header.more_fragments = true;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
