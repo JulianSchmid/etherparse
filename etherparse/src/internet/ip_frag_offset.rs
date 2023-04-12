@@ -6,7 +6,7 @@ use crate::err::ValueTooBigError;
 /// position of the payload of a packet relative to the originally
 /// fragmented packet payload.
 /// 
-/// This value can be present in an [`Ipv4Header`] or an [`Ipv6FragmentHeader`].
+/// This value can be present in an [`crate::Ipv4Header`] or an [`crate::Ipv6FragmentHeader`].
 /// 
 /// # Example Usage:
 /// 
@@ -157,6 +157,154 @@ impl TryFrom<u16> for IpFragOffset {
                 max_allowed: IpFragOffset::MAX_U16,
                 value_type: IpFragmentOffset,
             })
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use core::hash::{Hash, Hasher};
+    use std::format;
+    use proptest::prelude::*;
+    
+    #[test]
+    fn derived_traits() {
+        // copy & clone
+        {
+            let a = IpFragOffset(123);
+            let b = a;
+            assert_eq!(a, b);
+            assert_eq!(a.clone(), a);
+        }
+
+        // default
+        {
+            let actual: IpFragOffset = Default::default();
+            assert_eq!(actual.value(), 0);
+        }
+
+        // debug
+        {
+            let a = IpFragOffset(123);
+            assert_eq!(format!("{:?}", a), format!("IpFragOffset(123)"));
+        }
+
+        // ord & partial ord
+        {
+            use core::cmp::Ordering;
+            let a = IpFragOffset(123);
+            let b = a;
+            assert_eq!(a.cmp(&b), Ordering::Equal);
+            assert_eq!(a.partial_cmp(&b), Some(Ordering::Equal));
+        }
+
+        // hash
+        {
+            use std::collections::hash_map::DefaultHasher;
+            let a = {
+                let mut hasher = DefaultHasher::new();
+                IpFragOffset(123).hash(&mut hasher);
+                hasher.finish()
+            };
+            let b = {
+                let mut hasher = DefaultHasher::new();
+                IpFragOffset(123).hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(a, b);
+        }
+
+    }
+
+    proptest!{
+        #[test]
+        fn try_new(
+            valid_value in 0..0b0001_1111_1111_1111u16,
+            invalid_value in 0b0010_0000_0000_0000u16..=u16::MAX
+        ) {
+            use crate::err::{ValueType, ValueTooBigError};
+            assert_eq!(
+                valid_value,
+                IpFragOffset::try_new(valid_value).unwrap().value()
+            );
+            assert_eq!(
+                IpFragOffset::try_new(invalid_value).unwrap_err(),
+                ValueTooBigError{
+                    actual: invalid_value,
+                    max_allowed: 0b0001_1111_1111_1111,
+                    value_type:  ValueType::IpFragmentOffset
+                }
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn try_from(
+            valid_value in 0..0b0001_1111_1111_1111u16,
+            invalid_value in 0b0010_0000_0000_0000u16..=u16::MAX
+        ) {
+            use crate::err::{ValueType, ValueTooBigError};
+            // try_into
+            {
+                let actual: IpFragOffset = valid_value.try_into().unwrap();
+                assert_eq!(actual.value(), valid_value);
+
+                let err: Result<IpFragOffset, ValueTooBigError<u16>> = invalid_value.try_into();
+                assert_eq!(
+                    err.unwrap_err(),
+                    ValueTooBigError{
+                        actual: invalid_value,
+                        max_allowed: 0b0001_1111_1111_1111,
+                        value_type:  ValueType::IpFragmentOffset
+                    }
+                );
+            }
+            // try_from
+            {
+                assert_eq!(
+                    IpFragOffset::try_from(valid_value).unwrap().value(),
+                    valid_value
+                );
+
+                assert_eq!(
+                    IpFragOffset::try_from(invalid_value).unwrap_err(),
+                    ValueTooBigError{
+                        actual: invalid_value,
+                        max_allowed: 0b0001_1111_1111_1111,
+                        value_type:  ValueType::IpFragmentOffset
+                    }
+                );
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn new_unchecked(valid_value in 0..0b0001_1111_1111_1111u16) {
+            assert_eq!(
+                valid_value,
+                unsafe {
+                    IpFragOffset::new_unchecked(valid_value).value()
+                }
+            );
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn fmt(valid_value in 0..0b0001_1111_1111_1111u16) {
+            assert_eq!(format!("{}", IpFragOffset(valid_value)), format!("{}", valid_value));
+        }
+    }
+    
+    proptest!{
+        #[test]
+        fn from(valid_value in 0..0b0001_1111_1111_1111u16,) {
+            let frag_offset = IpFragOffset::try_new(valid_value).unwrap();
+            let actual: u16 = frag_offset.into();
+            assert_eq!(actual, valid_value);
         }
     }
 }

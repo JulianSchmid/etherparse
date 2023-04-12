@@ -106,7 +106,7 @@
 //! ## Manually slicing & parsing packets
 //! It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice.
 //!
-//! Have a look at the documentation for the <NAME>Slice.from_slice methods, if you want to create your own slices:
+//! Have a look at the documentation for the \[NAME\]Slice.from_slice methods, if you want to create your own slices:
 //!
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
