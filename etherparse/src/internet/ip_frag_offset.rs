@@ -1,7 +1,8 @@
 use crate::err::ValueTooBigError;
 
-/// 13 bit unsigned integer indicating the stating position of the payload
-/// of a packet relative to the originally fragmented packet payload.
+/// The fragment offset is a 13 bit unsigned integer indicating the stating
+/// position of the payload of a packet relative to the originally fragmented
+/// packet payload.
 ///
 /// This value can be present in an [`crate::Ipv4Header`] or an
 /// [`crate::Ipv6FragmentHeader`].
@@ -120,7 +121,7 @@ impl IpFragOffset {
         IpFragOffset(value)
     }
 
-    /// Returns the underlying `u16` value.
+    /// Returns the underlying unsigned 13 bit value as an `u16` value.
     #[inline]
     pub const fn value(self) -> u16 {
         self.0

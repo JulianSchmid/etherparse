@@ -1,10 +1,13 @@
 use crate::{err::Layer, err::SliceWriteSpaceError, *};
 
-///Ethernet II header.
+/// Ethernet II header.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct Ethernet2Header {
+    /// Source MAC Address
     pub source: [u8; 6],
+    /// Destination MAC Address
     pub destination: [u8; 6],
+    /// Protocol present after the ethernet2 header.
     pub ether_type: EtherType,
 }
 
@@ -12,10 +15,11 @@ impl Ethernet2Header {
     /// Serialized size of an Ethernet2 header in bytes/octets.
     pub const LEN: usize = 14;
 
+    /// Deprecated use [`Ethernet2Header::LEN`] instead.
     #[deprecated(since = "0.14.0", note = "Use `Ethernet2Header::LEN` instead")]
     pub const SERIALIZED_SIZE: usize = Ethernet2Header::LEN;
 
-    /// Creates a ethernet slice from an other slice.
+    /// Deprecated use [`Ethernet2Header::from_slice`] instead.
     #[deprecated(since = "0.10.1", note = "Use Ethernet2Header::from_slice instead.")]
     #[inline]
     pub fn read_from_slice(slice: &[u8]) -> Result<(Ethernet2Header, &[u8]), err::LenError> {
