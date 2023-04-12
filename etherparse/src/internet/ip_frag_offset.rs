@@ -1,12 +1,10 @@
 use crate::err::ValueTooBigError;
 
-/// Offset of a fragmented IP packet.
+/// 13 bit unsigned integer indicating the stating position of the payload
+/// of a packet relative to the originally fragmented packet payload.
 ///
-/// [`IpFragOffset`] is an 13 bit unsigned integer indicating the stating
-/// position of the payload of a packet relative to the originally
-/// fragmented packet payload.
-///
-/// This value can be present in an [`crate::Ipv4Header`] or an [`crate::Ipv6FragmentHeader`].
+/// This value can be present in an [`crate::Ipv4Header`] or an
+/// [`crate::Ipv6FragmentHeader`].
 ///
 /// # Example Usage:
 ///
