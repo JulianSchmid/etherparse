@@ -351,10 +351,7 @@ pub type ReadError = err::ReadError;
 
 /// Deprecated use [err::ReadError] instead or use the specific error type returned by operation you are using.
 #[cfg(feature = "std")]
-#[deprecated(
-    since = "0.14.0",
-    note = "Please use the type err::Field instead."
-)]
+#[deprecated(since = "0.14.0", note = "Please use the type err::Field instead.")]
 pub type ErrorField = err::ValueType;
 
 ///Errors that can occur when writing.

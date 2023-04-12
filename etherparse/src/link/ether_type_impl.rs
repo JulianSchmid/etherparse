@@ -61,9 +61,19 @@ impl core::fmt::Debug for EtherType {
             Self::IPV6 => write!(f, "{:#06X} (Internet Protocol Version 6 (IPV6))", self.0),
             Self::ARP => write!(f, "{:#06X} (Address Resolution Protocol (ARP))", self.0),
             Self::WAKE_ON_LAN => write!(f, "{:#06X} (Wake on LAN)", self.0),
-            Self::VLAN_TAGGED_FRAME => write!(f, "{:#06X} (Customer VLAN Tag (C-TAG) as defined in IEEE Std 802.1Q)", self.0),
-            Self::PROVIDER_BRIDGING => write!(f, "{:#06X} (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))", self.0),
-            Self::VLAN_DOUBLE_TAGGED_FRAME => write!(f, "{:#06X} (VLAN Double Tagged Frame)", self.0),
+            Self::VLAN_TAGGED_FRAME => write!(
+                f,
+                "{:#06X} (Customer VLAN Tag (C-TAG) as defined in IEEE Std 802.1Q)",
+                self.0
+            ),
+            Self::PROVIDER_BRIDGING => write!(
+                f,
+                "{:#06X} (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))",
+                self.0
+            ),
+            Self::VLAN_DOUBLE_TAGGED_FRAME => {
+                write!(f, "{:#06X} (VLAN Double Tagged Frame)", self.0)
+            }
             _ => write!(f, "{:#06X}", self.0),
         }
     }
@@ -150,12 +160,24 @@ mod test {
     #[test]
     fn dbg() {
         let pairs = &[
-            (EtherType::IPV4, "0x0800 (Internet Protocol version 4 (IPv4))"),
-            (EtherType::IPV6, "0x86DD (Internet Protocol Version 6 (IPV6))"),
+            (
+                EtherType::IPV4,
+                "0x0800 (Internet Protocol version 4 (IPv4))",
+            ),
+            (
+                EtherType::IPV6,
+                "0x86DD (Internet Protocol Version 6 (IPV6))",
+            ),
             (EtherType::ARP, "0x0806 (Address Resolution Protocol (ARP))"),
             (EtherType::WAKE_ON_LAN, "0x0842 (Wake on LAN)"),
-            (EtherType::VLAN_TAGGED_FRAME, "0x8100 (Customer VLAN Tag (C-TAG) as defined in IEEE Std 802.1Q)"),
-            (EtherType::PROVIDER_BRIDGING, "0x88A8 (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))"),
+            (
+                EtherType::VLAN_TAGGED_FRAME,
+                "0x8100 (Customer VLAN Tag (C-TAG) as defined in IEEE Std 802.1Q)",
+            ),
+            (
+                EtherType::PROVIDER_BRIDGING,
+                "0x88A8 (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))",
+            ),
             (
                 EtherType::VLAN_DOUBLE_TAGGED_FRAME,
                 "0x9100 (VLAN Double Tagged Frame)",

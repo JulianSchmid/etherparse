@@ -458,7 +458,12 @@ impl ExtensionTestHeaders {
             }
             IPV6_FRAG => {
                 if self.data.fragment.is_none() {
-                    self.data.fragment = Some(Ipv6FragmentHeader::new(next_header, IpFragOffset::ZERO, true, 123));
+                    self.data.fragment = Some(Ipv6FragmentHeader::new(
+                        next_header,
+                        IpFragOffset::ZERO,
+                        true,
+                        123,
+                    ));
                     true
                 } else {
                     false
@@ -1015,7 +1020,12 @@ pub mod header {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
-                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, false, 0)),
+                fragment: Some(Ipv6FragmentHeader::new(
+                    ip_number::UDP,
+                    IpFragOffset::ZERO,
+                    false,
+                    0
+                )),
                 auth: None,
             }
             .is_fragmenting_payload()
@@ -1026,7 +1036,12 @@ pub mod header {
             hop_by_hop_options: None,
             destination_options: None,
             routing: None,
-            fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0)),
+            fragment: Some(Ipv6FragmentHeader::new(
+                ip_number::UDP,
+                IpFragOffset::ZERO,
+                true,
+                0
+            )),
             auth: None,
         }
         .is_fragmenting_payload());
@@ -1098,7 +1113,12 @@ pub mod header {
                 hop_by_hop_options: None,
                 destination_options: None,
                 routing: None,
-                fragment: Some(Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0)),
+                fragment: Some(Ipv6FragmentHeader::new(
+                    ip_number::UDP,
+                    IpFragOffset::ZERO,
+                    true,
+                    0
+                )),
                 auth: None,
             }
             .is_empty()
@@ -1327,8 +1347,8 @@ pub mod slice {
 
         // fragment
         {
-            let bytes = Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0)
-                .to_bytes();
+            let bytes =
+                Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0).to_bytes();
             let slice = Ipv6ExtensionsSlice::from_slice(ip_number::IPV6_FRAG, &bytes)
                 .unwrap()
                 .0;

@@ -63,7 +63,7 @@ impl Ipv6FragmentHeader {
                 // 13 bits.
                 IpFragOffset::new_unchecked(u16::from_be_bytes([
                     (buffer[2] >> 3) & 0b0001_1111u8,
-                    ((buffer[2] << 5) & 0b1110_0000u8) | (buffer[3] & 0b0001_1111u8)
+                    ((buffer[2] << 5) & 0b1110_0000u8) | (buffer[3] & 0b0001_1111u8),
                 ]))
             },
             more_fragments: 0 != buffer[3] & 0b1000_0000u8,

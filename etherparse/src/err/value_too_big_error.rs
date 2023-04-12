@@ -1,11 +1,5 @@
 use crate::err;
-use core::{
-    fmt::Display,
-    fmt::Debug,
-    cmp::Eq,
-    cmp::PartialEq,
-    hash::Hash
-};
+use core::{cmp::Eq, cmp::PartialEq, fmt::Debug, fmt::Display, hash::Hash};
 
 /// Error if a value exceeds the maximum allowed value.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -20,24 +14,23 @@ pub struct ValueTooBigError<T: Sized + Clone + Display + Debug + Eq + PartialEq 
     pub value_type: err::ValueType,
 }
 
-
-impl<T> core::fmt::Display for ValueTooBigError<T> where
-    T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash
+impl<T> core::fmt::Display for ValueTooBigError<T>
+where
+    T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "Error '{}' is too big to be a '{}' (maximum allowed value is '{}')",
-            self.actual,
-            self.value_type,
-            self.max_allowed
+            self.actual, self.value_type, self.max_allowed
         )
     }
 }
 
 #[cfg(feature = "std")]
-impl<T> std::error::Error for ValueTooBigError<T> where
-    T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash
+impl<T> std::error::Error for ValueTooBigError<T>
+where
+    T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash,
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None
@@ -50,28 +43,31 @@ mod test {
     use std::{
         collections::hash_map::DefaultHasher,
         error::Error,
+        format,
         hash::{Hash, Hasher},
-        format
     };
 
     #[test]
     fn fmt() {
         assert_eq!(
-            format!("{}", ValueTooBigError{
-                actual: 3,
-                max_allowed: 2,
-                value_type: err::ValueType::IpFragmentOffset
-            }),
+            format!(
+                "{}",
+                ValueTooBigError {
+                    actual: 3,
+                    max_allowed: 2,
+                    value_type: err::ValueType::IpFragmentOffset
+                }
+            ),
             "Error '3' is too big to be a 'IP fragment offset' (maximum allowed value is '2')"
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = ValueTooBigError{
+        let err = ValueTooBigError {
             actual: 3,
             max_allowed: 2,
-            value_type: err::ValueType::IpFragmentOffset
+            value_type: err::ValueType::IpFragmentOffset,
         };
         assert_eq!(err, err.clone());
         let hash_a = {
@@ -90,7 +86,7 @@ mod test {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(ValueTooBigError{
+        assert!(ValueTooBigError {
             actual: 3,
             max_allowed: 2,
             value_type: err::ValueType::IpFragmentOffset

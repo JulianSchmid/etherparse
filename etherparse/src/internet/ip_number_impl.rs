@@ -16,28 +16,28 @@ pub type IpTrafficClass = IpNumber;
 ///
 /// You can access the underlying `u8` value by using `.0` and any `u8`
 /// can be converted to an `IpNumber`:
-/// 
+///
 /// ```
 /// use etherparse::IpNumber;
 ///
 /// assert_eq!(IpNumber::TCP.0, 6);
 /// assert_eq!(IpNumber::TCP, IpNumber(6));
-/// 
+///
 /// // convert to IpNumber using the from & into trait
 /// let ip_num: IpNumber = 6.into();
 /// assert_eq!(IpNumber::TCP, ip_num);
-/// 
+///
 /// // convert to u8 using the from & into trait
 /// let num: u8 = IpNumber::TCP.into();
 /// assert_eq!(6, num);
 /// ```
-/// 
+///
 /// The constants are also defined in the `ip_number` module so they can
 /// be used without the need to write `IpNumber::` in front of them:
-/// 
+///
 /// ```
 /// use etherparse::{ip_number::TCP, IpNumber};
-/// 
+///
 /// assert_eq!(TCP, IpNumber::TCP);
 /// ```
 ///
@@ -360,18 +360,18 @@ impl IpNumber {
     /// Returns the "keyword" string if known. Usually this is the abbreviation of the protocol.
     ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// use etherparse::IpNumber;
-    /// 
+    ///
     /// assert_eq!(IpNumber::UDP.keyword_str(), Some("UDP"));
-    /// 
+    ///
     /// // Unassigned values return None
     /// assert_eq!(IpNumber(145).keyword_str(), None);
     /// ```
-    /// 
+    ///
     /// # Data Source
-    /// 
+    ///
     /// The strings were copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
     /// on 2023-04-11.
     pub fn keyword_str(self) -> Option<&'static str> {
@@ -532,20 +532,20 @@ impl IpNumber {
     }
 
     /// Returns the "protocol" string if known. Usually this the non abbreviated name of the protocol.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```
     /// use etherparse::IpNumber;
-    /// 
+    ///
     /// assert_eq!(IpNumber::UDP.protocol_str(), Some("User Datagram"));
-    /// 
+    ///
     /// // Unassigned values return None
     /// assert_eq!(IpNumber(145).protocol_str(), None);
     /// ```
-    /// 
+    ///
     /// # Data Source
-    /// 
+    ///
     /// The string was copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
     /// on 2023-04-11.
     pub fn protocol_str(self) -> Option<&'static str> {
@@ -751,11 +751,11 @@ impl core::fmt::Debug for IpNumber {
 ///
 /// The constants only exist for convenience so you can import them
 /// (`use ip_number::*`) without a need to write `IpNumber::` in front
-/// of every constant. 
-/// 
+/// of every constant.
+///
 /// You can access the underlying `u8` value by using `.0` and any `u8`
 /// can be converted to an `IpNumber`:
-/// 
+///
 /// ```
 /// use etherparse::{ip_number::TCP, IpNumber};
 ///
@@ -1075,7 +1075,8 @@ pub mod ip_number {
     /// Use for experimentation and testing
     pub const EXP1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1; // 254
     /// Use for experimentation and testing
-    pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1; // 254
+    pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = IpNumber::EXPERIMENTAL_AND_TESTING_1;
+    // 254
 }
 
 #[cfg(test)]
@@ -1085,8 +1086,8 @@ mod tests {
         cmp::Ordering,
         hash::{Hash, Hasher},
     };
-    use std::{collections::hash_map::DefaultHasher, format};
     use proptest::prelude::*;
+    use std::{collections::hash_map::DefaultHasher, format};
 
     #[test]
     fn is_ipv6_ext_header_value() {
@@ -1107,7 +1108,10 @@ mod tests {
         ];
 
         for i in 0..std::u8::MAX {
-            assert_eq!(ext_ids.contains(&IpNumber(i)), IpNumber(i).is_ipv6_ext_header_value());
+            assert_eq!(
+                ext_ids.contains(&IpNumber(i)),
+                IpNumber(i).is_ipv6_ext_header_value()
+            );
         }
     }
 
@@ -1276,14 +1280,23 @@ mod tests {
         // on 2023-04-11.
         assert_eq!(IpNumber(0).protocol_str(), Some("IPv6 Hop-by-Hop Option"));
         assert_eq!(IpNumber(1).protocol_str(), Some("Internet Control Message"));
-        assert_eq!(IpNumber(2).protocol_str(), Some("Internet Group Management"));
+        assert_eq!(
+            IpNumber(2).protocol_str(),
+            Some("Internet Group Management")
+        );
         assert_eq!(IpNumber(3).protocol_str(), Some("Gateway-to-Gateway"));
         assert_eq!(IpNumber(4).protocol_str(), Some("IPv4 encapsulation"));
         assert_eq!(IpNumber(5).protocol_str(), Some("Stream"));
         assert_eq!(IpNumber(6).protocol_str(), Some("Transmission Control"));
         assert_eq!(IpNumber(7).protocol_str(), Some("CBT"));
-        assert_eq!(IpNumber(8).protocol_str(), Some("Exterior Gateway Protocol"));
-        assert_eq!(IpNumber(9).protocol_str(), Some("any private interior gateway (used by Cisco for their IGRP)"));
+        assert_eq!(
+            IpNumber(8).protocol_str(),
+            Some("Exterior Gateway Protocol")
+        );
+        assert_eq!(
+            IpNumber(9).protocol_str(),
+            Some("any private interior gateway (used by Cisco for their IGRP)")
+        );
         assert_eq!(IpNumber(10).protocol_str(), Some("BBN RCC Monitoring"));
         assert_eq!(IpNumber(11).protocol_str(), Some("Network Voice Protocol"));
         assert_eq!(IpNumber(12).protocol_str(), Some("PUP"));
@@ -1293,120 +1306,294 @@ mod tests {
         assert_eq!(IpNumber(16).protocol_str(), Some("Chaos"));
         assert_eq!(IpNumber(17).protocol_str(), Some("User Datagram"));
         assert_eq!(IpNumber(18).protocol_str(), Some("Multiplexing"));
-        assert_eq!(IpNumber(19).protocol_str(), Some("DCN Measurement Subsystems"));
+        assert_eq!(
+            IpNumber(19).protocol_str(),
+            Some("DCN Measurement Subsystems")
+        );
         assert_eq!(IpNumber(20).protocol_str(), Some("Host Monitoring"));
-        assert_eq!(IpNumber(21).protocol_str(), Some("Packet Radio Measurement"));
+        assert_eq!(
+            IpNumber(21).protocol_str(),
+            Some("Packet Radio Measurement")
+        );
         assert_eq!(IpNumber(22).protocol_str(), Some("XEROX NS IDP"));
         assert_eq!(IpNumber(23).protocol_str(), Some("Trunk-1"));
         assert_eq!(IpNumber(24).protocol_str(), Some("Trunk-2"));
         assert_eq!(IpNumber(25).protocol_str(), Some("Leaf-1"));
         assert_eq!(IpNumber(26).protocol_str(), Some("Leaf-2"));
         assert_eq!(IpNumber(27).protocol_str(), Some("Reliable Data Protocol"));
-        assert_eq!(IpNumber(28).protocol_str(), Some("Internet Reliable Transaction"));
-        assert_eq!(IpNumber(29).protocol_str(), Some("ISO Transport Protocol Class 4"));
-        assert_eq!(IpNumber(30).protocol_str(), Some("Bulk Data Transfer Protocol"));
-        assert_eq!(IpNumber(31).protocol_str(), Some("MFE Network Services Protocol"));
-        assert_eq!(IpNumber(32).protocol_str(), Some("MERIT Internodal Protocol"));
-        assert_eq!(IpNumber(33).protocol_str(), Some("Datagram Congestion Control Protocol"));
-        assert_eq!(IpNumber(34).protocol_str(), Some("Third Party Connect Protocol"));
-        assert_eq!(IpNumber(35).protocol_str(), Some("Inter-Domain Policy Routing Protocol"));
+        assert_eq!(
+            IpNumber(28).protocol_str(),
+            Some("Internet Reliable Transaction")
+        );
+        assert_eq!(
+            IpNumber(29).protocol_str(),
+            Some("ISO Transport Protocol Class 4")
+        );
+        assert_eq!(
+            IpNumber(30).protocol_str(),
+            Some("Bulk Data Transfer Protocol")
+        );
+        assert_eq!(
+            IpNumber(31).protocol_str(),
+            Some("MFE Network Services Protocol")
+        );
+        assert_eq!(
+            IpNumber(32).protocol_str(),
+            Some("MERIT Internodal Protocol")
+        );
+        assert_eq!(
+            IpNumber(33).protocol_str(),
+            Some("Datagram Congestion Control Protocol")
+        );
+        assert_eq!(
+            IpNumber(34).protocol_str(),
+            Some("Third Party Connect Protocol")
+        );
+        assert_eq!(
+            IpNumber(35).protocol_str(),
+            Some("Inter-Domain Policy Routing Protocol")
+        );
         assert_eq!(IpNumber(36).protocol_str(), Some("XTP"));
-        assert_eq!(IpNumber(37).protocol_str(), Some("Datagram Delivery Protocol"));
-        assert_eq!(IpNumber(38).protocol_str(), Some("IDPR Control Message Transport Proto"));
+        assert_eq!(
+            IpNumber(37).protocol_str(),
+            Some("Datagram Delivery Protocol")
+        );
+        assert_eq!(
+            IpNumber(38).protocol_str(),
+            Some("IDPR Control Message Transport Proto")
+        );
         assert_eq!(IpNumber(39).protocol_str(), Some("TP++ Transport Protocol"));
         assert_eq!(IpNumber(40).protocol_str(), Some("IL Transport Protocol"));
         assert_eq!(IpNumber(41).protocol_str(), Some("IPv6 encapsulation"));
-        assert_eq!(IpNumber(42).protocol_str(), Some("Source Demand Routing Protocol"));
+        assert_eq!(
+            IpNumber(42).protocol_str(),
+            Some("Source Demand Routing Protocol")
+        );
         assert_eq!(IpNumber(43).protocol_str(), Some("Routing Header for IPv6"));
-        assert_eq!(IpNumber(44).protocol_str(), Some("Fragment Header for IPv6"));
-        assert_eq!(IpNumber(45).protocol_str(), Some("Inter-Domain Routing Protocol"));
+        assert_eq!(
+            IpNumber(44).protocol_str(),
+            Some("Fragment Header for IPv6")
+        );
+        assert_eq!(
+            IpNumber(45).protocol_str(),
+            Some("Inter-Domain Routing Protocol")
+        );
         assert_eq!(IpNumber(46).protocol_str(), Some("Reservation Protocol"));
-        assert_eq!(IpNumber(47).protocol_str(), Some("Generic Routing Encapsulation"));
-        assert_eq!(IpNumber(48).protocol_str(), Some("Dynamic Source Routing Protocol"));
+        assert_eq!(
+            IpNumber(47).protocol_str(),
+            Some("Generic Routing Encapsulation")
+        );
+        assert_eq!(
+            IpNumber(48).protocol_str(),
+            Some("Dynamic Source Routing Protocol")
+        );
         assert_eq!(IpNumber(49).protocol_str(), Some("BNA"));
         assert_eq!(IpNumber(50).protocol_str(), Some("Encap Security Payload"));
         assert_eq!(IpNumber(51).protocol_str(), Some("Authentication Header"));
-        assert_eq!(IpNumber(52).protocol_str(), Some("Integrated Net Layer Security  TUBA"));
+        assert_eq!(
+            IpNumber(52).protocol_str(),
+            Some("Integrated Net Layer Security  TUBA")
+        );
         assert_eq!(IpNumber(53).protocol_str(), Some("IP with Encryption"));
-        assert_eq!(IpNumber(54).protocol_str(), Some("NBMA Address Resolution Protocol"));
+        assert_eq!(
+            IpNumber(54).protocol_str(),
+            Some("NBMA Address Resolution Protocol")
+        );
         assert_eq!(IpNumber(55).protocol_str(), Some("IP Mobility"));
-        assert_eq!(IpNumber(56).protocol_str(), Some("Transport Layer Security Protocol using Kryptonet key management"));
+        assert_eq!(
+            IpNumber(56).protocol_str(),
+            Some("Transport Layer Security Protocol using Kryptonet key management")
+        );
         assert_eq!(IpNumber(57).protocol_str(), Some("SKIP"));
         assert_eq!(IpNumber(58).protocol_str(), Some("ICMP for IPv6"));
         assert_eq!(IpNumber(59).protocol_str(), Some("No Next Header for IPv6"));
-        assert_eq!(IpNumber(60).protocol_str(), Some("Destination Options for IPv6"));
-        assert_eq!(IpNumber(61).protocol_str(), Some("any host internal protocol"));
+        assert_eq!(
+            IpNumber(60).protocol_str(),
+            Some("Destination Options for IPv6")
+        );
+        assert_eq!(
+            IpNumber(61).protocol_str(),
+            Some("any host internal protocol")
+        );
         assert_eq!(IpNumber(62).protocol_str(), Some("CFTP"));
         assert_eq!(IpNumber(63).protocol_str(), Some("any local network"));
-        assert_eq!(IpNumber(64).protocol_str(), Some("SATNET and Backroom EXPAK"));
+        assert_eq!(
+            IpNumber(64).protocol_str(),
+            Some("SATNET and Backroom EXPAK")
+        );
         assert_eq!(IpNumber(65).protocol_str(), Some("Kryptolan"));
-        assert_eq!(IpNumber(66).protocol_str(), Some("MIT Remote Virtual Disk Protocol"));
-        assert_eq!(IpNumber(67).protocol_str(), Some("Internet Pluribus Packet Core"));
-        assert_eq!(IpNumber(68).protocol_str(), Some("any distributed file system"));
+        assert_eq!(
+            IpNumber(66).protocol_str(),
+            Some("MIT Remote Virtual Disk Protocol")
+        );
+        assert_eq!(
+            IpNumber(67).protocol_str(),
+            Some("Internet Pluribus Packet Core")
+        );
+        assert_eq!(
+            IpNumber(68).protocol_str(),
+            Some("any distributed file system")
+        );
         assert_eq!(IpNumber(69).protocol_str(), Some("SATNET Monitoring"));
         assert_eq!(IpNumber(70).protocol_str(), Some("VISA Protocol"));
-        assert_eq!(IpNumber(71).protocol_str(), Some("Internet Packet Core Utility"));
-        assert_eq!(IpNumber(72).protocol_str(), Some("Computer Protocol Network Executive"));
-        assert_eq!(IpNumber(73).protocol_str(), Some("Computer Protocol Heart Beat"));
+        assert_eq!(
+            IpNumber(71).protocol_str(),
+            Some("Internet Packet Core Utility")
+        );
+        assert_eq!(
+            IpNumber(72).protocol_str(),
+            Some("Computer Protocol Network Executive")
+        );
+        assert_eq!(
+            IpNumber(73).protocol_str(),
+            Some("Computer Protocol Heart Beat")
+        );
         assert_eq!(IpNumber(74).protocol_str(), Some("Wang Span Network"));
         assert_eq!(IpNumber(75).protocol_str(), Some("Packet Video Protocol"));
-        assert_eq!(IpNumber(76).protocol_str(), Some("Backroom SATNET Monitoring"));
-        assert_eq!(IpNumber(77).protocol_str(), Some("SUN ND PROTOCOL-Temporary"));
+        assert_eq!(
+            IpNumber(76).protocol_str(),
+            Some("Backroom SATNET Monitoring")
+        );
+        assert_eq!(
+            IpNumber(77).protocol_str(),
+            Some("SUN ND PROTOCOL-Temporary")
+        );
         assert_eq!(IpNumber(78).protocol_str(), Some("WIDEBAND Monitoring"));
         assert_eq!(IpNumber(79).protocol_str(), Some("WIDEBAND EXPAK"));
         assert_eq!(IpNumber(80).protocol_str(), Some("ISO Internet Protocol"));
         assert_eq!(IpNumber(81).protocol_str(), Some("VMTP"));
         assert_eq!(IpNumber(82).protocol_str(), Some("SECURE-VMTP"));
         assert_eq!(IpNumber(83).protocol_str(), Some("VINES"));
-        assert_eq!(IpNumber(84).protocol_str(), Some("Internet Protocol Traffic Manager"));
+        assert_eq!(
+            IpNumber(84).protocol_str(),
+            Some("Internet Protocol Traffic Manager")
+        );
         assert_eq!(IpNumber(85).protocol_str(), Some("NSFNET-IGP"));
-        assert_eq!(IpNumber(86).protocol_str(), Some("Dissimilar Gateway Protocol"));
+        assert_eq!(
+            IpNumber(86).protocol_str(),
+            Some("Dissimilar Gateway Protocol")
+        );
         assert_eq!(IpNumber(87).protocol_str(), Some("TCF"));
         assert_eq!(IpNumber(88).protocol_str(), Some("EIGRP"));
         assert_eq!(IpNumber(89).protocol_str(), Some("OSPFIGP"));
         assert_eq!(IpNumber(90).protocol_str(), Some("Sprite RPC Protocol"));
-        assert_eq!(IpNumber(91).protocol_str(), Some("Locus Address Resolution Protocol"));
-        assert_eq!(IpNumber(92).protocol_str(), Some("Multicast Transport Protocol"));
+        assert_eq!(
+            IpNumber(91).protocol_str(),
+            Some("Locus Address Resolution Protocol")
+        );
+        assert_eq!(
+            IpNumber(92).protocol_str(),
+            Some("Multicast Transport Protocol")
+        );
         assert_eq!(IpNumber(93).protocol_str(), Some("AX.25 Frames"));
-        assert_eq!(IpNumber(94).protocol_str(), Some("IP-within-IP Encapsulation Protocol"));
-        assert_eq!(IpNumber(95).protocol_str(), Some("Mobile Internetworking Control Pro."));
-        assert_eq!(IpNumber(96).protocol_str(), Some("Semaphore Communications Sec. Pro."));
-        assert_eq!(IpNumber(97).protocol_str(), Some("Ethernet-within-IP Encapsulation"));
+        assert_eq!(
+            IpNumber(94).protocol_str(),
+            Some("IP-within-IP Encapsulation Protocol")
+        );
+        assert_eq!(
+            IpNumber(95).protocol_str(),
+            Some("Mobile Internetworking Control Pro.")
+        );
+        assert_eq!(
+            IpNumber(96).protocol_str(),
+            Some("Semaphore Communications Sec. Pro.")
+        );
+        assert_eq!(
+            IpNumber(97).protocol_str(),
+            Some("Ethernet-within-IP Encapsulation")
+        );
         assert_eq!(IpNumber(98).protocol_str(), Some("Encapsulation Header"));
-        assert_eq!(IpNumber(99).protocol_str(), Some("any private encryption scheme"));
+        assert_eq!(
+            IpNumber(99).protocol_str(),
+            Some("any private encryption scheme")
+        );
         assert_eq!(IpNumber(100).protocol_str(), Some("GMTP"));
-        assert_eq!(IpNumber(101).protocol_str(), Some("Ipsilon Flow Management Protocol"));
+        assert_eq!(
+            IpNumber(101).protocol_str(),
+            Some("Ipsilon Flow Management Protocol")
+        );
         assert_eq!(IpNumber(102).protocol_str(), Some("PNNI over IP"));
-        assert_eq!(IpNumber(103).protocol_str(), Some("Protocol Independent Multicast"));
+        assert_eq!(
+            IpNumber(103).protocol_str(),
+            Some("Protocol Independent Multicast")
+        );
         assert_eq!(IpNumber(104).protocol_str(), Some("ARIS"));
         assert_eq!(IpNumber(105).protocol_str(), Some("SCPS"));
         assert_eq!(IpNumber(106).protocol_str(), Some("QNX"));
         assert_eq!(IpNumber(107).protocol_str(), Some("Active Networks"));
-        assert_eq!(IpNumber(108).protocol_str(), Some("IP Payload Compression Protocol"));
-        assert_eq!(IpNumber(109).protocol_str(), Some("Sitara Networks Protocol"));
+        assert_eq!(
+            IpNumber(108).protocol_str(),
+            Some("IP Payload Compression Protocol")
+        );
+        assert_eq!(
+            IpNumber(109).protocol_str(),
+            Some("Sitara Networks Protocol")
+        );
         assert_eq!(IpNumber(110).protocol_str(), Some("Compaq Peer Protocol"));
         assert_eq!(IpNumber(111).protocol_str(), Some("IPX in IP"));
-        assert_eq!(IpNumber(112).protocol_str(), Some("Virtual Router Redundancy Protocol"));
-        assert_eq!(IpNumber(113).protocol_str(), Some("PGM Reliable Transport Protocol"));
+        assert_eq!(
+            IpNumber(112).protocol_str(),
+            Some("Virtual Router Redundancy Protocol")
+        );
+        assert_eq!(
+            IpNumber(113).protocol_str(),
+            Some("PGM Reliable Transport Protocol")
+        );
         assert_eq!(IpNumber(114).protocol_str(), Some("any 0-hop protocol"));
-        assert_eq!(IpNumber(115).protocol_str(), Some("Layer Two Tunneling Protocol"));
-        assert_eq!(IpNumber(116).protocol_str(), Some("D-II Data Exchange (DDX)"));
-        assert_eq!(IpNumber(117).protocol_str(), Some("Interactive Agent Transfer Protocol"));
-        assert_eq!(IpNumber(118).protocol_str(), Some("Schedule Transfer Protocol"));
-        assert_eq!(IpNumber(119).protocol_str(), Some("SpectraLink Radio Protocol"));
+        assert_eq!(
+            IpNumber(115).protocol_str(),
+            Some("Layer Two Tunneling Protocol")
+        );
+        assert_eq!(
+            IpNumber(116).protocol_str(),
+            Some("D-II Data Exchange (DDX)")
+        );
+        assert_eq!(
+            IpNumber(117).protocol_str(),
+            Some("Interactive Agent Transfer Protocol")
+        );
+        assert_eq!(
+            IpNumber(118).protocol_str(),
+            Some("Schedule Transfer Protocol")
+        );
+        assert_eq!(
+            IpNumber(119).protocol_str(),
+            Some("SpectraLink Radio Protocol")
+        );
         assert_eq!(IpNumber(120).protocol_str(), Some("UTI"));
-        assert_eq!(IpNumber(121).protocol_str(), Some("Simple Message Protocol"));
-        assert_eq!(IpNumber(122).protocol_str(), Some("Simple Multicast Protocol"));
-        assert_eq!(IpNumber(123).protocol_str(), Some("Performance Transparency Protocol"));
+        assert_eq!(
+            IpNumber(121).protocol_str(),
+            Some("Simple Message Protocol")
+        );
+        assert_eq!(
+            IpNumber(122).protocol_str(),
+            Some("Simple Multicast Protocol")
+        );
+        assert_eq!(
+            IpNumber(123).protocol_str(),
+            Some("Performance Transparency Protocol")
+        );
         assert_eq!(IpNumber(124).protocol_str(), None);
         assert_eq!(IpNumber(125).protocol_str(), None);
-        assert_eq!(IpNumber(126).protocol_str(), Some("Combat Radio Transport Protocol"));
-        assert_eq!(IpNumber(127).protocol_str(), Some("Combat Radio User Datagram"));
+        assert_eq!(
+            IpNumber(126).protocol_str(),
+            Some("Combat Radio Transport Protocol")
+        );
+        assert_eq!(
+            IpNumber(127).protocol_str(),
+            Some("Combat Radio User Datagram")
+        );
         assert_eq!(IpNumber(128).protocol_str(), None);
         assert_eq!(IpNumber(129).protocol_str(), None);
         assert_eq!(IpNumber(130).protocol_str(), Some("Secure Packet Shield"));
-        assert_eq!(IpNumber(131).protocol_str(), Some("Private IP Encapsulation within IP"));
-        assert_eq!(IpNumber(132).protocol_str(), Some("Stream Control Transmission Protocol"));
+        assert_eq!(
+            IpNumber(131).protocol_str(),
+            Some("Private IP Encapsulation within IP")
+        );
+        assert_eq!(
+            IpNumber(132).protocol_str(),
+            Some("Stream Control Transmission Protocol")
+        );
         assert_eq!(IpNumber(133).protocol_str(), Some("Fibre Channel"));
         assert_eq!(IpNumber(134).protocol_str(), None);
         assert_eq!(IpNumber(135).protocol_str(), None);
@@ -1415,15 +1602,30 @@ mod tests {
         assert_eq!(IpNumber(138).protocol_str(), Some("MANET Protocols"));
         assert_eq!(IpNumber(139).protocol_str(), Some("Host Identity Protocol"));
         assert_eq!(IpNumber(140).protocol_str(), Some("Shim6 Protocol"));
-        assert_eq!(IpNumber(141).protocol_str(), Some("Wrapped Encapsulating Security Payload"));
-        assert_eq!(IpNumber(142).protocol_str(), Some("Robust Header Compression"));
+        assert_eq!(
+            IpNumber(141).protocol_str(),
+            Some("Wrapped Encapsulating Security Payload")
+        );
+        assert_eq!(
+            IpNumber(142).protocol_str(),
+            Some("Robust Header Compression")
+        );
         assert_eq!(IpNumber(143).protocol_str(), Some("Ethernet"));
-        assert_eq!(IpNumber(144).protocol_str(), Some("AGGFRAG encapsulation payload for ESP"));
+        assert_eq!(
+            IpNumber(144).protocol_str(),
+            Some("AGGFRAG encapsulation payload for ESP")
+        );
         for i in 145u8..=252 {
             assert_eq!(IpNumber(i).protocol_str(), None);
         }
-        assert_eq!(IpNumber(253).protocol_str(), Some("Use for experimentation and testing"));
-        assert_eq!(IpNumber(254).protocol_str(), Some("Use for experimentation and testing"));
+        assert_eq!(
+            IpNumber(253).protocol_str(),
+            Some("Use for experimentation and testing")
+        );
+        assert_eq!(
+            IpNumber(254).protocol_str(),
+            Some("Use for experimentation and testing")
+        );
         assert_eq!(IpNumber(255).protocol_str(), None);
     }
 
@@ -1467,7 +1669,10 @@ mod tests {
             (MFE_NSP, IpNumber::MFE_NSP),
             (MERIT_INP, IpNumber::MERIT_INP),
             (DCCP, IpNumber::DCCP),
-            (THIRD_PARTY_CONNECT_PROTOCOL, IpNumber::THIRD_PARTY_CONNECT_PROTOCOL),
+            (
+                THIRD_PARTY_CONNECT_PROTOCOL,
+                IpNumber::THIRD_PARTY_CONNECT_PROTOCOL,
+            ),
             (IDPR, IpNumber::IDPR),
             (XTP, IpNumber::XTP),
             (DDP, IpNumber::DDP),
@@ -1478,7 +1683,10 @@ mod tests {
             (SDRP, IpNumber::SDRP),
             (IPV6_ROUTE_HEADER, IpNumber::IPV6_ROUTE_HEADER),
             (IPV6_ROUTE, IpNumber::IPV6_ROUTE_HEADER),
-            (IPV6_FRAGMENTATION_HEADER, IpNumber::IPV6_FRAGMENTATION_HEADER),
+            (
+                IPV6_FRAGMENTATION_HEADER,
+                IpNumber::IPV6_FRAGMENTATION_HEADER,
+            ),
             (IPV6_FRAG, IpNumber::IPV6_FRAGMENTATION_HEADER),
             (IDRP, IpNumber::IDRP),
             (RSVP, IpNumber::RSVP),
@@ -1486,7 +1694,10 @@ mod tests {
             (DSR, IpNumber::DSR),
             (BNA, IpNumber::BNA),
             (ENCAP_SEC, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
-            (ENCAPSULATING_SECURITY_PAYLOAD, IpNumber::ENCAPSULATING_SECURITY_PAYLOAD),
+            (
+                ENCAPSULATING_SECURITY_PAYLOAD,
+                IpNumber::ENCAPSULATING_SECURITY_PAYLOAD,
+            ),
             (AUTH, IpNumber::AUTHENTICATION_HEADER),
             (AUTHENTICATION_HEADER, IpNumber::AUTHENTICATION_HEADER),
             (INLSP, IpNumber::INLSP),
@@ -1499,14 +1710,20 @@ mod tests {
             (IPV6_NO_NEXT_HEADER, IpNumber::IPV6_NO_NEXT_HEADER),
             (IPV6_DEST_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
             (IPV6_DESTINATION_OPTIONS, IpNumber::IPV6_DESTINATION_OPTIONS),
-            (ANY_HOST_INTERNAL_PROTOCOL, IpNumber::ANY_HOST_INTERNAL_PROTOCOL),
+            (
+                ANY_HOST_INTERNAL_PROTOCOL,
+                IpNumber::ANY_HOST_INTERNAL_PROTOCOL,
+            ),
             (CFTP, IpNumber::CFTP),
             (ANY_LOCAL_NETWORK, IpNumber::ANY_LOCAL_NETWORK),
             (SAT_EXPAK, IpNumber::SAT_EXPAK),
             (KRYTOLAN, IpNumber::KRYTOLAN),
             (RVD, IpNumber::RVD),
             (IPPC, IpNumber::IPPC),
-            (ANY_DISTRIBUTED_FILE_SYSTEM, IpNumber::ANY_DISTRIBUTED_FILE_SYSTEM),
+            (
+                ANY_DISTRIBUTED_FILE_SYSTEM,
+                IpNumber::ANY_DISTRIBUTED_FILE_SYSTEM,
+            ),
             (SAT_MON, IpNumber::SAT_MON),
             (VISA, IpNumber::VISA),
             (IPCV, IpNumber::IPCV),
@@ -1552,7 +1769,10 @@ mod tests {
             (VRRP, IpNumber::VRRP),
             (PGM, IpNumber::PGM),
             (ANY_ZERO_HOP_PROTOCOL, IpNumber::ANY_ZERO_HOP_PROTOCOL),
-            (LAYER2_TUNNELING_PROTOCOL, IpNumber::LAYER2_TUNNELING_PROTOCOL),
+            (
+                LAYER2_TUNNELING_PROTOCOL,
+                IpNumber::LAYER2_TUNNELING_PROTOCOL,
+            ),
             (DDX, IpNumber::DDX),
             (IATP, IpNumber::IATP),
             (STP, IpNumber::STP),
@@ -1582,9 +1802,15 @@ mod tests {
             (WESP, IpNumber::WESP),
             (ROHC, IpNumber::ROHC),
             (EXP0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
-            (EXPERIMENTAL_AND_TESTING_0, IpNumber::EXPERIMENTAL_AND_TESTING_0),
+            (
+                EXPERIMENTAL_AND_TESTING_0,
+                IpNumber::EXPERIMENTAL_AND_TESTING_0,
+            ),
             (EXP1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
-            (EXPERIMENTAL_AND_TESTING_1, IpNumber::EXPERIMENTAL_AND_TESTING_1),
+            (
+                EXPERIMENTAL_AND_TESTING_1,
+                IpNumber::EXPERIMENTAL_AND_TESTING_1,
+            ),
         ];
         for (raw, enum_value) in pairs {
             assert_eq!(*raw, *enum_value);
@@ -1597,7 +1823,7 @@ mod tests {
         assert_eq!(actual, IpNumber(255));
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn into(num in any::<u8>()) {
             {
@@ -1611,7 +1837,7 @@ mod tests {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from(num in any::<u8>()) {
             {
@@ -1643,10 +1869,7 @@ mod tests {
             format!("253 (Use for experimentation and testing)")
         );
         // no keyword & no protocol string
-        assert_eq!(
-            format!("{:?}", IpNumber(145)),
-            format!("145")
-        );
+        assert_eq!(format!("{:?}", IpNumber(145)), format!("145"));
     }
 
     #[test]

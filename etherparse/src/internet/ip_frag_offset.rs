@@ -1,34 +1,34 @@
 use crate::err::ValueTooBigError;
 
 /// Offset of a fragmented IP packet.
-/// 
+///
 /// [`IpFragOffset`] is an 13 bit unsigned integer indicating the stating
 /// position of the payload of a packet relative to the originally
 /// fragmented packet payload.
-/// 
+///
 /// This value can be present in an [`crate::Ipv4Header`] or an [`crate::Ipv6FragmentHeader`].
-/// 
+///
 /// # Example Usage:
-/// 
+///
 /// ```
 /// use etherparse::IpFragOffset;
-/// 
+///
 /// // try into
 /// {
 ///     let frag_offset: IpFragOffset = 123.try_into().unwrap();
 ///     assert_eq!(frag_offset.value(), 123);
-/// 
+///
 ///     // fragment offset can always be converted back to an u16
 ///     let value: u16 = frag_offset.into();
 ///     assert_eq!(123, value);
 /// }
-/// 
+///
 /// // via try_new
 /// {
 ///     let frag_offset = IpFragOffset::try_new(123).unwrap();
 ///     assert_eq!(frag_offset.value(), 123);
-/// 
-///     // note that only 13 bit numbers are allowed (meaning 
+///
+///     // note that only 13 bit numbers are allowed (meaning
 ///     // 0b0001_1111_1111_1111 is the maximum allowed value)
 ///     use etherparse::err::{ValueTooBigError, ValueType};
 ///     assert_eq!(
@@ -40,7 +40,7 @@ use crate::err::ValueTooBigError;
 ///         })
 ///     );
 /// }
-/// 
+///
 /// // via new_unchecked
 /// {
 ///     // in case you are sure the number does not exceed the max
@@ -57,7 +57,6 @@ use crate::err::ValueTooBigError;
 pub struct IpFragOffset(u16);
 
 impl IpFragOffset {
-
     /// IpFragOffset with value 0.
     pub const ZERO: IpFragOffset = IpFragOffset(0);
 
@@ -66,16 +65,16 @@ impl IpFragOffset {
 
     /// Tries to create an [`IpFragOffset`] and checks that the passed value
     /// is smaller or equal than [`IpFragOffset::MAX_U16`] (13 bit unsigned integer).
-    /// 
+    ///
     /// In case the passed value is bigger then what can be represented in an 13 bit
     /// integer an error is returned. Otherwise an `Ok` containing the [`IpFragOffset`].
-    /// 
+    ///
     /// ```
     /// use etherparse::IpFragOffset;
-    /// 
+    ///
     /// let frag_offset = IpFragOffset::try_new(123).unwrap();
     /// assert_eq!(frag_offset.value(), 123);
-    /// 
+    ///
     /// // if a number that can not be represented in an 13 bit integer
     /// // gets passed in an error is returned
     /// use etherparse::err::{ValueTooBigError, ValueType};
@@ -88,9 +87,9 @@ impl IpFragOffset {
     ///     })
     /// );
     /// ```
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// `value` must be smaller or equal than [`IpFragOffset::MAX_U16`]
     /// otherwise the behaviour of functions or datastructures relying
     /// on this pre-requirement is undefined.
@@ -100,7 +99,7 @@ impl IpFragOffset {
         if value <= IpFragOffset::MAX_U16 {
             Ok(IpFragOffset(value))
         } else {
-            Err(ValueTooBigError{
+            Err(ValueTooBigError {
                 actual: value,
                 max_allowed: IpFragOffset::MAX_U16,
                 value_type: IpFragmentOffset,
@@ -111,9 +110,9 @@ impl IpFragOffset {
     /// Creates an [`IpFragOffset`] without checking that the value
     /// is smaller or equal than [`IpFragOffset::MAX_U16`] (13 bit unsigned integer).
     /// The caller must gurantee that `value <= IpFragOffset::MAX_U16`.
-    /// 
+    ///
     /// # Safety
-    /// 
+    ///
     /// `value` must be smaller or equal than [`IpFragOffset::MAX_U16`]
     /// otherwise the behaviour of functions or datastructures relying
     /// on this pre-requirement is undefined.
@@ -152,7 +151,7 @@ impl TryFrom<u16> for IpFragOffset {
         if value <= IpFragOffset::MAX_U16 {
             Ok(IpFragOffset(value))
         } else {
-            Err(Self::Error{
+            Err(Self::Error {
                 actual: value,
                 max_allowed: IpFragOffset::MAX_U16,
                 value_type: IpFragmentOffset,
@@ -165,9 +164,9 @@ impl TryFrom<u16> for IpFragOffset {
 mod test {
     use super::*;
     use core::hash::{Hash, Hasher};
-    use std::format;
     use proptest::prelude::*;
-    
+    use std::format;
+
     #[test]
     fn derived_traits() {
         // copy & clone
@@ -214,10 +213,9 @@ mod test {
             };
             assert_eq!(a, b);
         }
-
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn try_new(
             valid_value in 0..0b0001_1111_1111_1111u16,
@@ -239,7 +237,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn try_from(
             valid_value in 0..0b0001_1111_1111_1111u16,
@@ -280,7 +278,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn new_unchecked(valid_value in 0..0b0001_1111_1111_1111u16) {
             assert_eq!(
@@ -292,14 +290,14 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn fmt(valid_value in 0..0b0001_1111_1111_1111u16) {
             assert_eq!(format!("{}", IpFragOffset(valid_value)), format!("{}", valid_value));
         }
     }
-    
-    proptest!{
+
+    proptest! {
         #[test]
         fn from(valid_value in 0..0b0001_1111_1111_1111u16,) {
             let frag_offset = IpFragOffset::try_new(valid_value).unwrap();

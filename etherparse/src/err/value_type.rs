@@ -2,14 +2,14 @@
 /// and can cause an [`crate::err::ValueTooBigError`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ValueType {
-    /// IP Fragment offset present in the IPv4 header and 
+    /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.
     IpFragmentOffset,
 
     Ipv4PayloadLength,
     Ipv4Dscp,
     Ipv4Ecn,
-    
+
     Ipv6FlowLabel,
     /// VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,
@@ -34,8 +34,8 @@ impl core::fmt::Display for ValueType {
 
 #[cfg(test)]
 mod test {
-    use std::format;
     use super::*;
+    use std::format;
 
     #[test]
     fn debug() {
@@ -48,7 +48,7 @@ mod test {
     #[test]
     fn display() {
         use ValueType::*;
-    
+
         assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
         assert_eq!(
             "Ipv4Header.differentiated_services_code_point",
@@ -58,10 +58,7 @@ mod test {
             "Ipv4Header.explicit_congestion_notification",
             &format!("{}", Ipv4Ecn)
         );
-        assert_eq!(
-            "IP fragment offset",
-            &format!("{}", IpFragmentOffset)
-        );
+        assert_eq!("IP fragment offset", &format!("{}", IpFragmentOffset));
         assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
         assert_eq!(
             "SingleVlanHeader.priority_code_point",

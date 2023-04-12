@@ -20,7 +20,10 @@ use test_writer::*;
 
 #[test]
 fn test_eq() {
-    assert_eq!(err::ValueType::Ipv4PayloadLength, err::ValueType::Ipv4PayloadLength);
+    assert_eq!(
+        err::ValueType::Ipv4PayloadLength,
+        err::ValueType::Ipv4PayloadLength
+    );
     assert_ne!(err::ValueType::Ipv4PayloadLength, err::ValueType::Ipv4Dscp);
 }
 
