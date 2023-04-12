@@ -7,6 +7,9 @@ pub mod ipv6_exts;
 pub mod packet;
 pub mod tcp;
 
+mod value_type;
+pub use value_type::*;
+
 mod from_slice_error;
 pub use from_slice_error::*;
 
@@ -18,6 +21,9 @@ pub use len_error::*;
 
 mod len_source;
 pub use len_source::*;
+
+mod value_too_big_error;
+pub use value_too_big_error::*;
 
 #[cfg(feature = "std")]
 mod read_error;

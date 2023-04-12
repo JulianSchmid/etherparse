@@ -438,7 +438,7 @@ impl ComponentTest {
             test.ip = Some({
                 let mut non_frag = ip.clone();
                 non_frag.more_fragments = false;
-                non_frag.fragments_offset = 0;
+                non_frag.fragments_offset = 0.try_into().unwrap();
                 let mut header = IpHeader::Version4(non_frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header
@@ -466,7 +466,7 @@ impl ComponentTest {
                         frag.more_fragments = true;
                     }
                 } else {
-                    frag.fragment = Some(Ipv6FragmentHeader::new(ip_number::UDP, 0, true, 0));
+                    frag.fragment = Some(Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0));
                 }
                 let mut header = IpHeader::Version6(ip.clone(), frag);
                 header.set_next_headers(ip.next_header);

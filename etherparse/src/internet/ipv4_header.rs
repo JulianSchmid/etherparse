@@ -19,7 +19,7 @@ pub struct Ipv4Header {
     pub identification: u16,
     pub dont_fragment: bool,
     pub more_fragments: bool,
-    pub fragments_offset: u16,
+    pub fragments_offset: IpFragOffset,
     pub time_to_live: u8,
     pub protocol: IpNumber,
     pub header_checksum: u16,
@@ -64,7 +64,7 @@ impl Ipv4Header {
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
-            fragments_offset: 0,
+            fragments_offset: Default::default(),
             time_to_live,
             protocol,
             header_checksum: 0,
@@ -221,7 +221,11 @@ impl Ipv4Header {
             identification,
             dont_fragment,
             more_fragments,
-            fragments_offset,
+            fragments_offset: unsafe {
+                // Safe as only 13 bits were used to decode the
+                // fragment offset
+                IpFragOffset::new_unchecked(fragments_offset)
+            },
             time_to_live: header_raw[8],
             protocol: IpNumber(header_raw[9]),
             header_checksum: u16::from_be_bytes([header_raw[10], header_raw[11]]),
@@ -258,12 +262,11 @@ impl Ipv4Header {
     /// * explicit_congestion_notification is not greater then 0x3
     /// * fragments_offset is not greater then 0x1fff
     pub fn check_ranges(&self) -> Result<(), ValueError> {
-        use crate::ErrorField::*;
+        use crate::err::ValueType::*;
 
         //check ranges
         max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
         max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
-        max_check_u16(self.fragments_offset, 0x1fff, Ipv4FragmentsOffset)?;
         max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
 
         Ok(())
@@ -301,7 +304,7 @@ impl Ipv4Header {
         let total_len_be = self.total_len().to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
-            let frag_be: [u8; 2] = self.fragments_offset.to_be_bytes();
+            let frag_be: [u8; 2] = self.fragments_offset.value().to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -365,7 +368,7 @@ impl Ipv4Header {
         let total_len_be = self.total_len().to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
-            let frag_be: [u8; 2] = self.fragments_offset.to_be_bytes();
+            let frag_be: [u8; 2] = self.fragments_offset.value().to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -431,7 +434,7 @@ impl Ipv4Header {
             .add_2bytes(self.total_len().to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
-                let frag_off_be = self.fragments_offset.to_be_bytes();
+                let frag_off_be = self.fragments_offset.value().to_be_bytes();
                 let flags = {
                     let mut result = 0;
                     if self.dont_fragment {
@@ -458,7 +461,7 @@ impl Ipv4Header {
     /// an fragment offset.
     #[inline]
     pub fn is_fragmenting_payload(&self) -> bool {
-        self.more_fragments || (0 != self.fragments_offset)
+        self.more_fragments || (0 != self.fragments_offset.value())
     }
 }
 
@@ -478,7 +481,7 @@ impl Default for Ipv4Header {
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
-            fragments_offset: 0,
+            fragments_offset: Default::default(),
             time_to_live: 0,
             protocol: IpNumber(255),
             header_checksum: 0,
@@ -556,7 +559,7 @@ mod test {
         assert_eq!(0, default.identification);
         assert_eq!(true, default.dont_fragment);
         assert_eq!(false, default.more_fragments);
-        assert_eq!(0, default.fragments_offset);
+        assert_eq!(0, default.fragments_offset.value());
         assert_eq!(0, default.time_to_live);
         assert_eq!(IpNumber(255), default.protocol);
         assert_eq!(0, default.header_checksum);
@@ -568,7 +571,7 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv4_any()) {
-            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
+            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.ihl(),
                     input.differentiated_services_code_point,
                     input.explicit_congestion_notification,
@@ -741,7 +744,7 @@ mod test {
             assert_eq!(result.identification, 0);
             assert_eq!(result.dont_fragment, true);
             assert_eq!(result.more_fragments, false);
-            assert_eq!(result.fragments_offset, 0);
+            assert_eq!(result.fragments_offset.value(), 0);
             assert_eq!(result.time_to_live, ttl);
             assert_eq!(result.protocol, ip_number::UDP);
             assert_eq!(result.header_checksum, 0);
@@ -1102,10 +1105,9 @@ mod test {
         fn check_ranges(
             base_header in ipv4_any(),
             bad_dscp in 0b100_0000u8..=u8::MAX,
-            bad_ecn in 0b100..=u8::MAX,
-            bad_frag_offset in 0b0010_0000_0000_0000u16..=u16::MAX
+            bad_ecn in 0b100..=u8::MAX
         ) {
-            use crate::ErrorField::*;
+            use crate::err::ValueType::*;
             use crate::ValueError::*;
 
             fn test_range_methods(input: &Ipv4Header, expected: ValueError) {
@@ -1161,22 +1163,6 @@ mod test {
                         value: bad_ecn,
                         max: 0b11,
                         field: Ipv4Ecn,
-                    },
-                );
-            }
-            // fragmentation offset
-            {
-                let value = {
-                    let mut value = base_header.clone();
-                    value.fragments_offset = bad_frag_offset;
-                    value
-                };
-                test_range_methods(
-                    &value,
-                    U16TooLarge {
-                        value: bad_frag_offset,
-                        max: 0x1FFF,
-                        field: Ipv4FragmentsOffset,
                     },
                 );
             }
@@ -1257,7 +1243,7 @@ mod test {
                 assert_eq!(err, ValueError::U16TooLarge {
                     value: u16::MAX,
                     max: u16::MAX - (base_header.header_len() as u16),
-                    field: ErrorField::Ipv4PayloadLength
+                    field: err::ValueType::Ipv4PayloadLength
                 });
             }
         }
@@ -1303,7 +1289,7 @@ mod test {
                 assert_eq!(err, ValueError::U16TooLarge {
                     value: u16::MAX,
                     max: u16::MAX - (base_header.header_len() as u16),
-                    field: ErrorField::Ipv4PayloadLength
+                    field: err::ValueType::Ipv4PayloadLength
                 });
             }
         }
@@ -1373,7 +1359,7 @@ mod test {
         // not fragmenting
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 0;
+            header.fragments_offset = 0.try_into().unwrap();
             header.more_fragments = false;
             assert_eq!(false, header.is_fragmenting_payload());
         }
@@ -1381,7 +1367,7 @@ mod test {
         // fragmenting based on offset
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 1;
+            header.fragments_offset = 1.try_into().unwrap();
             header.more_fragments = false;
             assert!(header.is_fragmenting_payload());
         }
@@ -1389,7 +1375,7 @@ mod test {
         // fragmenting based on more_fragments
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 0;
+            header.fragments_offset = 0.try_into().unwrap();
             header.more_fragments = true;
             assert!(header.is_fragmenting_payload());
         }

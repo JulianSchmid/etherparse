@@ -429,7 +429,7 @@ mod test {
         {
             let ipv6_frag = Ipv6FragmentHeader {
                 next_header: UDP,
-                fragment_offset: 0,
+                fragment_offset: 0.try_into().unwrap(),
                 more_fragments: true,
                 identification: 0,
             };
@@ -445,7 +445,7 @@ mod test {
 
             let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
             data.extend_from_slice(&ipv6.to_bytes().unwrap());
-            data.extend_from_slice(&ipv6_frag.to_bytes().unwrap());
+            data.extend_from_slice(&ipv6_frag.to_bytes());
             assert!(Ipv6Slice::from_slice(&data)
                 .unwrap()
                 .is_payload_fragmented());

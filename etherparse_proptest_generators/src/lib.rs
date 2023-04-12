@@ -2,13 +2,13 @@ use etherparse::*;
 use proptest::prelude::*;
 use proptest::*;
 
-pub fn error_field_any() -> impl Strategy<Value = ErrorField> {
-    use ErrorField::*;
+pub fn err_field_any() -> impl Strategy<Value = err::ValueType> {
+    use err::ValueType::*;
     prop_oneof![
         Just(Ipv4PayloadLength),
         Just(Ipv4Dscp),
         Just(Ipv4Ecn),
-        Just(Ipv4FragmentsOffset),
+        Just(IpFragmentOffset),
         Just(Ipv6FlowLabel),
         Just(VlanTagPriorityCodePoint),
         Just(VlanTagVlanId)
@@ -207,7 +207,7 @@ prop_compose! {
         result.identification = identification;
         result.dont_fragment = dont_fragment;
         result.more_fragments = more_fragments;
-        result.fragments_offset = fragments_offset;
+        result.fragments_offset = fragments_offset.try_into().unwrap();
         result.time_to_live = ttl;
         result.protocol = protocol;
         result.header_checksum = header_checksum;
@@ -494,7 +494,7 @@ prop_compose! {
     {
         Ipv6FragmentHeader::new(
             next_header,
-            fragment_offset,
+            fragment_offset.try_into().unwrap(),
             more_fragments,
             identification
         )

@@ -385,7 +385,7 @@ mod test {
             let payload: [u8; 6] = [1, 2, 3, 4, 5, 6];
             let mut ipv4 =
                 Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
-            ipv4.fragments_offset = 123;
+            ipv4.fragments_offset = 123.try_into().unwrap();
             let data = {
                 let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
                 data.extend_from_slice(&ipv4.to_bytes().unwrap());
