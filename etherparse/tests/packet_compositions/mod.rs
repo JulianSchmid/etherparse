@@ -466,7 +466,12 @@ impl ComponentTest {
                         frag.more_fragments = true;
                     }
                 } else {
-                    frag.fragment = Some(Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0));
+                    frag.fragment = Some(Ipv6FragmentHeader::new(
+                        ip_number::UDP,
+                        IpFragOffset::ZERO,
+                        true,
+                        0,
+                    ));
                 }
                 let mut header = IpHeader::Version6(ip.clone(), frag);
                 header.set_next_headers(ip.next_header);
