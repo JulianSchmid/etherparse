@@ -59,7 +59,7 @@ impl IpFragOffset {
     /// IpFragOffset with value 0.
     pub const ZERO: IpFragOffset = IpFragOffset(0);
 
-    /// Maximum value value of an IP fragmentation offset.
+    /// Maximum value of an IP fragmentation offset.
     pub const MAX_U16: u16 = 0b0001_1111_1111_1111;
 
     /// Tries to create an [`IpFragOffset`] and checks that the passed value

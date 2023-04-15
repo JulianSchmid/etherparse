@@ -34,7 +34,7 @@ use core::fmt::{Debug, Formatter};
 #[derive(Clone)]
 pub struct Ipv4Header {
     /// Differentiated Services Code Point
-    pub dscp: u8,
+    pub dscp: Ipv4Dscp,
     /// Explicit Congestion Notification
     pub ecn: u8,
     /// Length of the payload of the ipv4 packet in bytes (does not contain the options).
@@ -111,7 +111,7 @@ impl Ipv4Header {
     /// );
     /// 
     /// // for the rest of the fields the following default values will be used:
-    /// assert_eq!(0, header.dscp);
+    /// assert_eq!(0, header.dscp.value());
     /// assert_eq!(0, header.ecn);
     /// assert_eq!(0, header.identification);
     /// assert_eq!(true, header.dont_fragment);
@@ -131,7 +131,7 @@ impl Ipv4Header {
         destination: [u8; 4],
     ) -> Ipv4Header {
         Ipv4Header {
-            dscp: 0,
+            dscp: Default::default(),
             ecn: 0,
             payload_len,
             identification: 0,
@@ -186,6 +186,37 @@ impl Ipv4Header {
     }
 
     /// Length of the header (includes options) in bytes.
+    /// 
+    /// The minimum allowed length of a header is 5 (= 20 bytes) and the
+    /// maximum length is 15 (= 60 bytes).
+    /// 
+    /// ```
+    /// use etherparse::Ipv4Header;
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // minimum IHL is 5
+    ///     assert_eq!(5, header.ihl());
+    /// }
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [1,2,3,4].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // IHL is increased by 1 for every 4 bytes of options
+    ///     assert_eq!(6, header.ihl());
+    /// }
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [0;40].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // maximum ihl
+    ///     assert_eq!(15, header.ihl());
+    /// } 
+    /// ```
     #[inline]
     pub fn header_len(&self) -> usize {
         Ipv4Header::MIN_LEN + usize::from(self.options.len())
@@ -309,7 +340,11 @@ impl Ipv4Header {
             u16::from_be_bytes([header_raw[6] & 0b0001_1111, header_raw[7]]),
         );
         Ok(Ipv4Header {
-            dscp,
+            dscp: unsafe {
+                // Safe as only 6 bits were used to decode the
+                // dscp value
+                Ipv4Dscp::new_unchecked(dscp)
+            },
             ecn,
             payload_len: total_length - header_length,
             identification,
@@ -357,7 +392,6 @@ impl Ipv4Header {
         use crate::err::ValueType::*;
 
         //check ranges
-        max_check_u8(self.dscp, 0x3f, Ipv4Dscp)?;
         max_check_u8(self.ecn, 0x3, Ipv4Ecn)?;
         max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
 
@@ -414,7 +448,7 @@ impl Ipv4Header {
         #[rustfmt::skip]
         let mut header_raw: ArrayVec<u8, { Ipv4Header::MAX_LEN } > = [
             (4 << 4) | self.ihl(),
-            (self.dscp << 2) | self.ecn,
+            (self.dscp.value() << 2) | self.ecn,
             total_len_be[0],
             total_len_be[1],
 
@@ -477,7 +511,7 @@ impl Ipv4Header {
 
         let header_raw = [
             (4 << 4) | self.ihl(),
-            (self.dscp << 2) | self.ecn,
+            (self.dscp.value() << 2) | self.ecn,
             total_len_be[0],
             total_len_be[1],
             id_be[0],
@@ -520,7 +554,7 @@ impl Ipv4Header {
         checksum::Sum16BitWords::new()
             .add_2bytes([
                 (4 << 4) | self.ihl(),
-                (self.dscp << 2)
+                (self.dscp.value() << 2)
                     | self.ecn,
             ])
             .add_2bytes(self.total_len().to_be_bytes())
@@ -567,7 +601,7 @@ impl Ipv4Header {
 impl Default for Ipv4Header {
     fn default() -> Ipv4Header {
         Ipv4Header {
-            dscp: 0,
+            dscp: Default::default(),
             ecn: 0,
             payload_len: 0,
             identification: 0,
@@ -643,7 +677,7 @@ mod test {
     fn default() {
         let default: Ipv4Header = Default::default();
         assert_eq!(5, default.ihl());
-        assert_eq!(0, default.dscp);
+        assert_eq!(0, default.dscp.value());
         assert_eq!(0, default.ecn);
         assert_eq!(0, default.payload_len);
         assert_eq!(0, default.identification);
@@ -661,7 +695,7 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv4_any()) {
-            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
+            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {:?}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.ihl(),
                     input.dscp,
                     input.ecn,
@@ -828,7 +862,7 @@ mod test {
                 dest_ip
             );
 
-            assert_eq!(result.dscp, 0);
+            assert_eq!(result.dscp.value(), 0);
             assert_eq!(result.ecn, 0);
             assert_eq!(result.payload_len, payload_len);
             assert_eq!(result.identification, 0);
@@ -1197,7 +1231,6 @@ mod test {
         #[test]
         fn check_ranges(
             base_header in ipv4_any(),
-            bad_dscp in 0b100_0000u8..=u8::MAX,
             bad_ecn in 0b100..=u8::MAX
         ) {
             use crate::err::ValueType::*;
@@ -1226,22 +1259,6 @@ mod test {
                     assert_eq!(0, buffer.len());
                     assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
                 }
-            }
-            //dscp
-            {
-                let value = {
-                    let mut value = base_header.clone();
-                    value.dscp = bad_dscp;
-                    value
-                };
-                test_range_methods(
-                    &value,
-                    U8TooLarge {
-                        value: bad_dscp,
-                        max: 0b11_1111,
-                        field: Ipv4Dscp,
-                    },
-                );
             }
             //ecn
             {
