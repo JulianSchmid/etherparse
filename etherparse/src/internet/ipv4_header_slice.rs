@@ -274,25 +274,26 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// Decode all the fields and copy the results to a Ipv4Header struct
     #[inline]
     pub fn to_header(&self) -> Ipv4Header {
-        let options = self.options();
         Ipv4Header {
-            differentiated_services_code_point: self.dcp(),
-            explicit_congestion_notification: self.ecn(),
+            dscp: self.dcp(),
+            ecn: self.ecn(),
             payload_len: self.payload_len(),
             identification: self.identification(),
             dont_fragment: self.dont_fragment(),
             more_fragments: self.more_fragments(),
-            fragments_offset: self.fragments_offset(),
+            fragment_offset: self.fragments_offset(),
             time_to_live: self.ttl(),
             protocol: self.protocol(),
             header_checksum: self.header_checksum(),
             source: self.source(),
             destination: self.destination(),
-            options_len: options.len() as u8,
-            options_buffer: {
-                let mut result: [u8; 40] = [0; 40];
-                result[..options.len()].copy_from_slice(options);
-                result
+            options: {
+                let options_slice = self.options();
+                let mut options = Ipv4Options::new();
+                options.len = options_slice.len() as u8;
+                let target_slice: &mut [u8] = options.as_mut();
+                target_slice.copy_from_slice(options_slice);
+                options
             },
         }
     }
@@ -430,20 +431,20 @@ mod test {
             assert_eq!(slice.slice(), &buffer[..]);
             assert_eq!(slice.version(), 4);
             assert_eq!(slice.ihl(), header.ihl());
-            assert_eq!(slice.dcp(), header.differentiated_services_code_point);
-            assert_eq!(slice.ecn(), header.explicit_congestion_notification);
+            assert_eq!(slice.dcp(), header.dscp);
+            assert_eq!(slice.ecn(), header.ecn);
             assert_eq!(slice.total_len(), header.total_len());
             assert_eq!(slice.payload_len(), header.payload_len);
             assert_eq!(slice.identification(), header.identification);
             assert_eq!(slice.dont_fragment(), header.dont_fragment);
             assert_eq!(slice.more_fragments(), header.more_fragments);
-            assert_eq!(slice.fragments_offset(), header.fragments_offset);
+            assert_eq!(slice.fragments_offset(), header.fragment_offset);
             assert_eq!(slice.ttl(), header.time_to_live);
             assert_eq!(slice.protocol(), header.protocol);
             assert_eq!(slice.header_checksum(), header.header_checksum);
             assert_eq!(slice.source(), header.source);
             assert_eq!(slice.destination(), header.destination);
-            assert_eq!(slice.options(), header.options());
+            assert_eq!(slice.options(), &header.options[..]);
         }
     }
 
@@ -467,7 +468,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 0.try_into().unwrap();
+                header.fragment_offset = 0.try_into().unwrap();
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
@@ -481,7 +482,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 1.try_into().unwrap();
+                header.fragment_offset = 1.try_into().unwrap();
                 header.more_fragments = false;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
@@ -495,7 +496,7 @@ mod test {
         {
             let buffer = {
                 let mut header: Ipv4Header = Default::default();
-                header.fragments_offset = 0.try_into().unwrap();
+                header.fragment_offset = 0.try_into().unwrap();
                 header.more_fragments = true;
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();

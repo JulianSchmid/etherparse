@@ -161,62 +161,70 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn ipv4_options_any()
+    (
+        len_div_4 in 0u8..10,
+        options_part0 in prop::array::uniform32(any::<u8>()),
+        options_part1 in prop::array::uniform8(any::<u8>())
+    ) -> Ipv4Options
+    {
+        let mut options: [u8;40] = [0;40];
+        //copy together 40 bytes of random data (the limit for static arrays in proptest 32,
+        //so a 32 & 8 byte array get combined here)
+        let len = usize::from(len_div_4)*4;
+        if len > 0 {
+            let sub_len = std::cmp::min(len,32);
+            options[..sub_len].copy_from_slice(&options_part0[..sub_len]);
+        }
+        if len > 32 {
+            let sub_len = len - 32;
+            options[32..len].copy_from_slice(&options_part1[..sub_len]);
+        }
+
+        //set the options
+        (&options[..len]).try_into().unwrap()
+    }
+}
+
+prop_compose! {
     pub fn ipv4_with(protocol: IpNumber)
     (
-        ihl in 0u8..10,
-        protocol in proptest::strategy::Just(protocol))
-        (source in prop::array::uniform4(any::<u8>()),
-        dest in prop::array::uniform4(any::<u8>()),
+        protocol in proptest::strategy::Just(protocol),
+        options in ipv4_options_any()
+    )(
+        source in prop::array::uniform4(any::<u8>()),
+        destination in prop::array::uniform4(any::<u8>()),
         dscp in prop::bits::u8::between(0,6),
         ecn in prop::bits::u8::between(0,2),
         identification in any::<u16>(),
-        ttl in any::<u8>(),
+        time_to_live in any::<u8>(),
         dont_fragment in any::<bool>(),
         more_fragments in any::<bool>(),
-        fragments_offset in prop::bits::u16::between(0, 13),
+        fragment_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
-        payload_len in 0..(std::u16::MAX - u16::from(ihl*4) - (Ipv4Header::MIN_LEN as u16)),
+        payload_len in 0..(core::u16::MAX - u16::from(options.len()) - (Ipv4Header::MIN_LEN as u16)),
         protocol in proptest::strategy::Just(protocol),
-        options_len in proptest::strategy::Just(ihl*4),
-        options_part0 in prop::array::uniform32(any::<u8>()),
-        options_part1 in prop::array::uniform8(any::<u8>())
+        options in proptest::strategy::Just(options)
     ) -> Ipv4Header
     {
-        let mut result: Ipv4Header = Default::default();
-        {
-            let mut options: [u8;40] = [0;40];
-            //copy together 40 bytes of random data (the limit for static arrays in proptest 32,
-            //so a 32 & 8 byte array get combined here)
-            let len = usize::from(options_len);
-            if len > 0 {
-                let sub_len = std::cmp::min(len,32);
-                options[..sub_len].copy_from_slice(&options_part0[..sub_len]);
-            }
-            if len > 32 {
-                let sub_len = len - 32;
-                options[32..len].copy_from_slice(&options_part1[..sub_len]);
-            }
-
-            //set the options
-            result.set_options(&options[..len]).unwrap();
+        Ipv4Header{
+            dscp,
+            ecn,
+            payload_len,
+            identification,
+            dont_fragment,
+            more_fragments,
+            fragment_offset: fragment_offset.try_into().unwrap(),
+            time_to_live,
+            protocol,
+            header_checksum,
+            source,
+            destination,
+            options
         }
-
-        result.differentiated_services_code_point = dscp;
-        result.explicit_congestion_notification = ecn;
-        result.payload_len = payload_len;
-        result.identification = identification;
-        result.dont_fragment = dont_fragment;
-        result.more_fragments = more_fragments;
-        result.fragments_offset = fragments_offset.try_into().unwrap();
-        result.time_to_live = ttl;
-        result.protocol = protocol;
-        result.header_checksum = header_checksum;
-        result.source = source;
-        result.destination = dest;
-
-        result
     }
 }
+
 prop_compose! {
     pub fn ipv4_any()
                (protocol in ip_number_any())

@@ -4,10 +4,39 @@ use crate::*;
 use core::fmt::{Debug, Formatter};
 
 /// IPv4 header with options.
+/// 
+/// # Example Usage:
+/// 
+/// ```
+/// use etherparse::{Ipv4Header, IpNumber};
+/// 
+/// let mut header = Ipv4Header {
+///     source: [1,2,3,4],
+///     destination: [1,2,3,4],
+///     time_to_live: 4,
+///     payload_len: 100,
+///     protocol: IpNumber::UDP,
+///     ..Default::default()
+/// };
+/// 
+/// // depending on your usecase you might want to set the correct checksum
+/// header.header_checksum = header.calc_header_checksum().unwrap();
+/// 
+/// // header can be serialized into the "on the wire" format
+/// // using the "write" or "to_bytes" methods
+/// let bytes = header.to_bytes().unwrap();
+/// 
+/// // IPv4 headers can be decoded via "read" or "from_slice"
+/// let (decoded, slice_rest) = Ipv4Header::from_slice(&bytes).unwrap();
+/// assert_eq!(header, decoded);
+/// assert_eq!(slice_rest, &[]);
+/// ```
 #[derive(Clone)]
 pub struct Ipv4Header {
-    pub differentiated_services_code_point: u8,
-    pub explicit_congestion_notification: u8,
+    /// Differentiated Services Code Point
+    pub dscp: u8,
+    /// Explicit Congestion Notification
+    pub ecn: u8,
     /// Length of the payload of the ipv4 packet in bytes (does not contain the options).
     ///
     /// This field does not directly exist in an ipv4 header but instead is decoded from
@@ -16,10 +45,18 @@ pub struct Ipv4Header {
     /// Headers where the total length is smaller then then the minimum header size itself
     /// are not representable in this struct.
     pub payload_len: u16,
+    /// Number used to identify packets that contain an originally fragmented packet.
     pub identification: u16,
+    /// If set the packet is not allowed to fragmented.
     pub dont_fragment: bool,
+    /// Indicates that the packet contains part of an fragmented message and that
+    /// additional data is needed to reconstruct the original packet.
     pub more_fragments: bool,
-    pub fragments_offset: IpFragOffset,
+    /// In case this message contains parts of a fragmented packet the fragment
+    /// offset is the offset of payload the current message relative to the
+    /// original payload of the message.
+    pub fragment_offset: IpFragOffset,
+    /// Number of hops the packet is allowed to take before it should be discarded.
     pub time_to_live: u8,
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
@@ -30,12 +67,9 @@ pub struct Ipv4Header {
     pub source: [u8; 4],
     /// IPv4 destination address
     pub destination: [u8; 4],
-    /// Length of the options in the options_buffer in bytes.
-    pub(crate) options_len: u8,
-    pub(crate) options_buffer: [u8; 40],
+    /// Options in the header (in raw).
+    pub options: Ipv4Options,
 }
-
-const IPV4_MAX_OPTIONS_LENGTH: usize = 10 * 4;
 
 impl Ipv4Header {
     /// Minimum length of an IPv4 header in bytes/octets.
@@ -55,6 +89,40 @@ impl Ipv4Header {
     pub const SERIALIZED_SIZE: usize = Ipv4Header::MIN_LEN;
 
     /// Constructs an Ipv4Header with standard values for non specified values.
+    /// 
+    /// This method is equivalent to partially initializing a struct with
+    /// default values:
+    /// 
+    /// ```
+    /// use etherparse::{Ipv4Header, IpNumber};
+    /// 
+    /// let mut header = Ipv4Header::new(100, 4, IpNumber::UDP, [1,2,3,4], [5,6,7,8]);
+    /// 
+    /// assert_eq!(
+    ///     header,
+    ///     Ipv4Header {
+    ///         payload_len: 100,
+    ///         time_to_live: 4,
+    ///         protocol: IpNumber::UDP,
+    ///         source: [1,2,3,4],
+    ///         destination: [5,6,7,8],
+    ///         ..Default::default()
+    ///     }
+    /// );
+    /// 
+    /// // for the rest of the fields the following default values will be used:
+    /// assert_eq!(0, header.dscp);
+    /// assert_eq!(0, header.ecn);
+    /// assert_eq!(0, header.identification);
+    /// assert_eq!(true, header.dont_fragment);
+    /// assert_eq!(false, header.more_fragments);
+    /// assert_eq!(0, header.fragment_offset.value());
+    /// assert_eq!(0, header.header_checksum);
+    /// 
+    /// // in case you also want to have a correct checksum you will have to
+    /// // additionally update it:
+    /// header.header_checksum = header.calc_header_checksum().unwrap();
+    /// ```
     pub fn new(
         payload_len: u16,
         time_to_live: u8,
@@ -63,39 +131,69 @@ impl Ipv4Header {
         destination: [u8; 4],
     ) -> Ipv4Header {
         Ipv4Header {
-            differentiated_services_code_point: 0,
-            explicit_congestion_notification: 0,
+            dscp: 0,
+            ecn: 0,
             payload_len,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
-            fragments_offset: Default::default(),
+            fragment_offset: Default::default(),
             time_to_live,
             protocol,
             header_checksum: 0,
             source,
             destination,
-            options_len: 0,
-            options_buffer: [0; 40],
+            options: Default::default(),
         }
     }
 
-    /// Length of the header in 4 bytes (often also called IHL - Internet Header Lenght).
+    /// Length of the header in multiples of 4 bytes (often also called
+    /// IHL - Internet Header Lenght). This field is part of the serialized
+    /// header and determines / is determined by the byte length of the options.
     ///
-    /// The minimum allowed length of a header is 5 (= 20 bytes) and the maximum length is 15 (= 60 bytes).
+    /// The minimum allowed length of a header is 5 (= 20 bytes) and the
+    /// maximum length is 15 (= 60 bytes).
+    /// 
+    /// ```
+    /// use etherparse::Ipv4Header;
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // minimum IHL is 5
+    ///     assert_eq!(5, header.ihl());
+    /// }
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [1,2,3,4].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // IHL is increased by 1 for every 4 bytes of options
+    ///     assert_eq!(6, header.ihl());
+    /// }
+    /// {
+    ///     let header = Ipv4Header {
+    ///         options: [0;40].into(),
+    ///         ..Default::default()
+    ///     };
+    ///     // maximum ihl
+    ///     assert_eq!(15, header.ihl());
+    /// } 
+    /// ```
     pub fn ihl(&self) -> u8 {
-        (self.options_len / 4) + 5
+        (self.options.len() / 4) + 5
     }
 
     /// Length of the header (includes options) in bytes.
     #[inline]
     pub fn header_len(&self) -> usize {
-        Ipv4Header::MIN_LEN + usize::from(self.options_len)
+        Ipv4Header::MIN_LEN + usize::from(self.options.len())
     }
 
     /// Returns the total length of the header + payload in bytes.
     pub fn total_len(&self) -> u16 {
-        self.payload_len + (Ipv4Header::MIN_LEN as u16) + u16::from(self.options_len)
+        self.payload_len + (Ipv4Header::MIN_LEN as u16) + u16::from(self.options.len())
     }
 
     /// Sets the payload length if the value is not too big. Otherwise an error is returned.
@@ -111,32 +209,23 @@ impl Ipv4Header {
 
     /// Returns the maximum payload size based on the current options size.
     pub fn max_payload_len(&self) -> u16 {
-        core::u16::MAX - u16::from(self.options_len) - (Ipv4Header::MIN_LEN as u16)
+        core::u16::MAX - u16::from(self.options.len()) - (Ipv4Header::MIN_LEN as u16)
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).
+    #[deprecated(since = "0.14.0", note = "Directly use `&(header.options[..])` instead.")]
     pub fn options(&self) -> &[u8] {
-        &self.options_buffer[..usize::from(self.options_len)]
+        &self.options[..]
     }
 
     /// Sets the options & header_length based on the provided length.
     /// The length of the given slice must be a multiple of 4 and maximum 40 bytes.
     /// If the length is not fullfilling these constraints, no data is set and
     /// an error is returned.
-    pub fn set_options(&mut self, data: &[u8]) -> Result<(), ValueError> {
-        use crate::ValueError::*;
-
-        //check that the options length is within bounds
-        if (IPV4_MAX_OPTIONS_LENGTH < data.len()) || (0 != data.len() % 4) {
-            Err(Ipv4OptionsLengthBad(data.len()))
-        } else {
-            //copy the data to the buffer
-            self.options_buffer[..data.len()].copy_from_slice(data);
-
-            //set the header length
-            self.options_len = data.len() as u8;
-            Ok(())
-        }
+    #[deprecated(since = "0.14.0", note = "Directly set it via the header.options field instead.")]
+    pub fn set_options(&mut self, data: &[u8]) -> Result<(), err::ipv4::BadOptionsLen> {
+        self.options = data.try_into()?;
+        Ok(())
     }
 
     /// Renamed to `Ipv4Header::from_slice`
@@ -220,13 +309,13 @@ impl Ipv4Header {
             u16::from_be_bytes([header_raw[6] & 0b0001_1111, header_raw[7]]),
         );
         Ok(Ipv4Header {
-            differentiated_services_code_point: dscp,
-            explicit_congestion_notification: ecn,
+            dscp,
+            ecn,
             payload_len: total_length - header_length,
             identification,
             dont_fragment,
             more_fragments,
-            fragments_offset: unsafe {
+            fragment_offset: unsafe {
                 // Safe as only 13 bits were used to decode the
                 // fragment offset
                 IpFragOffset::new_unchecked(fragments_offset)
@@ -246,15 +335,13 @@ impl Ipv4Header {
                 header_raw[18],
                 header_raw[19],
             ],
-            options_len: (ihl - 5) * 4,
-            options_buffer: {
-                let mut values = [0u8; 40];
-
-                let options_len = usize::from(ihl - 5) * 4;
-                if options_len > 0 {
-                    reader.read_exact(&mut values[..options_len]).map_err(Io)?;
+            options: {
+                let mut options = Ipv4Options::new();
+                options.len = (ihl - 5) * 4;
+                if options.len() > 0 {
+                    reader.read_exact(options.as_mut()).map_err(Io)?;
                 }
-                values
+                options
             },
         })
     }
@@ -270,8 +357,8 @@ impl Ipv4Header {
         use crate::err::ValueType::*;
 
         //check ranges
-        max_check_u8(self.differentiated_services_code_point, 0x3f, Ipv4Dscp)?;
-        max_check_u8(self.explicit_congestion_notification, 0x3, Ipv4Ecn)?;
+        max_check_u8(self.dscp, 0x3f, Ipv4Dscp)?;
+        max_check_u8(self.ecn, 0x3, Ipv4Ecn)?;
         max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
 
         Ok(())
@@ -309,7 +396,7 @@ impl Ipv4Header {
         let total_len_be = self.total_len().to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
-            let frag_be: [u8; 2] = self.fragments_offset.value().to_be_bytes();
+            let frag_be: [u8; 2] = self.fragment_offset.value().to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -327,7 +414,7 @@ impl Ipv4Header {
         #[rustfmt::skip]
         let mut header_raw: ArrayVec<u8, { Ipv4Header::MAX_LEN } > = [
             (4 << 4) | self.ihl(),
-            (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification,
+            (self.dscp << 2) | self.ecn,
             total_len_be[0],
             total_len_be[1],
 
@@ -337,21 +424,21 @@ impl Ipv4Header {
             self.source[0], self.source[1], self.source[2], self.source[3],
 
             self.destination[0], self.destination[1], self.destination[2], self.destination[3],
-            self.options_buffer[0], self.options_buffer[1], self.options_buffer[2], self.options_buffer[3],
+            self.options.buf[0], self.options.buf[1], self.options.buf[2], self.options.buf[3],
 
-            self.options_buffer[4], self.options_buffer[5], self.options_buffer[6], self.options_buffer[7],
-            self.options_buffer[8], self.options_buffer[9], self.options_buffer[10], self.options_buffer[11],
+            self.options.buf[4], self.options.buf[5], self.options.buf[6], self.options.buf[7],
+            self.options.buf[8], self.options.buf[9], self.options.buf[10], self.options.buf[11],
 
-            self.options_buffer[12], self.options_buffer[13], self.options_buffer[14], self.options_buffer[15],
-            self.options_buffer[16], self.options_buffer[17], self.options_buffer[18], self.options_buffer[19],
+            self.options.buf[12], self.options.buf[13], self.options.buf[14], self.options.buf[15],
+            self.options.buf[16], self.options.buf[17], self.options.buf[18], self.options.buf[19],
 
-            self.options_buffer[20], self.options_buffer[21], self.options_buffer[22], self.options_buffer[23],
-            self.options_buffer[24], self.options_buffer[25], self.options_buffer[26], self.options_buffer[27],
+            self.options.buf[20], self.options.buf[21], self.options.buf[22], self.options.buf[23],
+            self.options.buf[24], self.options.buf[25], self.options.buf[26], self.options.buf[27],
 
-            self.options_buffer[28], self.options_buffer[29], self.options_buffer[30], self.options_buffer[31],
-            self.options_buffer[32], self.options_buffer[33], self.options_buffer[34], self.options_buffer[35],
+            self.options.buf[28], self.options.buf[29], self.options.buf[30], self.options.buf[31],
+            self.options.buf[32], self.options.buf[33], self.options.buf[34], self.options.buf[35],
 
-            self.options_buffer[36], self.options_buffer[37], self.options_buffer[38], self.options_buffer[39],
+            self.options.buf[36], self.options.buf[37], self.options.buf[38], self.options.buf[39],
         ].into();
 
         // SAFETY: Safe as header_len() can never exceed the maximum length of an
@@ -373,7 +460,7 @@ impl Ipv4Header {
         let total_len_be = self.total_len().to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
-            let frag_be: [u8; 2] = self.fragments_offset.value().to_be_bytes();
+            let frag_be: [u8; 2] = self.fragment_offset.value().to_be_bytes();
             let flags = {
                 let mut result = 0;
                 if self.dont_fragment {
@@ -390,7 +477,7 @@ impl Ipv4Header {
 
         let header_raw = [
             (4 << 4) | self.ihl(),
-            (self.differentiated_services_code_point << 2) | self.explicit_congestion_notification,
+            (self.dscp << 2) | self.ecn,
             total_len_be[0],
             total_len_be[1],
             id_be[0],
@@ -413,7 +500,7 @@ impl Ipv4Header {
         write.write_all(&header_raw)?;
 
         //options
-        write.write_all(self.options())?;
+        write.write_all(&self.options)?;
 
         //done
         Ok(())
@@ -433,13 +520,13 @@ impl Ipv4Header {
         checksum::Sum16BitWords::new()
             .add_2bytes([
                 (4 << 4) | self.ihl(),
-                (self.differentiated_services_code_point << 2)
-                    | self.explicit_congestion_notification,
+                (self.dscp << 2)
+                    | self.ecn,
             ])
             .add_2bytes(self.total_len().to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
-                let frag_off_be = self.fragments_offset.value().to_be_bytes();
+                let frag_off_be = self.fragment_offset.value().to_be_bytes();
                 let flags = {
                     let mut result = 0;
                     if self.dont_fragment {
@@ -455,7 +542,7 @@ impl Ipv4Header {
             .add_2bytes([self.time_to_live, self.protocol.0])
             .add_4bytes(self.source)
             .add_4bytes(self.destination)
-            .add_slice(self.options())
+            .add_slice(&self.options)
             .ones_complement()
             .to_be()
     }
@@ -466,7 +553,7 @@ impl Ipv4Header {
     /// an fragment offset.
     #[inline]
     pub fn is_fragmenting_payload(&self) -> bool {
-        self.more_fragments || (0 != self.fragments_offset.value())
+        self.more_fragments || (0 != self.fragment_offset.value())
     }
 }
 
@@ -480,20 +567,19 @@ impl Ipv4Header {
 impl Default for Ipv4Header {
     fn default() -> Ipv4Header {
         Ipv4Header {
-            differentiated_services_code_point: 0,
-            explicit_congestion_notification: 0,
+            dscp: 0,
+            ecn: 0,
             payload_len: 0,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
-            fragments_offset: Default::default(),
+            fragment_offset: Default::default(),
             time_to_live: 0,
             protocol: IpNumber(255),
             header_checksum: 0,
             source: [0; 4],
             destination: [0; 4],
-            options_len: 0,
-            options_buffer: [0; 40],
+            options: Ipv4Options::new(),
         }
     }
 }
@@ -504,43 +590,42 @@ impl Debug for Ipv4Header {
         s.field("ihl", &self.ihl());
         s.field(
             "differentiated_services_code_point",
-            &self.differentiated_services_code_point,
+            &self.dscp,
         );
         s.field(
             "explicit_congestion_notification",
-            &self.explicit_congestion_notification,
+            &self.ecn,
         );
         s.field("payload_len", &self.payload_len);
         s.field("identification", &self.identification);
         s.field("dont_fragment", &self.dont_fragment);
         s.field("more_fragments", &self.more_fragments);
-        s.field("fragments_offset", &self.fragments_offset);
+        s.field("fragments_offset", &self.fragment_offset);
         s.field("time_to_live", &self.time_to_live);
         s.field("protocol", &self.protocol);
         s.field("header_checksum", &self.header_checksum);
         s.field("source", &self.source);
         s.field("destination", &self.destination);
-        s.field("options", &self.options());
+        s.field("options", &self.options);
         s.finish()
     }
 }
 
 impl core::cmp::PartialEq for Ipv4Header {
     fn eq(&self, other: &Ipv4Header) -> bool {
-        self.differentiated_services_code_point == other.differentiated_services_code_point
-            && self.explicit_congestion_notification == other.explicit_congestion_notification
+        self.dscp == other.dscp
+            && self.ecn == other.ecn
             && self.payload_len == other.payload_len
             && self.identification == other.identification
             && self.dont_fragment == other.dont_fragment
             && self.more_fragments == other.more_fragments
-            && self.fragments_offset == other.fragments_offset
+            && self.fragment_offset == other.fragment_offset
             && self.time_to_live == other.time_to_live
             && self.protocol == other.protocol
             && self.header_checksum == other.header_checksum
             && self.source == other.source
             && self.destination == other.destination
-            && self.options_len == other.options_len
-            && self.options() == other.options()
+            && self.options == other.options
     }
 }
 
@@ -558,19 +643,19 @@ mod test {
     fn default() {
         let default: Ipv4Header = Default::default();
         assert_eq!(5, default.ihl());
-        assert_eq!(0, default.differentiated_services_code_point);
-        assert_eq!(0, default.explicit_congestion_notification);
+        assert_eq!(0, default.dscp);
+        assert_eq!(0, default.ecn);
         assert_eq!(0, default.payload_len);
         assert_eq!(0, default.identification);
         assert_eq!(true, default.dont_fragment);
         assert_eq!(false, default.more_fragments);
-        assert_eq!(0, default.fragments_offset.value());
+        assert_eq!(0, default.fragment_offset.value());
         assert_eq!(0, default.time_to_live);
         assert_eq!(IpNumber(255), default.protocol);
         assert_eq!(0, default.header_checksum);
         assert_eq!([0; 4], default.source);
         assert_eq!([0; 4], default.destination);
-        assert_eq!(default.options(), &[]);
+        assert_eq!(&default.options[..], &[]);
     }
 
     proptest! {
@@ -578,19 +663,19 @@ mod test {
         fn debug(input in ipv4_any()) {
             assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.ihl(),
-                    input.differentiated_services_code_point,
-                    input.explicit_congestion_notification,
+                    input.dscp,
+                    input.ecn,
                     input.payload_len,
                     input.identification,
                     input.dont_fragment,
                     input.more_fragments,
-                    input.fragments_offset,
+                    input.fragment_offset,
                     input.time_to_live,
                     input.protocol,
                     input.header_checksum,
                     input.source,
                     input.destination,
-                    input.options()
+                    input.options
                 ),
                 &format!("{:?}", input)
             );
@@ -609,19 +694,19 @@ mod test {
             //check every field
             //differentiated_services_code_point
             assert_eq!(
-                a.differentiated_services_code_point == b.differentiated_services_code_point,
+                a.dscp == b.dscp,
                 a == {
                     let mut other = a.clone();
-                    other.differentiated_services_code_point = b.differentiated_services_code_point;
+                    other.dscp = b.dscp;
                     other
                 }
             );
             //explicit_congestion_notification
             assert_eq!(
-                a.explicit_congestion_notification == b.explicit_congestion_notification,
+                a.ecn == b.ecn,
                 a == {
                     let mut other = a.clone();
-                    other.explicit_congestion_notification = b.explicit_congestion_notification;
+                    other.ecn = b.ecn;
                     other
                 }
             );
@@ -663,10 +748,10 @@ mod test {
             );
             //fragments_offset
             assert_eq!(
-                a.fragments_offset == b.fragments_offset,
+                a.fragment_offset == b.fragment_offset,
                 a == {
                     let mut other = a.clone();
-                    other.fragments_offset = b.fragments_offset;
+                    other.fragment_offset = b.fragment_offset;
                     other
                 }
             );
@@ -718,10 +803,10 @@ mod test {
 
             //options
             assert_eq!(
-                a.options() == b.options(),
+                a.options == b.options,
                 a == {
                     let mut other = a.clone();
-                    other.set_options(b.options()).unwrap();
+                    other.options = b.options;
                     other
                 }
             );
@@ -743,19 +828,19 @@ mod test {
                 dest_ip
             );
 
-            assert_eq!(result.differentiated_services_code_point, 0);
-            assert_eq!(result.explicit_congestion_notification, 0);
+            assert_eq!(result.dscp, 0);
+            assert_eq!(result.ecn, 0);
             assert_eq!(result.payload_len, payload_len);
             assert_eq!(result.identification, 0);
             assert_eq!(result.dont_fragment, true);
             assert_eq!(result.more_fragments, false);
-            assert_eq!(result.fragments_offset.value(), 0);
+            assert_eq!(result.fragment_offset.value(), 0);
             assert_eq!(result.time_to_live, ttl);
             assert_eq!(result.protocol, ip_number::UDP);
             assert_eq!(result.header_checksum, 0);
             assert_eq!(result.source, source_ip);
             assert_eq!(result.destination, dest_ip);
-            assert_eq!(result.options(), &[]);
+            assert_eq!(result.options.as_slice(), &[]);
         }
     }
 
@@ -769,14 +854,14 @@ mod test {
     proptest! {
         #[test]
         fn header_len(header in ipv4_any()) {
-            assert_eq!(header.header_len(), 20 + header.options().len());
+            assert_eq!(header.header_len(), 20 + usize::from(header.options.len()));
         }
     }
 
     proptest! {
         #[test]
         fn total_len(header in ipv4_any()) {
-            assert_eq!(header.total_len(), 20 + (header.options().len() as u16) + header.payload_len);
+            assert_eq!(header.total_len(), 20 + (header.options.len() as u16) + header.payload_len);
         }
     }
 
@@ -785,7 +870,7 @@ mod test {
         let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0; 4], [0; 4]);
 
         //add options (to make sure they are included in the calculation)
-        header.set_options(&[1, 2, 3, 4]).unwrap();
+        header.options = [1, 2, 3, 4].into();
 
         //zero check
         assert!(header.set_payload_len(0).is_ok());
@@ -806,11 +891,12 @@ mod test {
     proptest! {
         #[test]
         fn max_payload_len(header in ipv4_any()) {
-            assert_eq!(header.max_payload_len(), core::u16::MAX - 20 - (header.options().len() as u16));
+            assert_eq!(header.max_payload_len(), core::u16::MAX - 20 - u16::from(header.options.len()));
         }
     }
 
     #[test]
+    #[allow(deprecated)]
     fn set_options() {
         //length of 1
         {
@@ -855,9 +941,11 @@ mod test {
                 let mut header: Ipv4Header = Default::default();
 
                 //expect an error
-                use self::ValueError::Ipv4OptionsLengthBad;
+                use self::err::ipv4::BadOptionsLen;
                 assert_eq!(
-                    Err(Ipv4OptionsLengthBad(*len)),
+                    Err(BadOptionsLen{
+                        bad_len: *len
+                    }),
                     header.set_options(&buffer[..*len])
                 );
 
@@ -1143,7 +1231,7 @@ mod test {
             {
                 let value = {
                     let mut value = base_header.clone();
-                    value.differentiated_services_code_point = bad_dscp;
+                    value.dscp = bad_dscp;
                     value
                 };
                 test_range_methods(
@@ -1159,7 +1247,7 @@ mod test {
             {
                 let value = {
                     let mut value = base_header.clone();
-                    value.explicit_congestion_notification = bad_ecn;
+                    value.ecn = bad_ecn;
                     value
                 };
                 test_range_methods(
@@ -1352,7 +1440,7 @@ mod test {
             let header = {
                 let mut header = base.clone();
                 header.payload_len = 40 - 8;
-                header.set_options(&[1, 2, 3, 4, 5, 6, 7, 8]).unwrap();
+                header.options = [1, 2, 3, 4, 5, 6, 7, 8].into();
                 header
             };
             assert_eq!(0xc36e, header.calc_header_checksum().unwrap());
@@ -1364,7 +1452,7 @@ mod test {
         // not fragmenting
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 0.try_into().unwrap();
+            header.fragment_offset = 0.try_into().unwrap();
             header.more_fragments = false;
             assert_eq!(false, header.is_fragmenting_payload());
         }
@@ -1372,7 +1460,7 @@ mod test {
         // fragmenting based on offset
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 1.try_into().unwrap();
+            header.fragment_offset = 1.try_into().unwrap();
             header.more_fragments = false;
             assert!(header.is_fragmenting_payload());
         }
@@ -1380,7 +1468,7 @@ mod test {
         // fragmenting based on more_fragments
         {
             let mut header: Ipv4Header = Default::default();
-            header.fragments_offset = 0.try_into().unwrap();
+            header.fragment_offset = 0.try_into().unwrap();
             header.more_fragments = true;
             assert!(header.is_fragmenting_payload());
         }

@@ -8,6 +8,7 @@ pub mod ip_payload;
 pub mod ipv4_exts;
 pub mod ipv4_exts_slice;
 pub mod ipv4_header;
+pub mod ipv4_options;
 pub mod ipv4_header_slice;
 pub mod ipv4_slice;
 pub mod ipv6_ext_slice;

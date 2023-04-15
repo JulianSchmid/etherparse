@@ -1,3 +1,6 @@
+mod bad_options_len;
+pub use bad_options_len::*;
+
 mod header_error;
 pub use header_error::*;
 

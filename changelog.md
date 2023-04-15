@@ -27,6 +27,9 @@
 * `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
 * Removed `IPV6_MAX_NUM_HEADER_EXTENSIONS` as it is no longer used by the skip functions.
 * Type of `fragment_offset` in `Ipv4Header` & `Ipv6FragmentHeader` changed from `u16` to `IpFragOffset`.
+* `Ipv4Header.differentiated_services_code_point` renamed to `Ipv4Header.dscp`.
+* `Ipv4Header.explicit_congestion_notification` renamed to `Ipv4Header.ecn`.
+* `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
 
 ### Bugfixes
 
