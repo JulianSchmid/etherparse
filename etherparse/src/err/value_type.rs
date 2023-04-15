@@ -46,6 +46,15 @@ mod test {
     }
 
     #[test]
+    fn cmp_partial_cmp() {
+        use core::cmp::Ordering;
+        let a = ValueType::IpFragmentOffset;
+        let b = a;
+        assert_eq!(a.cmp(&b), Ordering::Equal);
+        assert_eq!(a.partial_cmp(&b), Some(Ordering::Equal));
+    }
+
+    #[test]
     fn display() {
         use ValueType::*;
 
