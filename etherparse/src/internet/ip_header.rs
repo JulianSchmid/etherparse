@@ -1,12 +1,13 @@
 use crate::err::{Layer, LenError, LenSource};
-
 use super::super::*;
 
-///Internet protocol headers version 4 & 6
+/// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum IpHeader {
+    /// IPv4 header & extension headers.
     Version4(Ipv4Header, Ipv4Extensions),
+    /// IPv6 header & extension headers.
     Version6(Ipv6Header, Ipv6Extensions),
 }
 

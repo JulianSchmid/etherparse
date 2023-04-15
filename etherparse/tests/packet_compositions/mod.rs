@@ -438,7 +438,7 @@ impl ComponentTest {
             test.ip = Some({
                 let mut non_frag = ip.clone();
                 non_frag.more_fragments = false;
-                non_frag.fragments_offset = 0.try_into().unwrap();
+                non_frag.fragment_offset = 0.try_into().unwrap();
                 let mut header = IpHeader::Version4(non_frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header

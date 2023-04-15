@@ -285,6 +285,7 @@ pub use crate::internet::ipv4_exts::*;
 pub use crate::internet::ipv4_exts_slice::*;
 pub use crate::internet::ipv4_header::*;
 pub use crate::internet::ipv4_header_slice::*;
+pub use crate::internet::ipv4_options::*;
 pub use crate::internet::ipv4_slice::*;
 pub use crate::internet::ipv6_ext_slice::*;
 pub use crate::internet::ipv6_ext_slice_iter::*;

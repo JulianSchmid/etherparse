@@ -372,7 +372,7 @@ mod test {
             {
                 let mut ipv4 = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
                 if fragment {
-                    ipv4.fragments_offset = 123.try_into().unwrap();
+                    ipv4.fragment_offset = 123.try_into().unwrap();
                 }
 
                 let data = ipv4.to_bytes().unwrap();
