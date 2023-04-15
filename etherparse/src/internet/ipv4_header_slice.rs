@@ -120,11 +120,13 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Read the "differentiated_services_code_point" from the slice.
     #[inline]
-    pub fn dcp(&self) -> u8 {
+    pub fn dcp(&self) -> Ipv4Dscp {
         // SAFETY:
-        // Safe as the slice length is checked to be at least
+        // get_unchecked: Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
-        unsafe { *self.slice.get_unchecked(1) >> 2 }
+        // new_unchecked: Safe as the bitshift by 2 gurantees that the passed
+        // value is not bigger then 6 bits.
+        unsafe { Ipv4Dscp::new_unchecked(*self.slice.get_unchecked(1) >> 2) }
     }
 
     /// Read the "explicit_congestion_notification" from the slice.
