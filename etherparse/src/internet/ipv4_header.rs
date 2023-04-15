@@ -4,12 +4,12 @@ use crate::*;
 use core::fmt::{Debug, Formatter};
 
 /// IPv4 header with options.
-/// 
+///
 /// # Example Usage:
-/// 
+///
 /// ```
 /// use etherparse::{Ipv4Header, IpNumber};
-/// 
+///
 /// let mut header = Ipv4Header {
 ///     source: [1,2,3,4],
 ///     destination: [1,2,3,4],
@@ -18,14 +18,14 @@ use core::fmt::{Debug, Formatter};
 ///     protocol: IpNumber::UDP,
 ///     ..Default::default()
 /// };
-/// 
+///
 /// // depending on your usecase you might want to set the correct checksum
 /// header.header_checksum = header.calc_header_checksum().unwrap();
-/// 
+///
 /// // header can be serialized into the "on the wire" format
 /// // using the "write" or "to_bytes" methods
 /// let bytes = header.to_bytes().unwrap();
-/// 
+///
 /// // IPv4 headers can be decoded via "read" or "from_slice"
 /// let (decoded, slice_rest) = Ipv4Header::from_slice(&bytes).unwrap();
 /// assert_eq!(header, decoded);
@@ -89,15 +89,15 @@ impl Ipv4Header {
     pub const SERIALIZED_SIZE: usize = Ipv4Header::MIN_LEN;
 
     /// Constructs an Ipv4Header with standard values for non specified values.
-    /// 
+    ///
     /// This method is equivalent to partially initializing a struct with
     /// default values:
-    /// 
+    ///
     /// ```
     /// use etherparse::{Ipv4Header, IpNumber};
-    /// 
+    ///
     /// let mut header = Ipv4Header::new(100, 4, IpNumber::UDP, [1,2,3,4], [5,6,7,8]);
-    /// 
+    ///
     /// assert_eq!(
     ///     header,
     ///     Ipv4Header {
@@ -109,7 +109,7 @@ impl Ipv4Header {
     ///         ..Default::default()
     ///     }
     /// );
-    /// 
+    ///
     /// // for the rest of the fields the following default values will be used:
     /// assert_eq!(0, header.dscp.value());
     /// assert_eq!(0, header.ecn);
@@ -118,7 +118,7 @@ impl Ipv4Header {
     /// assert_eq!(false, header.more_fragments);
     /// assert_eq!(0, header.fragment_offset.value());
     /// assert_eq!(0, header.header_checksum);
-    /// 
+    ///
     /// // in case you also want to have a correct checksum you will have to
     /// // additionally update it:
     /// header.header_checksum = header.calc_header_checksum().unwrap();
@@ -153,7 +153,7 @@ impl Ipv4Header {
     ///
     /// The minimum allowed length of a header is 5 (= 20 bytes) and the
     /// maximum length is 15 (= 60 bytes).
-    /// 
+    ///
     /// ```
     /// use etherparse::Ipv4Header;
     /// {
@@ -179,17 +179,17 @@ impl Ipv4Header {
     ///     };
     ///     // maximum ihl
     ///     assert_eq!(15, header.ihl());
-    /// } 
+    /// }
     /// ```
     pub fn ihl(&self) -> u8 {
         (self.options.len() / 4) + 5
     }
 
     /// Length of the header (includes options) in bytes.
-    /// 
+    ///
     /// The minimum allowed length of a header is 5 (= 20 bytes) and the
     /// maximum length is 15 (= 60 bytes).
-    /// 
+    ///
     /// ```
     /// use etherparse::Ipv4Header;
     /// {
@@ -215,7 +215,7 @@ impl Ipv4Header {
     ///     };
     ///     // maximum ihl
     ///     assert_eq!(15, header.ihl());
-    /// } 
+    /// }
     /// ```
     #[inline]
     pub fn header_len(&self) -> usize {
@@ -244,7 +244,10 @@ impl Ipv4Header {
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).
-    #[deprecated(since = "0.14.0", note = "Directly use `&(header.options[..])` instead.")]
+    #[deprecated(
+        since = "0.14.0",
+        note = "Directly use `&(header.options[..])` instead."
+    )]
     pub fn options(&self) -> &[u8] {
         &self.options[..]
     }
@@ -253,7 +256,10 @@ impl Ipv4Header {
     /// The length of the given slice must be a multiple of 4 and maximum 40 bytes.
     /// If the length is not fullfilling these constraints, no data is set and
     /// an error is returned.
-    #[deprecated(since = "0.14.0", note = "Directly set it via the header.options field instead.")]
+    #[deprecated(
+        since = "0.14.0",
+        note = "Directly set it via the header.options field instead."
+    )]
     pub fn set_options(&mut self, data: &[u8]) -> Result<(), err::ipv4::BadOptionsLen> {
         self.options = data.try_into()?;
         Ok(())
@@ -552,11 +558,7 @@ impl Ipv4Header {
     /// Calculate the header checksum under the assumtion that all value ranges in the header are correct
     fn calc_header_checksum_unchecked(&self) -> u16 {
         checksum::Sum16BitWords::new()
-            .add_2bytes([
-                (4 << 4) | self.ihl(),
-                (self.dscp.value() << 2)
-                    | self.ecn,
-            ])
+            .add_2bytes([(4 << 4) | self.ihl(), (self.dscp.value() << 2) | self.ecn])
             .add_2bytes(self.total_len().to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
@@ -622,14 +624,8 @@ impl Debug for Ipv4Header {
     fn fmt(&self, f: &mut Formatter) -> Result<(), core::fmt::Error> {
         let mut s = f.debug_struct("Ipv4Header");
         s.field("ihl", &self.ihl());
-        s.field(
-            "differentiated_services_code_point",
-            &self.dscp,
-        );
-        s.field(
-            "explicit_congestion_notification",
-            &self.ecn,
-        );
+        s.field("differentiated_services_code_point", &self.dscp);
+        s.field("explicit_congestion_notification", &self.ecn);
         s.field("payload_len", &self.payload_len);
         s.field("identification", &self.identification);
         s.field("dont_fragment", &self.dont_fragment);
@@ -977,9 +973,7 @@ mod test {
                 //expect an error
                 use self::err::ipv4::BadOptionsLen;
                 assert_eq!(
-                    Err(BadOptionsLen{
-                        bad_len: *len
-                    }),
+                    Err(BadOptionsLen { bad_len: *len }),
                     header.set_options(&buffer[..*len])
                 );
 

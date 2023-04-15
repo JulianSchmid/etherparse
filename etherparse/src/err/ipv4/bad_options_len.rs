@@ -1,7 +1,6 @@
-
-/// Error if a slice can not be used as options data in 
+/// Error if a slice can not be used as options data in
 /// [`crate::Ipv4HeaderOptions`] as then length is non compatible.
-/// 
+///
 /// The length for options in an IPv4 header
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct BadOptionsLen {
@@ -59,7 +58,7 @@ mod tests {
 
     #[test]
     fn fmt() {
-        let err = BadOptionsLen{ bad_len: 123 };
+        let err = BadOptionsLen { bad_len: 123 };
         assert_eq!(
             format!("{}", err),
             "Slice of lenght 123 cannot be set as IPv4 header options. The length must be a multiple of 4 and at maximum 40."
@@ -69,6 +68,6 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(BadOptionsLen{ bad_len: 123 }.source().is_none());
+        assert!(BadOptionsLen { bad_len: 123 }.source().is_none());
     }
 }
