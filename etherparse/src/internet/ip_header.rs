@@ -1,5 +1,5 @@
-use crate::err::{Layer, LenError, LenSource};
 use super::super::*;
+use crate::err::{Layer, LenError, LenSource};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
