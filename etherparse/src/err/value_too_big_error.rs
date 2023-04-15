@@ -63,6 +63,26 @@ mod test {
     }
 
     #[test]
+    fn dbg() {
+        assert_eq!(
+            format!(
+                "{:?}",
+                ValueTooBigError {
+                    actual: 3,
+                    max_allowed: 2,
+                    value_type: err::ValueType::IpFragmentOffset
+                }
+            ),
+            format!(
+                "ValueTooBigError {{ actual: {}, max_allowed: {}, value_type: {:?} }}",
+                3,
+                2,
+                err::ValueType::IpFragmentOffset
+            )
+        );
+    }
+
+    #[test]
     fn clone_eq_hash() {
         let err = ValueTooBigError {
             actual: 3,
