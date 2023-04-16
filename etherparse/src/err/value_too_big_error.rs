@@ -58,7 +58,7 @@ mod test {
                     value_type: err::ValueType::IpFragmentOffset
                 }
             ),
-            "Error '3' is too big to be a 'IP fragment offset' (maximum allowed value is '2')"
+            "Error '3' is too big to be a 'IP Fragment Offset' (maximum allowed value is '2')"
         );
     }
 

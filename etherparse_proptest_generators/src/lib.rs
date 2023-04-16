@@ -195,7 +195,7 @@ prop_compose! {
         source in prop::array::uniform4(any::<u8>()),
         destination in prop::array::uniform4(any::<u8>()),
         dscp in 0u8..=0b0011_1111,
-        ecn in prop::bits::u8::between(0,2),
+        ecn in 0u8..=0b0000_0011,
         identification in any::<u16>(),
         time_to_live in any::<u8>(),
         dont_fragment in any::<bool>(),
@@ -209,7 +209,7 @@ prop_compose! {
     {
         Ipv4Header{
             dscp: dscp.try_into().unwrap(),
-            ecn,
+            ecn: ecn.try_into().unwrap(),
             payload_len,
             identification,
             dont_fragment,

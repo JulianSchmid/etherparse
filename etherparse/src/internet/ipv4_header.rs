@@ -1,7 +1,5 @@
 use arrayvec::ArrayVec;
-
 use crate::*;
-use core::fmt::{Debug, Formatter};
 
 /// IPv4 header with options.
 ///
@@ -31,12 +29,12 @@ use core::fmt::{Debug, Formatter};
 /// assert_eq!(header, decoded);
 /// assert_eq!(slice_rest, &[]);
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Ipv4Header {
     /// Differentiated Services Code Point
     pub dscp: Ipv4Dscp,
     /// Explicit Congestion Notification
-    pub ecn: u8,
+    pub ecn: Ipv4Ecn,
     /// Length of the payload of the ipv4 packet in bytes (does not contain the options).
     ///
     /// This field does not directly exist in an ipv4 header but instead is decoded from
@@ -112,7 +110,7 @@ impl Ipv4Header {
     ///
     /// // for the rest of the fields the following default values will be used:
     /// assert_eq!(0, header.dscp.value());
-    /// assert_eq!(0, header.ecn);
+    /// assert_eq!(0, header.ecn.value());
     /// assert_eq!(0, header.identification);
     /// assert_eq!(true, header.dont_fragment);
     /// assert_eq!(false, header.more_fragments);
@@ -132,7 +130,7 @@ impl Ipv4Header {
     ) -> Ipv4Header {
         Ipv4Header {
             dscp: Default::default(),
-            ecn: 0,
+            ecn: Default::default(),
             payload_len,
             identification: 0,
             dont_fragment: true,
@@ -327,7 +325,7 @@ impl Ipv4Header {
 
         let (dscp, ecn) = {
             let value = header_raw[1];
-            (value >> 2, value & 0x3)
+            (value >> 2, value & 0b0000_0011)
         };
         let header_length = u16::from(ihl) * 4;
         let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
@@ -351,7 +349,11 @@ impl Ipv4Header {
                 // dscp value
                 Ipv4Dscp::new_unchecked(dscp)
             },
-            ecn,
+            ecn: unsafe {
+                // Safe as only 2 bits were used to decode the
+                // ecn value
+                Ipv4Ecn::new_unchecked(ecn)
+            },
             payload_len: total_length - header_length,
             identification,
             dont_fragment,
@@ -398,7 +400,6 @@ impl Ipv4Header {
         use crate::err::ValueType::*;
 
         //check ranges
-        max_check_u8(self.ecn, 0x3, Ipv4Ecn)?;
         max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
 
         Ok(())
@@ -454,7 +455,7 @@ impl Ipv4Header {
         #[rustfmt::skip]
         let mut header_raw: ArrayVec<u8, { Ipv4Header::MAX_LEN } > = [
             (4 << 4) | self.ihl(),
-            (self.dscp.value() << 2) | self.ecn,
+            (self.dscp.value() << 2) | self.ecn.value(),
             total_len_be[0],
             total_len_be[1],
 
@@ -517,7 +518,7 @@ impl Ipv4Header {
 
         let header_raw = [
             (4 << 4) | self.ihl(),
-            (self.dscp.value() << 2) | self.ecn,
+            (self.dscp.value() << 2) | self.ecn.value(),
             total_len_be[0],
             total_len_be[1],
             id_be[0],
@@ -558,7 +559,7 @@ impl Ipv4Header {
     /// Calculate the header checksum under the assumtion that all value ranges in the header are correct
     fn calc_header_checksum_unchecked(&self) -> u16 {
         checksum::Sum16BitWords::new()
-            .add_2bytes([(4 << 4) | self.ihl(), (self.dscp.value() << 2) | self.ecn])
+            .add_2bytes([(4 << 4) | self.ihl(), (self.dscp.value() << 2) | self.ecn.value()])
             .add_2bytes(self.total_len().to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
@@ -593,18 +594,11 @@ impl Ipv4Header {
     }
 }
 
-//NOTE: I would have prefered to NOT write my own Default, Debug & PartialEq implementation but there are no
-//      default implementations availible for [u8;40] and the alternative of using [u32;10] would lead
-//      to unsafe casting. Writing impl Debug for [u8;40] in a crate is also illegal as it could lead
-//      to an implementation collision between crates.
-//      So the only option left to me was to write an implementation myself and deal with the added complexity
-//      and potential added error source.
-
 impl Default for Ipv4Header {
     fn default() -> Ipv4Header {
         Ipv4Header {
             dscp: Default::default(),
-            ecn: 0,
+            ecn: Default::default(),
             payload_len: 0,
             identification: 0,
             dont_fragment: true,
@@ -620,47 +614,6 @@ impl Default for Ipv4Header {
     }
 }
 
-impl Debug for Ipv4Header {
-    fn fmt(&self, f: &mut Formatter) -> Result<(), core::fmt::Error> {
-        let mut s = f.debug_struct("Ipv4Header");
-        s.field("ihl", &self.ihl());
-        s.field("differentiated_services_code_point", &self.dscp);
-        s.field("explicit_congestion_notification", &self.ecn);
-        s.field("payload_len", &self.payload_len);
-        s.field("identification", &self.identification);
-        s.field("dont_fragment", &self.dont_fragment);
-        s.field("more_fragments", &self.more_fragments);
-        s.field("fragments_offset", &self.fragment_offset);
-        s.field("time_to_live", &self.time_to_live);
-        s.field("protocol", &self.protocol);
-        s.field("header_checksum", &self.header_checksum);
-        s.field("source", &self.source);
-        s.field("destination", &self.destination);
-        s.field("options", &self.options);
-        s.finish()
-    }
-}
-
-impl core::cmp::PartialEq for Ipv4Header {
-    fn eq(&self, other: &Ipv4Header) -> bool {
-        self.dscp == other.dscp
-            && self.ecn == other.ecn
-            && self.payload_len == other.payload_len
-            && self.identification == other.identification
-            && self.dont_fragment == other.dont_fragment
-            && self.more_fragments == other.more_fragments
-            && self.fragment_offset == other.fragment_offset
-            && self.time_to_live == other.time_to_live
-            && self.protocol == other.protocol
-            && self.header_checksum == other.header_checksum
-            && self.source == other.source
-            && self.destination == other.destination
-            && self.options == other.options
-    }
-}
-
-impl core::cmp::Eq for Ipv4Header {}
-
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
@@ -674,7 +627,7 @@ mod test {
         let default: Ipv4Header = Default::default();
         assert_eq!(5, default.ihl());
         assert_eq!(0, default.dscp.value());
-        assert_eq!(0, default.ecn);
+        assert_eq!(0, default.ecn.value());
         assert_eq!(0, default.payload_len);
         assert_eq!(0, default.identification);
         assert_eq!(true, default.dont_fragment);
@@ -691,8 +644,7 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv4_any()) {
-            assert_eq!(&format!("Ipv4Header {{ ihl: {}, differentiated_services_code_point: {:?}, explicit_congestion_notification: {}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragments_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
-                    input.ihl(),
+            assert_eq!(&format!("Ipv4Header {{ dscp: {:?}, ecn: {:?}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragment_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.dscp,
                     input.ecn,
                     input.payload_len,
@@ -845,6 +797,25 @@ mod test {
 
     proptest! {
         #[test]
+        fn hash(header in ipv4_any()) {
+            use std::collections::hash_map::DefaultHasher;
+            use core::hash::{Hash, Hasher};
+            let a = {
+                let mut hasher = DefaultHasher::new();
+                header.hash(&mut hasher);
+                hasher.finish()
+            };
+            let b = {
+                let mut hasher = DefaultHasher::new();
+                header.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(a, b);
+        }
+    }
+
+    proptest! {
+        #[test]
         fn new(source_ip in prop::array::uniform4(any::<u8>()),
                dest_ip in prop::array::uniform4(any::<u8>()),
                ttl in any::<u8>(),
@@ -859,7 +830,7 @@ mod test {
             );
 
             assert_eq!(result.dscp.value(), 0);
-            assert_eq!(result.ecn, 0);
+            assert_eq!(result.ecn.value(), 0);
             assert_eq!(result.payload_len, payload_len);
             assert_eq!(result.identification, 0);
             assert_eq!(result.dont_fragment, true);
@@ -1224,8 +1195,7 @@ mod test {
     proptest! {
         #[test]
         fn check_ranges(
-            base_header in ipv4_any(),
-            bad_ecn in 0b100..=u8::MAX
+            base_header in ipv4_any()
         ) {
             use crate::err::ValueType::*;
             use crate::ValueError::*;
@@ -1253,22 +1223,6 @@ mod test {
                     assert_eq!(0, buffer.len());
                     assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
                 }
-            }
-            //ecn
-            {
-                let value = {
-                    let mut value = base_header.clone();
-                    value.ecn = bad_ecn;
-                    value
-                };
-                test_range_methods(
-                    &value,
-                    U8TooLarge {
-                        value: bad_ecn,
-                        max: 0b11,
-                        field: Ipv4Ecn,
-                    },
-                );
             }
             // payload len
             {

@@ -1,5 +1,7 @@
 use crate::err::ValueTooBigError;
 
+/// 6 bit unsigned integer containing the "Differentiated Services
+/// Code Point" (present in the [`Ipv4Header`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Ipv4Dscp(u8);
 
@@ -37,7 +39,7 @@ impl Ipv4Dscp {
     ///
     /// # Safety
     ///
-    /// `value` must be smaller or equal than [`Ipv4Dscp::MAX_U16`]
+    /// `value` must be smaller or equal than [`Ipv4Dscp::MAX_U8`]
     /// otherwise the behaviour of functions or datastructures relying
     /// on this pre-requirement is undefined.
     #[inline]
@@ -118,7 +120,7 @@ mod test {
     fn derived_traits() {
         // copy & clone
         {
-            let a = Ipv4Dscp(64);
+            let a = Ipv4Dscp(32);
             let b = a;
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
@@ -132,14 +134,14 @@ mod test {
 
         // debug
         {
-            let a = Ipv4Dscp(64);
-            assert_eq!(format!("{:?}", a), format!("Ipv4Dscp(64)"));
+            let a = Ipv4Dscp(32);
+            assert_eq!(format!("{:?}", a), format!("Ipv4Dscp(32)"));
         }
 
         // ord & partial ord
         {
             use core::cmp::Ordering;
-            let a = Ipv4Dscp(64);
+            let a = Ipv4Dscp(32);
             let b = a;
             assert_eq!(a.cmp(&b), Ordering::Equal);
             assert_eq!(a.partial_cmp(&b), Some(Ordering::Equal));
@@ -247,8 +249,8 @@ mod test {
     proptest! {
         #[test]
         fn from(valid_value in 0..0b0011_1111u8,) {
-            let frag_offset = Ipv4Dscp::try_new(valid_value).unwrap();
-            let actual: u8 = frag_offset.into();
+            let dscp = Ipv4Dscp::try_new(valid_value).unwrap();
+            let actual: u8 = dscp.into();
             assert_eq!(actual, valid_value);
         }
     }
