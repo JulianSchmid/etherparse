@@ -131,11 +131,12 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Read the "explicit_congestion_notification" from the slice.
     #[inline]
-    pub fn ecn(&self) -> u8 {
+    pub fn ecn(&self) -> Ipv4Ecn {
         // SAFETY:
-        // Safe as the slice length is checked to be at least
+        // get_unchecked: Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
-        unsafe { *self.slice.get_unchecked(1) & 0x3 }
+        // new_unchecked: Safe as value has been bitmasked to two bits.
+        unsafe { Ipv4Ecn::new_unchecked(*self.slice.get_unchecked(1) & 0b0000_0011) }
     }
 
     /// Read the "total length" from the slice (total length of ip header + payload).

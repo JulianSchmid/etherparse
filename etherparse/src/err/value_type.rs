@@ -7,7 +7,11 @@ pub enum ValueType {
     IpFragmentOffset,
 
     Ipv4PayloadLength,
+    /// Ipv4 Header DSCP (Differentiated Services Code Point) field
+    /// present in an [`crate::Ipv4Header`].
     Ipv4Dscp,
+    /// Ipv4 Header ECN (Explicit Congestion Notification) field
+    /// present in an [`crate::Ipv4Header`].
     Ipv4Ecn,
 
     Ipv6FlowLabel,
@@ -22,9 +26,9 @@ impl core::fmt::Display for ValueType {
         use ValueType::*;
         match self {
             Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
-            Ipv4Dscp => write!(f, "Ipv4Header.differentiated_services_code_point"),
-            Ipv4Ecn => write!(f, "Ipv4Header.explicit_congestion_notification"),
-            IpFragmentOffset => write!(f, "IP fragment offset"),
+            Ipv4Dscp => write!(f, "IPv4 Header DSCP (Differentiated Services Code Point)"),
+            Ipv4Ecn => write!(f, "IPv4 Header ECN (Explicit Congestion Notification)"),
+            IpFragmentOffset => write!(f, "IP Fragment Offset"),
             Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
             VlanTagPriorityCodePoint => write!(f, "SingleVlanHeader.priority_code_point"),
             VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier"),
@@ -60,14 +64,14 @@ mod test {
 
         assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
         assert_eq!(
-            "Ipv4Header.differentiated_services_code_point",
+            "IPv4 Header DSCP (Differentiated Services Code Point)",
             &format!("{}", Ipv4Dscp)
         );
         assert_eq!(
-            "Ipv4Header.explicit_congestion_notification",
+            "IPv4 Header ECN (Explicit Congestion Notification)",
             &format!("{}", Ipv4Ecn)
         );
-        assert_eq!("IP fragment offset", &format!("{}", IpFragmentOffset));
+        assert_eq!("IP Fragment Offset", &format!("{}", IpFragmentOffset));
         assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
         assert_eq!(
             "SingleVlanHeader.priority_code_point",
