@@ -71,17 +71,18 @@ impl<'a> SingleVlanHeaderSlice<'a> {
 
     /// Reads the 12 bits "vland identifier" field from the slice.
     #[inline]
-    pub fn vlan_identifier(&self) -> u16 {
-        u16::from_be_bytes(
-            // SAFETY:
-            // Slice len checked in constructor to be at least 4.
-            unsafe {
-                [
-                    *self.slice.get_unchecked(0) & 0xf,
-                    *self.slice.get_unchecked(1),
-                ]
-            },
-        )
+    pub fn vlan_identifier(&self) -> VlanId {
+        // SAFETY:
+        // Slice len checked in constructor to be at least 4 &
+        // value and the value is guranteed not to exceed
+        // 0b0000_1111_1111_1111 as the upper bits have been
+        // bitmasked out.
+        unsafe {
+            VlanId::new_unchecked(u16::from_be_bytes([
+                *self.slice.get_unchecked(0) & 0b0000_1111,
+                *self.slice.get_unchecked(1),
+            ]))
+        }
     }
 
     /// Read the "Tag protocol identifier" field from the slice. Refer to the "EtherType" for a list of possible supported values.

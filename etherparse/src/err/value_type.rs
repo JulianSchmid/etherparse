@@ -2,6 +2,8 @@
 /// and can cause an [`crate::err::ValueTooBigError`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum ValueType {
+    /// VLAN identifier field present in a [`crate::SingleVlanHeader`].
+    VlanId,
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.
     IpFragmentOffset,
@@ -17,21 +19,19 @@ pub enum ValueType {
     Ipv6FlowLabel,
     /// VlanTaggingHeader.priority_code_point
     VlanTagPriorityCodePoint,
-    /// VlanTaggingHeader.vlan_identifier
-    VlanTagVlanId,
 }
 
 impl core::fmt::Display for ValueType {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use ValueType::*;
         match self {
+            VlanId => write!(f, "VLAN ID"),
             Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
             Ipv4Dscp => write!(f, "IPv4 Header DSCP (Differentiated Services Code Point)"),
             Ipv4Ecn => write!(f, "IPv4 Header ECN (Explicit Congestion Notification)"),
             IpFragmentOffset => write!(f, "IP Fragment Offset"),
             Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
             VlanTagPriorityCodePoint => write!(f, "SingleVlanHeader.priority_code_point"),
-            VlanTagVlanId => write!(f, "SingleVlanHeader.vlan_identifier"),
         }
     }
 }
@@ -62,6 +62,7 @@ mod test {
     fn display() {
         use ValueType::*;
 
+        assert_eq!("VLAN ID", &format!("{}", VlanId));
         assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
         assert_eq!(
             "IPv4 Header DSCP (Differentiated Services Code Point)",
@@ -76,10 +77,6 @@ mod test {
         assert_eq!(
             "SingleVlanHeader.priority_code_point",
             &format!("{}", VlanTagPriorityCodePoint)
-        );
-        assert_eq!(
-            "SingleVlanHeader.vlan_identifier",
-            &format!("{}", VlanTagVlanId)
         );
     }
 }

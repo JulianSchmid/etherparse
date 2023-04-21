@@ -45,12 +45,6 @@ impl Ipv4Ecn {
     ///     })
     /// );
     /// ```
-    ///
-    /// # Safety
-    ///
-    /// `value` must be smaller or equal than [`Ipv4Ecn::MAX_U8`]
-    /// otherwise the behaviour of functions or datastructures relying
-    /// on this pre-requirement is undefined.
     #[inline]
     pub const fn try_new(value: u8) -> Result<Ipv4Ecn, ValueTooBigError<u8>> {
         use crate::err::ValueType;
@@ -177,7 +171,7 @@ mod test {
     proptest! {
         #[test]
         fn try_new(
-            valid_value in 0..0b0000_0011u8,
+            valid_value in 0..=0b0000_0011u8,
             invalid_value in 0b0000_0100u8..=u8::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -199,7 +193,7 @@ mod test {
     proptest! {
         #[test]
         fn try_from(
-            valid_value in 0..0b0000_0011u8,
+            valid_value in 0..=0b0000_0011u8,
             invalid_value in 0b0000_0100u8..=u8::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -239,7 +233,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn new_unchecked(valid_value in 0..0b0000_0011u8) {
+        fn new_unchecked(valid_value in 0..=0b0000_0011u8) {
             assert_eq!(
                 valid_value,
                 unsafe {
@@ -251,14 +245,14 @@ mod test {
 
     proptest! {
         #[test]
-        fn fmt(valid_value in 0..0b0000_0011u8) {
+        fn fmt(valid_value in 0..=0b0000_0011u8) {
             assert_eq!(format!("{}", Ipv4Ecn(valid_value)), format!("{}", valid_value));
         }
     }
 
     proptest! {
         #[test]
-        fn from(valid_value in 0..0b0000_0011u8,) {
+        fn from(valid_value in 0..=0b0000_0011u8,) {
             let ecn = Ipv4Ecn::try_new(valid_value).unwrap();
             let actual: u8 = ecn.into();
             assert_eq!(actual, valid_value);

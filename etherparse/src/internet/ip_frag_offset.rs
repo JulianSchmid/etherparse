@@ -86,12 +86,6 @@ impl IpFragOffset {
     ///     })
     /// );
     /// ```
-    ///
-    /// # Safety
-    ///
-    /// `value` must be smaller or equal than [`IpFragOffset::MAX_U16`]
-    /// otherwise the behaviour of functions or datastructures relying
-    /// on this pre-requirement is undefined.
     #[inline]
     pub const fn try_new(value: u16) -> Result<IpFragOffset, ValueTooBigError<u16>> {
         use crate::err::ValueType::IpFragmentOffset;
@@ -217,7 +211,7 @@ mod test {
     proptest! {
         #[test]
         fn try_new(
-            valid_value in 0..0b0001_1111_1111_1111u16,
+            valid_value in 0..=0b0001_1111_1111_1111u16,
             invalid_value in 0b0010_0000_0000_0000u16..=u16::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -239,7 +233,7 @@ mod test {
     proptest! {
         #[test]
         fn try_from(
-            valid_value in 0..0b0001_1111_1111_1111u16,
+            valid_value in 0..=0b0001_1111_1111_1111u16,
             invalid_value in 0b0010_0000_0000_0000u16..=u16::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -279,7 +273,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn new_unchecked(valid_value in 0..0b0001_1111_1111_1111u16) {
+        fn new_unchecked(valid_value in 0..=0b0001_1111_1111_1111u16) {
             assert_eq!(
                 valid_value,
                 unsafe {
@@ -291,14 +285,14 @@ mod test {
 
     proptest! {
         #[test]
-        fn fmt(valid_value in 0..0b0001_1111_1111_1111u16) {
+        fn fmt(valid_value in 0..=0b0001_1111_1111_1111u16) {
             assert_eq!(format!("{}", IpFragOffset(valid_value)), format!("{}", valid_value));
         }
     }
 
     proptest! {
         #[test]
-        fn from(valid_value in 0..0b0001_1111_1111_1111u16,) {
+        fn from(valid_value in 0..=0b0001_1111_1111_1111u16,) {
             let frag_offset = IpFragOffset::try_new(valid_value).unwrap();
             let actual: u16 = frag_offset.into();
             assert_eq!(actual, valid_value);

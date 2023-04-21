@@ -6,5 +6,6 @@ pub mod ethernet2_header_slice;
 pub mod link_slice;
 pub mod single_vlan_header;
 pub mod single_vlan_header_slice;
+pub mod vlan_id;
 pub mod vlan_header;
 pub mod vlan_slice;

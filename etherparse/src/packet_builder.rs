@@ -500,7 +500,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///         SingleVlanHeader{
     ///             priority_code_point: 0,
     ///             drop_eligible_indicator: false,
-    ///             vlan_identifier: 0x123,
+    ///             vlan_identifier: 0x123.try_into().unwrap(),
     ///             ether_type: 0.into() // will be overwritten during write
     ///         }))
     ///     .ipv4([192,168,1,1], //source ip
@@ -540,7 +540,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
     ///               [7,8,9,10,11,12]) //destionation mac
-    ///     .single_vlan(0x123) // vlan identifier
+    ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
@@ -557,7 +557,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn single_vlan(mut self, vlan_identifier: u16) -> PacketBuilderStep<VlanHeader> {
+    pub fn single_vlan(mut self, vlan_identifier: VlanId) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
@@ -583,8 +583,8 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
     ///               [7,8,9,10,11,12]) //destionation mac
-    ///     .double_vlan(0x123, // outer vlan identifier
-    ///                  0x234) // inner vlan identifier
+    ///     .double_vlan(0x123.try_into().unwrap(), // outer vlan identifier
+    ///                  0x234.try_into().unwrap()) // inner vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life
@@ -603,8 +603,8 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// ```
     pub fn double_vlan(
         mut self,
-        outer_vlan_identifier: u16,
-        inner_vlan_identifier: u16,
+        outer_vlan_identifier: VlanId,
+        inner_vlan_identifier: VlanId,
     ) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Double(DoubleVlanHeader {
             outer: SingleVlanHeader {
@@ -638,7 +638,7 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .single_vlan(0x132)
+    ///    .single_vlan(0x132.try_into().unwrap())
     ///    //payload_len, protocol & checksum will be replaced during write
     ///    .ip(IpHeader::Version4(
     ///         Ipv4Header::new(
@@ -659,7 +659,7 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .single_vlan(0x132)
+    ///    .single_vlan(0x132.try_into().unwrap())
     ///    .ip(IpHeader::Version6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
@@ -694,7 +694,7 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
     ///               [7,8,9,10,11,12]) //destionation mac
-    ///     .single_vlan(0x123) // vlan identifier
+    ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv6(
     ///         //source
     ///         [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
@@ -741,7 +741,7 @@ impl PacketBuilderStep<VlanHeader> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
     ///               [7,8,9,10,11,12]) //destionation mac
-    ///     .single_vlan(0x123) // vlan identifier
+    ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
     ///           [192,168,1,2], //desitionation ip
     ///           20)            //time to life

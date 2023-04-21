@@ -268,6 +268,7 @@ pub use crate::link::link_slice::*;
 pub use crate::link::single_vlan_header::*;
 pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::vlan_header::*;
+pub use crate::link::vlan_id::*;
 pub use crate::link::vlan_slice::*;
 
 #[cfg(test)]

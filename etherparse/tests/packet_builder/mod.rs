@@ -452,7 +452,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     let in_payload = [50, 51, 52, 53];
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
-        .single_vlan(0x123)
+        .single_vlan(0x123.try_into().unwrap())
         .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
         .udp(48, 49)
         .write(&mut serialized, &in_payload)
@@ -489,7 +489,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
         SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
+            vlan_identifier: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV4
         }
     );
@@ -523,7 +523,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     let in_payload = [50, 51, 52, 53];
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
-        .double_vlan(0x123, 0x234)
+        .double_vlan(0x123.try_into().unwrap(), 0x234.try_into().unwrap())
         .ipv6(
             [
                 11, 12, 13, 14, 15, 16, 17, 18, 19, 10, 21, 22, 23, 24, 25, 26,
@@ -570,7 +570,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
         SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
-            vlan_identifier: 0x123,
+            vlan_identifier: 0x123.try_into().unwrap(),
             ether_type: ether_type::VLAN_TAGGED_FRAME
         }
     );
@@ -581,7 +581,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
         SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
-            vlan_identifier: 0x234,
+            vlan_identifier: 0x234.try_into().unwrap(),
             ether_type: ether_type::IPV6
         }
     );
@@ -700,7 +700,7 @@ fn udp_builder_eth_vlan_ip_udp() {
         .vlan(VlanHeader::Single(SingleVlanHeader {
             priority_code_point: 1,
             drop_eligible_indicator: true,
-            vlan_identifier: 0x123,
+            vlan_identifier: 0x123.try_into().unwrap(),
             ether_type: 0.into(), //should be overwritten
         }))
         .ip(IpHeader::Version6(
@@ -756,7 +756,7 @@ fn udp_builder_eth_vlan_ip_udp() {
         SingleVlanHeader {
             priority_code_point: 1,
             drop_eligible_indicator: true,
-            vlan_identifier: 0x123,
+            vlan_identifier: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV6
         }
     );
@@ -1063,7 +1063,7 @@ fn size() {
     assert_eq!(
         Ethernet2Header::LEN + SingleVlanHeader::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
-            .single_vlan(0x123)
+            .single_vlan(0x123.try_into().unwrap())
             .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
             .udp(22, 23)
             .size(123)
@@ -1073,7 +1073,7 @@ fn size() {
     assert_eq!(
         Ethernet2Header::LEN + DoubleVlanHeader::LEN + Ipv6Header::LEN + UdpHeader::LEN + 123,
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
-            .double_vlan(0x123, 0x234)
+            .double_vlan(0x123.try_into().unwrap(), 0x234.try_into().unwrap())
             .ipv6(
                 [11, 12, 13, 14, 15, 16, 17, 18, 19, 10, 21, 22, 23, 24, 25, 26],
                 [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46],

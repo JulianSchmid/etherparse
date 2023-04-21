@@ -36,12 +36,6 @@ impl Ipv4Dscp {
     ///     })
     /// );
     /// ```
-    ///
-    /// # Safety
-    ///
-    /// `value` must be smaller or equal than [`Ipv4Dscp::MAX_U8`]
-    /// otherwise the behaviour of functions or datastructures relying
-    /// on this pre-requirement is undefined.
     #[inline]
     pub const fn try_new(value: u8) -> Result<Ipv4Dscp, ValueTooBigError<u8>> {
         use crate::err::ValueType;
@@ -167,7 +161,7 @@ mod test {
     proptest! {
         #[test]
         fn try_new(
-            valid_value in 0..0b0011_1111u8,
+            valid_value in 0..=0b0011_1111u8,
             invalid_value in 0b0100_0000u8..=u8::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -189,7 +183,7 @@ mod test {
     proptest! {
         #[test]
         fn try_from(
-            valid_value in 0..0b0011_1111u8,
+            valid_value in 0..=0b0011_1111u8,
             invalid_value in 0b0100_0000u8..=u8::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
@@ -229,7 +223,7 @@ mod test {
 
     proptest! {
         #[test]
-        fn new_unchecked(valid_value in 0..0b0011_1111u8) {
+        fn new_unchecked(valid_value in 0..=0b0011_1111u8) {
             assert_eq!(
                 valid_value,
                 unsafe {
@@ -241,14 +235,14 @@ mod test {
 
     proptest! {
         #[test]
-        fn fmt(valid_value in 0..0b0011_1111u8) {
+        fn fmt(valid_value in 0..=0b0011_1111u8) {
             assert_eq!(format!("{}", Ipv4Dscp(valid_value)), format!("{}", valid_value));
         }
     }
 
     proptest! {
         #[test]
-        fn from(valid_value in 0..0b0011_1111u8,) {
+        fn from(valid_value in 0..=0b0011_1111u8,) {
             let dscp = Ipv4Dscp::try_new(valid_value).unwrap();
             let actual: u8 = dscp.into();
             assert_eq!(actual, valid_value);

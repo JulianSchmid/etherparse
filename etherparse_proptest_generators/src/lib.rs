@@ -10,8 +10,7 @@ pub fn err_field_any() -> impl Strategy<Value = err::ValueType> {
         Just(Ipv4Ecn),
         Just(IpFragmentOffset),
         Just(Ipv6FlowLabel),
-        Just(VlanTagPriorityCodePoint),
-        Just(VlanTagVlanId)
+        Just(VlanTagPriorityCodePoint)
     ]
 }
 
@@ -29,6 +28,15 @@ prop_compose! {
         -> EtherType
     {
         EtherType(value)
+    }
+}
+
+prop_compose! {
+    pub fn vlan_id_any()
+        (value in 0..=0b0000_1111_1111_1111u16)
+        -> VlanId
+    {
+        VlanId::try_new(value).unwrap()
     }
 }
 
@@ -94,7 +102,7 @@ prop_compose! {
     pub fn vlan_single_unknown()(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
-        vlan_identifier in prop::bits::u16::between(0,12),
+        vlan_identifier in vlan_id_any(),
         ether_type in ether_type_any().prop_filter("ether_type must be unknown",
             |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
         -> SingleVlanHeader
@@ -112,7 +120,7 @@ prop_compose! {
     pub fn vlan_single_with(ether_type: EtherType)(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
-        vlan_identifier in prop::bits::u16::between(0,12),
+        vlan_identifier in vlan_id_any(),
         ether_type in proptest::strategy::Just(ether_type))
         -> SingleVlanHeader
     {

@@ -18,10 +18,10 @@ pub enum LinkFilter {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum VlanFilter {
-    Single(Option<u16>),
+    Single(Option<VlanId>),
     Double {
-        outer_identifier: Option<u16>,
-        inner_identifier: Option<u16>,
+        outer_identifier: Option<VlanId>,
+        inner_identifier: Option<VlanId>,
     },
 }
 
