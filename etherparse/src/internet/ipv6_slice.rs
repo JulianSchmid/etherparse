@@ -147,7 +147,7 @@ mod test {
             let mut ipv6 = ipv6_base.clone();
             ipv6.next_header = AUTH;
             ipv6.payload_length = (auth.header_len() + payload.len()) as u16;
-            data.extend_from_slice(&ipv6.to_bytes().unwrap());
+            data.extend_from_slice(&ipv6.to_bytes());
             data.extend_from_slice(&auth.to_bytes());
             data.extend_from_slice(&payload);
 
@@ -186,7 +186,7 @@ mod test {
                 let mut ipv6 = ipv6_base.clone();
                 ipv6.payload_length = (payload.len()) as u16;
                 ipv6.next_header = UDP;
-                data.extend_from_slice(&ipv6.to_bytes().unwrap());
+                data.extend_from_slice(&ipv6.to_bytes());
                 data.extend_from_slice(&payload);
                 data.extend_from_slice(&[0,0,0,0]);
                 data
@@ -204,7 +204,7 @@ mod test {
                 ipv6.next_header = AUTH;
                 let mut auth = auth_base.clone();
                 auth.next_header = UDP;
-                data.extend_from_slice(&ipv6.to_bytes().unwrap());
+                data.extend_from_slice(&ipv6.to_bytes());
                 data.extend_from_slice(&auth.to_bytes());
                 data.extend_from_slice(&payload);
                 data.extend_from_slice(&[0,0,0,0]);
@@ -408,15 +408,13 @@ mod test {
         {
             let data = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: 0,
                 next_header: UDP,
                 hop_limit: 4,
                 source: [0; 16],
                 destination: [0; 16],
-            }
-            .to_bytes()
-            .unwrap();
+            }.to_bytes();
             assert_eq!(
                 false,
                 Ipv6Slice::from_slice(&data)
@@ -435,7 +433,7 @@ mod test {
             };
             let ipv6 = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: ipv6_frag.header_len() as u16,
                 next_header: IPV6_FRAG,
                 hop_limit: 4,
@@ -444,7 +442,7 @@ mod test {
             };
 
             let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
-            data.extend_from_slice(&ipv6.to_bytes().unwrap());
+            data.extend_from_slice(&ipv6.to_bytes());
             data.extend_from_slice(&ipv6_frag.to_bytes());
             assert!(Ipv6Slice::from_slice(&data)
                 .unwrap()

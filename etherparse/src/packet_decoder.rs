@@ -479,7 +479,7 @@ mod test {
         // single vlan header
         {
             let single = SingleVlanHeader {
-                priority_code_point: 1.try_into().unwrap(),
+                pcp: 1.try_into().unwrap(),
                 drop_eligible_indicator: false,
                 vlan_id: 2.try_into().unwrap(),
                 ether_type: 3.into(),
@@ -522,13 +522,13 @@ mod test {
             for inner_vlan_ether_type in VLAN_ETHER_TYPES {
                 let double = DoubleVlanHeader {
                     outer: SingleVlanHeader {
-                        priority_code_point: 1.try_into().unwrap(),
+                        pcp: 1.try_into().unwrap(),
                         drop_eligible_indicator: false,
                         vlan_id: 2.try_into().unwrap(),
                         ether_type: inner_vlan_ether_type,
                     },
                     inner: SingleVlanHeader {
-                        priority_code_point: 1.try_into().unwrap(),
+                        pcp: 1.try_into().unwrap(),
                         drop_eligible_indicator: false,
                         vlan_id: 2.try_into().unwrap(),
                         ether_type: 3.into(),
@@ -710,7 +710,7 @@ mod test {
         {
             let ipv6 = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: 2,
                 next_header: 3.into(),
                 hop_limit: 4,

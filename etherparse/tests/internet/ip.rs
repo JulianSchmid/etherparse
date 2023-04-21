@@ -10,7 +10,7 @@ mod ip_header {
         use std::io::Cursor;
         let input = Ipv6Header {
             traffic_class: 1,
-            flow_label: 0x81806,
+            flow_label: 0x81806.try_into().unwrap(),
             payload_length: 0x8021,
             next_header: 30.into(),
             hop_limit: 40,

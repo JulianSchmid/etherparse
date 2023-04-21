@@ -178,7 +178,7 @@ mod test {
                 VlanPcp::try_new(invalid_value).unwrap_err(),
                 ValueTooBigError{
                     actual: invalid_value,
-                    max_allowed: 0b0000_0011,
+                    max_allowed: 0b0000_0111,
                     value_type:  ValueType::VlanPcp
                 }
             );
@@ -202,7 +202,7 @@ mod test {
                     err.unwrap_err(),
                     ValueTooBigError{
                         actual: invalid_value,
-                        max_allowed: 0b0000_0011,
+                        max_allowed: 0b0000_0111,
                         value_type:  ValueType::VlanPcp
                     }
                 );
@@ -218,7 +218,7 @@ mod test {
                     VlanPcp::try_from(invalid_value).unwrap_err(),
                     ValueTooBigError{
                         actual: invalid_value,
-                        max_allowed: 0b0000_0011,
+                        max_allowed: 0b0000_0111,
                         value_type:  ValueType::VlanPcp
                     }
                 );

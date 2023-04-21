@@ -89,7 +89,7 @@ impl Default for DoubleVlanHeader {
     fn default() -> Self {
         DoubleVlanHeader {
             outer: SingleVlanHeader {
-                priority_code_point: VlanPcp::ZERO,
+                pcp: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
                 vlan_id: Default::default(),
                 ether_type: ether_type::VLAN_TAGGED_FRAME,

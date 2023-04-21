@@ -1862,7 +1862,7 @@ mod test {
 
             let ip_header = Ipv6Header {
                 traffic_class: 1,
-                flow_label: 0x81806,
+                flow_label: 0x81806.try_into().unwrap(),
                 payload_length: tcp_payload.len() as u16 + tcp.header_len(),
                 next_header: ip_number::TCP,
                 hop_limit: 40,
@@ -1893,7 +1893,7 @@ mod test {
             };
             let ip_header = Ipv6Header {
                 traffic_class: 1,
-                flow_label: 0x81806,
+                flow_label: 0x81806.try_into().unwrap(),
                 payload_length: 0, //lets assume jumbograms behavior (set to 0, as bigger then u16)
                 next_header: ip_number::TCP,
                 hop_limit: 40,

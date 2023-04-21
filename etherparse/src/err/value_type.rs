@@ -9,16 +9,16 @@ pub enum ValueType {
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.
     IpFragmentOffset,
-
-    Ipv4PayloadLength,
-    /// Ipv4 Header DSCP (Differentiated Services Code Point) field
+    /// IPv4 Header DSCP (Differentiated Services Code Point) field
     /// present in an [`crate::Ipv4Header`].
     Ipv4Dscp,
-    /// Ipv4 Header ECN (Explicit Congestion Notification) field
+    /// IPv4 Header ECN (Explicit Congestion Notification) field
     /// present in an [`crate::Ipv4Header`].
     Ipv4Ecn,
-
+    /// IPv6 Header Flow Label field present in [`crate::Ipv6Header`].
     Ipv6FlowLabel,
+
+    Ipv4PayloadLength,
 }
 
 impl core::fmt::Display for ValueType {
@@ -27,11 +27,11 @@ impl core::fmt::Display for ValueType {
         match self {
             VlanId => write!(f, "VLAN ID"),
             VlanPcp => write!(f, "VLAN PCP (Priority Code Point)"),
-            Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
+            IpFragmentOffset => write!(f, "IP Fragment Offset"),
             Ipv4Dscp => write!(f, "IPv4 DSCP (Differentiated Services Code Point)"),
             Ipv4Ecn => write!(f, "IPv4 ECN (Explicit Congestion Notification)"),
-            IpFragmentOffset => write!(f, "IP Fragment Offset"),
-            Ipv6FlowLabel => write!(f, "Ipv6Header.flow_label"),
+            Ipv6FlowLabel => write!(f, "IPv6 Flow Label"),
+            Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
         }
     }
 }
@@ -64,7 +64,7 @@ mod test {
 
         assert_eq!("VLAN ID", &format!("{}", VlanId));
         assert_eq!("VLAN PCP (Priority Code Point)", &format!("{}", VlanPcp));
-        assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
+        assert_eq!("IP Fragment Offset", &format!("{}", IpFragmentOffset));
         assert_eq!(
             "IPv4 DSCP (Differentiated Services Code Point)",
             &format!("{}", Ipv4Dscp)
@@ -73,7 +73,7 @@ mod test {
             "IPv4 ECN (Explicit Congestion Notification)",
             &format!("{}", Ipv4Ecn)
         );
-        assert_eq!("IP Fragment Offset", &format!("{}", IpFragmentOffset));
-        assert_eq!("Ipv6Header.flow_label", &format!("{}", Ipv6FlowLabel));
+        assert_eq!("IPv6 Flow Label", &format!("{}", Ipv6FlowLabel));
+        assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
     }
 }

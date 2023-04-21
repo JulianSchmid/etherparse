@@ -142,7 +142,7 @@ fn ipv6() {
     let builder = PacketBuilder::ip(IpHeader::Version6(
         Ipv6Header {
             traffic_class: 0,
-            flow_label: 0,
+            flow_label: Ipv6FlowLabel::ZERO,
             payload_length: in_payload.len() as u16,
             next_header: 0.into(),
             hop_limit: 47,
@@ -189,7 +189,7 @@ fn ipv6() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 0,
-        flow_label: 0,
+        flow_label: Ipv6FlowLabel::ZERO,
         payload_length: (auth_ext.header_len() + in_payload.len()) as u16,
         next_header: ip_number::AUTH, // should have been set
         hop_limit: 47,
@@ -300,7 +300,7 @@ fn ipv6_udp() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 0,
-        flow_label: 0,
+        flow_label: Ipv6FlowLabel::ZERO,
         payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
@@ -422,7 +422,7 @@ fn udp_builder_eth_ipv6_udp() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 0,
-        flow_label: 0,
+        flow_label: Ipv6FlowLabel::ZERO,
         payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
@@ -487,7 +487,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: VlanPcp::ZERO,
+            pcp: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV4
@@ -568,7 +568,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: VlanPcp::ZERO,
+            pcp: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::VLAN_TAGGED_FRAME
@@ -579,7 +579,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: VlanPcp::ZERO,
+            pcp: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x234.try_into().unwrap(),
             ether_type: ether_type::IPV6
@@ -590,7 +590,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 0,
-        flow_label: 0,
+        flow_label: Ipv6FlowLabel::ZERO,
         payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
@@ -623,7 +623,7 @@ fn udp_builder_eth_ip_udp() {
         .ip(IpHeader::Version6(
             Ipv6Header {
                 traffic_class: 1,
-                flow_label: 2,
+                flow_label: 2.try_into().unwrap(),
                 payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
                 next_header: ip_number::UDP,
                 hop_limit: 47,
@@ -667,7 +667,7 @@ fn udp_builder_eth_ip_udp() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 1,
-        flow_label: 2,
+        flow_label: 2.try_into().unwrap(),
         payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
@@ -698,7 +698,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
         .vlan(VlanHeader::Single(SingleVlanHeader {
-            priority_code_point: 1.try_into().unwrap(),
+            pcp: 1.try_into().unwrap(),
             drop_eligible_indicator: true,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: 0.into(), //should be overwritten
@@ -706,7 +706,7 @@ fn udp_builder_eth_vlan_ip_udp() {
         .ip(IpHeader::Version6(
             Ipv6Header {
                 traffic_class: 1,
-                flow_label: 2,
+                flow_label: 2.try_into().unwrap(),
                 payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
                 next_header: ip_number::UDP,
                 hop_limit: 47,
@@ -754,7 +754,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: 1.try_into().unwrap(),
+            pcp: 1.try_into().unwrap(),
             drop_eligible_indicator: true,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV6
@@ -765,7 +765,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     let ip_actual = Ipv6Header::read(&mut cursor).unwrap();
     let ip_expected = Ipv6Header {
         traffic_class: 1,
-        flow_label: 2,
+        flow_label: 2.try_into().unwrap(),
         payload_length: (UdpHeader::LEN + in_payload.len()) as u16,
         next_header: ip_number::UDP,
         hop_limit: 47,
@@ -907,7 +907,7 @@ proptest! {
         //ip v4 header
         let ip_expected = Ipv6Header{
             traffic_class: 0,
-            flow_label: 0,
+            flow_label: Ipv6FlowLabel::ZERO,
             payload_length: (input.header_len() as usize + in_payload.len()) as u16,
             next_header: ip_number::TCP,
             hop_limit: 47,
@@ -1352,7 +1352,7 @@ proptest! {
             let icmp_expected = Icmpv4Header::with_checksum(icmpv4_type, &adapted_payload);
             let ip_expected = Ipv6Header{
                 traffic_class: 0,
-                flow_label: 0,
+                flow_label: Ipv6FlowLabel::ZERO,
                 payload_length: (icmp_expected.header_len() + adapted_payload.len()) as u16,
                 next_header: ip_number::ICMP,
                 hop_limit: ipv6_hop_limit,
@@ -1479,7 +1479,7 @@ proptest! {
             ).unwrap();
             let ip_expected = Ipv6Header{
                 traffic_class: 0,
-                flow_label: 0,
+                flow_label: Ipv6FlowLabel::ZERO,
                 payload_length: (icmp_expected.header_len() + payload.len()) as u16,
                 next_header: ip_number::IPV6_ICMP,
                 hop_limit: ipv6_hop_limit,
