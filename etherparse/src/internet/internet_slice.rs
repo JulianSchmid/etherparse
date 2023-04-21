@@ -352,7 +352,7 @@ mod test {
                 next_header: ip_number::UDP,
                 ..Default::default()
             };
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
             let ipv6 = Ipv6Slice::from_slice(&buffer).unwrap();
             let slice = InternetSlice::Ipv6(ipv6.clone());
 
@@ -393,7 +393,7 @@ mod test {
                 };
                 let ipv6 = Ipv6Header {
                     traffic_class: 0,
-                    flow_label: 1,
+                    flow_label: 1.try_into().unwrap(),
                     payload_length: ipv6_frag.header_len() as u16,
                     next_header: ip_number::IPV6_FRAG,
                     hop_limit: 4,
@@ -401,7 +401,7 @@ mod test {
                     destination: [2; 16],
                 };
                 let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
-                data.extend_from_slice(&ipv6.to_bytes().unwrap());
+                data.extend_from_slice(&ipv6.to_bytes());
                 data.extend_from_slice(&ipv6_frag.to_bytes());
 
                 assert_eq!(
@@ -431,15 +431,13 @@ mod test {
         {
             let data = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: 0,
                 next_header: ip_number::IGMP,
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }
-            .to_bytes()
-            .unwrap();
+            }.to_bytes();
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([1; 16])),
@@ -468,15 +466,13 @@ mod test {
         {
             let data = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: 0,
                 next_header: ip_number::IGMP,
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }
-            .to_bytes()
-            .unwrap();
+            }.to_bytes();
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([2; 16])),
@@ -515,7 +511,7 @@ mod test {
         {
             let header = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: payload.len() as u16,
                 next_header: ip_number::UDP,
                 hop_limit: 4,
@@ -523,7 +519,7 @@ mod test {
                 destination: [2; 16],
             };
             let mut data = Vec::with_capacity(header.header_len() + payload.len());
-            data.extend_from_slice(&header.to_bytes().unwrap());
+            data.extend_from_slice(&header.to_bytes());
             data.extend_from_slice(&payload);
             assert_eq!(
                 InternetSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).payload(),
@@ -556,15 +552,13 @@ mod test {
         {
             let data = Ipv6Header {
                 traffic_class: 0,
-                flow_label: 1,
+                flow_label: 1.try_into().unwrap(),
                 payload_length: 0,
                 next_header: IGMP,
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }
-            .to_bytes()
-            .unwrap();
+            }.to_bytes();
 
             assert_eq!(
                 IGMP,

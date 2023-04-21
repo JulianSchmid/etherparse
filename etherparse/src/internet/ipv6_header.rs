@@ -5,7 +5,7 @@ use crate::*;
 pub struct Ipv6Header {
     pub traffic_class: u8,
     /// If non 0 serves as a hint to router and switches with multiple outbound paths that these packets should stay on the same path, so that they will not be reordered.
-    pub flow_label: u32,
+    pub flow_label: Ipv6FlowLabel,
     ///The length of the payload and extension headers in bytes (0 in case of jumbo payloads).
     pub payload_length: u16,
     /// IP protocol number specifying the next header or transport layer protocol.
@@ -72,7 +72,13 @@ impl Ipv6Header {
 
         Ok(Ipv6Header {
             traffic_class: (version_rest << 4) | (buffer[0] >> 4),
-            flow_label: u32::from_be_bytes([0, buffer[0] & 0xf, buffer[1], buffer[2]]),
+            flow_label: unsafe {
+                // SAFETY: Safe as the bitmask & 0 contant gurantee that the value
+                // does not exceed 20 bytes.
+                Ipv6FlowLabel::new_unchecked(u32::from_be_bytes(
+                    [0, buffer[0] & 0b0000_1111, buffer[1], buffer[2]]
+                ))
+            },
             payload_length: u16::from_be_bytes([buffer[3], buffer[4]]),
             next_header: IpNumber(buffer[5]),
             hop_limit: buffer[6],
@@ -251,9 +257,8 @@ impl Ipv6Header {
 
     ///Writes a given IPv6 header to the current position.
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()?)?;
-        Ok(())
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        writer.write_all(&self.to_bytes())
     }
 
     /// Return the ipv6 source address as an std::net::Ipv6Addr
@@ -294,28 +299,12 @@ impl Ipv6Header {
     /// Returns the serialized form of the header as a statically
     /// sized byte array.
     #[rustfmt::skip]
-    pub fn to_bytes(&self) -> Result<[u8;Ipv6Header::LEN], ValueError> {
-        use crate::err::ValueType::*;
-        fn max_check_u32(value: u32, max: u32, field: err::ValueType) -> Result<(), ValueError> {
-            if value <= max {
-                Ok(())
-            } else {
-                Err(ValueError::U32TooLarge {
-                    value,
-                    max,
-                    field,
-                })
-            }
-        }
-
+    pub fn to_bytes(&self) -> [u8;Ipv6Header::LEN] {
         // serialize header
-        let flow_label_be = self.flow_label.to_be_bytes();
+        let flow_label_be = self.flow_label.value().to_be_bytes();
         let payload_len_be = self.payload_length.to_be_bytes();
 
-        // check value ranges
-        max_check_u32(self.flow_label, 0xfffff, Ipv6FlowLabel)?;
-
-        Ok([
+        [
             (6 << 4) | (self.traffic_class >> 4),
             (self.traffic_class << 4) | flow_label_be[1],
             flow_label_be[2],
@@ -332,7 +321,7 @@ impl Ipv6Header {
             self.destination[4], self.destination[5], self.destination[6], self.destination[7],
             self.destination[8], self.destination[9], self.destination[10], self.destination[11],
             self.destination[12], self.destination[13], self.destination[14], self.destination[15],
-        ])
+        ]
     }
 }
 
@@ -350,7 +339,7 @@ mod test {
     fn default() {
         let header: Ipv6Header = Default::default();
         assert_eq!(0, header.traffic_class);
-        assert_eq!(0, header.flow_label);
+        assert_eq!(0, header.flow_label.value());
         assert_eq!(0, header.payload_length);
         assert_eq!(255, header.next_header.0);
         assert_eq!(0, header.hop_limit);
@@ -364,7 +353,7 @@ mod test {
         assert_eq!(
             format!("{:?}", header),
             format!(
-                "Ipv6Header {{ traffic_class: {}, flow_label: {}, payload_length: {}, next_header: {:?}, hop_limit: {}, source: {:?}, destination: {:?} }}",
+                "Ipv6Header {{ traffic_class: {}, flow_label: {:?}, payload_length: {}, next_header: {:?}, hop_limit: {}, source: {:?}, destination: {:?} }}",
                 header.traffic_class,
                 header.flow_label,
                 header.payload_length,
@@ -392,7 +381,7 @@ mod test {
         ) {
             // ok read
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 let (actual, rest) = Ipv6Header::read_from_slice(&bytes).unwrap();
                 assert_eq!(header, actual);
                 assert_eq!(rest, &[]);
@@ -400,7 +389,7 @@ mod test {
 
             // version error
             if bad_version != 6 {
-                let mut bytes = header.to_bytes().unwrap();
+                let mut bytes = header.to_bytes();
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
@@ -412,7 +401,7 @@ mod test {
 
             // length error
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::read_from_slice(&bytes[..len])
@@ -438,7 +427,7 @@ mod test {
         ) {
             // ok read
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 let (actual, rest) = Ipv6Header::from_slice(&bytes).unwrap();
                 assert_eq!(header, actual);
                 assert_eq!(rest, &[]);
@@ -446,7 +435,7 @@ mod test {
 
             // version error
             if bad_version != 6 {
-                let mut bytes = header.to_bytes().unwrap();
+                let mut bytes = header.to_bytes();
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
@@ -458,7 +447,7 @@ mod test {
 
             // length error
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6Header::from_slice(&bytes[..len])
@@ -486,7 +475,7 @@ mod test {
 
             // ok read
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 let mut cursor = Cursor::new(&bytes[..]);
                 let actual = Ipv6Header::read(&mut cursor).unwrap();
                 assert_eq!(header, actual);
@@ -495,7 +484,7 @@ mod test {
 
             // version error
             if bad_version != 6 {
-                let mut bytes = header.to_bytes().unwrap();
+                let mut bytes = header.to_bytes();
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
@@ -513,7 +502,7 @@ mod test {
 
             // io error
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 for len in 0..bytes.len() {
                     let mut cursor = Cursor::new(&bytes[..len]);
                     assert!(Ipv6Header::read(&mut cursor).is_err());
@@ -527,7 +516,7 @@ mod test {
         fn read_without_version(header in ipv6_any()) {
             // ok read
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 let mut cursor = Cursor::new(&bytes[1..]);
                 let actual = Ipv6Header::read_without_version(&mut cursor, bytes[0] & 0xf).unwrap();
                 assert_eq!(header, actual);
@@ -536,7 +525,7 @@ mod test {
 
             // io error
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 for len in 1..bytes.len() {
                     let mut cursor = Cursor::new(&bytes[1..len]);
                     assert!(Ipv6Header::read_without_version(&mut cursor, bytes[0] & 0xf).is_err());
@@ -992,33 +981,12 @@ mod test {
 
     proptest! {
         #[test]
-        fn to_bytes(
-            header in ipv6_any(),
-            bad_flow_label in 0b1_0000_0000_0000_0000_0000..=u32::MAX
-        ) {
-            // ok case
-            {
-                let bytes = header.to_bytes().unwrap();
-                assert_eq!(
-                    Ipv6Header::from_slice(&bytes).unwrap().0,
-                    header
-                );
-            }
-
-            // flow label error
-            {
-                let mut bad_header = header.clone();
-                bad_header.flow_label = bad_flow_label;
-                let err = bad_header.to_bytes().unwrap_err();
-                assert_eq!(
-                    err,
-                    ValueError::U32TooLarge {
-                        value: bad_flow_label,
-                        max: 0b1111_1111_1111_1111_1111,
-                        field: err::ValueType::Ipv6FlowLabel,
-                    }
-                );
-            }
+        fn to_bytes(header in ipv6_any()) {
+            let bytes = header.to_bytes();
+            assert_eq!(
+                Ipv6Header::from_slice(&bytes).unwrap().0,
+                header
+            );
         }
     }
 }

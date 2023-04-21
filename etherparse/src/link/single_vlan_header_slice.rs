@@ -102,7 +102,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     #[inline]
     pub fn to_header(&self) -> SingleVlanHeader {
         SingleVlanHeader {
-            priority_code_point: self.priority_code_point(),
+            pcp: self.priority_code_point(),
             drop_eligible_indicator: self.drop_eligible_indicator(),
             vlan_id: self.vlan_identifier(),
             ether_type: self.ether_type(),
@@ -156,7 +156,7 @@ mod test {
             let bytes = input.to_bytes();
             let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
 
-            assert_eq!(input.priority_code_point, slice.priority_code_point());
+            assert_eq!(input.pcp, slice.priority_code_point());
             assert_eq!(input.drop_eligible_indicator, slice.drop_eligible_indicator());
             assert_eq!(input.vlan_id, slice.vlan_identifier());
             assert_eq!(input.ether_type, slice.ether_type());

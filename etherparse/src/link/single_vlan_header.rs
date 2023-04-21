@@ -4,7 +4,7 @@ use crate::*;
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SingleVlanHeader {
     /// A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
-    pub priority_code_point: VlanPcp,
+    pub pcp: VlanPcp,
     /// Indicate that the frame may be dropped under the presence of congestion.
     pub drop_eligible_indicator: bool,
     /// 12 bits vland identifier.
@@ -40,7 +40,7 @@ impl SingleVlanHeader {
     #[inline]
     pub fn from_bytes(bytes: [u8; 4]) -> SingleVlanHeader {
         SingleVlanHeader {
-            priority_code_point: unsafe {
+            pcp: unsafe {
                 // SAFETY: Safe as bitmasks gurantee that value does not exceed
                 //         0b0000_0111.
                 VlanPcp::new_unchecked(
@@ -100,7 +100,7 @@ impl SingleVlanHeader {
                 id_be[0] | 0x10
             } else {
                 id_be[0]
-            } | (self.priority_code_point.value() << 5)),
+            } | (self.pcp.value() << 5)),
             id_be[1],
             eth_type_be[0],
             eth_type_be[1],
@@ -222,7 +222,7 @@ mod test {
                                     0x10
                                 } else {
                                     0
-                                } | (input.priority_code_point.value() << 5)
+                                } | (input.pcp.value() << 5)
                             ),
                             id_be[1],
                             eth_type_be[0],
@@ -251,7 +251,7 @@ mod test {
     #[test]
     fn default() {
         let actual: SingleVlanHeader = Default::default();
-        assert_eq!(0, actual.priority_code_point.value());
+        assert_eq!(0, actual.pcp.value());
         assert_eq!(false, actual.drop_eligible_indicator);
         assert_eq!(0, actual.vlan_id.value());
         assert_eq!(0, actual.ether_type.0);
@@ -269,8 +269,8 @@ mod test {
         fn dbg(input in vlan_single_any()) {
             assert_eq!(
                 &format!(
-                    "SingleVlanHeader {{ priority_code_point: {:?}, drop_eligible_indicator: {}, vlan_id: {:?}, ether_type: {:?} }}",
-                    input.priority_code_point,
+                    "SingleVlanHeader {{ pcp: {:?}, drop_eligible_indicator: {}, vlan_id: {:?}, ether_type: {:?} }}",
+                    input.pcp,
                     input.drop_eligible_indicator,
                     input.vlan_id,
                     input.ether_type,

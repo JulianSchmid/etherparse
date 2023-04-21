@@ -58,6 +58,15 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn ipv6_flow_label_any()
+        (value in 0u32..=0b1111_11111111_11111111u32)
+        -> Ipv6FlowLabel
+    {
+        Ipv6FlowLabel::try_new(value).unwrap()
+    }
+}
+
+prop_compose! {
     pub fn ethernet_2_with(ether_type: EtherType)(
         source in prop::array::uniform6(any::<u8>()),
         destination in prop::array::uniform6(any::<u8>()),
@@ -108,7 +117,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_single_unknown()(
-        priority_code_point in vlan_pcp_any(),
+        pcp in vlan_pcp_any(),
         drop_eligible_indicator in any::<bool>(),
         vlan_id in vlan_id_any(),
         ether_type in ether_type_any().prop_filter("ether_type must be unknown",
@@ -116,7 +125,7 @@ prop_compose! {
         -> SingleVlanHeader
     {
         SingleVlanHeader {
-            priority_code_point,
+            pcp,
             drop_eligible_indicator,
             vlan_id,
             ether_type,
@@ -126,14 +135,14 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_single_with(ether_type: EtherType)(
-        priority_code_point in vlan_pcp_any(),
+        pcp in vlan_pcp_any(),
         drop_eligible_indicator in any::<bool>(),
         vlan_id in vlan_id_any(),
         ether_type in proptest::strategy::Just(ether_type))
         -> SingleVlanHeader
     {
         SingleVlanHeader {
-            priority_code_point,
+            pcp,
             drop_eligible_indicator,
             vlan_id,
             ether_type
@@ -321,7 +330,7 @@ prop_compose! {
         source in prop::array::uniform16(any::<u8>()),
         destination in prop::array::uniform16(any::<u8>()),
         traffic_class in any::<u8>(),
-        flow_label in prop::bits::u32::between(0,20),
+        flow_label in ipv6_flow_label_any(),
         payload_length in any::<u16>(),
         hop_limit in any::<u8>(),
         next_header in proptest::strategy::Just(next_header)
@@ -373,7 +382,7 @@ prop_compose! {
         source in prop::array::uniform16(any::<u8>()),
         destination in prop::array::uniform16(any::<u8>()),
         traffic_class in any::<u8>(),
-        flow_label in prop::bits::u32::between(0,20),
+        flow_label in ipv6_flow_label_any(),
         payload_length in any::<u16>(),
         hop_limit in any::<u8>(),
         next_header in ip_number_any().prop_filter("next_header must be unknown",

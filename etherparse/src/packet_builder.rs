@@ -272,8 +272,8 @@ impl PacketBuilder {
     ///    ip(IpHeader::Version6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
-    ///             flow_label: 0,
-    ///             hop_limit: 4,
+    ///             flow_label: 0.try_into().unwrap(),
+    ///             hop_limit: 4.try_into().unwrap(),
     ///             source: [0;16],
     ///             destination: [0;16],
     ///             // payload_length & next_header will be replaced during write
@@ -407,7 +407,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///    .ip(IpHeader::Version6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
-    ///             flow_label: 0,
+    ///             flow_label: 0.try_into().unwrap(),
     ///             hop_limit: 4,
     ///             source: [0;16],
     ///             destination: [0;16],
@@ -467,7 +467,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         self.state.ip_header = Some(IpHeader::Version6(
             Ipv6Header {
                 traffic_class: 0,
-                flow_label: 0,
+                flow_label: Ipv6FlowLabel::ZERO,
                 payload_length: 0,          //filled in on write
                 next_header: IpNumber(255), //filled in on write
                 hop_limit,
@@ -498,9 +498,9 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///               [7,8,9,10,11,12]) //destionation mac
     ///     .vlan(VlanHeader::Single(
     ///         SingleVlanHeader{
-    ///             priority_code_point: 0,
+    ///             pcp: 1.try_into().unwrap(),
     ///             drop_eligible_indicator: false,
-    ///             vlan_identifier: 0x123.try_into().unwrap(),
+    ///             vlan_id: 0x123.try_into().unwrap(),
     ///             ether_type: 0.into() // will be overwritten during write
     ///         }))
     ///     .ipv4([192,168,1,1], //source ip
@@ -559,7 +559,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// ```
     pub fn single_vlan(mut self, vlan_identifier: VlanId) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
-            priority_code_point: VlanPcp::ZERO,
+            pcp: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: vlan_identifier,
             ether_type: EtherType(0), //will be set automatically during write
@@ -608,13 +608,13 @@ impl PacketBuilderStep<Ethernet2Header> {
     ) -> PacketBuilderStep<VlanHeader> {
         self.state.vlan_header = Some(VlanHeader::Double(DoubleVlanHeader {
             outer: SingleVlanHeader {
-                priority_code_point: VlanPcp::ZERO,
+                pcp: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
                 vlan_id: outer_vlan_identifier,
                 ether_type: EtherType(0), //will be set automatically during write
             },
             inner: SingleVlanHeader {
-                priority_code_point: VlanPcp::ZERO,
+                pcp: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
                 vlan_id: inner_vlan_identifier,
                 ether_type: EtherType(0), //will be set automatically during write
@@ -663,7 +663,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///    .ip(IpHeader::Version6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
-    ///             flow_label: 0,
+    ///             flow_label: 0.try_into().unwrap(),
     ///             hop_limit: 4,
     ///             source: [0;16],
     ///             destination: [0;16],

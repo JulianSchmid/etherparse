@@ -88,21 +88,20 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
     /// Read the "flow label" field from the slice.
     #[inline]
-    pub fn flow_label(&self) -> u32 {
-        u32::from_be_bytes(
+    pub fn flow_label(&self) -> Ipv6FlowLabel {
+        unsafe {
             // SAFETY:
-            // Safe as the slice length is set to
-            // Ipv6Header::LEN (40) during construction
-            // of the struct.
-            unsafe {
-                [
-                    0,
-                    *self.slice.get_unchecked(1) & 0xf,
-                    *self.slice.get_unchecked(2),
-                    *self.slice.get_unchecked(3),
-                ]
-            },
-        )
+            // Slice access safe as the slice length is set to Ipv6Header::LEN (40)
+            // during construction of the struct.
+            // Conversion to flow label safe as the bitmask & 0 constant gurantee
+            // that the value does not exceed 20 bits.
+            Ipv6FlowLabel::new_unchecked(u32::from_be_bytes([
+                0,
+                *self.slice.get_unchecked(1) & 0xf,
+                *self.slice.get_unchecked(2),
+                *self.slice.get_unchecked(3),
+            ]))
+        }
     }
 
     /// Read the "payload length" field from  the slice. The length should contain the length of all extension headers and payload.
@@ -195,7 +194,7 @@ mod test {
     #[test]
     fn debug() {
         let header: Ipv6Header = Default::default();
-        let bytes = header.to_bytes().unwrap();
+        let bytes = header.to_bytes();
         let slice = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
         assert_eq!(
             format!("{:?}", slice),
@@ -206,7 +205,7 @@ mod test {
     proptest! {
         #[test]
         fn clone_eq(header in ipv6_any()) {
-            let bytes = header.to_bytes().unwrap();
+            let bytes = header.to_bytes();
             let slice = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(slice.clone(), slice);
         }
@@ -220,14 +219,14 @@ mod test {
         {
             // ok read
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
                 assert_eq!(actual.slice(), &bytes[..]);
             }
 
             // version error
             if bad_version != 6 {
-                let mut bytes = header.to_bytes().unwrap();
+                let mut bytes = header.to_bytes();
                 // inject a bad version number
                 bytes[0] = (0b1111 & bytes[0]) | (bad_version << 4);
 
@@ -239,7 +238,7 @@ mod test {
 
             // length error
             {
-                let bytes = header.to_bytes().unwrap();
+                let bytes = header.to_bytes();
                 for len in 0..bytes.len() {
                     assert_eq!(
                         Ipv6HeaderSlice::from_slice(&bytes[..len])
@@ -260,7 +259,7 @@ mod test {
     proptest! {
         #[test]
         fn from_slice_unchecked(header in ipv6_any()) {
-            let bytes = header.to_bytes().unwrap();
+            let bytes = header.to_bytes();
             let actual = unsafe {
                 Ipv6HeaderSlice::from_slice_unchecked(&bytes)
             };
@@ -271,7 +270,7 @@ mod test {
     proptest! {
         #[test]
         fn getters(header in ipv6_any()) {
-            let bytes = header.to_bytes().unwrap();
+            let bytes = header.to_bytes();
             let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(actual.slice(), &bytes[..]);
             assert_eq!(actual.version(), 6);
@@ -289,7 +288,7 @@ mod test {
     proptest! {
         #[test]
         fn getters_std(header in ipv6_any()) {
-            let bytes = header.to_bytes().unwrap();
+            let bytes = header.to_bytes();
             let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(actual.source_addr(), std::net::Ipv6Addr::from(header.source));
             assert_eq!(actual.destination_addr(), std::net::Ipv6Addr::from(header.destination));
@@ -299,7 +298,7 @@ mod test {
     proptest! {
         #[test]
         fn to_header(header in ipv6_any()) {
-            let bytes = header.to_bytes().unwrap();
+            let bytes = header.to_bytes();
             let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(actual.to_header(), header);
         }
