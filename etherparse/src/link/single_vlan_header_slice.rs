@@ -99,7 +99,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
         SingleVlanHeader {
             priority_code_point: self.priority_code_point(),
             drop_eligible_indicator: self.drop_eligible_indicator(),
-            vlan_identifier: self.vlan_identifier(),
+            vlan_id: self.vlan_identifier(),
             ether_type: self.ether_type(),
         }
     }
@@ -153,7 +153,7 @@ mod test {
 
             assert_eq!(input.priority_code_point, slice.priority_code_point());
             assert_eq!(input.drop_eligible_indicator, slice.drop_eligible_indicator());
-            assert_eq!(input.vlan_identifier, slice.vlan_identifier());
+            assert_eq!(input.vlan_id, slice.vlan_identifier());
             assert_eq!(input.ether_type, slice.ether_type());
         }
     }

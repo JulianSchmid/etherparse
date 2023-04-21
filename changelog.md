@@ -30,6 +30,8 @@
 * `Ipv4Header.differentiated_services_code_point` renamed to `Ipv4Header.dscp`.
 * `Ipv4Header.explicit_congestion_notification` renamed to `Ipv4Header.ecn`.
 * `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
+* `SingleVlanHeader.vlan_identifier` renamed to `SingleVlanHeader.vlan_id`.
+* Type of `vlan_id` in `SingleVlanHeader` changed from `u16` to `VlanId`.
 
 ### Bugfixes
 

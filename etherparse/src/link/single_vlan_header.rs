@@ -8,7 +8,7 @@ pub struct SingleVlanHeader {
     /// Indicate that the frame may be dropped under the presence of congestion.
     pub drop_eligible_indicator: bool,
     /// 12 bits vland identifier.
-    pub vlan_identifier: VlanId,
+    pub vlan_id: VlanId,
     /// "Tag protocol identifier": Type id of content after this header. Refer to the "EtherType" for a list of possible supported values.
     pub ether_type: EtherType,
 }
@@ -42,7 +42,7 @@ impl SingleVlanHeader {
         SingleVlanHeader {
             priority_code_point: (bytes[0] >> 5) & 0b0000_0111u8,
             drop_eligible_indicator: 0 != (bytes[0] & 0b0001_0000u8),
-            vlan_identifier: unsafe {
+            vlan_id: unsafe {
                 // SAFETY: Safe as bitmasks gurantee that value does not exceed
                 //         0b0000_1111_1111_1111.
                 VlanId::new_unchecked(u16::from_be_bytes(
@@ -93,7 +93,7 @@ impl SingleVlanHeader {
         max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
 
         // serialize
-        let id_be = self.vlan_identifier.value().to_be_bytes();
+        let id_be = self.vlan_id.value().to_be_bytes();
         let eth_type_be = self.ether_type.0.to_be_bytes();
         Ok([
             (if self.drop_eligible_indicator {
@@ -212,7 +212,7 @@ mod test {
                 input.write(&mut buffer).unwrap();
                 assert_eq!(&buffer[..], &input.to_bytes().unwrap());
                 {
-                    let id_be = input.vlan_identifier.value().to_be_bytes();
+                    let id_be = input.vlan_id.value().to_be_bytes();
                     let eth_type_be = input.ether_type.0.to_be_bytes();
                     assert_eq!(
                         input.to_bytes().unwrap(),
@@ -284,7 +284,7 @@ mod test {
         let actual: SingleVlanHeader = Default::default();
         assert_eq!(0, actual.priority_code_point);
         assert_eq!(false, actual.drop_eligible_indicator);
-        assert_eq!(0, actual.vlan_identifier.value());
+        assert_eq!(0, actual.vlan_id.value());
         assert_eq!(0, actual.ether_type.0);
     }
 
@@ -303,7 +303,7 @@ mod test {
                     "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {:?}, ether_type: {:?} }}",
                     input.priority_code_point,
                     input.drop_eligible_indicator,
-                    input.vlan_identifier,
+                    input.vlan_id,
                     input.ether_type,
                 ),
                 &format!("{:?}", input)
