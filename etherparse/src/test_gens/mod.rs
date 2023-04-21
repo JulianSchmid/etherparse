@@ -97,7 +97,7 @@ prop_compose! {
         SingleVlanHeader {
             priority_code_point: priority_code_point,
             drop_eligible_indicator: drop_eligible_indicator,
-            vlan_identifier: vlan_identifier,
+            vlan_id: vlan_identifier,
             ether_type: ether_type
         }
     }

@@ -481,7 +481,7 @@ mod test {
             let single = SingleVlanHeader {
                 priority_code_point: 1,
                 drop_eligible_indicator: false,
-                vlan_identifier: 2.try_into().unwrap(),
+                vlan_id: 2.try_into().unwrap(),
                 ether_type: 3.into(),
             };
 
@@ -524,13 +524,13 @@ mod test {
                     outer: SingleVlanHeader {
                         priority_code_point: 1,
                         drop_eligible_indicator: false,
-                        vlan_identifier: 2.try_into().unwrap(),
+                        vlan_id: 2.try_into().unwrap(),
                         ether_type: inner_vlan_ether_type,
                     },
                     inner: SingleVlanHeader {
                         priority_code_point: 1,
                         drop_eligible_indicator: false,
-                        vlan_identifier: 2.try_into().unwrap(),
+                        vlan_id: 2.try_into().unwrap(),
                         ether_type: 3.into(),
                     },
                 };

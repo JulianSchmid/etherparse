@@ -561,7 +561,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         self.state.vlan_header = Some(VlanHeader::Single(SingleVlanHeader {
             priority_code_point: 0,
             drop_eligible_indicator: false,
-            vlan_identifier,
+            vlan_id: vlan_identifier,
             ether_type: EtherType(0), //will be set automatically during write
         }));
         //return for next step
@@ -610,13 +610,13 @@ impl PacketBuilderStep<Ethernet2Header> {
             outer: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
-                vlan_identifier: outer_vlan_identifier,
+                vlan_id: outer_vlan_identifier,
                 ether_type: EtherType(0), //will be set automatically during write
             },
             inner: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
-                vlan_identifier: inner_vlan_identifier,
+                vlan_id: inner_vlan_identifier,
                 ether_type: EtherType(0), //will be set automatically during write
             },
         }));

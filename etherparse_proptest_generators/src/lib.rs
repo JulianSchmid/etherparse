@@ -102,7 +102,7 @@ prop_compose! {
     pub fn vlan_single_unknown()(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
-        vlan_identifier in vlan_id_any(),
+        vlan_id in vlan_id_any(),
         ether_type in ether_type_any().prop_filter("ether_type must be unknown",
             |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
         -> SingleVlanHeader
@@ -110,7 +110,7 @@ prop_compose! {
         SingleVlanHeader {
             priority_code_point,
             drop_eligible_indicator,
-            vlan_identifier,
+            vlan_id,
             ether_type,
         }
     }
@@ -120,14 +120,14 @@ prop_compose! {
     pub fn vlan_single_with(ether_type: EtherType)(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
-        vlan_identifier in vlan_id_any(),
+        vlan_id in vlan_id_any(),
         ether_type in proptest::strategy::Just(ether_type))
         -> SingleVlanHeader
     {
         SingleVlanHeader {
             priority_code_point,
             drop_eligible_indicator,
-            vlan_identifier,
+            vlan_id,
             ether_type
         }
     }

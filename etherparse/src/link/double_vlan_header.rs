@@ -91,7 +91,7 @@ impl Default for DoubleVlanHeader {
             outer: SingleVlanHeader {
                 priority_code_point: 0,
                 drop_eligible_indicator: false,
-                vlan_identifier: Default::default(),
+                vlan_id: Default::default(),
                 ether_type: ether_type::VLAN_TAGGED_FRAME,
             },
             inner: Default::default(),
