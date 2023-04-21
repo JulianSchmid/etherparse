@@ -90,6 +90,7 @@ impl From<VlanId> for u16 {
 impl TryFrom<u16> for VlanId {
     type Error = ValueTooBigError<u16>;
 
+    #[inline]
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         use crate::err::ValueType;
         if value <= VlanId::MAX_U16 {

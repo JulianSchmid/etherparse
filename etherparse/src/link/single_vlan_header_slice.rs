@@ -55,10 +55,15 @@ impl<'a> SingleVlanHeaderSlice<'a> {
 
     /// Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     #[inline]
-    pub fn priority_code_point(&self) -> u8 {
-        // SAFETY:
-        // Slice len checked in constructor to be at least 4.
-        unsafe { *self.slice.get_unchecked(0) >> 5 }
+    pub fn priority_code_point(&self) -> VlanPcp {
+        
+        unsafe {
+            // SAFETY: Safe as slice len checked in constructor to be at least 4 &
+            // the bitmask gurantees values does not exceed 0b0000_0111.
+            VlanPcp::new_unchecked(
+                (*self.slice.get_unchecked(0) >> 5) & 0b0000_0111
+            )
+        }
     }
 
     /// Read the "drop_eligible_indicator" flag from the slice. Indicates that the frame may be dropped under the presence of congestion.
@@ -148,7 +153,7 @@ mod test {
     proptest! {
         #[test]
         fn getters(input in vlan_single_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
 
             assert_eq!(input.priority_code_point, slice.priority_code_point());
@@ -161,7 +166,7 @@ mod test {
     proptest! {
         #[test]
         fn to_header(input in vlan_single_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(input, slice.to_header());
         }
@@ -170,7 +175,7 @@ mod test {
     proptest! {
         #[test]
         fn clone_eq(input in vlan_single_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(slice, slice.clone());
         }
@@ -179,7 +184,7 @@ mod test {
     proptest! {
         #[test]
         fn dbg(input in vlan_single_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = SingleVlanHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(
                 &format!(

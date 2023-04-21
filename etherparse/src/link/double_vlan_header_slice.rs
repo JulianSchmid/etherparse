@@ -143,7 +143,7 @@ mod test {
                 let mut bad_outer = input.clone();
                 bad_outer.outer.ether_type = ether_type_non_vlan;
                 assert_eq!(
-                    DoubleVlanHeaderSlice::from_slice(&bad_outer.to_bytes().unwrap())
+                    DoubleVlanHeaderSlice::from_slice(&bad_outer.to_bytes())
                         .unwrap_err(),
                     Content(NonVlanEtherType{ unexpected_ether_type: ether_type_non_vlan })
                 );
@@ -154,7 +154,7 @@ mod test {
     proptest! {
         #[test]
         fn getters(input in vlan_double_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
 
             assert_eq!(input.outer, slice.outer().to_header());
@@ -165,7 +165,7 @@ mod test {
     proptest! {
         #[test]
         fn to_header(input in vlan_double_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
 
             assert_eq!(
@@ -181,7 +181,7 @@ mod test {
     proptest! {
         #[test]
         fn clone_eq(input in vlan_double_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(slice, slice.clone());
         }
@@ -190,7 +190,7 @@ mod test {
     proptest! {
         #[test]
         fn dbg(input in vlan_double_any()) {
-            let bytes = input.to_bytes().unwrap();
+            let bytes = input.to_bytes();
             let slice = DoubleVlanHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(
                 &format!(

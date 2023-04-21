@@ -487,7 +487,7 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: 0,
+            priority_code_point: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV4
@@ -568,7 +568,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: 0,
+            priority_code_point: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::VLAN_TAGGED_FRAME
@@ -579,7 +579,7 @@ fn udp_builder_eth_double_vlan_ipv6_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: 0,
+            priority_code_point: VlanPcp::ZERO,
             drop_eligible_indicator: false,
             vlan_id: 0x234.try_into().unwrap(),
             ether_type: ether_type::IPV6
@@ -698,7 +698,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     let mut serialized = Vec::new();
     PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
         .vlan(VlanHeader::Single(SingleVlanHeader {
-            priority_code_point: 1,
+            priority_code_point: 1.try_into().unwrap(),
             drop_eligible_indicator: true,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: 0.into(), //should be overwritten
@@ -754,7 +754,7 @@ fn udp_builder_eth_vlan_ip_udp() {
     assert_eq!(
         SingleVlanHeader::read(&mut cursor).unwrap(),
         SingleVlanHeader {
-            priority_code_point: 1,
+            priority_code_point: 1.try_into().unwrap(),
             drop_eligible_indicator: true,
             vlan_id: 0x123.try_into().unwrap(),
             ether_type: ether_type::IPV6

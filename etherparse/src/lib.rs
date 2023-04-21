@@ -269,6 +269,7 @@ pub use crate::link::single_vlan_header::*;
 pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::vlan_header::*;
 pub use crate::link::vlan_id::*;
+pub use crate::link::vlan_pcp::*;
 pub use crate::link::vlan_slice::*;
 
 #[cfg(test)]
@@ -549,15 +550,6 @@ impl core::fmt::Display for ValueError {
                 write!(f, "ICMPv6 packet can not be combined with IPv4 headers.")
             }
         }
-    }
-}
-
-fn max_check_u8(value: u8, max: u8, field: err::ValueType) -> Result<(), ValueError> {
-    use crate::ValueError::U8TooLarge;
-    if value <= max {
-        Ok(())
-    } else {
-        Err(U8TooLarge { value, max, field })
     }
 }
 

@@ -34,7 +34,7 @@ mod test {
         ) {
             // single
             {
-                let raw = single.to_bytes().unwrap();
+                let raw = single.to_bytes();
                 let slice = VlanSlice::SingleVlan(
                     SingleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
@@ -46,7 +46,7 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes().unwrap();
+                let raw = double.to_bytes();
                 let slice = VlanSlice::DoubleVlan(
                     DoubleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
@@ -66,7 +66,7 @@ mod test {
         ) {
             // single
             {
-                let raw = single.to_bytes().unwrap();
+                let raw = single.to_bytes();
                 let s = SingleVlanHeaderSlice::from_slice(&raw).unwrap();
                 assert_eq!(
                     format!("{:?}", VlanSlice::SingleVlan(s.clone())),
@@ -76,7 +76,7 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes().unwrap();
+                let raw = double.to_bytes();
                 let d = DoubleVlanHeaderSlice::from_slice(&raw).unwrap();
                 assert_eq!(
                     format!("{:?}", VlanSlice::DoubleVlan(d.clone())),
@@ -94,7 +94,7 @@ mod test {
         ) {
             // single
             {
-                let raw = single.to_bytes().unwrap();
+                let raw = single.to_bytes();
                 let s = VlanSlice::SingleVlan(
                     SingleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
@@ -103,7 +103,7 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes().unwrap();
+                let raw = double.to_bytes();
                 let d = VlanSlice::DoubleVlan(
                     DoubleVlanHeaderSlice::from_slice(&raw).unwrap()
                 );
