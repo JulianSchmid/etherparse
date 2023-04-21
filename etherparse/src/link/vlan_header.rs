@@ -20,7 +20,7 @@ impl VlanHeader {
     /// Write the IEEE 802.1Q VLAN single or double tagging header
     #[cfg(feature = "std")]
     #[inline]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         use VlanHeader::*;
         match &self {
             Single(header) => header.write(writer),

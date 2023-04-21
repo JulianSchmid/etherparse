@@ -4,7 +4,7 @@ use crate::*;
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub struct SingleVlanHeader {
     /// A 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
-    pub priority_code_point: u8,
+    pub priority_code_point: VlanPcp,
     /// Indicate that the frame may be dropped under the presence of congestion.
     pub drop_eligible_indicator: bool,
     /// 12 bits vland identifier.
@@ -40,7 +40,13 @@ impl SingleVlanHeader {
     #[inline]
     pub fn from_bytes(bytes: [u8; 4]) -> SingleVlanHeader {
         SingleVlanHeader {
-            priority_code_point: (bytes[0] >> 5) & 0b0000_0111u8,
+            priority_code_point: unsafe {
+                // SAFETY: Safe as bitmasks gurantee that value does not exceed
+                //         0b0000_0111.
+                VlanPcp::new_unchecked(
+                    (bytes[0] >> 5) & 0b0000_0111u8
+                )
+            },
             drop_eligible_indicator: 0 != (bytes[0] & 0b0001_0000u8),
             vlan_id: unsafe {
                 // SAFETY: Safe as bitmasks gurantee that value does not exceed
@@ -73,9 +79,8 @@ impl SingleVlanHeader {
     /// Write the IEEE 802.1Q VLAN tagging header
     #[inline]
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        writer.write_all(&self.to_bytes()?)?;
-        Ok(())
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        writer.write_all(&self.to_bytes())
     }
 
     /// Length of the serialized header in bytes.
@@ -87,24 +92,19 @@ impl SingleVlanHeader {
     /// Returns the serialized form of the header or an value error in case
     /// the header values are outside of range.
     #[inline]
-    pub fn to_bytes(&self) -> Result<[u8; 4], ValueError> {
-        use crate::err::ValueType::*;
-        // check value ranges
-        max_check_u8(self.priority_code_point, 0x7, VlanTagPriorityCodePoint)?;
-
-        // serialize
+    pub fn to_bytes(&self) -> [u8; 4] {
         let id_be = self.vlan_id.value().to_be_bytes();
         let eth_type_be = self.ether_type.0.to_be_bytes();
-        Ok([
+        [
             (if self.drop_eligible_indicator {
                 id_be[0] | 0x10
             } else {
                 id_be[0]
-            } | (self.priority_code_point << 5)),
+            } | (self.priority_code_point.value() << 5)),
             id_be[1],
             eth_type_be[0],
             eth_type_be[1],
-        ])
+        ]
     }
 }
 
@@ -165,7 +165,7 @@ mod test {
         #[test]
         fn from_bytes(input in vlan_single_any()) {
             let actual = SingleVlanHeader::from_bytes(
-                input.to_bytes().unwrap()
+                input.to_bytes()
             );
             assert_eq!(actual, input);
         }
@@ -210,19 +210,19 @@ mod test {
             {
                 let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
                 input.write(&mut buffer).unwrap();
-                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                assert_eq!(&buffer[..], &input.to_bytes());
                 {
                     let id_be = input.vlan_id.value().to_be_bytes();
                     let eth_type_be = input.ether_type.0.to_be_bytes();
                     assert_eq!(
-                        input.to_bytes().unwrap(),
+                        input.to_bytes(),
                         [
                             (
                                 id_be[0] | if input.drop_eligible_indicator {
                                     0x10
                                 } else {
                                     0
-                                } | (input.priority_code_point << 5)
+                                } | (input.priority_code_point.value() << 5)
                             ),
                             id_be[1],
                             eth_type_be[0],
@@ -232,42 +232,11 @@ mod test {
                 }
             }
 
-            // priority_code_point: outside of range error
-            {
-                let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
-                for i in 1..=0b0001_1111u8 {
-                    let mut bad_input = input.clone();
-                    bad_input.priority_code_point |= i << 3;
-                    let expected = ValueError::U8TooLarge{
-                        value: bad_input.priority_code_point,
-                        max: 0b111,
-                        field: err::ValueType::VlanTagPriorityCodePoint
-                    };
-                    assert_eq!(
-                        expected,
-                        bad_input.write(&mut buffer)
-                            .unwrap_err()
-                            .value_error()
-                            .unwrap()
-                    );
-                    assert_eq!(
-                        expected,
-                        bad_input.to_bytes()
-                            .unwrap_err()
-                    );
-                }
-            }
-
             // unexpected eof
             for len in 0..4 {
                 let mut buffer = [0u8;4];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
-                assert!(
-                    input.write(&mut cursor)
-                        .unwrap_err()
-                        .io_error()
-                        .is_some()
-                );
+                assert!(input.write(&mut cursor).is_err());
             }
         }
     }
@@ -282,7 +251,7 @@ mod test {
     #[test]
     fn default() {
         let actual: SingleVlanHeader = Default::default();
-        assert_eq!(0, actual.priority_code_point);
+        assert_eq!(0, actual.priority_code_point.value());
         assert_eq!(false, actual.drop_eligible_indicator);
         assert_eq!(0, actual.vlan_id.value());
         assert_eq!(0, actual.ether_type.0);
@@ -300,7 +269,7 @@ mod test {
         fn dbg(input in vlan_single_any()) {
             assert_eq!(
                 &format!(
-                    "SingleVlanHeader {{ priority_code_point: {}, drop_eligible_indicator: {}, vlan_identifier: {:?}, ether_type: {:?} }}",
+                    "SingleVlanHeader {{ priority_code_point: {:?}, drop_eligible_indicator: {}, vlan_id: {:?}, ether_type: {:?} }}",
                     input.priority_code_point,
                     input.drop_eligible_indicator,
                     input.vlan_id,

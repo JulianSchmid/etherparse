@@ -139,6 +139,7 @@ impl From<IpFragOffset> for u16 {
 impl TryFrom<u16> for IpFragOffset {
     type Error = ValueTooBigError<u16>;
 
+    #[inline]
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         use crate::err::ValueType::IpFragmentOffset;
         if value <= IpFragOffset::MAX_U16 {

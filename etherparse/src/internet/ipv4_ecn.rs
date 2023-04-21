@@ -99,6 +99,7 @@ impl From<Ipv4Ecn> for u8 {
 impl TryFrom<u8> for Ipv4Ecn {
     type Error = ValueTooBigError<u8>;
 
+    #[inline]
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         use crate::err::ValueType;
         if value <= Ipv4Ecn::MAX_U8 {

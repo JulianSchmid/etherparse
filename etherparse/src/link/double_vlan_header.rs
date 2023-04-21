@@ -62,7 +62,7 @@ impl DoubleVlanHeader {
 
     /// Write the double IEEE 802.1Q VLAN tagging header
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         self.outer.write(writer)?;
         self.inner.write(writer)
     }
@@ -76,12 +76,12 @@ impl DoubleVlanHeader {
     /// Returns the serialized form of the headers or an value error in case
     /// the headers contain values that are outside of range.
     #[inline]
-    pub fn to_bytes(&self) -> Result<[u8; 8], ValueError> {
-        let outer = self.outer.to_bytes()?;
-        let inner = self.inner.to_bytes()?;
-        Ok([
+    pub fn to_bytes(&self) -> [u8; 8] {
+        let outer = self.outer.to_bytes();
+        let inner = self.inner.to_bytes();
+        [
             outer[0], outer[1], outer[2], outer[3], inner[0], inner[1], inner[2], inner[3],
-        ])
+        ]
     }
 }
 
@@ -89,7 +89,7 @@ impl Default for DoubleVlanHeader {
     fn default() -> Self {
         DoubleVlanHeader {
             outer: SingleVlanHeader {
-                priority_code_point: 0,
+                priority_code_point: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
                 vlan_id: Default::default(),
                 ether_type: ether_type::VLAN_TAGGED_FRAME,
@@ -160,7 +160,7 @@ mod test {
             {
                 let mut bad_outer = input.clone();
                 bad_outer.outer.ether_type = ether_type_non_vlan;
-                let bytes = bad_outer.to_bytes().unwrap();
+                let bytes = bad_outer.to_bytes();
                 assert_eq!(
                     DoubleVlanHeader::from_slice(&bytes)
                         .unwrap_err(),
@@ -214,7 +214,7 @@ mod test {
             {
                 let mut bad_outer = input.clone();
                 bad_outer.outer.ether_type = ether_type_non_vlan;
-                let bytes = bad_outer.to_bytes().unwrap();
+                let bytes = bad_outer.to_bytes();
                 let mut cursor = Cursor::new(&bytes);
                 assert_eq!(
                     DoubleVlanHeader::read(&mut cursor)
@@ -236,12 +236,12 @@ mod test {
             {
                 let mut buffer: Vec<u8> = Vec::with_capacity(input.header_len());
                 input.write(&mut buffer).unwrap();
-                assert_eq!(&buffer[..], &input.to_bytes().unwrap());
+                assert_eq!(&buffer[..], &input.to_bytes());
                 {
-                    let inner_bytes = input.inner.to_bytes().unwrap();
-                    let outer_bytes = input.outer.to_bytes().unwrap();
+                    let inner_bytes = input.inner.to_bytes();
+                    let outer_bytes = input.outer.to_bytes();
                     assert_eq!(
-                        input.to_bytes().unwrap(),
+                        input.to_bytes(),
                         [
                             outer_bytes[0],
                             outer_bytes[1],
@@ -256,60 +256,11 @@ mod test {
                 }
             }
 
-            // bad value outer
-            {
-                let mut bad_input = input.clone();
-                bad_input.outer.priority_code_point = 0b1000;
-
-                let mut buffer: Vec<u8> = Vec::new();
-                let expected = ValueError::U8TooLarge{
-                    value: bad_input.outer.priority_code_point,
-                    max: 0b111,
-                    field: err::ValueType::VlanTagPriorityCodePoint
-                };
-
-                assert_eq!(
-                    bad_input
-                        .write(&mut buffer)
-                        .unwrap_err()
-                        .value_error()
-                        .unwrap(),
-                    expected
-                );
-                assert_eq!(
-                    bad_input
-                        .to_bytes()
-                        .unwrap_err(),
-                    expected
-                );
-            }
-
-            // bad value inner
-            {
-                let mut bad_input = input.clone();
-                bad_input.inner.priority_code_point = 0b1000;
-
-                let mut buffer: Vec<u8> = Vec::new();
-                let expected = ValueError::U8TooLarge{
-                    value: bad_input.inner.priority_code_point,
-                    max: 0b111,
-                    field: err::ValueType::VlanTagPriorityCodePoint
-                };
-
-                assert_eq!(
-                    bad_input
-                        .write(&mut buffer)
-                        .unwrap_err()
-                        .value_error()
-                        .unwrap(),
-                    expected
-                );
-                assert_eq!(
-                    bad_input
-                        .to_bytes()
-                        .unwrap_err(),
-                    expected
-                );
+            // io error
+            for len in 0..DoubleVlanHeader::LEN {
+                let mut buf = [0u8;DoubleVlanHeader::LEN];
+                let mut cursor = Cursor::new(&mut buf[..len]);
+                assert!(input.write(&mut cursor).is_err());
             }
         }
     }

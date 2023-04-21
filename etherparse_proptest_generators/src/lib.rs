@@ -10,7 +10,6 @@ pub fn err_field_any() -> impl Strategy<Value = err::ValueType> {
         Just(Ipv4Ecn),
         Just(IpFragmentOffset),
         Just(Ipv6FlowLabel),
-        Just(VlanTagPriorityCodePoint)
     ]
 }
 
@@ -37,6 +36,15 @@ prop_compose! {
         -> VlanId
     {
         VlanId::try_new(value).unwrap()
+    }
+}
+
+prop_compose! {
+    pub fn vlan_pcp_any()
+        (value in 0..=0b0000_0111u8)
+        -> VlanPcp
+    {
+        VlanPcp::try_new(value).unwrap()
     }
 }
 
@@ -100,7 +108,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_single_unknown()(
-        priority_code_point in prop::bits::u8::between(0,3),
+        priority_code_point in vlan_pcp_any(),
         drop_eligible_indicator in any::<bool>(),
         vlan_id in vlan_id_any(),
         ether_type in ether_type_any().prop_filter("ether_type must be unknown",
@@ -118,7 +126,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn vlan_single_with(ether_type: EtherType)(
-        priority_code_point in prop::bits::u8::between(0,3),
+        priority_code_point in vlan_pcp_any(),
         drop_eligible_indicator in any::<bool>(),
         vlan_id in vlan_id_any(),
         ether_type in proptest::strategy::Just(ether_type))
