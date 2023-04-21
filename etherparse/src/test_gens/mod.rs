@@ -20,6 +20,15 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn vlan_id_any()
+        (value in 0..=0b0000_1111_1111_1111u16)
+        -> VlanId
+    {
+        VlanId::try_new(value).unwrap()
+    }
+}
+
+prop_compose! {
     pub fn ip_number_any()
         (value in any::<u8>())
         -> IpNumber
@@ -81,7 +90,7 @@ prop_compose! {
     pub fn vlan_single_with(ether_type: EtherType)(
         priority_code_point in prop::bits::u8::between(0,3),
         drop_eligible_indicator in any::<bool>(),
-        vlan_identifier in prop::bits::u16::between(0,12),
+        vlan_identifier in vlan_id_any(),
         ether_type in proptest::strategy::Just(ether_type))
         -> SingleVlanHeader
     {

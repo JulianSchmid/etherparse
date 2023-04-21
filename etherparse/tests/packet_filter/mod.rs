@@ -519,7 +519,9 @@ mod vlan_filter {
             ).applies_to_slice(&single_slice));
             //non matching
             assert_eq!(false, Single(
-                Some(!vlan_inner.vlan_identifier)
+                Some(VlanId::try_new(
+                    vlan_inner.vlan_identifier.value().wrapping_add(1) & VlanId::MAX_U16
+                ).unwrap())
             ).applies_to_slice(&single_slice));
 
             //test double vlan filter with wildcards
@@ -538,12 +540,16 @@ mod vlan_filter {
             }.applies_to_slice(&double_slice));
             //non matching
             assert_eq!(false, Double {
-                outer_identifier: Some(!vlan_outer.vlan_identifier),
+                outer_identifier: Some(VlanId::try_new(
+                    vlan_outer.vlan_identifier.value().wrapping_add(1) & VlanId::MAX_U16
+                ).unwrap()),
                 inner_identifier: Some(vlan_inner.vlan_identifier)
             }.applies_to_slice(&double_slice));
             assert_eq!(false, Double {
                 outer_identifier: Some(vlan_outer.vlan_identifier),
-                inner_identifier: Some(!vlan_inner.vlan_identifier)
+                inner_identifier: Some(VlanId::try_new(
+                    vlan_inner.vlan_identifier.value().wrapping_add(1) & VlanId::MAX_U16
+                ).unwrap())
             }.applies_to_slice(&double_slice));
         }
     }
