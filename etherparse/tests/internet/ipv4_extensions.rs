@@ -127,11 +127,11 @@ pub mod header {
             }
             .write(&mut buffer, UDP)
             .unwrap_err();
-            assert_matches!(
-                err,
-                WriteError::ValueError(ValueError::Ipv4ExtensionNotReferenced(
+            assert_eq!(
+                err.content().unwrap(),
+                &err::ipv4_exts::HeaderSerError::ExtNotReferenced(
                     IpNumber::AUTHENTICATION_HEADER
-                ))
+                )
             );
         }
 
@@ -145,7 +145,7 @@ pub mod header {
             .unwrap_err();
             assert_eq!(
                 std::io::ErrorKind::UnexpectedEof,
-                err.io_error().unwrap().kind()
+                err.io().unwrap().kind()
             );
         }
     }

@@ -1555,7 +1555,13 @@ fn final_write<T: io::Write + Sized, B>(
                 Version4(mut ip, ext) => {
                     ip.set_payload_len(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
-                    ext.write(writer, ip.protocol)?;
+                    ext.write(writer, ip.protocol).map_err(|err| {
+                        use err::ipv4_exts::HeaderWriteError as I;
+                        match err {
+                            I::Io(err) => WriteError::IoError(err),
+                            I::Content(err) => WriteError::Ipv4Exts(err),
+                        }
+                    })?;
                 }
                 Version6(mut ip, ext) => {
                     ip.set_payload_length(ext.header_len() + payload.len())?;
@@ -1599,7 +1605,13 @@ fn final_write<T: io::Write + Sized, B>(
 
                     //write (will automatically calculate the checksum)
                     ip.write(writer)?;
-                    ext.write(writer, ip.protocol)?;
+                    ext.write(writer, ip.protocol).map_err(|err| {
+                        use err::ipv4_exts::HeaderWriteError as I;
+                        match err {
+                            I::Io(err) => WriteError::IoError(err),
+                            I::Content(err) => WriteError::Ipv4Exts(err),
+                        }
+                    })?;
                 }
                 Version6(mut ip, mut ext) => {
                     //set total length
