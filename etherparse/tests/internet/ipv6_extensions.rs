@@ -694,7 +694,7 @@ pub mod header {
 
             /// Run a test with the given ip numbers
             fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8], post_header: IpNumber) {
-                use ValueError::*;
+                use etherparse::err::ipv6_exts::HeaderSerError::*;
 
                 // setup test header
                 let e = ExtensionTestHeaders::new(
@@ -706,8 +706,8 @@ pub mod header {
                     // a hop by hop header that is not at the start triggers an error
                     let mut writer = Vec::with_capacity(e.data.header_len());
                     assert_eq!(
-                        e.data.write(&mut writer, e.ip_numbers[0]).unwrap_err().value_error().unwrap(),
-                        Ipv6ExtensionHopByHopNotAtStart
+                        e.data.write(&mut writer, e.ip_numbers[0]).unwrap_err().content().unwrap(),
+                        &HopByHopNotAtStart
                     );
                 } else {
                     // normal write
@@ -739,7 +739,7 @@ pub mod header {
 
                         assert_eq!(
                             std::io::ErrorKind::UnexpectedEof,
-                            err.io_error().unwrap().kind()
+                            err.io().unwrap().kind()
                         );
                     }
 
@@ -755,8 +755,8 @@ pub mod header {
                         ).unwrap_err();
 
                         assert_eq!(
-                            err.value_error().unwrap(),
-                            Ipv6ExtensionNotReferenced(missing_ip_number)
+                            err.content().unwrap(),
+                            &ExtNotReferenced(missing_ip_number)
                         );
                     }
                 }

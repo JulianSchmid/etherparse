@@ -1560,7 +1560,13 @@ fn final_write<T: io::Write + Sized, B>(
                 Version6(mut ip, ext) => {
                     ip.set_payload_length(ext.header_len() + payload.len())?;
                     ip.write(writer)?;
-                    ext.write(writer, ip.next_header)?;
+                    ext.write(writer, ip.next_header).map_err(|err| {
+                        use err::ipv6_exts::HeaderWriteError as I;
+                        match err {
+                            I::Io(err) => WriteError::IoError(err),
+                            I::Content(err) => WriteError::Ipv6Exts(err),
+                        }
+                    })?;
                 }
             }
         }
@@ -1622,7 +1628,13 @@ fn final_write<T: io::Write + Sized, B>(
 
                     //write (will automatically calculate the checksum)
                     ip.write(writer)?;
-                    ext.write(writer, ip.next_header)?;
+                    ext.write(writer, ip.next_header).map_err(|err| {
+                        use err::ipv6_exts::HeaderWriteError as I;
+                        match err {
+                            I::Io(err) => WriteError::IoError(err),
+                            I::Content(err) => WriteError::Ipv6Exts(err),
+                        }
+                    })?;
                 }
             }
 

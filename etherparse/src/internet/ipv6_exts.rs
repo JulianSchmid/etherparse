@@ -300,9 +300,10 @@ impl Ipv6Extensions {
         &self,
         writer: &mut T,
         first_header: IpNumber,
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), err::ipv6_exts::HeaderWriteError> {
         use ip_number::*;
-        use ValueError::*;
+        use err::ipv6_exts::HeaderWriteError::*;
+        use err::ipv6_exts::HeaderSerError::*;
 
         /// Struct flagging if a header needs to be written.
         struct NeedsWrite {
@@ -333,7 +334,7 @@ impl Ipv6Extensions {
         // check if hop by hop header should be written first
         if IPV6_HOP_BY_HOP == next_header {
             let header = &self.hop_by_hop_options.as_ref().unwrap();
-            header.write(writer)?;
+            header.write(writer).map_err(Io)?;
             next_header = header.next_header;
             needs_write.hop_by_hop_options = false;
         }
@@ -350,7 +351,7 @@ impl Ipv6Extensions {
                     // by hop if it is not part of this extensions struct.
                     if needs_write.hop_by_hop_options {
                         // the hop by hop header is only allowed at the start
-                        return Err(Ipv6ExtensionHopByHopNotAtStart.into());
+                        return Err(Content(HopByHopNotAtStart));
                     } else {
                         break;
                     }
@@ -367,7 +368,7 @@ impl Ipv6Extensions {
                                 .final_destination_options
                                 .as_ref()
                                 .unwrap();
-                            header.write(writer)?;
+                            header.write(writer).map_err(Io)?;
                             next_header = header.next_header;
                             needs_write.final_destination_options = false;
                         } else {
@@ -375,7 +376,7 @@ impl Ipv6Extensions {
                         }
                     } else if needs_write.destination_options {
                         let header = &self.destination_options.as_ref().unwrap();
-                        header.write(writer)?;
+                        header.write(writer).map_err(Io)?;
                         next_header = header.next_header;
                         needs_write.destination_options = false;
                     } else {
@@ -385,7 +386,7 @@ impl Ipv6Extensions {
                 IPV6_ROUTE => {
                     if needs_write.routing {
                         let header = &self.routing.as_ref().unwrap().routing;
-                        header.write(writer)?;
+                        header.write(writer).map_err(Io)?;
                         next_header = header.next_header;
                         needs_write.routing = false;
                         // for destination options
@@ -397,7 +398,7 @@ impl Ipv6Extensions {
                 IPV6_FRAG => {
                     if needs_write.fragment {
                         let header = &self.fragment.as_ref().unwrap();
-                        header.write(writer)?;
+                        header.write(writer).map_err(Io)?;
                         next_header = header.next_header;
                         needs_write.fragment = false;
                     } else {
@@ -407,7 +408,7 @@ impl Ipv6Extensions {
                 AUTH => {
                     if needs_write.auth {
                         let header = &self.auth.as_ref().unwrap();
-                        header.write(writer)?;
+                        header.write(writer).map_err(Io)?;
                         next_header = header.next_header;
                         needs_write.auth = false;
                     } else {
@@ -423,17 +424,17 @@ impl Ipv6Extensions {
 
         // check that all header have been written
         if needs_write.hop_by_hop_options {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_HEADER_HOP_BY_HOP).into())
+            Err(Content(ExtNotReferenced(IpNumber::IPV6_HEADER_HOP_BY_HOP)))
         } else if needs_write.destination_options {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS).into())
+            Err(Content(ExtNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS)))
         } else if needs_write.routing {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_ROUTE_HEADER).into())
+            Err(Content(ExtNotReferenced(IpNumber::IPV6_ROUTE_HEADER)))
         } else if needs_write.fragment {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_FRAGMENTATION_HEADER).into())
+            Err(Content(ExtNotReferenced(IpNumber::IPV6_FRAGMENTATION_HEADER)))
         } else if needs_write.auth {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER).into())
+            Err(Content(ExtNotReferenced(IpNumber::AUTHENTICATION_HEADER)))
         } else if needs_write.final_destination_options {
-            Err(Ipv6ExtensionNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS).into())
+            Err(Content(ExtNotReferenced(IpNumber::IPV6_DESTINATION_OPTIONS)))
         } else {
             Ok(())
         }
