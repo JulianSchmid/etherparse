@@ -458,7 +458,13 @@ impl IpHeader {
         match *self {
             Version4(ref header, ref extensions) => {
                 header.write(writer)?;
-                extensions.write(writer, header.protocol)
+                extensions.write(writer, header.protocol).map_err(|err| {
+                    use err::ipv4_exts::HeaderWriteError as I;
+                    match err {
+                        I::Io(err) => WriteError::IoError(err),
+                        I::Content(err) => WriteError::Ipv4Exts(err),
+                    }
+                })
             }
             Version6(ref header, ref extensions) => {
                 header.write(writer)?;

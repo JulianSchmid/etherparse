@@ -1,6 +1,6 @@
 use super::HeaderSerError;
 
-/// Error when writing IPv6 extension headers.
+/// Error when writing IPv4 extension headers.
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderWriteError {
@@ -20,7 +20,7 @@ impl HeaderWriteError {
         }
     }
 
-    /// Returns a reference to the [`crate::err:ipv6_exts::HeaderSerError`] if the value is an [`HeaderWriteError::Content`].
+    /// Returns a reference to the [`crate::err:ipv4_exts::HeaderSerError`] if the value is an [`HeaderWriteError::Content`].
     pub fn content(&self) -> Option<&HeaderSerError> {
         match self {
             HeaderWriteError::Io(_) => None,
