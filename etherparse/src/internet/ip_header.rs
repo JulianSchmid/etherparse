@@ -462,7 +462,13 @@ impl IpHeader {
             }
             Version6(ref header, ref extensions) => {
                 header.write(writer)?;
-                extensions.write(writer, header.next_header)
+                extensions.write(writer, header.next_header).map_err(|err|{
+                    use err::ipv6_exts::HeaderWriteError as I;
+                    match err {
+                        I::Io(err) => WriteError::IoError(err),
+                        I::Content(err) => WriteError::Ipv6Exts(err),
+                    }
+                })
             }
         }
     }

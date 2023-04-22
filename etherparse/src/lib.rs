@@ -367,6 +367,7 @@ pub enum WriteError {
     IoError(std::io::Error),
     ///Error in the data that was given to write
     ValueError(ValueError),
+    Ipv6Exts(err::ipv6_exts::HeaderSerError),
 }
 
 #[cfg(feature = "std")]
@@ -411,7 +412,9 @@ impl core::fmt::Display for WriteError {
             IoError(err) => err.fmt(f),
             ValueError(err) => {
                 write!(f, "ValueError: {}", err)
-            }
+            },
+            Ipv6Exts(err) => err.fmt(f),
+            
         }
     }
 }
@@ -423,6 +426,7 @@ impl std::error::Error for WriteError {
         match self {
             IoError(ref err) => Some(err),
             ValueError(ref err) => Some(err),
+            Ipv6Exts(ref err) => Some(err),
         }
     }
 }
