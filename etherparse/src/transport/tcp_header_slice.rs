@@ -513,10 +513,10 @@ mod test {
                 [0; 4],
                 //destination ip address
                 [0; 4],
-            );
+            ).unwrap();
 
             // setup slices
-            let ip_bytes = ip_header.to_bytes().unwrap();
+            let ip_bytes = ip_header.to_bytes();
             let ip_slice = Ipv4HeaderSlice::from_slice(&ip_bytes).unwrap();
 
             let tcp_bytes = tcp.to_bytes();
@@ -557,10 +557,10 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            );
+            ).unwrap();
 
             // setup slices
-            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_buffer = ip_header.to_bytes();
             let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer).unwrap();
 
             let tcp_buffer = tcp.to_bytes();
@@ -601,10 +601,10 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            );
+            ).unwrap();
 
             // setup slices
-            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_buffer = ip_header.to_bytes();
             let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer[..]).unwrap();
 
             let tcp_buffer = tcp.to_bytes();
@@ -623,10 +623,10 @@ mod test {
             let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
-            let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]);
+            let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]).unwrap();
 
             // setup slices
-            let ip_buffer = ip_header.to_bytes().unwrap();
+            let ip_buffer = ip_header.to_bytes();
             let ip_slice = Ipv4HeaderSlice::from_slice(&ip_buffer).unwrap();
 
             let tcp_buffer = tcp.to_bytes();

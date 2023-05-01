@@ -27,8 +27,19 @@ impl<'a> Ipv4Slice<'a> {
             }
         })?;
 
-        // check length based on the total length
+        // validate total_len at least contains the header
         let header_total_len: usize = header.total_len().into();
+        if header_total_len < header.slice().len() {
+            return Err(SliceError::Len(LenError {
+                required_len: header.slice().len(),
+                len: header_total_len,
+                len_source: LenSource::Ipv4HeaderTotalLen,
+                layer: Layer::Ipv4Packet,
+                layer_start_offset: 0,
+            }));
+        }
+
+        // check slice length based on the total length
         let header_payload = if slice.len() < header_total_len {
             return Err(SliceError::Len(LenError {
                 required_len: header_total_len,
@@ -155,7 +166,7 @@ mod test {
             let mut ipv4 = ipv4_base.clone();
             ipv4.protocol = crate::ip_number::AUTH;
             ipv4.set_payload_len(auth.header_len() + payload.len()).unwrap();
-            data.extend_from_slice(&ipv4.to_bytes().unwrap());
+            data.extend_from_slice(&ipv4.to_bytes());
             data.extend_from_slice(&auth.to_bytes());
             data.extend_from_slice(&payload);
 
@@ -194,7 +205,7 @@ mod test {
                 let mut ipv4 = ipv4_base.clone();
                 ipv4.set_payload_len(payload.len()).unwrap();
                 ipv4.protocol = crate::ip_number::UDP;
-                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&ipv4.to_bytes());
                 data.extend_from_slice(&payload);
                 data.extend_from_slice(&[0,0,0,0]);
                 data
@@ -210,7 +221,7 @@ mod test {
                 let mut ipv4 = ipv4_base.clone();
                 ipv4.set_payload_len(auth.header_len() + payload.len()).unwrap();
                 ipv4.protocol = crate::ip_number::AUTH;
-                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&ipv4.to_bytes());
                 data.extend_from_slice(&auth.to_bytes());
                 data.extend_from_slice(&payload);
                 data.extend_from_slice(&[0,0,0,0]);
@@ -369,10 +380,10 @@ mod test {
         // non-fragmented
         {
             let payload: [u8; 6] = [1, 2, 3, 4, 5, 6];
-            let ipv4 = Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
+            let ipv4 = Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
             let data = {
                 let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
-                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&ipv4.to_bytes());
                 data.extend_from_slice(&payload);
                 data
             };
@@ -384,11 +395,11 @@ mod test {
         {
             let payload: [u8; 6] = [1, 2, 3, 4, 5, 6];
             let mut ipv4 =
-                Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
+                Ipv4Header::new(payload.len() as u16, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
             ipv4.fragment_offset = 123.try_into().unwrap();
             let data = {
                 let mut data = Vec::with_capacity(ipv4.header_len() + payload.len());
-                data.extend_from_slice(&ipv4.to_bytes().unwrap());
+                data.extend_from_slice(&ipv4.to_bytes());
                 data.extend_from_slice(&payload);
                 data
             };

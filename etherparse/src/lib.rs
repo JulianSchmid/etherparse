@@ -305,6 +305,9 @@ pub use crate::internet::ipv6_raw_ext_header::*;
 pub use crate::internet::ipv6_routing_exts::*;
 pub use crate::internet::ipv6_slice::*;
 
+#[cfg(feature = "std")]
+pub mod io;
+
 mod transport;
 pub use crate::transport::icmp_echo_header::*;
 pub use crate::transport::icmpv4;
@@ -330,6 +333,8 @@ pub use crate::transport::udp_slice::*;
 
 /// Helpers for calculating checksums.
 pub mod checksum;
+
+mod helpers;
 
 #[cfg(feature = "std")]
 mod packet_builder;
@@ -438,8 +443,6 @@ impl std::error::Error for WriteError {
 pub enum ValueError {
     /// Error when the ipv4 options length is too big or not aligned (cannot be bigger then 40 bytes and must be a multiple of 4 bytes).
     Ipv4OptionsLengthBad(usize),
-    /// Error when a given payload & ipv4 header is bigger then what fits inside an ipv4 total_length field.
-    Ipv4PayloadLengthTooLarge(usize),
     /// Error when a given payload & ipv6 header block is bigger then what fits inside an ipv6 payload_length field.
     Ipv6PayloadLengthTooLarge(usize),
     /// Error when a given payload size is smaller then 6 octets which is the minimum ipv6 extended header size ([Ipv6RawExtHeader::MAX_PAYLOAD_LEN]).
@@ -495,9 +498,6 @@ impl core::fmt::Display for ValueError {
         match self {
             Ipv4OptionsLengthBad(options_len) => {
                 write!(f, "Bad IPv4 'options_len'. The IPv4 options length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 40 bytes.", options_len)
-            }
-            Ipv4PayloadLengthTooLarge(total_length) => {
-                write!(f, "IPv4 'total_legnth' too large. The IPv4 header and payload have a larger size ({} bytes) than can be be represented by the 'total_legnth' field in the IPv4 header.", total_length)
             }
             Ipv6PayloadLengthTooLarge(size) => {
                 write!(f, "IPv6 'payload_length' too large. The IPv6 header block & payload size ({} bytes) is larger then what can be be represented by the 'payload_length' field in the IPv6 header.", size)
@@ -557,15 +557,6 @@ impl core::fmt::Display for ValueError {
                 write!(f, "ICMPv6 packet can not be combined with IPv4 headers.")
             }
         }
-    }
-}
-
-fn max_check_u16(value: u16, max: u16, field: err::ValueType) -> Result<(), ValueError> {
-    use crate::ValueError::U16TooLarge;
-    if value <= max {
-        Ok(())
-    } else {
-        Err(U16TooLarge { value, max, field })
     }
 }
 

@@ -1,3 +1,5 @@
+use crate::err::packet::BuildWriteError;
+
 use super::*;
 
 use std::{io, marker};
@@ -247,7 +249,7 @@ impl PacketBuilder {
     ///            ip_number::UDP, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
-    ///        ),
+    ///        ).unwrap(),
     ///        Default::default()))
     ///    .udp(21,    //source port
     ///         1234); //desitnation port
@@ -392,7 +394,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///            ip_number::UDP, //will be replaced during write
     ///            [0,1,2,3], //source
     ///            [4,5,6,7] //destination
-    ///        ),
+    ///        ).unwrap(),
     ///        Default::default()));
     /// ```
     ///
@@ -647,7 +649,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///             ip_number::UDP, //will be replaced during write
     ///             [0,1,2,3], //source
     ///             [4,5,6,7] //destination
-    ///         ),
+    ///         ).unwrap(),
     ///         Default::default() // IPv4 extension headers (default is none)
     ///     ));
     /// ```
@@ -1268,7 +1270,7 @@ impl PacketBuilderStep<IpHeader> {
         writer: &mut T,
         last_next_header_ip_number: IpNumber,
         payload: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), BuildWriteError> {
         self.state
             .ip_header
             .as_mut()
@@ -1289,7 +1291,7 @@ impl PacketBuilderStep<Icmpv4Header> {
         self,
         writer: &mut T,
         payload: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), BuildWriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1305,7 +1307,7 @@ impl PacketBuilderStep<Icmpv6Header> {
         self,
         writer: &mut T,
         payload: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), BuildWriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1321,7 +1323,7 @@ impl PacketBuilderStep<UdpHeader> {
         self,
         writer: &mut T,
         payload: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), BuildWriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1481,7 +1483,7 @@ impl PacketBuilderStep<TcpHeader> {
         self,
         writer: &mut T,
         payload: &[u8],
-    ) -> Result<(), WriteError> {
+    ) -> Result<(), BuildWriteError> {
         final_write(self, writer, payload)
     }
 
@@ -1491,12 +1493,14 @@ impl PacketBuilderStep<TcpHeader> {
     }
 }
 
-///Write all the headers and the payload.
+/// Write all the headers and the payload.
 fn final_write<T: io::Write + Sized, B>(
     builder: PacketBuilderStep<B>,
     writer: &mut T,
     payload: &[u8],
-) -> Result<(), WriteError> {
+) -> Result<(), BuildWriteError> {
+    use BuildWriteError::*;
+
     let ip_ether_type = {
         use crate::IpHeader::*;
         match builder.state.ip_header {
@@ -1518,7 +1522,7 @@ fn final_write<T: io::Write + Sized, B>(
                 None => ip_ether_type,
             }
         };
-        eth.write(writer)?;
+        eth.write(writer).map_err(Io)?;
     }
 
     //write the vlan header if it exists
@@ -1528,14 +1532,14 @@ fn final_write<T: io::Write + Sized, B>(
             //set ether types
             value.ether_type = ip_ether_type;
             //serialize
-            value.write(writer)?;
+            value.write(writer).map_err(Io)?;
         }
         Some(Double(mut value)) => {
             //set ether types
             value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
             value.inner.ether_type = ip_ether_type;
             //serialize
-            value.write(writer)?;
+            value.write(writer).map_err(Io)?;
         }
         None => {}
     }
@@ -1553,24 +1557,24 @@ fn final_write<T: io::Write + Sized, B>(
             // directly and don't need to be set here again.
             match ip_header {
                 Version4(mut ip, ext) => {
-                    ip.set_payload_len(ext.header_len() + payload.len())?;
-                    ip.write(writer)?;
+                    ip.set_payload_len(ext.header_len() + payload.len()).map_err(PayloadLen)?;
+                    ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.protocol).map_err(|err| {
                         use err::ipv4_exts::HeaderWriteError as I;
                         match err {
-                            I::Io(err) => WriteError::IoError(err),
-                            I::Content(err) => WriteError::Ipv4Exts(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Ipv4Exts(err),
                         }
                     })?;
                 }
                 Version6(mut ip, ext) => {
-                    ip.set_payload_length(ext.header_len() + payload.len())?;
-                    ip.write(writer)?;
+                    ip.set_payload_length(ext.header_len() + payload.len()).map_err(PayloadLen)?;
+                    ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.next_header).map_err(|err| {
                         use err::ipv6_exts::HeaderWriteError as I;
                         match err {
-                            I::Io(err) => WriteError::IoError(err),
-                            I::Content(err) => WriteError::Ipv6Exts(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Ipv6Exts(err),
                         }
                     })?;
                 }
@@ -1581,7 +1585,7 @@ fn final_write<T: io::Write + Sized, B>(
                 Version4(mut ip, mut ext) => {
                     //set total length & udp payload length (ip checks that the payload length is ok)
                     let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_len(ext.header_len() + transport_size)?;
+                    ip.set_payload_len(ext.header_len() + transport_size).map_err(PayloadLen)?;
                     use crate::TransportHeader::*;
                     match transport {
                         Icmpv4(_) => {}
@@ -1601,22 +1605,28 @@ fn final_write<T: io::Write + Sized, B>(
                     });
 
                     //calculate the udp checksum
-                    transport.update_checksum_ipv4(&ip, payload)?;
+                    transport.update_checksum_ipv4(&ip, payload).map_err(|err| {
+                        use err::packet::TransportChecksumError as I;
+                        match err {
+                            I::PayloadLen(err) => PayloadLen(err),
+                            I::Icmpv6InIpv4 => Icmpv6InIpv4,
+                        }
+                    })?;
 
                     //write (will automatically calculate the checksum)
-                    ip.write(writer)?;
+                    ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.protocol).map_err(|err| {
                         use err::ipv4_exts::HeaderWriteError as I;
                         match err {
-                            I::Io(err) => WriteError::IoError(err),
-                            I::Content(err) => WriteError::Ipv4Exts(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Ipv4Exts(err),
                         }
                     })?;
                 }
                 Version6(mut ip, mut ext) => {
                     //set total length
                     let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_length(ext.header_len() + transport_size)?;
+                    ip.set_payload_length(ext.header_len() + transport_size).map_err(PayloadLen)?;
                     use crate::TransportHeader::*;
                     match transport {
                         Icmpv4(_) => {}
@@ -1636,25 +1646,25 @@ fn final_write<T: io::Write + Sized, B>(
                     });
 
                     //calculate the udp checksum
-                    transport.update_checksum_ipv6(&ip, payload)?;
+                    transport.update_checksum_ipv6(&ip, payload).map_err(PayloadLen)?;
 
                     //write (will automatically calculate the checksum)
-                    ip.write(writer)?;
+                    ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.next_header).map_err(|err| {
                         use err::ipv6_exts::HeaderWriteError as I;
                         match err {
-                            I::Io(err) => WriteError::IoError(err),
-                            I::Content(err) => WriteError::Ipv6Exts(err),
+                            I::Io(err) => Io(err),
+                            I::Content(err) => Ipv6Exts(err),
                         }
                     })?;
                 }
             }
 
             //finaly write the udp header & payload
-            transport.write(writer)?;
+            transport.write(writer).map_err(Io)?;
         }
     }
-    writer.write_all(payload)?;
+    writer.write_all(payload).map_err(Io)?;
     Ok(())
 }
 

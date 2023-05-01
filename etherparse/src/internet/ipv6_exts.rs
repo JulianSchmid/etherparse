@@ -290,6 +290,138 @@ impl Ipv6Extensions {
         //should not be hit
     }
 
+    /// Reads as many extension headers as possible from the limited reader and returns the found ipv6
+    /// extension headers and the next header ip number.
+    ///
+    /// If no extension headers are present an unfilled struct and the original `first_header`
+    /// ip number is returned.
+    ///
+    /// Note that this function can only handle ipv6 extensions if each extension header does
+    /// occur at most once, except for destination options headers which are allowed to
+    /// exist once in front of a routing header and once after a routing header.
+    ///
+    /// In case that more extension headers then can fit into a `Ipv6Extensions` struct are
+    /// encountered, the parsing is stoped at the point where the data would no longer fit into
+    /// the struct. In such a scenario a struct with the data that could be parsed is returned
+    /// together with the next header ip number that identfies which header could be read next.
+    ///
+    /// It is in the responsibility of the caller to handle a scenario like this.
+    ///
+    /// The reason that no error is generated, is that even though according to RFC 8200, packets
+    /// "should" not contain more then one occurence of an extension header, the RFC also specifies
+    /// that "IPv6 nodes must accept and attempt to process extension headers in any order and
+    /// occurring any number of times in the same packet". So packets with multiple headers "should"
+    /// not exist, but are still valid IPv6 packets. As such this function does not generate a
+    /// parsing error, as it is not an invalid packet, but if packets like these are encountered
+    /// the user of this function has to themself decide how to handle packets like these.
+    ///
+    /// The only exception is if an hop by hop header is located somewhere else then directly at
+    /// the start. In this case an `ReadError::Ipv6HopByHopHeaderNotAtStart` error is generated as
+    /// the hop by hop header is required to be located directly after the IPv6 header according
+    /// to RFC 8200.
+    #[cfg(feature = "std")]
+    pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
+        reader: &mut crate::io::LimitedReader<T>,
+        start_ip_number: IpNumber,
+    ) -> Result<(Ipv6Extensions, IpNumber), err::ipv6_exts::HeaderLimitedReadError> {
+        use err::ipv6_exts::{HeaderError::*, HeaderLimitedReadError::{self, *}};
+        use ip_number::*;
+
+        fn map_limited_err(err: err::io::LimitedReadError) -> HeaderLimitedReadError {
+            use crate::err::io::LimitedReadError as I;
+            match err {
+                I::Io(err) => Io(err),
+                I::Len(err) => Len(err),
+            }
+        }
+
+        // start decoding
+        let mut result: Ipv6Extensions = Default::default();
+        let mut next_protocol = start_ip_number;
+
+        // the hop by hop header is required to occur directly after the ipv6 header
+        if IPV6_HOP_BY_HOP == next_protocol {
+            let header = Ipv6RawExtHeader::read_limited(reader).map_err(map_limited_err)?;
+            next_protocol = header.next_header;
+            result.hop_by_hop_options = Some(header);
+        }
+
+        loop {
+            match next_protocol {
+                IPV6_HOP_BY_HOP => {
+                    return Err(Content(HopByHopNotAtStart));
+                }
+                IPV6_DEST_OPTIONS => {
+                    if let Some(ref mut routing) = result.routing {
+                        // if the routing header is already present
+                        // asume this is a "final destination options" header
+                        if routing.final_destination_options.is_some() {
+                            // more then one header of this type found -> abort parsing
+                            return Ok((result, next_protocol));
+                        } else {
+                            let header = Ipv6RawExtHeader::read_limited(reader).map_err(map_limited_err)?;
+                            next_protocol = header.next_header;
+                            routing.final_destination_options = Some(header);
+                        }
+                    } else if result.destination_options.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_protocol));
+                    } else {
+                        let header = Ipv6RawExtHeader::read_limited(reader).map_err(map_limited_err)?;
+                        next_protocol = header.next_header;
+                        result.destination_options = Some(header);
+                    }
+                }
+                IPV6_ROUTE => {
+                    if result.routing.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_protocol));
+                    } else {
+                        let header = Ipv6RawExtHeader::read_limited(reader).map_err(map_limited_err)?;
+                        next_protocol = header.next_header;
+                        result.routing = Some(Ipv6RoutingExtensions {
+                            routing: header,
+                            final_destination_options: None,
+                        });
+                    }
+                }
+                IPV6_FRAG => {
+                    if result.fragment.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_protocol));
+                    } else {
+                        let header = Ipv6FragmentHeader::read_limited(reader).map_err(map_limited_err)?;
+                        next_protocol = header.next_header;
+                        result.fragment = Some(header);
+                    }
+                }
+                AUTH => {
+                    if result.auth.is_some() {
+                        // more then one header of this type found -> abort parsing
+                        return Ok((result, next_protocol));
+                    } else {
+                        let header = IpAuthHeader::read_limited(reader).map_err(|err| {
+                            use err::ip_auth::HeaderLimitedReadError as I;
+                            match err {
+                                I::Io(err) => Io(err),
+                                I::Len(err) => Len(err),
+                                I::Content(err) => Content(IpAuth(err)),
+                            }
+                        })?;
+                        next_protocol = header.next_header;
+                        result.auth = Some(header);
+                    }
+                }
+                _ => {
+                    // done parsing, the next header is not a known header extension
+                    return Ok((result, next_protocol));
+                }
+            }
+        }
+
+        //should not be hit
+    }
+
     /// Writes the given headers to a writer based on the order defined in the next_header fields of
     /// the headers and the first header_id passed to this function.
     ///

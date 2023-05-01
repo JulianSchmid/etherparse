@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::ValueTooBigError};
 
 /// IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -285,11 +285,17 @@ impl Ipv6Header {
     }
 
     /// Sets the field total_length based on the size of the payload and the options. Returns an error if the payload is too big to fit.
-    pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueError> {
-        //check that the total length fits into the field
+    pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueTooBigError<usize>> {
+        use crate::err::ValueType;
+        // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = core::u16::MAX as usize;
         if MAX_PAYLOAD_LENGTH < size {
-            return Err(ValueError::Ipv6PayloadLengthTooLarge(size));
+            //return Err(ValueError::Ipv6PayloadLengthTooLarge(size));
+            return Err(ValueTooBigError{
+                actual: size,
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: ValueType::Ipv6PayloadLength,
+            });
         }
 
         self.payload_length = size as u16;

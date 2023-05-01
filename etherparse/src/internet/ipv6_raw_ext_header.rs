@@ -169,6 +169,33 @@ impl Ipv6RawExtHeader {
         })
     }
 
+    /// Read an fragment header from the current limited reader position.
+    #[cfg(feature = "std")]
+    pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
+        reader: &mut crate::io::LimitedReader<T>,
+    ) -> Result<Ipv6RawExtHeader, err::io::LimitedReadError> {
+
+        // set layer start
+        reader.start_layer(err::Layer::Ipv6ExtHeader);
+
+        // read next & len
+        let (next_header, header_length) = {
+            let mut d: [u8; 2] = [0; 2];
+            reader.read_exact(&mut d)?;
+            (IpNumber(d[0]), d[1])
+        };
+
+        Ok(Ipv6RawExtHeader {
+            next_header,
+            header_length,
+            payload_buffer: {
+                let mut buffer = [0; 0xff * 8 + 6];
+                reader.read_exact(&mut buffer[..usize::from(header_length) * 8 + 6])?;
+                buffer
+            },
+        })
+    }
+
     /// Writes a given IPv6 extension header to the current position.
     #[cfg(feature = "std")]
     pub fn write<W: std::io::Write + Sized>(&self, writer: &mut W) -> Result<(), std::io::Error> {

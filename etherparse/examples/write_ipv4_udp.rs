@@ -32,7 +32,7 @@ fn main() {
         ip_number::UDP,    //contained protocol is udp
         [192, 168, 1, 42], //source ip address
         [192, 168, 1, 1],  //destination ip address
-    );
+    ).unwrap();
 
     //write the ipv4 header
     //

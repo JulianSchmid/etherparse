@@ -1,16 +1,16 @@
-use crate::err::LenError;
 use super::HeaderError;
+use crate::err::LenError;
 
-/// Error when decoding an IP header via a `std::io::Read` source.
+/// Error when decoding IPv6 extension headers via a `std::io::Read` source.
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub enum HeaderReadError {
+pub enum HeaderLimitedReadError {
     /// IO error was encoutered while reading header.
     Io(std::io::Error),
 
-    /// Errors caused by conflicts with the lengths defined
-    /// in the headers (i.e. IPv4 length too small to read the
-    /// lower layer headers)
+    /// Error when parsing had to be aborted because a
+    /// length limit specified by an upper layer has been
+    /// exceeded.
     Len(LenError),
 
     /// Error caused by the contents of the header.
@@ -18,34 +18,34 @@ pub enum HeaderReadError {
 }
 
 #[cfg(feature = "std")]
-impl HeaderReadError {
-    /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
+impl HeaderLimitedReadError {
+    /// Returns the [`std::io::Error`] value if the [`HeaderLimitedReadError`] is `Io`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn io(self) -> Option<std::io::Error> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Io(value) => Some(value),
             _ => None,
         }
     }
 
-    /// Returns the `err::LenError` value if the `HeaderReadError` is `Len`.
+    /// Returns the [`crate::err::LenError`] value if it is of value `Len`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn len(self) -> Option<LenError> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Len(value) => Some(value),
             _ => None,
         }
     }
 
-    /// Returns the `err::ip::HeaderError` value if the `HeaderReadError` is `Content`.
+    /// Returns the [`crate::err::ip_auth::HeaderError`] value if it is of value `Content`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn content(self) -> Option<HeaderError> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Content(value) => Some(value),
             _ => None,
@@ -54,11 +54,11 @@ impl HeaderReadError {
 }
 
 #[cfg(feature = "std")]
-impl core::fmt::Display for HeaderReadError {
+impl core::fmt::Display for HeaderLimitedReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
-            Io(err) => write!(f, "IP Header IO Error: {}", err),
+            Io(err) => write!(f, "IPv6 Extension Header IO Error: {}", err),
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
         }
@@ -66,9 +66,9 @@ impl core::fmt::Display for HeaderReadError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeaderReadError {
+impl std::error::Error for HeaderLimitedReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Io(err) => Some(err),
             Len(err) => Some(err),
@@ -79,12 +79,14 @@ impl std::error::Error for HeaderReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use super::{HeaderReadError::*, *};
+    use crate::err::{LenSource, Layer};
+
+    use super::{HeaderLimitedReadError::*, *};
     use alloc::format;
 
     #[test]
     fn debug() {
-        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+        let err = HeaderError::HopByHopNotAtStart;
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -99,12 +101,22 @@ mod test {
                 "failed to fill whole buffer",
             );
             assert_eq!(
-                format!("IP Header IO Error: {}", err),
+                format!("IPv6 Extension Header IO Error: {}", err),
                 format!("{}", Io(err))
             );
         }
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            };
+            assert_eq!(format!("{}", &err), format!("{}", Len(err.clone())));
+        }
+        {
+            let err = HeaderError::HopByHopNotAtStart;
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -119,10 +131,15 @@ mod test {
         .source()
         .is_some());
         assert!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
-                .source()
-                .is_some()
+            Len(LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            }).source().is_some()
         );
+        assert!(Content(HeaderError::HopByHopNotAtStart).source().is_some());
     }
 
     #[test]
@@ -133,11 +150,29 @@ mod test {
         ))
         .io()
         .is_some());
-        assert!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
-                .io()
-                .is_none()
+        assert!(Content(HeaderError::HopByHopNotAtStart).io().is_none());
+    }
+
+    #[test]
+    fn len() {
+        assert_eq!(
+            None,
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+            .len()
         );
+        {
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            };
+            assert_eq!(Some(err.clone()), Len(err.clone()).len());
+        }
     }
 
     #[test]
@@ -151,7 +186,7 @@ mod test {
             .content()
         );
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+            let err = HeaderError::HopByHopNotAtStart;
             assert_eq!(Some(err.clone()), Content(err.clone()).content());
         }
     }

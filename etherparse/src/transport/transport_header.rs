@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::{packet::TransportChecksumError, ValueTooBigError}};
 
 /// The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -116,19 +116,19 @@ impl TransportHeader {
         &mut self,
         ip_header: &Ipv4Header,
         payload: &[u8],
-    ) -> Result<(), ValueError> {
-        use crate::TransportHeader::*;
+    ) -> Result<(), TransportChecksumError> {
+        use crate::{TransportHeader::*, err::packet::TransportChecksumError::*};
         match self {
             Udp(header) => {
-                header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
+                header.checksum = header.calc_checksum_ipv4(ip_header, payload).map_err(PayloadLen)?;
             }
             Tcp(header) => {
-                header.checksum = header.calc_checksum_ipv4(ip_header, payload)?;
+                header.checksum = header.calc_checksum_ipv4(ip_header, payload).map_err(PayloadLen)?;
             }
             Icmpv4(header) => {
                 header.update_checksum(payload);
             }
-            Icmpv6(_) => return Err(ValueError::Icmpv6InIpv4),
+            Icmpv6(_) => return Err(Icmpv6InIpv4),
         }
         Ok(())
     }
@@ -139,7 +139,7 @@ impl TransportHeader {
         &mut self,
         ip_header: &Ipv6Header,
         payload: &[u8],
-    ) -> Result<(), ValueError> {
+    ) -> Result<(), ValueTooBigError<usize>> {
         use crate::TransportHeader::*;
         match self {
             Icmpv4(header) => header.update_checksum(payload),
@@ -173,7 +173,6 @@ impl TransportHeader {
 mod test {
     use crate::{test_gens::*, *};
     use alloc::{format, vec::Vec};
-    use assert_matches::assert_matches;
     use core::slice;
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -312,9 +311,10 @@ mod test {
             udp in udp_any(),
             tcp in tcp_any(),
             icmpv4 in icmpv4_header_any(),
-            icmpv6 in icmpv6_header_any(),
+            icmpv6 in icmpv6_header_any()
         ) {
             use TransportHeader::*;
+            use crate::err::{ValueTooBigError, ValueType, packet::TransportChecksumError::*};
 
             // udp
             {
@@ -340,7 +340,14 @@ mod test {
                             len
                         )
                     };
-                    assert_eq!(Err(ValueError::UdpPayloadLengthTooLarge(len)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
+                    assert_eq!(
+                        transport.update_checksum_ipv4(&ipv4, &tcp_payload),
+                        Err(PayloadLen(ValueTooBigError{
+                            actual: len,
+                            max_allowed: (core::u16::MAX as usize) - UdpHeader::LEN,
+                            value_type: ValueType::UdpPayloadLengthIpv4
+                        }))
+                    );
                 }
             }
             // tcp
@@ -367,10 +374,17 @@ mod test {
                             len
                         )
                     };
-                    assert_eq!(Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)), transport.update_checksum_ipv4(&ipv4, &tcp_payload));
+                    assert_eq!(
+                        transport.update_checksum_ipv4(&ipv4, &tcp_payload),
+                        Err(PayloadLen(ValueTooBigError{
+                            actual: len,
+                            max_allowed: (core::u16::MAX as usize) - usize::from(tcp.header_len()),
+                            value_type: ValueType::TcpPayloadLengthIpv4
+                        }))
+                    );
                 }
             }
-
+            
             // icmpv4
             {
                 let mut transport = Icmpv4(icmpv4.clone());
@@ -381,11 +395,11 @@ mod test {
                     icmpv4.icmp_type.calc_checksum(&payload)
                 );
             }
-
+            
             // icmpv6 (error)
             assert_eq!(
                 Icmpv6(icmpv6).update_checksum_ipv4(&ipv4, &[]),
-                Err(ValueError::Icmpv6InIpv4)
+                Err(Icmpv6InIpv4)
             );
         }
     }
@@ -401,6 +415,7 @@ mod test {
             icmpv6 in icmpv6_header_any(),
         ) {
             use TransportHeader::*;
+            use crate::err::{ValueTooBigError, ValueType};
 
             // udp
             {
@@ -427,11 +442,16 @@ mod test {
                         )
                     };
                     assert_eq!(
-                        Err(ValueError::UdpPayloadLengthTooLarge(len)),
-                        transport.update_checksum_ipv6(&ipv6, &payload)
+                        transport.update_checksum_ipv6(&ipv6, &payload),
+                        Err(ValueTooBigError{
+                            actual: len,
+                            max_allowed: (core::u32::MAX as usize) - UdpHeader::LEN,
+                            value_type: ValueType::UdpPayloadLengthIpv6
+                        })
                     );
                 }
             }
+            
             // tcp
             {
                 //ok case
@@ -456,10 +476,17 @@ mod test {
                             len
                         )
                     };
-                    assert_eq!(Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)), transport.update_checksum_ipv6(&ipv6, &tcp_payload));
+                    assert_eq!(
+                        transport.update_checksum_ipv6(&ipv6, &tcp_payload),
+                        Err(ValueTooBigError{
+                            actual: len,
+                            max_allowed: (core::u32::MAX - tcp.header_len() as u32) as usize,
+                            value_type: ValueType::TcpPayloadLengthIpv6
+                        })
+                    );
                 }
             }
-
+            
             // icmpv4
             {
                 let mut transport = Icmpv4(icmpv4.clone());
@@ -499,9 +526,13 @@ mod test {
                             (core::u32::MAX - 7) as usize
                         )
                     };
-                    assert_matches!(
+                    assert_eq!(
                         transport.update_checksum_ipv6(&ipv6, too_big_slice),
-                        Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                        Err(ValueTooBigError{
+                            actual: too_big_slice.len(),
+                            max_allowed: (core::u32::MAX - 8) as usize,
+                            value_type: ValueType::Icmpv6PayloadLength,
+                        })
                     );
                 }
             }

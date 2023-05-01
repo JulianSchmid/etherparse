@@ -269,9 +269,8 @@ impl Icmpv4Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv4::*, test_gens::*, *};
+    use crate::{icmpv4::*, test_gens::*, *, err::{LenError, LenSource, Layer}};
     use alloc::{format, vec::Vec};
-    use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     #[test]
@@ -347,9 +346,19 @@ mod test {
 
             // error case
             for bad_len in 0..header.header_len() {
-                assert_matches!(
+                assert_eq!(
                     Icmpv4Header::from_slice(&buffer[..bad_len]),
-                    Err(_)
+                    Err(LenError{
+                        required_len: if bad_len < Icmpv4Header::MIN_LEN {
+                            Icmpv4Header::MIN_LEN
+                        } else {
+                            header.header_len()
+                        },
+                        len: bad_len,
+                        len_source: LenSource::Slice,
+                        layer: Layer::Icmpv4,
+                        layer_start_offset: 0,
+                    })
                 );
             }
         }
@@ -394,10 +403,7 @@ mod test {
                 // size error case
                 for bad_len in 0..expected.header_len() {
                     let mut cursor = std::io::Cursor::new(&(b.as_ref()[..bad_len]));
-                    assert_matches!(
-                        Icmpv4Header::read(&mut cursor),
-                        Err(_)
-                    );
+                    assert!(Icmpv4Header::read(&mut cursor).is_err());
                 }
             }
         }

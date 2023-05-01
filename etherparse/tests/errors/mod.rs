@@ -51,7 +51,6 @@ fn value_error_source() {
 
     let none_values = [
         Ipv4OptionsLengthBad(0),
-        Ipv4PayloadLengthTooLarge(0),
         Ipv6PayloadLengthTooLarge(0),
         Ipv6ExtensionPayloadTooLarge(0),
         IpAuthenticationHeaderBadIcvLength(0),
@@ -89,7 +88,6 @@ fn value_error_debug() {
 
     let values = [
         Ipv4OptionsLengthBad(0),
-        Ipv4PayloadLengthTooLarge(0),
         Ipv6PayloadLengthTooLarge(0),
         Ipv6ExtensionPayloadTooLarge(0),
         IpAuthenticationHeaderBadIcvLength(0),
@@ -140,12 +138,6 @@ proptest! {
         assert_eq!(
             &format!("Bad IPv4 'options_len'. The IPv4 options length ({} bytes) is either not a multiple of 4 bytes or bigger then the maximum of 40 bytes.", arg_usize),
             &format!("{}", Ipv4OptionsLengthBad(arg_usize))
-        );
-
-        //Ipv4PayloadLengthTooLarge
-        assert_eq!(
-            &format!("IPv4 'total_legnth' too large. The IPv4 header and payload have a larger size ({} bytes) than can be be represented by the 'total_legnth' field in the IPv4 header.", arg_usize),
-            &format!("{}", Ipv4PayloadLengthTooLarge(arg_usize))
         );
 
         //Ipv6PayloadLengthTooLarge

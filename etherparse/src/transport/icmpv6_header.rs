@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::ValueTooBigError};
 use arrayvec::ArrayVec;
 
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
@@ -49,7 +49,7 @@ impl Icmpv6Header {
         source_ip: [u8; 16],
         destination_ip: [u8; 16],
         payload: &[u8],
-    ) -> Result<Icmpv6Header, ValueError> {
+    ) -> Result<Icmpv6Header, ValueTooBigError<usize>> {
         let checksum = icmp_type.calc_checksum(source_ip, destination_ip, payload)?;
         Ok(Icmpv6Header {
             icmp_type,
@@ -103,7 +103,7 @@ impl Icmpv6Header {
         source_ip: [u8; 16],
         destination_ip: [u8; 16],
         payload: &[u8],
-    ) -> Result<(), ValueError> {
+    ) -> Result<(), ValueTooBigError<usize>> {
         self.checksum = self
             .icmp_type
             .calc_checksum(source_ip, destination_ip, payload)?;
@@ -188,10 +188,9 @@ impl Icmpv6Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv6::*, test_gens::*, *};
+    use crate::{icmpv6::*, test_gens::*, *, err::{ValueTooBigError, ValueType}};
     use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
-    use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     proptest! {
@@ -231,9 +230,13 @@ mod test {
                         bad_len
                     )
                 };
-                assert_matches!(
+                assert_eq!(
                     Icmpv6Header::with_checksum(icmp_type.clone(), ip_header.source, ip_header.destination, too_big_slice),
-                    Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                    Err(ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (core::u32::MAX - 8) as usize,
+                        value_type: ValueType::Icmpv6PayloadLength,
+                    })
                 );
             }
 
@@ -314,10 +317,7 @@ mod test {
             // size error case
             for length in 0..header.header_len() {
                 let mut cursor = std::io::Cursor::new(&bytes[..length]);
-                assert_matches!(
-                    Icmpv6Header::read(&mut cursor),
-                    Err(_)
-                );
+                assert!(Icmpv6Header::read(&mut cursor).is_err());
             }
         }
     }
@@ -406,12 +406,16 @@ mod test {
                         bad_len
                     )
                 };
-                assert_matches!(
+                assert_eq!(
                     Icmpv6Header{
                         icmp_type,
                         checksum: 0
                     }.update_checksum(ip_header.source, ip_header.destination, too_big_slice),
-                    Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                    Err(ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (u32::MAX - 8) as usize,
+                        value_type: ValueType::Icmpv6PayloadLength
+                    })
                 );
             }
 
