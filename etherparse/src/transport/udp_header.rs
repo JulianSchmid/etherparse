@@ -25,11 +25,15 @@ impl UdpHeader {
         source_port: u16,
         destination_port: u16,
         payload_length: usize,
-    ) -> Result<UdpHeader, ValueError> {
-        //check that the total length fits into the field
+    ) -> Result<UdpHeader, ValueTooBigError<usize>> {
+        // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload_length {
-            return Err(ValueError::UdpPayloadLengthTooLarge(payload_length));
+            return Err(ValueTooBigError{
+                actual: payload_length,
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: err::ValueType::UdpPayloadLengthIpv4,
+            });
         }
 
         Ok(UdpHeader {
@@ -46,11 +50,15 @@ impl UdpHeader {
         destination_port: u16,
         ip_header: &Ipv4Header,
         payload: &[u8],
-    ) -> Result<UdpHeader, ValueError> {
-        //check that the total length fits into the field
+    ) -> Result<UdpHeader, ValueTooBigError<usize>> {
+        // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: err::ValueType::UdpPayloadLengthIpv4,
+            });
         }
 
         let mut result = UdpHeader {
@@ -80,7 +88,7 @@ impl UdpHeader {
         destination: [u8; 4],
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
-        //check that the total length fits into the field
+        // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueTooBigError{
@@ -117,11 +125,15 @@ impl UdpHeader {
         destination_port: u16,
         ip_header: &Ipv6Header,
         payload: &[u8],
-    ) -> Result<UdpHeader, ValueError> {
-        //check that the total length fits into the field
+    ) -> Result<UdpHeader, ValueTooBigError<usize>> {
+        // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
-        if MAX_PAYLOAD_LENGTH <= payload.len() {
-            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+        if MAX_PAYLOAD_LENGTH < payload.len() {
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: err::ValueType::UdpPayloadLengthIpv6,
+            });
         }
 
         let mut result = UdpHeader {
@@ -316,7 +328,11 @@ mod test {
                 ).unwrap_err();
                 assert_eq!(
                     actual,
-                    ValueError::UdpPayloadLengthTooLarge(bad_payload_length)
+                    ValueTooBigError{
+                        actual: bad_payload_length,
+                        max_allowed: usize::from(u16::MAX) - UdpHeader::LEN,
+                        value_type: err::ValueType::UdpPayloadLengthIpv4,
+                    }
                 );
             }
         }
@@ -432,13 +448,17 @@ mod test {
                     )
                 };
                 assert_eq!(
-                    ValueError::UdpPayloadLengthTooLarge(bad_len),
                     UdpHeader::with_ipv4_checksum(
                         source_port,
                         destination_port,
                         &ipv4,
                         &too_big_slice
-                    ).unwrap_err()
+                    ).unwrap_err(),
+                    ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: usize::from(u16::MAX) - UdpHeader::LEN,
+                        value_type: err::ValueType::UdpPayloadLengthIpv4,
+                    }
                 );
             }
         }
@@ -662,13 +682,17 @@ mod test {
                     )
                 };
                 assert_eq!(
-                    ValueError::UdpPayloadLengthTooLarge(bad_len),
                     UdpHeader::with_ipv6_checksum(
                         source_port,
                         destination_port,
                         &ipv6,
                         &too_big_slice
-                    ).unwrap_err()
+                    ).unwrap_err(),
+                    ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: usize::from(u16::MAX) - UdpHeader::LEN,
+                        value_type: err::ValueType::UdpPayloadLengthIpv6,
+                    }
                 );
             }
         }
@@ -761,13 +785,17 @@ mod test {
                     )
                 };
                 assert_eq!(
-                    ValueError::UdpPayloadLengthTooLarge(bad_len),
                     UdpHeader::with_ipv6_checksum(
                         source_port,
                         destination_port,
                         &ipv6,
                         &too_big_slice
-                    ).unwrap_err()
+                    ).unwrap_err(),
+                    ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: usize::from(u16::MAX) - UdpHeader::LEN,
+                        value_type: err::ValueType::UdpPayloadLengthIpv6,
+                    }
                 );
             }
         }
