@@ -324,7 +324,7 @@ impl<'a> TcpHeaderSlice<'a> {
         &self,
         ip_header: &Ipv6HeaderSlice,
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, ValueTooBigError<usize>> {
         self.calc_checksum_ipv6_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
@@ -334,19 +334,26 @@ impl<'a> TcpHeaderSlice<'a> {
         source: [u8; 16],
         destination: [u8; 16],
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
-        //check that the total length fits into the field
-        let tcp_length = (self.data_offset() as usize) * 4 + payload.len();
-        if (core::u32::MAX as usize) < tcp_length {
-            return Err(ValueError::TcpLengthTooLarge(tcp_length));
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        // check that the total length fits into the field
+        let header_len = self.slice.len() as u32;
+        let max_payload = (core::u32::MAX as usize) - (header_len as usize);
+        if max_payload < payload.len() {
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: max_payload,
+                value_type: ValueType::TcpPayloadLengthIpv6,
+            });
         }
 
+        // calculate the checksum
+        let tcp_len = header_len + (payload.len() as u32);
         Ok(self.calc_checksum_post_ip(
             checksum::Sum16BitWords::new()
                 .add_16bytes(source)
                 .add_16bytes(destination)
                 .add_2bytes([0, ip_number::TCP.0])
-                .add_4bytes((tcp_length as u32).to_be_bytes()),
+                .add_4bytes((tcp_len).to_be_bytes()),
             payload,
         ))
     }
@@ -839,8 +846,12 @@ mod test {
 
             // check for an error during checksum calc
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)),
-                tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload)
+                tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload),
+                Err(ValueTooBigError{
+                    actual: len,
+                    max_allowed: core::u32::MAX as usize - tcp.header_len() as usize,
+                    value_type: ValueType::TcpPayloadLengthIpv6,
+                })
             );
         }
     }
@@ -907,12 +918,16 @@ mod test {
 
             // expect an length error
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(core::u32::MAX as usize + 1)),
                 tcp_slice.calc_checksum_ipv6_raw(
                     [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
                     [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
                     &tcp_payload
-                )
+                ),
+                Err(ValueTooBigError{
+                    actual: len,
+                    max_allowed: core::u32::MAX as usize - tcp.header_len() as usize,
+                    value_type: ValueType::TcpPayloadLengthIpv6,
+                })
             );
         }
     }
