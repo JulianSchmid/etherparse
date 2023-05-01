@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::{ValueTooBigError, ValueType}};
 
 /// A slice containing an tcp header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -285,7 +285,7 @@ impl<'a> TcpHeaderSlice<'a> {
         &self,
         ip_header: &Ipv4HeaderSlice,
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, ValueTooBigError<usize>> {
         self.calc_checksum_ipv4_raw(ip_header.source(), ip_header.destination(), payload)
     }
 
@@ -295,20 +295,26 @@ impl<'a> TcpHeaderSlice<'a> {
         source_ip: [u8; 4],
         destination_ip: [u8; 4],
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
-        //check that the total length fits into the field
-        let tcp_length = self.slice.len() + payload.len();
-        if (core::u16::MAX as usize) < tcp_length {
-            return Err(ValueError::TcpLengthTooLarge(tcp_length));
+    ) -> Result<u16, ValueTooBigError<usize>> {
+        // check that the total length fits into the field
+        let header_len = self.slice.len() as u16;
+        let max_payload = usize::from(core::u16::MAX) - usize::from(header_len);
+        if max_payload < payload.len() {
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: max_payload,
+                value_type: ValueType::TcpPayloadLengthIpv4,
+            });
         }
-
-        //calculate the checksum
+        
+        // calculate the checksum
+        let tcp_len = header_len + (payload.len() as u16);
         Ok(self.calc_checksum_post_ip(
             checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
                 .add_2bytes([0, ip_number::TCP.0])
-                .add_2bytes((tcp_length as u16).to_be_bytes()),
+                .add_2bytes((tcp_len).to_be_bytes()),
             payload,
         ))
     }
@@ -363,7 +369,7 @@ impl<'a> TcpHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        err::tcp::{HeaderError::*, HeaderSliceError::*},
+        err::{tcp::{HeaderError::*, HeaderSliceError::*}, ValueTooBigError, ValueType},
         test_gens::*,
         TcpOptionElement::*,
         *,
@@ -633,8 +639,12 @@ mod test {
             let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
 
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)),
-                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload)
+                tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload),
+                Err(ValueTooBigError{
+                    actual: len,
+                    max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
+                    value_type: ValueType::TcpPayloadLengthIpv4,
+                })
             );
         }
     }
@@ -729,8 +739,12 @@ mod test {
             let tcp_slice = TcpHeaderSlice::from_slice(&tcp_buffer).unwrap();
 
             assert_eq!(
-                Err(ValueError::TcpLengthTooLarge(core::u16::MAX as usize + 1)),
-                tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload)
+                tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload),
+                Err(ValueTooBigError{
+                    actual: len,
+                    max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
+                    value_type: ValueType::TcpPayloadLengthIpv4,
+                })
             );
         }
     }
