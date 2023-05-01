@@ -180,6 +180,7 @@ impl From<ip::HeaderReadError> for ReadError {
         use ip::HeaderReadError::*;
         match value {
             Io(err) => ReadError::Io(err),
+            Len(err) => ReadError::Len(err),
             Content(err) => ReadError::Ip(err),
         }
     }

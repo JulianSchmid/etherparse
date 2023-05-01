@@ -1,34 +1,51 @@
 use super::HeaderError;
+use crate::err::LenError;
 
 /// Error when decoding an IP authentification header via a `std::io::Read` source.
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub enum HeaderReadError {
+pub enum HeaderLimitedReadError {
     /// IO error was encoutered while reading header.
     Io(std::io::Error),
+
+    /// Error when parsing had to be aborted because a
+    /// length limit specified by an upper layer has been
+    /// exceeded.
+    Len(LenError),
 
     /// Error caused by the contents of the header.
     Content(HeaderError),
 }
 
 #[cfg(feature = "std")]
-impl HeaderReadError {
-    /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
+impl HeaderLimitedReadError {
+    /// Returns the `std::io::Error` value if the `HeaderLimitedReadError` is `Io`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn io(self) -> Option<std::io::Error> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Io(value) => Some(value),
             _ => None,
         }
     }
 
-    /// Returns the `err::ip_auth::HeaderError` value if it is of value `Content`.
+    /// Returns the [`crate::err::LenError`] value if it is of value `Len`.
+    /// Otherwise `None` is returned.
+    #[inline]
+    pub fn len(self) -> Option<LenError> {
+        use HeaderLimitedReadError::*;
+        match self {
+            Len(value) => Some(value),
+            _ => None,
+        }
+    }
+
+    /// Returns the [`crate::err::ip_auth::HeaderError`] value if it is of value `Content`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn content(self) -> Option<HeaderError> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Content(value) => Some(value),
             _ => None,
@@ -37,22 +54,24 @@ impl HeaderReadError {
 }
 
 #[cfg(feature = "std")]
-impl core::fmt::Display for HeaderReadError {
+impl core::fmt::Display for HeaderLimitedReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Io(err) => write!(f, "IP Authentification Header IO Error: {}", err),
-            Content(value) => value.fmt(f),
+            Len(err) => err.fmt(f),
+            Content(err) => err.fmt(f),
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeaderReadError {
+impl std::error::Error for HeaderLimitedReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeaderReadError::*;
+        use HeaderLimitedReadError::*;
         match self {
             Io(err) => Some(err),
+            Len(err) => Some(err),
             Content(err) => Some(err),
         }
     }
@@ -60,7 +79,9 @@ impl std::error::Error for HeaderReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use super::{HeaderReadError::*, *};
+    use crate::err::{LenSource, Layer};
+
+    use super::{HeaderLimitedReadError::*, *};
     use alloc::format;
 
     #[test]
@@ -85,6 +106,16 @@ mod test {
             );
         }
         {
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            };
+            assert_eq!(format!("{}", &err), format!("{}", Len(err.clone())));
+        }
+        {
             let err = HeaderError::ZeroPayloadLen;
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
@@ -99,6 +130,15 @@ mod test {
         ))
         .source()
         .is_some());
+        assert!(
+            Len(LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            }).source().is_some()
+        );
         assert!(Content(HeaderError::ZeroPayloadLen).source().is_some());
     }
 
@@ -111,6 +151,28 @@ mod test {
         .io()
         .is_some());
         assert!(Content(HeaderError::ZeroPayloadLen).io().is_none());
+    }
+
+    #[test]
+    fn len() {
+        assert_eq!(
+            None,
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+            .len()
+        );
+        {
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::IpAuthHeader,
+                layer_start_offset: 3,
+            };
+            assert_eq!(Some(err.clone()), Len(err.clone()).len());
+        }
     }
 
     #[test]

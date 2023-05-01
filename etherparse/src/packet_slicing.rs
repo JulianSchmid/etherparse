@@ -770,7 +770,7 @@ mod test {
         // ipv4
         for fragmented in [false, true] {
             let ipv4 = {
-                let mut ipv4 = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10]);
+                let mut ipv4 = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
                 ipv4.more_fragments = fragmented;
                 ipv4
             };
@@ -844,17 +844,22 @@ mod test {
                     data[ipv4_offset + 2] = 0;
                     data[ipv4_offset + 3] = 0;
 
+                    let err = LenError {
+                        required_len: ipv4.header_len(),
+                        len: 0,
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        layer: Layer::Ipv4Packet,
+                        layer_start_offset: {
+                            test.link.as_ref().map(|h| h.header_len()).unwrap_or(0)
+                            + test.vlan.as_ref().map(|h| h.header_len()).unwrap_or(0)
+                        },
+                    };
+
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4(err::ipv4::HeaderError::TotalLengthSmallerThanHeader {
-                            total_length: 0,
-                            min_expected_length: ipv4.header_len() as u16,
-                        }),
-                        IpSliceError::Ip(err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader {
-                            total_length: 0,
-                            min_expected_length: ipv4.header_len() as u16,
-                        }),
+                        EthSliceError::Len(err.clone()),
+                        IpSliceError::Len(err.clone())
                     );
                 }
             }

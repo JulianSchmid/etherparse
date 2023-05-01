@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::{ValueTooBigError, ValueType}};
 
 /// Different kinds of ICMPv6 messages.
 ///
@@ -383,7 +383,7 @@ impl Icmpv6Type {
         source_ip: [u8; 16],
         destination_ip: [u8; 16],
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
         //
         // Note according to RFC 2460 the "Upper-Layer Packet Length" used
@@ -393,7 +393,11 @@ impl Icmpv6Type {
         // between the IPv6 header and the upper-layer header."
         let max_payload_len: usize = (core::u32::MAX as usize) - self.header_len();
         if max_payload_len < payload.len() {
-            return Err(ValueError::Ipv6PayloadLengthTooLarge(payload.len()));
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: max_payload_len,
+                value_type: ValueType::Icmpv6PayloadLength,
+            });
         }
 
         let msg_len = payload.len() + self.header_len();
@@ -444,7 +448,7 @@ impl Icmpv6Type {
         source_ip: [u8; 16],
         destination_ip: [u8; 16],
         payload: &[u8],
-    ) -> Result<Icmpv6Header, ValueError> {
+    ) -> Result<Icmpv6Header, ValueTooBigError<usize>> {
         Ok(Icmpv6Header {
             checksum: self.calc_checksum(source_ip, destination_ip, payload)?,
             icmp_type: self,
@@ -495,9 +499,8 @@ impl Icmpv6Type {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *};
+    use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *, err::{ValueTooBigError, ValueType}};
     use alloc::format;
-    use assert_matches::assert_matches;
     use proptest::prelude::*;
 
     proptest! {
@@ -616,9 +619,13 @@ mod test {
                         bad_len
                     )
                 };
-                assert_matches!(
+                assert_eq!(
                     icmpv6_type.calc_checksum(ip_header.source, ip_header.destination, too_big_slice),
-                    Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                    Err(ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (core::u32::MAX - 8) as usize,
+                        value_type: ValueType::Icmpv6PayloadLength
+                    })
                 );
             }
 
@@ -719,9 +726,13 @@ mod test {
                         bad_len
                     )
                 };
-                assert_matches!(
+                assert_eq!(
                     icmpv6_type.to_header(ip_header.source, ip_header.destination, too_big_slice),
-                    Err(ValueError::Ipv6PayloadLengthTooLarge(_))
+                    Err(ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (core::u32::MAX - 8) as usize,
+                        value_type: ValueType::Icmpv6PayloadLength,
+                    })
                 );
             }
             // normal case

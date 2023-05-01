@@ -112,7 +112,7 @@ impl<'a> IpAuthHeader {
 
     /// Read an authentication header from the current reader position.
     #[cfg(feature = "std")]
-    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
+    pub fn read<T: std::io::Read + Sized>(
         reader: &mut T,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderReadError> {
         use err::ip_auth::HeaderError::*;
@@ -142,6 +142,55 @@ impl<'a> IpAuthHeader {
                     reader
                         .read_exact(&mut buffer[..usize::from(payload_len - 1) * 4])
                         .map_err(Io)?;
+                    buffer
+                },
+            })
+        }
+    }
+
+    /// Read an authentication header from the current reader position
+    /// with a limited reader.
+    #[cfg(feature = "std")]
+    pub fn read_limited<T: std::io::Read + Sized>(
+        reader: &mut crate::io::LimitedReader<T>,
+    ) -> Result<IpAuthHeader, err::ip_auth::HeaderLimitedReadError> {
+        use err::{Layer, ip_auth::HeaderLimitedReadError::{self, *}, ip_auth::HeaderError::*};
+
+        fn map_err(err: err::io::LimitedReadError) -> HeaderLimitedReadError {
+            use err::io::LimitedReadError as I;
+            match err {
+                I::Io(err) => Io(err),
+                I::Len(err) => Len(err),
+            }
+        }
+
+        // notify reader of layer start
+        reader.start_layer(Layer::IpAuthHeader);
+
+        let start = {
+            let mut start = [0; 4 + 4 + 4];
+            reader.read_exact(&mut start).map_err(map_err)?;
+            start
+        };
+
+        let next_header = IpNumber(start[0]);
+        let payload_len = start[1];
+
+        // payload len must be at least 1
+        if payload_len < 1 {
+            Err(Content(ZeroPayloadLen))
+        } else {
+            // read the rest of the header
+            Ok(IpAuthHeader {
+                next_header,
+                spi: u32::from_be_bytes([start[4], start[5], start[6], start[7]]),
+                sequence_number: u32::from_be_bytes([start[8], start[9], start[10], start[11]]),
+                raw_icv_len: payload_len - 1,
+                raw_icv_buffer: {
+                    let mut buffer = [0; 0xfe * 4];
+                    reader
+                        .read_exact(&mut buffer[..usize::from(payload_len - 1) * 4])
+                        .map_err(map_err)?;
                     buffer
                 },
             })
@@ -433,7 +482,7 @@ mod test {
                     assert!(
                         IpAuthHeader::read(&mut cursor)
                             .unwrap_err()
-                            .io_error()
+                            .io()
                             .is_some()
                     );
                 }
@@ -446,7 +495,7 @@ mod test {
                 bytes[1] = 0;
                 let mut cursor = Cursor::new(&bytes);
                 assert_eq!(
-                    IpAuthHeader::read(&mut cursor).unwrap_err().content_error(),
+                    IpAuthHeader::read(&mut cursor).unwrap_err().content(),
                     Some(ZeroPayloadLen)
                 );
             }

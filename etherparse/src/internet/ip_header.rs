@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::err::{Layer, LenError, LenSource};
+use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -72,10 +72,10 @@ impl IpHeader {
                     }
 
                     // check that the slice contains enough data for the entire header + options
-                    let header_length = usize::from(ihl) * 4;
-                    if slice.len() < header_length {
+                    let header_len = usize::from(ihl) * 4;
+                    if slice.len() < header_len {
                         return Err(Len(LenError {
-                            required_len: header_length,
+                            required_len: header_len,
                             len: slice.len(),
                             len_source: LenSource::Slice,
                             layer: Layer::Ipv4Header,
@@ -83,48 +83,45 @@ impl IpHeader {
                         }));
                     }
 
-                    // check the total_length can contain the header
-                    //
-                    // SAFETY:
-                    // Safe as the slice length is checked to be at least
-                    // Ipv4Header::MIN_LEN (20) at the start.
-                    let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
-                    let total_length_usize: usize = total_length.into();
+                    let header = unsafe {
+                        // SAFETY: Safe as the IHL & slice len has been validated
+                        Ipv4HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
+                            slice.as_ptr(),
+                            header_len,
+                        ))
+                        .to_header()
+                    };
 
-                    if total_length_usize < header_length {
-                        return Err(Content(Ipv4TotalLengthSmallerThanHeader {
-                            total_length,
-                            min_expected_length: header_length as u16,
-                        }));
-                    }
-
-                    // check that the length is big enough
-                    if total_length_usize > slice.len() {
+                    // check that the total len is at least containing the header len
+                    let total_len: usize = header.total_len.into();
+                    if total_len < header_len {
                         return Err(Len(LenError {
-                            required_len: total_length.into(),
-                            len: header_length,
-                            len_source: LenSource::Slice,
+                            required_len: header_len,
+                            len: total_len,
+                            len_source: LenSource::Ipv4HeaderTotalLen,
                             layer: Layer::Ipv4Packet,
                             layer_start_offset: 0,
                         }));
                     }
 
-                    let header = unsafe {
-                        // SAFETY: Safe as all IPv4 slice preconditions were validated.
-                        Ipv4HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
-                            slice.as_ptr(),
-                            header_length,
-                        ))
-                        .to_header()
-                    };
-
-                    let rest = unsafe {
-                        core::slice::from_raw_parts(
-                            // SAFETY: Safe as the slice length was validated to be at least header_length
-                            slice.as_ptr().add(header_length),
-                            // SAFETY: Safe as slice length has been validated to be at least total_length_usize long
-                            total_length_usize - header_length,
-                        )
+                    // restrict the rest of the slice based on the total len
+                    let rest = if slice.len() < total_len {
+                        return Err(Len(LenError {
+                            required_len: total_len,
+                            len: slice.len(),
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv4Packet,
+                            layer_start_offset: 0,
+                        }));
+                    } else {
+                        unsafe {
+                            core::slice::from_raw_parts(
+                                // SAFETY: Safe as the slice length was validated to be at least header_length
+                                slice.as_ptr().add(header_len),
+                                // SAFETY: Safe as slice length has been validated to be at least total_length_usize long
+                                total_len - header_len,
+                            )
+                        }
                     };
 
                     let (exts, next_protocol, rest) =
@@ -132,7 +129,7 @@ impl IpHeader {
                             use err::ip_auth::HeaderSliceError as I;
                             match err {
                                 I::Len(mut err) => {
-                                    err.layer_start_offset += header_length;
+                                    err.layer_start_offset += header_len;
                                     err.len_source = LenSource::Ipv4HeaderTotalLen;
                                     Len(err)
                                 }
@@ -262,20 +259,38 @@ impl IpHeader {
             }
         })?;
 
+        // check that the total length at least contains the header
+        let total_len: usize = header.total_len.into();
+        let header_len = header.header_len();
+        let payload_len = if total_len >= header_len {
+            total_len - header_len
+        } else {
+            return Err(Len(LenError {
+                required_len: header_len,
+                len: total_len,
+                len_source: LenSource::Ipv4HeaderTotalLen,
+                layer: Layer::Ipv4Packet,
+                layer_start_offset: 0
+            }));
+        };
+
         // limit rest based on ipv4 total length
-        let payload_len: usize = header.payload_len.into();
-        if payload_len > header_rest.len() {
+        let header_rest = if payload_len > header_rest.len() {
             return Err(Len(err::LenError {
-                required_len: payload_len + header.header_len(),
+                required_len: total_len,
                 len: slice.len(),
                 len_source: LenSource::Slice,
                 layer: Layer::Ipv4Packet,
                 layer_start_offset: 0,
             }));
-        }
-        let header_rest = unsafe {
-            // Safe as the payload_len <= header_rest.len is verfied above
-            core::slice::from_raw_parts(header_rest.as_ptr(), payload_len)
+        } else {
+            unsafe {
+                // Safe as the payload_len <= header_rest.len is verfied above
+                core::slice::from_raw_parts(
+                    header_rest.as_ptr(),
+                    payload_len
+                )
+            }
         };
 
         // read the extension header
@@ -387,6 +402,7 @@ impl IpHeader {
         reader: &mut T,
     ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
         use err::ip::{HeaderError::*, HeaderReadError::*};
+        use crate::io::LimitedReader;
 
         let value = {
             let mut buf = [0; 1];
@@ -410,38 +426,61 @@ impl IpHeader {
                 buffer[0] = value;
                 reader.read_exact(&mut buffer[1..header_len]).map_err(Io)?;
 
-                // validate the total length
-                let total_length = u16::from_be_bytes([buffer[2], buffer[3]]);
-                if total_length < header_len_u16 {
-                    return Err(Content(Ipv4TotalLengthSmallerThanHeader {
-                        total_length,
-                        min_expected_length: header_len_u16,
-                    }));
-                }
+                let header = unsafe {
+                    // SAFETY: Safe as both the IHL and slice len have been verified
+                    Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len])
+                }.to_header();
 
-                let header =
-                    unsafe { Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len]) }
-                        .to_header();
+                // check that the total len is long enough to contain the header
+                let total_len = usize::from(header.total_len);
+                let mut reader = if total_len < header_len {
+                    return Err(Len(LenError {
+                        required_len: header_len,
+                        len: total_len,
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        layer: Layer::Ipv4Packet,
+                        layer_start_offset: 0,
+                    }));
+                } else {
+                    // create a new reader that is limited by the total_len value length
+                    LimitedReader::new(
+                        reader,
+                        total_len - header_len,
+                        LenSource::Ipv4HeaderTotalLen,
+                        Layer::Ipv4Header
+                    )
+                };
 
                 // read the extension headers if present
-                Ipv4Extensions::read(reader, header.protocol)
+                Ipv4Extensions::read_limited(&mut reader, header.protocol)
                     .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
                     .map_err(|err| {
-                        use err::ip_auth::HeaderReadError as I;
+                        use err::ip_auth::HeaderLimitedReadError as I;
                         match err {
                             I::Io(err) => Io(err),
+                            I::Len(err) => Len(err),
                             I::Content(err) => Content(Ipv4Ext(err)),
                         }
                     })
             }
             6 => {
                 let header = Ipv6Header::read_without_version(reader, value & 0xf).map_err(Io)?;
-                Ipv6Extensions::read(reader, header.next_header)
+
+                // create a new reader that is limited by the payload_len value length
+                let mut reader = LimitedReader::new(
+                    reader,
+                    header.payload_length.into(),
+                    LenSource::Ipv6HeaderPayloadLen,
+                    Layer::Ipv6Header
+                );
+
+                Ipv6Extensions::read_limited(&mut reader, header.next_header)
                     .map(|(ext, next)| (IpHeader::Version6(header, ext), next))
                     .map_err(|err| {
-                        use err::ipv6_exts::HeaderReadError as I;
+                        use err::ipv6_exts::HeaderLimitedReadError as I;
                         match err {
                             I::Io(err) => Io(err),
+                            I::Len(err) => Len(err),
                             I::Content(err) => Content(Ipv6Ext(err)),
                         }
                     })
@@ -526,21 +565,29 @@ impl IpHeader {
     ///
     /// Note that this function will automatically add the length of the extension
     /// headers is they are present.
-    pub fn set_payload_len(&mut self, len: usize) -> Result<(), ValueError> {
-        use crate::ValueError::*;
+    pub fn set_payload_len(&mut self, len: usize) -> Result<(), ValueTooBigError<usize>> {
+        use crate::err::ValueType;
         match self {
             IpHeader::Version4(ipv4_hdr, exts) => {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv4_hdr.set_payload_len(complete_len)
                 } else {
-                    Err(Ipv4PayloadLengthTooLarge(len))
+                    Err(ValueTooBigError{
+                        actual: len,
+                        max_allowed: usize::from(u16::MAX) - ipv4_hdr.header_len() - exts.header_len(),
+                        value_type: ValueType::Ipv4PayloadLength,
+                    })
                 }
             }
             IpHeader::Version6(ipv6_hdr, exts) => {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv6_hdr.set_payload_length(complete_len)
                 } else {
-                    Err(Ipv6PayloadLengthTooLarge(len))
+                    Err(ValueTooBigError{
+                        actual: len,
+                        max_allowed: usize::from(u16::MAX) - exts.header_len(),
+                        value_type: ValueType::Ipv4PayloadLength,
+                    })
                 }
             }
         }
@@ -576,8 +623,8 @@ mod test {
             {
                 let mut v4 = v4.clone();
                 v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
-                v4.payload_len = (ext.header_len() + payload.len()) as u16;
-                v4.header_checksum = v4.calc_header_checksum().unwrap();
+                v4.total_len = (v4.header_len() + ext.header_len() + payload.len()) as u16;
+                v4.header_checksum = v4.calc_header_checksum();
                 v4
             },
             ext.clone(),

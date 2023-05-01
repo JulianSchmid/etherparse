@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use crate::*;
+use crate::{*, err::{ValueTooBigError, ValueType}};
 
 /// IPv4 header with options.
 ///
@@ -12,17 +12,17 @@ use crate::*;
 ///     source: [1,2,3,4],
 ///     destination: [1,2,3,4],
 ///     time_to_live: 4,
-///     payload_len: 100,
+///     total_len: Ipv4Header::MIN_LEN as u16 + 100,
 ///     protocol: IpNumber::UDP,
 ///     ..Default::default()
 /// };
 ///
 /// // depending on your usecase you might want to set the correct checksum
-/// header.header_checksum = header.calc_header_checksum().unwrap();
+/// header.header_checksum = header.calc_header_checksum();
 ///
 /// // header can be serialized into the "on the wire" format
 /// // using the "write" or "to_bytes" methods
-/// let bytes = header.to_bytes().unwrap();
+/// let bytes = header.to_bytes();
 ///
 /// // IPv4 headers can be decoded via "read" or "from_slice"
 /// let (decoded, slice_rest) = Ipv4Header::from_slice(&bytes).unwrap();
@@ -35,14 +35,8 @@ pub struct Ipv4Header {
     pub dscp: Ipv4Dscp,
     /// Explicit Congestion Notification
     pub ecn: Ipv4Ecn,
-    /// Length of the payload of the ipv4 packet in bytes (does not contain the options).
-    ///
-    /// This field does not directly exist in an ipv4 header but instead is decoded from
-    /// & encoded to the total_size field together with the options length (using the ihl).
-    ///
-    /// Headers where the total length is smaller then then the minimum header size itself
-    /// are not representable in this struct.
-    pub payload_len: u16,
+    /// Total length of the IPv4 header (including extension headers) and the payload after it.
+    pub total_len: u16,
     /// Number used to identify packets that contain an originally fragmented packet.
     pub identification: u16,
     /// If set the packet is not allowed to fragmented.
@@ -94,12 +88,12 @@ impl Ipv4Header {
     /// ```
     /// use etherparse::{Ipv4Header, IpNumber};
     ///
-    /// let mut header = Ipv4Header::new(100, 4, IpNumber::UDP, [1,2,3,4], [5,6,7,8]);
+    /// let mut header = Ipv4Header::new(100, 4, IpNumber::UDP, [1,2,3,4], [5,6,7,8]).unwrap();
     ///
     /// assert_eq!(
     ///     header,
     ///     Ipv4Header {
-    ///         payload_len: 100,
+    ///         total_len: (100 + Ipv4Header::MIN_LEN) as u16,
     ///         time_to_live: 4,
     ///         protocol: IpNumber::UDP,
     ///         source: [1,2,3,4],
@@ -119,7 +113,7 @@ impl Ipv4Header {
     ///
     /// // in case you also want to have a correct checksum you will have to
     /// // additionally update it:
-    /// header.header_checksum = header.calc_header_checksum().unwrap();
+    /// header.header_checksum = header.calc_header_checksum();
     /// ```
     pub fn new(
         payload_len: u16,
@@ -127,21 +121,30 @@ impl Ipv4Header {
         protocol: IpNumber,
         source: [u8; 4],
         destination: [u8; 4],
-    ) -> Ipv4Header {
-        Ipv4Header {
-            dscp: Default::default(),
-            ecn: Default::default(),
-            payload_len,
-            identification: 0,
-            dont_fragment: true,
-            more_fragments: false,
-            fragment_offset: Default::default(),
-            time_to_live,
-            protocol,
-            header_checksum: 0,
-            source,
-            destination,
-            options: Default::default(),
+    ) -> Result<Ipv4Header, ValueTooBigError<u16>> {
+        const MAX_PAYLOAD: u16 = u16::MAX - (Ipv4Header::MIN_LEN as u16);
+        if payload_len > MAX_PAYLOAD {
+            Err(ValueTooBigError {
+                actual: payload_len,
+                max_allowed: MAX_PAYLOAD,
+                value_type: ValueType::Ipv4PayloadLength,
+            })
+        } else {
+            Ok(Ipv4Header {
+                dscp: Default::default(),
+                ecn: Default::default(),
+                total_len: payload_len + (Ipv4Header::MIN_LEN as u16),
+                identification: 0,
+                dont_fragment: true,
+                more_fragments: false,
+                fragment_offset: Default::default(),
+                time_to_live,
+                protocol,
+                header_checksum: 0,
+                source,
+                destination,
+                options: Default::default(),
+            })
         }
     }
 
@@ -179,6 +182,7 @@ impl Ipv4Header {
     ///     assert_eq!(15, header.ihl());
     /// }
     /// ```
+    #[inline]
     pub fn ihl(&self) -> u8 {
         (self.options.len() / 4) + 5
     }
@@ -220,23 +224,117 @@ impl Ipv4Header {
         Ipv4Header::MIN_LEN + usize::from(self.options.len())
     }
 
-    /// Returns the total length of the header + payload in bytes.
-    pub fn total_len(&self) -> u16 {
-        self.payload_len + (Ipv4Header::MIN_LEN as u16) + u16::from(self.options.len())
+    /// Determine the payload length based on the ihl & total_length
+    /// field of the header.
+    /// 
+    /// # Example Usage
+    /// 
+    /// ```
+    /// use etherparse::{Ipv4Header, Ipv4HeaderSlice};
+    /// 
+    /// let header = Ipv4Header{
+    ///     // the payload len will be calculated by subtracting the
+    ///     // header length from the total length
+    ///     total_len: Ipv4Header::MIN_LEN as u16 + 100,
+    ///     ..Default::default()
+    /// };
+    /// 
+    /// assert_eq!(Ok(100), header.payload_len());
+    /// 
+    /// // error case
+    /// let bad_header = Ipv4Header {
+    ///     // total len should also include the header, in case it does
+    ///     // not it is not possible to calculate the payload length
+    ///     total_len: Ipv4Header::MIN_LEN as u16 - 1,
+    ///     ..Default::default()
+    /// };
+    /// 
+    /// // in case the total_len is smaller then the header itself an
+    /// // error is returned
+    /// use etherparse::err::{LenError, Layer, LenSource};
+    /// assert_eq!(
+    ///     bad_header.payload_len(),
+    ///     Err(LenError {
+    ///         required_len: Ipv4Header::MIN_LEN,
+    ///         len: Ipv4Header::MIN_LEN - 1,
+    ///         len_source: LenSource::Ipv4HeaderTotalLen,
+    ///         layer: Layer::Ipv4Packet,
+    ///         layer_start_offset: 0,
+    ///     })
+    /// );
+    /// ```
+    #[inline]
+    pub fn payload_len(&self) -> Result<u16, err::LenError> {
+        // SAFETY: header_len() can be at most be 60 so a cast to u16 is safe.
+        let header_len = self.header_len() as u16;
+        if header_len <= self.total_len {
+            Ok(self.total_len - header_len)
+        } else {
+            use err::{LenError, LenSource, Layer};
+            Err(LenError {
+                required_len: header_len.into(),
+                len: self.total_len.into(),
+                len_source: LenSource::Ipv4HeaderTotalLen,
+                layer: Layer::Ipv4Packet,
+                layer_start_offset: 0,
+            })
+        }
     }
 
-    /// Sets the payload length if the value is not too big. Otherwise an error is returned.
-    pub fn set_payload_len(&mut self, value: usize) -> Result<(), ValueError> {
-        if usize::from(self.max_payload_len()) < value {
-            use crate::ValueError::*;
-            Err(Ipv4PayloadLengthTooLarge(value))
+    /// Tries setting the [`Ipv4Header::total_len`] field given the length of
+    /// the payload after the header & the current options length of the header.
+    /// 
+    /// If the value is not too big. Otherwise an error is returned.
+    /// 
+    /// Note that the set payload lenght is no longer valid if you change
+    /// [`Ipv4Header::options`] length after calling [`Ipv4Header::set_payload_len`]
+    /// as it uses  the length of options to calculate the `total_len` value.
+    /// 
+    /// # Example Usage:
+    /// 
+    /// ```
+    /// use etherparse::Ipv4Header;
+    /// 
+    /// let mut header = Ipv4Header{
+    ///     total_len: 100, // will be reset by set_payload
+    ///     options: [1,2,3,4].into(),
+    ///     ..Default::default()
+    /// };
+    /// 
+    /// // set_payload_len set the total_len field based on the header_len
+    /// // and given payload length
+    /// header.set_payload_len(100).unwrap();
+    /// assert_eq!(100 + header.header_len() as u16, header.total_len);
+    /// 
+    /// // in case the payload is len is bigger then can represented in the
+    /// // total_len field an error is returned
+    /// use etherparse::err::{ValueTooBigError, ValueType};
+    /// let err = header.set_payload_len(usize::from(u16::MAX) - header.header_len() + 1);
+    /// assert_eq!(
+    ///     err,
+    ///     Err(ValueTooBigError {
+    ///         actual: usize::from(u16::MAX) - header.header_len() + 1,
+    ///         max_allowed: usize::from(u16::MAX) - header.header_len(),
+    ///         value_type: ValueType::Ipv4PayloadLength
+    ///     })
+    /// );
+    /// ```
+    pub fn set_payload_len(&mut self, value: usize) -> Result<(), ValueTooBigError<usize>> {
+        let max_allowed = usize::from(self.max_payload_len());
+        if value > max_allowed {
+            Err(ValueTooBigError {
+                actual: value,
+                max_allowed,
+                value_type: ValueType::Ipv4PayloadLength,
+            })
         } else {
-            self.payload_len = value as u16;
+            self.total_len = (self.header_len() + value) as u16;
             Ok(())
         }
     }
 
     /// Returns the maximum payload size based on the current options size.
+    #[inline]
     pub fn max_payload_len(&self) -> u16 {
         core::u16::MAX - u16::from(self.options.len()) - (Ipv4Header::MIN_LEN as u16)
     }
@@ -327,16 +425,7 @@ impl Ipv4Header {
             let value = header_raw[1];
             (value >> 2, value & 0b0000_0011)
         };
-        let header_length = u16::from(ihl) * 4;
-        let total_length = u16::from_be_bytes([header_raw[2], header_raw[3]]);
-
-        // validate the total length
-        if total_length < header_length {
-            return Err(Content(TotalLengthSmallerThanHeader {
-                total_length,
-                min_expected_length: header_length,
-            }));
-        }
+        let total_len = u16::from_be_bytes([header_raw[2], header_raw[3]]);
         let identification = u16::from_be_bytes([header_raw[4], header_raw[5]]);
         let (dont_fragment, more_fragments, fragments_offset) = (
             0 != (header_raw[6] & 0b0100_0000),
@@ -354,7 +443,7 @@ impl Ipv4Header {
                 // ecn value
                 Ipv4Ecn::new_unchecked(ecn)
             },
-            payload_len: total_length - header_length,
+            total_len,
             identification,
             dont_fragment,
             more_fragments,
@@ -389,52 +478,26 @@ impl Ipv4Header {
         })
     }
 
-    /// Checks if the values in this header are valid values for an ipv4 header.
-    ///
-    /// Specifically it will be checked, that:
-    /// * payload_len + options_len is not too big to be encoded in the total_size header field
-    /// * differentiated_services_code_point is not greater then 0x3f
-    /// * explicit_congestion_notification is not greater then 0x3
-    /// * fragments_offset is not greater then 0x1fff
-    pub fn check_ranges(&self) -> Result<(), ValueError> {
-        use crate::err::ValueType::*;
-
-        //check ranges
-        max_check_u16(self.payload_len, self.max_payload_len(), Ipv4PayloadLength)?;
-
-        Ok(())
-    }
-
     /// Writes a given IPv4 header to the current position (this method automatically calculates
     /// the header length and checksum).
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        //check ranges
-        self.check_ranges()?;
-
-        //write with recalculations
-        self.write_ipv4_header_internal(writer, self.calc_header_checksum_unchecked())
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        // write with recalculations
+        self.write_ipv4_header_internal(writer, self.calc_header_checksum())
     }
 
     /// Writes a given IPv4 header to the current position (this method just writes the specified
     /// checksum and does note compute it).
     #[cfg(feature = "std")]
-    pub fn write_raw<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
-        //check ranges
-        self.check_ranges()?;
-
-        //write
+    pub fn write_raw<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         self.write_ipv4_header_internal(writer, self.header_checksum)
     }
 
     /// Returns the serialized header (note that this method does NOT
     /// update & calculate the checksum).
-    pub fn to_bytes(&self) -> Result<ArrayVec<u8, { Ipv4Header::MAX_LEN }>, ValueError> {
-        //check ranges
-        self.check_ranges()?;
-
+    pub fn to_bytes(&self) -> ArrayVec<u8, { Ipv4Header::MAX_LEN }> {
         // prep the values for copy
-        let total_len_be = self.total_len().to_be_bytes();
+        let total_len_be = self.total_len.to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
             let frag_be: [u8; 2] = self.fragment_offset.value().to_be_bytes();
@@ -488,7 +551,7 @@ impl Ipv4Header {
             header_raw.set_len(self.header_len());
         }
 
-        Ok(header_raw)
+        header_raw
     }
 
     /// Write the given header with the  checksum and header length specified in the seperate arguments
@@ -497,8 +560,8 @@ impl Ipv4Header {
         &self,
         write: &mut T,
         header_checksum: u16,
-    ) -> Result<(), WriteError> {
-        let total_len_be = self.total_len().to_be_bytes();
+    ) -> Result<(), std::io::Error> {
+        let total_len_be = self.total_len.to_be_bytes();
         let id_be = self.identification.to_be_bytes();
         let frag_and_flags = {
             let frag_be: [u8; 2] = self.fragment_offset.value().to_be_bytes();
@@ -548,19 +611,10 @@ impl Ipv4Header {
     }
 
     /// Calculate header checksum of the current ipv4 header.
-    pub fn calc_header_checksum(&self) -> Result<u16, ValueError> {
-        //check ranges
-        self.check_ranges()?;
-
-        //calculate the checksum
-        Ok(self.calc_header_checksum_unchecked())
-    }
-
-    /// Calculate the header checksum under the assumtion that all value ranges in the header are correct
-    fn calc_header_checksum_unchecked(&self) -> u16 {
+    pub fn calc_header_checksum(&self) -> u16 {
         checksum::Sum16BitWords::new()
             .add_2bytes([(4 << 4) | self.ihl(), (self.dscp.value() << 2) | self.ecn.value()])
-            .add_2bytes(self.total_len().to_be_bytes())
+            .add_2bytes(self.total_len.to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
                 let frag_off_be = self.fragment_offset.value().to_be_bytes();
@@ -599,7 +653,7 @@ impl Default for Ipv4Header {
         Ipv4Header {
             dscp: Default::default(),
             ecn: Default::default(),
-            payload_len: 0,
+            total_len: 0,
             identification: 0,
             dont_fragment: true,
             more_fragments: false,
@@ -616,7 +670,7 @@ impl Default for Ipv4Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{test_gens::*, *};
+    use crate::{test_gens::*, *, err::{ValueTooBigError, ValueType, LenError, LenSource, Layer}};
     use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use proptest::prelude::*;
@@ -628,7 +682,7 @@ mod test {
         assert_eq!(5, default.ihl());
         assert_eq!(0, default.dscp.value());
         assert_eq!(0, default.ecn.value());
-        assert_eq!(0, default.payload_len);
+        assert_eq!(0, default.total_len);
         assert_eq!(0, default.identification);
         assert_eq!(true, default.dont_fragment);
         assert_eq!(false, default.more_fragments);
@@ -644,10 +698,10 @@ mod test {
     proptest! {
         #[test]
         fn debug(input in ipv4_any()) {
-            assert_eq!(&format!("Ipv4Header {{ dscp: {:?}, ecn: {:?}, payload_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragment_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
+            assert_eq!(&format!("Ipv4Header {{ dscp: {:?}, ecn: {:?}, total_len: {}, identification: {}, dont_fragment: {}, more_fragments: {}, fragment_offset: {:?}, time_to_live: {}, protocol: {:?}, header_checksum: {}, source: {:?}, destination: {:?}, options: {:?} }}",
                     input.dscp,
                     input.ecn,
-                    input.payload_len,
+                    input.total_len,
                     input.identification,
                     input.dont_fragment,
                     input.more_fragments,
@@ -692,12 +746,12 @@ mod test {
                     other
                 }
             );
-            //payload_len
+            //total_len
             assert_eq!(
-                a.payload_len == b.payload_len,
+                a.total_len == b.total_len,
                 a == {
                     let mut other = a.clone();
-                    other.payload_len = b.payload_len;
+                    other.total_len = b.total_len;
                     other
                 }
             );
@@ -816,32 +870,54 @@ mod test {
 
     proptest! {
         #[test]
-        fn new(source_ip in prop::array::uniform4(any::<u8>()),
-               dest_ip in prop::array::uniform4(any::<u8>()),
-               ttl in any::<u8>(),
-               payload_len in any::<u16>())
-        {
-            let result = Ipv4Header::new(
-                payload_len,
-                ttl,
-                ip_number::UDP,
-                source_ip,
-                dest_ip
-            );
+        fn new(
+            source_ip in prop::array::uniform4(any::<u8>()),
+            dest_ip in prop::array::uniform4(any::<u8>()),
+            ttl in any::<u8>(),
+            ok_payload_len in 0u16..=(u16::MAX - Ipv4Header::MIN_LEN as u16),
+            err_payload_len in (u16::MAX - Ipv4Header::MIN_LEN as u16 + 1)..=u16::MAX
+        ) {
+            // ok case
+            {
+                let result = Ipv4Header::new(
+                    ok_payload_len,
+                    ttl,
+                    ip_number::UDP,
+                    source_ip,
+                    dest_ip
+                ).unwrap();
 
-            assert_eq!(result.dscp.value(), 0);
-            assert_eq!(result.ecn.value(), 0);
-            assert_eq!(result.payload_len, payload_len);
-            assert_eq!(result.identification, 0);
-            assert_eq!(result.dont_fragment, true);
-            assert_eq!(result.more_fragments, false);
-            assert_eq!(result.fragment_offset.value(), 0);
-            assert_eq!(result.time_to_live, ttl);
-            assert_eq!(result.protocol, ip_number::UDP);
-            assert_eq!(result.header_checksum, 0);
-            assert_eq!(result.source, source_ip);
-            assert_eq!(result.destination, dest_ip);
-            assert_eq!(result.options.as_slice(), &[]);
+                assert_eq!(result.dscp.value(), 0);
+                assert_eq!(result.ecn.value(), 0);
+                assert_eq!(result.total_len, ok_payload_len + Ipv4Header::MIN_LEN as u16);
+                assert_eq!(result.identification, 0);
+                assert_eq!(result.dont_fragment, true);
+                assert_eq!(result.more_fragments, false);
+                assert_eq!(result.fragment_offset.value(), 0);
+                assert_eq!(result.time_to_live, ttl);
+                assert_eq!(result.protocol, ip_number::UDP);
+                assert_eq!(result.header_checksum, 0);
+                assert_eq!(result.source, source_ip);
+                assert_eq!(result.destination, dest_ip);
+                assert_eq!(result.options.as_slice(), &[]);
+            }
+            // err
+            {
+                assert_eq!(
+                    Ipv4Header::new(
+                        err_payload_len,
+                        ttl,
+                        ip_number::UDP,
+                        source_ip,
+                        dest_ip
+                    ),
+                    Err(ValueTooBigError::<u16>{
+                        actual: err_payload_len,
+                        max_allowed: u16::MAX - Ipv4Header::MIN_LEN as u16,
+                        value_type: ValueType::Ipv4PayloadLength,
+                    })
+                );
+            }
         }
     }
 
@@ -861,31 +937,57 @@ mod test {
 
     proptest! {
         #[test]
-        fn total_len(header in ipv4_any()) {
-            assert_eq!(header.total_len(), 20 + (header.options.len() as u16) + header.payload_len);
+        fn payload_len(
+            header in ipv4_any()
+        ) {
+            // ok case
+            assert_eq!(
+                header.payload_len().unwrap(),
+                header.total_len - 20 - (header.options.len() as u16)
+            );
+            // err case
+            for bad_len in 0u16..(header.header_len() as u16) {
+                let mut header = header.clone();
+                header.total_len = bad_len;
+                assert_eq!(
+                    header.payload_len().unwrap_err(),
+                    LenError{
+                        required_len: header.header_len(),
+                        len: bad_len.into(),
+                        len_source: LenSource::Ipv4HeaderTotalLen,
+                        layer: Layer::Ipv4Packet,
+                        layer_start_offset: 0
+                    }
+                );
+            }
+            
         }
     }
 
     #[test]
     fn set_payload_len() {
-        let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0; 4], [0; 4]);
+        let mut header = Ipv4Header::new(0, 0, ip_number::UDP, [0; 4], [0; 4]).unwrap();
 
         //add options (to make sure they are included in the calculation)
         header.options = [1, 2, 3, 4].into();
 
         //zero check
         assert!(header.set_payload_len(0).is_ok());
-        assert_eq!(header.total_len(), 24);
+        assert_eq!(header.total_len, 24);
 
         //max check
         const MAX: usize = (core::u16::MAX as usize) - Ipv4Header::MIN_LEN - 4;
         assert!(header.set_payload_len(MAX).is_ok());
-        assert_eq!(header.total_len(), core::u16::MAX);
+        assert_eq!(header.total_len, core::u16::MAX);
 
         const OVER_MAX: usize = MAX + 1;
         assert_eq!(
             header.set_payload_len(OVER_MAX),
-            Err(ValueError::Ipv4PayloadLengthTooLarge(OVER_MAX))
+            Err(ValueTooBigError {
+                actual: OVER_MAX,
+                max_allowed: usize::from(u16::MAX) - header.header_len(),
+                value_type: ValueType::Ipv4PayloadLength
+            })
         );
     }
 
@@ -907,7 +1009,7 @@ mod test {
 
             assert_eq!(&options, header.options());
             assert_eq!(24, header.header_len());
-            assert_eq!(24, header.total_len());
+            assert_eq!(0, header.total_len);
             assert_eq!(6, header.ihl());
 
             //length 0
@@ -915,7 +1017,7 @@ mod test {
 
             assert_eq!(&options[..0], header.options());
             assert_eq!(20, header.header_len());
-            assert_eq!(20, header.total_len());
+            assert_eq!(0, header.total_len);
             assert_eq!(5, header.ihl());
         }
         //maximum length (40)
@@ -929,7 +1031,7 @@ mod test {
 
             assert_eq!(&options[..], header.options());
             assert_eq!(60, header.header_len());
-            assert_eq!(60, header.total_len());
+            assert_eq!(0, header.total_len);
             assert_eq!(15, header.ihl());
         }
         //errors
@@ -951,7 +1053,7 @@ mod test {
                 //check value was not taken
                 assert_eq!(&buffer[..0], header.options());
                 assert_eq!(20, header.header_len());
-                assert_eq!(20, header.total_len());
+                assert_eq!(0, header.total_len);
                 assert_eq!(5, header.ihl());
             }
         }
@@ -982,7 +1084,7 @@ mod test {
             // ok
             {
                 let mut buffer = ArrayVec::<u8, { Ipv4Header::MAX_LEN + 1 }>::new();
-                buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+                buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer.try_extend_from_slice(&[1]).unwrap();
 
                 let (actual_header, actual_rest) = Ipv4Header::from_slice(&buffer).unwrap();
@@ -992,7 +1094,7 @@ mod test {
 
             // unexpected end of slice
             {
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 for len in 0..header.header_len() {
                     assert_eq!(
                         Ipv4Header::from_slice(&buffer[..len]),
@@ -1014,7 +1116,7 @@ mod test {
             // version error
             for version_number in 0u8..0b1111u8 {
                 if 4 != version_number {
-                    let mut buffer = header.to_bytes().unwrap();
+                    let mut buffer = header.to_bytes();
                     // inject the bad ihl
                     buffer[0] = (version_number << 4) | (buffer[0] & 0b1111);
                     // expect an error
@@ -1029,7 +1131,7 @@ mod test {
 
             // ihl too small error
             for ihl in 0u8..5u8 {
-                let mut buffer = header.to_bytes().unwrap();
+                let mut buffer = header.to_bytes();
                 // inject the bad ihl
                 buffer[0] = (4 << 4) | ihl;
                 // expect an error
@@ -1037,23 +1139,6 @@ mod test {
                     Ipv4Header::from_slice(&buffer).unwrap_err(),
                     Content(HeaderLengthSmallerThanHeader{
                         ihl,
-                    })
-                );
-            }
-
-            // total length too small error
-            for total_length in 0..header.header_len() {
-                let mut buffer = header.to_bytes().unwrap();
-                // inject total length smaller then the header length
-                let tl_be = (total_length as u16).to_be_bytes();
-                buffer[2] = tl_be[0];
-                buffer[3] = tl_be[1];
-                // expect an error
-                assert_eq!(
-                    Ipv4Header::from_slice(&buffer).unwrap_err(),
-                    Content(TotalLengthSmallerThanHeader{
-                        total_length: total_length as u16,
-                        min_expected_length: header.header_len() as u16,
                     })
                 );
             }
@@ -1068,7 +1153,7 @@ mod test {
 
             // ok
             {
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
 
                 // read
                 {
@@ -1088,7 +1173,7 @@ mod test {
 
             // io error
             {
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 for len in 0..header.header_len() {
                     // read
                     {
@@ -1109,7 +1194,7 @@ mod test {
             // version error
             for version_number in 0u8..0b1111u8 {
                 if 4 != version_number {
-                    let mut buffer = header.to_bytes().unwrap();
+                    let mut buffer = header.to_bytes();
                     // inject the bad version number
                     buffer[0] = (version_number << 4) | (buffer[0] & 0b1111);
 
@@ -1130,7 +1215,7 @@ mod test {
 
             // ihl too small error
             for ihl in 0u8..5u8 {
-                let mut buffer = header.to_bytes().unwrap();
+                let mut buffer = header.to_bytes();
                 // inject the bad ihl
                 buffer[0] = (4 << 4) | ihl;
                 // expect an error
@@ -1153,93 +1238,6 @@ mod test {
                         .unwrap();
                     assert_eq!(err, HeaderLengthSmallerThanHeader{ ihl });
                 }
-            }
-
-            // total length too small error
-            for total_length in 0..header.header_len() {
-                let mut buffer = header.to_bytes().unwrap();
-                // inject total length smaller then the header length
-                let tl_be = (total_length as u16).to_be_bytes();
-                buffer[2] = tl_be[0];
-                buffer[3] = tl_be[1];
-
-                // expect an error
-                let expected_err = TotalLengthSmallerThanHeader{
-                    total_length: total_length as u16,
-                    min_expected_length: header.header_len() as u16,
-                };
-
-                // read
-                {
-                    let mut cursor = Cursor::new(&buffer[..]);
-                    let err = Ipv4Header::read(&mut cursor)
-                        .unwrap_err()
-                        .content_error()
-                        .unwrap();
-                    assert_eq!(err, expected_err);
-                }
-
-                // read_without_version
-                {
-                    let mut cursor = Cursor::new(&buffer[1..]);
-                    let err = Ipv4Header::read_without_version(&mut cursor, buffer[0])
-                        .unwrap_err()
-                        .content_error()
-                        .unwrap();
-                    assert_eq!(err, expected_err);
-                }
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn check_ranges(
-            base_header in ipv4_any()
-        ) {
-            use crate::err::ValueType::*;
-            use crate::ValueError::*;
-
-            fn test_range_methods(input: &Ipv4Header, expected: ValueError) {
-
-                // check_ranges
-                assert_eq!(expected.clone(), input.check_ranges().unwrap_err());
-
-                //calc_header_checksum
-                assert_eq!(expected.clone(), input.calc_header_checksum().unwrap_err());
-
-                //write
-                {
-                    let mut buffer: Vec<u8> = Vec::new();
-                    let result = input.write(&mut buffer);
-                    assert_eq!(0, buffer.len());
-                    assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
-                }
-
-                //write_raw
-                {
-                    let mut buffer: Vec<u8> = Vec::new();
-                    let result = input.write_raw(&mut buffer);
-                    assert_eq!(0, buffer.len());
-                    assert_eq!(Some(expected.clone()), result.unwrap_err().value_error());
-                }
-            }
-            // payload len
-            {
-                let max_len = u16::MAX - (base_header.header_len() as u16);
-                let value = {
-                    let mut value = base_header.clone();
-                    value.payload_len = max_len + 1;
-                    value
-                };
-                test_range_methods(
-                    &value,
-                    U16TooLarge {
-                        value: max_len + 1,
-                        max: max_len,
-                        field: Ipv4PayloadLength,
-                    },
-                );
             }
         }
     }
@@ -1275,7 +1273,7 @@ mod test {
                 //check equivalence (with calculated checksum)
                 let header_with_checksum = {
                     let mut h = header.clone();
-                    h.header_checksum = h.calc_header_checksum().unwrap();
+                    h.header_checksum = h.calc_header_checksum();
                     h
                 };
                 assert_eq!(header_with_checksum, result);
@@ -1286,23 +1284,8 @@ mod test {
                 let mut buffer = [0u8; Ipv4Header::MAX_LEN];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
                 assert!(
-                    header.write(&mut cursor).unwrap_err().io_error().is_some()
+                    header.write(&mut cursor).is_err()
                 );
-            }
-
-            // range error
-            {
-                let err = {
-                    let mut header = base_header.clone();
-                    header.payload_len = u16::MAX;
-                    let mut buffer = Vec::new();
-                    header.write(&mut buffer).unwrap_err().value_error().unwrap()
-                };
-                assert_eq!(err, ValueError::U16TooLarge {
-                    value: u16::MAX,
-                    max: u16::MAX - (base_header.header_len() as u16),
-                    field: err::ValueType::Ipv4PayloadLength
-                });
             }
         }
     }
@@ -1332,23 +1315,8 @@ mod test {
                 let mut buffer = [0u8; Ipv4Header::MAX_LEN];
                 let mut cursor = Cursor::new(&mut buffer[..len]);
                 assert!(
-                    base_header.write_raw(&mut cursor).unwrap_err().io_error().is_some()
+                    base_header.write_raw(&mut cursor).is_err()
                 );
-            }
-
-            // range error
-            {
-                let err = {
-                    let mut header = base_header.clone();
-                    header.payload_len = u16::MAX;
-                    let mut buffer = Vec::new();
-                    header.write_raw(&mut buffer).unwrap_err().value_error().unwrap()
-                };
-                assert_eq!(err, ValueError::U16TooLarge {
-                    value: u16::MAX,
-                    max: u16::MAX - (base_header.header_len() as u16),
-                    field: err::ValueType::Ipv4PayloadLength
-                });
             }
         }
     }
@@ -1356,23 +1324,11 @@ mod test {
     proptest! {
         #[test]
         fn to_bytes(base_header in ipv4_any()) {
-            // normal write
-            {
-                let bytes = base_header.to_bytes().unwrap();
-                assert_eq!(
-                    base_header,
-                    Ipv4HeaderSlice::from_slice(&bytes).unwrap().to_header()
-                );
-            }
-            // range error
-            {
-                let result = {
-                    let mut header = base_header.clone();
-                    header.payload_len = u16::MAX;
-                    header.to_bytes()
-                };
-                assert!(result.is_err());
-            }
+            let bytes = base_header.to_bytes();
+            assert_eq!(
+                base_header,
+                Ipv4HeaderSlice::from_slice(&bytes).unwrap().to_header()
+            );
         }
     }
 
@@ -1384,13 +1340,13 @@ mod test {
             ip_number::UDP,
             [192, 168, 1, 1],   // source
             [212, 10, 11, 123], // destination
-        );
+        ).unwrap();
 
         //without options
         {
             //dont_fragment && !more_fragments
             let header = base.clone();
-            assert_eq!(0xd582, header.calc_header_checksum().unwrap());
+            assert_eq!(0xd582, header.calc_header_checksum());
             // !dont_fragment && more_fragments
             let header = {
                 let mut header = base.clone();
@@ -1398,17 +1354,17 @@ mod test {
                 header.more_fragments = true;
                 header
             };
-            assert_eq!(0xf582, header.calc_header_checksum().unwrap());
+            assert_eq!(0xf582, header.calc_header_checksum());
         }
         //with options
         {
             let header = {
                 let mut header = base.clone();
-                header.payload_len = 40 - 8;
                 header.options = [1, 2, 3, 4, 5, 6, 7, 8].into();
+                header.total_len = (header.header_len() + 32) as u16;
                 header
             };
-            assert_eq!(0xc36e, header.calc_header_checksum().unwrap());
+            assert_eq!(0xc36e, header.calc_header_checksum());
         }
     }
 

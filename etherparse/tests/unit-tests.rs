@@ -60,7 +60,6 @@ fn test_debug_write() {
         use crate::ValueError::*;
         for value in [
             Ipv4OptionsLengthBad(0),
-            Ipv4PayloadLengthTooLarge(0),
             Ipv6PayloadLengthTooLarge(0),
             UdpPayloadLengthTooLarge(0),
             U8TooLarge {

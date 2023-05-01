@@ -71,6 +71,37 @@ impl Ipv6FragmentHeader {
         })
     }
 
+    /// Read an fragment header from the current reader position.
+    #[cfg(feature = "std")]
+    pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
+        reader: &mut crate::io::LimitedReader<T>,
+    ) -> Result<Ipv6FragmentHeader, crate::err::io::LimitedReadError> {
+        use err::Layer;
+
+        // set layer so errors contain the correct layer & offset
+        reader.start_layer(Layer::Ipv6FragHeader);
+
+        let buffer = {
+            let mut buffer: [u8; 8] = [0; 8];
+            reader.read_exact(&mut buffer)?;
+            buffer
+        };
+
+        Ok(Ipv6FragmentHeader {
+            next_header: IpNumber(buffer[0]),
+            fragment_offset: unsafe {
+                // SAFE as the resulting number is guranteed to have at most
+                // 13 bits.
+                IpFragOffset::new_unchecked(u16::from_be_bytes([
+                    (buffer[2] >> 3) & 0b0001_1111u8,
+                    ((buffer[2] << 5) & 0b1110_0000u8) | (buffer[3] & 0b0001_1111u8),
+                ]))
+            },
+            more_fragments: 0 != buffer[3] & 0b1000_0000u8,
+            identification: u32::from_be_bytes([buffer[4], buffer[5], buffer[6], buffer[7]]),
+        })
+    }
+
     /// Writes a given IPv6 fragment header to the current position.
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {

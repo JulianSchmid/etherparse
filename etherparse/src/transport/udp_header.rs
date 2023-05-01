@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{*, err::ValueTooBigError};
 
 /// Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -69,7 +69,7 @@ impl UdpHeader {
         &self,
         ip_header: &Ipv4Header,
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, ValueTooBigError<usize>> {
         self.calc_checksum_ipv4_raw(ip_header.source, ip_header.destination, payload)
     }
 
@@ -79,11 +79,15 @@ impl UdpHeader {
         source: [u8; 4],
         destination: [u8; 4],
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, ValueTooBigError<usize>> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+            return Err(ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: err::ValueType::UdpPayloadLengthIpv4,
+            });
         }
 
         Ok(self.calc_checksum_ipv4_internal(source, destination, payload))
@@ -136,7 +140,7 @@ impl UdpHeader {
         &self,
         ip_header: &Ipv6Header,
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, err::ValueTooBigError<usize>> {
         self.calc_checksum_ipv6_raw(ip_header.source, ip_header.destination, payload)
     }
 
@@ -146,11 +150,15 @@ impl UdpHeader {
         source: [u8; 16],
         destination: [u8; 16],
         payload: &[u8],
-    ) -> Result<u16, ValueError> {
+    ) -> Result<u16, err::ValueTooBigError<usize>> {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u32::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueError::UdpPayloadLengthTooLarge(payload.len()));
+            return Err(err::ValueTooBigError{
+                actual: payload.len(),
+                max_allowed: MAX_PAYLOAD_LENGTH,
+                value_type: err::ValueType::UdpPayloadLengthIpv6,
+            });
         }
 
         Ok(self.calc_checksum_ipv6_internal(source, destination, payload))
@@ -267,7 +275,7 @@ impl UdpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{test_gens::*, *};
+    use crate::{test_gens::*, *, err::{ValueTooBigError, ValueType}};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -529,12 +537,16 @@ mod test {
                     )
                 };
                 assert_eq!(
-                    ValueError::UdpPayloadLengthTooLarge(bad_len),
                     header.calc_checksum_ipv4_raw(
                         ipv4.source,
                         ipv4.destination,
                         too_big_slice
-                    ).unwrap_err()
+                    ).unwrap_err(),
+                    ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (core::u16::MAX as usize) - UdpHeader::LEN,
+                        value_type: ValueType::UdpPayloadLengthIpv4,
+                    }
                 );
             }
         }
@@ -854,12 +866,16 @@ mod test {
                     )
                 };
                 assert_eq!(
-                    ValueError::UdpPayloadLengthTooLarge(bad_len),
                     header.calc_checksum_ipv6_raw(
                         ipv6.source,
                         ipv6.destination,
                         too_big_slice
-                    ).unwrap_err()
+                    ).unwrap_err(),
+                    ValueTooBigError{
+                        actual: bad_len,
+                        max_allowed: (core::u32::MAX as usize) - UdpHeader::LEN,
+                        value_type: ValueType::UdpPayloadLengthIpv6,
+                    }
                 );
             }
         }

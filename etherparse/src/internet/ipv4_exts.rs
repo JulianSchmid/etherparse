@@ -33,13 +33,31 @@ impl Ipv4Extensions {
     /// headers together with the internet protocol number identifying the protocol
     /// that will be next.
     #[cfg(feature = "std")]
-    pub fn read<T: std::io::Read + std::io::Seek + Sized>(
+    pub fn read<T: std::io::Read + Sized>(
         reader: &mut T,
         start_ip_number: IpNumber,
     ) -> Result<(Ipv4Extensions, IpNumber), err::ip_auth::HeaderReadError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeader::read(reader)?;
+            let next_ip_number = header.next_header;
+            Ok((Ipv4Extensions { auth: Some(header) }, next_ip_number))
+        } else {
+            Ok((Default::default(), start_ip_number))
+        }
+    }
+
+    /// Reads the known ipv4 extension headers from a length limited reader and returns the
+    /// headers together with the internet protocol number identifying the protocol
+    /// that will be next.
+    #[cfg(feature = "std")]
+    pub fn read_limited<T: std::io::Read + Sized>(
+        reader: &mut crate::io::LimitedReader<T>,
+        start_ip_number: IpNumber,
+    ) -> Result<(Ipv4Extensions, IpNumber), err::ip_auth::HeaderLimitedReadError> {
+        use ip_number::*;
+        if AUTH == start_ip_number {
+            let header = IpAuthHeader::read_limited(reader)?;
             let next_ip_number = header.next_header;
             Ok((Ipv4Extensions { auth: Some(header) }, next_ip_number))
         } else {

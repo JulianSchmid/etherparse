@@ -123,20 +123,6 @@ impl<'a> InternetSlice<'a> {
                         }));
                     }
 
-                    // check the total_length can contain the header
-                    //
-                    // SAFETY:
-                    // Safe as the slice length is checked to be at least
-                    // 5*4 (5 for the minimum of the ihl) just before.
-                    let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
-                    if total_length < header_len as u16 {
-                        use err::ip::HeaderError::Ipv4TotalLengthSmallerThanHeader;
-                        return Err(IpHeader(Ipv4TotalLengthSmallerThanHeader {
-                            total_length,
-                            min_expected_length: header_len as u16,
-                        }));
-                    }
-
                     // SAFETY:
                     // Safe as the slice length is checked to be at least
                     // header_len or greater above.
@@ -147,11 +133,22 @@ impl<'a> InternetSlice<'a> {
                         ))
                     };
 
-                    // validate the total length agains the slice
-                    let total_length_usize: usize = total_length.into();
-                    let header_payload = if slice.len() < total_length_usize {
+                    // check the total_lenat least contains the header
+                    let total_len = usize::from(header.total_len());
+                    if total_len < header_len {
                         return Err(Len(LenError {
-                            required_len: total_length_usize,
+                            required_len: header_len,
+                            len: total_len,
+                            len_source: LenSource::Ipv4HeaderTotalLen,
+                            layer: Layer::Ipv4Packet,
+                            layer_start_offset: 0,
+                        }));
+                    }
+
+                    // validate the total length agains the slice
+                    let header_payload = if slice.len() < total_len {
+                        return Err(Len(LenError {
+                            required_len: total_len,
                             len: slice.len(),
                             len_source: LenSource::Slice,
                             layer: Layer::Ipv4Packet,
@@ -165,7 +162,7 @@ impl<'a> InternetSlice<'a> {
                                 slice.as_ptr().add(header_len),
                                 // SAFETY: Safe as total_length >= header_len was verfied in an
                                 // if statement above as well as that slice.len() >= total_length_usize.
-                                total_length_usize - header_len,
+                                total_len - header_len,
                             )
                         }
                     };
@@ -334,7 +331,7 @@ mod test {
             let mut header: Ipv4Header = Default::default();
             header.protocol = ip_number::UDP;
             header.set_payload_len(0).unwrap();
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
 
             let ipv4 = Ipv4Slice::from_slice(&buffer).unwrap();
             let slice = InternetSlice::Ipv4(ipv4.clone());
@@ -370,12 +367,12 @@ mod test {
             use ip_number::UDP;
             // ipv4
             {
-                let mut ipv4 = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]);
+                let mut ipv4 = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
                 if fragment {
                     ipv4.fragment_offset = 123.try_into().unwrap();
                 }
 
-                let data = ipv4.to_bytes().unwrap();
+                let data = ipv4.to_bytes();
                 let ipv4_slice = Ipv4Slice::from_slice(&data).unwrap();
                 assert_eq!(
                     fragment,
@@ -419,8 +416,8 @@ mod test {
         // ipv4
         {
             let data = Ipv4Header::new(0, 1, 2.into(), [3, 4, 5, 6], [7, 8, 9, 10])
-                .to_bytes()
-                .unwrap();
+                .unwrap()
+                .to_bytes();
             assert_eq!(
                 IpAddr::V4(Ipv4Addr::from([3, 4, 5, 6])),
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).source_addr()
@@ -454,8 +451,9 @@ mod test {
         // ipv4
         {
             let data = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10])
-                .to_bytes()
-                .unwrap();
+                .unwrap()
+                .to_bytes();
+
             assert_eq!(
                 IpAddr::V4(Ipv4Addr::from([7, 8, 9, 10])),
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).destination_addr()
@@ -492,9 +490,9 @@ mod test {
                 ip_number::UDP,
                 [3, 4, 5, 6],
                 [7, 8, 9, 10],
-            );
+            ).unwrap();
             let mut data = Vec::with_capacity(header.header_len() + payload.len());
-            data.extend_from_slice(&header.to_bytes().unwrap());
+            data.extend_from_slice(&header.to_bytes());
             data.extend_from_slice(&payload);
             assert_eq!(
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload(),
@@ -540,8 +538,8 @@ mod test {
         // ipv4
         {
             let data = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10])
-                .to_bytes()
-                .unwrap();
+                .unwrap()
+                .to_bytes();
             assert_eq!(
                 UDP,
                 InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload_ip_number()
@@ -585,8 +583,8 @@ mod test {
                 } else {
                     ip_number::UDP
                 };
-                header.payload_len = (ipv4_exts.header_len() + payload.len()) as u16;
-                header.header_checksum = header.calc_header_checksum().unwrap();
+                header.total_len = (header.header_len() + ipv4_exts.header_len() + payload.len()) as u16;
+                header.header_checksum = header.calc_header_checksum();
                 header
             };
 

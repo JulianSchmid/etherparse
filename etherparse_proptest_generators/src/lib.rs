@@ -227,7 +227,7 @@ prop_compose! {
         more_fragments in any::<bool>(),
         fragment_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
-        payload_len in 0..(core::u16::MAX - u16::from(options.len()) - (Ipv4Header::MIN_LEN as u16)),
+        total_len in (u16::from(options.len()) + (Ipv4Header::MIN_LEN as u16))..u16::MAX,
         protocol in proptest::strategy::Just(protocol),
         options in proptest::strategy::Just(options)
     ) -> Ipv4Header
@@ -235,7 +235,7 @@ prop_compose! {
         Ipv4Header{
             dscp: dscp.try_into().unwrap(),
             ecn: ecn.try_into().unwrap(),
-            payload_len,
+            total_len,
             identification,
             dont_fragment,
             more_fragments,

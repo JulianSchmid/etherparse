@@ -17,8 +17,26 @@ pub enum ValueType {
     Ipv4Ecn,
     /// IPv6 Header Flow Label field present in [`crate::Ipv6Header`].
     Ipv6FlowLabel,
-
+    /// IPv4 Header "total length" field based on the payload
+    /// length after the header.
     Ipv4PayloadLength,
+    /// IPv6 Header "payload length" field present in an
+    /// [`crate::Ipv6Header`].
+    Ipv6PayloadLength,
+    /// Payload length used when calculcating the checksum of a
+    /// [`crate::UdpHeader`] for IPv4.
+    UdpPayloadLengthIpv4,
+    /// Payload length used when calculcating the checksum of a
+    /// [`crate::UdpHeader`] for IPv6.
+    UdpPayloadLengthIpv6,
+    /// Payload length used when calculcating the checksum of a
+    /// [`crate::TcpHeader`] for IPv4.
+    TcpPayloadLengthIpv4,
+    /// Payload length used when calculcating the checksum of a
+    /// [`crate::TcpHeader`] for IPv6.
+    TcpPayloadLengthIpv6,
+    /// Variable length data of an ICMPv6 packet.
+    Icmpv6PayloadLength,
 }
 
 impl core::fmt::Display for ValueType {
@@ -31,7 +49,13 @@ impl core::fmt::Display for ValueType {
             Ipv4Dscp => write!(f, "IPv4 DSCP (Differentiated Services Code Point)"),
             Ipv4Ecn => write!(f, "IPv4 ECN (Explicit Congestion Notification)"),
             Ipv6FlowLabel => write!(f, "IPv6 Flow Label"),
-            Ipv4PayloadLength => write!(f, "Ipv4Header.payload_len"),
+            Ipv4PayloadLength => write!(f, "IPv4 Header 'Payload Length' (sets 'Total Length')"),
+            Ipv6PayloadLength => write!(f, "IPv6 Header 'Payload Length'"),
+            UdpPayloadLengthIpv4 => write!(f, "UDP Payload Length (in IPv4 checksum calculation)"),
+            UdpPayloadLengthIpv6 => write!(f, "UDP Payload Length (in IPv6 checksum calculation)"),
+            TcpPayloadLengthIpv4 => write!(f, "TCP Payload Length (in IPv4 checksum calculation)"),
+            TcpPayloadLengthIpv6 => write!(f, "TCP Payload Length (in IPv6 checksum calculation)"),
+            Icmpv6PayloadLength => write!(f, "ICMPv6 Payload Length")
         }
     }
 }
@@ -74,6 +98,12 @@ mod test {
             &format!("{}", Ipv4Ecn)
         );
         assert_eq!("IPv6 Flow Label", &format!("{}", Ipv6FlowLabel));
-        assert_eq!("Ipv4Header.payload_len", &format!("{}", Ipv4PayloadLength));
+        assert_eq!("IPv4 Header 'Payload Length' (sets 'Total Length')", &format!("{}", Ipv4PayloadLength));
+        assert_eq!("IPv6 Header 'Payload Length'", &format!("{}", Ipv6PayloadLength));
+        assert_eq!("UDP Payload Length (in IPv4 checksum calculation)", &format!("{}", UdpPayloadLengthIpv4));
+        assert_eq!("UDP Payload Length (in IPv6 checksum calculation)", &format!("{}", UdpPayloadLengthIpv6));
+        assert_eq!("TCP Payload Length (in IPv4 checksum calculation)", &format!("{}", TcpPayloadLengthIpv4));
+        assert_eq!("TCP Payload Length (in IPv6 checksum calculation)", &format!("{}", TcpPayloadLengthIpv6));
+        assert_eq!("ICMPv6 Payload Length", &format!("{}", Icmpv6PayloadLength));
     }
 }

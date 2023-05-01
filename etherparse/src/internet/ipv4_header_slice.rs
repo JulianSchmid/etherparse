@@ -16,7 +16,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         use err::ipv4::HeaderError::*;
         use err::ipv4::HeaderSliceError::*;
 
-        //check length
+        // check length
         if slice.len() < Ipv4Header::MIN_LEN {
             return Err(Len(err::LenError {
                 required_len: Ipv4Header::MIN_LEN,
@@ -27,23 +27,23 @@ impl<'a> Ipv4HeaderSlice<'a> {
             }));
         }
 
-        //read version & ihl
+        // read version & ihl
         let (version_number, ihl) = unsafe {
             let value = slice.get_unchecked(0);
             (value >> 4, value & 0xf)
         };
 
-        //check version
+        // check version
         if 4 != version_number {
             return Err(Content(UnexpectedVersion { version_number }));
         }
 
-        //check that the ihl is correct
+        // check that the ihl is correct
         if ihl < 5 {
             return Err(Content(HeaderLengthSmallerThanHeader { ihl }));
         }
 
-        //check that the slice contains enough data for the entire header + options
+        // check that the slice contains enough data for the entire header + options
         let header_length = (usize::from(ihl)) * 4;
         if slice.len() < header_length {
             return Err(Len(err::LenError {
@@ -52,20 +52,6 @@ impl<'a> Ipv4HeaderSlice<'a> {
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
                 layer_start_offset: 0,
-            }));
-        }
-
-        // check the total_length can contain the header
-        //
-        // SAFETY:
-        // Safe as the slice length is checked to be at least
-        // Ipv4Header::MIN_LEN (20) at the start.
-        let total_length = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
-
-        if total_length < header_length as u16 {
-            return Err(Content(TotalLengthSmallerThanHeader {
-                total_length,
-                min_expected_length: header_length as u16,
             }));
         }
 
@@ -148,10 +134,65 @@ impl<'a> Ipv4HeaderSlice<'a> {
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
     }
 
-    /// Determine the payload length based on the ihl & total_length field of the header.
+    /// Determine the payload length based on the ihl & total_length
+    /// field of the header.
+    /// 
+    /// # Example Usage
+    /// 
+    /// ```
+    /// use etherparse::{Ipv4Header, Ipv4HeaderSlice};
+    /// 
+    /// let bytes = Ipv4Header{
+    ///     // the payload len will be calculated by subtracting the
+    ///     // header length from the total length
+    ///     total_len: Ipv4Header::MIN_LEN as u16 + 100,
+    ///     ..Default::default()
+    /// }.to_bytes();
+    /// 
+    /// let slice = Ipv4HeaderSlice::from_slice(&bytes).unwrap();
+    /// assert_eq!(Ok(100), slice.payload_len());
+    /// 
+    /// // error case
+    /// let bad_bytes = Ipv4Header {
+    ///     // total len should also include the header, in case it does
+    ///     // not it is not possible to calculate the payload length
+    ///     total_len: Ipv4Header::MIN_LEN as u16 - 1,
+    ///     ..Default::default()
+    /// }.to_bytes();
+    /// 
+    /// let bad_slice = Ipv4HeaderSlice::from_slice(&bad_bytes).unwrap();
+    /// // in case the total_len is smaller then the header itself an
+    /// // error is returned
+    /// use etherparse::err::{LenError, Layer, LenSource};
+    /// assert_eq!(
+    ///     bad_slice.payload_len(),
+    ///     Err(LenError {
+    ///         required_len: Ipv4Header::MIN_LEN,
+    ///         len: Ipv4Header::MIN_LEN - 1,
+    ///         len_source: LenSource::Ipv4HeaderTotalLen,
+    ///         layer: Layer::Ipv4Packet,
+    ///         layer_start_offset: 0,
+    ///     })
+    /// );
+    /// ```
     #[inline]
-    pub fn payload_len(&self) -> u16 {
-        self.total_len() - u16::from(self.ihl()) * 4
+    pub fn payload_len(&self) -> Result<u16, err::LenError> {
+        let total_len = self.total_len();
+        // SAFETY: slice.len() can be at most be 60 (verified in from_slice) so a
+        // cast to u16 is safe.
+        let header_len = self.slice.len() as u16;
+        if header_len <= total_len {
+            Ok(total_len - header_len)
+        } else {
+            use err::{LenError, LenSource, Layer};
+            Err(LenError {
+                required_len: header_len.into(),
+                len: total_len.into(),
+                len_source: LenSource::Ipv4HeaderTotalLen,
+                layer: Layer::Ipv4Packet,
+                layer_start_offset: 0,
+            })
+        }
     }
 
     /// Read the "identification" field from the slice.
@@ -280,7 +321,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         Ipv4Header {
             dscp: self.dcp(),
             ecn: self.ecn(),
-            payload_len: self.payload_len(),
+            total_len: self.total_len(),
             identification: self.identification(),
             dont_fragment: self.dont_fragment(),
             more_fragments: self.more_fragments(),
@@ -313,7 +354,7 @@ mod test {
     fn debug() {
         let buffer = {
             let header: Ipv4Header = Default::default();
-            header.to_bytes().unwrap()
+            header.to_bytes()
         };
         let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
         assert_eq!(
@@ -325,7 +366,7 @@ mod test {
     proptest! {
         #[test]
         fn clone_eq(header in ipv4_any()) {
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
             let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(slice.clone(), slice);
         }
@@ -340,7 +381,7 @@ mod test {
             // ok
             {
                 let mut buffer = ArrayVec::<u8, { Ipv4Header::MAX_LEN + 1 }>::new();
-                buffer.try_extend_from_slice(&header.to_bytes().unwrap()).unwrap();
+                buffer.try_extend_from_slice(&header.to_bytes()).unwrap();
                 buffer.try_extend_from_slice(&[1]).unwrap();
 
                 let actual_slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
@@ -350,7 +391,7 @@ mod test {
 
             // unexpected end of slice
             {
-                let buffer = header.to_bytes().unwrap();
+                let buffer = header.to_bytes();
                 for len in 0..header.header_len() {
                     assert_eq!(
                         Ipv4HeaderSlice::from_slice(&buffer[..len]),
@@ -372,7 +413,7 @@ mod test {
             // version error
             for version_number in 0u8..0b1111u8 {
                 if 4 != version_number {
-                    let mut buffer = header.to_bytes().unwrap();
+                    let mut buffer = header.to_bytes();
                     // inject the bad ihl
                     buffer[0] = (version_number << 4) | (buffer[0] & 0b1111);
                     // expect an error
@@ -387,7 +428,7 @@ mod test {
 
             // ihl too small error
             for ihl in 0u8..5u8 {
-                let mut buffer = header.to_bytes().unwrap();
+                let mut buffer = header.to_bytes();
                 // inject the bad ihl
                 buffer[0] = (4 << 4) | ihl;
                 // expect an error
@@ -395,23 +436,6 @@ mod test {
                     Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
                     Content(HeaderLengthSmallerThanHeader{
                         ihl,
-                    })
-                );
-            }
-
-            // total length too small error
-            for total_length in 0..header.header_len() {
-                let mut buffer = header.to_bytes().unwrap();
-                // inject total length smaller then the header length
-                let tl_be = (total_length as u16).to_be_bytes();
-                buffer[2] = tl_be[0];
-                buffer[3] = tl_be[1];
-                // expect an error
-                assert_eq!(
-                    Ipv4HeaderSlice::from_slice(&buffer).unwrap_err(),
-                    Content(TotalLengthSmallerThanHeader{
-                        total_length: total_length as u16,
-                        min_expected_length: header.header_len() as u16,
                     })
                 );
             }
@@ -428,7 +452,7 @@ mod test {
     proptest! {
         #[test]
         fn getters(header in ipv4_any()) {
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
             let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
 
             assert_eq!(slice.slice(), &buffer[..]);
@@ -436,8 +460,8 @@ mod test {
             assert_eq!(slice.ihl(), header.ihl());
             assert_eq!(slice.dcp(), header.dscp);
             assert_eq!(slice.ecn(), header.ecn);
-            assert_eq!(slice.total_len(), header.total_len());
-            assert_eq!(slice.payload_len(), header.payload_len);
+            assert_eq!(slice.total_len(), header.total_len);
+            assert_eq!(slice.payload_len(), header.payload_len());
             assert_eq!(slice.identification(), header.identification);
             assert_eq!(slice.dont_fragment(), header.dont_fragment);
             assert_eq!(slice.more_fragments(), header.more_fragments);
@@ -457,7 +481,7 @@ mod test {
         fn getters_std(header in ipv4_any()) {
             use std::net::Ipv4Addr;
 
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
             let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
 
             assert_eq!(slice.source_addr(), Ipv4Addr::from(header.source));
@@ -513,7 +537,7 @@ mod test {
     proptest! {
         #[test]
         fn to_header(header in ipv4_any()) {
-            let buffer = header.to_bytes().unwrap();
+            let buffer = header.to_bytes();
             let slice = Ipv4HeaderSlice::from_slice(&buffer).unwrap();
             assert_eq!(slice.to_header(), header);
         }
