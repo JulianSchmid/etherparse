@@ -1,4 +1,4 @@
-use crate::IpNumber;
+use super::ExtNotReferencedError;
 
 /// Errors in content of IPv4 header extensions that prevent serialization.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
@@ -6,14 +6,14 @@ pub enum HeaderSerError {
     /// Error when a header in `Ipv6Extensions` is never written
     /// as it is never referenced by any of the other `next_header`
     /// fields or the initial ip number.
-    ExtNotReferenced(IpNumber),
+    ExtNotReferenced(ExtNotReferencedError),
 }
 
 impl core::fmt::Display for HeaderSerError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        use HeaderSerError::*;
         match self {
-            HeaderSerError::ExtNotReferenced(ip_number) =>
-                write!(f, "IPv4 extensions '{:?}' is defined but is not referenced by the 'protocol' the IPv4 header.", ip_number),
+            ExtNotReferenced(err) => err.fmt(f),
         }
     }
 }
@@ -21,13 +21,16 @@ impl core::fmt::Display for HeaderSerError {
 #[cfg(feature = "std")]
 impl std::error::Error for HeaderSerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        None
+        use HeaderSerError::*;
+        match self {
+            ExtNotReferenced(err) => Some(err),
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::HeaderSerError::*;
+    use super::{*, HeaderSerError::*};
     use crate::*;
     use alloc::format;
     use std::{
@@ -39,14 +42,26 @@ mod tests {
     #[test]
     fn debug() {
         assert_eq!(
-            format!("ExtNotReferenced({:?})", IpNumber::AUTHENTICATION_HEADER),
-            format!("{:?}", ExtNotReferenced(IpNumber::AUTHENTICATION_HEADER))
+            format!(
+                "ExtNotReferenced({:?})",
+                ExtNotReferencedError{
+                    missing_ext: IpNumber::AUTHENTICATION_HEADER,
+                }
+            ),
+            format!(
+                "{:?}",
+                ExtNotReferenced(ExtNotReferencedError{
+                    missing_ext: IpNumber::AUTHENTICATION_HEADER
+                })
+            )
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = ExtNotReferenced(IpNumber::AUTHENTICATION_HEADER);
+        let err = ExtNotReferenced(ExtNotReferencedError{
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -65,13 +80,17 @@ mod tests {
     fn fmt() {
         assert_eq!(
             "IPv4 extensions '51 (AH - Authentication Header)' is defined but is not referenced by the 'protocol' the IPv4 header.",
-            format!("{}", ExtNotReferenced(IpNumber::AUTHENTICATION_HEADER))
+            format!("{}", ExtNotReferenced(ExtNotReferencedError{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            }))
         );
     }
 
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(ExtNotReferenced(IpNumber::IPV6_FRAGMENTATION_HEADER).source().is_none());
+        assert!(ExtNotReferenced(ExtNotReferencedError{
+            missing_ext: IpNumber::IPV6_FRAGMENTATION_HEADER
+        }).source().is_some());
     }
 }
