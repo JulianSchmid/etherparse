@@ -694,7 +694,7 @@ pub mod header {
 
             /// Run a test with the given ip numbers
             fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8], post_header: IpNumber) {
-                use etherparse::err::ipv6_exts::HeaderSerError::*;
+                use etherparse::err::ipv6_exts::ExtsWalkError::*;
 
                 // setup test header
                 let e = ExtensionTestHeaders::new(
@@ -745,8 +745,10 @@ pub mod header {
 
                     // missing reference (skip the last header)
                     {
+                        use etherparse::err::ipv6_exts::ExtsWalkError::ExtNotReferenced;
+
                         let mut missing_ref = e.clone();
-                        let missing_ip_number = missing_ref.introduce_missing_ref(post_header);
+                        let missing_ext = missing_ref.introduce_missing_ref(post_header);
 
                         let mut writer = Vec::with_capacity(e.data.header_len());
                         let err = missing_ref.data.write(
@@ -756,7 +758,7 @@ pub mod header {
 
                         assert_eq!(
                             err.content().unwrap(),
-                            &ExtNotReferenced(missing_ip_number)
+                            &ExtNotReferenced{ missing_ext }
                         );
                     }
                 }
@@ -933,8 +935,6 @@ pub mod header {
 
             /// Run a test with the given ip numbers
             fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8], post_header: IpNumber) {
-                use ValueError::*;
-
                 // setup test header
                 let e = ExtensionTestHeaders::new(
                     ip_numbers,
@@ -943,9 +943,10 @@ pub mod header {
 
                 if e.ip_numbers[1..e.ip_numbers.len()-1].iter().any(|&x| x == IPV6_HOP_BY_HOP) {
                     // a hop by hop header that is not at the start triggers an error
+                    use etherparse::err::ipv6_exts::ExtsWalkError::HopByHopNotAtStart;
                     assert_eq!(
                         e.data.next_header(e.ip_numbers[0]).unwrap_err(),
-                        Ipv6ExtensionHopByHopNotAtStart
+                        HopByHopNotAtStart
                     );
                 } else {
                     // normal header
@@ -956,11 +957,13 @@ pub mod header {
 
                     // missing reference (skip the last header)
                     {
+                        use etherparse::err::ipv6_exts::ExtsWalkError::ExtNotReferenced;
+
                         let mut missing_ref = e.clone();
-                        let missing_ip_number = missing_ref.introduce_missing_ref(post_header);
+                        let missing_ext = missing_ref.introduce_missing_ref(post_header);
                         assert_eq!(
                             missing_ref.data.next_header(missing_ref.ip_numbers[0]).unwrap_err(),
-                            Ipv6ExtensionNotReferenced(missing_ip_number)
+                            ExtNotReferenced{ missing_ext }
                         );
                     }
                 }

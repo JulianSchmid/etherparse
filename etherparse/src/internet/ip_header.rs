@@ -529,11 +529,12 @@ impl IpHeader {
 
     /// Returns the last next header number following the ip header
     /// and header extensions.
-    pub fn next_header(&self) -> Result<IpNumber, ValueError> {
+    pub fn next_header(&self) -> Result<IpNumber, err::ip_exts::ExtsWalkError> {
         use crate::IpHeader::*;
+        use crate::err::ip_exts::ExtsWalkError::*;
         match *self {
-            Version4(ref header, ref extensions) => extensions.next_header(header.protocol),
-            Version6(ref header, ref extensions) => extensions.next_header(header.next_header),
+            Version4(ref header, ref extensions) => extensions.next_header(header.protocol).map_err(Ipv4Exts),
+            Version6(ref header, ref extensions) => extensions.next_header(header.next_header).map_err(Ipv6Exts),
         }
     }
 

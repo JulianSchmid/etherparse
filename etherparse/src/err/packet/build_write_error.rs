@@ -14,11 +14,11 @@ pub enum BuildWriteError {
     /// Error if the IPv4 extensions can not be serialized
     /// because of internal consistency errors (i.e. a header
     /// is never).
-    Ipv4Exts(ipv4_exts::HeaderSerError),
+    Ipv4Exts(ipv4_exts::ExtsWalkError),
 
     /// Error if the IPv6 extensions can not be serialized
     /// because of internal consistency errors.
-    Ipv6Exts(ipv6_exts::HeaderSerError),
+    Ipv6Exts(ipv6_exts::ExtsWalkError),
 
     /// Error if ICMPv6 is packaged in an IPv4 packet (it is undefined
     /// how to calculate the checksum).
