@@ -290,7 +290,6 @@ impl Ipv6Header {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = core::u16::MAX as usize;
         if MAX_PAYLOAD_LENGTH < size {
-            //return Err(ValueError::Ipv6PayloadLengthTooLarge(size));
             return Err(ValueTooBigError{
                 actual: size,
                 max_allowed: MAX_PAYLOAD_LENGTH,

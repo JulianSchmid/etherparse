@@ -1,4 +1,4 @@
-use super::HeaderSerError;
+use super::ExtsWalkError;
 
 /// Error when writing IPv4 extension headers.
 #[cfg(feature = "std")]
@@ -7,7 +7,7 @@ pub enum HeaderWriteError {
     /// IO error encountered while writing.
     Io(std::io::Error),
     /// Data was not serializable because of its content.
-    Content(HeaderSerError),
+    Content(ExtsWalkError),
 }
 
 #[cfg(feature = "std")]
@@ -21,7 +21,7 @@ impl HeaderWriteError {
     }
 
     /// Returns a reference to the [`crate::err:ipv4_exts::HeaderSerError`] if the value is an [`HeaderWriteError::Content`].
-    pub fn content(&self) -> Option<&HeaderSerError> {
+    pub fn content(&self) -> Option<&ExtsWalkError> {
         match self {
             HeaderWriteError::Io(_) => None,
             HeaderWriteError::Content(err) => Some(err),

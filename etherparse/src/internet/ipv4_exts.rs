@@ -1,4 +1,4 @@
-use super::super::*;
+use crate::{*, err::ipv4_exts::ExtsWalkError};
 
 /// IPv4 extension headers present after the ip header.
 ///
@@ -73,15 +73,15 @@ impl Ipv4Extensions {
         start_ip_number: IpNumber,
     ) -> Result<(), err::ipv4_exts::HeaderWriteError> {
         use ip_number::*;
-        use err::ipv4_exts::{HeaderWriteError::*, HeaderSerError::*, ExtNotReferencedError};
+        use err::ipv4_exts::{HeaderWriteError::*, ExtsWalkError::*};
         match self.auth {
             Some(ref header) => {
                 if AUTH == start_ip_number {
                     header.write(writer).map_err(Io)
                 } else {
-                    Err(Content(ExtNotReferenced(ExtNotReferencedError{
+                    Err(Content(ExtNotReferenced{
                         missing_ext: IpNumber::AUTHENTICATION_HEADER
-                    })))
+                    }))
                 }
             }
             None => Ok(()),
@@ -119,17 +119,17 @@ impl Ipv4Extensions {
     /// Return next header based on the extension headers and
     /// the first ip protocol number.
     ///
-    /// In case a header is never
-    /// referenced a ValueError::Ipv4ExtensionNotReferenced is returned.
-    pub fn next_header(&self, first_next_header: IpNumber) -> Result<IpNumber, ValueError> {
+    /// In case a header is never referenced a
+    /// [`err::ipv4_exts::ExtNotReferencedError`] is returned.
+    pub fn next_header(&self, first_next_header: IpNumber) -> Result<IpNumber, ExtsWalkError> {
         use ip_number::*;
         if let Some(ref auth) = self.auth {
             if first_next_header == AUTH {
                 Ok(auth.next_header)
             } else {
-                Err(ValueError::Ipv4ExtensionNotReferenced(
-                    IpNumber::AUTHENTICATION_HEADER,
-                ))
+                Err(ExtsWalkError::ExtNotReferenced{
+                    missing_ext: IpNumber::AUTHENTICATION_HEADER,
+                })
             }
         } else {
             Ok(first_next_header)

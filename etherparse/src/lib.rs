@@ -372,8 +372,8 @@ pub enum WriteError {
     IoError(std::io::Error),
     ///Error in the data that was given to write
     ValueError(ValueError),
-    Ipv4Exts(err::ipv4_exts::HeaderSerError),
-    Ipv6Exts(err::ipv6_exts::HeaderSerError),
+    Ipv4Exts(err::ipv4_exts::ExtsWalkError),
+    Ipv6Exts(err::ipv6_exts::ExtsWalkError),
 }
 
 #[cfg(feature = "std")]

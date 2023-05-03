@@ -121,7 +121,8 @@ pub mod header {
 
         // Some bad start number
         {
-            use err::ipv4_exts::{ExtNotReferencedError, HeaderSerError};
+            use etherparse::err::ipv4_exts::ExtsWalkError::ExtNotReferenced;
+
             let mut buffer = Vec::new();
             let err = Ipv4Extensions {
                 auth: Some(auth_header.clone()),
@@ -130,9 +131,9 @@ pub mod header {
             .unwrap_err();
             assert_eq!(
                 err.content().unwrap(),
-                &HeaderSerError::ExtNotReferenced(ExtNotReferencedError{
+                &ExtNotReferenced{
                     missing_ext: IpNumber::AUTHENTICATION_HEADER,
-                })
+                }
             );
         }
 
@@ -212,8 +213,9 @@ pub mod header {
             assert_eq!(TCP, exts.next_header(AUTH).unwrap());
 
             // auth not referenced (error)
+            use etherparse::err::ipv4_exts::ExtsWalkError::ExtNotReferenced;
             assert_eq!(
-                ValueError::Ipv4ExtensionNotReferenced(IpNumber::AUTHENTICATION_HEADER),
+                ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER },
                 exts.next_header(TCP).unwrap_err()
             );
         }

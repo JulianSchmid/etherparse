@@ -3,6 +3,7 @@ pub mod double_vlan;
 pub mod io;
 pub mod ip;
 pub mod ip_auth;
+pub mod ip_exts;
 pub mod ipv4;
 pub mod ipv4_exts;
 pub mod ipv6;
