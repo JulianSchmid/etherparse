@@ -121,6 +121,7 @@ pub mod header {
 
         // Some bad start number
         {
+            use err::ipv4_exts::{ExtNotReferencedError, HeaderSerError};
             let mut buffer = Vec::new();
             let err = Ipv4Extensions {
                 auth: Some(auth_header.clone()),
@@ -129,9 +130,9 @@ pub mod header {
             .unwrap_err();
             assert_eq!(
                 err.content().unwrap(),
-                &err::ipv4_exts::HeaderSerError::ExtNotReferenced(
-                    IpNumber::AUTHENTICATION_HEADER
-                )
+                &HeaderSerError::ExtNotReferenced(ExtNotReferencedError{
+                    missing_ext: IpNumber::AUTHENTICATION_HEADER,
+                })
             );
         }
 

@@ -73,13 +73,15 @@ impl Ipv4Extensions {
         start_ip_number: IpNumber,
     ) -> Result<(), err::ipv4_exts::HeaderWriteError> {
         use ip_number::*;
-        use err::ipv4_exts::{HeaderWriteError::*, HeaderSerError::*};
+        use err::ipv4_exts::{HeaderWriteError::*, HeaderSerError::*, ExtNotReferencedError};
         match self.auth {
             Some(ref header) => {
                 if AUTH == start_ip_number {
                     header.write(writer).map_err(Io)
                 } else {
-                    Err(Content(ExtNotReferenced(IpNumber::AUTHENTICATION_HEADER)))
+                    Err(Content(ExtNotReferenced(ExtNotReferencedError{
+                        missing_ext: IpNumber::AUTHENTICATION_HEADER
+                    })))
                 }
             }
             None => Ok(()),
