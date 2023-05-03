@@ -80,6 +80,7 @@ impl std::error::Error for HeaderReadError {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::{HeaderReadError::*, *};
+    use crate::err::{Layer, LenSource, LenError};
     use alloc::format;
 
     #[test]
@@ -104,6 +105,19 @@ mod test {
             );
         }
         {
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::Icmpv4,
+                layer_start_offset: 3,
+            };
+            assert_eq!(
+                format!("{}", Len(err.clone())),
+                format!("{}", err)
+            );
+        }
+        {
             let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
@@ -118,6 +132,15 @@ mod test {
         ))
         .source()
         .is_some());
+        assert!(
+            Len(LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::Icmpv4,
+                layer_start_offset: 3,
+            }).source().is_some()
+        );
         assert!(
             Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .source()
@@ -137,6 +160,31 @@ mod test {
             Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .io()
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn len() {
+        {
+            let err = LenError{
+                required_len: 2,
+                len: 1,
+                len_source: LenSource::Slice,
+                layer: Layer::Icmpv4,
+                layer_start_offset: 3,
+            };
+            assert_eq!(
+                Len(err.clone()).len(),
+                Some(err)
+            );
+        }
+        assert!(
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
+            .len()
+            .is_none()
         );
     }
 
