@@ -29,18 +29,45 @@ pub enum BuildWriteError {
 impl BuildWriteError {
     /// Returns the [`std::io::Error`] value if the `BuildWriteError` is an `Io`.
     /// Otherwise `None` is returned.
-    pub fn io(self) -> Option<std::io::Error> {
+    pub fn io(&self) -> Option<&std::io::Error> {
         match self {
-            BuildWriteError::Io(value) => Some(value),
+            BuildWriteError::Io(err) => Some(err),
             _ => None,
         }
     }
-    /// Returns the [`crate::err::packet::ValueTooBigError`] value if the
-    /// `BuildWriteError` is a `ValueTooBig`. Otherwise `None` is returned.
-    pub fn value_too_big(self) -> Option<ValueTooBigError<usize>> {
+
+    /// Returns the [`crate::err::ValueTooBigError`] value if the
+    /// `BuildWriteError` is a `PayloadLen`. Otherwise `None` is returned.
+    pub fn payload_len(&self) -> Option<&ValueTooBigError<usize>> {
         match self {
-            BuildWriteError::PayloadLen(value) => Some(value),
+            BuildWriteError::PayloadLen(err) => Some(err),
             _ => None,
+        }
+    }
+
+    /// Returns the [`crate::err::ipv4_exts::ExtsWalkError`] value if the
+    /// `BuildWriteError` is a `Ipv4Exts`. Otherwise `None` is returned.
+    pub fn ipv4_exts(&self) -> Option<&ipv4_exts::ExtsWalkError> {
+        match self {
+            BuildWriteError::Ipv4Exts(err) => Some(err),
+            _ => None,
+        }
+    }
+
+    /// Returns the [`crate::err::ipv6_exts::ExtsWalkError`] value if the
+    /// `BuildWriteError` is a `Ipv6Exts`. Otherwise `None` is returned.
+    pub fn ipv6_exts(&self) -> Option<&ipv6_exts::ExtsWalkError> {
+        match self {
+            BuildWriteError::Ipv6Exts(err) => Some(err),
+            _ => None,
+        }
+    }
+
+    /// Returns true if the `BuildWriteError` is a `Icmpv6InIpv4`.
+    pub fn is_icmpv6_in_ipv4(&self) -> bool {
+        match self {
+            BuildWriteError::Icmpv6InIpv4 => true,
+            _ => false,
         }
     }
 }
@@ -70,5 +97,189 @@ impl std::error::Error for BuildWriteError {
             Ipv6Exts(err) => Some(err),
             Icmpv6InIpv4 => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{*, BuildWriteError::*};
+    use crate::{*, err::{ValueType}};
+    use alloc::format;
+    use std::error::Error;
+
+    #[test]
+    fn io() {
+        assert!(
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )).io().is_some()
+        );
+        assert!(
+            Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            }).io().is_none()
+        );
+    }
+
+    #[test]
+    fn payload_len() {
+        {
+            let err = ValueTooBigError{
+                actual: 3,
+                max_allowed: 2,
+                value_type: ValueType::Ipv4PayloadLength,
+            };
+            assert_eq!(
+                Some(&err),
+                PayloadLen(err.clone()).payload_len()
+            );
+        }
+        {
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(
+                None,
+                Ipv4Exts(err.clone()).payload_len()
+            );
+        }
+    }
+
+    #[test]
+    fn ipv4_exts() {
+        assert!(
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )).ipv4_exts().is_none()
+        );
+        {
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(
+                Some(&err),
+                Ipv4Exts(err.clone()).ipv4_exts()
+            );
+        }
+    }
+
+    #[test]
+    fn ipv6_exts() {
+        assert!(
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )).ipv6_exts().is_none()
+        );
+        {
+            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(
+                Some(&err),
+                Ipv6Exts(err.clone()).ipv6_exts()
+            );
+        }
+    }
+
+    #[test]
+    fn is_icmpv6_in_ipv4() {
+        assert_eq!(
+            false,
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )).is_icmpv6_in_ipv4()
+        );
+        assert!(Icmpv6InIpv4.is_icmpv6_in_ipv4());
+    }
+
+    #[test]
+    fn debug() {
+        let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        };
+        assert_eq!(
+            format!("Ipv4Exts({:?})", err.clone()),
+            format!("{:?}", Ipv4Exts(err))
+        );
+    }
+
+    #[test]
+    fn fmt() {
+        {
+            let err = std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            );
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", Io(err))
+            );
+        }
+        {
+            let err = ValueTooBigError{
+                actual: 3,
+                max_allowed: 2,
+                value_type: ValueType::Ipv4PayloadLength,
+            };
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", PayloadLen(err.clone()))
+            );
+        }
+        {
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", Ipv4Exts(err.clone()))
+            );
+        }
+        {
+            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", Ipv6Exts(err.clone()))
+            );
+        }
+        assert_eq!(
+            "Error: ICMPv6 can not be combined with an IPv4 headers (checksum can not be calculated).",
+            format!("{}", Icmpv6InIpv4)
+        );
+    }
+
+    #[cfg(feature = "std")]
+    #[test]
+    fn source() {
+        assert!(
+            Io(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            )).source().is_some()
+        );
+        assert!(
+            PayloadLen(ValueTooBigError{
+                actual: 3,
+                max_allowed: 2,
+                value_type: ValueType::Ipv4PayloadLength,
+            }).source().is_some()
+        );
+        assert!(
+            Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            }).source().is_some()
+        );
+        assert!(
+            Ipv6Exts(ipv6_exts::ExtsWalkError::ExtNotReferenced{
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            }).source().is_some()
+        );
+        assert!(Icmpv6InIpv4.source().is_none());
     }
 }

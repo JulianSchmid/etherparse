@@ -51,7 +51,6 @@ impl std::error::Error for HeaderWriteError {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{HeaderWriteError::*, ExtsWalkError::*};
