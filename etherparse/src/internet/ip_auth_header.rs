@@ -283,7 +283,7 @@ impl<'a> IpAuthHeader {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_gens::*;
+    use crate::{test_gens::*, io::LimitedReader, err::{LenSource, Layer, LenError}};
     use alloc::{format, vec::Vec};
     use err::ip_auth::HeaderError::*;
     use proptest::prelude::*;
@@ -496,6 +496,93 @@ mod test {
                 let mut cursor = Cursor::new(&bytes);
                 assert_eq!(
                     IpAuthHeader::read(&mut cursor).unwrap_err().content(),
+                    Some(ZeroPayloadLen)
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read_limited(header in ip_auth_any()) {
+            // ok
+            {
+                let bytes = header.to_bytes();
+                let mut cursor = Cursor::new(&bytes);
+                let mut reader = LimitedReader::new(
+                    &mut cursor,
+                    bytes.len(),
+                    LenSource::Slice,
+                    Layer::Ipv4Header
+                );
+                assert_eq!(header, IpAuthHeader::read_limited(&mut reader).unwrap());
+            }
+
+            // length error
+            {
+                let bytes = header.to_bytes();
+                for len in 0..header.header_len() {
+                    // io error
+                    {
+                        let mut cursor = Cursor::new(&bytes[..len]);
+                        let mut reader = LimitedReader::new(
+                            &mut cursor,
+                            bytes.len(),
+                            LenSource::Slice,
+                            Layer::Ipv4Header
+                        );
+                        assert!(
+                            IpAuthHeader::read_limited(&mut reader)
+                                .unwrap_err()
+                                .io()
+                                .is_some()
+                        );
+                    }
+                    // limited reader error
+                    {
+                        
+                        let mut cursor = Cursor::new(&bytes);
+                        let mut reader = LimitedReader::new(
+                            &mut cursor,
+                            len,
+                            LenSource::Ipv4HeaderTotalLen,
+                            Layer::Ipv4Header
+                        );
+                        assert_eq!(
+                            IpAuthHeader::read_limited(&mut reader)
+                                .unwrap_err()
+                                .len()
+                                .unwrap(),
+                            LenError {
+                                required_len: if len < 12 {
+                                    12
+                                } else {
+                                    bytes.len()
+                                },
+                                len,
+                                len_source: LenSource::Ipv4HeaderTotalLen,
+                                layer: Layer::IpAuthHeader,
+                                layer_start_offset: 0
+                            }
+                        );
+                    }
+                }
+            }
+
+            // payload length error
+            {
+                let mut bytes = header.to_bytes();
+                // set payload length to 0
+                bytes[1] = 0;
+                let mut cursor = Cursor::new(&bytes);
+                let mut reader = LimitedReader::new(
+                    &mut cursor,
+                    bytes.len(),
+                    LenSource::Ipv4HeaderTotalLen,
+                    Layer::Ipv4Header
+                );
+                assert_eq!(
+                    IpAuthHeader::read_limited(&mut reader).unwrap_err().content(),
                     Some(ZeroPayloadLen)
                 );
             }
