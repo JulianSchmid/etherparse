@@ -634,6 +634,12 @@ mod tests {
                     .ip()
                     .unwrap()
             );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(ip::HeaderReadError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
             assert!(ReadError::from(ip::HeaderReadError::Io(io_error()))
                 .io()
                 .is_some());
