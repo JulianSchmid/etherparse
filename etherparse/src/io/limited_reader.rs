@@ -18,13 +18,13 @@ pub struct LimitedReader<'a, T> {
 #[cfg(feature = "std")]
 impl<'a, T: std::io::Read + Sized> LimitedReader<'a, T> {
     /// Setup a new limited reader.
-    pub fn new(reader: &'a mut T, max_len: usize, len_source: LenSource, layer: Layer) -> LimitedReader<'a, T> {
+    pub fn new(reader: &'a mut T, max_len: usize, len_source: LenSource, layer_offset: usize, layer: Layer) -> LimitedReader<'a, T> {
         LimitedReader{
             reader,
             max_len,
             len_source,
             layer,
-            layer_offset: 0,
+            layer_offset,
             read_len: 0,
         }
     }

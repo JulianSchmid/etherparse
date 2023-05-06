@@ -447,6 +447,7 @@ impl IpHeader {
                         reader,
                         total_len - header_len,
                         LenSource::Ipv4HeaderTotalLen,
+                        header_len,
                         Layer::Ipv4Header
                     )
                 };
@@ -471,6 +472,7 @@ impl IpHeader {
                     reader,
                     header.payload_length.into(),
                     LenSource::Ipv6HeaderPayloadLen,
+                    header.header_len(),
                     Layer::Ipv6Header
                 );
 
@@ -606,7 +608,7 @@ impl IpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{err::LenSource, ip_number::*, test_gens::*, *};
+    use crate::{err::{LenSource, ip::HeaderError, LenError, Layer}, ip_number::*, test_gens::*, *};
     use alloc::{borrow::ToOwned, format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -794,9 +796,20 @@ mod test {
         fn read(
             v4 in ipv4_any(),
             v4_exts in ipv4_extensions_any(),
+            bad_ihl in 0u8..5u8,
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
+            // no data error
+            {
+                let mut cursor = Cursor::new(&[]);
+                assert!(
+                    IpHeader::read(&mut cursor)
+                    .unwrap_err()
+                    .io()
+                    .is_some()
+                );
+            }
             // v4
             {
                 let header = combine_v4(&v4, &v4_exts, &[]);
@@ -805,22 +818,111 @@ mod test {
 
                 // read
                 {
-                    let mut cursor = Cursor::new(&buffer);
+                    let mut cursor = Cursor::new(&buffer[..]);
                     let actual = IpHeader::read(&mut cursor).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                 }
 
-                // read error ipv4 header
+                // read error ihl smaller then header
+                {
+                    let mut buffer = buffer.clone();
+                    // inject bad ihl
+                    buffer[0] = (buffer[0] & 0b1111_0000) | bad_ihl;
+                    let mut cursor = Cursor::new(&buffer[..]);
+                    assert_eq!(
+                        IpHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .content()
+                        .unwrap(),
+                        HeaderError::Ipv4HeaderLengthSmallerThanHeader{
+                            ihl: bad_ihl
+                        }
+                    );
+                }
+
+                // total length smaller the header
+                {
+                    let bad_total_len = (v4.header_len() - 1) as u16;
+
+                    let mut buffer = buffer.clone();
+                    // inject bad total_len
+                    let bad_total_len_be = bad_total_len.to_be_bytes();
+                    buffer[2] = bad_total_len_be[0];
+                    buffer[3] = bad_total_len_be[1];
+                    let mut cursor = Cursor::new(&buffer[..]);
+                    assert_eq!(
+                        IpHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .len()
+                        .unwrap(),
+                        LenError{
+                            required_len: v4.header_len(),
+                            len: bad_total_len as usize,
+                            len_source: LenSource::Ipv4HeaderTotalLen,
+                            layer: Layer::Ipv4Packet,
+                            layer_start_offset: 0,
+                        }
+                    );
+                }
+
+                // read len error ipv4
                 {
                     let mut cursor = Cursor::new(&buffer[..1]);
-                    IpHeader::read(&mut cursor).unwrap_err();
+                    assert!(
+                        IpHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .io()
+                        .is_some()
+                    );
                 }
 
                 // read error ipv4 extensions
                 if v4_exts.header_len() > 0 {
                     let mut cursor = Cursor::new(&buffer[..v4.header_len() + 1]);
                     IpHeader::read(&mut cursor).unwrap_err();
+                }
+
+                // len error in extensions
+                if v4_exts.auth.is_some() {
+                    let bad_total_len = (buffer.len() - 1) as u16;
+
+                    let mut buffer = buffer.clone();
+                    // inject bad total_len
+                    let bad_total_len_be = bad_total_len.to_be_bytes();
+                    buffer[2] = bad_total_len_be[0];
+                    buffer[3] = bad_total_len_be[1];
+                    let mut cursor = Cursor::new(&buffer[..]);
+                    assert_eq!(
+                        IpHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .len()
+                        .unwrap(),
+                        LenError{
+                            required_len: buffer.len() - v4.header_len(),
+                            len: bad_total_len as usize - v4.header_len(),
+                            len_source: LenSource::Ipv4HeaderTotalLen,
+                            layer: Layer::IpAuthHeader,
+                            layer_start_offset: v4.header_len(),
+                        }
+                    );
+                }
+
+                // extension content error
+                if v4_exts.auth.is_some() {
+                    let mut buffer = buffer.clone();
+                    // inject zero as header len
+                    buffer[v4.header_len() + 1] = 0;
+                    let mut cursor = Cursor::new(&buffer[..]);
+                    assert_eq!(
+                        IpHeader::read(&mut cursor)
+                        .unwrap_err()
+                        .content()
+                        .unwrap(),
+                        HeaderError::Ipv4Ext(
+                            err::ip_auth::HeaderError::ZeroPayloadLen
+                        )
+                    );
                 }
             }
 
@@ -830,24 +932,64 @@ mod test {
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
 
-                // read
+                // ok case
                 {
-                    let mut cursor = Cursor::new(&buffer);
+                    let mut cursor = Cursor::new(&buffer[..]);
                     let actual = IpHeader::read(&mut cursor).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                 }
 
-                // read error header
+                // io error in v6 header section
                 {
                     let mut cursor = Cursor::new(&buffer[..1]);
-                    IpHeader::read(&mut cursor).unwrap_err();
+                    assert!(
+                        IpHeader::read(&mut cursor).unwrap_err().io().is_some()
+                    );
                 }
 
-                // read error ipv4 extensions
+                // io error ipv6 extensions
                 if v6_exts.header_len() > 0 {
                     let mut cursor = Cursor::new(&buffer[..Ipv6Header::LEN + 1]);
-                    IpHeader::read(&mut cursor).unwrap_err();
+                    assert!(
+                        IpHeader::read(&mut cursor).unwrap_err().io().is_some()
+                    );
+                }
+
+                // len error in ipv6 extensions
+                if v6_exts.header_len() > 0 {
+                    // inject an invalid length
+                    let mut buffer = buffer.clone();
+                    let bad_payload_len = (buffer.len() - header.header_len()) as u16;
+                    let bad_payload_len_be = bad_payload_len.to_be_bytes();
+                    buffer[4] = bad_payload_len_be[0];
+                    buffer[5] = bad_payload_len_be[1];
+                    // expect a length error
+                    let mut cursor = Cursor::new(&buffer[..]);
+                    assert!(
+                        IpHeader::read(&mut cursor).unwrap_err().len().is_some()
+                    );
+                }
+
+                // extension content error
+                if let Some(auth) = v6_exts.auth.as_ref() {
+                    // only do it if auth is the last header
+                    if v6_exts.routing.is_none() {
+                        // inject zero as header len
+                        let mut buffer = buffer.clone();
+                        let auth_offset = buffer.len() - auth.header_len();
+                        buffer[auth_offset + 1] = 0;
+                        let mut cursor = Cursor::new(&buffer[..]);
+                        assert_eq!(
+                            IpHeader::read(&mut cursor)
+                            .unwrap_err()
+                            .content()
+                            .unwrap(),
+                            HeaderError::Ipv6Ext(err::ipv6_exts::HeaderError::IpAuth(
+                                err::ip_auth::HeaderError::ZeroPayloadLen
+                            ))
+                        );
+                    }
                 }
             }
         }
