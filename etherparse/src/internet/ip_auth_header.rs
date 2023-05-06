@@ -513,6 +513,7 @@ mod test {
                     &mut cursor,
                     bytes.len(),
                     LenSource::Slice,
+                    0,
                     Layer::Ipv4Header
                 );
                 assert_eq!(header, IpAuthHeader::read_limited(&mut reader).unwrap());
@@ -529,6 +530,7 @@ mod test {
                             &mut cursor,
                             bytes.len(),
                             LenSource::Slice,
+                            0,
                             Layer::Ipv4Header
                         );
                         assert!(
@@ -546,6 +548,7 @@ mod test {
                             &mut cursor,
                             len,
                             LenSource::Ipv4HeaderTotalLen,
+                            0,
                             Layer::Ipv4Header
                         );
                         assert_eq!(
@@ -579,6 +582,7 @@ mod test {
                     &mut cursor,
                     bytes.len(),
                     LenSource::Ipv4HeaderTotalLen,
+                    0,
                     Layer::Ipv4Header
                 );
                 assert_eq!(
