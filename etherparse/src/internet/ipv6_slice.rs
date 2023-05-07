@@ -414,7 +414,8 @@ mod test {
                 hop_limit: 4,
                 source: [0; 16],
                 destination: [0; 16],
-            }.to_bytes();
+            }
+            .to_bytes();
             assert_eq!(
                 false,
                 Ipv6Slice::from_slice(&data)

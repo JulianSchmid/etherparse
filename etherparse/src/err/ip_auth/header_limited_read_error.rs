@@ -79,7 +79,7 @@ impl std::error::Error for HeaderLimitedReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use crate::err::{LenSource, Layer};
+    use crate::err::{Layer, LenSource};
 
     use super::{HeaderLimitedReadError::*, *};
     use alloc::format;
@@ -106,7 +106,7 @@ mod test {
             );
         }
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -130,15 +130,15 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(
-            Len(LenError{
-                required_len: 2,
-                len: 1,
-                len_source: LenSource::Slice,
-                layer: Layer::IpAuthHeader,
-                layer_start_offset: 3,
-            }).source().is_some()
-        );
+        assert!(Len(LenError {
+            required_len: 2,
+            len: 1,
+            len_source: LenSource::Slice,
+            layer: Layer::IpAuthHeader,
+            layer_start_offset: 3,
+        })
+        .source()
+        .is_some());
         assert!(Content(HeaderError::ZeroPayloadLen).source().is_some());
     }
 
@@ -164,7 +164,7 @@ mod test {
             .len()
         );
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,

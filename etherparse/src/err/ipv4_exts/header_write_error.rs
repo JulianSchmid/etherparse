@@ -53,48 +53,47 @@ impl std::error::Error for HeaderWriteError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeaderWriteError::*, ExtsWalkError::*};
+    use super::{ExtsWalkError::*, HeaderWriteError::*};
     use crate::*;
     use alloc::format;
     use std::error::Error;
 
     #[test]
     fn io() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).io().is_some()
-        );
-        assert!(
-            Content(ExtNotReferenced{
-                missing_ext: IpNumber::AUTHENTICATION_HEADER,
-            }).io().is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .io()
+        .is_some());
+        assert!(Content(ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        })
+        .io()
+        .is_none());
     }
 
     #[test]
     fn content() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).content().is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .content()
+        .is_none());
         {
-            let err = ExtNotReferenced{
+            let err = ExtNotReferenced {
                 missing_ext: IpNumber::AUTHENTICATION_HEADER,
             };
-            assert_eq!(
-                Some(&err),
-                Content(err.clone()).content()
-            );
+            assert_eq!(Some(&err), Content(err.clone()).content());
         }
     }
 
     #[test]
     fn debug() {
-        let err = ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER, };
+        let err = ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -108,33 +107,29 @@ mod tests {
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
             );
-            assert_eq!(
-                format!("{}", err),
-                format!("{}", Io(err))
-            );
+            assert_eq!(format!("{}", err), format!("{}", Io(err)));
         }
         {
-            let err = ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER, };
-            assert_eq!(
-                format!("{}", Content(err.clone())),
-                format!("{}", err)
-            );
+            let err = ExtNotReferenced {
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(format!("{}", Content(err.clone())), format!("{}", err));
         }
     }
 
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).source().is_some()
-        );
-        assert!(
-            Content(ExtNotReferenced{
-                missing_ext: IpNumber::AUTHENTICATION_HEADER,
-            }).source().is_some()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .source()
+        .is_some());
+        assert!(Content(ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        })
+        .source()
+        .is_some());
     }
 }

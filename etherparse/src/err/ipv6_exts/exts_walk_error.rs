@@ -11,7 +11,7 @@ pub enum ExtsWalkError {
     /// Error when a header in [`Ipv6Extensions`] is never written
     /// as it is never referenced by any of the other `next_header`
     /// fields or the initial ip number.
-    ExtNotReferenced{
+    ExtNotReferenced {
         /// IpNumber of the header which was not referenced.
         missing_ext: IpNumber,
     },
@@ -84,6 +84,10 @@ mod tests {
     #[test]
     fn source() {
         assert!(HopByHopNotAtStart.source().is_none());
-        assert!(ExtNotReferenced{ missing_ext: IpNumber::IPV6_FRAGMENTATION_HEADER }.source().is_none());
+        assert!(ExtNotReferenced {
+            missing_ext: IpNumber::IPV6_FRAGMENTATION_HEADER
+        }
+        .source()
+        .is_none());
     }
 }

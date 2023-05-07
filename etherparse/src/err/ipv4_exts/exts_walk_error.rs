@@ -6,10 +6,10 @@ use crate::IpNumber;
 pub enum ExtsWalkError {
     /// Error when a header in [`crate::Ipv4Extensions`] is never referenced even
     /// though it is present in the [`crate::Ipv4Extensions`].
-    /// 
+    ///
     /// This can occur when calculating the "next header" value or when
     /// trying to write [crate::Ipv4Extensions`].
-    ExtNotReferenced{
+    ExtNotReferenced {
         /// IpNumber of the header which was not referenced.
         missing_ext: IpNumber,
     },
@@ -20,7 +20,7 @@ impl core::fmt::Display for ExtsWalkError {
         use ExtsWalkError::*;
         match self {
             ExtNotReferenced{ missing_ext } => write!(
-                f, 
+                f,
                 "IPv4 extensions '{:?}' is defined but is not referenced by the 'protocol' the IPv4 header.",
                 missing_ext
             ),
@@ -33,7 +33,7 @@ impl std::error::Error for ExtsWalkError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use ExtsWalkError::*;
         match self {
-            ExtNotReferenced{ missing_ext: _ } => None,
+            ExtNotReferenced { missing_ext: _ } => None,
         }
     }
 }
@@ -58,7 +58,7 @@ mod tests {
             ),
             format!(
                 "{:?}",
-                ExtNotReferenced{
+                ExtNotReferenced {
                     missing_ext: IpNumber::AUTHENTICATION_HEADER
                 }
             )
@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = ExtNotReferenced{
+        let err = ExtNotReferenced {
             missing_ext: IpNumber::AUTHENTICATION_HEADER,
         };
         assert_eq!(err, err.clone());
@@ -97,8 +97,10 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(ExtNotReferenced{
+        assert!(ExtNotReferenced {
             missing_ext: IpNumber::IPV6_FRAGMENTATION_HEADER
-        }.source().is_none());
+        }
+        .source()
+        .is_none());
     }
 }

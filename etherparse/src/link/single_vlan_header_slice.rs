@@ -56,13 +56,10 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     /// Read the "priority_code_point" field from the slice. This is a 3 bit number which refers to the IEEE 802.1p class of service and maps to the frame priority level.
     #[inline]
     pub fn priority_code_point(&self) -> VlanPcp {
-        
         unsafe {
             // SAFETY: Safe as slice len checked in constructor to be at least 4 &
             // the bitmask gurantees values does not exceed 0b0000_0111.
-            VlanPcp::new_unchecked(
-                (*self.slice.get_unchecked(0) >> 5) & 0b0000_0111
-            )
+            VlanPcp::new_unchecked((*self.slice.get_unchecked(0) >> 5) & 0b0000_0111)
         }
     }
 

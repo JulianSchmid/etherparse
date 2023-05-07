@@ -6,7 +6,7 @@ pub enum TransportChecksumError {
     /// Error if the length of the payload is too
     /// big to be representable by the length fields.
     PayloadLen(ValueTooBigError<usize>),
-    
+
     /// Error when an Icmpv6 payload is found in an IPv4 packet.
     Icmpv6InIpv4,
 }
@@ -31,7 +31,6 @@ impl std::error::Error for TransportChecksumError {
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -73,7 +72,7 @@ mod tests {
             let err = ValueTooBigError {
                 actual: 1,
                 max_allowed: 2,
-                value_type: ValueType::TcpPayloadLengthIpv6
+                value_type: ValueType::TcpPayloadLengthIpv6,
             };
             assert_eq!(format!("{}", &err), format!("{}", PayloadLen(err)));
         }
@@ -93,7 +92,7 @@ mod tests {
             let err = ValueTooBigError {
                 actual: 1,
                 max_allowed: 2,
-                value_type: ValueType::TcpPayloadLengthIpv6
+                value_type: ValueType::TcpPayloadLengthIpv6,
             };
             assert!(PayloadLen(err).source().is_some());
         }

@@ -24,9 +24,9 @@ mod sliced_packet {
             if i >> 4 != 4 && i >> 4 != 6 {
                 assert_eq!(
                     SlicedPacket::from_ip(&[i]).unwrap_err(),
-                    err::packet::IpSliceError::Ip(
-                        err::ip::HeaderError::UnsupportedIpVersion { version_number: i >> 4 }
-                    )
+                    err::packet::IpSliceError::Ip(err::ip::HeaderError::UnsupportedIpVersion {
+                        version_number: i >> 4
+                    })
                 );
             }
         }

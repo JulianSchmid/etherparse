@@ -1,7 +1,7 @@
 use super::super::*;
-use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 #[cfg(feature = "std")]
 use crate::err::ip::HeaderWriteError;
+use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -272,7 +272,7 @@ impl IpHeader {
                 len: total_len,
                 len_source: LenSource::Ipv4HeaderTotalLen,
                 layer: Layer::Ipv4Packet,
-                layer_start_offset: 0
+                layer_start_offset: 0,
             }));
         };
 
@@ -288,10 +288,7 @@ impl IpHeader {
         } else {
             unsafe {
                 // Safe as the payload_len <= header_rest.len is verfied above
-                core::slice::from_raw_parts(
-                    header_rest.as_ptr(),
-                    payload_len
-                )
+                core::slice::from_raw_parts(header_rest.as_ptr(), payload_len)
             }
         };
 
@@ -403,8 +400,8 @@ impl IpHeader {
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
-        use err::ip::{HeaderError::*, HeaderReadError::*};
         use crate::io::LimitedReader;
+        use err::ip::{HeaderError::*, HeaderReadError::*};
 
         let value = {
             let mut buf = [0; 1];
@@ -431,7 +428,8 @@ impl IpHeader {
                 let header = unsafe {
                     // SAFETY: Safe as both the IHL and slice len have been verified
                     Ipv4HeaderSlice::from_slice_unchecked(&buffer[..header_len])
-                }.to_header();
+                }
+                .to_header();
 
                 // check that the total len is long enough to contain the header
                 let total_len = usize::from(header.total_len);
@@ -450,7 +448,7 @@ impl IpHeader {
                         total_len - header_len,
                         LenSource::Ipv4HeaderTotalLen,
                         header_len,
-                        Layer::Ipv4Header
+                        Layer::Ipv4Header,
                     )
                 };
 
@@ -475,7 +473,7 @@ impl IpHeader {
                     header.payload_length.into(),
                     LenSource::Ipv6HeaderPayloadLen,
                     header.header_len(),
-                    Layer::Ipv6Header
+                    Layer::Ipv6Header,
                 );
 
                 Ipv6Extensions::read_limited(&mut reader, header.next_header)
@@ -497,8 +495,8 @@ impl IpHeader {
     /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeaderWriteError> {
-        use HeaderWriteError::*;
         use crate::IpHeader::*;
+        use HeaderWriteError::*;
         match *self {
             Version4(ref header, ref extensions) => {
                 header.write(writer).map_err(Io)?;
@@ -512,7 +510,7 @@ impl IpHeader {
             }
             Version6(ref header, ref extensions) => {
                 header.write(writer).map_err(Io)?;
-                extensions.write(writer, header.next_header).map_err(|err|{
+                extensions.write(writer, header.next_header).map_err(|err| {
                     use err::ipv6_exts::HeaderWriteError as I;
                     match err {
                         I::Io(err) => Io(err),
@@ -535,11 +533,15 @@ impl IpHeader {
     /// Returns the last next header number following the ip header
     /// and header extensions.
     pub fn next_header(&self) -> Result<IpNumber, err::ip_exts::ExtsWalkError> {
-        use crate::IpHeader::*;
         use crate::err::ip_exts::ExtsWalkError::*;
+        use crate::IpHeader::*;
         match *self {
-            Version4(ref header, ref extensions) => extensions.next_header(header.protocol).map_err(Ipv4Exts),
-            Version6(ref header, ref extensions) => extensions.next_header(header.next_header).map_err(Ipv6Exts),
+            Version4(ref header, ref extensions) => {
+                extensions.next_header(header.protocol).map_err(Ipv4Exts)
+            }
+            Version6(ref header, ref extensions) => {
+                extensions.next_header(header.next_header).map_err(Ipv6Exts)
+            }
         }
     }
 
@@ -578,9 +580,11 @@ impl IpHeader {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv4_hdr.set_payload_len(complete_len)
                 } else {
-                    Err(ValueTooBigError{
+                    Err(ValueTooBigError {
                         actual: len,
-                        max_allowed: usize::from(u16::MAX) - ipv4_hdr.header_len() - exts.header_len(),
+                        max_allowed: usize::from(u16::MAX)
+                            - ipv4_hdr.header_len()
+                            - exts.header_len(),
                         value_type: ValueType::Ipv4PayloadLength,
                     })
                 }
@@ -589,7 +593,7 @@ impl IpHeader {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv6_hdr.set_payload_length(complete_len)
                 } else {
-                    Err(ValueTooBigError{
+                    Err(ValueTooBigError {
                         actual: len,
                         max_allowed: usize::from(u16::MAX) - exts.header_len(),
                         value_type: ValueType::Ipv4PayloadLength,
@@ -611,7 +615,15 @@ impl IpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{err::{LenSource, ip::{HeaderError, HeaderSliceError}, LenError, Layer}, ip_number::*, test_gens::*, *};
+    use crate::{
+        err::{
+            ip::{HeaderError, HeaderSliceError},
+            Layer, LenError, LenSource,
+        },
+        ip_number::*,
+        test_gens::*,
+        *,
+    };
     use alloc::{borrow::ToOwned, format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;

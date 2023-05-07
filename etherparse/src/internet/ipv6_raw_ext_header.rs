@@ -1,7 +1,7 @@
 use super::super::*;
+use crate::err::ipv6_exts::ExtPayloadLenError;
 use arrayvec::ArrayVec;
 use core::fmt::{Debug, Formatter};
-use crate::err::ipv6_exts::ExtPayloadLenError;
 
 /// Deprecated. Use [Ipv6RawExtHeader] instead.
 #[deprecated(
@@ -92,7 +92,10 @@ impl Ipv6RawExtHeader {
     /// The maximum length of the payload is `2046` bytes ([`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`]).
     ///
     /// If a payload with a non supported length is provided a [`crate::err::ipv6_exts::ExtPayloadLenError`] is returned.
-    pub fn new_raw(next_header: IpNumber, payload: &[u8]) -> Result<Ipv6RawExtHeader, ExtPayloadLenError> {
+    pub fn new_raw(
+        next_header: IpNumber,
+        payload: &[u8],
+    ) -> Result<Ipv6RawExtHeader, ExtPayloadLenError> {
         use ExtPayloadLenError::*;
         if payload.len() < Self::MIN_PAYLOAD_LEN {
             Err(TooSmall(payload.len()))
@@ -175,7 +178,6 @@ impl Ipv6RawExtHeader {
     pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
     ) -> Result<Ipv6RawExtHeader, err::io::LimitedReadError> {
-
         // set layer start
         reader.start_layer(err::Layer::Ipv6ExtHeader);
 
@@ -226,8 +228,8 @@ impl Ipv6RawExtHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{test_gens::*, *};
     use super::*;
+    use crate::{test_gens::*, *};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;

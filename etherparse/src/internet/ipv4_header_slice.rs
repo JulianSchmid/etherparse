@@ -136,22 +136,22 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Determine the payload length based on the ihl & total_length
     /// field of the header.
-    /// 
+    ///
     /// # Example Usage
-    /// 
+    ///
     /// ```
     /// use etherparse::{Ipv4Header, Ipv4HeaderSlice};
-    /// 
+    ///
     /// let bytes = Ipv4Header{
     ///     // the payload len will be calculated by subtracting the
     ///     // header length from the total length
     ///     total_len: Ipv4Header::MIN_LEN as u16 + 100,
     ///     ..Default::default()
     /// }.to_bytes();
-    /// 
+    ///
     /// let slice = Ipv4HeaderSlice::from_slice(&bytes).unwrap();
     /// assert_eq!(Ok(100), slice.payload_len());
-    /// 
+    ///
     /// // error case
     /// let bad_bytes = Ipv4Header {
     ///     // total len should also include the header, in case it does
@@ -159,7 +159,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     ///     total_len: Ipv4Header::MIN_LEN as u16 - 1,
     ///     ..Default::default()
     /// }.to_bytes();
-    /// 
+    ///
     /// let bad_slice = Ipv4HeaderSlice::from_slice(&bad_bytes).unwrap();
     /// // in case the total_len is smaller then the header itself an
     /// // error is returned
@@ -184,7 +184,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         if header_len <= total_len {
             Ok(total_len - header_len)
         } else {
-            use err::{LenError, LenSource, Layer};
+            use err::{Layer, LenError, LenSource};
             Err(LenError {
                 required_len: header_len.into(),
                 len: total_len.into(),

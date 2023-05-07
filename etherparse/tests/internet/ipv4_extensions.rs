@@ -131,7 +131,7 @@ pub mod header {
             .unwrap_err();
             assert_eq!(
                 err.content().unwrap(),
-                &ExtNotReferenced{
+                &ExtNotReferenced {
                     missing_ext: IpNumber::AUTHENTICATION_HEADER,
                 }
             );
@@ -145,10 +145,7 @@ pub mod header {
             }
             .write(&mut writer, AUTH)
             .unwrap_err();
-            assert_eq!(
-                std::io::ErrorKind::UnexpectedEof,
-                err.io().unwrap().kind()
-            );
+            assert_eq!(std::io::ErrorKind::UnexpectedEof, err.io().unwrap().kind());
         }
     }
 
@@ -215,7 +212,9 @@ pub mod header {
             // auth not referenced (error)
             use etherparse::err::ipv4_exts::ExtsWalkError::ExtNotReferenced;
             assert_eq!(
-                ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER },
+                ExtNotReferenced {
+                    missing_ext: IpNumber::AUTHENTICATION_HEADER
+                },
                 exts.next_header(TCP).unwrap_err()
             );
         }

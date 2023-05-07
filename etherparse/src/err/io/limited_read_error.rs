@@ -64,22 +64,19 @@ impl std::error::Error for LimitedReadError {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::{LimitedReadError::*, *};
-    use crate::err::{LenSource, Layer};
+    use crate::err::{Layer, LenSource};
     use alloc::format;
 
     #[test]
     fn debug() {
-        let err = LenError{
+        let err = LenError {
             required_len: 2,
             len: 1,
             len_source: LenSource::Slice,
             layer: Layer::Icmpv4,
             layer_start_offset: 3,
         };
-        assert_eq!(
-            format!("Len({:?})", err.clone()),
-            format!("{:?}", Len(err))
-        );
+        assert_eq!(format!("Len({:?})", err.clone()), format!("{:?}", Len(err)));
     }
 
     #[test]
@@ -89,13 +86,10 @@ mod test {
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
             );
-            assert_eq!(
-                format!("{}", err),
-                format!("{}", Io(err))
-            );
+            assert_eq!(format!("{}", err), format!("{}", Io(err)));
         }
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -116,7 +110,7 @@ mod test {
         .source()
         .is_some());
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -136,7 +130,7 @@ mod test {
         .io()
         .is_some());
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
@@ -158,7 +152,7 @@ mod test {
             .len()
         );
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,

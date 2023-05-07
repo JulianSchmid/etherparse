@@ -1,7 +1,7 @@
 use super::super::*;
+use crate::err::ip_auth::IcvLenError;
 use arrayvec::ArrayVec;
 use core::fmt::{Debug, Formatter};
-use crate::err::ip_auth::IcvLenError;
 
 /// Deprecated use [IpAuthHeader] instead.
 #[deprecated(since = "0.10.1", note = "Please use the type IpAuthHeader instead")]
@@ -155,7 +155,11 @@ impl<'a> IpAuthHeader {
     pub fn read_limited<T: std::io::Read + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderLimitedReadError> {
-        use err::{Layer, ip_auth::HeaderLimitedReadError::{self, *}, ip_auth::HeaderError::*};
+        use err::{
+            ip_auth::HeaderError::*,
+            ip_auth::HeaderLimitedReadError::{self, *},
+            Layer,
+        };
 
         fn map_err(err: err::io::LimitedReadError) -> HeaderLimitedReadError {
             use err::io::LimitedReadError as I;
@@ -286,7 +290,11 @@ impl<'a> IpAuthHeader {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_gens::*, io::LimitedReader, err::{LenSource, Layer, LenError}};
+    use crate::{
+        err::{Layer, LenError, LenSource},
+        io::LimitedReader,
+        test_gens::*,
+    };
     use alloc::{format, vec::Vec};
     use err::ip_auth::HeaderError::*;
     use proptest::prelude::*;
@@ -340,7 +348,10 @@ mod test {
 
         let tests = [
             // ok
-            Test { icv: &[], err: None },
+            Test {
+                icv: &[],
+                err: None,
+            },
             Test {
                 icv: &[1, 2, 3, 4],
                 err: None,
@@ -403,7 +414,7 @@ mod test {
                 assert_eq!(6, header.spi);
                 assert_eq!(7, header.sequence_number);
                 if let Some(err) = &test.err {
-                    assert_eq!(Err(err.clone()), result );
+                    assert_eq!(Err(err.clone()), result);
                     assert_eq!(&[0; 4], header.raw_icv());
                 } else {
                     assert_eq!(Ok(()), result);
@@ -542,7 +553,7 @@ mod test {
                     }
                     // limited reader error
                     {
-                        
+
                         let mut cursor = Cursor::new(&bytes);
                         let mut reader = LimitedReader::new(
                             &mut cursor,

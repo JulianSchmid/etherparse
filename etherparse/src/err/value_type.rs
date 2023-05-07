@@ -55,7 +55,7 @@ impl core::fmt::Display for ValueType {
             UdpPayloadLengthIpv6 => write!(f, "UDP Payload Length (in IPv6 checksum calculation)"),
             TcpPayloadLengthIpv4 => write!(f, "TCP Payload Length (in IPv4 checksum calculation)"),
             TcpPayloadLengthIpv6 => write!(f, "TCP Payload Length (in IPv6 checksum calculation)"),
-            Icmpv6PayloadLength => write!(f, "ICMPv6 Payload Length")
+            Icmpv6PayloadLength => write!(f, "ICMPv6 Payload Length"),
         }
     }
 }
@@ -98,12 +98,30 @@ mod test {
             &format!("{}", Ipv4Ecn)
         );
         assert_eq!("IPv6 Flow Label", &format!("{}", Ipv6FlowLabel));
-        assert_eq!("IPv4 Header 'Payload Length' (sets 'Total Length')", &format!("{}", Ipv4PayloadLength));
-        assert_eq!("IPv6 Header 'Payload Length'", &format!("{}", Ipv6PayloadLength));
-        assert_eq!("UDP Payload Length (in IPv4 checksum calculation)", &format!("{}", UdpPayloadLengthIpv4));
-        assert_eq!("UDP Payload Length (in IPv6 checksum calculation)", &format!("{}", UdpPayloadLengthIpv6));
-        assert_eq!("TCP Payload Length (in IPv4 checksum calculation)", &format!("{}", TcpPayloadLengthIpv4));
-        assert_eq!("TCP Payload Length (in IPv6 checksum calculation)", &format!("{}", TcpPayloadLengthIpv6));
+        assert_eq!(
+            "IPv4 Header 'Payload Length' (sets 'Total Length')",
+            &format!("{}", Ipv4PayloadLength)
+        );
+        assert_eq!(
+            "IPv6 Header 'Payload Length'",
+            &format!("{}", Ipv6PayloadLength)
+        );
+        assert_eq!(
+            "UDP Payload Length (in IPv4 checksum calculation)",
+            &format!("{}", UdpPayloadLengthIpv4)
+        );
+        assert_eq!(
+            "UDP Payload Length (in IPv6 checksum calculation)",
+            &format!("{}", UdpPayloadLengthIpv6)
+        );
+        assert_eq!(
+            "TCP Payload Length (in IPv4 checksum calculation)",
+            &format!("{}", TcpPayloadLengthIpv4)
+        );
+        assert_eq!(
+            "TCP Payload Length (in IPv6 checksum calculation)",
+            &format!("{}", TcpPayloadLengthIpv6)
+        );
         assert_eq!("ICMPv6 Payload Length", &format!("{}", Icmpv6PayloadLength));
     }
 }

@@ -42,7 +42,8 @@ fn eth_ipv4_udp() {
         ip_number::UDP,
         [13, 14, 15, 16],
         [17, 18, 19, 20],
-    ).unwrap();
+    )
+    .unwrap();
     ip_expected.header_checksum = ip_expected.calc_header_checksum();
     assert_eq!(ip_actual, ip_expected);
 
@@ -71,7 +72,8 @@ fn ipv4() {
             0.into(),
             [13, 14, 15, 16],
             [17, 18, 19, 20],
-        ).unwrap(),
+        )
+        .unwrap(),
         Ipv4Extensions {
             auth: Some(auth_ext.clone()),
         },
@@ -109,7 +111,8 @@ fn ipv4() {
         ip_number::AUTH, // should have been set
         [13, 14, 15, 16],
         [17, 18, 19, 20],
-    ).unwrap();
+    )
+    .unwrap();
     ip_expected.header_checksum = ip_expected.calc_header_checksum();
     assert_eq!(ip_actual, ip_expected);
 
@@ -250,7 +253,8 @@ fn ipv4_udp() {
         ip_number::UDP,
         [13, 14, 15, 16],
         [17, 18, 19, 20],
-    ).unwrap();
+    )
+    .unwrap();
     ip_expected.header_checksum = ip_expected.calc_header_checksum();
     assert_eq!(ip_actual, ip_expected);
 
@@ -337,7 +341,8 @@ fn ipv4_custom_udp() {
             ip_number::TCP,   //will be replaced during write
             [13, 14, 15, 16], //source
             [17, 18, 19, 20], //destination
-        ).unwrap(),
+        )
+        .unwrap(),
         Default::default(),
     ))
     .udp(22, 23)
@@ -362,7 +367,8 @@ fn ipv4_custom_udp() {
         ip_number::UDP,
         [13, 14, 15, 16],
         [17, 18, 19, 20],
-    ).unwrap();
+    )
+    .unwrap();
     ip_expected.header_checksum = ip_expected.calc_header_checksum();
     assert_eq!(ip_actual, ip_expected);
 
@@ -502,7 +508,8 @@ fn udp_builder_eth_single_vlan_ipv4_udp() {
         ip_number::UDP,
         [13, 14, 15, 16],
         [17, 18, 19, 20],
-    ).unwrap();
+    )
+    .unwrap();
     ip_expected.header_checksum = ip_expected.calc_header_checksum();
     assert_eq!(ip_actual, ip_expected);
 

@@ -1,5 +1,8 @@
+use crate::{
+    err::{ValueTooBigError, ValueType},
+    *,
+};
 use arrayvec::ArrayVec;
-use crate::{*, err::{ValueTooBigError, ValueType}};
 
 /// IPv4 header with options.
 ///
@@ -226,21 +229,21 @@ impl Ipv4Header {
 
     /// Determine the payload length based on the ihl & total_length
     /// field of the header.
-    /// 
+    ///
     /// # Example Usage
-    /// 
+    ///
     /// ```
     /// use etherparse::{Ipv4Header, Ipv4HeaderSlice};
-    /// 
+    ///
     /// let header = Ipv4Header{
     ///     // the payload len will be calculated by subtracting the
     ///     // header length from the total length
     ///     total_len: Ipv4Header::MIN_LEN as u16 + 100,
     ///     ..Default::default()
     /// };
-    /// 
+    ///
     /// assert_eq!(Ok(100), header.payload_len());
-    /// 
+    ///
     /// // error case
     /// let bad_header = Ipv4Header {
     ///     // total len should also include the header, in case it does
@@ -248,7 +251,7 @@ impl Ipv4Header {
     ///     total_len: Ipv4Header::MIN_LEN as u16 - 1,
     ///     ..Default::default()
     /// };
-    /// 
+    ///
     /// // in case the total_len is smaller then the header itself an
     /// // error is returned
     /// use etherparse::err::{LenError, Layer, LenSource};
@@ -270,7 +273,7 @@ impl Ipv4Header {
         if header_len <= self.total_len {
             Ok(self.total_len - header_len)
         } else {
-            use err::{LenError, LenSource, Layer};
+            use err::{Layer, LenError, LenSource};
             Err(LenError {
                 required_len: header_len.into(),
                 len: self.total_len.into(),
@@ -283,29 +286,29 @@ impl Ipv4Header {
 
     /// Tries setting the [`Ipv4Header::total_len`] field given the length of
     /// the payload after the header & the current options length of the header.
-    /// 
+    ///
     /// If the value is not too big. Otherwise an error is returned.
-    /// 
+    ///
     /// Note that the set payload lenght is no longer valid if you change
     /// [`Ipv4Header::options`] length after calling [`Ipv4Header::set_payload_len`]
     /// as it uses  the length of options to calculate the `total_len` value.
-    /// 
+    ///
     /// # Example Usage:
-    /// 
+    ///
     /// ```
     /// use etherparse::Ipv4Header;
-    /// 
+    ///
     /// let mut header = Ipv4Header{
     ///     total_len: 100, // will be reset by set_payload
     ///     options: [1,2,3,4].into(),
     ///     ..Default::default()
     /// };
-    /// 
+    ///
     /// // set_payload_len set the total_len field based on the header_len
     /// // and given payload length
     /// header.set_payload_len(100).unwrap();
     /// assert_eq!(100 + header.header_len() as u16, header.total_len);
-    /// 
+    ///
     /// // in case the payload is len is bigger then can represented in the
     /// // total_len field an error is returned
     /// use etherparse::err::{ValueTooBigError, ValueType};
@@ -489,7 +492,10 @@ impl Ipv4Header {
     /// Writes a given IPv4 header to the current position (this method just writes the specified
     /// checksum and does note compute it).
     #[cfg(feature = "std")]
-    pub fn write_raw<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+    pub fn write_raw<T: std::io::Write + Sized>(
+        &self,
+        writer: &mut T,
+    ) -> Result<(), std::io::Error> {
         self.write_ipv4_header_internal(writer, self.header_checksum)
     }
 
@@ -613,7 +619,10 @@ impl Ipv4Header {
     /// Calculate header checksum of the current ipv4 header.
     pub fn calc_header_checksum(&self) -> u16 {
         checksum::Sum16BitWords::new()
-            .add_2bytes([(4 << 4) | self.ihl(), (self.dscp.value() << 2) | self.ecn.value()])
+            .add_2bytes([
+                (4 << 4) | self.ihl(),
+                (self.dscp.value() << 2) | self.ecn.value(),
+            ])
             .add_2bytes(self.total_len.to_be_bytes())
             .add_2bytes(self.identification.to_be_bytes())
             .add_2bytes({
@@ -670,7 +679,11 @@ impl Default for Ipv4Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{test_gens::*, *, err::{ValueTooBigError, ValueType, LenError, LenSource, Layer}};
+    use crate::{
+        err::{Layer, LenError, LenSource, ValueTooBigError, ValueType},
+        test_gens::*,
+        *,
+    };
     use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use proptest::prelude::*;
@@ -960,7 +973,7 @@ mod test {
                     }
                 );
             }
-            
+
         }
     }
 
@@ -1340,7 +1353,8 @@ mod test {
             ip_number::UDP,
             [192, 168, 1, 1],   // source
             [212, 10, 11, 123], // destination
-        ).unwrap();
+        )
+        .unwrap();
 
         //without options
         {
