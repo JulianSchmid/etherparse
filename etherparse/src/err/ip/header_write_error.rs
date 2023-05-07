@@ -114,7 +114,7 @@ mod tests {
             Io(std::io::Error::new(
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
-            )).ipv4_exts().is_none()
+            )).ipv6_exts().is_none()
         );
         {
             let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{
