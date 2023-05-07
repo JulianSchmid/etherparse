@@ -1,6 +1,7 @@
 use super::super::*;
 use arrayvec::ArrayVec;
 use core::fmt::{Debug, Formatter};
+use crate::err::ipv6_exts::ExtPayloadLenError;
 
 /// Deprecated. Use [Ipv6RawExtHeader] instead.
 #[deprecated(
@@ -88,17 +89,17 @@ impl Ipv6RawExtHeader {
     ///
     /// Note that `payload` must have at least the length of 6 bytes and only supports
     /// length increases in steps of 8. This measn that the following expression must be true `(payload.len() + 2) % 8 == 0`.
-    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`).
+    /// The maximum length of the payload is `2046` bytes ([`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`]).
     ///
-    /// If a payload with a non supported length is provided a `ValueError` is returned.
-    pub fn new_raw(next_header: IpNumber, payload: &[u8]) -> Result<Ipv6RawExtHeader, ValueError> {
-        use ValueError::*;
+    /// If a payload with a non supported length is provided a [`crate::err::ipv6_exts::ExtPayloadLenError`] is returned.
+    pub fn new_raw(next_header: IpNumber, payload: &[u8]) -> Result<Ipv6RawExtHeader, ExtPayloadLenError> {
+        use ExtPayloadLenError::*;
         if payload.len() < Self::MIN_PAYLOAD_LEN {
-            Err(Ipv6ExtensionPayloadTooSmall(payload.len()))
+            Err(TooSmall(payload.len()))
         } else if payload.len() > Self::MAX_PAYLOAD_LEN {
-            Err(Ipv6ExtensionPayloadTooLarge(payload.len()))
+            Err(TooBig(payload.len()))
         } else if 0 != (payload.len() + 2) % 8 {
-            Err(Ipv6ExtensionPayloadLengthUnaligned(payload.len()))
+            Err(Unaligned(payload.len()))
         } else {
             let mut result = Ipv6RawExtHeader {
                 next_header,
@@ -129,17 +130,17 @@ impl Ipv6RawExtHeader {
     ///
     /// Note that `payload` must have at least the length of 6 bytes and only supports
     /// length increases in steps of 8. This measn that the following expression must be true `(payload.len() + 2) % 8 == 0`.
-    /// The maximum length of the payload is `2046` bytes (`Ipv6RawExtHeader::MAX_PAYLOAD_LEN`).
+    /// The maximum length of the payload is `2046` bytes ([`crate::Ipv6RawExtHeader::MAX_PAYLOAD_LEN`]).
     ///
-    /// If a payload with a non supported length is provided a `ValueError` is returned and the payload of the header is not changed.
-    pub fn set_payload(&mut self, payload: &[u8]) -> Result<(), ValueError> {
-        use ValueError::*;
+    /// If a payload with a non supported length is provided a [`crate::err::ipv6_exts::ExtPayloadLenError`] is returned and the payload of the header is not changed.
+    pub fn set_payload(&mut self, payload: &[u8]) -> Result<(), ExtPayloadLenError> {
+        use ExtPayloadLenError::*;
         if payload.len() < Self::MIN_PAYLOAD_LEN {
-            Err(Ipv6ExtensionPayloadTooSmall(payload.len()))
+            Err(TooSmall(payload.len()))
         } else if payload.len() > Self::MAX_PAYLOAD_LEN {
-            Err(Ipv6ExtensionPayloadTooLarge(payload.len()))
+            Err(TooBig(payload.len()))
         } else if 0 != (payload.len() + 2) % 8 {
-            Err(Ipv6ExtensionPayloadLengthUnaligned(payload.len()))
+            Err(Unaligned(payload.len()))
         } else {
             self.payload_buffer[..payload.len()].copy_from_slice(payload);
             self.header_length = ((payload.len() - 6) / 8) as u8;
@@ -226,6 +227,7 @@ impl Ipv6RawExtHeader {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
+    use super::*;
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
@@ -269,6 +271,8 @@ mod test {
     proptest! {
         #[test]
         fn new_raw(header in ipv6_raw_ext_any()) {
+            use ExtPayloadLenError::*;
+
             // ok
             {
                 let actual = Ipv6RawExtHeader::new_raw(header.next_header, header.payload()).unwrap();
@@ -280,7 +284,7 @@ mod test {
             for len in 0..Ipv6RawExtHeader::MIN_PAYLOAD_LEN {
                 assert_eq!(
                     Ipv6RawExtHeader::new_raw(header.next_header, &header.payload()[..len]).unwrap_err(),
-                    ValueError::Ipv6ExtensionPayloadTooSmall(len)
+                    TooSmall(len)
                 );
             }
 
@@ -289,7 +293,7 @@ mod test {
                 let bytes = [0u8;Ipv6RawExtHeader::MAX_PAYLOAD_LEN + 1];
                 assert_eq!(
                     Ipv6RawExtHeader::new_raw(header.next_header, &bytes).unwrap_err(),
-                    ValueError::Ipv6ExtensionPayloadTooLarge(bytes.len())
+                    TooBig(bytes.len())
                 );
             }
 
@@ -304,7 +308,7 @@ mod test {
                         bytes.push(0);
                         assert_eq!(
                             Ipv6RawExtHeader::new_raw(header.next_header, &bytes).unwrap_err(),
-                            ValueError::Ipv6ExtensionPayloadLengthUnaligned(bytes.len())
+                            Unaligned(bytes.len())
                         );
                     }
                 }
@@ -356,6 +360,7 @@ mod test {
             header_a in ipv6_raw_ext_any(),
             header_b in ipv6_raw_ext_any()
         ) {
+            use ExtPayloadLenError::*;
             // ok
             {
                 let mut actual = header_a.clone();
@@ -368,7 +373,7 @@ mod test {
                 let mut actual = header_a.clone();
                 assert_eq!(
                     actual.set_payload(&header_b.payload()[..len]).unwrap_err(),
-                    ValueError::Ipv6ExtensionPayloadTooSmall(len)
+                    TooSmall(len)
                 );
                 assert_eq!(actual.payload(), header_a.payload());
             }
@@ -379,7 +384,7 @@ mod test {
                 let mut actual = header_a.clone();
                 assert_eq!(
                     actual.set_payload(&bytes).unwrap_err(),
-                    ValueError::Ipv6ExtensionPayloadTooLarge(bytes.len())
+                    TooBig(bytes.len())
                 );
             }
 
@@ -395,7 +400,7 @@ mod test {
                         let mut actual = header_a.clone();
                         assert_eq!(
                             actual.set_payload(&bytes).unwrap_err(),
-                            ValueError::Ipv6ExtensionPayloadLengthUnaligned(bytes.len())
+                            Unaligned(bytes.len())
                         );
                     }
                 }
