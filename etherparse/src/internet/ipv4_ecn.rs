@@ -81,7 +81,6 @@ impl Ipv4Ecn {
     }
 }
 
-
 impl core::fmt::Display for Ipv4Ecn {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

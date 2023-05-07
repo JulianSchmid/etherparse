@@ -1,4 +1,7 @@
-use crate::{*, err::{ValueTooBigError, ValueType}};
+use crate::{
+    err::{ValueTooBigError, ValueType},
+    *,
+};
 
 /// Different kinds of ICMPv6 messages.
 ///
@@ -393,7 +396,7 @@ impl Icmpv6Type {
         // between the IPv6 header and the upper-layer header."
         let max_payload_len: usize = (core::u32::MAX as usize) - self.header_len();
         if max_payload_len < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: max_payload_len,
                 value_type: ValueType::Icmpv6PayloadLength,
@@ -499,7 +502,13 @@ impl Icmpv6Type {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv6::*, test_gens::*, Icmpv6Type::*, *, err::{ValueTooBigError, ValueType}};
+    use crate::{
+        err::{ValueTooBigError, ValueType},
+        icmpv6::*,
+        test_gens::*,
+        Icmpv6Type::*,
+        *,
+    };
     use alloc::format;
     use proptest::prelude::*;
 

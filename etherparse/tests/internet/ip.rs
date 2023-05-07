@@ -31,10 +31,7 @@ mod ip_header {
         {
             let mut cursor = Cursor::new(&buffer);
             assert_eq!(
-                IpHeader::read(&mut cursor)
-                    .unwrap_err()
-                    .content()
-                    .unwrap(),
+                IpHeader::read(&mut cursor).unwrap_err().content().unwrap(),
                 UnsupportedIpVersion {
                     version_number: 0xf
                 }

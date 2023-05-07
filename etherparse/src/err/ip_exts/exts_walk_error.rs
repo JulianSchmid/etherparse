@@ -34,7 +34,7 @@ impl std::error::Error for ExtsWalkError {
 
 #[cfg(test)]
 mod tests {
-    use super::{*, ExtsWalkError::*};
+    use super::{ExtsWalkError::*, *};
     use crate::IpNumber;
     use alloc::format;
     use std::{
@@ -73,7 +73,9 @@ mod tests {
     fn fmt() {
         // Ipv4Exts
         {
-            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced { missing_ext: IpNumber::AUTHENTICATION_HEADER };
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced {
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
             assert_eq!(format!("{}", &err), format!("{}", Ipv4Exts(err)));
         }
         // Ipv6Exts
@@ -86,15 +88,13 @@ mod tests {
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(
-            Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced {
-                missing_ext: IpNumber::AUTHENTICATION_HEADER
-            }).source().is_some()
-        );
-        assert!(
-            Ipv6Exts(
-                ipv6_exts::ExtsWalkError::HopByHopNotAtStart
-            ).source().is_some()
-        );
+        assert!(Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER
+        })
+        .source()
+        .is_some());
+        assert!(Ipv6Exts(ipv6_exts::ExtsWalkError::HopByHopNotAtStart)
+            .source()
+            .is_some());
     }
 }

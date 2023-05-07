@@ -1,4 +1,4 @@
-use crate::{*, err::ValueTooBigError};
+use crate::{err::ValueTooBigError, *};
 
 /// IPv6 header according to rfc8200.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -75,9 +75,12 @@ impl Ipv6Header {
             flow_label: unsafe {
                 // SAFETY: Safe as the bitmask & 0 contant gurantee that the value
                 // does not exceed 20 bytes.
-                Ipv6FlowLabel::new_unchecked(u32::from_be_bytes(
-                    [0, buffer[0] & 0b0000_1111, buffer[1], buffer[2]]
-                ))
+                Ipv6FlowLabel::new_unchecked(u32::from_be_bytes([
+                    0,
+                    buffer[0] & 0b0000_1111,
+                    buffer[1],
+                    buffer[2],
+                ]))
             },
             payload_length: u16::from_be_bytes([buffer[3], buffer[4]]),
             next_header: IpNumber(buffer[5]),
@@ -290,7 +293,7 @@ impl Ipv6Header {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = core::u16::MAX as usize;
         if MAX_PAYLOAD_LENGTH < size {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: size,
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: ValueType::Ipv6PayloadLength,

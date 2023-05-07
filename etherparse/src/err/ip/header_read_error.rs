@@ -1,5 +1,5 @@
-use crate::err::LenError;
 use super::HeaderError;
+use crate::err::LenError;
 
 /// Error when decoding an IP header via a `std::io::Read` source.
 #[cfg(feature = "std")]
@@ -80,7 +80,7 @@ impl std::error::Error for HeaderReadError {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::{HeaderReadError::*, *};
-    use crate::err::{Layer, LenSource, LenError};
+    use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
 
     #[test]
@@ -105,17 +105,14 @@ mod test {
             );
         }
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
                 layer: Layer::Icmpv4,
                 layer_start_offset: 3,
             };
-            assert_eq!(
-                format!("{}", Len(err.clone())),
-                format!("{}", err)
-            );
+            assert_eq!(format!("{}", Len(err.clone())), format!("{}", err));
         }
         {
             let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
@@ -132,15 +129,15 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(
-            Len(LenError{
-                required_len: 2,
-                len: 1,
-                len_source: LenSource::Slice,
-                layer: Layer::Icmpv4,
-                layer_start_offset: 3,
-            }).source().is_some()
-        );
+        assert!(Len(LenError {
+            required_len: 2,
+            len: 1,
+            len_source: LenSource::Slice,
+            layer: Layer::Icmpv4,
+            layer_start_offset: 3,
+        })
+        .source()
+        .is_some());
         assert!(
             Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
                 .source()
@@ -166,26 +163,21 @@ mod test {
     #[test]
     fn len() {
         {
-            let err = LenError{
+            let err = LenError {
                 required_len: 2,
                 len: 1,
                 len_source: LenSource::Slice,
                 layer: Layer::Icmpv4,
                 layer_start_offset: 3,
             };
-            assert_eq!(
-                Len(err.clone()).len(),
-                Some(err)
-            );
+            assert_eq!(Len(err.clone()).len(), Some(err));
         }
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            ))
-            .len()
-            .is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .len()
+        .is_none());
     }
 
     #[test]

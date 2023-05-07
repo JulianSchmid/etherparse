@@ -2,7 +2,7 @@ use crate::err::ValueTooBigError;
 
 /// 3 bit unsigned integer containing the "Priority Code Point"
 /// (present in the [`crate::SingleVlanHeader`]).
-/// 
+///
 /// Refers to the IEEE 802.1p class of service and maps to the
 /// frame priority level.
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -74,7 +74,6 @@ impl VlanPcp {
         self.0
     }
 }
-
 
 impl core::fmt::Display for VlanPcp {
     #[inline]

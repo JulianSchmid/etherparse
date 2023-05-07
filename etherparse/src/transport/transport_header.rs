@@ -1,4 +1,7 @@
-use crate::{*, err::{packet::TransportChecksumError, ValueTooBigError}};
+use crate::{
+    err::{packet::TransportChecksumError, ValueTooBigError},
+    *,
+};
 
 /// The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,13 +120,17 @@ impl TransportHeader {
         ip_header: &Ipv4Header,
         payload: &[u8],
     ) -> Result<(), TransportChecksumError> {
-        use crate::{TransportHeader::*, err::packet::TransportChecksumError::*};
+        use crate::{err::packet::TransportChecksumError::*, TransportHeader::*};
         match self {
             Udp(header) => {
-                header.checksum = header.calc_checksum_ipv4(ip_header, payload).map_err(PayloadLen)?;
+                header.checksum = header
+                    .calc_checksum_ipv4(ip_header, payload)
+                    .map_err(PayloadLen)?;
             }
             Tcp(header) => {
-                header.checksum = header.calc_checksum_ipv4(ip_header, payload).map_err(PayloadLen)?;
+                header.checksum = header
+                    .calc_checksum_ipv4(ip_header, payload)
+                    .map_err(PayloadLen)?;
             }
             Icmpv4(header) => {
                 header.update_checksum(payload);
@@ -384,7 +391,7 @@ mod test {
                     );
                 }
             }
-            
+
             // icmpv4
             {
                 let mut transport = Icmpv4(icmpv4.clone());
@@ -395,7 +402,7 @@ mod test {
                     icmpv4.icmp_type.calc_checksum(&payload)
                 );
             }
-            
+
             // icmpv6 (error)
             assert_eq!(
                 Icmpv6(icmpv6).update_checksum_ipv4(&ipv4, &[]),
@@ -451,7 +458,7 @@ mod test {
                     );
                 }
             }
-            
+
             // tcp
             {
                 //ok case
@@ -486,7 +493,7 @@ mod test {
                     );
                 }
             }
-            
+
             // icmpv4
             {
                 let mut transport = Icmpv4(icmpv4.clone());

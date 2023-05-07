@@ -1,4 +1,4 @@
-use crate::{*, err::ValueTooBigError};
+use crate::{err::ValueTooBigError, *};
 
 /// Udp header according to rfc768.
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
@@ -29,7 +29,7 @@ impl UdpHeader {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload_length {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload_length,
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: err::ValueType::UdpPayloadLengthIpv4,
@@ -54,7 +54,7 @@ impl UdpHeader {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: err::ValueType::UdpPayloadLengthIpv4,
@@ -91,7 +91,7 @@ impl UdpHeader {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: err::ValueType::UdpPayloadLengthIpv4,
@@ -129,7 +129,7 @@ impl UdpHeader {
         // check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: err::ValueType::UdpPayloadLengthIpv6,
@@ -166,7 +166,7 @@ impl UdpHeader {
         //check that the total length fits into the field
         const MAX_PAYLOAD_LENGTH: usize = (core::u32::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
-            return Err(err::ValueTooBigError{
+            return Err(err::ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: MAX_PAYLOAD_LENGTH,
                 value_type: err::ValueType::UdpPayloadLengthIpv6,
@@ -287,7 +287,11 @@ impl UdpHeader {
 
 #[cfg(test)]
 mod test {
-    use crate::{test_gens::*, *, err::{ValueTooBigError, ValueType}};
+    use crate::{
+        err::{ValueTooBigError, ValueType},
+        test_gens::*,
+        *,
+    };
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;

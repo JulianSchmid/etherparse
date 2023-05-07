@@ -434,7 +434,8 @@ mod test {
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }.to_bytes();
+            }
+            .to_bytes();
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([1; 16])),
@@ -470,7 +471,8 @@ mod test {
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }.to_bytes();
+            }
+            .to_bytes();
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([2; 16])),
@@ -490,7 +492,8 @@ mod test {
                 ip_number::UDP,
                 [3, 4, 5, 6],
                 [7, 8, 9, 10],
-            ).unwrap();
+            )
+            .unwrap();
             let mut data = Vec::with_capacity(header.header_len() + payload.len());
             data.extend_from_slice(&header.to_bytes());
             data.extend_from_slice(&payload);
@@ -556,7 +559,8 @@ mod test {
                 hop_limit: 4,
                 source: [1; 16],
                 destination: [2; 16],
-            }.to_bytes();
+            }
+            .to_bytes();
 
             assert_eq!(
                 IGMP,

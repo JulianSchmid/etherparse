@@ -1,4 +1,4 @@
-use crate::err::{LenSource, io::LimitedReadError, LenError, Layer};
+use crate::err::{io::LimitedReadError, Layer, LenError, LenSource};
 
 /// Encapsulated reader with an maximum allowed read length.
 ///
@@ -27,8 +27,14 @@ pub struct LimitedReader<T> {
 #[cfg(feature = "std")]
 impl<T: std::io::Read + Sized> LimitedReader<T> {
     /// Setup a new limited reader.
-    pub fn new(reader: T, max_len: usize, len_source: LenSource, layer_offset: usize, layer: Layer) -> LimitedReader<T> {
-        LimitedReader{
+    pub fn new(
+        reader: T,
+        max_len: usize,
+        len_source: LenSource,
+        layer_offset: usize,
+        layer: Layer,
+    ) -> LimitedReader<T> {
+        LimitedReader {
             reader,
             max_len,
             len_source,
@@ -39,19 +45,29 @@ impl<T: std::io::Read + Sized> LimitedReader<T> {
     }
 
     /// Maximum len that still can be read (on the current layer).
-    pub fn max_len(&self) -> usize { self.max_len }
+    pub fn max_len(&self) -> usize {
+        self.max_len
+    }
 
     /// Source of the maximum length (used for len error).
-    pub fn len_source(&self) -> LenSource { self.len_source }
+    pub fn len_source(&self) -> LenSource {
+        self.len_source
+    }
 
     /// Layer that is currently read (used for len error).
-    pub fn layer(&self) -> Layer { self.layer }
+    pub fn layer(&self) -> Layer {
+        self.layer
+    }
 
     /// Offset of the layer that is currently read (used for len error).
-    pub fn layer_offset(&self) -> usize { self.layer_offset }
+    pub fn layer_offset(&self) -> usize {
+        self.layer_offset
+    }
 
     /// Len that was read on the current layer.
-    pub fn read_len(&self) -> usize { self.read_len }
+    pub fn read_len(&self) -> usize {
+        self.read_len
+    }
 
     /// Set currrent position as starting position for a layer.
     pub fn start_layer(&mut self, layer: Layer) {
@@ -62,12 +78,12 @@ impl<T: std::io::Read + Sized> LimitedReader<T> {
     }
 
     /// Try read the given buf length from the reader.
-    /// 
-    /// Triggers an len error if the 
+    ///
+    /// Triggers an len error if the
     pub fn read_exact(&mut self, buf: &mut [u8]) -> Result<(), LimitedReadError> {
         use LimitedReadError::*;
         if self.max_len - self.read_len < buf.len() {
-            Err(Len(LenError{
+            Err(Len(LenError {
                 required_len: self.read_len + buf.len(),
                 len: self.max_len,
                 len_source: self.len_source,
@@ -103,20 +119,20 @@ impl<T: core::fmt::Debug> core::fmt::Debug for LimitedReader<T> {
 
 #[cfg(all(test, feature = "std"))]
 mod tests {
-    use std::io::Cursor;
     use std::format;
+    use std::io::Cursor;
 
     use super::*;
 
     #[test]
     fn new() {
-        let data = [1,2,3,4];
+        let data = [1, 2, 3, 4];
         let actual = LimitedReader::new(
             Cursor::new(&data),
             data.len(),
             LenSource::Slice,
             5,
-            Layer::Ipv4Header
+            Layer::Ipv4Header,
         );
         assert_eq!(actual.max_len, data.len());
         assert_eq!(actual.max_len(), data.len());
@@ -132,18 +148,18 @@ mod tests {
 
     #[test]
     fn start_layer() {
-        let data = [1,2,3,4,5];
+        let data = [1, 2, 3, 4, 5];
         let mut r = LimitedReader::new(
             Cursor::new(&data),
             data.len(),
             LenSource::Slice,
             6,
-            Layer::Ipv4Header
+            Layer::Ipv4Header,
         );
         {
-            let mut read_result = [0u8;2];
+            let mut read_result = [0u8; 2];
             r.read_exact(&mut read_result).unwrap();
-            assert_eq!(read_result, [1,2]);
+            assert_eq!(read_result, [1, 2]);
         }
         r.start_layer(Layer::IpAuthHeader);
 
@@ -154,10 +170,10 @@ mod tests {
         assert_eq!(r.read_len, 0);
 
         {
-            let mut read_result = [0u8;4];
+            let mut read_result = [0u8; 4];
             assert_eq!(
                 r.read_exact(&mut read_result).unwrap_err().len().unwrap(),
-                LenError{
+                LenError {
                     required_len: 4,
                     len: 3,
                     len_source: LenSource::Slice,
@@ -170,28 +186,28 @@ mod tests {
 
     #[test]
     fn read_exact() {
-        let data = [1,2,3,4,5];
+        let data = [1, 2, 3, 4, 5];
         let mut r = LimitedReader::new(
             Cursor::new(&data),
             data.len() + 1,
             LenSource::Ipv4HeaderTotalLen,
             10,
-            Layer::Ipv4Header
+            Layer::Ipv4Header,
         );
 
         // normal read
         {
-            let mut read_result = [0u8;2];
+            let mut read_result = [0u8; 2];
             r.read_exact(&mut read_result).unwrap();
-            assert_eq!(read_result, [1,2]);
+            assert_eq!(read_result, [1, 2]);
         }
 
         // len error
         {
-            let mut read_result = [0u8;5];
+            let mut read_result = [0u8; 5];
             assert_eq!(
                 r.read_exact(&mut read_result).unwrap_err().len().unwrap(),
-                LenError{
+                LenError {
                     required_len: 7,
                     len: 6,
                     len_source: LenSource::Ipv4HeaderTotalLen,
@@ -203,27 +219,25 @@ mod tests {
 
         // io error
         {
-            let mut read_result = [0u8;4];
-            assert!(
-                r.read_exact(&mut read_result).unwrap_err().io().is_some()
-            );
+            let mut read_result = [0u8; 4];
+            assert!(r.read_exact(&mut read_result).unwrap_err().io().is_some());
         }
     }
 
     #[test]
     fn take_reader() {
-        let data = [1,2,3,4,5];
+        let data = [1, 2, 3, 4, 5];
         let mut r = LimitedReader::new(
             Cursor::new(&data),
             data.len(),
             LenSource::Slice,
             6,
-            Layer::Ipv4Header
+            Layer::Ipv4Header,
         );
         {
-            let mut read_result = [0u8;2];
+            let mut read_result = [0u8; 2];
             r.read_exact(&mut read_result).unwrap();
-            assert_eq!(read_result, [1,2]);
+            assert_eq!(read_result, [1, 2]);
         }
         let result = r.take_reader();
         assert_eq!(2, result.position());
@@ -231,13 +245,13 @@ mod tests {
 
     #[test]
     fn debug() {
-        let data = [1,2,3,4];
+        let data = [1, 2, 3, 4];
         let actual = LimitedReader::new(
             Cursor::new(&data),
             data.len(),
             LenSource::Slice,
             5,
-            Layer::Ipv4Header
+            Layer::Ipv4Header,
         );
         assert_eq!(
             format!("{:?}", actual),
@@ -252,5 +266,4 @@ mod tests {
             )
         );
     }
-
 }

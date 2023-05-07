@@ -69,67 +69,63 @@ impl std::error::Error for HeaderWriteError {
 
 #[cfg(test)]
 mod tests {
-    use super::{*, HeaderWriteError::*};
+    use super::{HeaderWriteError::*, *};
     use crate::*;
     use alloc::format;
     use std::error::Error;
 
     #[test]
     fn io() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).io().is_some()
-        );
-        assert!(
-            Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced{
-                missing_ext: IpNumber::AUTHENTICATION_HEADER,
-            }).io().is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .io()
+        .is_some());
+        assert!(Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        })
+        .io()
+        .is_none());
     }
 
     #[test]
     fn ipv4_exts() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).ipv4_exts().is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .ipv4_exts()
+        .is_none());
         {
-            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced {
                 missing_ext: IpNumber::AUTHENTICATION_HEADER,
             };
-            assert_eq!(
-                Some(&err),
-                Ipv4Exts(err.clone()).ipv4_exts()
-            );
+            assert_eq!(Some(&err), Ipv4Exts(err.clone()).ipv4_exts());
         }
     }
 
     #[test]
     fn ipv6_exts() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).ipv6_exts().is_none()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .ipv6_exts()
+        .is_none());
         {
-            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{
+            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced {
                 missing_ext: IpNumber::AUTHENTICATION_HEADER,
             };
-            assert_eq!(
-                Some(&err),
-                Ipv6Exts(err.clone()).ipv6_exts()
-            );
+            assert_eq!(Some(&err), Ipv6Exts(err.clone()).ipv6_exts());
         }
     }
 
     #[test]
     fn debug() {
-        let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER, };
+        let err = ipv6_exts::ExtsWalkError::ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        };
         assert_eq!(
             format!("Ipv6Exts({:?})", err.clone()),
             format!("{:?}", Ipv6Exts(err))
@@ -143,45 +139,40 @@ mod tests {
                 std::io::ErrorKind::UnexpectedEof,
                 "failed to fill whole buffer",
             );
-            assert_eq!(
-                format!("{}", err),
-                format!("{}", Io(err))
-            );
+            assert_eq!(format!("{}", err), format!("{}", Io(err)));
         }
         {
-            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER, };
-            assert_eq!(
-                format!("{}", Ipv4Exts(err.clone())),
-                format!("{}", err)
-            );
+            let err = ipv4_exts::ExtsWalkError::ExtNotReferenced {
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(format!("{}", Ipv4Exts(err.clone())), format!("{}", err));
         }
         {
-            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced{ missing_ext: IpNumber::AUTHENTICATION_HEADER, };
-            assert_eq!(
-                format!("{}", Ipv6Exts(err.clone())),
-                format!("{}", err)
-            );
+            let err = ipv6_exts::ExtsWalkError::ExtNotReferenced {
+                missing_ext: IpNumber::AUTHENTICATION_HEADER,
+            };
+            assert_eq!(format!("{}", Ipv6Exts(err.clone())), format!("{}", err));
         }
     }
 
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        assert!(
-            Io(std::io::Error::new(
-                std::io::ErrorKind::UnexpectedEof,
-                "failed to fill whole buffer",
-            )).source().is_some()
-        );
-        assert!(
-            Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced{
-                missing_ext: IpNumber::AUTHENTICATION_HEADER,
-            }).source().is_some()
-        );
-        assert!(
-            Ipv6Exts(ipv6_exts::ExtsWalkError::ExtNotReferenced{
-                missing_ext: IpNumber::AUTHENTICATION_HEADER,
-            }).source().is_some()
-        );
+        assert!(Io(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "failed to fill whole buffer",
+        ))
+        .source()
+        .is_some());
+        assert!(Ipv4Exts(ipv4_exts::ExtsWalkError::ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        })
+        .source()
+        .is_some());
+        assert!(Ipv6Exts(ipv6_exts::ExtsWalkError::ExtNotReferenced {
+            missing_ext: IpNumber::AUTHENTICATION_HEADER,
+        })
+        .source()
+        .is_some());
     }
 }

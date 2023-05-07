@@ -269,7 +269,12 @@ impl Icmpv4Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv4::*, test_gens::*, *, err::{LenError, LenSource, Layer}};
+    use crate::{
+        err::{Layer, LenError, LenSource},
+        icmpv4::*,
+        test_gens::*,
+        *,
+    };
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 

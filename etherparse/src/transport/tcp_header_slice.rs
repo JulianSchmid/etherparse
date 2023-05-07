@@ -1,4 +1,7 @@
-use crate::{*, err::{ValueTooBigError, ValueType}};
+use crate::{
+    err::{ValueTooBigError, ValueType},
+    *,
+};
 
 /// A slice containing an tcp header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -300,13 +303,13 @@ impl<'a> TcpHeaderSlice<'a> {
         let header_len = self.slice.len() as u16;
         let max_payload = usize::from(core::u16::MAX) - usize::from(header_len);
         if max_payload < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: max_payload,
                 value_type: ValueType::TcpPayloadLengthIpv4,
             });
         }
-        
+
         // calculate the checksum
         let tcp_len = header_len + (payload.len() as u16);
         Ok(self.calc_checksum_post_ip(
@@ -339,7 +342,7 @@ impl<'a> TcpHeaderSlice<'a> {
         let header_len = self.slice.len() as u32;
         let max_payload = (core::u32::MAX as usize) - (header_len as usize);
         if max_payload < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: max_payload,
                 value_type: ValueType::TcpPayloadLengthIpv6,
@@ -376,7 +379,10 @@ impl<'a> TcpHeaderSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        err::{tcp::{HeaderError::*, HeaderSliceError::*}, ValueTooBigError, ValueType},
+        err::{
+            tcp::{HeaderError::*, HeaderSliceError::*},
+            ValueTooBigError, ValueType,
+        },
         test_gens::*,
         TcpOptionElement::*,
         *,
@@ -526,7 +532,8 @@ mod test {
                 [0; 4],
                 //destination ip address
                 [0; 4],
-            ).unwrap();
+            )
+            .unwrap();
 
             // setup slices
             let ip_bytes = ip_header.to_bytes();
@@ -570,7 +577,8 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            ).unwrap();
+            )
+            .unwrap();
 
             // setup slices
             let ip_buffer = ip_header.to_bytes();
@@ -614,7 +622,8 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            ).unwrap();
+            )
+            .unwrap();
 
             // setup slices
             let ip_buffer = ip_header.to_bytes();
@@ -647,7 +656,7 @@ mod test {
 
             assert_eq!(
                 tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload),
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
@@ -747,7 +756,7 @@ mod test {
 
             assert_eq!(
                 tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload),
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
@@ -847,7 +856,7 @@ mod test {
             // check for an error during checksum calc
             assert_eq!(
                 tcp_slice.calc_checksum_ipv6(&ip_slice, &tcp_payload),
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: core::u32::MAX as usize - tcp.header_len() as usize,
                     value_type: ValueType::TcpPayloadLengthIpv6,
@@ -923,7 +932,7 @@ mod test {
                     [21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36,],
                     &tcp_payload
                 ),
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: core::u32::MAX as usize - tcp.header_len() as usize,
                     value_type: ValueType::TcpPayloadLengthIpv6,

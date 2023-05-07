@@ -1557,7 +1557,8 @@ fn final_write<T: io::Write + Sized, B>(
             // directly and don't need to be set here again.
             match ip_header {
                 Version4(mut ip, ext) => {
-                    ip.set_payload_len(ext.header_len() + payload.len()).map_err(PayloadLen)?;
+                    ip.set_payload_len(ext.header_len() + payload.len())
+                        .map_err(PayloadLen)?;
                     ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.protocol).map_err(|err| {
                         use err::ipv4_exts::HeaderWriteError as I;
@@ -1568,7 +1569,8 @@ fn final_write<T: io::Write + Sized, B>(
                     })?;
                 }
                 Version6(mut ip, ext) => {
-                    ip.set_payload_length(ext.header_len() + payload.len()).map_err(PayloadLen)?;
+                    ip.set_payload_length(ext.header_len() + payload.len())
+                        .map_err(PayloadLen)?;
                     ip.write(writer).map_err(Io)?;
                     ext.write(writer, ip.next_header).map_err(|err| {
                         use err::ipv6_exts::HeaderWriteError as I;
@@ -1585,7 +1587,8 @@ fn final_write<T: io::Write + Sized, B>(
                 Version4(mut ip, mut ext) => {
                     //set total length & udp payload length (ip checks that the payload length is ok)
                     let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_len(ext.header_len() + transport_size).map_err(PayloadLen)?;
+                    ip.set_payload_len(ext.header_len() + transport_size)
+                        .map_err(PayloadLen)?;
                     use crate::TransportHeader::*;
                     match transport {
                         Icmpv4(_) => {}
@@ -1605,13 +1608,15 @@ fn final_write<T: io::Write + Sized, B>(
                     });
 
                     //calculate the udp checksum
-                    transport.update_checksum_ipv4(&ip, payload).map_err(|err| {
-                        use err::packet::TransportChecksumError as I;
-                        match err {
-                            I::PayloadLen(err) => PayloadLen(err),
-                            I::Icmpv6InIpv4 => Icmpv6InIpv4,
-                        }
-                    })?;
+                    transport
+                        .update_checksum_ipv4(&ip, payload)
+                        .map_err(|err| {
+                            use err::packet::TransportChecksumError as I;
+                            match err {
+                                I::PayloadLen(err) => PayloadLen(err),
+                                I::Icmpv6InIpv4 => Icmpv6InIpv4,
+                            }
+                        })?;
 
                     //write (will automatically calculate the checksum)
                     ip.write(writer).map_err(Io)?;
@@ -1626,7 +1631,8 @@ fn final_write<T: io::Write + Sized, B>(
                 Version6(mut ip, mut ext) => {
                     //set total length
                     let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_length(ext.header_len() + transport_size).map_err(PayloadLen)?;
+                    ip.set_payload_length(ext.header_len() + transport_size)
+                        .map_err(PayloadLen)?;
                     use crate::TransportHeader::*;
                     match transport {
                         Icmpv4(_) => {}
@@ -1646,7 +1652,9 @@ fn final_write<T: io::Write + Sized, B>(
                     });
 
                     //calculate the udp checksum
-                    transport.update_checksum_ipv6(&ip, payload).map_err(PayloadLen)?;
+                    transport
+                        .update_checksum_ipv6(&ip, payload)
+                        .map_err(PayloadLen)?;
 
                     //write (will automatically calculate the checksum)
                     ip.write(writer).map_err(Io)?;

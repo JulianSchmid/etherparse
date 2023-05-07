@@ -1,4 +1,4 @@
-use crate::{*, err::ValueTooBigError};
+use crate::{err::ValueTooBigError, *};
 use arrayvec::ArrayVec;
 
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
@@ -188,7 +188,12 @@ impl Icmpv6Header {
 
 #[cfg(test)]
 mod test {
-    use crate::{icmpv6::*, test_gens::*, *, err::{ValueTooBigError, ValueType}};
+    use crate::{
+        err::{ValueTooBigError, ValueType},
+        icmpv6::*,
+        test_gens::*,
+        *,
+    };
     use alloc::{format, vec::Vec};
     use arrayvec::ArrayVec;
     use proptest::prelude::*;

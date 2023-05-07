@@ -1,4 +1,4 @@
-use crate::{*, err::ipv4_exts::ExtsWalkError};
+use crate::{err::ipv4_exts::ExtsWalkError, *};
 
 /// IPv4 extension headers present after the ip header.
 ///
@@ -72,15 +72,15 @@ impl Ipv4Extensions {
         writer: &mut T,
         start_ip_number: IpNumber,
     ) -> Result<(), err::ipv4_exts::HeaderWriteError> {
+        use err::ipv4_exts::{ExtsWalkError::*, HeaderWriteError::*};
         use ip_number::*;
-        use err::ipv4_exts::{HeaderWriteError::*, ExtsWalkError::*};
         match self.auth {
             Some(ref header) => {
                 if AUTH == start_ip_number {
                     header.write(writer).map_err(Io)
                 } else {
-                    Err(Content(ExtNotReferenced{
-                        missing_ext: IpNumber::AUTHENTICATION_HEADER
+                    Err(Content(ExtNotReferenced {
+                        missing_ext: IpNumber::AUTHENTICATION_HEADER,
                     }))
                 }
             }
@@ -127,7 +127,7 @@ impl Ipv4Extensions {
             if first_next_header == AUTH {
                 Ok(auth.next_header)
             } else {
-                Err(ExtsWalkError::ExtNotReferenced{
+                Err(ExtsWalkError::ExtNotReferenced {
                     missing_ext: IpNumber::AUTHENTICATION_HEADER,
                 })
             }

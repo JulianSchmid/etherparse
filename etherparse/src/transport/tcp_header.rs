@@ -556,7 +556,7 @@ impl TcpHeader {
         // check that the total length fits into the tcp length field
         let max_payload = usize::from(core::u16::MAX) - usize::from(self.header_len());
         if max_payload < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: max_payload,
                 value_type: ValueType::TcpPayloadLengthIpv4,
@@ -591,11 +591,10 @@ impl TcpHeader {
         destination: [u8; 16],
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
-
         // check that the total length fits into the tcp length field
         let max_payload = (core::u32::MAX as usize) - usize::from(self.header_len());
         if max_payload < payload.len() {
-            return Err(ValueTooBigError{
+            return Err(ValueTooBigError {
                 actual: payload.len(),
                 max_allowed: max_payload,
                 value_type: ValueType::TcpPayloadLengthIpv6,
@@ -755,7 +754,10 @@ impl core::cmp::Eq for TcpHeader {}
 #[cfg(test)]
 mod test {
     use crate::{
-        err::{tcp::{HeaderError::*, HeaderSliceError::*}, ValueTooBigError, ValueType},
+        err::{
+            tcp::{HeaderError::*, HeaderSliceError::*},
+            ValueTooBigError, ValueType,
+        },
         tcp_option::*,
         test_gens::*,
         TcpOptionElement::*,
@@ -1675,7 +1677,8 @@ mod test {
                 [0; 4],
                 //destination ip address
                 [0; 4],
-            ).unwrap();
+            )
+            .unwrap();
             assert_eq!(Ok(0x0), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
             assert_eq!(
                 Ok(0x0),
@@ -1713,7 +1716,8 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            ).unwrap();
+            )
+            .unwrap();
 
             //check checksum
             assert_eq!(Ok(0xdeeb), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
@@ -1749,7 +1753,8 @@ mod test {
                 [192, 168, 1, 42],
                 //destination ip address
                 [192, 168, 1, 1],
-            ).unwrap();
+            )
+            .unwrap();
 
             //check checksum
             assert_eq!(Ok(0xd5ea), tcp.calc_checksum_ipv4(&ip_header, &tcp_payload));
@@ -1764,7 +1769,7 @@ mod test {
             tcp_payload.resize(len, 0);
             let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]).unwrap();
             assert_eq!(
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: usize::from(core::u16::MAX) - usize::from(tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
@@ -1847,7 +1852,7 @@ mod test {
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
             assert_eq!(
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: usize::from(core::u16::MAX) - usize::from(tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
@@ -1925,7 +1930,7 @@ mod test {
             };
 
             assert_eq!(
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: core::u32::MAX as usize - usize::from(tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv6,
@@ -1988,7 +1993,7 @@ mod test {
             };
 
             assert_eq!(
-                Err(ValueTooBigError{
+                Err(ValueTooBigError {
                     actual: len,
                     max_allowed: core::u32::MAX as usize - usize::from(tcp.header_len()),
                     value_type: ValueType::TcpPayloadLengthIpv6,
