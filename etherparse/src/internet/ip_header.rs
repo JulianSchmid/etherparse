@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
+use crate::err::{Layer, LenError, LenSource, ValueTooBigError, ip::HeaderWriteError};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -494,26 +494,27 @@ impl IpHeader {
     /// Writes an IP (v4 or v6) header to the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), WriteError> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeaderWriteError> {
+        use HeaderWriteError::*;
         use crate::IpHeader::*;
         match *self {
             Version4(ref header, ref extensions) => {
-                header.write(writer)?;
+                header.write(writer).map_err(Io)?;
                 extensions.write(writer, header.protocol).map_err(|err| {
                     use err::ipv4_exts::HeaderWriteError as I;
                     match err {
-                        I::Io(err) => WriteError::IoError(err),
-                        I::Content(err) => WriteError::Ipv4Exts(err),
+                        I::Io(err) => Io(err),
+                        I::Content(err) => Ipv4Exts(err),
                     }
                 })
             }
             Version6(ref header, ref extensions) => {
-                header.write(writer)?;
+                header.write(writer).map_err(Io)?;
                 extensions.write(writer, header.next_header).map_err(|err|{
                     use err::ipv6_exts::HeaderWriteError as I;
                     match err {
-                        I::Io(err) => WriteError::IoError(err),
-                        I::Content(err) => WriteError::Ipv6Exts(err),
+                        I::Io(err) => Io(err),
+                        I::Content(err) => Ipv6Exts(err),
                     }
                 })
             }
@@ -1168,7 +1169,7 @@ mod test {
                     assert!(
                         header.write(&mut cursor)
                         .unwrap_err()
-                        .io_error()
+                        .io()
                         .is_some()
                     );
                 }
@@ -1180,7 +1181,7 @@ mod test {
                     assert!(
                         header.write(&mut cursor)
                         .unwrap_err()
-                        .io_error()
+                        .io()
                         .is_some()
                     );
                 }
@@ -1223,7 +1224,7 @@ mod test {
                     assert!(
                         header.write(&mut cursor)
                         .unwrap_err()
-                        .io_error()
+                        .io()
                         .is_some()
                     );
                 }
@@ -1235,7 +1236,7 @@ mod test {
                     assert!(
                         header.write(&mut cursor)
                         .unwrap_err()
-                        .io_error()
+                        .io()
                         .is_some()
                     );
                 }
