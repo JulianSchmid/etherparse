@@ -356,7 +356,16 @@ mod test {
                         },
                         len: bad_len,
                         len_source: LenSource::Slice,
-                        layer: Layer::Icmpv4,
+                        layer: if bad_len < Icmpv4Header::MIN_LEN {
+                            Layer::Icmpv4
+                        } else {
+                            use crate::Icmpv4Type::*;
+                            match icmpv4_type {
+                                TimestampRequest(_) => Layer::Icmpv4Timestamp,
+                                TimestampReply(_) => Layer::Icmpv4TimestampReply,
+                                _ => Layer::Icmpv4,
+                            }
+                        },
                         layer_start_offset: 0,
                     })
                 );
