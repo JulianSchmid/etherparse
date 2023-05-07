@@ -87,9 +87,25 @@ impl<T: std::io::Read + Sized> LimitedReader<T> {
     }
 }
 
+#[cfg(feature = "std")]
+impl<T: core::fmt::Debug> core::fmt::Debug for LimitedReader<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("LimitedReader")
+            .field("reader", &self.reader)
+            .field("max_len", &self.max_len)
+            .field("len_source", &self.len_source)
+            .field("layer", &self.layer)
+            .field("layer_offset", &self.layer_offset)
+            .field("read_len", &self.read_len)
+            .finish()
+    }
+}
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use std::io::Cursor;
+    use std::format;
+
     use super::*;
 
     #[test]
@@ -211,6 +227,30 @@ mod tests {
         }
         let result = r.take_reader();
         assert_eq!(2, result.position());
+    }
+
+    #[test]
+    fn debug() {
+        let data = [1,2,3,4];
+        let actual = LimitedReader::new(
+            Cursor::new(&data),
+            data.len(),
+            LenSource::Slice,
+            5,
+            Layer::Ipv4Header
+        );
+        assert_eq!(
+            format!("{:?}", actual),
+            format!(
+                "LimitedReader {{ reader: {:?}, max_len: {:?}, len_source: {:?}, layer: {:?}, layer_offset: {:?}, read_len: {:?} }}",
+                &actual.reader,
+                &actual.max_len,
+                &actual.len_source,
+                &actual.layer,
+                &actual.layer_offset,
+                &actual.read_len
+            )
+        );
     }
 
 }
