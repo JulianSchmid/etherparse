@@ -42,19 +42,6 @@ fn test_debug_write() {
         input.write(&mut buffer).unwrap();
         println!("{:?}", Ethernet2HeaderSlice::from_slice(&buffer));
     }
-    //write error
-    {
-        use crate::ValueError::Ipv4OptionsLengthBad;
-        use crate::WriteError::*;
-        for value in [
-            IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-            ValueError(Ipv4OptionsLengthBad(0)),
-        ]
-        .iter()
-        {
-            println!("{:?}", value);
-        }
-    }
     //value error
     {
         use crate::ValueError::*;
@@ -94,44 +81,5 @@ fn test_debug_write() {
             payload: &dummy[..],
         };
         println!("{:?}", value);
-    }
-}
-
-#[test]
-fn test_io_error_to_write_error() {
-    assert_matches!(
-        WriteError::from(std::io::Error::new(std::io::ErrorKind::Other, "oh no!")),
-        WriteError::IoError(_)
-    );
-}
-
-mod write_error {
-    #[test]
-    fn io_error() {
-        use super::*;
-        assert_eq!(
-            std::io::ErrorKind::Other,
-            WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .io_error()
-                .unwrap()
-                .kind()
-        );
-        assert!(WriteError::ValueError(ValueError::TcpLengthTooLarge(0))
-            .io_error()
-            .is_none());
-    }
-
-    #[test]
-    fn value_error() {
-        use super::*;
-        assert!(
-            WriteError::IoError(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
-                .value_error()
-                .is_none()
-        );
-        assert_eq!(
-            Some(ValueError::TcpLengthTooLarge(0)),
-            WriteError::ValueError(ValueError::TcpLengthTooLarge(0)).value_error()
-        );
     }
 }

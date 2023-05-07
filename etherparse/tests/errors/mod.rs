@@ -1,48 +1,6 @@
 use super::*;
 use proptest::prelude::*;
 
-/// Check the write error display fmt generate the expected strings
-#[test]
-fn write_error_display() {
-    use ValueError::Ipv4OptionsLengthBad;
-    use WriteError::IoError;
-
-    //IoError
-    {
-        let custom_error = std::io::Error::new(std::io::ErrorKind::Other, "some error");
-        assert_eq!(
-            &format!("{}", custom_error),
-            &format!("{}", IoError(custom_error))
-        );
-    }
-
-    //ValueError
-    {
-        let value_error = Ipv4OptionsLengthBad(0);
-        assert_eq!(
-            &format!("ValueError: {}", value_error),
-            &format!("{}", WriteError::ValueError(value_error))
-        );
-    }
-}
-
-/// Check the write error display fmt generate the expected strings
-#[test]
-fn write_error_source() {
-    use super::WriteError::IoError;
-    use std::error::Error;
-
-    assert_matches!(
-        IoError(std::io::Error::new(std::io::ErrorKind::Other, "some error")).source(),
-        Some(_)
-    );
-
-    assert_matches!(
-        WriteError::ValueError(ValueError::Ipv4OptionsLengthBad(0)).source(),
-        Some(_)
-    );
-}
-
 /// Check that all values return None as source
 #[test]
 fn value_error_source() {
