@@ -65,10 +65,7 @@ impl BuildWriteError {
 
     /// Returns true if the `BuildWriteError` is a `Icmpv6InIpv4`.
     pub fn is_icmpv6_in_ipv4(&self) -> bool {
-        match self {
-            BuildWriteError::Icmpv6InIpv4 => true,
-            _ => false,
-        }
+        matches!(self, BuildWriteError::Icmpv6InIpv4)
     }
 }
 

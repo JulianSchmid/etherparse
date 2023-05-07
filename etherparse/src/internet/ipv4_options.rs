@@ -70,6 +70,12 @@ impl Ipv4Options {
     pub fn len(&self) -> u8 {
         self.len
     }
+
+    /// Returns if the length of the options is zero.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 impl TryFrom<&[u8]> for Ipv4Options {
@@ -251,6 +257,18 @@ mod tests {
         let actual = Ipv4Options::new();
         assert_eq!(actual.len, 0);
         assert_eq!(actual.buf, [0; 40]);
+    }
+
+    #[test]
+    fn is_empty() {
+        {
+            let actual = Ipv4Options::new();
+            assert!(actual.is_empty());
+        }
+        {
+            let actual: Ipv4Options = [1, 2, 3, 4].into();
+            assert_eq!(false, actual.is_empty());
+        }
     }
 
     #[test]

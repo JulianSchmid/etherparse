@@ -56,7 +56,7 @@ impl Ipv6FlowLabel {
     pub const ZERO: Ipv6FlowLabel = Ipv6FlowLabel(0);
 
     /// Maximum value of an IPv6 Flow Label.
-    pub const MAX_U32: u32 = 0b1111_11111111_11111111;
+    pub const MAX_U32: u32 = 0b1111_1111_1111_1111_1111;
 
     /// Tries to create an [`Ipv6FlowLabel`] and checks that the passed value
     /// is smaller or equal than [`Ipv6FlowLabel::MAX_U32`] (20 bit unsigned integer).

@@ -570,7 +570,7 @@ impl TcpHeader {
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
                 .add_2bytes([0, ip_number::TCP.0])
-                .add_2bytes((tcp_len as u16).to_be_bytes()),
+                .add_2bytes(tcp_len.to_be_bytes()),
             payload,
         ))
     }
@@ -606,7 +606,7 @@ impl TcpHeader {
             checksum::Sum16BitWords::new()
                 .add_16bytes(source)
                 .add_16bytes(destination)
-                .add_4bytes((tcp_len as u32).to_be_bytes())
+                .add_4bytes(tcp_len.to_be_bytes())
                 .add_2bytes([0, ip_number::TCP.0]),
             payload,
         ))

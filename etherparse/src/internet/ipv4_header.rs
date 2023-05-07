@@ -473,7 +473,7 @@ impl Ipv4Header {
             options: {
                 let mut options = Ipv4Options::new();
                 options.len = (ihl - 5) * 4;
-                if options.len() > 0 {
+                if false == options.is_empty() {
                     reader.read_exact(options.as_mut()).map_err(Io)?;
                 }
                 options
