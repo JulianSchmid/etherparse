@@ -423,11 +423,14 @@ impl Ipv6Extensions {
         //should not be hit
     }
 
-    /// Writes the given headers to a writer based on the order defined in the next_header fields of
-    /// the headers and the first header_id passed to this function.
+    /// Writes the given headers to a writer based on the order defined in
+    /// the next_header fields of the headers and the first header_id
+    /// passed to this function.
     ///
-    /// It is required that all next header are correctly set in the headers and no other ipv6 header
-    /// extensions follow this header. If this is not the case a `ValueError::Ipv6ExtensionNotReferenced`
+    /// It is required that all next header are correctly set in the headers
+    /// and no other ipv6 header extensions follow this header. If this is not
+    /// the case an [`err::ipv6_exts::HeaderWriteError::Content`] error is
+    /// returned.
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(
         &self,

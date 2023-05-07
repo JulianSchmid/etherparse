@@ -75,7 +75,7 @@ impl<'a> IpAuthHeader {
     /// and the maximum allowed length is 1016 bytes
     /// (`IpAuthHeader::MAX_ICV_LEN`). If the slice length does
     /// not fullfill these requirements the value is not copied and an
-    /// `Err(ValueError::IpAuthenticationHeaderBadIcvLength)` is returned.
+    /// [`crate::err::ip_auth::IcvLenError`] is returned.
     /// If successfull an Ok(()) is returned.
     pub fn new(
         next_header: IpNumber,
@@ -207,7 +207,7 @@ impl<'a> IpAuthHeader {
     /// a multiple of 4 and the maximum allowed length is 1016 bytes
     /// (`IpAuthHeader::MAX_ICV_LEN`). If the slice length does
     /// not fullfill these requirements the value is not copied and an
-    /// `Err(ValueError::IpAuthenticationHeaderBadIcvLength)` is returned.
+    /// [`crate::err::ip_auth::IcvLenError`] is returned.
     /// If successfull an Ok(()) is returned.
     pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(), IcvLenError> {
         use IcvLenError::*;

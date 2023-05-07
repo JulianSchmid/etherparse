@@ -6,7 +6,6 @@ use assert_matches::assert_matches;
 pub use etherparse_proptest_generators::*;
 
 mod checksum;
-mod errors;
 mod internet;
 mod packet_builder;
 mod packet_decoder;
@@ -41,34 +40,6 @@ fn test_debug_write() {
         let mut buffer: Vec<u8> = Vec::with_capacity(14);
         input.write(&mut buffer).unwrap();
         println!("{:?}", Ethernet2HeaderSlice::from_slice(&buffer));
-    }
-    //value error
-    {
-        use crate::ValueError::*;
-        for value in [
-            Ipv4OptionsLengthBad(0),
-            Ipv6PayloadLengthTooLarge(0),
-            UdpPayloadLengthTooLarge(0),
-            U8TooLarge {
-                value: 0,
-                max: 0,
-                field: err::ValueType::Ipv4Ecn,
-            },
-            U16TooLarge {
-                value: 0,
-                max: 0,
-                field: err::ValueType::Ipv4Ecn,
-            },
-            U32TooLarge {
-                value: 0,
-                max: 0,
-                field: err::ValueType::Ipv4Ecn,
-            },
-        ]
-        .iter()
-        {
-            println!("{:?}", value);
-        }
     }
     //PacketHeaders
     {
