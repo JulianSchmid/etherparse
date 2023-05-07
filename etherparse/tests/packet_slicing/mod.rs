@@ -22,7 +22,12 @@ mod sliced_packet {
         // bad protocol number
         for i in 0u8..std::u8::MAX {
             if i >> 4 != 4 && i >> 4 != 6 {
-                assert_matches!(SlicedPacket::from_ip(&[i]), Err(Ip(_)));
+                assert_eq!(
+                    SlicedPacket::from_ip(&[i]).unwrap_err(),
+                    err::packet::IpSliceError::Ip(
+                        err::ip::HeaderError::UnsupportedIpVersion { version_number: i >> 4 }
+                    )
+                );
             }
         }
     }

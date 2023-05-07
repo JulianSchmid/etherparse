@@ -26,6 +26,5 @@ std = ["arrayvec/std"]
 arrayvec = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
-assert_matches = "1.5.0"
 proptest = "1.0.0"
 etherparse_proptest_generators = { path = "../etherparse_proptest_generators" }

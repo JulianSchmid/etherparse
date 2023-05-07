@@ -1,8 +1,6 @@
 extern crate etherparse;
 use etherparse::*;
 
-use assert_matches::assert_matches;
-
 pub use etherparse_proptest_generators::*;
 
 mod checksum;
