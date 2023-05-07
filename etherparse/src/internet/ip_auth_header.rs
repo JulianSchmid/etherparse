@@ -1,8 +1,7 @@
-use arrayvec::ArrayVec;
-
 use super::super::*;
-
+use arrayvec::ArrayVec;
 use core::fmt::{Debug, Formatter};
+use crate::err::ip_auth::IcvLenError;
 
 /// Deprecated use [IpAuthHeader] instead.
 #[deprecated(since = "0.10.1", note = "Please use the type IpAuthHeader instead")]
@@ -83,10 +82,12 @@ impl<'a> IpAuthHeader {
         spi: u32,
         sequence_number: u32,
         raw_icv: &'a [u8],
-    ) -> Result<IpAuthHeader, ValueError> {
-        if raw_icv.len() > IpAuthHeader::MAX_ICV_LEN || 0 != raw_icv.len() % 4 {
-            use ValueError::*;
-            Err(IpAuthenticationHeaderBadIcvLength(raw_icv.len()))
+    ) -> Result<IpAuthHeader, IcvLenError> {
+        use IcvLenError::*;
+        if raw_icv.len() > IpAuthHeader::MAX_ICV_LEN {
+            Err(TooBig(raw_icv.len()))
+        } else if 0 != raw_icv.len() % 4 {
+            Err(Unaligned(raw_icv.len()))
         } else {
             let mut result = IpAuthHeader {
                 next_header,
@@ -208,10 +209,12 @@ impl<'a> IpAuthHeader {
     /// not fullfill these requirements the value is not copied and an
     /// `Err(ValueError::IpAuthenticationHeaderBadIcvLength)` is returned.
     /// If successfull an Ok(()) is returned.
-    pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(), ValueError> {
-        if raw_icv.len() > IpAuthHeader::MAX_ICV_LEN || 0 != raw_icv.len() % 4 {
-            use ValueError::*;
-            Err(IpAuthenticationHeaderBadIcvLength(raw_icv.len()))
+    pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(), IcvLenError> {
+        use IcvLenError::*;
+        if raw_icv.len() > IpAuthHeader::MAX_ICV_LEN {
+            Err(TooBig(raw_icv.len()))
+        } else if 0 != raw_icv.len() % 4 {
+            Err(Unaligned(raw_icv.len()))
         } else {
             self.raw_icv_buffer[..raw_icv.len()].copy_from_slice(raw_icv);
             self.raw_icv_len = (raw_icv.len() / 4) as u8;
@@ -328,53 +331,53 @@ mod test {
 
     #[test]
     fn new_and_set_icv() {
-        use ValueError::*;
+        use IcvLenError::*;
 
         struct Test {
             icv: &'static [u8],
-            ok: bool,
+            err: Option<IcvLenError>,
         }
 
         let tests = [
             // ok
-            Test { icv: &[], ok: true },
+            Test { icv: &[], err: None },
             Test {
                 icv: &[1, 2, 3, 4],
-                ok: true,
+                err: None,
             },
             Test {
                 icv: &[1, 2, 3, 4, 5, 6, 7, 8],
-                ok: true,
+                err: None,
             },
             Test {
                 icv: &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
-                ok: true,
+                err: None,
             },
             Test {
                 icv: &[0; 0xfe * 4],
-                ok: true,
+                err: None,
             },
             // unaligned
             Test {
                 icv: &[1],
-                ok: false,
+                err: Some(Unaligned(1)),
             },
             Test {
                 icv: &[1, 2, 3],
-                ok: false,
+                err: Some(Unaligned(3)),
             },
             Test {
                 icv: &[1, 2, 3, 4, 5],
-                ok: false,
+                err: Some(Unaligned(5)),
             },
             Test {
                 icv: &[1, 2, 3, 4, 5, 6, 7],
-                ok: false,
+                err: Some(Unaligned(7)),
             },
             // too big
             Test {
                 icv: &[0; 0xff * 4],
-                ok: false,
+                err: Some(TooBig(0xff * 4)),
             },
         ];
 
@@ -382,14 +385,14 @@ mod test {
             // new
             {
                 let a = IpAuthHeader::new(5.into(), 6, 7, test.icv);
-                if test.ok {
+                if let Some(err) = &test.err {
+                    assert_eq!(Err(err.clone()), a);
+                } else {
                     let unwrapped = a.unwrap();
                     assert_eq!(IpNumber(5), unwrapped.next_header);
                     assert_eq!(6, unwrapped.spi);
                     assert_eq!(7, unwrapped.sequence_number);
                     assert_eq!(test.icv, unwrapped.raw_icv());
-                } else {
-                    assert_eq!(Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())), a);
                 }
             }
             // set_raw_icv
@@ -399,15 +402,12 @@ mod test {
                 assert_eq!(IpNumber(5), header.next_header);
                 assert_eq!(6, header.spi);
                 assert_eq!(7, header.sequence_number);
-                if test.ok {
+                if let Some(err) = &test.err {
+                    assert_eq!(Err(err.clone()), result );
+                    assert_eq!(&[0; 4], header.raw_icv());
+                } else {
                     assert_eq!(Ok(()), result);
                     assert_eq!(test.icv, header.raw_icv());
-                } else {
-                    assert_eq!(
-                        Err(IpAuthenticationHeaderBadIcvLength(test.icv.len())),
-                        result
-                    );
-                    assert_eq!(&[0; 4], header.raw_icv());
                 }
             }
         }
