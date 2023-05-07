@@ -115,8 +115,8 @@ impl ComponentTest {
             // create unexpected end of slice errors for the different headers
             for len in test.invalid_ser_lengths() {
                 if let Some(len) = len {
-                    assert_matches!(PacketHeaders::from_ethernet_slice(&buffer[..len]), Err(_));
-                    assert_matches!(SlicedPacket::from_ethernet(&buffer[..len]), Err(_));
+                    assert!(PacketHeaders::from_ethernet_slice(&buffer[..len]).is_err());
+                    assert!(SlicedPacket::from_ethernet(&buffer[..len]).is_err());
                 }
             }
         }
@@ -148,19 +148,17 @@ impl ComponentTest {
             // create unexpected end of slice errors for the different headers
             for len in ether_down.invalid_ser_lengths() {
                 if let Some(len) = len {
-                    assert_matches!(
+                    assert!(
                         PacketHeaders::from_ether_type(
                             test.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
-                        ),
-                        Err(_)
+                        ).is_err()
                     );
-                    assert_matches!(
+                    assert!(
                         SlicedPacket::from_ether_type(
                             test.link.as_ref().unwrap().ether_type,
                             &buffer[..len]
-                        ),
-                        Err(_)
+                        ).is_err()
                     );
                 }
             }

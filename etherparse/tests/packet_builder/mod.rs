@@ -1261,10 +1261,7 @@ proptest! {
             // test builder.write()
             let mut buffer = Vec::<u8>::with_capacity(builder.size(payload.len()));
             // should trigger an error, was it is not possible to calculate the checksum
-            assert_matches!(
-                builder.write(&mut buffer, &payload),
-                Err(_)
-            );
+            assert!(builder.write(&mut buffer, &payload).is_err());
         };
 
         // icmpv6
