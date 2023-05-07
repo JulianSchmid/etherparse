@@ -229,7 +229,7 @@ impl Ipv6RawExtHeader {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{test_gens::*, *};
+    use crate::test_gens::*;
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;

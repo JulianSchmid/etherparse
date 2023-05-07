@@ -59,7 +59,7 @@ prop_compose! {
 
 prop_compose! {
     pub fn ipv6_flow_label_any()
-        (value in 0u32..=0b1111_11111111_11111111u32)
+        (value in 0u32..=0b1111_1111_1111_1111_1111_u32)
         -> Ipv6FlowLabel
     {
         Ipv6FlowLabel::try_new(value).unwrap()

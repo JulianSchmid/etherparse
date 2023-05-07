@@ -105,7 +105,7 @@ impl Ipv6FragmentHeader {
     /// Writes a given IPv6 fragment header to the current position.
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
-        Ok(writer.write_all(&self.to_bytes())?)
+        writer.write_all(&self.to_bytes())
     }
 
     /// Length of the header in bytes.

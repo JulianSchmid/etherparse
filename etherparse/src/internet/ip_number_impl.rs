@@ -737,12 +737,10 @@ impl core::fmt::Debug for IpNumber {
             } else {
                 write!(f, "{} ({})", self.0, keyword)
             }
+        } else if let Some(protocol) = self.protocol_str() {
+            write!(f, "{} ({})", self.0, protocol)
         } else {
-            if let Some(protocol) = self.protocol_str() {
-                write!(f, "{} ({})", self.0, protocol)
-            } else {
-                write!(f, "{}", self.0)
-            }
+            write!(f, "{}", self.0)
         }
     }
 }
