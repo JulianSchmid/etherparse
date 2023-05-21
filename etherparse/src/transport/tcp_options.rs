@@ -699,6 +699,13 @@ mod test {
     }
 
     #[test]
+    pub fn partial_cmp() {
+        use core::cmp::Ordering;
+        let a = TcpOptions::from([1u8, 2, 3, 4]);
+        assert_eq!(a.partial_cmp(&a), Some(Ordering::Equal));
+    }
+
+    #[test]
     fn deref() {
         let a = TcpOptions::from([1u8, 2, 3, 4]);
         assert_eq!(a.deref(), &[1u8, 2, 3, 4][..]);
