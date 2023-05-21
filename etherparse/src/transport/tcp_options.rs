@@ -142,7 +142,57 @@ impl TcpOptions {
     /// Maximum number of bytes that can be part of an TCP options.
     pub const MAX_LEN: usize = 40;
 
+    /// Constructs a new empty TcpOptions.
+    #[inline]
+    pub fn new() -> TcpOptions {
+        TcpOptions {
+            len: 0,
+            buf: [0;40],
+        }
+    }
+
     /// Tries to convert an `u8` slice into [`TcpOptions`].
+    /// 
+    /// # Examples
+    /// 
+    /// Slices with a length that is a multiple of 4 and a length not
+    /// bigger than 40 can be converted one-to-one:
+    /// 
+    /// ```
+    /// use etherparse::TcpOptions;
+    /// 
+    /// let data = [1u8,2,3,4,5,6,7,8];
+    /// let options = TcpOptions::try_from_slice(&data[..]).unwrap();
+    /// assert_eq!(options.as_slice(), &data);
+    /// ```
+    /// 
+    /// If the length is not a multiple of 4 it is automatically filled
+    /// up with `0` (value of TCP option END) to the next multiple of 4:
+    /// 
+    /// ```
+    /// use etherparse::TcpOptions;
+    /// {
+    ///     let data = [1u8];
+    ///     let options = TcpOptions::try_from(&data[..]).unwrap();
+    ///     // 3 bytes of zero added so the len is a multiple of 4
+    ///     assert_eq!(options.as_slice(), &[1, 0, 0, 0]);
+    /// }
+    /// ```
+    /// 
+    /// In case more than 40 bytes are passed as input an error is returned:
+    /// 
+    /// ```
+    /// use etherparse::{
+    ///     TcpOptions,
+    ///     TcpOptionWriteError::NotEnoughSpace
+    /// };
+    /// 
+    /// let data = [0u8;41]; // 41 bytes
+    /// 
+    /// // slices with a len bigger then 40 cause an error
+    /// let result = TcpOptions::try_from(&data[..]);
+    /// assert_eq!(result, Err(NotEnoughSpace(41)));
+    /// ```
     pub fn try_from_slice(slice: &[u8]) -> Result<TcpOptions, TcpOptionWriteError> {
 
         // check length
@@ -173,6 +223,31 @@ impl TcpOptions {
 
     /// Tries to convert [`crate::TcpOptionElement`] into serialized
     /// form as [`TcpOptions`].
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use etherparse::{
+    ///     TcpOptions,
+    ///     tcp_option::{KIND_WINDOW_SCALE, LEN_WINDOW_SCALE, KIND_NOOP, KIND_END},
+    ///     TcpOptionElement::{Noop, WindowScale}
+    /// };
+    ///
+    /// let elements = [WindowScale(123), Noop, Noop];
+    /// 
+    /// // try_from encodes the options into the "on the wire" format
+    /// let options = TcpOptions::try_from_elements(&elements[..]).unwrap();
+    /// 
+    /// assert_eq!(
+    ///     options.as_slice(),
+    ///     &[
+    ///         KIND_WINDOW_SCALE, LEN_WINDOW_SCALE, 123, KIND_NOOP,
+    ///         // padding in form of "KIND_END" (0) is automatically added
+    ///         // so the resulting options length is a multiple of 4
+    ///         KIND_NOOP, KIND_END, KIND_END, KIND_END
+    ///     ]
+    /// );
+    /// ```
     pub fn try_from_elements(elements: &[TcpOptionElement]) -> Result<TcpOptions, TcpOptionWriteError> {
         // calculate the required size of the options
         use crate::TcpOptionElement::*;
@@ -341,6 +416,23 @@ impl TcpOptions {
 
     /// Returns an iterator that allows to iterate through the
     /// decoded option elements.
+    /// 
+    /// # Example
+    /// 
+    /// ```
+    /// use etherparse::{
+    ///     TcpOptions,
+    ///     TcpOptionElement::{Noop, WindowScale}
+    /// };
+    ///
+    /// let options = TcpOptions::try_from(&[WindowScale(123), Noop, Noop][..]).unwrap();
+    /// 
+    /// let mut v = Vec::with_capacity(3);
+    /// for re in options.elements_iter() {
+    ///     v.push(re);
+    /// }
+    /// assert_eq!(v, vec![Ok(WindowScale(123)), Ok(Noop), Ok(Noop)]);
+    /// ```
     #[inline]
     pub fn elements_iter(&self) -> TcpOptionsIterator {
         TcpOptionsIterator {
@@ -417,6 +509,13 @@ impl core::ops::Deref for TcpOptions {
     }
 }
 
+impl AsRef<TcpOptions> for TcpOptions {
+    #[inline]
+    fn as_ref(&self) -> &TcpOptions {
+        self
+    }
+}
+
 impl AsMut<TcpOptions> for TcpOptions {
     #[inline]
     fn as_mut(&mut self) -> &mut TcpOptions {
@@ -467,34 +566,67 @@ from_static_array!(28);
 from_static_array!(32);
 from_static_array!(36);
 
-/*
+impl From<[u8; 40]> for TcpOptions {
+    fn from(values: [u8; 40]) -> Self {
+        TcpOptions {
+            len: 40,
+            buf: values,
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use super::TcpOptions;
+    use core::ops::Deref;
+    use std::format;
+    use super::*;
+
+    #[test]
+    fn new() {
+        assert_eq!(
+            TcpOptions::new(),
+            TcpOptions{ len: 0, buf: [0;40] }
+        );
+    }
 
     #[test]
     fn try_from_slice() {
-        todo!()
+        let actual = TcpOptions::try_from_slice(&[1,2,3,4][..]);
+        assert_eq!(actual, Ok(TcpOptions::from([1,2,3,4])));
     }
 
     #[test]
     fn try_from_elements() {
-        todo!()
+        use crate::tcp_option::KIND_NOOP;
+        use crate::TcpOptionElement::Noop;
+        let actual = TcpOptions::try_from_elements(&[Noop,Noop,Noop,Noop][..]);
+        assert_eq!(
+            actual,
+            Ok(TcpOptions::from([KIND_NOOP, KIND_NOOP, KIND_NOOP, KIND_NOOP]))
+        );
     }
 
     #[test]
     fn as_slice() {
-        todo!()
+        let options = TcpOptions::from([1,2,3,4]);
+        assert_eq!(options.as_slice(), &[1,2,3,4][..]);
     }
 
     #[test]
     fn as_mut_slice() {
-        todo!()
+        let mut options = TcpOptions::from([1,2,3,4]);
+        let r = options.as_mut_slice();
+        r[0] = 5;
+        assert_eq!(options.as_slice(), &[5,2,3,4][..]);
     }
 
     #[test]
     fn options_iterator() {
-        todo!()
+        let options = TcpOptions::from([1,2,3,4]);
+        assert_eq!(
+            options.elements_iter(),
+            TcpOptionsIterator{ options: &[1,2,3,4][..]}
+        );
     }
 
     #[test]
@@ -505,43 +637,179 @@ mod test {
     }
 
     #[test]
-    fn eq() {
-        todo!()
-    }
-
-    #[test]
     fn try_from() {
-        todo!()
+        // from slice
+        {
+            let actual = TcpOptions::try_from(&[1,2,3,4][..]);
+            assert_eq!(actual, Ok(TcpOptions::from([1,2,3,4])));
+        }
+        // from elements
+        {
+            use crate::tcp_option::KIND_NOOP;
+            use crate::TcpOptionElement::Noop;
+            let actual = TcpOptions::try_from(&[Noop,Noop,Noop,Noop][..]);
+            assert_eq!(
+                actual,
+                Ok(TcpOptions::from([KIND_NOOP, KIND_NOOP, KIND_NOOP, KIND_NOOP]))
+            );
+        }
     }
 
     #[test]
     fn debug_fmt() {
-        todo!()
+        use crate::tcp_option::KIND_NOOP;
+        let data = [KIND_NOOP,KIND_NOOP,KIND_NOOP,KIND_NOOP];
+        let options = TcpOptions::from(data.clone());
+        assert_eq!(
+            format!("{:?}", TcpOptionsIterator{ options: &data[..] }),
+            format!("{:?}", options)
+        );
     }
 
     #[test]
     fn clone_eq_hash_ord() {
-        todo!()
+        let a = TcpOptions::from([1u8,2,3,4]);
+        assert_eq!(a, a.clone());
+        assert_ne!(a, TcpOptions::from([5u8,6,7,8]));
+        {
+            use std::collections::hash_map::DefaultHasher;
+            use core::hash::{Hash, Hasher};
+            let a_hash = {
+                let mut hasher = DefaultHasher::new();
+                a.hash(&mut hasher);
+                hasher.finish()
+            };
+            let b_hash = {
+                let mut hasher = DefaultHasher::new();
+                a.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(a_hash, b_hash);
+        }
+        {
+            use core::cmp::Ordering;
+            assert_eq!(a.cmp(&a), Ordering::Equal);
+        }
     }
 
     #[test]
     fn deref() {
-        todo!()
+        let a = TcpOptions::from([1u8,2,3,4]);
+        assert_eq!(a.deref(), &[1u8,2,3,4][..]);
     }
 
     #[test]
     fn as_ref() {
-        todo!()
+        // TcpOptions ref
+        {
+            let a = TcpOptions::from([1u8,2,3,4]);
+            let b: &TcpOptions = a.as_ref();
+            assert_eq!(b, &TcpOptions::from([1u8,2,3,4]));
+        }
+        // slice ref
+        {
+            let a = TcpOptions::from([1u8,2,3,4]);
+            let b: &[u8] = a.as_ref();
+            assert_eq!(b, &[1u8,2,3,4]);
+        }
     }
 
     #[test]
     fn as_mut() {
-        todo!()
+        // TcpOptions ref
+        {
+            let mut a = TcpOptions::from([1u8,2,3,4]);
+            let b: &mut TcpOptions = a.as_mut();
+            *b = TcpOptions::from([5u8,6,7,8]);
+            assert_eq!(a, TcpOptions::from([5u8,6,7,8]));
+        }
+        // slice ref
+        {
+            let mut a = TcpOptions::from([1u8,2,3,4]);
+            let b: &mut [u8] = a.as_mut();
+            assert_eq!(b, &[1u8,2,3,4]);
+            b[0] = 5;
+            assert_eq!(a, TcpOptions::from([5u8,2,3,4]));
+        }
     }
 
     #[test]
     fn from() {
-        todo!()
+        assert_eq!(TcpOptions::from([1u8,2,3,4]).as_slice(), &[1u8,2,3,4]);
+        assert_eq!(
+            TcpOptions::from(
+                [1u8,2,3,4,5,6,7,8]
+            ).as_slice(), 
+            &[1u8,2,3,4,5,6,7,8]
+        );
+        assert_eq!(
+            TcpOptions::from(
+                [1u8,2,3,4,5,6,7,8,9,10,11,12]
+            ).as_slice(), 
+            &[1u8,2,3,4,5,6,7,8,9,10,11,12]
+        );
+        assert_eq!(
+            TcpOptions::from(
+                [1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+            ).as_slice(), 
+            &[1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]
+        );
+        assert_eq!(
+            TcpOptions::from(
+                [1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+            ).as_slice(), 
+            &[1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+        );
+        assert_eq!(
+            TcpOptions::from([
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24
+            ]).as_slice(), 
+            &[
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24
+            ]
+        );
+        assert_eq!(
+            TcpOptions::from([
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28
+            ]).as_slice(), 
+            &[
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28
+            ]
+        );
+        assert_eq!(
+            TcpOptions::from([
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32
+            ]).as_slice(), 
+            &[
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32
+            ]
+        );
+        assert_eq!(
+            TcpOptions::from([
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36
+            ]).as_slice(), 
+            &[
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36
+            ]
+        );
+        assert_eq!(
+            TcpOptions::from([
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40
+            ]).as_slice(), 
+            &[
+                1u8,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,
+                21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40
+            ]
+        );
     }
 }
- */
+ 
