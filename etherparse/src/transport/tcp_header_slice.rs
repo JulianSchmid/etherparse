@@ -275,7 +275,7 @@ impl<'a> TcpHeaderSlice<'a> {
                 let options_slice = self.options();
                 let mut options = TcpOptions {
                     len: options_slice.len() as u8,
-                    buf: [0; 40]
+                    buf: [0; 40],
                 };
                 options.buf[..options_slice.len()].clone_from_slice(options_slice);
                 options

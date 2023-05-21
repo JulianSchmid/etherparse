@@ -138,27 +138,24 @@ impl TcpHeader {
 
     /// Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
     #[inline]
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use `options.len()` instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use `options.len()` instead")]
     pub fn options_len(&self) -> usize {
         self.options.len()
     }
 
     /// Returns a slice containing the options of the header (size is determined via the data_offset field.
     #[inline]
-    #[deprecated(
-        since = "0.14.0",
-        note = "Please use `options.as_slice()` instead"
-    )]
+    #[deprecated(since = "0.14.0", note = "Please use `options.as_slice()` instead")]
     pub fn options(&self) -> &[u8] {
         &self.options.as_slice()
     }
 
     /// Sets the options (overwrites the current options) or returns
     /// an error when there is not enough space.
-    pub fn set_options(&mut self, elements: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
+    pub fn set_options(
+        &mut self,
+        elements: &[TcpOptionElement],
+    ) -> Result<(), TcpOptionWriteError> {
         self.options = TcpOptions::try_from_elements(elements)?;
         Ok(())
     }
@@ -235,11 +232,13 @@ impl TcpHeader {
                 } else {
                     let mut options = TcpOptions {
                         len: (data_offset - TcpHeader::MIN_DATA_OFFSET) << 2,
-                        buf: [0; 40]
+                        buf: [0; 40],
                     };
                     // convert to bytes minus the tcp header size itself
                     if options.len > 0 {
-                        reader.read_exact(&mut options.buf[..options.len.into()]).map_err(Io)?;
+                        reader
+                            .read_exact(&mut options.buf[..options.len.into()])
+                            .map_err(Io)?;
                     }
                     options
                 }
@@ -561,7 +560,10 @@ impl Default for TcpHeader {
             window_size: 0,
             checksum: 0,
             urgent_pointer: 0,
-            options: TcpOptions { len: 0, buf: [0u8;40] },
+            options: TcpOptions {
+                len: 0,
+                buf: [0u8; 40],
+            },
         }
     }
 }
