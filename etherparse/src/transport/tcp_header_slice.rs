@@ -259,7 +259,6 @@ impl<'a> TcpHeaderSlice<'a> {
             destination_port: self.destination_port(),
             sequence_number: self.sequence_number(),
             acknowledgment_number: self.acknowledgment_number(),
-            _data_offset: self.data_offset(),
             ns: self.ns(),
             fin: self.fin(),
             syn: self.syn(),
@@ -272,13 +271,14 @@ impl<'a> TcpHeaderSlice<'a> {
             window_size: self.window_size(),
             checksum: self.checksum(),
             urgent_pointer: self.urgent_pointer(),
-            options_buffer: {
-                let options = self.options();
-                let mut result: [u8; 40] = [0; 40];
-                if !options.is_empty() {
-                    result[..options.len()].clone_from_slice(options);
-                }
-                result
+            options: {
+                let options_slice = self.options();
+                let mut options = TcpOptions {
+                    len: options_slice.len() as u8,
+                    buf: [0; 40]
+                };
+                options.buf[..options_slice.len()].clone_from_slice(options_slice);
+                options
             },
         }
     }
@@ -489,7 +489,7 @@ mod test {
             assert_eq!(header.window_size, slice.window_size());
             assert_eq!(header.checksum, slice.checksum());
             assert_eq!(header.urgent_pointer, slice.urgent_pointer());
-            assert_eq!(header.options(), slice.options());
+            assert_eq!(header.options.as_slice(), slice.options());
         }
     }
 
@@ -499,7 +499,7 @@ mod test {
             let bytes = header.to_bytes();
             let slice = TcpHeaderSlice::from_slice(&bytes).unwrap();
             assert_eq!(
-                TcpOptionsIterator::from_slice(header.options()),
+                TcpOptionsIterator::from_slice(header.options.as_slice()),
                 slice.options_iterator()
             );
         }

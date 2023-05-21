@@ -19,7 +19,7 @@ pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 /// TCP header according to rfc 793.
 ///
 /// Field descriptions copied from RFC 793 page 15++
-#[derive(Clone)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpHeader {
     /// The source port number.
     pub source_port: u16,
@@ -37,11 +37,6 @@ pub struct TcpHeader {
     ///
     /// Once a connection is established this is always sent.
     pub acknowledgment_number: u32,
-    /// The number of 32 bit words in the TCP Header.
-    ///
-    /// This indicates where the data begins.  The TCP header (even one including options) is an
-    /// integral number of 32 bits long.
-    pub(crate) _data_offset: u8,
     /// ECN-nonce - concealment protection (experimental: see RFC 3540)
     pub ns: bool,
     /// No more data from sender
@@ -75,8 +70,9 @@ pub struct TcpHeader {
     /// the urgent data.  This field is only be interpreted in segments with
     /// the URG control bit set.
     pub urgent_pointer: u16,
-    /// Buffer containing the options of the header (note that the data_offset defines the actual length). Use the options() method if you want to get a slice that has the actual length of the options.
-    pub(crate) options_buffer: [u8; 40],
+
+    /// Options in the TCP header.
+    pub options: TcpOptions,
 }
 
 impl TcpHeader {
@@ -109,7 +105,6 @@ impl TcpHeader {
             destination_port,
             sequence_number,
             acknowledgment_number: 0,
-            _data_offset: TcpHeader::MIN_DATA_OFFSET,
             ns: false,
             fin: false,
             syn: false,
@@ -122,7 +117,7 @@ impl TcpHeader {
             window_size,
             checksum: 0,
             urgent_pointer: 0,
-            options_buffer: [0; 40],
+            options: Default::default(),
         }
     }
 
@@ -132,174 +127,53 @@ impl TcpHeader {
     /// integral number of 32 bits long.
     #[inline]
     pub fn data_offset(&self) -> u8 {
-        self._data_offset
+        self.options.data_offset()
     }
 
     /// Returns the length of the header including the options.
     #[inline]
     pub fn header_len(&self) -> u16 {
-        u16::from(self._data_offset) * 4
+        20 + (self.options.len_u8() as u16)
     }
 
     /// Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
     #[inline]
+    #[deprecated(
+        since = "0.14.0",
+        note = "Please use `options.len()` instead"
+    )]
     pub fn options_len(&self) -> usize {
-        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
-        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
-        (self._data_offset - TcpHeader::MIN_DATA_OFFSET) as usize * 4
+        self.options.len()
     }
 
     /// Returns a slice containing the options of the header (size is determined via the data_offset field.
     #[inline]
+    #[deprecated(
+        since = "0.14.0",
+        note = "Please use `options.as_slice()` instead"
+    )]
     pub fn options(&self) -> &[u8] {
-        &self.options_buffer[..self.options_len()]
+        &self.options.as_slice()
     }
 
-    /// Sets the options (overwrites the current options) or returns an error when there is not enough space.
-    pub fn set_options(&mut self, options: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
-        //calculate the required size of the options
-        use crate::TcpOptionElement::*;
-        let required_length = options.iter().fold(0, |acc, ref x| {
-            acc + match x {
-                Noop => 1,
-                MaximumSegmentSize(_) => 4,
-                WindowScale(_) => 3,
-                SelectiveAcknowledgementPermitted => 2,
-                SelectiveAcknowledgement(_, rest) => rest.iter().fold(10, |acc2, ref y| match y {
-                    None => acc2,
-                    Some(_) => acc2 + 8,
-                }),
-                Timestamp(_, _) => 10,
-            }
-        });
-
-        if self.options_buffer.len() < required_length {
-            Err(TcpOptionWriteError::NotEnoughSpace(required_length))
-        } else {
-            //reset the options to null
-            self.options_buffer = [0; 40];
-            self._data_offset = TcpHeader::MIN_DATA_OFFSET;
-
-            //write the options to the buffer
-            //note to whoever: I would have prefered to use std::io::Cursor as it would be less error
-            //                 prone. But just in case that "no std" support is added later lets
-            //                 not not rewrite it just yet with cursor.
-            use tcp_option::*;
-            let mut i = 0;
-            for element in options {
-                match element {
-                    Noop => {
-                        self.options_buffer[i] = KIND_NOOP;
-                        i += 1;
-                    }
-                    MaximumSegmentSize(value) => {
-                        // determine insertion area
-                        let insert = &mut self.options_buffer[i..i + 4];
-                        i += 4;
-
-                        // write data
-                        insert[0] = KIND_MAXIMUM_SEGMENT_SIZE;
-                        insert[1] = 4;
-                        insert[2..4].copy_from_slice(&value.to_be_bytes());
-                    }
-                    WindowScale(value) => {
-                        // determine insertion area
-                        let insert = &mut self.options_buffer[i..i + 3];
-                        i += 3;
-
-                        // write data
-                        insert[0] = KIND_WINDOW_SCALE;
-                        insert[1] = 3;
-                        insert[2] = *value;
-                    }
-                    SelectiveAcknowledgementPermitted => {
-                        // determine insertion area
-                        let insert = &mut self.options_buffer[i..i + 2];
-                        i += 2;
-
-                        // write data
-                        insert[0] = KIND_SELECTIVE_ACK_PERMITTED;
-                        insert[1] = 2;
-                    }
-                    SelectiveAcknowledgement(first, rest) => {
-                        //write guranteed data
-                        {
-                            let insert = &mut self.options_buffer[i..i + 10];
-                            i += 10;
-
-                            insert[0] = KIND_SELECTIVE_ACK;
-                            //write the length
-                            insert[1] = rest.iter().fold(10, |acc, ref y| match y {
-                                None => acc,
-                                Some(_) => acc + 8,
-                            });
-                            // write first
-                            insert[2..6].copy_from_slice(&first.0.to_be_bytes());
-                            insert[6..10].copy_from_slice(&first.1.to_be_bytes());
-                        }
-                        //write the rest
-                        for v in rest {
-                            match v {
-                                None => {}
-                                Some((a, b)) => {
-                                    // determine insertion area
-                                    let insert = &mut self.options_buffer[i..i + 8];
-                                    i += 8;
-
-                                    // insert
-                                    insert[0..4].copy_from_slice(&a.to_be_bytes());
-                                    insert[4..8].copy_from_slice(&b.to_be_bytes());
-                                }
-                            }
-                        }
-                    }
-                    Timestamp(a, b) => {
-                        let insert = &mut self.options_buffer[i..i + 10];
-                        i += 10;
-
-                        insert[0] = KIND_TIMESTAMP;
-                        insert[1] = 10;
-                        insert[2..6].copy_from_slice(&a.to_be_bytes());
-                        insert[6..10].copy_from_slice(&b.to_be_bytes());
-                    }
-                }
-            }
-            //set the new data offset
-            if i > 0 {
-                self._data_offset = (i / 4) as u8 + TcpHeader::MIN_DATA_OFFSET;
-                if i % 4 != 0 {
-                    self._data_offset += 1;
-                }
-            }
-            //done
-            Ok(())
-        }
+    /// Sets the options (overwrites the current options) or returns
+    /// an error when there is not enough space.
+    pub fn set_options(&mut self, elements: &[TcpOptionElement]) -> Result<(), TcpOptionWriteError> {
+        self.options = TcpOptions::try_from_elements(elements)?;
+        Ok(())
     }
 
     /// Sets the options to the data given.
     pub fn set_options_raw(&mut self, data: &[u8]) -> Result<(), TcpOptionWriteError> {
-        //check length
-        if self.options_buffer.len() < data.len() {
-            Err(TcpOptionWriteError::NotEnoughSpace(data.len()))
-        } else {
-            //reset all to zero to ensure padding
-            self.options_buffer = [0; 40];
-
-            //set data & data_offset
-            self.options_buffer[..data.len()].copy_from_slice(data);
-            self._data_offset = (data.len() / 4) as u8 + TcpHeader::MIN_DATA_OFFSET;
-            if data.len() % 4 != 0 {
-                self._data_offset += 1;
-            }
-            Ok(())
-        }
+        self.options = TcpOptions::try_from_slice(data)?;
+        Ok(())
     }
 
-    /// Returns an iterator that allows to iterate through all known TCP header options.
+    /// Returns an iterator that allows to iterate through all
+    /// known TCP header options.
+    #[inline]
     pub fn options_iterator(&self) -> TcpOptionsIterator {
-        TcpOptionsIterator {
-            options: &self.options_buffer[..self.options_len()],
-        }
+        self.options.elements_iter()
     }
 
     /// Renamed to `TcpHeader::from_slice`
@@ -355,20 +229,21 @@ impl TcpHeader {
             window_size: u16::from_be_bytes([raw[14], raw[15]]),
             checksum: u16::from_be_bytes([raw[16], raw[17]]),
             urgent_pointer: u16::from_be_bytes([raw[18], raw[19]]),
-            options_buffer: {
+            options: {
                 if data_offset < TcpHeader::MIN_DATA_OFFSET {
                     return Err(Content(DataOffsetTooSmall { data_offset }));
                 } else {
-                    let mut buffer: [u8; 40] = [0; 40];
-                    //convert to bytes minus the tcp header size itself
-                    let len = ((data_offset - TcpHeader::MIN_DATA_OFFSET) as usize) * 4;
-                    if len > 0 {
-                        reader.read_exact(&mut buffer[..len]).map_err(Io)?;
+                    let mut options = TcpOptions {
+                        len: (data_offset - TcpHeader::MIN_DATA_OFFSET) << 2,
+                        buf: [0; 40]
+                    };
+                    // convert to bytes minus the tcp header size itself
+                    if options.len > 0 {
+                        reader.read_exact(&mut options.buf[..options.len.into()]).map_err(Io)?;
                     }
-                    buffer
+                    options
                 }
             },
-            _data_offset: data_offset,
         })
     }
 
@@ -376,9 +251,6 @@ impl TcpHeader {
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         //check that the data offset is within range
-        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
-        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
-
         let src_be = self.source_port.to_be_bytes();
         let dst_be = self.destination_port.to_be_bytes();
         let seq_be = self.sequence_number.to_be_bytes();
@@ -386,6 +258,9 @@ impl TcpHeader {
         let window_be = self.window_size.to_be_bytes();
         let checksum_be = self.checksum.to_be_bytes();
         let urg_ptr_be = self.urgent_pointer.to_be_bytes();
+        let data_offset = self.data_offset();
+        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= data_offset);
+        debug_assert!(data_offset <= TcpHeader::MAX_DATA_OFFSET);
 
         writer.write_all(&[
             src_be[0],
@@ -401,7 +276,7 @@ impl TcpHeader {
             ack_be[2],
             ack_be[3],
             {
-                let value = (self._data_offset << 4) & 0xF0;
+                let value = (data_offset << 4) & 0xF0;
                 if self.ns {
                     value | 1
                 } else {
@@ -444,10 +319,10 @@ impl TcpHeader {
             urg_ptr_be[1],
         ])?;
 
-        //write options if the data_offset is large enough
-        if self._data_offset > TcpHeader::MIN_DATA_OFFSET {
-            let len = ((self._data_offset - TcpHeader::MIN_DATA_OFFSET) as usize) * 4;
-            writer.write_all(&self.options_buffer[..len])?;
+        // write options if the data_offset is large enough
+        let options = self.options.as_slice();
+        if options.len() > 0 {
+            writer.write_all(options)?;
         }
         Ok(())
     }
@@ -455,9 +330,6 @@ impl TcpHeader {
     /// Returns the serialized header.
     pub fn to_bytes(&self) -> ArrayVec<u8, { TcpHeader::MAX_LEN }> {
         //check that the data offset is within range
-        debug_assert!(TcpHeader::MIN_DATA_OFFSET <= self._data_offset);
-        debug_assert!(self._data_offset <= TcpHeader::MAX_DATA_OFFSET);
-
         let src_be = self.source_port.to_be_bytes();
         let dst_be = self.destination_port.to_be_bytes();
         let seq_be = self.sequence_number.to_be_bytes();
@@ -483,7 +355,7 @@ impl TcpHeader {
             ack_be[2],
             ack_be[3],
             {
-                let value = (self._data_offset << 4) & 0xF0;
+                let value = (self.data_offset() << 4) & 0xF0;
                 if self.ns {
                     value | 1
                 } else {
@@ -527,7 +399,7 @@ impl TcpHeader {
         ]);
 
         // add the options
-        result.extend(self.options_buffer);
+        result.extend(self.options.buf);
         // SAFETY: Safe as the header len can not exceed the maximum length
         // of the header.
         unsafe {
@@ -625,7 +497,7 @@ impl TcpHeader {
             .add_4bytes(self.acknowledgment_number.to_be_bytes())
             .add_2bytes([
                 {
-                    let value = (self._data_offset << 4) & 0xF0;
+                    let value = (self.data_offset() << 4) & 0xF0;
                     if self.ns {
                         value | 1
                     } else {
@@ -663,7 +535,7 @@ impl TcpHeader {
             ])
             .add_2bytes(self.window_size.to_be_bytes())
             .add_2bytes(self.urgent_pointer.to_be_bytes())
-            .add_slice(&self.options_buffer[..self.options_len()])
+            .add_slice(&self.options.as_slice())
             .add_slice(payload)
             .ones_complement()
             .to_be()
@@ -677,7 +549,6 @@ impl Default for TcpHeader {
             destination_port: 0,
             sequence_number: 0,
             acknowledgment_number: 0,
-            _data_offset: 5,
             ns: false,
             fin: false,
             syn: false,
@@ -690,66 +561,10 @@ impl Default for TcpHeader {
             window_size: 0,
             checksum: 0,
             urgent_pointer: 0,
-            options_buffer: [0; 40],
+            options: TcpOptions { len: 0, buf: [0u8;40] },
         }
     }
 }
-
-//NOTE: I would have prefered to NOT write my own Debug & PartialEq implementation but there are no
-//      default implementations availible for [u8;40] and the alternative of using [u32;10] would lead
-//      to unsafe casting. Writing impl Debug for [u8;40] in a crate is also illegal as it could lead
-//      to an implementation collision between crates.
-//      So the only option left to me was to write an implementation myself and deal with the added complexity
-//      and potential added error source.
-impl core::fmt::Debug for TcpHeader {
-    fn fmt(&self, fmt: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
-        fmt.debug_struct("TcpHeader")
-            .field("source_port", &self.source_port)
-            .field("destination_port", &self.destination_port)
-            .field("sequence_number", &self.sequence_number)
-            .field("acknowledgment_number", &self.acknowledgment_number)
-            .field("data_offset", &self._data_offset)
-            .field("ns", &self.ns)
-            .field("fin", &self.fin)
-            .field("syn", &self.syn)
-            .field("rst", &self.rst)
-            .field("psh", &self.psh)
-            .field("ack", &self.ack)
-            .field("urg", &self.urg)
-            .field("ece", &self.ece)
-            .field("cwr", &self.cwr)
-            .field("window_size", &self.window_size)
-            .field("checksum", &self.checksum)
-            .field("urgent_pointer", &self.urgent_pointer)
-            .field("options", &self.options_iterator())
-            .finish()
-    }
-}
-
-impl core::cmp::PartialEq for TcpHeader {
-    fn eq(&self, other: &TcpHeader) -> bool {
-        self.source_port == other.source_port
-            && self.destination_port == other.destination_port
-            && self.sequence_number == other.sequence_number
-            && self.acknowledgment_number == other.acknowledgment_number
-            && self._data_offset == other._data_offset
-            && self.ns == other.ns
-            && self.fin == other.fin
-            && self.syn == other.syn
-            && self.rst == other.rst
-            && self.psh == other.psh
-            && self.ack == other.ack
-            && self.urg == other.urg
-            && self.ece == other.ece
-            && self.cwr == other.cwr
-            && self.window_size == other.window_size
-            && self.checksum == other.checksum
-            && self.urgent_pointer == other.urgent_pointer
-            && self.options() == other.options()
-    }
-}
-
-impl core::cmp::Eq for TcpHeader {}
 
 #[cfg(test)]
 mod test {
@@ -788,7 +603,7 @@ mod test {
         assert_eq!(0, default.window_size);
         assert_eq!(0, default.checksum);
         assert_eq!(0, default.urgent_pointer);
-        assert_eq!(&[0; 40][0..0], &default.options()[..]);
+        assert_eq!(0, default.options.as_slice().len());
     }
 
     proptest! {
@@ -798,12 +613,11 @@ mod test {
             // normal debug printing
             assert_eq!(
                 format!(
-                    "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, data_offset: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {}, options: {:?} }}",
+                    "TcpHeader {{ source_port: {}, destination_port: {}, sequence_number: {}, acknowledgment_number: {}, ns: {}, fin: {}, syn: {}, rst: {}, psh: {}, ack: {}, urg: {}, ece: {}, cwr: {}, window_size: {}, checksum: {}, urgent_pointer: {}, options: {:?} }}",
                     header.source_port,
                     header.destination_port,
                     header.sequence_number,
                     header.acknowledgment_number,
-                    header.data_offset(),
                     header.ns,
                     header.fin,
                     header.syn,
@@ -835,7 +649,6 @@ mod test {
     destination_port: {},
     sequence_number: {},
     acknowledgment_number: {},
-    data_offset: {},
     ns: {},
     fin: {},
     syn: {},
@@ -854,7 +667,6 @@ mod test {
                         header.destination_port,
                         header.sequence_number,
                         header.acknowledgment_number,
-                        header.data_offset(),
                         header.ns,
                         header.fin,
                         header.syn,
@@ -1081,7 +893,6 @@ mod test {
             assert_eq!(header.destination_port, destination_port);
             assert_eq!(header.sequence_number, sequence_number);
             assert_eq!(header.acknowledgment_number, 0);
-            assert_eq!(header._data_offset, 5);
             assert_eq!(header.ns, false);
             assert_eq!(header.fin, false);
             assert_eq!(header.syn, false);
@@ -1094,14 +905,14 @@ mod test {
             assert_eq!(header.window_size, window_size);
             assert_eq!(header.checksum, 0);
             assert_eq!(header.urgent_pointer, 0);
-            assert_eq!(header.options_buffer, [0u8;40]);
+            assert_eq!(header.options.as_slice(), &[]);
         }
     }
 
     proptest! {
         #[test]
         fn data_offset(header in tcp_any()) {
-            assert_eq!(header.options().len()/4 + 5, header.data_offset().into());
+            assert_eq!(header.options.len()/4 + 5, header.data_offset().into());
         }
     }
 
@@ -1110,13 +921,14 @@ mod test {
         fn header_len(header in tcp_any()) {
             assert_eq!(
                 header.header_len(),
-                (20 + header.options().len()) as u16
+                (20 + header.options.len()) as u16
             );
         }
     }
 
     proptest! {
         #[test]
+        #[allow(deprecated)]
         fn options_len(header in tcp_any()) {
             assert_eq!(
                 header.options_len(),
@@ -1127,6 +939,7 @@ mod test {
 
     proptest! {
         #[test]
+        #[allow(deprecated)]
         fn options(header in tcp_any()) {
             assert_eq!(
                 header.options(),
@@ -1155,7 +968,7 @@ mod test {
                     &[Noop, Noop, MaximumSegmentSize(arg_u16), Noop]
                 ).unwrap();
                 assert_eq!(
-                    header.options(),
+                    header.options.as_slice(),
                     &{
                         let arg_be = arg_u16.to_be_bytes();
                         [
@@ -1173,7 +986,7 @@ mod test {
                     &[Noop, Noop, WindowScale(arg_u8), Noop]
                 ).unwrap();
                 assert_eq!(
-                    header.options(),
+                    header.options.as_slice(),
                     &[
                         KIND_NOOP, KIND_NOOP, KIND_WINDOW_SCALE, 3,
                         arg_u8, KIND_NOOP, KIND_END, 0
@@ -1188,7 +1001,7 @@ mod test {
                     &[Noop, Noop, SelectiveAcknowledgementPermitted, Noop]
                 ).unwrap();
                 assert_eq!(
-                    header.options(),
+                    header.options.as_slice(),
                     &[
                         KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK_PERMITTED, 2,
                         KIND_NOOP, KIND_END, 0, 0
@@ -1207,7 +1020,7 @@ mod test {
                         &[Noop, Noop, SelectiveAcknowledgement((ack_args[0], ack_args[1]), [None, None, None]), Noop]
                     ).unwrap();
                     assert_eq!(
-                        header.options(),
+                        header.options.as_slice(),
                         &[
                             KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 10,
                             args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
@@ -1232,7 +1045,7 @@ mod test {
                         ]
                     ).unwrap();
                     assert_eq!(
-                        header.options(),
+                        header.options.as_slice(),
                         [
                             KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 18,
                             args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
@@ -1263,7 +1076,7 @@ mod test {
                         ]
                     ).unwrap();
                     assert_eq!(
-                        header.options(),
+                        header.options.as_slice(),
                         &[
                             KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 26,
                             args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
@@ -1296,7 +1109,7 @@ mod test {
                         ]
                     ).unwrap();
                     assert_eq!(
-                        header.options(),
+                        header.options.as_slice(),
                         &[
                             KIND_NOOP, KIND_NOOP, KIND_SELECTIVE_ACK, 34,
                             args_be[0][0], args_be[0][1], args_be[0][2], args_be[0][3],
@@ -1320,7 +1133,7 @@ mod test {
                     &[Noop, Noop, Timestamp(arg0_u32, arg1_u32), Noop]
                 ).unwrap();
                 assert_eq!(
-                    header.options(),
+                    header.options.as_slice(),
                     &{
                         let arg0_be = arg0_u32.to_be_bytes();
                         let arg1_be = arg1_u32.to_be_bytes();
@@ -1425,12 +1238,12 @@ mod test {
                 let mut expected_options = [0; 40];
                 expected_options[..i].copy_from_slice(&dummy[..i]);
 
-                assert_eq!(options_length, header.options_len());
+                assert_eq!(options_length, header.options.len());
                 assert_eq!(
                     (options_length / 4) as u8 + TcpHeader::MIN_DATA_OFFSET,
                     header.data_offset()
                 );
-                assert_eq!(&expected_options[..options_length], header.options());
+                assert_eq!(&expected_options[..options_length], header.options.as_slice());
             }
 
             //too big -> expect error

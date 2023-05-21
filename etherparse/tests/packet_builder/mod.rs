@@ -839,7 +839,7 @@ proptest! {
                                                  input.destination_port,
                                                  input.sequence_number,
                                                  input.window_size)
-                                            .options_raw(input.options()).unwrap();
+                                            .options_raw(input.options.as_slice()).unwrap();
             //set the flags
             if input.ns {
                 builder = builder.ns();
@@ -951,7 +951,7 @@ proptest! {
                                                  input.destination_port,
                                                  input.sequence_number,
                                                  input.window_size)
-                                            .options_raw(input.options()).unwrap();
+                                            .options_raw(input.options.as_slice()).unwrap();
             //set the flags
             if input.ns {
                 builder = builder.ns();
@@ -1106,7 +1106,7 @@ proptest! {
                                       input.destination_port,
                                       input.sequence_number,
                                       input.window_size)
-                                 .options_raw(input.options()).unwrap()
+                                 .options_raw(input.options.as_slice()).unwrap()
                                  .size(123));
     }
 }
