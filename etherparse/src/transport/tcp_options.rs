@@ -372,10 +372,31 @@ impl TcpOptions {
         }
     }
 
-    /// The number of 32 bit words in the TCP Header.
+    /// The number of 32 bit words in the TCP Header & TCP header options.
     ///
-    /// This indicates where the data begins.  The TCP header (even one
-    /// including options) is an integral number of 32 bits long.
+    /// This indicates where the data begins relative to the start of an
+    /// TCP header in multiples of 4 bytes. This number is
+    /// present in the `data_offset` field of the header and defines
+    /// the length of the tcp options present.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use etherparse::TcpOptions;
+    ///
+    /// {
+    ///     let options = TcpOptions::try_from_slice(&[]).unwrap();
+    ///     // in case there are no options the minimum size of the tcp
+    ///     // is returned.
+    ///     assert_eq!(5, options.data_offset());
+    /// }
+    /// {
+    ///     let options = TcpOptions::try_from_slice(&[1,2,3,4,5,6,7,8]).unwrap();
+    ///     // otherwise the base TCP header size plus the number of 4 byte
+    ///     // words in the options is returned
+    ///     assert_eq!(5 + 2, options.data_offset());
+    /// }
+    /// ```
     #[inline]
     pub fn data_offset(&self) -> u8 {
         TcpHeader::MIN_DATA_OFFSET + (self.len >> 2)
