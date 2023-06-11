@@ -510,7 +510,7 @@ prop_compose! {
     }
 }
 
-prop_compose!{
+prop_compose! {
     pub fn tcp_options_any()
     (data_offset in TcpHeader::MIN_DATA_OFFSET..(TcpHeader::MAX_DATA_OFFSET + 1))
     (
