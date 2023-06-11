@@ -67,7 +67,13 @@ impl Ipv4Options {
 
     /// Returns the length of the options in bytes.
     #[inline]
-    pub fn len(&self) -> u8 {
+    pub fn len(&self) -> usize {
+        usize::from(self.len)
+    }
+
+    /// Returns the length of the options in bytes.
+    #[inline]
+    pub fn len_u8(&self) -> u8 {
         self.len
     }
 
@@ -284,7 +290,8 @@ mod tests {
             let mut actual = Ipv4Options::try_from(&DATA[..len_div_4 * 4]).unwrap();
             assert_eq!(actual.as_slice(), &DATA[..len_div_4 * 4]);
             assert_eq!(actual.as_mut_slice(), &DATA[..len_div_4 * 4]);
-            assert_eq!(actual.len(), (len_div_4 * 4) as u8);
+            assert_eq!(actual.len_u8(), (len_div_4 * 4) as u8);
+            assert_eq!(actual.len(), len_div_4 * 4);
         }
 
         // error cases

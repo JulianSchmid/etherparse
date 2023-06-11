@@ -187,7 +187,7 @@ impl Ipv4Header {
     /// ```
     #[inline]
     pub fn ihl(&self) -> u8 {
-        (self.options.len() / 4) + 5
+        (self.options.len_u8() / 4) + 5
     }
 
     /// Length of the header (includes options) in bytes.
@@ -339,7 +339,7 @@ impl Ipv4Header {
     /// Returns the maximum payload size based on the current options size.
     #[inline]
     pub fn max_payload_len(&self) -> u16 {
-        core::u16::MAX - u16::from(self.options.len()) - (Ipv4Header::MIN_LEN as u16)
+        core::u16::MAX - u16::from(self.options.len_u8()) - (Ipv4Header::MIN_LEN as u16)
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).
@@ -1007,7 +1007,7 @@ mod test {
     proptest! {
         #[test]
         fn max_payload_len(header in ipv4_any()) {
-            assert_eq!(header.max_payload_len(), core::u16::MAX - 20 - u16::from(header.options.len()));
+            assert_eq!(header.max_payload_len(), core::u16::MAX - 20 - u16::from(header.options.len_u8()));
         }
     }
 

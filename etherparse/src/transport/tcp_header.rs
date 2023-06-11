@@ -879,6 +879,25 @@ mod test {
 
     proptest! {
         #[test]
+        fn hash(header in tcp_any()) {
+            use std::collections::hash_map::DefaultHasher;
+            use core::hash::{Hash, Hasher};
+            let a = {
+                let mut hasher = DefaultHasher::new();
+                header.hash(&mut hasher);
+                hasher.finish()
+            };
+            let b = {
+                let mut hasher = DefaultHasher::new();
+                header.hash(&mut hasher);
+                hasher.finish()
+            };
+            assert_eq!(a, b);
+        }
+    }
+
+    proptest! {
+        #[test]
         fn new(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
