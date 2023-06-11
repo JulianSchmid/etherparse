@@ -147,7 +147,7 @@ impl TcpHeader {
     #[inline]
     #[deprecated(since = "0.14.0", note = "Please use `options.as_slice()` instead")]
     pub fn options(&self) -> &[u8] {
-        &self.options.as_slice()
+        self.options.as_slice()
     }
 
     /// Sets the options (overwrites the current options) or returns
@@ -320,7 +320,7 @@ impl TcpHeader {
 
         // write options if the data_offset is large enough
         let options = self.options.as_slice();
-        if options.len() > 0 {
+        if false == options.is_empty() {
             writer.write_all(options)?;
         }
         Ok(())
@@ -534,7 +534,7 @@ impl TcpHeader {
             ])
             .add_2bytes(self.window_size.to_be_bytes())
             .add_2bytes(self.urgent_pointer.to_be_bytes())
-            .add_slice(&self.options.as_slice())
+            .add_slice(self.options.as_slice())
             .add_slice(payload)
             .ones_complement()
             .to_be()
