@@ -227,7 +227,7 @@ prop_compose! {
         more_fragments in any::<bool>(),
         fragment_offset in prop::bits::u16::between(0, 13),
         header_checksum in any::<u16>(),
-        total_len in (u16::from(options.len()) + (Ipv4Header::MIN_LEN as u16))..u16::MAX,
+        total_len in (u16::from(options.len_u8()) + (Ipv4Header::MIN_LEN as u16))..u16::MAX,
         protocol in proptest::strategy::Just(protocol),
         options in proptest::strategy::Just(options)
     ) -> Ipv4Header
