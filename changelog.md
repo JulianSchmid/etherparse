@@ -33,6 +33,7 @@
 * `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
 * `SingleVlanHeader.vlan_identifier` renamed to `SingleVlanHeader.vlan_id`.
 * Type of `vlan_id` in `SingleVlanHeader` changed from `u16` to `VlanId`.
+* Moved options of `Ipv4Header` and `TcpHeader` into seperate structs and made all fields in `Ipv4Header` & `TcpHeader` public for easier default initialisation.
 
 ### Bugfixes
 
@@ -57,7 +58,6 @@
 ### Internal Changes:
 
 * Seperated proptest generators into seperate library `etherparse_proptest_generators`
-* Applied rust-fmt to all code & tests (with exceptions where needed)
 * TODO Split modules up into one file per struct/enum and moved tests there
 
 ## 0.13.0
