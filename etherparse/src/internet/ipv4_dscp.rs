@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 6 bit unsigned integer containing the "Differentiated Services
-/// Code Point" (present in the [`Ipv4Header`]).
+/// Code Point" (present in the [`crate::Ipv4Header`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Ipv4Dscp(u8);
 

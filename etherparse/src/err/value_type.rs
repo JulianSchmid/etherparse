@@ -4,7 +4,7 @@
 pub enum ValueType {
     /// VLAN identifier field present in a [`crate::SingleVlanHeader`].
     VlanId,
-    /// VLAN PCP (Priority Code Point) field in a [`crate::SingleVlanheader`].
+    /// VLAN PCP (Priority Code Point) field in a [`crate::SingleVlanHeader`].
     VlanPcp,
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.

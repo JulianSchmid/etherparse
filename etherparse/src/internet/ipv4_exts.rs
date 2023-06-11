@@ -120,7 +120,7 @@ impl Ipv4Extensions {
     /// the first ip protocol number.
     ///
     /// In case a header is never referenced a
-    /// [`err::ipv4_exts::ExtNotReferencedError`] is returned.
+    /// [`err::ipv4_exts::ExtsWalkError::ExtNotReferenced`] is returned.
     pub fn next_header(&self, first_next_header: IpNumber) -> Result<IpNumber, ExtsWalkError> {
         use ip_number::*;
         if let Some(ref auth) = self.auth {
