@@ -224,7 +224,7 @@ impl Ipv4Header {
     /// ```
     #[inline]
     pub fn header_len(&self) -> usize {
-        Ipv4Header::MIN_LEN + usize::from(self.options.len())
+        Ipv4Header::MIN_LEN + self.options.len()
     }
 
     /// Determine the payload length based on the ihl & total_length

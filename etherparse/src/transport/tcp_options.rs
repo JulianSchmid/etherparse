@@ -401,7 +401,7 @@ impl TcpOptions {
 
     /// Slice containing the options.
     #[inline]
-    pub fn as_slice<'a>(&'a self) -> &'a [u8] {
+    pub fn as_slice(&self) -> &[u8] {
         debug_assert!(self.len <= 40);
         // SAFETY: Safe as all constructing methods verify len to be less then 40.
         unsafe { core::slice::from_raw_parts(self.buf.as_ptr(), self.len()) }
@@ -409,7 +409,7 @@ impl TcpOptions {
 
     /// Mutable slice containing the options.
     #[inline]
-    pub fn as_mut_slice<'a>(&'a mut self) -> &'a mut [u8] {
+    pub fn as_mut_slice(&mut self) -> &mut [u8] {
         debug_assert!(self.len <= 40);
         // SAFETY: Safe as all constructing methods verify len to be less then 40.
         unsafe { core::slice::from_raw_parts_mut(self.buf.as_mut_ptr(), self.len()) }
