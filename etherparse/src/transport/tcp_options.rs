@@ -361,10 +361,8 @@ impl TcpOptions {
                 }
             }
             // set the new data offset
-            if len > 0 {
-                if 0 != len & 0b11 {
-                    len = (len & (!0b11)) + 4;
-                }
+            if (len > 0) && (0 != len & 0b11) {
+                len = (len & (!0b11)) + 4;
             }
             // done
             Ok(TcpOptions {
@@ -393,6 +391,12 @@ impl TcpOptions {
     #[inline]
     pub fn len(&self) -> usize {
         self.len as usize
+    }
+
+    /// Returns true if the options contain no elements.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        0 == self.len
     }
 
     /// Slice containing the options.
@@ -577,6 +581,8 @@ mod test {
     use super::*;
     use core::ops::Deref;
     use std::format;
+    use proptest::prelude::*;
+    use crate::test_gens::tcp_options_any;
 
     #[test]
     fn new() {
@@ -606,6 +612,44 @@ mod test {
                 KIND_NOOP, KIND_NOOP, KIND_NOOP, KIND_NOOP
             ]))
         );
+    }
+
+    proptest!{
+        #[test]
+        fn data_offset(
+            options in tcp_options_any()
+        ) {
+            assert_eq!(
+                (5 + ((options.len as u64) / 4)) as u8,
+                options.data_offset()
+            );
+        }
+    }
+    proptest!{
+        #[test]
+        fn len(
+            options in tcp_options_any()
+        ) {
+            assert_eq!(options.len(), usize::from(options.len));
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn len_u8(
+            options in tcp_options_any()
+        ) {
+            assert_eq!(options.len_u8(), options.len);
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn is_empty(
+            options in tcp_options_any()
+        ) {
+            assert_eq!(options.is_empty(), 0 == options.len);
+        }
     }
 
     #[test]

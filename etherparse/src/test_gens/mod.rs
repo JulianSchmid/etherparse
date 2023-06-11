@@ -510,6 +510,17 @@ prop_compose! {
     }
 }
 
+prop_compose!{
+    pub fn tcp_options_any()
+    (data_offset in TcpHeader::MIN_DATA_OFFSET..(TcpHeader::MAX_DATA_OFFSET + 1))
+    (
+        options in proptest::collection::vec(any::<u8>(), ((data_offset - 5) as usize)*4)
+    ) -> TcpOptions
+    {
+        TcpOptions::try_from_slice(&options).unwrap()
+    }
+}
+
 prop_compose! {
     pub fn icmpv4_type_any()
         (
