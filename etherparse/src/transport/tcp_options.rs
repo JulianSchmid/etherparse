@@ -579,10 +579,10 @@ impl From<[u8; 40]> for TcpOptions {
 #[cfg(test)]
 mod test {
     use super::*;
-    use core::ops::Deref;
-    use std::format;
-    use proptest::prelude::*;
     use crate::test_gens::tcp_options_any;
+    use core::ops::Deref;
+    use proptest::prelude::*;
+    use std::format;
 
     #[test]
     fn new() {
@@ -614,7 +614,7 @@ mod test {
         );
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn data_offset(
             options in tcp_options_any()
@@ -625,7 +625,7 @@ mod test {
             );
         }
     }
-    proptest!{
+    proptest! {
         #[test]
         fn len(
             options in tcp_options_any()
@@ -634,7 +634,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn len_u8(
             options in tcp_options_any()
@@ -643,7 +643,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn is_empty(
             options in tcp_options_any()
