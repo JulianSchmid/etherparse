@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 2 bit unsigned integer containing the "Explicit Congestion
-/// Notification" (present in the [`Ipv4Header`]).
+/// Notification" (present in the [`crate::Ipv4Header`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Ipv4Ecn(u8);
 

@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 12 bit unsigned integer containing the "VLAN identifier" (present
-/// in the [`SingleVlanHeader`]).
+/// in the [`crate::SingleVlanHeader`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct VlanId(u16);
 

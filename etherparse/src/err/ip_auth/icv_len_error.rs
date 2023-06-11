@@ -4,7 +4,7 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum IcvLenError {
     /// Error when the payload length is bigger then
-    /// [`crate::Ipv6RawExtHeader::MAX_ICV_LEN`] (1016).
+    /// [`crate::IpAuthHeader::MAX_ICV_LEN`] (1016).
     TooBig(usize),
 
     /// Error when the ICV length can not be represented

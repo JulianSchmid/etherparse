@@ -1,5 +1,5 @@
 /// Error if a slice can not be used as options data in
-/// [`crate::Ipv4HeaderOptions`] as then length is non compatible.
+/// [`crate::Ipv4Options`] as then length is non compatible.
 ///
 /// The length for options in an IPv4 header
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]

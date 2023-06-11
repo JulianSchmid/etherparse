@@ -8,7 +8,7 @@ pub enum ExtsWalkError {
     /// header.
     HopByHopNotAtStart,
 
-    /// Error when a header in [`Ipv6Extensions`] is never written
+    /// Error when a header in [`crate::Ipv6Extensions`] is never written
     /// as it is never referenced by any of the other `next_header`
     /// fields or the initial ip number.
     ExtNotReferenced {

@@ -105,7 +105,7 @@ impl IpNumber {
     pub const RDP: IpNumber = Self(27);
     /// Internet Reliable Transaction \[[RFC938](https://datatracker.ietf.org/doc/html/rfc938)\] \[Trudy_Miller\]
     pub const IRTP: IpNumber = Self(28);
-    /// ISO Transport Protocol Class 4 \[[RFC905](https://datatracker.ietf.org/doc/html/rfc905)\] \[<mystery contact>\]
+    /// ISO Transport Protocol Class 4 \[[RFC905](https://datatracker.ietf.org/doc/html/rfc905)\] \[mystery contact\]
     pub const ISO_TP4: IpNumber = Self(29);
     /// Bulk Data Transfer Protocol \[[RFC969](https://datatracker.ietf.org/doc/html/rfc969)\] \[David_Clark\]
     pub const NET_BLT: IpNumber = Self(30);
@@ -372,7 +372,7 @@ impl IpNumber {
     ///
     /// # Data Source
     ///
-    /// The strings were copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+    /// The strings were copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
     /// on 2023-04-11.
     pub fn keyword_str(self) -> Option<&'static str> {
         // auto generated from CSV
@@ -546,7 +546,7 @@ impl IpNumber {
     ///
     /// # Data Source
     ///
-    /// The string was copied from https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
+    /// The string was copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
     /// on 2023-04-11.
     pub fn protocol_str(self) -> Option<&'static str> {
         // auto generated from CSV
@@ -828,7 +828,7 @@ pub mod ip_number {
     pub const RDP: IpNumber = IpNumber::RDP; // 27
     /// Internet Reliable Transaction \[[RFC938](https://datatracker.ietf.org/doc/html/rfc938)\] \[Trudy_Miller\]
     pub const IRTP: IpNumber = IpNumber::IRTP; // 28
-    /// ISO Transport Protocol Class 4 \[[RFC905](https://datatracker.ietf.org/doc/html/rfc905)\] \[<mystery contact>\]
+    /// ISO Transport Protocol Class 4 \[[RFC905](https://datatracker.ietf.org/doc/html/rfc905)\] \[mystery contact\]
     pub const ISO_TP4: IpNumber = IpNumber::ISO_TP4; // 29
     /// Bulk Data Transfer Protocol \[[RFC969](https://datatracker.ietf.org/doc/html/rfc969)\] \[David_Clark\]
     pub const NET_BLT: IpNumber = IpNumber::NET_BLT; // 30

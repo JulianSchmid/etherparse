@@ -20,7 +20,7 @@ impl HeaderWriteError {
         }
     }
 
-    /// Returns a reference to the [`crate::err:ipv6_exts::HeaderSerError`] if the value is an [`HeaderWriteError::Content`].
+    /// Returns a reference to the [`crate::err::ipv6_exts::ExtsWalkError`] if the value is an [`HeaderWriteError::Content`].
     pub fn content(&self) -> Option<&ExtsWalkError> {
         match self {
             HeaderWriteError::Io(_) => None,

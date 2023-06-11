@@ -24,7 +24,7 @@ impl HeaderWriteError {
         }
     }
 
-    /// Returns a reference to the [`crate::err:ipv4_exts::ExtsWalkError`]
+    /// Returns a reference to the [`crate::err::ipv4_exts::ExtsWalkError`]
     /// if the value is an `Ipv4Exts`.
     pub fn ipv4_exts(&self) -> Option<&ipv4_exts::ExtsWalkError> {
         match self {
@@ -33,7 +33,7 @@ impl HeaderWriteError {
         }
     }
 
-    /// Returns a reference to the [`crate::err:ipv6_exts::ExtsWalkError`]
+    /// Returns a reference to the [`crate::err::ipv6_exts::ExtsWalkError`]
     /// if the value is an `Ipv6Exts`.
     pub fn ipv6_exts(&self) -> Option<&ipv6_exts::ExtsWalkError> {
         match self {
