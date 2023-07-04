@@ -1210,7 +1210,7 @@ impl PacketBuilderStep<IpHeader> {
         }
     }
 
-    /// Adds an TCP header.
+    /// Adds a simple TCP header.
     ///
     /// # Example
     ///
@@ -1253,6 +1253,56 @@ impl PacketBuilderStep<IpHeader> {
             sequence_number,
             window_size,
         )));
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<TcpHeader> {},
+        }
+    }
+
+    /// Adds a more complicated TCP header.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use etherparse::PacketBuilder;
+    /// use etherparse::TcpHeader;
+    /// 
+    /// let mut tcp_header = TcpHeader::new(
+    ///     21,     // source port
+    ///     12,     // destination port
+    ///     12345,  // sequence number
+    ///     4000,   // window size
+    /// );
+    /// tcp_header.psh = true;
+    /// tcp_header.ack = true;
+    /// tcp_header.acknowledgment_number = 1;
+    /// 
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],     // source mac
+    ///               [7,8,9,10,11,12]) // destionation mac
+    ///    .ipv4([192,168,1,1], // source ip
+    ///          [192,168,1,2], // desitionation ip
+    ///          20)            // time to life
+    ///    .tcp_header(tcp_header);
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn tcp_header(
+        mut self,
+        tcp_header: TcpHeader,
+    ) -> PacketBuilderStep<TcpHeader> {
+        self.state.transport_header = Some(TransportHeader::Tcp(tcp_header));
         //return for next step
         PacketBuilderStep {
             state: self.state,
