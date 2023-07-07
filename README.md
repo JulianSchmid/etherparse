@@ -52,7 +52,7 @@ match SlicedPacket::from_ethernet(&packet) {
     }
 }
 ```
-This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packages based on a subset of the headers and/or their fields.
+This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packets based on a subset of the headers and/or their fields.
 
 Depending from which point downward you want to slice a package check out the functions:
 
