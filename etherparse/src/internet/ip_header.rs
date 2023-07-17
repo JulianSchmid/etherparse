@@ -245,6 +245,240 @@ impl IpHeader {
         }
     }
 
+    /// Reads an `IpHeader` & seperates the payload from the given slice with
+    /// less strict length checks (usefull for cut off packet or for packets with
+    /// unset length fields).
+    ///
+    /// This function can be used when:
+    ///
+    /// * The packet is incomplete (e.g. a cut off packet returned via ICMP).
+    /// * `total_len` (for IPv4) `payload_length` (for IPv6) have not yet been set.
+    ///
+    /// # Differences to `from_slice`:
+    ///
+    /// The main differences is that the function ignores inconsistent
+    /// `total_len` (in IPv4 headers) and `payload_length` (in IPv6 headers)
+    /// values. When these length values in the IP header are inconsistant the
+    /// lenght of the given slice is used as a substitute.
+    ///
+    /// You can check if the slice length was used as a substitude by checking
+    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
+    /// is set to [`LenSource::Ipv4HeaderTotalLen`] or
+    /// [`LenSource::Ipv6HeaderPayloadLen`].
+    ///
+    /// # When is the slice length used as a fallback?
+    ///
+    /// For IPv4 packets the slice length is used as a fallback/substitude
+    /// if the `total_length` field in the IPv4 header is:
+    ///
+    ///  * Bigger then the given slice (payload cannot fully be seperated).
+    ///  * Too small to contain at least the IPv4 header.
+    ///
+    /// For IPv6 packet the slice length is used as a fallback/substitude
+    /// if the `payload_length` is
+    ///
+    /// * Bigger then the given slice (payload cannot fully be seperated).
+    /// * The value `0`.
+    pub fn from_slice_lax(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeaderSliceError> {
+        use err::ip::{HeaderError::*, HeaderSliceError::*};
+
+        if slice.is_empty() {
+            Err(Len(err::LenError {
+                required_len: 1,
+                len: slice.len(),
+                len_source: err::LenSource::Slice,
+                layer: err::Layer::IpHeader,
+                layer_start_offset: 0,
+            }))
+        } else {
+            match slice[0] >> 4 {
+                4 => {
+                    // check length
+                    if slice.len() < Ipv4Header::MIN_LEN {
+                        return Err(Len(err::LenError {
+                            required_len: Ipv4Header::MIN_LEN,
+                            len: slice.len(),
+                            len_source: err::LenSource::Slice,
+                            layer: err::Layer::Ipv4Header,
+                            layer_start_offset: 0,
+                        }));
+                    }
+
+                    // read ihl
+                    //
+                    // SAFETY:
+                    // Safe as the slice length is checked to be at least
+                    // Ipv4Header::MIN_LEN (20) at the start.
+                    let ihl = unsafe { slice.get_unchecked(0) } & 0xf;
+
+                    //check that the ihl is correct
+                    if ihl < 5 {
+                        return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                    }
+
+                    // check that the slice contains enough data for the entire header + options
+                    let header_len = usize::from(ihl) * 4;
+                    if slice.len() < header_len {
+                        return Err(Len(LenError {
+                            required_len: header_len,
+                            len: slice.len(),
+                            len_source: LenSource::Slice,
+                            layer: Layer::Ipv4Header,
+                            layer_start_offset: 0,
+                        }));
+                    }
+
+                    let header = unsafe {
+                        // SAFETY: Safe as the IHL & slice len has been validated
+                        Ipv4HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
+                            slice.as_ptr(),
+                            header_len,
+                        ))
+                        .to_header()
+                    };
+
+                    // check that the total len is at least containing the header len
+                    let total_len: usize = header.total_len.into();
+
+                    // restrict the rest of the slice based on the total len
+                    let (len_source, rest) = if slice.len() < total_len {
+                        // fallback to slice len
+                        (
+                            LenSource::Slice,
+                            unsafe {
+                                core::slice::from_raw_parts(
+                                    // SAFETY: Safe as the slice length was validated to be at least header_length
+                                    slice.as_ptr().add(header_len),
+                                    // SAFETY: Safe as slice length has been validated to be at least header_len long
+                                    slice.len() - header_len,
+                                )
+                            }
+                        )
+                    } else {
+                        (
+                            LenSource::Ipv4HeaderTotalLen,
+                            unsafe {
+                                core::slice::from_raw_parts(
+                                    // SAFETY: Safe as the slice length was validated to be at least header_length
+                                    slice.as_ptr().add(header_len),
+                                    // SAFETY: Safe as slice length has been validated to be at least total_length_usize long
+                                    total_len - header_len,
+                                )
+                            }
+                        )
+                    };
+
+                    let (exts, next_protocol, rest) =
+                        Ipv4Extensions::from_slice(header.protocol, rest).map_err(|err| {
+                            use err::ip_auth::HeaderSliceError as I;
+                            match err {
+                                I::Len(mut err) => {
+                                    err.layer_start_offset += header_len;
+                                    err.len_source = len_source;
+                                    Len(err)
+                                }
+                                I::Content(err) => Content(Ipv4Ext(err)),
+                            }
+                        })?;
+
+                    let fragmented = header.is_fragmenting_payload();
+                    Ok((
+                        IpHeader::Version4(header, exts),
+                        IpPayload {
+                            ip_number: next_protocol,
+                            fragmented,
+                            len_source,
+                            payload: rest,
+                        },
+                    ))
+                }
+                6 => {
+                    if slice.len() < Ipv6Header::LEN {
+                        return Err(Len(err::LenError {
+                            required_len: Ipv6Header::LEN,
+                            len: slice.len(),
+                            len_source: err::LenSource::Slice,
+                            layer: err::Layer::Ipv6Header,
+                            layer_start_offset: 0,
+                        }));
+                    }
+                    let header = {
+                        // SAFETY:
+                        // This is safe as the slice length is checked to be
+                        // at least Ipv6Header::LEN (40) befpre this code block.
+                        unsafe {
+                            Ipv6HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
+                                slice.as_ptr(),
+                                Ipv6Header::LEN,
+                            ))
+                            .to_header()
+                        }
+                    };
+
+                    // restrict slice by the length specified in the header
+                    let payload_len = usize::from(header.payload_length);
+                    let (header_payload, len_source) =
+                        if header.payload_length == 0 || (slice.len() - Ipv6Header::LEN) < payload_len {
+                            // TODO: Add payload length parsing from the jumbogram
+                            unsafe {
+                                (
+                                    core::slice::from_raw_parts(
+                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                        slice.as_ptr().add(Ipv6Header::LEN),
+                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                        slice.len() - Ipv6Header::LEN,
+                                    ),
+                                    LenSource::Slice,
+                                )
+                            }
+                        } else {
+                            unsafe {
+                                (
+                                    core::slice::from_raw_parts(
+                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                        slice.as_ptr().add(Ipv6Header::LEN),
+                                        // SAFTEY: Safe as we verify that `(slice.len() - Ipv6Header::LEN) >= payload_len` above.
+                                        payload_len,
+                                    ),
+                                    LenSource::Ipv6HeaderPayloadLen,
+                                )
+                            }
+                        };
+
+                    let (exts, next_header, rest) =
+                        Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(
+                            |err| {
+                                use err::ipv6_exts::HeaderSliceError as I;
+                                match err {
+                                    I::Len(mut err) => {
+                                        err.layer_start_offset += Ipv6Header::LEN;
+                                        err.len_source = len_source;
+                                        Len(err)
+                                    }
+                                    I::Content(err) => Content(Ipv6Ext(err)),
+                                }
+                            },
+                        )?;
+
+                    let fragmented = exts.is_fragmenting_payload();
+                    Ok((
+                        IpHeader::Version6(header, exts),
+                        IpPayload {
+                            ip_number: next_header,
+                            fragmented,
+                            len_source,
+                            payload: rest,
+                        },
+                    ))
+                }
+                version_number => Err(Content(UnsupportedIpVersion { version_number })),
+            }
+        }
+    }
+
     /// Read an IPv4 header & extension headers from a slice and return the slice containing the payload
     /// according to the total_length field in the IPv4 header.
     pub fn ipv4_from_slice(
