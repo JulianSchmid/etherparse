@@ -249,10 +249,14 @@ impl IpHeader {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
-    /// This function can be used when:
+    /// The main usecases for this functions are:
     ///
-    /// * The packet is incomplete (e.g. a cut off packet returned via ICMP).
-    /// * `total_len` (for IPv4) `payload_length` (for IPv6) have not yet been set.
+    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    ///   parse packets returned via ICMP as these usually only contain the start.
+    /// * Parsing packets where the `total_len` (for IPv4) or `payload_length` (for IPv6)
+    ///   have not yet been set. This can be usefull when parsing packets which have been
+    ///   recorded in a layer before the length field was set (e.g. before the operating
+    ///   system set the length fields).
     ///
     /// # Differences to `from_slice`:
     ///
