@@ -53,6 +53,18 @@ impl PartialEq for IpAuthHeader {
 
 impl Eq for IpAuthHeader {}
 
+impl Default for IpAuthHeader {
+    fn default() -> Self {
+        IpAuthHeader {
+            next_header: IpNumber(255),
+            spi: 0,
+            sequence_number: 0,
+            raw_icv_len: 0,
+            raw_icv_buffer: [0; 0xfe * 4]
+        }
+    }
+}
+
 impl<'a> IpAuthHeader {
     /// Minimum length of an IP authentifcation header in bytes/octets.
     pub const MIN_LEN: usize = 4 + 4 + 4;
@@ -299,6 +311,17 @@ mod test {
     use err::ip_auth::HeaderError::*;
     use proptest::prelude::*;
     use std::io::Cursor;
+
+    #[test]
+    fn default() {
+        let default_header = IpAuthHeader { ..Default::default() };
+
+        assert_eq!(default_header.next_header, IpNumber(255));
+        assert_eq!(default_header.spi, 0);
+        assert_eq!(default_header.sequence_number, 0);
+        assert_eq!(default_header.raw_icv_len, 0);
+        assert_eq!(default_header.raw_icv_buffer, [0; 0xfe * 4]);
+    }
 
     proptest! {
         #[test]
