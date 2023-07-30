@@ -20,7 +20,7 @@ impl IpHeader {
     /// Returns references to the IPv4 header & extensions if the header contains IPv4 values.
     pub fn v4(&self) -> Option<(&Ipv4Header, &Ipv4Extensions)> {
         if let IpHeader::Version4(header, exts) = self {
-            Some((&header, &exts))
+            Some((header, exts))
         } else {
             None
         }
@@ -29,7 +29,7 @@ impl IpHeader {
     /// Returns references to the IPv6 header & extensions if the header contains IPv6 values.
     pub fn v6(&self) -> Option<(&Ipv6Header, &Ipv6Extensions)> {
         if let IpHeader::Version6(header, exts) = self {
-            Some((&header, &exts))
+            Some((header, exts))
         } else {
             None
         }
