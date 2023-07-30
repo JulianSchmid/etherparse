@@ -366,32 +366,27 @@ impl IpHeader {
                     let total_len: usize = header.total_len.into();
 
                     // restrict the rest of the slice based on the total len (if the total_len is not conflicting)
-                    let (len_source, rest) = if (total_len < header_len) || (slice.len() < total_len) {
-                        // fallback to slice len
-                        (
-                            LenSource::Slice,
-                            unsafe {
+                    let (len_source, rest) =
+                        if (total_len < header_len) || (slice.len() < total_len) {
+                            // fallback to slice len
+                            (LenSource::Slice, unsafe {
                                 core::slice::from_raw_parts(
                                     // SAFETY: Safe as the slice length was validated to be at least header_length
                                     slice.as_ptr().add(header_len),
                                     // SAFETY: Safe as slice length has been validated to be at least header_len long
                                     slice.len() - header_len,
                                 )
-                            }
-                        )
-                    } else {
-                        (
-                            LenSource::Ipv4HeaderTotalLen,
-                            unsafe {
+                            })
+                        } else {
+                            (LenSource::Ipv4HeaderTotalLen, unsafe {
                                 core::slice::from_raw_parts(
                                     // SAFETY: Safe as the slice length was validated to be at least header_length
                                     slice.as_ptr().add(header_len),
                                     // SAFETY: Safe as slice length has been validated to be at least total_length_usize long
                                     total_len - header_len,
                                 )
-                            }
-                        )
-                    };
+                            })
+                        };
 
                     let (exts, next_protocol, rest) =
                         Ipv4Extensions::from_slice(header.protocol, rest).map_err(|err| {
@@ -442,33 +437,34 @@ impl IpHeader {
 
                     // restrict slice by the length specified in the header
                     let payload_len = usize::from(header.payload_length);
-                    let (header_payload, len_source) =
-                        if header.payload_length == 0 || (slice.len() - Ipv6Header::LEN) < payload_len {
-                            // TODO: Add payload length parsing from the jumbogram
-                            unsafe {
-                                (
-                                    core::slice::from_raw_parts(
-                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
-                                        slice.as_ptr().add(Ipv6Header::LEN),
-                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
-                                        slice.len() - Ipv6Header::LEN,
-                                    ),
-                                    LenSource::Slice,
-                                )
-                            }
-                        } else {
-                            unsafe {
-                                (
-                                    core::slice::from_raw_parts(
-                                        // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
-                                        slice.as_ptr().add(Ipv6Header::LEN),
-                                        // SAFTEY: Safe as we verify that `(slice.len() - Ipv6Header::LEN) >= payload_len` above.
-                                        payload_len,
-                                    ),
-                                    LenSource::Ipv6HeaderPayloadLen,
-                                )
-                            }
-                        };
+                    let (header_payload, len_source) = if header.payload_length == 0
+                        || (slice.len() - Ipv6Header::LEN) < payload_len
+                    {
+                        // TODO: Add payload length parsing from the jumbogram
+                        unsafe {
+                            (
+                                core::slice::from_raw_parts(
+                                    // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                    slice.as_ptr().add(Ipv6Header::LEN),
+                                    // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                    slice.len() - Ipv6Header::LEN,
+                                ),
+                                LenSource::Slice,
+                            )
+                        }
+                    } else {
+                        unsafe {
+                            (
+                                core::slice::from_raw_parts(
+                                    // SAFTEY: Safe as we verify what `slice.len() >= Ipv6Header::LEN` above.
+                                    slice.as_ptr().add(Ipv6Header::LEN),
+                                    // SAFTEY: Safe as we verify that `(slice.len() - Ipv6Header::LEN) >= payload_len` above.
+                                    payload_len,
+                                ),
+                                LenSource::Ipv6HeaderPayloadLen,
+                            )
+                        }
+                    };
 
                     let (exts, next_header, rest) =
                         Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(
@@ -1098,7 +1094,7 @@ mod test {
         }
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn from_slice_lax(
             v4 in ipv4_any(),
@@ -1131,7 +1127,7 @@ mod test {
                     );
                 }
             }
- 
+
             // v4
             {
                 let header = combine_v4(&v4, &v4_exts, &payload);
@@ -1224,9 +1220,9 @@ mod test {
                     let bad_total_len_be = bad_total_len.to_be_bytes();
                     buffer[2] = bad_total_len_be[0];
                     buffer[3] = bad_total_len_be[1];
-                    
+
                     let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
-                    
+
                     let (v4_header, v4_exts) = header.v4().unwrap();
                     let expected_headers = IpHeader::Version4(
                         {
@@ -1312,9 +1308,9 @@ mod test {
                     // inject zero as payload len
                     buffer[4] = 0;
                     buffer[5] = 0;
-                    
+
                     let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
-                    
+
                     let (v6_header, v6_exts) = header.v6().unwrap();
                     let expected_headers = IpHeader::Version6(
                         {
