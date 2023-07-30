@@ -17,6 +17,24 @@ impl IpHeader {
     /// Maximum summed up length of all extension headers in bytes/octets.
     pub const MAX_LEN: usize = Ipv6Header::LEN + Ipv6Extensions::MAX_LEN;
 
+    /// Returns references to the IPv4 header & extensions if the header contains IPv4 values.
+    pub fn v4(&self) -> Option<(&Ipv4Header, &Ipv4Extensions)> {
+        if let IpHeader::Version4(header, exts) = self {
+            Some((&header, &exts))
+        } else {
+            None
+        }
+    }
+
+    /// Returns references to the IPv6 header & extensions if the header contains IPv6 values.
+    pub fn v6(&self) -> Option<(&Ipv6Header, &Ipv6Extensions)> {
+        if let IpHeader::Version6(header, exts) = self {
+            Some((&header, &exts))
+        } else {
+            None
+        }
+    }
+
     /// Renamed to `IpHeader::from_slice`
     #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
     #[inline]
@@ -347,8 +365,8 @@ impl IpHeader {
                     // check that the total len is at least containing the header len
                     let total_len: usize = header.total_len.into();
 
-                    // restrict the rest of the slice based on the total len
-                    let (len_source, rest) = if slice.len() < total_len {
+                    // restrict the rest of the slice based on the total len (if the total_len is not conflicting)
+                    let (len_source, rest) = if (total_len < header_len) || (slice.len() < total_len) {
                         // fallback to slice len
                         (
                             LenSource::Slice,
@@ -1076,6 +1094,248 @@ mod test {
                         ).is_err()
                     );
                 }
+            }
+        }
+    }
+
+    proptest!{
+        #[test]
+        fn from_slice_lax(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            use err::ip::{HeaderError::*, HeaderSliceError::*};
+
+            let payload = [1,2,3,4];
+
+            // empty error
+            assert_eq!(
+                IpHeader::from_slice_lax(&[]),
+                Err(Len(err::LenError {
+                    required_len: 1,
+                    len: 0,
+                    len_source: err::LenSource::Slice,
+                    layer: err::Layer::IpHeader,
+                    layer_start_offset: 0,
+                }))
+            );
+
+            // unknown version
+            for version_number in 0..=0xfu8 {
+                if version_number != 4 && version_number != 6 {
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&[version_number << 4]),
+                        Err(Content(UnsupportedIpVersion { version_number }))
+                    );
+                }
+            }
+ 
+            // v4
+            {
+                let header = combine_v4(&v4, &v4_exts, &payload);
+                let mut buffer = Vec::with_capacity(header.header_len() + payload.len() + 1);
+                header.write(&mut buffer).unwrap();
+                buffer.extend_from_slice(&payload);
+                buffer.push(1); // add some value to check the return slice
+
+                // normal read
+                {
+                    let actual = IpHeader::from_slice_lax(&buffer).unwrap();
+                    assert_eq!(&actual.0, &header);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Ipv4HeaderTotalLen,
+                            payload: &payload
+                        }
+                    );
+                }
+
+                // error len smaller then min header len
+                for len in 1..Ipv4Header::MIN_LEN {
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&buffer[..len]),
+                        Err(Len(err::LenError {
+                            required_len: Ipv4Header::MIN_LEN,
+                            len,
+                            len_source: err::LenSource::Slice,
+                            layer: err::Layer::Ipv4Header,
+                            layer_start_offset: 0,
+                        }))
+                    );
+                }
+
+                // ihl value error
+                {
+                    let mut bad_ihl_buffer = buffer.clone();
+                    for bad_ihl in 0..5 {
+                        bad_ihl_buffer[0] = (bad_ihl_buffer[0] & 0xf0) | bad_ihl;
+                        assert_eq!(
+                            IpHeader::from_slice_lax(&bad_ihl_buffer),
+                            Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
+                        );
+                    }
+                }
+
+                // ihl len error
+                for short_ihl in 5..usize::from(v4.ihl()) {
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&buffer[..4*short_ihl]),
+                        Err(Len(err::LenError {
+                            required_len: usize::from(v4.ihl())*4,
+                            len: 4*short_ihl,
+                            len_source: err::LenSource::Slice,
+                            layer: err::Layer::Ipv4Header,
+                            layer_start_offset: 0,
+                        }))
+                    );
+                }
+
+                // total_len bigger then slice len (fallback to slice len)
+                for payload_len in 0..payload.len(){
+                    let actual = IpHeader::from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
+                    assert_eq!(&actual.0, &header);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Slice,
+                            payload: &payload[..payload_len]
+                        }
+                    );
+                }
+
+                // read error ipv4 extensions
+                if v4_exts.header_len() > 0 {
+                    IpHeader::from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
+                }
+
+                // total length smaller the header (fallback to slice len)
+                {
+                    let bad_total_len = (v4.header_len() - 1) as u16;
+
+                    let mut buffer = buffer.clone();
+                    // inject bad total_len
+                    let bad_total_len_be = bad_total_len.to_be_bytes();
+                    buffer[2] = bad_total_len_be[0];
+                    buffer[3] = bad_total_len_be[1];
+                    
+                    let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
+                    
+                    let (v4_header, v4_exts) = header.v4().unwrap();
+                    let expected_headers = IpHeader::Version4(
+                        {
+                            let mut expected_v4 = v4_header.clone();
+                            expected_v4.total_len = bad_total_len;
+                            expected_v4
+                        },
+                        v4_exts.clone()
+                    );
+                    assert_eq!(&expected_headers, &actual.0);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Slice,
+                            payload: &buffer[v4_header.header_len() + v4_exts.header_len()..],
+                        }
+                    );
+                }
+            }
+
+            // v6
+            {
+                let header = combine_v6(&v6, &v6_exts, &payload);
+                let mut buffer = Vec::with_capacity(header.header_len() + payload.len() + 1);
+                header.write(&mut buffer).unwrap();
+                buffer.extend_from_slice(&payload);
+                buffer.push(1); // add some value to check the return slice
+
+                // normal read
+                {
+                    let actual = IpHeader::from_slice_lax(&buffer).unwrap();
+                    assert_eq!(&actual.0, &header);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Ipv6HeaderPayloadLen,
+                            payload: &payload
+                        }
+                    );
+                }
+
+                // smaller then header
+                for len in 1..Ipv6Header::LEN {
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&buffer[..len]),
+                        Err(Len(err::LenError {
+                            required_len: Ipv6Header::LEN,
+                            len,
+                            len_source: err::LenSource::Slice,
+                            layer: err::Layer::Ipv6Header,
+                            layer_start_offset: 0,
+                        }))
+                    );
+                }
+
+                // extension error
+                if v6_exts.header_len() > 0 {
+                    IpHeader::from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
+                }
+
+                // slice smaller then payload len
+                for len in (v6.header_len()+v6_exts.header_len())..buffer.len() - 1 {
+                    let actual = IpHeader::from_slice_lax(&buffer[..len]).unwrap();
+                    assert_eq!(&actual.0, &header);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Slice,
+                            payload: &payload[..len - v6.header_len() - v6_exts.header_len()]
+                        }
+                    );
+                }
+
+                // payload len zero (fallback to slice len)
+                {
+                    let mut buffer = buffer.clone();
+                    // inject zero as payload len
+                    buffer[4] = 0;
+                    buffer[5] = 0;
+                    
+                    let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
+                    
+                    let (v6_header, v6_exts) = header.v6().unwrap();
+                    let expected_headers = IpHeader::Version6(
+                        {
+                            let mut expected_v6 = v6_header.clone();
+                            expected_v6.payload_length = 0;
+                            expected_v6
+                        },
+                        v6_exts.clone()
+                    );
+                    assert_eq!(&expected_headers, &actual.0);
+                    assert_eq!(
+                        actual.1,
+                        IpPayload{
+                            ip_number: header.next_header().unwrap(),
+                            fragmented: header.is_fragmenting_payload(),
+                            len_source: LenSource::Slice,
+                            payload: &buffer[v6_header.header_len() + v6_exts.header_len()..],
+                        }
+                    );
+                }
+
             }
         }
     }
