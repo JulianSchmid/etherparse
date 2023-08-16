@@ -57,7 +57,7 @@ impl<'a> TcpHeaderSlice<'a> {
         self.slice
     }
 
-    /// Read the destination port number.
+    /// Read the source port number.
     #[inline]
     pub fn source_port(&self) -> u16 {
         // SAFETY:
