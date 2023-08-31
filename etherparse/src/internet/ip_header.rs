@@ -966,6 +966,44 @@ mod test {
 
     proptest! {
         #[test]
+        fn v4(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            assert_eq!(
+                IpHeader::Version4(v4.clone(), v4_exts.clone()).v4(),
+                Some((&v4, &v4_exts))
+            );
+            assert_eq!(
+                IpHeader::Version6(v6.clone(), v6_exts.clone()).v4(),
+                None
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn v6(
+            v4 in ipv4_any(),
+            v4_exts in ipv4_extensions_any(),
+            v6 in ipv6_any(),
+            v6_exts in ipv6_extensions_any(),
+        ) {
+            assert_eq!(
+                IpHeader::Version4(v4.clone(), v4_exts.clone()).v6(),
+                None
+            );
+            assert_eq!(
+                IpHeader::Version6(v6.clone(), v6_exts.clone()).v6(),
+                Some((&v6, &v6_exts))
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
         #[allow(deprecated)]
         fn read_from_slice(
             v4 in ipv4_any(),
