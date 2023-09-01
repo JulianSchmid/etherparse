@@ -570,6 +570,95 @@ impl IpHeader {
         ))
     }
 
+    /// Reads a IPv4 header (+ extensions) & seperates the payload from the given slice with
+    /// less strict length checks (usefull for cut off packet or for packets with
+    /// unset length fields).
+    ///
+    /// The main usecases for this functions are:
+    ///
+    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    ///   parse packets returned via ICMP as these usually only contain the start.
+    /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
+    ///   This can be usefull when parsing packets which have been recorded in a
+    ///   layer before the length field was set (e.g. before the operating
+    ///   system set the length fields).
+    ///
+    /// # Differences to `ipv4_from_slice`:
+    ///
+    /// The main differences is that the function ignores inconsistent
+    /// `total_len` (in IPv4 headers). When the total_length value in the IPv4
+    /// header is inconsistant the lenght of the given slice is used as a substitute.
+    ///
+    /// You can check if the slice length was used as a substitude by checking
+    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
+    /// is set to [`LenSource::Ipv4HeaderTotalLen`].
+    ///
+    /// # When is the slice length used as a fallback?
+    ///
+    /// For IPv4 packets the slice length is used as a fallback/substitude
+    /// if the `total_length` field in the IPv4 header is:
+    ///
+    ///  * Bigger then the given slice (payload cannot fully be seperated).
+    ///  * Too small to contain at least the IPv4 header.
+    pub fn ipv4_from_slice_lax(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv4::SliceError> {
+        use err::ipv4::SliceError::*;
+
+        // read the header
+        let (header, rest) = Ipv4Header::from_slice(slice).map_err(|err| {
+            use err::ipv4::HeaderSliceError as I;
+            match err {
+                I::Len(err) => Len(err),
+                I::Content(err) => Header(err),
+            }
+        })?;
+
+        // check that the total len is at least containing the header len
+        let total_len: usize = header.total_len.into();
+
+        // restrict the rest of the slice based on the total len (if the total_len is not conflicting)
+        let header_len = header.header_len();
+        let (len_source, rest) =
+            if (total_len < header_len) || (rest.len() < total_len - header_len) {
+                // fallback to the rest of the slice
+                (LenSource::Slice, rest)
+            } else {
+                (LenSource::Ipv4HeaderTotalLen, unsafe {
+                    core::slice::from_raw_parts(
+                        rest.as_ptr(),
+                        // SAFETY: Safe as slice length has been validated to be at least total_length_usize long
+                        total_len - header_len,
+                    )
+                })
+            };
+
+        let (exts, next_protocol, rest) =
+            Ipv4Extensions::from_slice(header.protocol, rest).map_err(|err| {
+                use err::ip_auth::HeaderSliceError as I;
+                match err {
+                    I::Len(mut err) => {
+                        err.layer_start_offset += header_len;
+                        err.len_source = len_source;
+                        Len(err)
+                    }
+                    I::Content(err) => Exts(err),
+                }
+            })?;
+
+        let fragmented = header.is_fragmenting_payload();
+        Ok((
+            IpHeader::Version4(header, exts),
+            IpPayload {
+                ip_number: next_protocol,
+                fragmented,
+                len_source,
+                payload: rest,
+            },
+        ))
+    }
+
     /// Read an IPv6 header & extension headers from a slice and return the slice
     /// containing the payload (e.g. TCP, UDP etc.) length limited by payload_length
     /// field in the IPv6 header.
