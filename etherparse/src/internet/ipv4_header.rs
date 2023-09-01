@@ -375,6 +375,13 @@ impl Ipv4Header {
 
     /// Read an Ipv4Header from a slice and return the header & unused parts
     /// of the slice (requires crate feature `std`).
+    ///
+    /// Note that this function DOES NOT seperate the payload based on the length
+    /// fields in the total_length present in the IPv4 header. It just returns the
+    /// left over slice after the header. If you want to have correctly seperated
+    /// payload use [`crate::Ipv4Slice::from_slice`] or
+    /// [`crate::Ipv4Slice::from_slice_lax`] for a laxer version which falls back
+    /// to slice length only when the total_length is bigger then the slice length.
     pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), err::ipv4::HeaderSliceError> {
         let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();
         let rest = &slice[header.header_len()..];
