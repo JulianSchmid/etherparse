@@ -570,7 +570,7 @@ impl IpHeader {
         ))
     }
 
-    /// Reads a IPv4 header (+ extensions) & seperates the payload from the given slice with
+    /// Reads an IPv4 header (+ extensions) & seperates the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
@@ -708,6 +708,91 @@ impl IpHeader {
                     }
                 }
             };
+
+        // read ipv6 extensions headers
+        let (exts, next_header, exts_rest) =
+            Ipv6Extensions::from_slice(header.next_header, header_payload).map_err(|err| {
+                use err::ipv6_exts::HeaderSliceError as I;
+                match err {
+                    I::Len(mut err) => {
+                        err.layer_start_offset += Ipv6Header::LEN;
+                        err.len_source = len_source;
+                        Len(err)
+                    }
+                    I::Content(err) => Exts(err),
+                }
+            })?;
+
+        let fragmented = exts.is_fragmenting_payload();
+        Ok((
+            IpHeader::Version6(header, exts),
+            IpPayload {
+                ip_number: next_header,
+                fragmented,
+                len_source,
+                payload: exts_rest,
+            },
+        ))
+    }
+
+    /// Reads an IPv6 header (+ extensions) & seperates the payload from the given slice with
+    /// less strict length checks (usefull for cut off packet or for packets with
+    /// unset length fields).
+    ///
+    /// The main usecases for this functions are:
+    ///
+    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    ///   parse packets returned via ICMP as these usually only contain the start.
+    /// * Parsing packets where the `payload_length` (in the IPv6 header) has not
+    ///   yet been set. This can be usefull when parsing packets which have been
+    ///  recorded in a layer before the length field was set (e.g. before the operating
+    ///   system set the length fields).
+    ///
+    /// # Differences to `from_slice`:
+    ///
+    /// The main differences is that the function ignores inconsistent
+    /// `payload_length` (in IPv6 headers) values. When these length values
+    /// in the IP header are inconsistant the lenght of the given slice is 
+    /// used as a substitute.
+    ///
+    /// You can check if the slice length was used as a substitude by checking
+    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
+    /// is set to [`LenSource::Ipv6HeaderPayloadLen`].
+    ///
+    /// # When is the slice length used as a fallback?
+    /// 
+    /// The slice length is used as a fallback/substitude if the `payload_length`
+    /// field in the IPv6 header is
+    ///
+    /// * Bigger then the given slice (payload cannot fully be seperated).
+    /// * The value `0`.
+    pub fn ipv6_from_slice_lax(
+        slice: &[u8],
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv6::SliceError> {
+        use err::ipv6::SliceError::*;
+
+        // read ipv6 header
+        let (header, header_rest) = Ipv6Header::from_slice(slice).map_err(|err| {
+            use err::ipv6::HeaderSliceError as I;
+            match err {
+                I::Len(err) => Len(err),
+                I::Content(err) => Header(err),
+            }
+        })?;
+
+        // restrict slice by the length specified in the header
+        let payload_len: usize = header.payload_length.into();
+        let (header_payload, len_source) = if (payload_len == 0 && header_rest.len() > 0) || payload_len > header_rest.len() {
+            (header_rest, LenSource::Slice)
+        } else {
+            unsafe {
+                (
+                    core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
+                    LenSource::Ipv6HeaderPayloadLen,
+                )
+            }
+        };
 
         // read ipv6 extensions headers
         let (exts, next_header, exts_rest) =
