@@ -45,13 +45,15 @@ impl IpHeader {
         Ok((header, payload.ip_number, payload.payload))
     }
 
-    /// Read an IpHeaders from a slice and return the header & slice
-    /// containing the rest of the payload of IP packet (determined based
-    /// on the header).
+    /// Read an [`IpHeader`] from a slice and return the headers & payload of
+    /// the IP packet (determined based on the length fields in the IP header).
     ///
-    /// Note that his function verifies `total_length` for IPv4 and
-    /// `payload_length` for IPv6 and that the extension headers are contained
-    /// within.
+    /// Note that his function returns an [`err::LenError`] if the given slice
+    /// contains less data then the length fields in the IP header indicate should
+    /// be present.
+    ///
+    /// If you want to ignore these kind of length errors based on the lenght
+    /// fields in the IP headers use [`IpHeader::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeaderSliceError> {
@@ -267,9 +269,12 @@ impl IpHeader {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
+    /// If you want to only receive correct IpPayloads use [`IpHeader::from_slice`]
+    /// instead.
+    ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, usefull to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) or `payload_length` (for IPv6)
     ///   have not yet been set. This can be usefull when parsing packets which have been
@@ -574,9 +579,12 @@ impl IpHeader {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
+    /// If you want to only receive correct IpPayloads use [`IpHeader::ipv4_from_slice`]
+    /// instead.
+    ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, usefull to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
     ///   This can be usefull when parsing packets which have been recorded in a
@@ -586,7 +594,7 @@ impl IpHeader {
     /// # Differences to `ipv4_from_slice`:
     ///
     /// The main differences is that the function ignores inconsistent
-    /// `total_len` (in IPv4 headers). When the total_length value in the IPv4
+    /// `total_len` values (in IPv4 headers). When the total_length value in the IPv4
     /// header is inconsistant the lenght of the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
@@ -739,9 +747,12 @@ impl IpHeader {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
+    /// If you want to only receive correct IpPayloads use [`IpHeader::ipv6_from_slice`]
+    /// instead.
+    ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packet that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, usefull to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `payload_length` (in the IPv6 header) has not
     ///   yet been set. This can be usefull when parsing packets which have been
@@ -751,7 +762,7 @@ impl IpHeader {
     /// # Differences to `from_slice`:
     ///
     /// The main differences is that the function ignores inconsistent
-    /// `payload_length` (in IPv6 headers) values. When these length values
+    /// `payload_length` values (in IPv6 headers). When these length values
     /// in the IP header are inconsistant the lenght of the given slice is 
     /// used as a substitute.
     ///

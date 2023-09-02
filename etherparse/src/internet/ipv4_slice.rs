@@ -109,6 +109,128 @@ impl<'a> Ipv4Slice<'a> {
         }
     }
 
+    /// Seperates and validates IPv4 headers (including extension headers) &
+    /// the payload from the given slice with less strict length checks
+    /// (usefull for cut off packet or for packets with unset length fields).
+    ///
+    /// If you want to only receive correct IpPayloads use [`Ipv4Slice::from_slice`]
+    /// instead.
+    ///
+    /// The main usecases for this functions are:
+    ///
+    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    ///   parse packets returned via ICMP as these usually only contain the start.
+    /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
+    ///   This can be usefull when parsing packets which have been recorded in a
+    ///   layer before the length field was set (e.g. before the operating
+    ///   system set the length fields).
+    ///
+    /// # Differences to `from_slice`:
+    ///
+    /// The main differences is that the function ignores inconsistent
+    /// `total_len` values (in IPv4 headers). When the total_length value in the IPv4
+    /// header is inconsistant the lenght of the given slice is used as a substitute.
+    ///
+    /// You can check if the slice length was used as a substitude by checking
+    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
+    /// is set to [`LenSource::Ipv4HeaderTotalLen`].
+    ///
+    /// # When is the slice length used as a fallback?
+    ///
+    /// For IPv4 packets the slice length is used as a fallback/substitude
+    /// if the `total_length` field in the IPv4 header is:
+    ///
+    ///  * Bigger then the given slice (payload cannot fully be seperated).
+    ///  * Too small to contain at least the IPv4 header.
+    pub fn from_slice_lax(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
+        use crate::ip_number::AUTH;
+
+        // decode the header
+        let header = Ipv4HeaderSlice::from_slice(slice).map_err(|err| {
+            use crate::err::ipv4::HeaderSliceError::*;
+            match err {
+                Len(err) => SliceError::Len(err),
+                Content(err) => SliceError::Header(err),
+            }
+        })?;
+
+        // validate total_len at least contains the header
+        let header_total_len: usize = header.total_len().into();
+        let (header_payload, len_source) = if header_total_len >= header.slice().len() && header_total_len <= slice.len() {
+            (
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(header.slice().len()),
+                        header_total_len - header.slice().len(),
+                    )
+                },
+                LenSource::Ipv4HeaderTotalLen
+            )
+        } else {
+            (
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(header.slice().len()),
+                        slice.len() - header.slice().len(),
+                    )
+                },
+                LenSource::Slice
+            )
+        };
+
+        // decode the authentification header if needed
+        let fragmented = header.is_fragmenting_payload();
+        match header.protocol() {
+            AUTH => {
+                use crate::err::ip_auth::HeaderSliceError as E;
+
+                // parse extension headers
+                let auth = match IpAuthHeaderSlice::from_slice(header_payload) {
+                    Ok(s) => s,
+                    Err(err) => match err {
+                        E::Len(mut l) => {
+                            // change the length source to the ipv4 header
+                            l.len_source = LenSource::Ipv4HeaderTotalLen;
+                            l.layer_start_offset += header.slice().len();
+                            return Err(SliceError::Len(l));
+                        }
+                        E::Content(err) => return Err(SliceError::Exts(err)),
+                    },
+                };
+
+                // remove the extension header from the payload
+                let payload = unsafe {
+                    core::slice::from_raw_parts(
+                        header_payload.as_ptr().add(auth.slice().len()),
+                        header_payload.len() - auth.slice().len(),
+                    )
+                };
+                let ip_number = auth.next_header();
+                Ok(Ipv4Slice {
+                    header,
+                    exts: Ipv4ExtensionsSlice { auth: Some(auth) },
+                    payload: IpPayload {
+                        ip_number,
+                        fragmented,
+                        len_source,
+                        payload,
+                    },
+                })
+            }
+            ip_number => Ok(Ipv4Slice {
+                header,
+                exts: Ipv4ExtensionsSlice { auth: None },
+                payload: IpPayload {
+                    ip_number,
+                    fragmented,
+                    len_source,
+                    payload: header_payload,
+                },
+            }),
+        }
+    }
+
     /// Returns a slice containing the IPv4 header.
     #[inline]
     pub fn header(&self) -> Ipv4HeaderSlice {
