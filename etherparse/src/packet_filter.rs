@@ -112,8 +112,8 @@ impl VlanFilter {
 }
 
 impl IpFilter {
-    pub fn applies_to_slice(&self, slice: &InternetSlice) -> bool {
-        use crate::InternetSlice::*;
+    pub fn applies_to_slice(&self, slice: &IpSlice) -> bool {
+        use crate::IpSlice::*;
         match self {
             IpFilter::Ipv4 {
                 source: expected_source,

@@ -50,6 +50,7 @@
 ### Deprecations / Renames:
 
 * The following types have been renamed (alias with the old name exist for backwards compatibility but will trigger a deprecation warning):
+  * `InternetSlice` to `IpSlice`
   * `IpAuthenticationHeader` to `IpAuthHeader`
   * `IpAuthenticationHeaderSlice` to `IpAuthHeaderSlice`
   * `Ipv6RawExtensionHeader` to `Ipv6RawExtHeader`

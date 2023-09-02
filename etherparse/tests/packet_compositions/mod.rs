@@ -285,7 +285,7 @@ impl ComponentTest {
         //ip
         assert_eq!(self.ip, {
             use self::IpHeader::*;
-            use crate::InternetSlice::*;
+            use crate::IpSlice::*;
             match result.ip {
                 Some(Ipv4(actual)) => Some(Version4(
                     actual.header().to_header(),

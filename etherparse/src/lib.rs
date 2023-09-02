@@ -276,13 +276,13 @@ pub use crate::link::vlan_slice::*;
 pub(crate) mod test_gens;
 
 mod internet;
-pub use crate::internet::internet_slice::*;
 pub use crate::internet::ip_auth_header::*;
 pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ip_frag_offset::*;
 pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_number_impl::*;
 pub use crate::internet::ip_payload::*;
+pub use crate::internet::ip_slice::*;
 pub use crate::internet::ipv4_dscp::*;
 pub use crate::internet::ipv4_ecn::*;
 pub use crate::internet::ipv4_exts::*;

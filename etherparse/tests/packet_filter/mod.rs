@@ -323,7 +323,7 @@ impl PacketFilterTest {
                     let mut header = header.clone();
                     header.set_payload_len(0).unwrap();
                     header.write(&mut ip_data).unwrap();
-                    Some(InternetSlice::Ipv4(
+                    Some(IpSlice::Ipv4(
                         Ipv4Slice::from_slice(&ip_data).unwrap(),
                     ))
                 }
@@ -331,7 +331,7 @@ impl PacketFilterTest {
                     let mut header = header.clone();
                     header.payload_length = 0;
                     header.write(&mut ip_data).unwrap();
-                    Some(InternetSlice::Ipv6(
+                    Some(IpSlice::Ipv6(
                         Ipv6Slice::from_slice(&ip_data).unwrap(),
                     ))
                 }
@@ -581,14 +581,14 @@ mod ip_filter {
                 let mut ipv4_data = Vec::new();
                 ipv4.write(&mut ipv4_data).unwrap();
                 ipv4_data };
-            let ipv4_slice = InternetSlice::Ipv4(
+            let ipv4_slice = IpSlice::Ipv4(
                 Ipv4Slice::from_slice(&ipv4_data[..]).unwrap()
             );
             let ipv6_data = {
                 let mut ipv6_data = Vec::new();
                 ipv6.write(&mut ipv6_data).unwrap();
                 ipv6_data };
-            let ipv6_slice = InternetSlice::Ipv6(
+            let ipv6_slice = IpSlice::Ipv6(
                 Ipv6Slice::from_slice(&ipv6_data[..]).unwrap()
             );
 
