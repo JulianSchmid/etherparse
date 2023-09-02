@@ -36,7 +36,7 @@ fn main() {
         Err(value) => println!("Err {:?}", value),
         Ok(value) => {
             println!("Ok");
-            use etherparse::{InternetSlice::*, LinkSlice::*, TransportSlice::*, VlanSlice::*};
+            use etherparse::{IpSlice::*, LinkSlice::*, TransportSlice::*, VlanSlice::*};
 
             match value.link {
                 Some(Ethernet2(value)) => println!(

@@ -4,26 +4,34 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum InternetSlice<'a> {
+pub enum IpSlice<'a> {
     /// The ipv4 header & the decoded extension headers.
     Ipv4(Ipv4Slice<'a>),
     /// The ipv6 header & the decoded extension headers.
     Ipv6(Ipv6Slice<'a>),
 }
 
-impl<'a> InternetSlice<'a> {
-    /// Returns a reference to the `Ipv4Slice` if `self` is a `InternetSlice::Ipv4`.
+/// Deprecated use [`crate::IpSlice`] instead.
+#[cfg(feature = "std")]
+#[deprecated(
+    since = "0.14.0",
+    note = "Deprecated use etherparse::IpSlice instead"
+)]
+pub use IpSlice as InternetSlice;
+
+impl<'a> IpSlice<'a> {
+    /// Returns a reference to the `Ipv4Slice` if `self` is a `IpSlice::Ipv4`.
     pub fn ipv4(&self) -> Option<&Ipv4Slice> {
-        use InternetSlice::*;
+        use IpSlice::*;
         match self {
             Ipv4(slice) => Some(slice),
             Ipv6(_) => None,
         }
     }
 
-    /// Returns a reference to the `Ipv6Slice` if `self` is a `InternetSlice::Ipv6`.
+    /// Returns a reference to the `Ipv6Slice` if `self` is a `IpSlice::Ipv6`.
     pub fn ipv6(&self) -> Option<&Ipv6Slice> {
-        use InternetSlice::*;
+        use IpSlice::*;
         match self {
             Ipv4(_) => None,
             Ipv6(slice) => Some(slice),
@@ -33,8 +41,8 @@ impl<'a> InternetSlice<'a> {
     /// Returns true if the payload is fragmented.
     pub fn is_fragmenting_payload(&self) -> bool {
         match self {
-            InternetSlice::Ipv4(s) => s.is_payload_fragmented(),
-            InternetSlice::Ipv6(s) => s.is_payload_fragmented(),
+            IpSlice::Ipv4(s) => s.is_payload_fragmented(),
+            IpSlice::Ipv6(s) => s.is_payload_fragmented(),
         }
     }
 
@@ -43,8 +51,8 @@ impl<'a> InternetSlice<'a> {
     #[cfg(feature = "std")]
     pub fn source_addr(&self) -> std::net::IpAddr {
         match self {
-            InternetSlice::Ipv4(s) => s.header().source_addr().into(),
-            InternetSlice::Ipv6(s) => s.header().source_addr().into(),
+            IpSlice::Ipv4(s) => s.header().source_addr().into(),
+            IpSlice::Ipv6(s) => s.header().source_addr().into(),
         }
     }
 
@@ -53,8 +61,8 @@ impl<'a> InternetSlice<'a> {
     #[cfg(feature = "std")]
     pub fn destination_addr(&self) -> std::net::IpAddr {
         match self {
-            InternetSlice::Ipv4(s) => s.header().destination_addr().into(),
-            InternetSlice::Ipv6(s) => s.header().destination_addr().into(),
+            IpSlice::Ipv4(s) => s.header().destination_addr().into(),
+            IpSlice::Ipv6(s) => s.header().destination_addr().into(),
         }
     }
 
@@ -62,7 +70,7 @@ impl<'a> InternetSlice<'a> {
     /// and IP extensions headers.
     #[inline]
     pub fn payload(&self) -> &IpPayload<'a> {
-        use InternetSlice::*;
+        use IpSlice::*;
         match self {
             Ipv4(ipv4) => ipv4.payload(),
             Ipv6(ipv6) => ipv6.payload(),
@@ -75,7 +83,7 @@ impl<'a> InternetSlice<'a> {
     /// IP header or extension header.
     #[inline]
     pub fn payload_ip_number(&self) -> IpNumber {
-        use InternetSlice::*;
+        use IpSlice::*;
         match self {
             Ipv4(ipv4) => ipv4.payload().ip_number,
             Ipv6(ipv6) => ipv6.payload().ip_number,
@@ -85,10 +93,10 @@ impl<'a> InternetSlice<'a> {
     /// Separates and validates IP headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IP packet.
-    pub fn from_ip_slice(slice: &[u8]) -> Result<InternetSlice, err::ip::SliceError> {
+    pub fn from_ip_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
         use err::ip::SliceError::*;
-        use InternetSlice::*;
+        use IpSlice::*;
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -334,7 +342,7 @@ mod test {
             let buffer = header.to_bytes();
 
             let ipv4 = Ipv4Slice::from_slice(&buffer).unwrap();
-            let slice = InternetSlice::Ipv4(ipv4.clone());
+            let slice = IpSlice::Ipv4(ipv4.clone());
 
             // clone & eq
             assert_eq!(slice.clone(), slice);
@@ -351,7 +359,7 @@ mod test {
             };
             let buffer = header.to_bytes();
             let ipv6 = Ipv6Slice::from_slice(&buffer).unwrap();
-            let slice = InternetSlice::Ipv6(ipv6.clone());
+            let slice = IpSlice::Ipv6(ipv6.clone());
 
             // clone & eq
             assert_eq!(slice.clone(), slice);
@@ -376,7 +384,7 @@ mod test {
                 let ipv4_slice = Ipv4Slice::from_slice(&data).unwrap();
                 assert_eq!(
                     fragment,
-                    InternetSlice::Ipv4(ipv4_slice).is_fragmenting_payload()
+                    IpSlice::Ipv4(ipv4_slice).is_fragmenting_payload()
                 );
             }
 
@@ -403,7 +411,7 @@ mod test {
 
                 assert_eq!(
                     fragment,
-                    InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap())
+                    IpSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap())
                         .is_fragmenting_payload()
                 );
             }
@@ -420,7 +428,7 @@ mod test {
                 .to_bytes();
             assert_eq!(
                 IpAddr::V4(Ipv4Addr::from([3, 4, 5, 6])),
-                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).source_addr()
+                IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).source_addr()
             );
         }
 
@@ -439,7 +447,7 @@ mod test {
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([1; 16])),
-                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).source_addr()
+                IpSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).source_addr()
             );
         }
     }
@@ -457,7 +465,7 @@ mod test {
 
             assert_eq!(
                 IpAddr::V4(Ipv4Addr::from([7, 8, 9, 10])),
-                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).destination_addr()
+                IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).destination_addr()
             );
         }
 
@@ -476,7 +484,7 @@ mod test {
 
             assert_eq!(
                 IpAddr::V6(Ipv6Addr::from([2; 16])),
-                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).destination_addr()
+                IpSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).destination_addr()
             );
         }
     }
@@ -498,7 +506,7 @@ mod test {
             data.extend_from_slice(&header.to_bytes());
             data.extend_from_slice(&payload);
             assert_eq!(
-                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload(),
+                IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload(),
                 &IpPayload {
                     ip_number: ip_number::UDP.into(),
                     fragmented: header.is_fragmenting_payload(),
@@ -523,7 +531,7 @@ mod test {
             data.extend_from_slice(&header.to_bytes());
             data.extend_from_slice(&payload);
             assert_eq!(
-                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).payload(),
+                IpSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).payload(),
                 &IpPayload {
                     ip_number: ip_number::UDP.into(),
                     fragmented: false,
@@ -545,7 +553,7 @@ mod test {
                 .to_bytes();
             assert_eq!(
                 UDP,
-                InternetSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload_ip_number()
+                IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload_ip_number()
             );
         }
 
@@ -564,7 +572,7 @@ mod test {
 
             assert_eq!(
                 IGMP,
-                InternetSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).payload_ip_number()
+                IpSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).payload_ip_number()
             );
         }
     }
@@ -617,7 +625,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = InternetSlice::from_ip_slice(&data).unwrap();
+                let actual = IpSlice::from_ip_slice(&data).unwrap();
                 assert!(actual.ipv6().is_none());
                 let actual = actual.ipv4().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv4_header);
@@ -641,7 +649,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = crate::InternetSlice::from_ip_slice(&data).unwrap();
+                let actual = crate::IpSlice::from_ip_slice(&data).unwrap();
                 assert!(actual.ipv4().is_none());
                 let actual = actual.ipv6().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv6_header);
@@ -680,7 +688,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = crate::InternetSlice::from_ip_slice(&data).unwrap();
+                let actual = crate::IpSlice::from_ip_slice(&data).unwrap();
                 assert!(actual.ipv4().is_none());
                 let actual = actual.ipv6().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv6_header);

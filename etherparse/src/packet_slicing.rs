@@ -51,7 +51,7 @@ pub struct SlicedPacket<'a> {
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanSlice<'a>>,
     /// IPv4 or IPv6 header and IP extension headers if present.
-    pub ip: Option<InternetSlice<'a>>,
+    pub ip: Option<IpSlice<'a>>,
     /// TCP or UDP header if present.
     pub transport: Option<TransportSlice<'a>>,
     /// The payload field points to the rest of the packet that could not be parsed by etherparse.
@@ -358,7 +358,7 @@ impl<'a> CursorSlice<'a> {
         use err::packet::IpSliceError::*;
 
         // slice header, extension headers and identify payload range
-        let ip = InternetSlice::from_ip_slice(self.slice).map_err(|err| {
+        let ip = IpSlice::from_ip_slice(self.slice).map_err(|err| {
             use err::ip::SliceError as I;
             match err {
                 I::Len(mut err) => {
@@ -435,7 +435,7 @@ impl<'a> CursorSlice<'a> {
         };
         self.len_source = payload.len_source;
         self.slice = payload.payload;
-        self.result.ip = Some(InternetSlice::Ipv4(ipv4));
+        self.result.ip = Some(IpSlice::Ipv4(ipv4));
 
         if payload.fragmented {
             Ok(self.slice_payload())
@@ -491,7 +491,7 @@ impl<'a> CursorSlice<'a> {
         };
         self.len_source = ipv6.payload().len_source;
         self.slice = ipv6.payload().payload;
-        self.result.ip = Some(InternetSlice::Ipv6(ipv6));
+        self.result.ip = Some(IpSlice::Ipv6(ipv6));
 
         // only try to decode the transport layer if the payload
         // is not fragmented
@@ -1336,13 +1336,13 @@ mod test {
             assert_eq!(test.vlan, result.vlan.as_ref().map(|e| e.to_header()));
             assert_eq!(
                 test.ip,
-                result.ip.as_ref().map(|s: &InternetSlice| -> IpHeader {
+                result.ip.as_ref().map(|s: &IpSlice| -> IpHeader {
                     match s {
-                        InternetSlice::Ipv4(ipv4) => IpHeader::Version4(
+                        IpSlice::Ipv4(ipv4) => IpHeader::Version4(
                             ipv4.header().to_header(),
                             ipv4.extensions().to_header(),
                         ),
-                        InternetSlice::Ipv6(ipv6) => IpHeader::Version6(
+                        IpSlice::Ipv6(ipv6) => IpHeader::Version6(
                             ipv6.header().to_header(),
                             Ipv6Extensions::from_slice(
                                 ipv6.header().next_header(),
