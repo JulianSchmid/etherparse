@@ -16,7 +16,7 @@ impl<'a> Ipv4Slice<'a> {
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IPv4 packet.
     ///
-    /// Note that his function returns an [`err::LenError`] if the given slice
+    /// Note that his function returns an [`crate::err::LenError`] if the given slice
     /// contains less data then the `total_len` field in the IPv4 header indicates
     /// should be present.
     ///
