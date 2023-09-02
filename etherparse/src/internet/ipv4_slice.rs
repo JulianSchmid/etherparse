@@ -15,6 +15,13 @@ impl<'a> Ipv4Slice<'a> {
     /// Separates and validates IPv4 headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IPv4 packet.
+    ///
+    /// Note that his function returns an [`err::LenError`] if the given slice
+    /// contains less data then the `total_len` field in the IPv4 header indicates
+    /// should be present.
+    ///
+    /// If you want to ignore these kind of length errors based on the length
+    /// fields in the IP headers use [`Ipv4Slice::from_slice_lax`] instead.
     pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
         use crate::ip_number::AUTH;
 
@@ -129,7 +136,7 @@ impl<'a> Ipv4Slice<'a> {
     ///
     /// The main differences is that the function ignores inconsistent
     /// `total_len` values (in IPv4 headers). When the total_length value in the IPv4
-    /// header is inconsistant the lenght of the given slice is used as a substitute.
+    /// header is inconsistant the length of the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if the `len_source` value in the returned [`IpPayload`] is set to

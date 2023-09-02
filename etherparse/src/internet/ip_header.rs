@@ -52,7 +52,7 @@ impl IpHeader {
     /// contains less data then the length fields in the IP header indicate should
     /// be present.
     ///
-    /// If you want to ignore these kind of length errors based on the lenght
+    /// If you want to ignore these kind of length errors based on the length
     /// fields in the IP headers use [`IpHeader::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
@@ -286,7 +286,7 @@ impl IpHeader {
     /// The main differences is that the function ignores inconsistent
     /// `total_len` (in IPv4 headers) and `payload_length` (in IPv6 headers)
     /// values. When these length values in the IP header are inconsistant the
-    /// lenght of the given slice is used as a substitute.
+    /// length of the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if the `len_source` value in the returned [`IpPayload`] is set to
@@ -504,6 +504,13 @@ impl IpHeader {
 
     /// Read an IPv4 header & extension headers from a slice and return the slice containing the payload
     /// according to the total_length field in the IPv4 header.
+    ///
+    /// Note that his function returns an [`err::LenError`] if the given slice
+    /// contains less data then the `total_len` field in the IPv4 header indicates
+    /// should be present.
+    ///
+    /// If you want to ignore these kind of length errors based on the length
+    /// fields in the IP headers use [`IpHeader::ipv4_from_slice_lax`] instead.
     pub fn ipv4_from_slice(
         slice: &[u8],
     ) -> Result<(IpHeader, IpPayload<'_>), err::ipv4::SliceError> {
@@ -595,7 +602,7 @@ impl IpHeader {
     ///
     /// The main differences is that the function ignores inconsistent
     /// `total_len` values (in IPv4 headers). When the total_length value in the IPv4
-    /// header is inconsistant the lenght of the given slice is used as a substitute.
+    /// header is inconsistant the length of the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if the `len_source` value in the returned [`IpPayload`] is set to
@@ -763,7 +770,7 @@ impl IpHeader {
     ///
     /// The main differences is that the function ignores inconsistent
     /// `payload_length` values (in IPv6 headers). When these length values
-    /// in the IP header are inconsistant the lenght of the given slice is 
+    /// in the IP header are inconsistant the length of the given slice is
     /// used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
@@ -1429,9 +1436,26 @@ mod test {
                     );
                 }
 
-                // read error ipv4 extensions
+                // len error ipv4 extensions
                 if v4_exts.header_len() > 0 {
                     IpHeader::from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
+                }
+
+                // content error ipv4 extensions
+                if v4_exts.auth.is_some() {
+                    use err::ip_auth::HeaderError::ZeroPayloadLen;
+                    use err::ip::HeaderSliceError::Content;
+                    use err::ip::HeaderError::Ipv4Ext;
+
+                    // introduce a auth header zero payload error
+                    let mut errored_buffer = buffer.clone();
+                    // inject length zero into auth header (not valid, will
+                    // trigger a content error)
+                    errored_buffer[v4.header_len() + 1] = 0;
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&errored_buffer),
+                        Err(Content(Ipv4Ext(ZeroPayloadLen)))
+                    );
                 }
 
                 // total length smaller the header (fallback to slice len)
@@ -1505,9 +1529,34 @@ mod test {
                     );
                 }
 
-                // extension error
+                // extension len error
                 if v6_exts.header_len() > 0 {
                     IpHeader::from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
+                }
+
+                // extension content error
+                if v6_exts.auth.is_some() {
+                    use err::ip_auth::HeaderError::ZeroPayloadLen;
+                    use err::ip::HeaderSliceError::Content;
+                    use err::ip::HeaderError::Ipv6Ext;
+                    use err::ipv6_exts::HeaderError::IpAuth;
+
+                    // introduce a auth header zero payload error
+                    let mut errored_buffer = buffer.clone();
+                    let auth_offset = v6.header_len() +
+                        v6_exts.hop_by_hop_options.as_ref().map(|h| h.header_len()).unwrap_or(0) +
+                        v6_exts.destination_options.as_ref().map(|h| h.header_len()).unwrap_or(0) +
+                        v6_exts.routing.as_ref().map(|h| h.routing.header_len()).unwrap_or(0) +
+                        // routing.final_destination_options skiped, as after auth
+                        v6_exts.fragment.as_ref().map(|h| h.header_len()).unwrap_or(0);
+
+                    // inject length zero into auth header (not valid, will
+                    // trigger a content error)
+                    errored_buffer[auth_offset + 1] = 0;
+                    assert_eq!(
+                        IpHeader::from_slice_lax(&errored_buffer),
+                        Err(Content(Ipv6Ext(IpAuth(ZeroPayloadLen))))
+                    );
                 }
 
                 // slice smaller then payload len
