@@ -693,6 +693,7 @@ pub mod u64_16bit_word {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use proptest::prelude::*;
 
         #[test]
         fn add_8bytes_test() {
@@ -896,6 +897,28 @@ pub mod u64_16bit_word {
             // will result in a first 16bit sum that will have to be
             // carry added twice
             assert_eq!(!1, ones_complement(0x02f6_e312_7fd7_9a20),);
+        }
+
+        proptest! {
+            #[test]
+            fn u32_u16_comparison(
+                data in proptest::collection::vec(any::<u8>(), 0..0xfffusize)
+            ) {
+                use crate::checksum::*;
+        
+                let u32_oc = u32_16bit_word::ones_complement(
+                    u32_16bit_word::add_slice(0, &data)
+                );
+                let u64_oc = u64_16bit_word::ones_complement(
+                    u64_16bit_word::add_slice(0, &data)
+                );
+                assert_eq!(u32_oc, u64_oc);
+        
+                let struct_oc = Sum16BitWords::new()
+                    .add_slice(&data)
+                    .ones_complement();
+                assert_eq!(u32_oc, struct_oc);
+            }
         }
     }
 }
