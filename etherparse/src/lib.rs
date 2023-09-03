@@ -195,14 +195,6 @@
 //! * [`Icmpv4Header::write`]
 //! * [`Icmpv6Header::write`]
 //!
-//! # Roadmap
-//! * Documentation
-//!   * Packet Builder
-//! * MutPacketSlice -> modifaction of fields in slices directly?
-//! * Reserializing SlicedPacket & MutSlicedPacket with corrected checksums & id's
-//! * Slicing & reading packet from different layers then ethernet onward (e.g. ip, vlan...)
-//! * IEEE 802.3
-//!
 //! # References
 //! * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)
 //! * Internet Protocol, Version 6 (IPv6) Specification [RFC 8200](https://tools.ietf.org/html/rfc8200)
