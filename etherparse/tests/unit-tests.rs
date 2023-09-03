@@ -3,7 +3,6 @@ use etherparse::*;
 
 pub use etherparse_proptest_generators::*;
 
-mod checksum;
 mod internet;
 mod packet_builder;
 mod packet_decoder;
