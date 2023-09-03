@@ -342,8 +342,8 @@ mod packet_builder;
 #[cfg(feature = "std")]
 pub use crate::packet_builder::*;
 
-mod packet_decoder;
-pub use crate::packet_decoder::*;
+mod packet_headers;
+pub use crate::packet_headers::*;
 
 mod packet_slicing;
 pub use crate::packet_slicing::*;
