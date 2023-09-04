@@ -1220,6 +1220,30 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
+            use err::ip::{HeaderError::*, HeaderSliceError::*};
+
+            // empty error
+            assert_eq!(
+                IpHeader::from_slice(&[]),
+                Err(Len(err::LenError {
+                    required_len: 1,
+                    len: 0,
+                    len_source: err::LenSource::Slice,
+                    layer: err::Layer::IpHeader,
+                    layer_start_offset: 0,
+                }))
+            );
+
+            // unknown version
+            for version_number in 0..=0xfu8 {
+                if version_number != 4 && version_number != 6 {
+                    assert_eq!(
+                        IpHeader::from_slice(&[version_number << 4]),
+                        Err(Content(UnsupportedIpVersion { version_number }))
+                    );
+                }
+            }
+
             let payload = [1,2,3,4];
 
             // v4
@@ -2037,6 +2061,17 @@ mod test {
                     .unwrap_err()
                     .io()
                     .is_some()
+                );
+            }
+            // version error
+            {
+                use err::ip::HeaderError::*;
+                let mut cursor = Cursor::new(&[0xf << 4]);
+                assert_eq!(
+                    IpHeader::read(&mut cursor).unwrap_err().content().unwrap(),
+                    UnsupportedIpVersion {
+                        version_number: 0xf
+                    }
                 );
             }
             // v4
