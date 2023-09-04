@@ -28,3 +28,72 @@ pub enum Ipv6ExtensionSlice<'a> {
     /// Authentication Header \[[RFC4302](https://datatracker.ietf.org/doc/html/rfc4302)\]
     Authentication(IpAuthHeaderSlice<'a>),
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::ip_number::*;
+
+    #[test]
+    fn debug() {
+        use alloc::{vec::Vec, format};
+        use Ipv6ExtensionSlice::*;
+        {
+            let header = Ipv6RawExtHeader::new_raw(UDP, &[1, 2, 3, 4, 5, 6]).unwrap();
+            let mut buffer = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            let slice = Ipv6RawExtHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                format!("HopByHop({:?})", slice),
+                format!("{:?}", HopByHop(slice.clone()))
+            );
+            assert_eq!(
+                format!("Routing({:?})", slice),
+                format!("{:?}", Routing(slice.clone()))
+            );
+            assert_eq!(
+                format!("DestinationOptions({:?})", slice),
+                format!("{:?}", DestinationOptions(slice.clone()))
+            );
+        }
+        {
+            let header = Ipv6FragmentHeader::new(UDP, 1.try_into().unwrap(), true, 2);
+            let mut buffer = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            let slice = Ipv6FragmentHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                format!("Fragment({:?})", slice),
+                format!("{:?}", Fragment(slice))
+            );
+        }
+        {
+            let header = IpAuthHeader::new(UDP, 1, 2, &[1, 2, 3, 4]).unwrap();
+            let mut buffer = Vec::with_capacity(header.header_len());
+            header.write(&mut buffer).unwrap();
+            let slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                format!("Authentication({:?})", slice),
+                format!("{:?}", Authentication(slice.clone()))
+            );
+        }
+    }
+
+    #[test]
+    fn clone_eq() {
+        use alloc::vec::Vec;
+        use Ipv6ExtensionSlice::*;
+
+        let header = Ipv6RawExtHeader::new_raw(UDP, &[1, 2, 3, 4, 5, 6]).unwrap();
+        let mut buffer = Vec::with_capacity(header.header_len());
+        header.write(&mut buffer).unwrap();
+        let slice = Ipv6RawExtHeaderSlice::from_slice(&buffer).unwrap();
+
+        let hop = HopByHop(slice.clone());
+        assert_eq!(hop.clone(), hop.clone());
+
+        let route = Routing(slice.clone());
+        assert_eq!(route.clone(), route.clone());
+
+        assert_ne!(route, hop);
+    }
+}
