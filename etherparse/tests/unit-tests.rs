@@ -6,19 +6,9 @@ pub use etherparse_proptest_generators::*;
 mod internet;
 mod packet_decoder;
 mod packet_filter;
-mod packet_slicing;
 mod transport;
 use proptest::prelude::*;
 mod packet_compositions;
-
-#[test]
-fn test_eq() {
-    assert_eq!(
-        err::ValueType::Ipv4PayloadLength,
-        err::ValueType::Ipv4PayloadLength
-    );
-    assert_ne!(err::ValueType::Ipv4PayloadLength, err::ValueType::Ipv4Dscp);
-}
 
 #[test]
 fn test_debug_write() {
