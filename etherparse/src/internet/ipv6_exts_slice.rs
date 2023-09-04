@@ -168,3 +168,220 @@ impl<'a> IntoIterator for Ipv6ExtensionsSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use alloc::{vec::Vec, borrow::ToOwned};
+    use proptest::prelude::*;
+    use crate::test_gens::*;
+    use super::ipv6_exts_test_helpers::*;
+    use crate::ip_number::*;
+
+    proptest! {
+        #[test]
+        fn from_slice(
+            header_size in any::<u8>(),
+            post_header in ip_number_any()
+                .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                )
+        ) {
+            use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+
+            // no extension headers filled
+            {
+                let some_data = [1,2,3,4];
+                let actual = Ipv6ExtensionsSlice::from_slice(UDP, &some_data).unwrap();
+                assert_eq!(actual.0.is_fragmenting_payload(), false);
+                assert_eq!(actual.0.first_header(), None);
+                assert_eq!(actual.0.slice().len(), 0);
+                assert_eq!(actual.1, UDP);
+                assert_eq!(actual.2, &some_data);
+            }
+
+            /// Run a test with the given ip numbers
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
+                // setup test payload
+                let e = ExtensionTestPayload::new(
+                    ip_numbers,
+                    header_sizes
+                );
+
+                if e.ip_numbers[1..].iter().any(|&x| x == IPV6_HOP_BY_HOP) {
+                    // a hop by hop header that is not at the start triggers an error
+                    assert_eq!(
+                        Ipv6ExtensionsSlice::from_slice(ip_numbers[0], e.slice()).unwrap_err(),
+                        Content(HopByHopNotAtStart)
+                    );
+                } else {
+                    // normal read
+                    let (header, next, rest) = Ipv6ExtensionsSlice::from_slice(ip_numbers[0], e.slice()).unwrap();
+                    assert_eq!(header.first_header(), Some(ip_numbers[0]));
+                    assert_eq!(header.slice(), e.slice());
+                    assert_eq!(next, *ip_numbers.last().unwrap());
+                    assert_eq!(rest, &e.slice()[e.slice().len()..]);
+
+                    // unexpected end of slice
+                    {
+                        let offset: usize = e.lengths[..e.lengths.len() - 1].into_iter().sum();
+
+                        assert_eq!(
+                            Ipv6ExtensionsSlice::from_slice(ip_numbers[0], &e.slice()[..e.slice().len() - 1]).unwrap_err(),
+                            Len(err::LenError {
+                                required_len: e.slice().len() - offset,
+                                len: e.slice().len() - offset - 1,
+                                len_source: err::LenSource::Slice,
+                                layer: match ip_numbers[ip_numbers.len() - 2] {
+                                    AUTH => err::Layer::IpAuthHeader,
+                                    IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                    _ => err::Layer::Ipv6ExtHeader
+                                },
+                                layer_start_offset: offset,
+                            })
+                        );
+                    }
+                }
+            }
+
+            // test the parsing of different extension header combinations
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                // single header parsing
+                run_test(
+                    &[*first_header, post_header],
+                    &[header_size],
+                );
+
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                    // double header parsing
+                    run_test(
+                        &[*first_header, *second_header, post_header],
+                        &[header_size],
+                    );
+
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // tripple header parsing
+                        run_test(
+                            &[*first_header, *second_header, *third_header, post_header],
+                            &[header_size],
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn is_fragmenting_payload(
+            hop_by_hop_options in ipv6_raw_ext_any(),
+            destination_options in ipv6_raw_ext_any(),
+            routing in ipv6_raw_ext_any(),
+            auth in ip_auth_any(),
+            final_destination_options in ipv6_raw_ext_any()
+        ) {
+            // no fragment header
+            {
+                let mut exts = Ipv6Extensions{
+                    hop_by_hop_options: Some(hop_by_hop_options),
+                    destination_options: Some(destination_options),
+                    routing: Some(
+                        Ipv6RoutingExtensions {
+                            routing,
+                            final_destination_options: Some(final_destination_options),
+                        }
+                    ),
+                    fragment: None,
+                    auth: Some(auth),
+                };
+                let first_ip_number = exts.set_next_headers(UDP);
+
+                let mut bytes = Vec::with_capacity(exts.header_len());
+                exts.write(&mut bytes, first_ip_number).unwrap();
+
+                let (header, _, _) = Ipv6ExtensionsSlice::from_slice(first_ip_number, &bytes).unwrap();
+                assert_eq!(false, header.is_fragmenting_payload());
+            }
+
+            // different variants of the fragment header with
+            // variants that fragment and variants that don't fragment
+            let frag_variants : [(bool, Ipv6FragmentHeader);4] = [
+                (false, Ipv6FragmentHeader::new(UDP, 0.try_into().unwrap(), false, 123)),
+                (true, Ipv6FragmentHeader::new(UDP, 2.try_into().unwrap(), false, 123)),
+                (true, Ipv6FragmentHeader::new(UDP, 0.try_into().unwrap(), true, 123)),
+                (true, Ipv6FragmentHeader::new(UDP, 3.try_into().unwrap(), true, 123)),
+            ];
+
+            for (first_expected, first_header) in frag_variants.iter() {
+                // single fragment header
+                {
+                    let bytes = first_header.to_bytes();
+                    let (header, _, _) = Ipv6ExtensionsSlice::from_slice(IPV6_FRAG, &bytes).unwrap();
+                    assert_eq!(*first_expected, header.is_fragmenting_payload());
+                }
+                // two fragment headers
+                for (second_expected, second_header) in frag_variants.iter() {
+                    let mut first_mod = first_header.clone();
+                    first_mod.next_header = IPV6_FRAG;
+                    let mut bytes = Vec::with_capacity(first_mod.header_len() + second_header.header_len());
+                    bytes.extend_from_slice(&first_mod.to_bytes());
+                    bytes.extend_from_slice(&second_header.to_bytes());
+
+                    let (header, _, _) = Ipv6ExtensionsSlice::from_slice(IPV6_FRAG, &bytes).unwrap();
+                    assert_eq!(
+                        *first_expected || *second_expected,
+                        header.is_fragmenting_payload()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn is_empty() {
+        // empty
+        {
+            let slice = Ipv6ExtensionsSlice::from_slice(ip_number::UDP, &[])
+                .unwrap()
+                .0;
+            assert!(slice.is_empty());
+        }
+
+        // fragment
+        {
+            let bytes =
+                Ipv6FragmentHeader::new(ip_number::UDP, IpFragOffset::ZERO, true, 0).to_bytes();
+            let slice = Ipv6ExtensionsSlice::from_slice(ip_number::IPV6_FRAG, &bytes)
+                .unwrap()
+                .0;
+            assert_eq!(false, slice.is_empty());
+        }
+    }
+
+    #[test]
+    fn debug() {
+        use alloc::format;
+
+        let a: Ipv6ExtensionsSlice = Default::default();
+        assert_eq!(
+            "Ipv6ExtensionsSlice { first_header: None, fragmented: false, slice: [] }",
+            &format!("{:?}", a)
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        let a: Ipv6ExtensionsSlice = Default::default();
+        assert_eq!(a, a.clone());
+    }
+
+    #[test]
+    fn default() {
+        let a: Ipv6ExtensionsSlice = Default::default();
+        assert_eq!(a.is_fragmenting_payload(), false);
+        assert_eq!(a.first_header(), None);
+        assert_eq!(a.slice().len(), 0);
+    }
+}

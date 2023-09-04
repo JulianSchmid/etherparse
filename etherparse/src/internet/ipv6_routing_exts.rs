@@ -28,6 +28,32 @@ mod tests {
     use proptest::prelude::*;
     use crate::test_gens::ipv6_raw_ext_any;
 
+    #[test]
+    fn debug() {
+        use alloc::format;
+        
+        let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
+            routing: Ipv6RawExtHeader::new_raw(0.into(), &[0; 6]).unwrap(),
+            final_destination_options: None,
+        };
+        assert_eq!(
+            &format!(
+                "Ipv6RoutingExtensions {{ routing: {:?}, final_destination_options: {:?} }}",
+                a.routing, a.final_destination_options,
+            ),
+            &format!("{:?}", a)
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
+            routing: Ipv6RawExtHeader::new_raw(0.into(), &[0; 6]).unwrap(),
+            final_destination_options: None,
+        };
+        assert_eq!(a, a.clone());
+    }
+
     proptest!{
         #[test]
         fn header_len(

@@ -47,3 +47,142 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
         self.auth.is_none()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::prelude::*;
+    use crate::test_gens::*;
+    use alloc::vec::Vec;
+
+    proptest! {
+        #[test]
+        fn debug(auth in ip_auth_any()) {
+            use alloc::format;
+
+            // None
+            assert_eq!(
+                &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Option::<IpAuthHeader>::None),
+                &format!(
+                    "{:?}",
+                    Ipv4ExtensionsSlice {
+                        auth: None,
+                    }
+                )
+            );
+
+            // Some
+            let buffer = {
+                let mut buffer = Vec::with_capacity(auth.header_len());
+                auth.write(&mut buffer).unwrap();
+                buffer
+            };
+            let auth_slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
+            assert_eq!(
+                &format!("Ipv4ExtensionsSlice {{ auth: {:?} }}", Some(auth_slice.clone())),
+                &format!(
+                    "{:?}",
+                    Ipv4ExtensionsSlice {
+                        auth: Some(auth_slice.clone()),
+                    }
+                )
+            );
+        }
+    }
+
+
+    proptest! {
+        #[test]
+        fn clone_eq(auth in ip_auth_any()) {
+            // None
+            {
+                let header = Ipv4ExtensionsSlice{
+                    auth: None,
+                };
+                assert_eq!(
+                    header.clone(),
+                    Ipv4ExtensionsSlice{
+                        auth: None,
+                    }
+                );
+            }
+
+            // Some
+            {
+                let buffer = {
+                    let mut buffer = Vec::with_capacity(auth.header_len());
+                    auth.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let auth_slice = IpAuthHeaderSlice::from_slice(&buffer).unwrap();
+                let slice = Ipv4ExtensionsSlice {
+                    auth: Some(auth_slice.clone()),
+                };
+                assert_eq!(
+                    slice.clone(),
+                    Ipv4ExtensionsSlice{
+                        auth: Some(auth_slice.clone()),
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(auth in ip_auth_any()) {
+            // None
+            assert_eq!(
+                Ipv4ExtensionsSlice{
+                    auth: None,
+                }.to_header(),
+                Ipv4Extensions{
+                    auth: None,
+                }
+            );
+
+            // Some
+            {
+                let buffer = {
+                    let mut buffer = Vec::with_capacity(auth.header_len());
+                    auth.write(&mut buffer).unwrap();
+                    buffer
+                };
+                let slice = Ipv4ExtensionsSlice{
+                    auth: Some(
+                        IpAuthHeaderSlice::from_slice(&buffer).unwrap()
+                    ),
+                };
+                assert_eq!(
+                    slice.to_header(),
+                    Ipv4Extensions{
+                        auth: Some(auth.clone()),
+                    }
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn is_empty() {
+        // empty
+        assert!(Ipv4ExtensionsSlice { auth: None }.is_empty());
+
+        // auth
+        {
+            let buffer = {
+                let auth = IpAuthHeader::new(ip_number::UDP, 0, 0, &[]).unwrap();
+                let mut buffer = Vec::with_capacity(auth.header_len());
+                auth.write(&mut buffer).unwrap();
+                buffer
+            };
+            assert_eq!(
+                false,
+                Ipv4ExtensionsSlice {
+                    auth: Some(IpAuthHeaderSlice::from_slice(&buffer).unwrap()),
+                }
+                .is_empty()
+            );
+        }
+    }
+}

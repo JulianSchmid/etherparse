@@ -73,3 +73,140 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use proptest::prelude::*;
+    use crate::test_gens::*;
+    use crate::ip_number::*;
+    use alloc::borrow::ToOwned;
+    use super::ipv6_exts_test_helpers::*;
+
+    #[test]
+    fn into_iter() {
+        let a: Ipv6ExtensionsSlice = Default::default();
+        let mut iter = a.into_iter();
+        assert_eq!(None, iter.next());
+    }
+
+    proptest! {
+        #[test]
+        fn next(
+            header_size in any::<u8>(),
+            post_header in ip_number_any()
+                .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                )
+        ) {
+            /// Run a test with the given ip numbers
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
+                // setup test payload
+                let e = ExtensionTestPayload::new(
+                    ip_numbers,
+                    header_sizes
+                );
+
+                // a hop by hop header that is not at the start triggers an error
+                if false == e.ip_numbers[1..].iter().any(|&x| x == IPV6_HOP_BY_HOP) {
+                    // normal read
+                    let (header, _, _) = Ipv6ExtensionsSlice::from_slice(ip_numbers[0], e.slice()).unwrap();
+                    let mut iter = header.into_iter();
+                    let mut slice = e.slice();
+
+                    // go through all expected headers
+                    for i in 0..e.ip_numbers.len() - 1 {
+                        use Ipv6ExtensionSlice::*;
+
+                        // iterate and check all results
+                        let next = iter.next().unwrap();
+                        match e.ip_numbers[i] {
+                            IPV6_HOP_BY_HOP => {
+                                let header = Ipv6RawExtHeaderSlice::from_slice(slice).unwrap();
+                                assert_eq!(next, HopByHop(header.clone()));
+                                slice = &slice[header.slice().len()..];
+                            },
+                            IPV6_ROUTE => {
+                                let header = Ipv6RawExtHeaderSlice::from_slice(slice).unwrap();
+                                assert_eq!(next, Routing(header.clone()));
+                                slice = &slice[header.slice().len()..];
+                            },
+                            IPV6_DEST_OPTIONS => {
+                                let header = Ipv6RawExtHeaderSlice::from_slice(slice).unwrap();
+                                assert_eq!(next, DestinationOptions(header.clone()));
+                                slice = &slice[header.slice().len()..];
+                            }
+                            IPV6_FRAG => {
+                                let header = Ipv6FragmentHeaderSlice::from_slice(slice).unwrap();
+                                assert_eq!(next, Fragment(header.clone()));
+                                slice = &slice[header.slice().len()..];
+                            },
+                            AUTH => {
+                                let header = IpAuthHeaderSlice::from_slice(slice).unwrap();
+                                assert_eq!(next, Authentication(header.clone()));
+                                slice = &slice[header.slice().len()..];
+                            },
+                            _ => unreachable!()
+                        }
+                    }
+
+                    // expect that all headers have been visited
+                    assert_eq!(None, iter.next());
+                }
+            }
+
+            // test the parsing of different extension header combinations
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                // single header parsing
+                run_test(
+                    &[*first_header, post_header],
+                    &[header_size],
+                );
+
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                    // double header parsing
+                    run_test(
+                        &[*first_header, *second_header, post_header],
+                        &[header_size],
+                    );
+
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // tripple header parsing
+                        run_test(
+                            &[*first_header, *second_header, *third_header, post_header],
+                            &[header_size],
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn debug() {
+        use alloc::format;
+
+        let a: Ipv6ExtensionSliceIter = Default::default();
+        assert_eq!(
+            format!(
+                "Ipv6ExtensionSliceIter {{ next_header: {:?}, rest: [] }}",
+                IpNumber(59)
+            ),
+            format!("{:?}", a)
+        );
+    }
+
+    #[test]
+    fn clone_eq() {
+        let a: Ipv6ExtensionSliceIter = Default::default();
+        assert_eq!(a.clone(), a);
+    }
+
+    #[test]
+    fn default() {
+        let mut a: Ipv6ExtensionSliceIter = Default::default();
+        assert_eq!(None, a.next());
+    }
+}
