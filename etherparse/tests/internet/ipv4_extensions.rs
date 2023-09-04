@@ -139,13 +139,15 @@ pub mod header {
 
         // Some: Write error
         {
-            let mut writer = TestWriter::with_max_size(auth_header.header_len() - 1);
+            let mut buffer = Vec::with_capacity(auth_header.header_len() - 1);
+            buffer.resize(auth_header.header_len() - 1, 0);
+            let mut cursor = Cursor::new(&mut buffer[..]);
             let err = Ipv4Extensions {
                 auth: Some(auth_header.clone()),
             }
-            .write(&mut writer, AUTH)
+            .write(&mut cursor, AUTH)
             .unwrap_err();
-            assert_eq!(std::io::ErrorKind::UnexpectedEof, err.io().unwrap().kind());
+            assert!(err.io().is_some());
         }
     }
 

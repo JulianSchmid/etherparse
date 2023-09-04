@@ -10,8 +10,6 @@ mod packet_slicing;
 mod transport;
 use proptest::prelude::*;
 mod packet_compositions;
-mod test_writer;
-use test_writer::*;
 
 #[test]
 fn test_eq() {

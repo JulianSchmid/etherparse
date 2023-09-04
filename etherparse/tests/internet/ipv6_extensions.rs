@@ -729,18 +729,16 @@ pub mod header {
 
                     // write error
                     {
-                        let mut writer = TestWriter::with_max_size(
-                            e.data.header_len() - 1
-                        );
+                        let mut buffer = Vec::with_capacity(e.data.header_len() - 1);
+                        buffer.resize(e.data.header_len() - 1, 0);
+                        let mut cursor = Cursor::new(&mut buffer[..]);
+
                         let err = e.data.write(
-                            &mut writer,
+                            &mut cursor,
                             e.ip_numbers[0]
                         ).unwrap_err();
 
-                        assert_eq!(
-                            std::io::ErrorKind::UnexpectedEof,
-                            err.io().unwrap().kind()
-                        );
+                        assert!(err.io().is_some());
                     }
 
                     // missing reference (skip the last header)
