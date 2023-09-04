@@ -4,9 +4,7 @@ use etherparse::*;
 pub use etherparse_proptest_generators::*;
 
 mod packet_decoder;
-mod packet_filter;
 mod transport;
-use proptest::prelude::*;
 
 #[test]
 fn test_debug_write() {
