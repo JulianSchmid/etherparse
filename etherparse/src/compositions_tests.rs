@@ -1,5 +1,9 @@
 use super::*;
 
+use alloc::{vec, vec::Vec};
+use proptest::prelude::*;
+use crate::test_gens::*;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ComponentTest {
     link: Option<Ethernet2Header>,

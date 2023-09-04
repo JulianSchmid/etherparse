@@ -327,6 +327,9 @@ pub use crate::transport::udp_slice::*;
 /// Helpers for calculating checksums.
 pub mod checksum;
 
+#[cfg(test)]
+mod compositions_tests;
+
 mod helpers;
 
 #[cfg(feature = "std")]

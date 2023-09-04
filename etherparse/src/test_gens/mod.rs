@@ -298,6 +298,21 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn ipv4_extensions_unknown()
+        (
+            next_header in ip_number_any().prop_filter(
+                "next_header must be unknown",
+                |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x)
+            )
+        ) (
+            result in ipv4_extensions_with(next_header)
+        ) -> Ipv4Extensions
+    {
+        result
+    }
+}
+
+prop_compose! {
     pub fn ipv6_with(next_header: IpNumber)
     (
         source in prop::array::uniform16(any::<u8>()),
@@ -328,6 +343,50 @@ prop_compose! {
     ) -> Ipv6Header
     {
         result
+    }
+}
+
+
+static IPV6_KNOWN_NEXT_HEADERS: &[IpNumber] = &[
+    ip_number::ICMP,
+    ip_number::UDP,
+    ip_number::TCP,
+    ip_number::IPV6_HOP_BY_HOP,
+    ip_number::IPV6_ICMP,
+    ip_number::IPV6_ROUTE,
+    ip_number::IPV6_FRAG,
+    ip_number::AUTH,
+    ip_number::IPV6_DEST_OPTIONS,
+    ip_number::MOBILITY,
+    ip_number::HIP,
+    ip_number::SHIM6,
+    // currently not supported:
+    // - EncapsulatingSecurityPayload
+    // - ExperimentalAndTesting0
+    // - ExperimentalAndTesting1
+];
+
+prop_compose! {
+    pub fn ipv6_unknown()(
+        source in prop::array::uniform16(any::<u8>()),
+        destination in prop::array::uniform16(any::<u8>()),
+        traffic_class in any::<u8>(),
+        flow_label in ipv6_flow_label_any(),
+        payload_length in any::<u16>(),
+        hop_limit in any::<u8>(),
+        next_header in ip_number_any().prop_filter("next_header must be unknown",
+            |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x))
+    ) -> Ipv6Header
+    {
+        Ipv6Header {
+            traffic_class,
+            flow_label,
+            payload_length,
+            next_header,
+            hop_limit,
+            source,
+            destination,
+        }
     }
 }
 
@@ -425,6 +484,21 @@ prop_compose! {
         ) (
             result in ipv6_extensions_with(next_header)
     ) -> Ipv6Extensions
+    {
+        result
+    }
+}
+
+prop_compose! {
+    pub fn ipv6_extensions_unknown()
+        (
+            next_header in ip_number_any().prop_filter(
+                "next_header must be unknown",
+                |v| !IPV6_KNOWN_NEXT_HEADERS.iter().any(|&x| v == &x)
+            )
+        ) (
+            result in ipv6_extensions_with(next_header)
+        ) -> Ipv6Extensions
     {
         result
     }
