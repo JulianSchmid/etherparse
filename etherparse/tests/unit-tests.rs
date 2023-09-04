@@ -8,7 +8,6 @@ mod packet_decoder;
 mod packet_filter;
 mod transport;
 use proptest::prelude::*;
-mod packet_compositions;
 
 #[test]
 fn test_debug_write() {
