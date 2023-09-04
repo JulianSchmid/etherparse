@@ -1,9 +1,4 @@
-extern crate etherparse;
 use etherparse::*;
-
-pub use etherparse_proptest_generators::*;
-
-mod packet_decoder;
 mod transport;
 
 #[test]
