@@ -38,6 +38,24 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn vlan_single_unknown()(
+        pcp in vlan_pcp_any(),
+        drop_eligible_indicator in any::<bool>(),
+        vlan_id in vlan_id_any(),
+        ether_type in ether_type_any().prop_filter("ether_type must be unknown",
+            |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+        -> SingleVlanHeader
+    {
+        SingleVlanHeader {
+            pcp,
+            drop_eligible_indicator,
+            vlan_id,
+            ether_type,
+        }
+    }
+}
+
+prop_compose! {
     pub fn ipv6_flow_label_any()
         (value in 0u32..=0b1111_11111111_11111111u32)
         -> Ipv6FlowLabel
@@ -227,6 +245,26 @@ prop_compose! {
                -> Ipv4Header
     {
         result
+    }
+}
+
+static IPV4_KNOWN_PROTOCOLS: &[IpNumber] = &[
+    ip_number::ICMP,
+    ip_number::UDP,
+    ip_number::TCP,
+    ip_number::AUTH,
+    ip_number::IPV6_ICMP,
+];
+
+prop_compose! {
+    pub fn ipv4_unknown()
+        (protocol in ip_number_any().prop_filter("protocol must be unknown",
+            |v| !IPV4_KNOWN_PROTOCOLS.iter().any(|&x| v == &x))
+        )
+        (header in ipv4_with(protocol)
+    ) -> Ipv4Header
+    {
+        header
     }
 }
 
