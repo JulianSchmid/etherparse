@@ -171,12 +171,12 @@ impl<'a> IntoIterator for Ipv6ExtensionsSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use alloc::{vec::Vec, borrow::ToOwned};
-    use proptest::prelude::*;
-    use crate::test_gens::*;
     use super::ipv6_exts_test_helpers::*;
+    use super::*;
     use crate::ip_number::*;
+    use crate::test_gens::*;
+    use alloc::{borrow::ToOwned, vec::Vec};
+    use proptest::prelude::*;
 
     proptest! {
         #[test]

@@ -225,16 +225,16 @@ impl Filter {
 #[cfg(test)]
 mod test {
     use super::*;
-    use proptest::*;
-    use alloc::vec::Vec;
     use crate::test_gens::*;
-    
+    use alloc::vec::Vec;
+    use proptest::*;
+
     #[test]
     fn default() {
         let value: ElementFilter<IpFilter> = Default::default();
         assert_eq!(ElementFilter::Any, value);
     }
-    
+
     ///The packet filter test generates all permutation of packet combinations & filter configurations
     ///and tests that all of them return the correct result.
     #[derive(Debug, Clone, Default)]
@@ -243,10 +243,10 @@ mod test {
         vlan: Option<VlanHeader>,
         ip: Option<IpHeader>,
         transport: Option<TransportHeader>,
-    
+
         filter: Filter,
     }
-    
+
     impl PacketFilterTest {
         ///Add all permutations of vlan data types to the test (none, single, double)
         ///and then proceeds calling "add_ip_data" with each permutations.
@@ -281,7 +281,7 @@ mod test {
                 t.add_ip_data(ipv4, ipv6, udp, tcp);
             }
         }
-    
+
         ///Add all permutations of ip data types to the test (none, v4, v6)
         ///and then proceeds calling "add_transport_data" with each permutations.
         fn add_ip_data(
@@ -303,7 +303,7 @@ mod test {
                 t.ip = Some(IpHeader::Version4(ipv4.0.clone(), Default::default()));
                 t.add_transport_data(udp, tcp);
             }
-    
+
             //ipv6
             {
                 let mut t = self.clone();
@@ -311,7 +311,7 @@ mod test {
                 t.add_transport_data(udp, tcp);
             }
         }
-    
+
         ///Add all permutations of transport data types to the test (none, udp, tcp)
         ///and then proceeds calling "add_link_filter" with each permutations.
         fn add_transport_data(&self, udp: &UdpHeader, tcp: &TcpHeader) {
@@ -334,7 +334,7 @@ mod test {
                 t.add_link_filter(true);
             }
         }
-    
+
         fn add_link_filter(&self, expected_result: bool) {
             //any
             {
@@ -342,7 +342,7 @@ mod test {
                 t.filter.link = ElementFilter::Any;
                 t.add_vlan_filter(expected_result);
             }
-    
+
             //none
             {
                 let mut t = self.clone();
@@ -373,7 +373,7 @@ mod test {
                 }
             }
         }
-    
+
         fn add_vlan_filter(&self, expected_result: bool) {
             //any
             {
@@ -381,7 +381,7 @@ mod test {
                 t.filter.vlan = ElementFilter::Any;
                 t.add_ip_filter(expected_result);
             }
-    
+
             //none
             {
                 let mut t = self.clone();
@@ -391,7 +391,7 @@ mod test {
                     _ => false,
                 });
             }
-    
+
             //single
             match &self.vlan {
                 Some(VlanHeader::Single(_)) => {
@@ -415,7 +415,7 @@ mod test {
                 }
             }
         }
-    
+
         fn add_ip_filter(&self, expected_result: bool) {
             //any
             {
@@ -423,7 +423,7 @@ mod test {
                 t.filter.ip = ElementFilter::Any;
                 t.add_transport_filter(expected_result);
             }
-    
+
             //none
             {
                 let mut t = self.clone();
@@ -433,7 +433,7 @@ mod test {
                     _ => false,
                 });
             }
-    
+
             //some
             match &self.ip {
                 Some(IpHeader::Version4(_, _)) => {
@@ -463,7 +463,7 @@ mod test {
                 }
             }
         }
-    
+
         fn add_transport_filter(&self, expected_result: bool) {
             //any
             {
@@ -471,7 +471,7 @@ mod test {
                 t.filter.transport = ElementFilter::Any;
                 t.run(expected_result);
             }
-    
+
             //none
             {
                 let mut t = self.clone();
@@ -510,7 +510,7 @@ mod test {
                 }
             }
         }
-    
+
         ///Gives self.filter the headers in self as input and assert the given parameter as a result.
         fn run(&self, expected_result: bool) {
             //generate a slice containing the headers
@@ -519,7 +519,7 @@ mod test {
             let mut ip_data = Vec::new();
             let mut transport_data = Vec::new();
             let payload = Vec::new();
-    
+
             let slice = SlicedPacket {
                 link: match &self.link {
                     Some(header) => {
@@ -550,19 +550,15 @@ mod test {
                         let mut header = header.clone();
                         header.set_payload_len(0).unwrap();
                         header.write(&mut ip_data).unwrap();
-                        Some(IpSlice::Ipv4(
-                            Ipv4Slice::from_slice(&ip_data).unwrap(),
-                        ))
+                        Some(IpSlice::Ipv4(Ipv4Slice::from_slice(&ip_data).unwrap()))
                     }
                     Some(IpHeader::Version6(header, _)) => {
                         let mut header = header.clone();
                         header.payload_length = 0;
                         header.write(&mut ip_data).unwrap();
-                        Some(IpSlice::Ipv6(
-                            Ipv6Slice::from_slice(&ip_data).unwrap(),
-                        ))
+                        Some(IpSlice::Ipv6(Ipv6Slice::from_slice(&ip_data).unwrap()))
                     }
-    
+
                     None => None,
                 },
                 transport: match &self.transport {
@@ -594,7 +590,7 @@ mod test {
                 },
                 payload: &payload[..],
             };
-    
+
             assert_eq!(expected_result, self.filter.applies_to_slice(&slice));
         }
     }
@@ -626,7 +622,7 @@ mod test {
                 &Default::default(),
             );
         }
-    
+
         //test with ethernet2 link
         {
             let mut test: PacketFilterTest = Default::default();
@@ -654,7 +650,7 @@ mod test {
             );
         }
     }
-    
+
     #[cfg(test)]
     mod link_filter {
         use super::*;
@@ -671,7 +667,7 @@ mod test {
                 let eth_slice = LinkSlice::Ethernet2(
                     Ethernet2HeaderSlice::from_slice(&eth_data[..]).unwrap()
                 );
-    
+
                 //test ethernet 2 filter with wildcards
                 {
                     let wildcard = Ethernet2 {
@@ -705,7 +701,7 @@ mod test {
             }
         }
     }
-    
+
     #[cfg(test)]
     mod vlan_filter {
         use super::*;
@@ -733,7 +729,7 @@ mod test {
                 let double_slice = VlanSlice::DoubleVlan(
                     DoubleVlanHeaderSlice::from_slice(&double_data[..]).unwrap()
                 );
-    
+
                 //test single vlan filter with wildcards
                 {
                     let wildcard = Single(None);
@@ -750,7 +746,7 @@ mod test {
                         vlan_inner.vlan_id.value().wrapping_add(1) & VlanId::MAX_U16
                     ).unwrap())
                 ).applies_to_slice(&single_slice));
-    
+
                 //test double vlan filter with wildcards
                 {
                     let wildcard = Double {
@@ -781,7 +777,7 @@ mod test {
             }
         }
     }
-    
+
     #[cfg(test)]
     mod ip_filter {
         use super::*;
@@ -801,7 +797,7 @@ mod test {
                     ipv6.payload_length = 0;
                     ipv6
                 };
-    
+
                 use self::IpFilter::*;
                 //create the slices the filters can be checked against
                 let ipv4_data = {
@@ -818,7 +814,7 @@ mod test {
                 let ipv6_slice = IpSlice::Ipv6(
                     Ipv6Slice::from_slice(&ipv6_data[..]).unwrap()
                 );
-    
+
                 //test ipv4 filter with wildcards
                 {
                     let wildcard = Ipv4 {
@@ -850,7 +846,7 @@ mod test {
                         value
                     })
                 }.applies_to_slice(&ipv4_slice));
-    
+
                 //test ipv6 filter with wildcards
                 {
                     let wildcard = Ipv6 {
@@ -883,7 +879,7 @@ mod test {
             }
         }
     }
-    
+
     #[cfg(test)]
     mod transport_filter {
         use super::*;
@@ -908,7 +904,7 @@ mod test {
                 let tcp_slice = TransportSlice::Tcp(
                     TcpHeaderSlice::from_slice(&tcp_data[..]).unwrap()
                 );
-    
+
                 //test udp filter with wildcards
                 {
                     let wildcard = Udp {
@@ -932,7 +928,7 @@ mod test {
                     source_port: Some(udp.source_port),
                     destination_port: Some(!udp.destination_port) //inverted port
                 }.applies_to_slice(&udp_slice));
-    
+
                 //test tcp filter with wildcards
                 {
                     let wildcard = Tcp {
@@ -959,7 +955,7 @@ mod test {
             }
         }
     }
-    
+
     #[test]
     fn type_derives() {
         use std::println;
@@ -979,5 +975,4 @@ mod test {
             }
         );
     }
-    
 }

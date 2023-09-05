@@ -164,27 +164,28 @@ impl<'a> Ipv4Slice<'a> {
 
         // validate total_len at least contains the header
         let header_total_len: usize = header.total_len().into();
-        let (header_payload, len_source) = if header_total_len >= header.slice().len() && header_total_len <= slice.len() {
-            (
-                unsafe {
-                    core::slice::from_raw_parts(
-                        slice.as_ptr().add(header.slice().len()),
-                        header_total_len - header.slice().len(),
-                    )
-                },
-                LenSource::Ipv4HeaderTotalLen
-            )
-        } else {
-            (
-                unsafe {
-                    core::slice::from_raw_parts(
-                        slice.as_ptr().add(header.slice().len()),
-                        slice.len() - header.slice().len(),
-                    )
-                },
-                LenSource::Slice
-            )
-        };
+        let (header_payload, len_source) =
+            if header_total_len >= header.slice().len() && header_total_len <= slice.len() {
+                (
+                    unsafe {
+                        core::slice::from_raw_parts(
+                            slice.as_ptr().add(header.slice().len()),
+                            header_total_len - header.slice().len(),
+                        )
+                    },
+                    LenSource::Ipv4HeaderTotalLen,
+                )
+            } else {
+                (
+                    unsafe {
+                        core::slice::from_raw_parts(
+                            slice.as_ptr().add(header.slice().len()),
+                            slice.len() - header.slice().len(),
+                        )
+                    },
+                    LenSource::Slice,
+                )
+            };
 
         // decode the authentification header if needed
         let fragmented = header.is_fragmenting_payload();
@@ -276,7 +277,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{ip_number, test_gens::*, Ipv4Header, IpHeader};
+    use crate::{ip_number, test_gens::*, IpHeader, Ipv4Header};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 

@@ -76,12 +76,12 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use proptest::prelude::*;
-    use crate::test_gens::*;
-    use crate::ip_number::*;
-    use alloc::borrow::ToOwned;
     use super::ipv6_exts_test_helpers::*;
+    use super::*;
+    use crate::ip_number::*;
+    use crate::test_gens::*;
+    use alloc::borrow::ToOwned;
+    use proptest::prelude::*;
 
     #[test]
     fn into_iter() {

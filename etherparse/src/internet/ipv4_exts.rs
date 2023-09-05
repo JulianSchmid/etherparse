@@ -143,7 +143,6 @@ impl Ipv4Extensions {
     }
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;

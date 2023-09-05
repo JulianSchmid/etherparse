@@ -1015,7 +1015,10 @@ pub mod ipv6_exts_test_helpers {
 
         /// Checks the if the extensions match the expected values based
         /// on this test payload.
-        pub fn assert_extensions(&self, exts: &Ipv6Extensions) -> (usize, Option<IpNumber>, IpNumber) {
+        pub fn assert_extensions(
+            &self,
+            exts: &Ipv6Extensions,
+        ) -> (usize, Option<IpNumber>, IpNumber) {
             struct ReadState {
                 hop_by_hop: bool,
                 dest_opt: bool,
@@ -1218,7 +1221,8 @@ pub mod ipv6_exts_test_helpers {
                                 .unwrap()
                                 .next_header = new_header;
                         } else {
-                            self.data.destination_options.as_mut().unwrap().next_header = new_header;
+                            self.data.destination_options.as_mut().unwrap().next_header =
+                                new_header;
                         }
                     }
                     IPV6_ROUTE => {
@@ -1331,8 +1335,9 @@ pub mod ipv6_exts_test_helpers {
                             len = A::MAX_ICV_LEN;
                         }
                         let raw_icv: [u8; A::MAX_ICV_LEN] = [0; A::MAX_ICV_LEN];
-                        self.data.auth =
-                            Some(IpAuthHeader::new(next_header, 123, 234, &raw_icv[..len]).unwrap());
+                        self.data.auth = Some(
+                            IpAuthHeader::new(next_header, 123, 234, &raw_icv[..len]).unwrap(),
+                        );
                         true
                     } else {
                         false
@@ -1346,12 +1351,12 @@ pub mod ipv6_exts_test_helpers {
 
 #[cfg(test)]
 mod test {
-    use super::*;
-    use proptest::prelude::*;
-    use crate::test_gens::*;
-    use crate::ip_number::*;
-    use alloc::{vec::Vec, borrow::ToOwned};
     use super::ipv6_exts_test_helpers::*;
+    use super::*;
+    use crate::ip_number::*;
+    use crate::test_gens::*;
+    use alloc::{borrow::ToOwned, vec::Vec};
+    use proptest::prelude::*;
 
     proptest! {
         #[test]

@@ -1,8 +1,8 @@
 use super::*;
 
+use crate::test_gens::*;
 use alloc::{vec, vec::Vec};
 use proptest::prelude::*;
-use crate::test_gens::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ComponentTest {

@@ -36,7 +36,7 @@ mod test {
 
     #[test]
     fn debug() {
-        use alloc::{vec::Vec, format};
+        use alloc::{format, vec::Vec};
         use Ipv6ExtensionSlice::*;
         {
             let header = Ipv6RawExtHeader::new_raw(UDP, &[1, 2, 3, 4, 5, 6]).unwrap();

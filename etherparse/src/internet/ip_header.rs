@@ -649,8 +649,8 @@ impl IpHeader {
                 })
             };
 
-        let (exts, next_protocol, rest) =
-            Ipv4Extensions::from_slice(header.protocol, rest).map_err(|err| {
+        let (exts, next_protocol, rest) = Ipv4Extensions::from_slice(header.protocol, rest)
+            .map_err(|err| {
                 use err::ip_auth::HeaderSliceError as I;
                 match err {
                     I::Len(mut err) => {
@@ -779,7 +779,7 @@ impl IpHeader {
     /// is set to [`LenSource::Ipv6HeaderPayloadLen`].
     ///
     /// # When is the slice length used as a fallback?
-    /// 
+    ///
     /// The slice length is used as a fallback/substitude if the `payload_length`
     /// field in the IPv6 header is
     ///
@@ -801,16 +801,17 @@ impl IpHeader {
 
         // restrict slice by the length specified in the header
         let payload_len: usize = header.payload_length.into();
-        let (header_payload, len_source) = if (payload_len == 0 && header_rest.len() > 0) || payload_len > header_rest.len() {
-            (header_rest, LenSource::Slice)
-        } else {
-            unsafe {
-                (
-                    core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
-                    LenSource::Ipv6HeaderPayloadLen,
-                )
-            }
-        };
+        let (header_payload, len_source) =
+            if (payload_len == 0 && header_rest.len() > 0) || payload_len > header_rest.len() {
+                (header_rest, LenSource::Slice)
+            } else {
+                unsafe {
+                    (
+                        core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
+                        LenSource::Ipv6HeaderPayloadLen,
+                    )
+                }
+            };
 
         // read ipv6 extensions headers
         let (exts, next_header, exts_rest) =
@@ -1691,7 +1692,6 @@ mod test {
             }
         }
     }
-
 
     proptest! {
         #[test]

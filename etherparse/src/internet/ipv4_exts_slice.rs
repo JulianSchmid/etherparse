@@ -51,9 +51,9 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use proptest::prelude::*;
     use crate::test_gens::*;
     use alloc::vec::Vec;
+    use proptest::prelude::*;
 
     proptest! {
         #[test]
@@ -89,7 +89,6 @@ mod test {
             );
         }
     }
-
 
     proptest! {
         #[test]

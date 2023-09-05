@@ -905,7 +905,7 @@ pub mod u64_16bit_word {
                 data in proptest::collection::vec(any::<u8>(), 0..0xfffusize)
             ) {
                 use crate::checksum::*;
-        
+
                 let u32_oc = u32_16bit_word::ones_complement(
                     u32_16bit_word::add_slice(0, &data)
                 );
@@ -913,7 +913,7 @@ pub mod u64_16bit_word {
                     u64_16bit_word::add_slice(0, &data)
                 );
                 assert_eq!(u32_oc, u64_oc);
-        
+
                 let struct_oc = Sum16BitWords::new()
                     .add_slice(&data)
                     .ones_complement();
