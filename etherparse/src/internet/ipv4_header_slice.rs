@@ -12,6 +12,20 @@ pub struct Ipv4HeaderSlice<'a> {
 
 impl<'a> Ipv4HeaderSlice<'a> {
     /// Creates a slice containing an ipv4 header (including header options).
+    ///
+    /// If you also want to have the payload & ip extension headers correctly
+    /// seperated you can use
+    ///
+    /// * [`crate::Ipv4Slice::from_slice`] (just identifies slice ranges)
+    /// * [`crate::IpHeader::ipv4_from_slice`] (unpacks all fields)
+    ///
+    /// or
+    ///
+    /// * [`crate::IpHeader::ipv4_from_slice_lax`]
+    /// * [`crate::Ipv4Slice::from_slice_lax`]
+    ///
+    /// for a laxer version which falls back to slice length only when the total_length
+    /// field in the header is inconsistent.
     pub fn from_slice(slice: &'a [u8]) -> Result<Ipv4HeaderSlice<'a>, err::ipv4::HeaderSliceError> {
         use err::ipv4::HeaderError::*;
         use err::ipv4::HeaderSliceError::*;

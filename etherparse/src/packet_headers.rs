@@ -414,9 +414,9 @@ mod test {
         packet::{EthSliceError, IpSliceError},
         LenError,
     };
+    use crate::test_gens::*;
     use crate::test_packet::TestPacket;
     use proptest::prelude::*;
-    use crate::test_gens::*;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
         ether_type::VLAN_TAGGED_FRAME,

@@ -346,7 +346,6 @@ prop_compose! {
     }
 }
 
-
 static IPV6_KNOWN_NEXT_HEADERS: &[IpNumber] = &[
     ip_number::ICMP,
     ip_number::UDP,

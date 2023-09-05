@@ -1795,10 +1795,10 @@ mod white_box_tests {
 #[cfg(test)]
 mod test {
     use super::*;
-    use alloc::{vec, vec::Vec};
-    use std::io::Read;
-    use proptest::prelude::*;
     use crate::test_gens::*;
+    use alloc::{vec, vec::Vec};
+    use proptest::prelude::*;
+    use std::io::Read;
 
     #[test]
     fn eth_ipv4_udp() {
@@ -1848,7 +1848,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2059,7 +2060,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2119,7 +2121,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv6_checksum(22, 23, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv6_checksum(22, 23, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2173,7 +2176,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2242,7 +2246,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2314,7 +2319,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv4_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv4_checksum(48, 49, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2411,7 +2417,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2488,7 +2495,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2586,7 +2594,8 @@ mod test {
 
         //udp header
         let udp_actual = UdpHeader::read(&mut cursor).unwrap();
-        let udp_expected = UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv6_checksum(48, 49, &ip_expected, &in_payload).unwrap();
         assert_eq!(udp_actual, udp_expected);
 
         //payload
@@ -2867,7 +2876,11 @@ mod test {
 
         //ipv4 single vlan
         assert_eq!(
-            Ethernet2Header::LEN + SingleVlanHeader::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 123,
+            Ethernet2Header::LEN
+                + SingleVlanHeader::LEN
+                + Ipv4Header::MIN_LEN
+                + UdpHeader::LEN
+                + 123,
             PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
                 .single_vlan(0x123.try_into().unwrap())
                 .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
@@ -3385,5 +3398,4 @@ mod test {
             }
         }
     }
-
 }

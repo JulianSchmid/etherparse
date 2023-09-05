@@ -18,20 +18,24 @@ impl Ipv6RoutingExtensions {
     /// Return the length of the headers in bytes.
     pub fn header_len(&self) -> usize {
         self.routing.header_len()
-        + self.final_destination_options.as_ref().map(|h| h.header_len()).unwrap_or(0)
+            + self
+                .final_destination_options
+                .as_ref()
+                .map(|h| h.header_len())
+                .unwrap_or(0)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use proptest::prelude::*;
     use crate::test_gens::ipv6_raw_ext_any;
+    use proptest::prelude::*;
 
     #[test]
     fn debug() {
         use alloc::format;
-        
+
         let a: Ipv6RoutingExtensions = Ipv6RoutingExtensions {
             routing: Ipv6RawExtHeader::new_raw(0.into(), &[0; 6]).unwrap(),
             final_destination_options: None,
@@ -54,7 +58,7 @@ mod tests {
         assert_eq!(a, a.clone());
     }
 
-    proptest!{
+    proptest! {
         #[test]
         fn header_len(
             routing in ipv6_raw_ext_any(),
