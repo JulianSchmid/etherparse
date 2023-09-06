@@ -10,8 +10,16 @@ pub struct Ipv6Slice<'a> {
 }
 
 impl<'a> Ipv6Slice<'a> {
-    /// Decode IPv6 header, extension headers and determine the payload
-    /// length based on the `payload_length` field in the IPv6 header.
+    /// Seperates and validates IPv6 headers (including extension headers)
+    /// in the given slice and determine the sub-slice containing the payload
+    /// of the IPv6 packet (based on the payload length value in the header).
+    ///
+    /// Note that his function returns an [`crate::err::LenError`] if the given slice
+    /// contains less data then the `payload_len` field in the IPv6 header indicates
+    /// should be present.
+    ///
+    /// If you want to ignore these kind of length errors based on the length
+    /// fields in the IP headers use [`Ipv6Slice::from_slice_lax`] instead.
     pub fn from_slice(slice: &'a [u8]) -> Result<Ipv6Slice<'a>, SliceError> {
         // try reading the header
         let header = Ipv6HeaderSlice::from_slice(slice).map_err(|err| {
