@@ -583,7 +583,7 @@ mod test {
                 for bad_ihl in 0..5 {
                     bad_ihl_buffer[0] = (bad_ihl_buffer[0] & 0xf0) | bad_ihl;
                     assert_eq!(
-                        IpHeader::ipv4_from_slice_lax(&bad_ihl_buffer),
+                        Ipv4Slice::from_slice_lax(&bad_ihl_buffer),
                         Err(Header(HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
                     );
                 }
@@ -592,7 +592,7 @@ mod test {
             // ihl len error
             for short_ihl in 5..usize::from(v4.ihl()) {
                 assert_eq!(
-                    IpHeader::ipv4_from_slice_lax(&buffer[..4*short_ihl]),
+                    Ipv4Slice::from_slice_lax(&buffer[..4*short_ihl]),
                     Err(Len(err::LenError {
                         required_len: usize::from(v4.ihl())*4,
                         len: 4*short_ihl,
@@ -605,11 +605,11 @@ mod test {
 
             // total_len bigger then slice len (fallback to slice len)
             for payload_len in 0..payload.len(){
-                let actual = IpHeader::ipv4_from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
-                assert_eq!(&actual.0, &header);
+                let actual = Ipv4Slice::from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
+                assert_eq!(&actual.header().to_header(), header.v4().unwrap().0);
                 assert_eq!(
-                    actual.1,
-                    IpPayload{
+                    actual.payload(),
+                    &IpPayload{
                         ip_number: header.next_header().unwrap(),
                         fragmented: header.is_fragmenting_payload(),
                         len_source: LenSource::Slice,
@@ -620,7 +620,7 @@ mod test {
 
             // len error ipv4 extensions
             if v4_exts.header_len() > 0 {
-                IpHeader::ipv4_from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
+                Ipv4Slice::from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
             }
 
             // content error ipv4 extensions
@@ -633,7 +633,7 @@ mod test {
                 // trigger a content error)
                 errored_buffer[v4.header_len() + 1] = 0;
                 assert_eq!(
-                    IpHeader::ipv4_from_slice_lax(&errored_buffer),
+                    Ipv4Slice::from_slice_lax(&errored_buffer),
                     Err(Exts(ZeroPayloadLen))
                 );
             }
@@ -648,7 +648,7 @@ mod test {
                 buffer[2] = bad_total_len_be[0];
                 buffer[3] = bad_total_len_be[1];
 
-                let actual = IpHeader::ipv4_from_slice_lax(&buffer[..]).unwrap();
+                let actual = Ipv4Slice::from_slice_lax(&buffer[..]).unwrap();
 
                 let (v4_header, v4_exts) = header.v4().unwrap();
                 let expected_headers = IpHeader::Version4(
@@ -659,10 +659,10 @@ mod test {
                     },
                     v4_exts.clone()
                 );
-                assert_eq!(&expected_headers, &actual.0);
+                assert_eq!(expected_headers.v4().unwrap().0, &actual.header().to_header());
                 assert_eq!(
-                    actual.1,
-                    IpPayload{
+                    actual.payload(),
+                    &IpPayload{
                         ip_number: header.next_header().unwrap(),
                         fragmented: header.is_fragmenting_payload(),
                         len_source: LenSource::Slice,
