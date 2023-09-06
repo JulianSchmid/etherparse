@@ -577,6 +577,19 @@ impl<'a> IpSlice<'a> {
             }
         }
     }
+
+}
+
+impl<'a> From<Ipv4Slice<'a>> for IpSlice<'a> {
+    fn from(value: Ipv4Slice<'a>) -> Self {
+        IpSlice::Ipv4(value)
+    }
+}
+
+impl<'a> From<Ipv6Slice<'a>> for IpSlice<'a> {
+    fn from(value: Ipv6Slice<'a>) -> Self {
+        IpSlice::Ipv6(value)
+    }
 }
 
 #[cfg(test)]
@@ -1311,6 +1324,40 @@ mod test {
                     );
                 }
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_ipv4_slice(
+            ipv4_header in ipv4_unknown()
+        ) {
+            let mut header = ipv4_header.clone();
+            header.total_len = (header.header_len() + 4) as u16;
+
+            let mut buffer = Vec::with_capacity(header.total_len.into());
+            buffer.extend_from_slice(&header.to_bytes()[..]);
+            buffer.extend_from_slice(&[1,2,3,4]);
+            let s = Ipv4Slice::from_slice(&buffer).unwrap();
+            let actual: IpSlice = s.clone().into();
+            assert_eq!(IpSlice::Ipv4(s), actual);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_ipv6_slice(
+            ipv6_header in ipv6_unknown()
+        ) {
+            let mut header = ipv6_header.clone();
+            header.payload_length = 4;
+
+            let mut buffer = Vec::with_capacity(header.header_len() + 4);
+            buffer.extend_from_slice(&header.to_bytes()[..]);
+            buffer.extend_from_slice(&[1,2,3,4]);
+            let s = Ipv6Slice::from_slice(&buffer).unwrap();
+            let actual: IpSlice = s.clone().into();
+            assert_eq!(IpSlice::Ipv6(s), actual);
         }
     }
 }
