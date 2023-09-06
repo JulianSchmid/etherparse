@@ -374,25 +374,25 @@ impl Ipv4Header {
     }
 
     /// Read an Ipv4Header from a slice and return the header & unused parts
-    /// of the slice (requires crate feature `std`).
+    /// of the slice.
     ///
-    /// Note that this function DOES NOT seperate the payload based on the length
-    /// payload_length present in the IPv6 header. It just returns the left over slice
-    /// after the header.
+    /// Note that this function DOES NOT seperate the payload based on the
+    /// `total_length` field present in the IPv4 header. It just returns the
+    /// left over slice after the header.
     ///
     /// If you want to have correctly seperated payload including the IP extension
     /// headers use
     ///
-    /// * [`crate::IpHeader::ipv6_from_slice`] (decodes all the fields of the IP headers)
-    /// * [`crate::Ipv6Slice::from_slice`] (just identifies the ranges in the slice where
+    /// * [`crate::IpHeader::ipv4_from_slice`] (decodes all the fields of the IP headers)
+    /// * [`crate::Ipv4Slice::from_slice`] (just identifies the ranges in the slice where
     ///   the headers and payload are present)
     ///
     /// or
     ///
-    /// * [`crate::IpHeader::ipv6_from_slice_lax`]
-    /// * [`crate::Ipv6Slice::from_slice_lax`]
+    /// * [`crate::IpHeader::ipv4_from_slice_lax`]
+    /// * [`crate::Ipv4Slice::from_slice_lax`]
     ///
-    /// for a laxer version which falls back to slice length when the payload_length
+    /// for a laxer version which falls back to slice length when the `total_length`
     /// contains an inconsistent value.
     pub fn from_slice(slice: &[u8]) -> Result<(Ipv4Header, &[u8]), err::ipv4::HeaderSliceError> {
         let header = Ipv4HeaderSlice::from_slice(slice)?.to_header();

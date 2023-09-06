@@ -37,6 +37,25 @@ impl Ipv6Header {
     }
 
     /// Read an Ipv6Header from a slice and return the header & unused parts of the slice.
+    ///
+    /// Note that this function DOES NOT seperate the payload based on the length
+    /// payload_length present in the IPv6 header. It just returns the left over slice
+    /// after the header.
+    ///
+    /// If you want to have correctly seperated payload including the IP extension
+    /// headers use
+    ///
+    /// * [`crate::IpHeader::ipv6_from_slice`] (decodes all the fields of the IP headers)
+    /// * [`crate::Ipv6Slice::from_slice`] (just identifies the ranges in the slice where
+    ///   the headers and payload are present)
+    ///
+    /// or
+    ///
+    /// * [`crate::IpHeader::ipv6_from_slice_lax`]
+    /// * [`crate::Ipv6Slice::from_slice_lax`]
+    ///
+    /// for a laxer version which falls back to slice length when the `payload_length`
+    /// contains an inconsistent value.
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(Ipv6Header, &[u8]), err::ipv6::HeaderSliceError> {
         Ok((
