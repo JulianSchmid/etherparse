@@ -218,6 +218,61 @@ impl<'a> SlicedPacket<'a> {
         CursorSlice::new(data).slice_ip()
     }
 
+    /// Seperates a network packet slice into different slices containing
+    /// the headers from the ip header downwards with lax length checks.
+    ///
+    /// This function allows the length in the IP header to be inconsistent
+    /// (e.g. data is missing from the slice) and falls back to the length of
+    /// slice. See [`IpSlice::from_ip_slice_lax`] for a detailed description
+    /// of when the slice length is used as a fallback.
+    ///
+    /// The result is returned as a [`SlicedPacket`] struct. This function
+    /// assumes the given data starts with an IPv4 or IPv6 header.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{SlicedPacket, PacketBuilder, IpSlice, err::LenSource};
+    /// # let builder = PacketBuilder::
+    /// #    ipv4([192,168,1,1], //source ip
+    /// #         [192,168,1,2], //desitionation ip
+    /// #         20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// #    //payload of the udp packet
+    /// #    let payload = [1,2,3,4,5,6,7,8];
+    /// #    //get some memory to store the serialized data
+    /// #    let mut packet = Vec::<u8>::with_capacity(
+    /// #                            builder.size(payload.len()));
+    /// #    builder.write(&mut packet, &payload).unwrap();
+    /// match SlicedPacket::from_ip_lax(&packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         // link & vlan fields are empty when parsing from ip downwards
+    ///         assert_eq!(None, value.link);
+    ///         assert_eq!(None, value.vlan);
+    ///
+    ///         // ip & transport (udp or tcp)
+    ///         println!("ip: {:?}", value.ip);
+    ///         if let Some(ip_payload) = value.ip.as_ref().map(|ip| ip.payload()) {
+    ///             // the ip payload len_source field can be used to check
+    ///             // if the slice length was used as a fallback value
+    ///             if ip_payload.len_source == LenSource::Slice {
+    ///                 println!("  Used slice length as fallback to identify the IP payload");
+    ///             } else {
+    ///                 println!("  IP payload could correctly be identfied via the length field in the header");
+    ///             }
+    ///         }
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
+    pub fn from_ip_lax(data: &'a [u8]) -> Result<SlicedPacket, err::packet::IpSliceError> {
+        CursorSlice::new(data).slice_ip_lax()
+    }
+
     /// If the slice in the `payload` field contains an ethernet payload
     /// this method returns the ether type number describing the payload type.
     ///
@@ -359,6 +414,59 @@ impl<'a> CursorSlice<'a> {
 
         // slice header, extension headers and identify payload range
         let ip = IpSlice::from_ip_slice(self.slice).map_err(|err| {
+            use err::ip::SliceError as I;
+            match err {
+                I::Len(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    Len(err)
+                }
+                I::IpHeader(err) => Ip(err),
+            }
+        })?;
+
+        // safe data needed
+        let payload = ip.payload().clone();
+
+        // set the new data
+        self.offset += unsafe {
+            // SAFETY: The payload is a subslice of self.slice.
+            // therefor calculating the offset from it is safe and
+            // the result should always be a positive number.
+            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
+        };
+        self.len_source = payload.len_source;
+        self.slice = payload.payload;
+        self.result.ip = Some(ip);
+
+        // continue to the lower layers
+        if payload.fragmented {
+            Ok(self.slice_payload())
+        } else {
+            match payload.ip_number {
+                ip_number::ICMP => self.slice_icmp4().map_err(Len),
+                ip_number::UDP => self.slice_udp().map_err(Len),
+                ip_number::TCP => self.slice_tcp().map_err(|err| {
+                    use err::tcp::HeaderSliceError as I;
+                    match err {
+                        I::Len(err) => Len(err),
+                        I::Content(err) => Tcp(err),
+                    }
+                }),
+                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
+                value => {
+                    use TransportSlice::*;
+                    self.result.transport = Some(Unknown(value));
+                    Ok(self.slice_payload())
+                }
+            }
+        }
+    }
+
+    pub fn slice_ip_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::IpSliceError> {
+        use err::packet::IpSliceError::*;
+
+        // slice header, extension headers and identify payload range
+        let ip = IpSlice::from_ip_slice_lax(self.slice).map_err(|err| {
             use err::ip::SliceError as I;
             match err {
                 I::Len(mut err) => {
