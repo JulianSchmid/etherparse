@@ -178,7 +178,80 @@ impl<'a> SlicedPacket<'a> {
         }
     }
 
-    /// Separates a network packet slice into different slices containing the headers from the ip header downwards.
+    /// Separates a network packet slice into different slices containing the headers using
+    /// the given `ether_type` number to identify the first header.
+    ///
+    /// The result is returned as a [`SlicedPacket`] struct. Currently supported
+    /// ether type numbers are:
+    ///
+    /// * `ether_type::IPV4`
+    /// * `ether_type::IPV6`
+    /// * `ether_type::VLAN_TAGGED_FRAME`
+    /// * `ether_type::PROVIDER_BRIDGING`
+    /// * `ether_type::VLAN_DOUBLE_TAGGED_FRAME`
+    ///
+    /// If an unsupported ether type is given the given slice will be set as payload
+    /// and all other fields will be set to `None`.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{Ethernet2Header, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //desitionation ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut complete_packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut complete_packet, &payload).unwrap();
+    /// #
+    /// # // skip ethernet 2 header so we can parse from there downwards
+    /// # let packet = &complete_packet[Ethernet2Header::LEN..];
+    /// #
+    /// use etherparse::{ether_type, SlicedPacket};
+    ///
+    /// match SlicedPacket::from_ether_type(ether_type::IPV4, packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("ip: {:?}", value.ip);
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    /// ```
+    pub fn from_ether_type_lax(
+        ether_type: EtherType,
+        data: &'a [u8],
+    ) -> Result<SlicedPacket, err::packet::EthSliceError> {
+        use ether_type::*;
+        match ether_type {
+            IPV4 => CursorSlice::new(data).slice_ipv4_lax(),
+            IPV6 => CursorSlice::new(data).slice_ipv6_lax(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                CursorSlice::new(data).slice_vlan_lax()
+            }
+            _ => Ok(SlicedPacket {
+                link: None,
+                vlan: None,
+                ip: None,
+                transport: None,
+                payload: data,
+            }),
+        }
+    }
+
+    /// Seperates a network packet slice into different slices containing the headers from the ip header downwards.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
     /// with an IPv4 or IPv6 header.
@@ -361,6 +434,30 @@ impl<'a> CursorSlice<'a> {
         }
     }
 
+    pub fn slice_ethernet2_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
+        use err::packet::EthSliceError::*;
+        use ether_type::*;
+        use LinkSlice::*;
+
+        let result = Ethernet2HeaderSlice::from_slice(self.slice)
+            .map_err(|err| Len(err.add_offset(self.offset)))?;
+
+        //cache the ether_type for later
+        let ether_type = result.ether_type();
+
+        //set the new data
+        self.move_by_slice(result.slice());
+        self.result.link = Some(Ethernet2(result));
+
+        //continue parsing (if required)
+        match ether_type {
+            IPV4 => self.slice_ipv4_lax(),
+            IPV6 => self.slice_ipv6_lax(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan_lax(),
+            _ => Ok(self.slice_payload()),
+        }
+    }
+
     pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
         use err::packet::EthSliceError::*;
         use ether_type::*;
@@ -392,6 +489,55 @@ impl<'a> CursorSlice<'a> {
                 match inner_ether_type {
                     IPV4 => self.slice_ipv4(),
                     IPV6 => self.slice_ipv6(),
+                    _ => Ok(self.slice_payload()),
+                }
+            }
+            value => {
+                //set the vlan header and continue the normal parsing
+                self.move_by_slice(outer.slice());
+                self.result.vlan = Some(SingleVlan(outer));
+
+                match value {
+                    IPV4 => self.slice_ipv4(),
+                    IPV6 => self.slice_ipv6(),
+                    _ => Ok(self.slice_payload()),
+                }
+            }
+        }
+    }
+
+
+    pub fn slice_vlan_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
+        use err::packet::EthSliceError::*;
+        use ether_type::*;
+        use VlanSlice::*;
+
+        let outer = SingleVlanHeaderSlice::from_slice(self.slice)
+            .map_err(|err| Len(err.add_offset(self.offset)))?;
+
+        //check if it is a double vlan header
+        match outer.ether_type() {
+            //in case of a double vlan header continue with the inner
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                self.move_by_slice(outer.slice());
+                let inner = SingleVlanHeaderSlice::from_slice(self.slice)
+                    .map_err(|err| Len(err.add_offset(self.offset)))?;
+                self.move_by_slice(inner.slice());
+
+                let inner_ether_type = inner.ether_type();
+                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
+                    // SAFETY: Safe as the lenght of the slice was previously verified.
+                    slice: unsafe {
+                        core::slice::from_raw_parts(
+                            outer.slice().as_ptr(),
+                            outer.slice().len() + inner.slice().len(),
+                        )
+                    },
+                }));
+
+                match inner_ether_type {
+                    IPV4 => self.slice_ipv4_lax(),
+                    IPV6 => self.slice_ipv6_lax(),
                     _ => Ok(self.slice_payload()),
                 }
             }
@@ -568,10 +714,122 @@ impl<'a> CursorSlice<'a> {
         }
     }
 
+    pub fn slice_ipv4_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
+        use err::packet::EthSliceError::*;
+
+        // slice ipv4 header & extension headers
+        let ipv4 = Ipv4Slice::from_slice_lax(self.slice).map_err(|err| {
+            use err::ipv4::SliceError as I;
+            match err {
+                I::Len(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    Len(err)
+                }
+                I::Header(err) => Ipv4(err),
+                I::Exts(err) => Ipv4Exts(err),
+            }
+        })?;
+
+        // safe data needed in following steps
+        let payload = ipv4.payload().clone();
+
+        // set the new data
+        self.offset += unsafe {
+            // SAFETY: The payload is a subslice of self.slice.
+            // therefor calculating the offset from it is safe and
+            // the result should always be a positive number.
+            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
+        };
+        self.len_source = payload.len_source;
+        self.slice = payload.payload;
+        self.result.ip = Some(IpSlice::Ipv4(ipv4));
+
+        if payload.fragmented {
+            Ok(self.slice_payload())
+        } else {
+            match payload.ip_number {
+                ip_number::UDP => self.slice_udp().map_err(Len),
+                ip_number::TCP => self.slice_tcp().map_err(|err| {
+                    use err::tcp::HeaderSliceError as I;
+                    match err {
+                        I::Len(err) => Len(err),
+                        I::Content(err) => Tcp(err),
+                    }
+                }),
+                ip_number::ICMP => self.slice_icmp4().map_err(Len),
+                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
+                value => {
+                    use TransportSlice::*;
+                    self.result.transport = Some(Unknown(value));
+                    Ok(self.slice_payload())
+                }
+            }
+        }
+    }
+
     pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
         use err::packet::EthSliceError::*;
 
         let ipv6 = Ipv6Slice::from_slice(self.slice).map_err(|err| {
+            use err::ipv6::SliceError as I;
+            match err {
+                I::Len(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    Len(err)
+                }
+                I::Header(err) => Ipv6(err),
+                I::Exts(err) => Ipv6Exts(err),
+            }
+        })?;
+
+        // safe data needed in following steps
+        let payload_ip_number = ipv6.payload().ip_number;
+        let fragmented = ipv6.payload().fragmented;
+
+        // set the new data
+        self.offset += unsafe {
+            // SAFETY: The payload is a subslice of self.slice.
+            // therefor calculating the offset from it is safe and
+            // the result should always be a positive number.
+            ipv6.payload()
+                .payload
+                .as_ptr()
+                .offset_from(self.slice.as_ptr()) as usize
+        };
+        self.len_source = ipv6.payload().len_source;
+        self.slice = ipv6.payload().payload;
+        self.result.ip = Some(IpSlice::Ipv6(ipv6));
+
+        // only try to decode the transport layer if the payload
+        // is not fragmented
+        if fragmented {
+            Ok(self.slice_payload())
+        } else {
+            //parse the data bellow
+            match payload_ip_number {
+                ip_number::ICMP => self.slice_icmp4().map_err(Len),
+                ip_number::UDP => self.slice_udp().map_err(Len),
+                ip_number::TCP => self.slice_tcp().map_err(|err| {
+                    use err::tcp::HeaderSliceError as I;
+                    match err {
+                        I::Len(err) => Len(err),
+                        I::Content(err) => Tcp(err),
+                    }
+                }),
+                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
+                value => {
+                    use TransportSlice::*;
+                    self.result.transport = Some(Unknown(value));
+                    Ok(self.slice_payload())
+                }
+            }
+        }
+    }
+
+    pub fn slice_ipv6_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
+        use err::packet::EthSliceError::*;
+
+        let ipv6 = Ipv6Slice::from_slice_lax(self.slice).map_err(|err| {
             use err::ipv6::SliceError as I;
             match err {
                 I::Len(mut err) => {
