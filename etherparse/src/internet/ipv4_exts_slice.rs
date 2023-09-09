@@ -37,7 +37,7 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     /// Collects all ipv4 extension headers in a slice until an error
     /// is encountered or a "non IP extension header" is found and
     /// returns the successfully parsed parts (+ the unparsed slice
-    /// it's `IpNumber` and the error if one occured).
+    /// it's [`IpNumber`] and the error if one occured).
     ///
     /// The returned values are
     ///
@@ -110,7 +110,6 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     ///     layer_start_offset: 0,
     /// })));
     /// ```
-    ///
     pub fn from_slice_lax(
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
