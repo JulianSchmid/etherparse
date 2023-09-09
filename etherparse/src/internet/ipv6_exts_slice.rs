@@ -119,6 +119,130 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         ))
     }
 
+    /// Collects all ipv6 extension headers in a slice until an error
+    /// is encountered or a "non IP header" is found and returns the successfully
+    /// parsed parts (+ the unparsed slice it's `IpNumber` and the error if
+    /// one occured).
+    ///
+    /// The returned values are a tuple of
+    /// 
+    /// * An `Ipv6ExtensionsSlice` containing the successfully parsed IPv6 extension headers
+    /// * The `IpNumber` indicating the payload after the last successfully parsed header
+    /// 
+    pub fn from_slice_lax(
+        start_ip_number: IpNumber,
+        start_slice: &'a [u8],
+    ) -> (Ipv6ExtensionsSlice, IpNumber, Option<err::ipv6_exts::HeaderSliceError>, &'a [u8]) {
+        let mut rest = start_slice;
+        let mut next_header = start_ip_number;
+        let mut error = None;
+        let mut fragmented = false;
+
+        use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+        use ip_number::*;
+
+        // the hop by hop header is required to occur directly after the ipv6 header
+        if IPV6_HOP_BY_HOP == next_header {
+            match Ipv6RawExtHeaderSlice::from_slice(rest) {
+                Ok(slice) => {
+                    rest = &rest[slice.slice().len()..];
+                    next_header = slice.next_header();
+                },
+                Err(err) => {
+                    error = Some(Len(err));
+                }
+            }
+        }
+
+        while error.is_none() {
+            match next_header {
+                IPV6_HOP_BY_HOP => {
+                    error = Some(Content(HopByHopNotAtStart));
+                    break;
+                }
+                IPV6_DEST_OPTIONS | IPV6_ROUTE => {
+                    let slice = match Ipv6RawExtHeaderSlice::from_slice(rest) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error = Some(Len(err.add_offset(start_slice.len() - rest.len())));
+                            break;
+                        }
+                    };
+                    // SAFETY:
+                    // Ipv6RawExtHeaderSlice::from_slice always generates
+                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // that len is always greater or equal the len of rest.
+                    rest = unsafe {
+                        let len = slice.slice().len();
+                        from_raw_parts(rest.as_ptr().add(len), rest.len() - len)
+                    };
+                    next_header = slice.next_header();
+                }
+                IPV6_FRAG => {
+                    let slice = match Ipv6FragmentHeaderSlice::from_slice(rest) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error = Some(Len(err.add_offset(start_slice.len() - rest.len())));
+                            break;
+                        }
+                    };
+
+                    // SAFETY:
+                    // Ipv6FragmentHeaderSlice::from_slice always generates
+                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // that len is always greater or equal the len of rest.
+                    rest = unsafe {
+                        let len = slice.slice().len();
+                        from_raw_parts(rest.as_ptr().add(len), rest.len() - len)
+                    };
+                    next_header = slice.next_header();
+
+                    // check if the fragment header actually causes fragmentation
+                    fragmented = fragmented || slice.is_fragmenting_payload();
+                }
+                AUTH => {
+                    use err::ip_auth::HeaderSliceError as I;
+                    let slice = match IpAuthHeaderSlice::from_slice(rest) {
+                        Ok(s) => s,
+                        Err(err) => {
+                            error = Some(match err {
+                                I::Len(err) => Len(err.add_offset(start_slice.len() - rest.len())),
+                                I::Content(err) => Content(IpAuth(err)),
+                            });
+                            break;
+                        }
+                    };
+                    // SAFETY:
+                    // IpAuthHeaderSlice::from_slice always generates
+                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // that len is always greater or equal the len of rest.
+                    rest = unsafe {
+                        let len = slice.slice().len();
+                        from_raw_parts(rest.as_ptr().add(len), rest.len() - len)
+                    };
+                    next_header = slice.next_header();
+                }
+                // done parsing, the next header is not a known/supported header extension
+                _ => break,
+            }
+        }
+
+        (
+            Ipv6ExtensionsSlice {
+                first_header: if rest.len() != start_slice.len() {
+                    Some(start_ip_number)
+                } else {
+                    None
+                },
+                fragmented,
+                slice: &start_slice[..start_slice.len() - rest.len()],
+            },
+            next_header,
+            error,
+            rest,
+        )
+    }
+
     /// Returns true if a fragmentation header is present in
     /// the extensions that fragments the payload.
     ///
