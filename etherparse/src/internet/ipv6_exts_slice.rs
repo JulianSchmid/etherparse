@@ -125,7 +125,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     /// it's `IpNumber` and the error if one occured).
     ///
     /// The returned values are
-    /// 
+    ///
     /// * [`Ipv6ExtensionsSlice`] containing the successfully parsed IPv6 extension headers
     /// * [`IpNumber`] of unparsed data
     /// * Slice with unparsed data
@@ -133,7 +133,12 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     pub fn from_slice_lax(
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> (Ipv6ExtensionsSlice, IpNumber, &'a [u8], Option<err::ipv6_exts::HeaderSliceError>) {
+    ) -> (
+        Ipv6ExtensionsSlice,
+        IpNumber,
+        &'a [u8],
+        Option<err::ipv6_exts::HeaderSliceError>,
+    ) {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
         let mut error = None;
@@ -148,7 +153,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                 Ok(slice) => {
                     rest = &rest[slice.slice().len()..];
                     next_header = slice.next_header();
-                },
+                }
                 Err(err) => {
                     error = Some(Len(err));
                 }
@@ -240,7 +245,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
             },
             next_header,
             rest,
-            error
+            error,
         )
     }
 

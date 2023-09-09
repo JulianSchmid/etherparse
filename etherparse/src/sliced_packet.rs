@@ -453,7 +453,9 @@ impl<'a> CursorSlice<'a> {
         match ether_type {
             IPV4 => self.slice_ipv4_lax(),
             IPV6 => self.slice_ipv6_lax(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan_lax(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                self.slice_vlan_lax()
+            }
             _ => Ok(self.slice_payload()),
         }
     }
@@ -505,7 +507,6 @@ impl<'a> CursorSlice<'a> {
             }
         }
     }
-
 
     pub fn slice_vlan_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
         use err::packet::EthSliceError::*;

@@ -101,7 +101,6 @@ impl<'a> Ipv6Slice<'a> {
         })
     }
 
-
     /// Seperate an IPv6 header (+ extensions) & the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
@@ -526,7 +525,6 @@ mod test {
             }
         }
     }
-
 
     proptest! {
         #[test]
