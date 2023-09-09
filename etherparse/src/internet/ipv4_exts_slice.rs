@@ -34,6 +34,126 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
         }
     }
 
+    /// Collects all ipv4 extension headers in a slice until an error
+    /// is encountered or a "non IP extension header" is found and
+    /// returns the successfully parsed parts (+ the unparsed slice
+    /// it's `IpNumber` and the error if one occured).
+    ///
+    /// The returned values are
+    /// 
+    /// * [`Ipv4ExtensionsSlice`] containing the successfully parsed IPv6 extension headers
+    /// * [`IpNumber`] of unparsed data
+    /// * Slice with unparsed data
+    /// * Optional with error if there was an error wich stoped the parsing.
+    /// 
+    /// # Examples
+    ///
+    /// ```
+    /// use etherparse::{Ipv4ExtensionsSlice, IpAuthHeader, ip_number::{UDP, AUTHENTICATION_HEADER}};
+    /// 
+    /// let auth_header = IpAuthHeader::new(UDP, 0, 0, &[]).unwrap();
+    /// let data = auth_header.to_bytes();
+    /// 
+    /// let (ipv4_exts, next_ip_num, next_data, err) =
+    ///     Ipv4ExtensionsSlice::from_slice_lax(AUTHENTICATION_HEADER, &data);
+    ///
+    /// // authentification header is separated and no error occured
+    /// assert!(ipv4_exts.auth.is_some());
+    /// assert_eq!(next_ip_num, UDP);
+    /// assert_eq!(next_data, &[]);
+    /// assert!(err.is_none());
+    /// ```
+    /// 
+    /// It is also ok to pass in a "non ip extension":
+    /// 
+    /// ```
+    /// use etherparse::{Ipv4ExtensionsSlice, ip_number::UDP};
+    /// 
+    /// let data = [0,1,2,3];
+    /// // passing a non "ip extension header" ip number
+    /// let (ipv4_exts, next_ip_num, next_data, err) =
+    ///     Ipv4ExtensionsSlice::from_slice_lax(UDP, &data);
+    /// 
+    /// // the original data gets returned as UDP is not a
+    /// // an IP extension header
+    /// assert!(ipv4_exts.is_empty());
+    /// assert_eq!(next_ip_num, UDP);
+    /// assert_eq!(next_data, &data);
+    /// // no errors gets triggered as the data is valid
+    /// assert!(err.is_none());
+    /// ```
+    /// 
+    /// In case an error occured the original data gets
+    /// returned together with the error:
+    /// 
+    /// /// ```
+    /// use etherparse::{
+    ///     Ipv4ExtensionsSlice,
+    ///     ip_number::AUTHENTICATION_HEADER,
+    ///     err::{ip_auth::HeaderSliceError::Len, LenError, LenSource, Layer}
+    /// };
+    ///
+    /// // providing not enough data
+    /// let (ipv4_exts, next_ip_num, next_data, err) =
+    ///     Ipv4ExtensionsSlice::from_slice_lax(AUTHENTICATION_HEADER, &[]);
+    ///
+    /// // original data will be returned with no data parsed
+    /// assert!(ipv4_exts.is_empty());
+    /// assert_eq!(next_ip_num, AUTHENTICATION_HEADER);
+    /// assert_eq!(next_data, &[]);
+    /// // the error that stopped the parsing will also be returned
+    /// assert_eq!(err, Some(Len(LenError{
+    ///     required_len: IpAuthHeader::MIN_LEN,
+    ///     len: 0,
+    ///     len_source: LenSource::Slice,
+    ///     layer: Layer::IpAuthHeader,
+    ///     layer_start_offset: 0,
+    /// })));
+    /// ```
+    /// 
+    pub fn from_slice_lax(
+        start_ip_number: IpNumber,
+        start_slice: &'a [u8],
+    ) -> (Ipv4ExtensionsSlice, IpNumber, &[u8], Option<err::ip_auth::HeaderSliceError>) {
+        use ip_number::*;
+        if AUTH == start_ip_number {
+            match IpAuthHeaderSlice::from_slice(start_slice) {
+                Ok(header) => {
+                    let rest = unsafe {
+                        // SAFE as header.slice() has the same start and is a
+                        // subslice of start_slice.
+                        core::slice::from_raw_parts(
+                            start_slice.as_ptr().add(header.slice().len()),
+                            start_slice.len() - header.slice().len()
+                        )
+                    };
+                    let next_header = header.next_header();
+                    (
+                        Ipv4ExtensionsSlice { auth: Some(header) },
+                        next_header,
+                        rest,
+                        None,
+                    )
+                },
+                Err(err) => {
+                    (
+                        Ipv4ExtensionsSlice { auth: None },
+                        start_ip_number,
+                        start_slice,
+                        Some(err),
+                    )
+                }
+            }
+        } else {
+            (
+                Ipv4ExtensionsSlice { auth: None },
+                start_ip_number,
+                start_slice,
+                None,
+            )
+        }
+    }
+
     /// Convert the slices into actual headers.
     pub fn to_header(&self) -> Ipv4Extensions {
         Ipv4Extensions {

@@ -120,19 +120,20 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     }
 
     /// Collects all ipv6 extension headers in a slice until an error
-    /// is encountered or a "non IP header" is found and returns the successfully
-    /// parsed parts (+ the unparsed slice it's `IpNumber` and the error if
-    /// one occured).
+    /// is encountered or a "non IP extension header" is found and
+    /// returns the successfully parsed parts (+ the unparsed slice
+    /// it's `IpNumber` and the error if one occured).
     ///
-    /// The returned values are a tuple of
+    /// The returned values are
     /// 
-    /// * An `Ipv6ExtensionsSlice` containing the successfully parsed IPv6 extension headers
-    /// * The `IpNumber` indicating the payload after the last successfully parsed header
-    /// 
+    /// * [`Ipv6ExtensionsSlice`] containing the successfully parsed IPv6 extension headers
+    /// * [`IpNumber`] of unparsed data
+    /// * Slice with unparsed data
+    /// * Optional with error if there was an error wich stoped the parsing.
     pub fn from_slice_lax(
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> (Ipv6ExtensionsSlice, IpNumber, Option<err::ipv6_exts::HeaderSliceError>, &'a [u8]) {
+    ) -> (Ipv6ExtensionsSlice, IpNumber, &'a [u8], Option<err::ipv6_exts::HeaderSliceError>) {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
         let mut error = None;
@@ -238,8 +239,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                 slice: &start_slice[..start_slice.len() - rest.len()],
             },
             next_header,
-            error,
             rest,
+            error
         )
     }
 
