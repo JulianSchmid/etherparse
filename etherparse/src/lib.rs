@@ -340,8 +340,8 @@ pub use crate::packet_builder::*;
 mod packet_headers;
 pub use crate::packet_headers::*;
 
-mod packet_slicing;
-pub use crate::packet_slicing::*;
+mod sliced_packet;
+pub use crate::sliced_packet::*;
 
 pub mod packet_filter;
 
