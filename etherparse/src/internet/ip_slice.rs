@@ -577,7 +577,6 @@ impl<'a> IpSlice<'a> {
             }
         }
     }
-
 }
 
 impl<'a> From<Ipv4Slice<'a>> for IpSlice<'a> {
