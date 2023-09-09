@@ -251,6 +251,62 @@ mod test {
 
     proptest! {
         #[test]
+        fn from_slice_lax(auth in ip_auth_any()) {
+            use crate::ip_number::{UDP, AUTHENTICATION_HEADER};
+            use crate::err::{*, ip_auth::HeaderSliceError::Len};
+
+            // normal read
+            {
+                let data = auth.to_bytes();
+
+                let (ipv4_exts, next_ip_num, next_data, err) =
+                    Ipv4ExtensionsSlice::from_slice_lax(AUTHENTICATION_HEADER, &data);
+
+                // authentification header is separated and no error occured
+                assert_eq!(ipv4_exts.auth.unwrap().to_header(), auth);
+                assert_eq!(next_ip_num, auth.next_header);
+                assert_eq!(next_data, &[]);
+                assert!(err.is_none());
+            }
+            // normal read with no extension header
+            {
+                let data = [0,1,2,3];
+                // passing a non "ip extension header" ip number
+                let (ipv4_exts, next_ip_num, next_data, err) =
+                    Ipv4ExtensionsSlice::from_slice_lax(UDP, &data);
+
+                // the original data gets returned as UDP is not a
+                // an IP extension header
+                assert!(ipv4_exts.is_empty());
+                assert_eq!(next_ip_num, UDP);
+                assert_eq!(next_data, &data);
+                // no errors gets triggered as the data is valid
+                assert!(err.is_none());
+            }
+            // len error during parsing
+            {
+                // providing not enough data
+                let (ipv4_exts, next_ip_num, next_data, err) =
+                    Ipv4ExtensionsSlice::from_slice_lax(AUTHENTICATION_HEADER, &[]);
+
+                // original data will be returned with no data parsed
+                assert!(ipv4_exts.is_empty());
+                assert_eq!(next_ip_num, AUTHENTICATION_HEADER);
+                assert_eq!(next_data, &[]);
+                // the error that stopped the parsing will also be returned
+                assert_eq!(err, Some(Len(LenError{
+                    required_len: IpAuthHeader::MIN_LEN,
+                    len: 0,
+                    len_source: LenSource::Slice,
+                    layer: Layer::IpAuthHeader,
+                    layer_start_offset: 0,
+                })));
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
         fn to_header(auth in ip_auth_any()) {
             // None
             assert_eq!(

@@ -302,7 +302,7 @@ mod test {
                     Ipv4Extensions::from_slice_lax(AUTHENTICATION_HEADER, &data);
 
                 // authentification header is separated and no error occured
-                assert!(ipv4_exts.auth.is_some());
+                assert_eq!(ipv4_exts.auth, Some(auth.clone()));
                 assert_eq!(next_ip_num, auth.next_header);
                 assert_eq!(next_data, &[]);
                 assert!(err.is_none());
