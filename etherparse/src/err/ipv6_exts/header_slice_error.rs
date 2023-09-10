@@ -22,6 +22,15 @@ impl HeaderSliceError {
             Content(err) => Content(err),
         }
     }
+
+    /// Returns the [`crate::err::LenError`] if the error is an Len.
+    pub fn len_error(&self) -> Option<&LenError> {
+        use HeaderSliceError::*;
+        match self {
+            Len(err) => Some(err),
+            Content(_) => None,
+        }
+    }
 }
 
 impl core::fmt::Display for HeaderSliceError {
@@ -79,6 +88,28 @@ mod tests {
             Content(HeaderError::HopByHopNotAtStart).add_slice_offset(200),
             Content(HeaderError::HopByHopNotAtStart)
         );
+    }
+
+    #[test]
+    fn len_error() {
+        assert_eq!(
+            Len(LenError {
+                required_len: 1,
+                layer: Layer::Icmpv4,
+                len: 2,
+                len_source: LenSource::Slice,
+                layer_start_offset: 3
+            })
+            .len_error(),
+            Some(&LenError {
+                required_len: 1,
+                layer: Layer::Icmpv4,
+                len: 2,
+                len_source: LenSource::Slice,
+                layer_start_offset: 3
+            })
+        );
+        assert_eq!(Content(HeaderError::HopByHopNotAtStart).len_error(), None);
     }
 
     #[test]
