@@ -1734,6 +1734,19 @@ mod test {
                     }
                 }
             }
+
+            // test that the auth content error gets forwarded
+            {
+                let auth = IpAuthHeader::new(post_header, 0, 0, &[]).unwrap();
+                let mut bytes = auth.to_bytes();
+                // inject an invalid len value
+                bytes[1] = 0;
+                let actual = Ipv6Extensions::from_slice(AUTH, &bytes).unwrap_err();
+
+                use err::ipv6_exts::HeaderError::IpAuth;
+                use err::ip_auth::HeaderError::ZeroPayloadLen;
+                assert_eq!(actual, Content(IpAuth(ZeroPayloadLen)));
+            }
         }
     }
 
@@ -1831,6 +1844,22 @@ mod test {
                     }
                 }
             }
+
+            // test that the auth content error gets forwarded
+            {
+                let auth = IpAuthHeader::new(post_header, 0, 0, &[]).unwrap();
+                let mut bytes = auth.to_bytes();
+                // inject an invalid len value
+                bytes[1] = 0;
+                let actual = Ipv6Extensions::from_slice_lax(AUTH, &bytes);
+                assert_eq!(0, actual.0.header_len());
+                assert_eq!(AUTH, actual.1);
+                assert_eq!(&bytes[..], actual.2);
+
+                use err::ipv6_exts::HeaderError::IpAuth;
+                use err::ip_auth::HeaderError::ZeroPayloadLen;
+                assert_eq!(actual.3.unwrap(), Content(IpAuth(ZeroPayloadLen)));
+            }
         }
     }
 
@@ -1915,6 +1944,165 @@ mod test {
                         );
                     }
                 }
+            }
+
+            // test that the auth content error gets forwarded
+            {
+                let auth = IpAuthHeader::new(post_header, 0, 0, &[]).unwrap();
+                let mut bytes = auth.to_bytes();
+                // inject an invalid len value
+                bytes[1] = 0;
+                let mut cursor = Cursor::new(&bytes[..]);
+                let actual = Ipv6Extensions::read(&mut cursor, AUTH).unwrap_err();
+
+                use err::ipv6_exts::HeaderError::IpAuth;
+                use err::ip_auth::HeaderError::ZeroPayloadLen;
+                assert_eq!(actual.content_error().unwrap(), IpAuth(ZeroPayloadLen));
+            }
+        }
+    }
+
+
+    proptest! {
+        #[test]
+        fn read_limited(
+            header_size in any::<u8>(),
+            post_header in ip_number_any()
+                .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                )
+        ) {
+            use err::ipv6_exts::HeaderError::*;
+            use err::{Layer, LenSource};
+            use std::io::Cursor;
+            use crate::io::LimitedReader;
+
+            // no extension headers filled
+            {
+                let mut reader = LimitedReader::new(
+                    Cursor::new(&[]),
+                    0,
+                    LenSource::Slice,
+                    0,
+                    Layer::Ipv6Header
+                );
+                let actual = Ipv6Extensions::read_limited(&mut reader, post_header).unwrap();
+                assert_eq!(actual.0, Default::default());
+                assert_eq!(actual.1, post_header);
+                assert_eq!(0, reader.read_len());
+            }
+
+            /// Run a test with the given ip numbers
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
+                // setup test payload
+                let e = ExtensionTestPayload::new(
+                    ip_numbers,
+                    header_sizes
+                );
+                let mut reader = LimitedReader::new(
+                    Cursor::new(e.slice()),
+                    e.slice().len(),
+                    LenSource::Slice,
+                    0,
+                    Layer::Ipv6Header
+                );
+
+                if e.exts_hop_by_hop_error() {
+                    // a hop by hop header that is not at the start triggers an error
+                    assert_eq!(
+                        Ipv6Extensions::read_limited(&mut reader, ip_numbers[0]).unwrap_err().content().unwrap(),
+                        HopByHopNotAtStart
+                    );
+                } else {
+                    // normal read
+                    let (header, next) = Ipv6Extensions::read_limited(&mut reader, ip_numbers[0]).unwrap();
+                    let (read_len, _, expected_post_header) = e.assert_extensions(&header);
+                    assert_eq!(next, expected_post_header);
+                    assert_eq!(reader.read_len() + reader.layer_offset(), read_len);
+
+                    // io error unexpected end
+                    {
+                        let mut short_reader = LimitedReader::new(
+                            Cursor::new(&e.slice()[..read_len - 1]),
+                            read_len,
+                            LenSource::Slice,
+                            0,
+                            Layer::Ipv6Header
+                        );
+
+                        assert!(
+                            Ipv6Extensions::read_limited(&mut short_reader, ip_numbers[0])
+                            .unwrap_err()
+                            .io()
+                            .is_some()
+                        );
+                    }
+
+                    // len error
+                    {
+                        let mut short_reader = LimitedReader::new(
+                            Cursor::new(e.slice()),
+                            read_len - 1,
+                            LenSource::Slice,
+                            0,
+                            Layer::Ipv6Header
+                        );
+
+                        assert!(
+                            Ipv6Extensions::read_limited(&mut short_reader, ip_numbers[0])
+                            .unwrap_err()
+                            .len()
+                            .is_some()
+                        );
+                    }
+                }
+            }
+
+            // test the parsing of different extension header combinations
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                // single header parsing
+                run_test(
+                    &[*first_header, post_header],
+                    &[header_size],
+                );
+
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                    // double header parsing
+                    run_test(
+                        &[*first_header, *second_header, post_header],
+                        &[header_size],
+                    );
+
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // tripple header parsing
+                        run_test(
+                            &[*first_header, *second_header, *third_header, post_header],
+                            &[header_size],
+                        );
+                    }
+                }
+            }
+
+            // test that the auth content error gets forwarded
+            {
+                let auth = IpAuthHeader::new(post_header, 0, 0, &[]).unwrap();
+                let mut bytes = auth.to_bytes();
+                // inject an invalid len value
+                bytes[1] = 0;
+                let mut reader = LimitedReader::new(
+                    Cursor::new(&bytes[..]),
+                    bytes.len(),
+                    LenSource::Slice,
+                    0,
+                    Layer::Ipv6Header
+                );
+                let actual = Ipv6Extensions::read_limited(&mut reader, AUTH).unwrap_err();
+
+                use err::ipv6_exts::HeaderError::IpAuth;
+                use err::ip_auth::HeaderError::ZeroPayloadLen;
+                assert_eq!(actual.content().unwrap(), IpAuth(ZeroPayloadLen));
             }
         }
     }
