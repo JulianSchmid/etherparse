@@ -403,6 +403,123 @@ mod test {
         }
     }
 
+
+    proptest! {
+        #[test]
+        fn from_slice_lax(
+            header_size in any::<u8>(),
+            post_header in ip_number_any()
+                .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                )
+        ) {
+            use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
+
+            // no extension headers filled
+            {
+                let some_data = [1,2,3,4];
+                let actual = Ipv6ExtensionsSlice::from_slice_lax(UDP, &some_data);
+                assert_eq!(actual.0.is_fragmenting_payload(), false);
+                assert_eq!(actual.0.first_header(), None);
+                assert_eq!(actual.0.slice().len(), 0);
+                assert_eq!(actual.1, UDP);
+                assert_eq!(actual.2, &some_data);
+            }
+
+            /// Run a test with the given ip numbers
+            fn run_test(ip_numbers: &[IpNumber], header_sizes: &[u8]) {
+                // setup test payload
+                let e = ExtensionTestPayload::new(
+                    ip_numbers,
+                    header_sizes
+                );
+
+                if e.ip_numbers[1..].iter().any(|&x| x == IPV6_HOP_BY_HOP) {
+                    // a hop by hop header that is not at the start triggers an error
+                    assert_eq!(
+                        Ipv6ExtensionsSlice::from_slice_lax(ip_numbers[0], e.slice()).3.unwrap(),
+                        Content(HopByHopNotAtStart)
+                    );
+                } else {
+                    // normal read
+                    let actual_normal = Ipv6ExtensionsSlice::from_slice_lax(ip_numbers[0], e.slice());
+                    assert_eq!(actual_normal.0.first_header(), Some(ip_numbers[0]));
+                    assert_eq!(actual_normal.0.slice(), e.slice());
+                    assert_eq!(actual_normal.1, *ip_numbers.last().unwrap());
+                    assert_eq!(actual_normal.2, &[]);
+
+                    // unexpected end of slice
+                    {
+                        let offset: usize = e.lengths[..e.lengths.len() - 1].into_iter().sum();
+
+                        let actual = Ipv6ExtensionsSlice::from_slice_lax(
+                            ip_numbers[0],
+                            &e.slice()[..e.slice().len() - 1]
+                        );
+                        assert_eq!(&e.slice()[offset..e.slice().len() - 1], actual.2);
+                        assert_eq!(
+                            actual.3.unwrap(),
+                            Len(err::LenError {
+                                required_len: e.slice().len() - offset,
+                                len: e.slice().len() - offset - 1,
+                                len_source: err::LenSource::Slice,
+                                layer: match ip_numbers[ip_numbers.len() - 2] {
+                                    AUTH => err::Layer::IpAuthHeader,
+                                    IPV6_FRAG => err::Layer::Ipv6FragHeader,
+                                    _ => err::Layer::Ipv6ExtHeader
+                                },
+                                layer_start_offset: offset,
+                            })
+                        );
+                    }
+                }
+            }
+
+            // test the parsing of different extension header combinations
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                // single header parsing
+                run_test(
+                    &[*first_header, post_header],
+                    &[header_size],
+                );
+
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
+
+                    // double header parsing
+                    run_test(
+                        &[*first_header, *second_header, post_header],
+                        &[header_size],
+                    );
+
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // tripple header parsing
+                        run_test(
+                            &[*first_header, *second_header, *third_header, post_header],
+                            &[header_size],
+                        );
+                    }
+                }
+            }
+
+            // test that the auth content error gets forwarded
+            {
+                let auth = IpAuthHeader::new(post_header, 0, 0, &[]).unwrap();
+                let mut bytes = auth.to_bytes();
+                // inject an invalid len value
+                bytes[1] = 0;
+                let actual = Ipv6ExtensionsSlice::from_slice_lax(AUTH, &bytes);
+
+                use err::ipv6_exts::HeaderError::IpAuth;
+                use err::ip_auth::HeaderError::ZeroPayloadLen;
+                assert_eq!(actual.0.slice(), &[]);
+                assert_eq!(actual.1, AUTH);
+                assert_eq!(actual.2, &bytes[..]);
+                assert_eq!(actual.3.unwrap().content().unwrap(), &IpAuth(ZeroPayloadLen));
+            }
+        }
+    }
+
     proptest! {
         #[test]
         fn is_fragmenting_payload(
