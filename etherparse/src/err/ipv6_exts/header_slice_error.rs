@@ -31,6 +31,15 @@ impl HeaderSliceError {
             Content(_) => None,
         }
     }
+
+    /// Returns the [`crate::err::ipv6_exts::HeaderError`] if the error is an Len.
+    pub fn content(&self) -> Option<&HeaderError> {
+        use HeaderSliceError::*;
+        match self {
+            Len(_) => None,
+            Content(err) => Some(err),
+        }
+    }
 }
 
 impl core::fmt::Display for HeaderSliceError {
@@ -110,6 +119,21 @@ mod tests {
             })
         );
         assert_eq!(Content(HeaderError::HopByHopNotAtStart).len_error(), None);
+    }
+
+    #[test]
+    fn content() {
+        assert_eq!(
+            Len(LenError {
+                required_len: 1,
+                layer: Layer::Icmpv4,
+                len: 2,
+                len_source: LenSource::Slice,
+                layer_start_offset: 3
+            }).content(),
+            None
+        );
+        assert_eq!(Content(HeaderError::HopByHopNotAtStart).content(), Some(&HeaderError::HopByHopNotAtStart));
     }
 
     #[test]
