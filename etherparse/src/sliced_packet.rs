@@ -1183,7 +1183,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeader::Version4(ipv4.clone(), Default::default()));
+                test.ip = Some(IpHeaders::Version4(ipv4.clone(), Default::default()));
                 test.set_payload_len(0);
 
                 // ok ipv4
@@ -1277,7 +1277,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeader::Version4(
+                test.ip = Some(IpHeaders::Version4(
                     {
                         let mut ipv4 = ipv4.clone();
                         ipv4.protocol = ip_number::AUTH;
@@ -1355,7 +1355,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeader::Version6(ipv6.clone(), Default::default()));
+                test.ip = Some(IpHeaders::Version6(ipv6.clone(), Default::default()));
                 test.set_payload_len(0);
 
                 // ok ipv6
@@ -1428,7 +1428,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeader::Version6(
+                test.ip = Some(IpHeaders::Version6(
                     {
                         let mut ipv6 = ipv6.clone();
                         ipv6.next_header = ip_number::IPV6_FRAG;
@@ -1554,8 +1554,8 @@ mod test {
                             required_len: udp.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: Layer::UdpHeader,
                             layer_start_offset: base_len,
@@ -1601,8 +1601,8 @@ mod test {
                                 required_len: tcp.header_len() as usize,
                                 len,
                                 len_source: match test.ip.as_ref().unwrap() {
-                                    IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                    IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                    IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                    IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                                 },
                                 layer: Layer::TcpHeader,
                                 layer_start_offset: base_len,
@@ -1665,8 +1665,8 @@ mod test {
                             required_len: icmpv4.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: Layer::Icmpv4,
                             layer_start_offset: base_len,
@@ -1711,8 +1711,8 @@ mod test {
                             required_len: icmpv6.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: Layer::Icmpv6,
                             layer_start_offset: base_len,
@@ -1744,13 +1744,13 @@ mod test {
             assert_eq!(test.vlan, result.vlan.as_ref().map(|e| e.to_header()));
             assert_eq!(
                 test.ip,
-                result.ip.as_ref().map(|s: &IpSlice| -> IpHeader {
+                result.ip.as_ref().map(|s: &IpSlice| -> IpHeaders {
                     match s {
-                        IpSlice::Ipv4(ipv4) => IpHeader::Version4(
+                        IpSlice::Ipv4(ipv4) => IpHeaders::Version4(
                             ipv4.header().to_header(),
                             ipv4.extensions().to_header(),
                         ),
-                        IpSlice::Ipv6(ipv6) => IpHeader::Version6(
+                        IpSlice::Ipv6(ipv6) => IpHeaders::Version6(
                             ipv6.header().to_header(),
                             Ipv6Extensions::from_slice(
                                 ipv6.header().next_header(),
@@ -1839,8 +1839,8 @@ mod test {
             if let Some(ip) = &test.ip {
                 let result = SlicedPacket::from_ether_type(
                     match ip {
-                        IpHeader::Version4(_, _) => ether_type::IPV4,
-                        IpHeader::Version6(_, _) => ether_type::IPV6,
+                        IpHeaders::Version4(_, _) => ether_type::IPV4,
+                        IpHeaders::Version6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )
@@ -1884,8 +1884,8 @@ mod test {
             if let Some(ip) = &test.ip {
                 let err = SlicedPacket::from_ether_type(
                     match ip {
-                        IpHeader::Version4(_, _) => ether_type::IPV4,
-                        IpHeader::Version6(_, _) => ether_type::IPV6,
+                        IpHeaders::Version4(_, _) => ether_type::IPV4,
+                        IpHeaders::Version6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )
@@ -1908,7 +1908,7 @@ mod test {
             ref ipv4 in ipv4_unknown(),
             ref udp in udp_any(),
         ) {
-            use IpHeader::*;
+            use IpHeaders::*;
             use alloc::vec::Vec;
 
             // empty

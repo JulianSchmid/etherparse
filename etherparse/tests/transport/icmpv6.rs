@@ -83,7 +83,7 @@ mod regression {
             // reset it and recalculate
             icmp6.checksum = 0;
             let iph = match request.ip {
-                Some(IpHeader::Version6(ipv6, _)) => ipv6,
+                Some(IpHeaders::Version6(ipv6, _)) => ipv6,
                 _ => panic!("Failed to parse ipv6 part of packet?!"),
             };
             assert_eq!(

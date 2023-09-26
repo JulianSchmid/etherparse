@@ -277,7 +277,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{ip_number, test_gens::*, IpHeader, Ipv4Header};
+    use crate::{ip_number, test_gens::*, IpHeaders, Ipv4Header};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
@@ -504,9 +504,9 @@ mod test {
         }
     }
 
-    fn combine_v4(v4: &Ipv4Header, ext: &crate::Ipv4Extensions, payload: &[u8]) -> crate::IpHeader {
+    fn combine_v4(v4: &Ipv4Header, ext: &crate::Ipv4Extensions, payload: &[u8]) -> crate::IpHeaders {
         use crate::ip_number::{AUTH, UDP};
-        crate::IpHeader::Version4(
+        crate::IpHeaders::Version4(
             {
                 let mut v4 = v4.clone();
                 v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
@@ -651,7 +651,7 @@ mod test {
                 let actual = Ipv4Slice::from_slice_lax(&buffer[..]).unwrap();
 
                 let (v4_header, v4_exts) = header.v4().unwrap();
-                let expected_headers = IpHeader::Version4(
+                let expected_headers = IpHeaders::Version4(
                     {
                         let mut expected_v4 = v4_header.clone();
                         expected_v4.total_len = bad_total_len;
