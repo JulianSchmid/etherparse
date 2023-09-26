@@ -128,7 +128,7 @@
 //! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
 //! * [`DoubleVlanHeader::read`] & [`DoubleVlanHeader::from_slice`]
-//! * [`IpHeader::read`] & [`IpHeader::from_slice`]
+//! * [`IpHeaders::read`] & [`IpHeaders::from_slice`]
 //! * [`Ipv4Header::read`] & [`Ipv4Header::from_slice`]
 //! * [`Ipv4Extensions::read`] & [`Ipv4Extensions::from_slice`]
 //! * [`Ipv6Header::read`] & [`Ipv6Header::from_slice`]

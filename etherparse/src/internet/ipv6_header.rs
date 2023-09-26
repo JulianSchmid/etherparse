@@ -45,13 +45,13 @@ impl Ipv6Header {
     /// If you want to have correctly seperated payload including the IP extension
     /// headers use
     ///
-    /// * [`crate::IpHeader::ipv6_from_slice`] (decodes all the fields of the IP headers)
+    /// * [`crate::IpHeaders::ipv6_from_slice`] (decodes all the fields of the IP headers)
     /// * [`crate::Ipv6Slice::from_slice`] (just identifies the ranges in the slice where
     ///   the headers and payload are present)
     ///
     /// or
     ///
-    /// * [`crate::IpHeader::ipv6_from_slice_lax`]
+    /// * [`crate::IpHeaders::ipv6_from_slice_lax`]
     /// * [`crate::Ipv6Slice::from_slice_lax`]
     ///
     /// for a laxer version which falls back to slice length when the `payload_length`

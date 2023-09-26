@@ -81,9 +81,10 @@ impl Ipv4Extensions {
     /// In case an error occured the original data gets
     /// returned together with the error:
     ///
-    /// /// ```
+    /// ```
     /// use etherparse::{
     ///     Ipv4Extensions,
+    ///     IpAuthHeader,
     ///     ip_number::AUTHENTICATION_HEADER,
     ///     err::{ip_auth::HeaderSliceError::Len, LenError, LenSource, Layer}
     /// };

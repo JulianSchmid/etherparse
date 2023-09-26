@@ -323,7 +323,7 @@ impl<'a> IpSlice<'a> {
     /// slice with less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
-    /// If you want to only receive correct IpPayloads use [`IpSlice::from_slice`]
+    /// If you want to only receive correct IpPayloads use [`crate::IpSlice::from_ip_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:

@@ -59,17 +59,17 @@ use std::{io, marker};
 ///     * [`PacketBuilderStep<VlanHeader>::ipv4`]
 ///     * [`PacketBuilderStep<VlanHeader>::ipv6`]
 /// * Options after an IP header was added:
-///     * [`PacketBuilderStep<IpHeader>::write`]
-///     * [`PacketBuilderStep<IpHeader>::tcp`]
-///     * [`PacketBuilderStep<IpHeader>::udp`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv4`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv4_raw`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv4_echo_request`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv4_echo_reply`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv6`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv6_raw`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv6_echo_request`]
-///     * [`PacketBuilderStep<IpHeader>::icmpv6_echo_reply`]
+///     * [`PacketBuilderStep<IpHeaders>::write`]
+///     * [`PacketBuilderStep<IpHeaders>::tcp`]
+///     * [`PacketBuilderStep<IpHeaders>::udp`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv4`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv4_raw`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv4_echo_request`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv4_echo_reply`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv6`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv6_raw`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv6_echo_request`]
+///     * [`PacketBuilderStep<IpHeaders>::icmpv6_echo_reply`]
 /// * Options after an TCP header was added:
 ///     * [`PacketBuilderStep<TcpHeader>::write`]
 ///     * [`PacketBuilderStep<TcpHeader>::size`]
@@ -835,7 +835,7 @@ impl PacketBuilderStep<IpHeaders> {
     /// This can be useful when trying to build an ICMPv4 packet
     /// which is not fully supported by etherparse and is the equivalent
     /// of using [`Icmpv4Type::Unknown`] together with
-    /// [`PacketBuilderStep<IpHeader>::icmpv4`].
+    /// [`PacketBuilderStep<IpHeaders>::icmpv4`].
     ///
     /// # Example
     ///
@@ -1027,7 +1027,7 @@ impl PacketBuilderStep<IpHeaders> {
     /// This can be useful when trying to build an ICMPv6 packet
     /// which is not fully supported by etherparse and is the equivalent
     /// of using [`Icmpv6Type::Unknown`] together with
-    /// [`PacketBuilderStep<IpHeader>::icmpv6`].
+    /// [`PacketBuilderStep<IpHeaders>::icmpv6`].
     ///
     /// # Example
     ///

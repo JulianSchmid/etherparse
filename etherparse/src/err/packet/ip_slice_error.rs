@@ -83,7 +83,7 @@ mod tests {
             assert_eq!(format!("{}", err), format!("{}", Len(err)));
         }
 
-        // IpHeader
+        // IpHeaders
         {
             let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 1 });
             assert_eq!(format!("{}", err), format!("{}", Ip(err)));
@@ -111,7 +111,7 @@ mod tests {
             assert!(Len(err).source().is_some());
         }
 
-        // IpHeader
+        // IpHeaders
         {
             let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 1 });
             assert!(Ip(err).source().is_some());

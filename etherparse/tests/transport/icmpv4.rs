@@ -164,7 +164,7 @@ mod icmpv4_regression {
         /*
         let embedded_pkt = PacketHeaders::from_ip_slice(ttl_exceeded.payload).unwrap();
         let ip_header = match embedded_pkt.ip.unwrap() {
-            IpHeader::Version4(ip4, _) => ip4,
+            IpHeaders::Version4(ip4, _) => ip4,
             _ => panic!("Didn't parse inner v4 IP header!?"),
         };
         use std::net::Ipv4Addr;

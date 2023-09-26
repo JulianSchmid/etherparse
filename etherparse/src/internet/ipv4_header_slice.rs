@@ -17,11 +17,11 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// seperated you can use
     ///
     /// * [`crate::Ipv4Slice::from_slice`] (just identifies slice ranges)
-    /// * [`crate::IpHeader::ipv4_from_slice`] (unpacks all fields)
+    /// * [`crate::IpHeaders::ipv4_from_slice`] (unpacks all fields)
     ///
     /// or
     ///
-    /// * [`crate::IpHeader::ipv4_from_slice_lax`]
+    /// * [`crate::IpHeaders::ipv4_from_slice_lax`]
     /// * [`crate::Ipv4Slice::from_slice_lax`]
     ///
     /// for a laxer version which falls back to slice length only when the total_length
