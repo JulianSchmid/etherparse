@@ -3,17 +3,8 @@ use crate::*;
 /// Error when decoding the IP header part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeadersError {
-    /// Error when the IP header version field is not equal to 4 or 6.
-    UnsupportedIpVersion {
-        /// The unexpected version number in the IP header.
-        version_number: u8,
-    },
-
-    /// Error when the ipv4 internet header length is smaller then the header itself (5).
-    Ipv4HeaderLengthSmallerThanHeader {
-        /// The internet header length that was too small.
-        ihl: u8,
-    },
+    /// Error in the IPv4 or IPv6 header.
+    Ip(err::ip::HeaderError),
 
     /// Error in the IPv4 extension headers (only authentication header).
     Ipv4Ext(err::ip_auth::HeaderError),
@@ -26,8 +17,7 @@ impl core::fmt::Display for HeadersError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeadersError::*;
         match self {
-            UnsupportedIpVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
-            Ipv4HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
+            Ip(err) => err.fmt(f),
             Ipv4Ext(err) => err.fmt(f),
             Ipv6Ext(err) => err.fmt(f),
         }
@@ -39,8 +29,7 @@ impl std::error::Error for HeadersError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeadersError::*;
         match self {
-            UnsupportedIpVersion { version_number: _ } => None,
-            Ipv4HeaderLengthSmallerThanHeader { ihl: _ } => None,
+            Ip(err) => Some(err),
             Ipv4Ext(err) => Some(err),
             Ipv6Ext(err) => Some(err),
         }
@@ -49,7 +38,7 @@ impl std::error::Error for HeadersError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersError::*, *};
+    use super::{HeadersError::*, super::HeaderError::*, *};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -59,15 +48,16 @@ mod tests {
 
     #[test]
     fn debug() {
+        
         assert_eq!(
-            "UnsupportedIpVersion { version_number: 6 }",
-            format!("{:?}", UnsupportedIpVersion { version_number: 6 })
+            "IpHeaders(UnsupportedIpVersion { version_number: 6 })",
+            format!("{:?}", Ip(UnsupportedIpVersion { version_number: 6 }))
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
+        let err = Ip(UnsupportedIpVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();

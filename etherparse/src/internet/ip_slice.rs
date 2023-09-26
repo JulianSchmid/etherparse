@@ -92,7 +92,7 @@ impl<'a> IpSlice<'a> {
     /// of the IP packet.
     pub fn from_ip_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
-        use err::ip::SliceError::*;
+        use err::ip::{SliceError::*, HeaderError::*, HeadersError::*};
         use IpSlice::*;
 
         if slice.is_empty() {
@@ -112,8 +112,7 @@ impl<'a> IpSlice<'a> {
 
                     // check that the ihl has at least the length of the base IPv4 header
                     if ihl < 5 {
-                        use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
-                        return Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        return Err(IpHeaders(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl })));
                     }
 
                     // check there is enough data for the header
@@ -313,9 +312,9 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
+                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion {
                     version_number,
-                })),
+                }))),
             }
         }
     }
@@ -363,7 +362,7 @@ impl<'a> IpSlice<'a> {
     /// * The value `0`.
     pub fn from_ip_slice_lax(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
-        use err::ip::SliceError::*;
+        use err::ip::{SliceError::*, HeaderError::*, HeadersError::*};
         use IpSlice::*;
 
         if slice.is_empty() {
@@ -383,8 +382,7 @@ impl<'a> IpSlice<'a> {
 
                     // check that the ihl has at least the lenght of the base IPv4 header
                     if ihl < 5 {
-                        use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
-                        return Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        return Err(IpHeaders(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl })));
                     }
 
                     // check there is enough data for the header
@@ -571,9 +569,9 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
+                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion {
                     version_number,
-                })),
+                }))),
             }
         }
     }
@@ -984,7 +982,7 @@ mod test {
             ipv6_header in ipv6_any(),
             mut ipv6_exts in ipv6_extensions_with(ip_number::UDP)
         ) {
-            use err::ip::{SliceError::*, HeadersError::*};
+            use err::ip::{SliceError::*, HeadersError::*, HeaderError::*};
             use err::ip_auth::HeaderError::*;
             use crate::IpHeader;
 
@@ -1005,9 +1003,9 @@ mod test {
                 if bad_version != 4 && bad_version != 6 {
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&[bad_version << 4]),
-                        Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
+                        Err(IpHeaders(Ip(UnsupportedIpVersion {
                             version_number: bad_version,
-                        }))
+                        })))
                     );
                 }
             }
@@ -1065,10 +1063,9 @@ mod test {
                     // inject bad IHL
                     buffer[0] = (buffer[0] & 0xf0u8) | bad_ihl;
 
-                    use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&buffer),
-                        Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
+                        Err(IpHeaders(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl })))
                     );
                 }
 

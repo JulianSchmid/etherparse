@@ -57,7 +57,7 @@ impl IpHeader {
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
-        use err::ip::{HeadersError::*, HeadersSliceError::*};
+        use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -90,7 +90,7 @@ impl IpHeader {
 
                     //check that the ihl is correct
                     if ihl < 5 {
-                        return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        return Err(Content(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl })));
                     }
 
                     // check that the slice contains enough data for the entire header + options
@@ -260,7 +260,7 @@ impl IpHeader {
                         },
                     ))
                 }
-                version_number => Err(Content(UnsupportedIpVersion { version_number })),
+                version_number => Err(Content(Ip(UnsupportedIpVersion { version_number }))),
             }
         }
     }
@@ -310,7 +310,7 @@ impl IpHeader {
     pub fn from_slice_lax(
         slice: &[u8],
     ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
-        use err::ip::{HeadersError::*, HeadersSliceError::*};
+        use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -343,7 +343,7 @@ impl IpHeader {
 
                     //check that the ihl is correct
                     if ihl < 5 {
-                        return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        return Err(Content(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl })));
                     }
 
                     // check that the slice contains enough data for the entire header + options
@@ -497,7 +497,7 @@ impl IpHeader {
                         },
                     ))
                 }
-                version_number => Err(Content(UnsupportedIpVersion { version_number })),
+                version_number => Err(Content(Ip(UnsupportedIpVersion { version_number }))),
             }
         }
     }
@@ -846,7 +846,7 @@ impl IpHeader {
         reader: &mut T,
     ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
         use crate::io::LimitedReader;
-        use err::ip::{HeadersError::*, HeaderReadError::*};
+        use err::ip::{HeadersError::*, HeaderError::*, HeaderReadError::*};
 
         let value = {
             let mut buf = [0; 1];
@@ -860,7 +860,7 @@ impl IpHeader {
 
                 // check that the ihl is correct
                 if ihl < 5 {
-                    return Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                    return Err(Content(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl })));
                 }
 
                 // read the rest of the header
@@ -932,7 +932,7 @@ impl IpHeader {
                         }
                     })
             }
-            version_number => Err(Content(UnsupportedIpVersion { version_number })),
+            version_number => Err(Content(Ip(UnsupportedIpVersion { version_number }))),
         }
     }
 
@@ -1221,7 +1221,7 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
-            use err::ip::{HeadersError::*, HeadersSliceError::*};
+            use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
 
             // empty error
             assert_eq!(
@@ -1240,7 +1240,7 @@ mod test {
                 if version_number != 4 && version_number != 6 {
                     assert_eq!(
                         IpHeader::from_slice(&[version_number << 4]),
-                        Err(Content(UnsupportedIpVersion { version_number }))
+                        Err(Content(Ip(UnsupportedIpVersion { version_number })))
                     );
                 }
             }
@@ -1357,7 +1357,7 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
-            use err::ip::{HeadersError::*, HeadersSliceError::*};
+            use err::ip::{HeaderError::*, HeadersError::*, HeadersSliceError::*};
 
             let payload = [1,2,3,4];
 
@@ -1378,7 +1378,7 @@ mod test {
                 if version_number != 4 && version_number != 6 {
                     assert_eq!(
                         IpHeader::from_slice_lax(&[version_number << 4]),
-                        Err(Content(UnsupportedIpVersion { version_number }))
+                        Err(Content(Ip(UnsupportedIpVersion { version_number })))
                     );
                 }
             }
@@ -1427,7 +1427,7 @@ mod test {
                         bad_ihl_buffer[0] = (bad_ihl_buffer[0] & 0xf0) | bad_ihl;
                         assert_eq!(
                             IpHeader::from_slice_lax(&bad_ihl_buffer),
-                            Err(Content(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
+                            Err(Content(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl })))
                         );
                     }
                 }
@@ -2053,6 +2053,8 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
+            use err::ip::{HeadersError::*, HeaderError::*};
+
             // no data error
             {
                 let mut cursor = Cursor::new(&[]);
@@ -2065,13 +2067,12 @@ mod test {
             }
             // version error
             {
-                use err::ip::HeadersError::*;
                 let mut cursor = Cursor::new(&[0xf << 4]);
                 assert_eq!(
                     IpHeader::read(&mut cursor).unwrap_err().content().unwrap(),
-                    UnsupportedIpVersion {
+                    Ip(UnsupportedIpVersion {
                         version_number: 0xf
-                    }
+                    })
                 );
             }
             // v4
@@ -2099,9 +2100,9 @@ mod test {
                         .unwrap_err()
                         .content()
                         .unwrap(),
-                        HeadersError::Ipv4HeaderLengthSmallerThanHeader{
+                        Ip(Ipv4HeaderLengthSmallerThanHeader{
                             ihl: bad_ihl
-                        }
+                        })
                     );
                 }
 

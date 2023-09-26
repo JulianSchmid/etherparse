@@ -38,7 +38,7 @@ impl std::error::Error for IpSliceError {
 #[cfg(test)]
 mod tests {
     use super::{IpSliceError::*, *};
-    use crate::err::{Layer, LenSource};
+    use crate::err::{Layer, LenSource, ip::{HeadersError, HeaderError::*}};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -48,13 +48,13 @@ mod tests {
 
     #[test]
     fn debug() {
-        let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
+        let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 1 });
         assert_eq!(format!("Ip({:?})", err.clone()), format!("{:?}", Ip(err)));
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = Ip(err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 });
+        let err = Ip(HeadersError::Ip(UnsupportedIpVersion { version_number: 1 }));
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -85,7 +85,7 @@ mod tests {
 
         // IpHeader
         {
-            let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
+            let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 1 });
             assert_eq!(format!("{}", err), format!("{}", Ip(err)));
         }
 
@@ -113,7 +113,7 @@ mod tests {
 
         // IpHeader
         {
-            let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
+            let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 1 });
             assert!(Ip(err).source().is_some());
         }
 

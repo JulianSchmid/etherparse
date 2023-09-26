@@ -769,9 +769,9 @@ mod test {
                         EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::Ip(err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader {
+                        IpSliceError::Ip(err::ip::HeadersError::Ip(err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader {
                             ihl: 0,
-                        }),
+                        })),
                     );
                 }
             }
@@ -900,6 +900,7 @@ mod test {
 
                 // content error ipv6
                 {
+                    use err::ip::{HeadersError, HeaderError::*};
                     let mut data = test.to_vec(&[]);
 
                     // inject an invalid ip version
@@ -912,9 +913,9 @@ mod test {
                         EthSliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
                             version_number: 0,
                         }),
-                        IpSliceError::Ip(err::ip::HeadersError::UnsupportedIpVersion {
+                        IpSliceError::Ip(HeadersError::Ip(UnsupportedIpVersion {
                             version_number: 0,
-                        }),
+                        })),
                     );
                 }
             }
