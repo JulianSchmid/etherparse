@@ -8,7 +8,7 @@ use proptest::prelude::*;
 struct ComponentTest {
     link: Option<Ethernet2Header>,
     vlan: Option<VlanHeader>,
-    ip: Option<IpHeader>,
+    ip: Option<IpHeaders>,
     transport: Option<TransportHeader>,
     payload: Vec<u8>,
 }
@@ -49,11 +49,11 @@ impl ComponentTest {
             None => {}
         }
         match &self.ip {
-            Some(IpHeader::Version4(header, exts)) => {
+            Some(IpHeaders::Version4(header, exts)) => {
                 header.write_raw(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.protocol).unwrap();
             }
-            Some(IpHeader::Version6(header, exts)) => {
+            Some(IpHeaders::Version6(header, exts)) => {
                 header.write(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.next_header).unwrap();
             }
@@ -86,7 +86,7 @@ impl ComponentTest {
         // set the payload length
         if let Some(ip) = test.ip.as_mut() {
             match ip {
-                IpHeader::Version4(ipv4, exts) => {
+                IpHeaders::Version4(ipv4, exts) => {
                     ipv4.set_payload_len(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -94,7 +94,7 @@ impl ComponentTest {
                     )
                     .unwrap();
                 }
-                IpHeader::Version6(ipv6, exts) => {
+                IpHeaders::Version6(ipv6, exts) => {
                     ipv6.set_payload_length(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -232,7 +232,7 @@ impl ComponentTest {
             }
         }
         if let Some(ip) = self.ip.as_ref() {
-            use IpHeader::*;
+            use IpHeaders::*;
             match ip {
                 Version4(header, exts) => {
                     builder.add(header.header_len());
@@ -288,7 +288,7 @@ impl ComponentTest {
 
         //ip
         assert_eq!(self.ip, {
-            use self::IpHeader::*;
+            use self::IpHeaders::*;
             use crate::IpSlice::*;
             match result.ip {
                 Some(Ipv4(actual)) => Some(Version4(
@@ -423,7 +423,7 @@ impl ComponentTest {
                 if false == frag.is_fragmenting_payload() {
                     frag.more_fragments = true;
                 }
-                let mut header = IpHeader::Version4(frag, ip_exts.clone());
+                let mut header = IpHeaders::Version4(frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header
             });
@@ -439,7 +439,7 @@ impl ComponentTest {
                 let mut non_frag = ip.clone();
                 non_frag.more_fragments = false;
                 non_frag.fragment_offset = 0.try_into().unwrap();
-                let mut header = IpHeader::Version4(non_frag, ip_exts.clone());
+                let mut header = IpHeaders::Version4(non_frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header
             });
@@ -473,7 +473,7 @@ impl ComponentTest {
                         0,
                     ));
                 }
-                let mut header = IpHeader::Version6(ip.clone(), frag);
+                let mut header = IpHeaders::Version6(ip.clone(), frag);
                 header.set_next_headers(ip.next_header);
                 header
             });
@@ -486,7 +486,7 @@ impl ComponentTest {
             test.ip = Some({
                 let mut non_frag = ip_exts.clone();
                 non_frag.fragment = None;
-                let mut header = IpHeader::Version6(ip.clone(), non_frag);
+                let mut header = IpHeaders::Version6(ip.clone(), non_frag);
                 header.set_next_headers(ip.next_header);
                 header
             });

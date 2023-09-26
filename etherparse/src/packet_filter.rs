@@ -241,7 +241,7 @@ mod test {
     struct PacketFilterTest {
         link: Option<Ethernet2Header>,
         vlan: Option<VlanHeader>,
-        ip: Option<IpHeader>,
+        ip: Option<IpHeaders>,
         transport: Option<TransportHeader>,
 
         filter: Filter,
@@ -300,14 +300,14 @@ mod test {
             //ipv4
             {
                 let mut t = self.clone();
-                t.ip = Some(IpHeader::Version4(ipv4.0.clone(), Default::default()));
+                t.ip = Some(IpHeaders::Version4(ipv4.0.clone(), Default::default()));
                 t.add_transport_data(udp, tcp);
             }
 
             //ipv6
             {
                 let mut t = self.clone();
-                t.ip = Some(IpHeader::Version6(ipv6.clone(), Default::default()));
+                t.ip = Some(IpHeaders::Version6(ipv6.clone(), Default::default()));
                 t.add_transport_data(udp, tcp);
             }
         }
@@ -436,7 +436,7 @@ mod test {
 
             //some
             match &self.ip {
-                Some(IpHeader::Version4(_, _)) => {
+                Some(IpHeaders::Version4(_, _)) => {
                     let mut t = self.clone();
                     t.filter.ip = ElementFilter::Some(IpFilter::Ipv4 {
                         source: None,
@@ -444,7 +444,7 @@ mod test {
                     });
                     t.add_transport_filter(expected_result);
                 }
-                Some(IpHeader::Version6(_, _)) => {
+                Some(IpHeaders::Version6(_, _)) => {
                     let mut t = self.clone();
                     t.filter.ip = ElementFilter::Some(IpFilter::Ipv6 {
                         source: None,
@@ -546,13 +546,13 @@ mod test {
                     None => None,
                 },
                 ip: match &self.ip {
-                    Some(IpHeader::Version4(header, _)) => {
+                    Some(IpHeaders::Version4(header, _)) => {
                         let mut header = header.clone();
                         header.set_payload_len(0).unwrap();
                         header.write(&mut ip_data).unwrap();
                         Some(IpSlice::Ipv4(Ipv4Slice::from_slice(&ip_data).unwrap()))
                     }
-                    Some(IpHeader::Version6(header, _)) => {
+                    Some(IpHeaders::Version6(header, _)) => {
                         let mut header = header.clone();
                         header.payload_length = 0;
                         header.write(&mut ip_data).unwrap();

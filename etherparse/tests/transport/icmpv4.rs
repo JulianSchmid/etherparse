@@ -89,8 +89,8 @@ mod icmpv4_regression {
         }
         let request_iph = request.ip.unwrap();
         let reply_iph = reply.ip.unwrap();
-        if let IpHeader::Version4(request_ip, _) = request_iph {
-            if let IpHeader::Version4(reply_ip, _) = reply_iph {
+        if let IpHeaders::Version4(request_ip, _) = request_iph {
+            if let IpHeaders::Version4(reply_ip, _) = reply_iph {
                 assert_eq!(reply_ip.source, request_ip.destination);
                 assert_eq!(reply_ip.destination, request_ip.source);
             } else {
@@ -147,7 +147,7 @@ mod icmpv4_regression {
     fn parse_icmp4_ttl_exceeded() {
         let ttl_exceeded = PacketHeaders::from_ethernet_slice(&ICMP4_TTL_EXCEEDED_BYTES).unwrap();
         let ip_header = match ttl_exceeded.ip.unwrap() {
-            IpHeader::Version4(ip4, _) => ip4,
+            IpHeaders::Version4(ip4, _) => ip4,
             _ => panic!("Didn't parse inner v4 IP header!?"),
         };
         assert_eq!(ip_header.source, [212, 156, 201, 114]);

@@ -6,20 +6,20 @@ use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]
-pub enum IpHeader {
+pub enum IpHeaders {
     /// IPv4 header & extension headers.
     Version4(Ipv4Header, Ipv4Extensions),
     /// IPv6 header & extension headers.
     Version6(Ipv6Header, Ipv6Extensions),
 }
 
-impl IpHeader {
+impl IpHeaders {
     /// Maximum summed up length of all extension headers in bytes/octets.
     pub const MAX_LEN: usize = Ipv6Header::LEN + Ipv6Extensions::MAX_LEN;
 
     /// Returns references to the IPv4 header & extensions if the header contains IPv4 values.
     pub fn v4(&self) -> Option<(&Ipv4Header, &Ipv4Extensions)> {
-        if let IpHeader::Version4(header, exts) = self {
+        if let IpHeaders::Version4(header, exts) = self {
             Some((header, exts))
         } else {
             None
@@ -28,7 +28,7 @@ impl IpHeader {
 
     /// Returns references to the IPv6 header & extensions if the header contains IPv6 values.
     pub fn v6(&self) -> Option<(&Ipv6Header, &Ipv6Extensions)> {
-        if let IpHeader::Version6(header, exts) = self {
+        if let IpHeaders::Version6(header, exts) = self {
             Some((header, exts))
         } else {
             None
@@ -40,8 +40,8 @@ impl IpHeader {
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpNumber, &[u8]), err::ip::HeadersSliceError> {
-        let (header, payload) = IpHeader::from_slice(slice)?;
+    ) -> Result<(IpHeaders, IpNumber, &[u8]), err::ip::HeadersSliceError> {
+        let (header, payload) = IpHeaders::from_slice(slice)?;
         Ok((header, payload.ip_number, payload.payload))
     }
 
@@ -56,7 +56,7 @@ impl IpHeader {
     /// fields in the IP headers use [`IpHeader::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ip::HeadersSliceError> {
         use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
@@ -161,7 +161,7 @@ impl IpHeader {
 
                     let fragmented = header.is_fragmenting_payload();
                     Ok((
-                        IpHeader::Version4(header, exts),
+                        IpHeaders::Version4(header, exts),
                         IpPayload {
                             ip_number: next_protocol,
                             fragmented,
@@ -251,7 +251,7 @@ impl IpHeader {
 
                     let fragmented = exts.is_fragmenting_payload();
                     Ok((
-                        IpHeader::Version6(header, exts),
+                        IpHeaders::Version6(header, exts),
                         IpPayload {
                             ip_number: next_header,
                             fragmented,
@@ -309,7 +309,7 @@ impl IpHeader {
     /// * The value `0`.
     pub fn from_slice_lax(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ip::HeadersSliceError> {
         use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
@@ -408,7 +408,7 @@ impl IpHeader {
 
                     let fragmented = header.is_fragmenting_payload();
                     Ok((
-                        IpHeader::Version4(header, exts),
+                        IpHeaders::Version4(header, exts),
                         IpPayload {
                             ip_number: next_protocol,
                             fragmented,
@@ -488,7 +488,7 @@ impl IpHeader {
 
                     let fragmented = exts.is_fragmenting_payload();
                     Ok((
-                        IpHeader::Version6(header, exts),
+                        IpHeaders::Version6(header, exts),
                         IpPayload {
                             ip_number: next_header,
                             fragmented,
@@ -513,7 +513,7 @@ impl IpHeader {
     /// fields in the IP headers use [`IpHeader::ipv4_from_slice_lax`] instead.
     pub fn ipv4_from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv4::SliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ipv4::SliceError> {
         use err::ipv4::SliceError::*;
 
         // read the header
@@ -572,7 +572,7 @@ impl IpHeader {
 
         let fragmented = header.is_fragmenting_payload();
         Ok((
-            IpHeader::Version4(header, exts),
+            IpHeaders::Version4(header, exts),
             IpPayload {
                 ip_number: next_header,
                 fragmented,
@@ -618,7 +618,7 @@ impl IpHeader {
     ///  * Too small to contain at least the IPv4 header.
     pub fn ipv4_from_slice_lax(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv4::SliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ipv4::SliceError> {
         use err::ipv4::SliceError::*;
 
         // read the header
@@ -664,7 +664,7 @@ impl IpHeader {
 
         let fragmented = header.is_fragmenting_payload();
         Ok((
-            IpHeader::Version4(header, exts),
+            IpHeaders::Version4(header, exts),
             IpPayload {
                 ip_number: next_protocol,
                 fragmented,
@@ -683,7 +683,7 @@ impl IpHeader {
     /// to partially support jumbograms.
     pub fn ipv6_from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv6::SliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ipv6::SliceError> {
         use err::ipv6::SliceError::*;
 
         // read ipv6 header
@@ -740,7 +740,7 @@ impl IpHeader {
 
         let fragmented = exts.is_fragmenting_payload();
         Ok((
-            IpHeader::Version6(header, exts),
+            IpHeaders::Version6(header, exts),
             IpPayload {
                 ip_number: next_header,
                 fragmented,
@@ -787,7 +787,7 @@ impl IpHeader {
     /// * The value `0`.
     pub fn ipv6_from_slice_lax(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ipv6::SliceError> {
+    ) -> Result<(IpHeaders, IpPayload<'_>), err::ipv6::SliceError> {
         use err::ipv6::SliceError::*;
 
         // read ipv6 header
@@ -829,7 +829,7 @@ impl IpHeader {
 
         let fragmented = exts.is_fragmenting_payload();
         Ok((
-            IpHeader::Version6(header, exts),
+            IpHeaders::Version6(header, exts),
             IpPayload {
                 ip_number: next_header,
                 fragmented,
@@ -844,7 +844,7 @@ impl IpHeader {
     #[cfg(feature = "std")]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
-    ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
+    ) -> Result<(IpHeaders, IpNumber), err::ip::HeaderReadError> {
         use crate::io::LimitedReader;
         use err::ip::{HeadersError::*, HeaderError::*, HeaderReadError::*};
 
@@ -899,7 +899,7 @@ impl IpHeader {
 
                 // read the extension headers if present
                 Ipv4Extensions::read_limited(&mut reader, header.protocol)
-                    .map(|(ext, next)| (IpHeader::Version4(header, ext), next))
+                    .map(|(ext, next)| (IpHeaders::Version4(header, ext), next))
                     .map_err(|err| {
                         use err::ip_auth::HeaderLimitedReadError as I;
                         match err {
@@ -922,7 +922,7 @@ impl IpHeader {
                 );
 
                 Ipv6Extensions::read_limited(&mut reader, header.next_header)
-                    .map(|(ext, next)| (IpHeader::Version6(header, ext), next))
+                    .map(|(ext, next)| (IpHeaders::Version6(header, ext), next))
                     .map_err(|err| {
                         use err::ipv6_exts::HeaderLimitedReadError as I;
                         match err {
@@ -940,7 +940,7 @@ impl IpHeader {
     /// crate feature `std`).
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeadersWriteError> {
-        use crate::IpHeader::*;
+        use crate::IpHeaders::*;
         use HeadersWriteError::*;
         match *self {
             Version4(ref header, ref extensions) => {
@@ -968,7 +968,7 @@ impl IpHeader {
 
     /// Returns the size when the ip header & extensions are serialized
     pub fn header_len(&self) -> usize {
-        use crate::IpHeader::*;
+        use crate::IpHeaders::*;
         match *self {
             Version4(ref header, ref extensions) => header.header_len() + extensions.header_len(),
             Version6(_, ref extensions) => Ipv6Header::LEN + extensions.header_len(),
@@ -979,7 +979,7 @@ impl IpHeader {
     /// and header extensions.
     pub fn next_header(&self) -> Result<IpNumber, err::ip_exts::ExtsWalkError> {
         use crate::err::ip_exts::ExtsWalkError::*;
-        use crate::IpHeader::*;
+        use crate::IpHeaders::*;
         match *self {
             Version4(ref header, ref extensions) => {
                 extensions.next_header(header.protocol).map_err(Ipv4Exts)
@@ -997,7 +997,7 @@ impl IpHeader {
     /// The given number will be set as the last "next_header" or
     /// protocol number.
     pub fn set_next_headers(&mut self, last_next_header: IpNumber) -> u16 {
-        use IpHeader::*;
+        use IpHeaders::*;
         match self {
             Version4(ref mut header, ref mut extensions) => {
                 header.protocol = extensions.set_next_headers(last_next_header);
@@ -1021,7 +1021,7 @@ impl IpHeader {
     pub fn set_payload_len(&mut self, len: usize) -> Result<(), ValueTooBigError<usize>> {
         use crate::err::ValueType;
         match self {
-            IpHeader::Version4(ipv4_hdr, exts) => {
+            IpHeaders::Version4(ipv4_hdr, exts) => {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv4_hdr.set_payload_len(complete_len)
                 } else {
@@ -1034,7 +1034,7 @@ impl IpHeader {
                     })
                 }
             }
-            IpHeader::Version6(ipv6_hdr, exts) => {
+            IpHeaders::Version6(ipv6_hdr, exts) => {
                 if let Some(complete_len) = len.checked_add(exts.header_len()) {
                     ipv6_hdr.set_payload_length(complete_len)
                 } else {
@@ -1052,8 +1052,8 @@ impl IpHeader {
     /// or the IPv6 fragment header.
     pub fn is_fragmenting_payload(&self) -> bool {
         match self {
-            IpHeader::Version4(ipv4, _) => ipv4.is_fragmenting_payload(),
-            IpHeader::Version6(_, exts) => exts.is_fragmenting_payload(),
+            IpHeaders::Version4(ipv4, _) => ipv4.is_fragmenting_payload(),
+            IpHeaders::Version6(_, exts) => exts.is_fragmenting_payload(),
         }
     }
 }
@@ -1081,8 +1081,8 @@ mod test {
         IPV6_ROUTE,
     ];
 
-    fn combine_v4(v4: &Ipv4Header, ext: &Ipv4Extensions, payload: &[u8]) -> IpHeader {
-        IpHeader::Version4(
+    fn combine_v4(v4: &Ipv4Header, ext: &Ipv4Extensions, payload: &[u8]) -> IpHeaders {
+        IpHeaders::Version4(
             {
                 let mut v4 = v4.clone();
                 v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
@@ -1094,13 +1094,13 @@ mod test {
         )
     }
 
-    fn combine_v6(v6: &Ipv6Header, ext: &Ipv6Extensions, payload: &[u8]) -> IpHeader {
+    fn combine_v6(v6: &Ipv6Header, ext: &Ipv6Extensions, payload: &[u8]) -> IpHeaders {
         let (ext, next_header) = {
             let mut ext = ext.clone();
             let next_header = ext.set_next_headers(UDP);
             (ext, next_header)
         };
-        IpHeader::Version6(
+        IpHeaders::Version6(
             {
                 let mut v6 = v6.clone();
                 v6.next_header = next_header;
@@ -1125,7 +1125,7 @@ mod test {
                     v4,
                     v4_exts
                 ),
-                format!("{:?}", IpHeader::Version4(v4, v4_exts))
+                format!("{:?}", IpHeaders::Version4(v4, v4_exts))
             );
             assert_eq!(
                 format!(
@@ -1133,7 +1133,7 @@ mod test {
                     v6,
                     v6_exts
                 ),
-                format!("{:?}", IpHeader::Version6(v6, v6_exts))
+                format!("{:?}", IpHeaders::Version6(v6, v6_exts))
             );
         }
     }
@@ -1147,11 +1147,11 @@ mod test {
             v6_exts in ipv6_extensions_any(),
         ) {
             {
-                let v4 = IpHeader::Version4(v4, v4_exts);
+                let v4 = IpHeaders::Version4(v4, v4_exts);
                 assert_eq!(v4, v4.clone());
             }
             {
-                let v6 = IpHeader::Version6(v6, v6_exts);
+                let v6 = IpHeaders::Version6(v6, v6_exts);
                 assert_eq!(v6, v6.clone());
             }
         }
@@ -1166,11 +1166,11 @@ mod test {
             v6_exts in ipv6_extensions_any(),
         ) {
             assert_eq!(
-                IpHeader::Version4(v4.clone(), v4_exts.clone()).v4(),
+                IpHeaders::Version4(v4.clone(), v4_exts.clone()).v4(),
                 Some((&v4, &v4_exts))
             );
             assert_eq!(
-                IpHeader::Version6(v6.clone(), v6_exts.clone()).v4(),
+                IpHeaders::Version6(v6.clone(), v6_exts.clone()).v4(),
                 None
             );
         }
@@ -1185,11 +1185,11 @@ mod test {
             v6_exts in ipv6_extensions_any(),
         ) {
             assert_eq!(
-                IpHeader::Version4(v4.clone(), v4_exts.clone()).v6(),
+                IpHeaders::Version4(v4.clone(), v4_exts.clone()).v6(),
                 None
             );
             assert_eq!(
-                IpHeader::Version6(v6.clone(), v6_exts.clone()).v6(),
+                IpHeaders::Version6(v6.clone(), v6_exts.clone()).v6(),
                 Some((&v6, &v6_exts))
             );
         }
@@ -1206,7 +1206,7 @@ mod test {
             let mut buffer = Vec::with_capacity(header.header_len());
             header.write(&mut buffer).unwrap();
 
-            let actual = IpHeader::read_from_slice(&buffer).unwrap();
+            let actual = IpHeaders::read_from_slice(&buffer).unwrap();
             assert_eq!(actual.0, header);
             assert_eq!(actual.1, header.next_header().unwrap());
             assert_eq!(actual.2, &buffer[buffer.len()..]);
@@ -1225,7 +1225,7 @@ mod test {
 
             // empty error
             assert_eq!(
-                IpHeader::from_slice(&[]),
+                IpHeaders::from_slice(&[]),
                 Err(Len(err::LenError {
                     required_len: 1,
                     len: 0,
@@ -1239,7 +1239,7 @@ mod test {
             for version_number in 0..=0xfu8 {
                 if version_number != 4 && version_number != 6 {
                     assert_eq!(
-                        IpHeader::from_slice(&[version_number << 4]),
+                        IpHeaders::from_slice(&[version_number << 4]),
                         Err(Content(Ip(UnsupportedIpVersion { version_number })))
                     );
                 }
@@ -1257,7 +1257,7 @@ mod test {
 
                 // read
                 {
-                    let actual = IpHeader::from_slice(&buffer).unwrap();
+                    let actual = IpHeaders::from_slice(&buffer).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1271,11 +1271,11 @@ mod test {
                 }
 
                 // read error ipv4 header
-                IpHeader::from_slice(&buffer[..1]).unwrap_err();
+                IpHeaders::from_slice(&buffer[..1]).unwrap_err();
 
                 // read error ipv4 extensions
                 if v4_exts.header_len() > 0 {
-                    IpHeader::from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
+                    IpHeaders::from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
                 }
 
                 // total length smaller the header
@@ -1288,7 +1288,7 @@ mod test {
                     buffer[2] = bad_total_len_be[0];
                     buffer[3] = bad_total_len_be[1];
                     assert_eq!(
-                        IpHeader::from_slice(&buffer[..]).unwrap_err(),
+                        IpHeaders::from_slice(&buffer[..]).unwrap_err(),
                         HeadersSliceError::Len(LenError{
                             required_len: v4.header_len(),
                             len: bad_total_len as usize,
@@ -1310,7 +1310,7 @@ mod test {
 
                 // len error
                 {
-                    let actual = IpHeader::from_slice(&buffer).unwrap();
+                    let actual = IpHeaders::from_slice(&buffer).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1324,11 +1324,11 @@ mod test {
                 }
 
                 // read error header
-                IpHeader::from_slice(&buffer[..1]).unwrap_err();
+                IpHeaders::from_slice(&buffer[..1]).unwrap_err();
 
                 // read error ipv4 extensions
                 if v6_exts.header_len() > 0 {
-                    IpHeader::from_slice(&buffer[..Ipv6Header::LEN + 1]).unwrap_err();
+                    IpHeaders::from_slice(&buffer[..Ipv6Header::LEN + 1]).unwrap_err();
                 }
 
                 // len error (with payload len zero)
@@ -1340,7 +1340,7 @@ mod test {
                     buffer[5] = 0;
 
                     assert!(
-                        IpHeader::from_slice(
+                        IpHeaders::from_slice(
                             &buffer[..buffer.len() - payload.len() - 2]
                         ).is_err()
                     );
@@ -1363,7 +1363,7 @@ mod test {
 
             // empty error
             assert_eq!(
-                IpHeader::from_slice_lax(&[]),
+                IpHeaders::from_slice_lax(&[]),
                 Err(Len(err::LenError {
                     required_len: 1,
                     len: 0,
@@ -1377,7 +1377,7 @@ mod test {
             for version_number in 0..=0xfu8 {
                 if version_number != 4 && version_number != 6 {
                     assert_eq!(
-                        IpHeader::from_slice_lax(&[version_number << 4]),
+                        IpHeaders::from_slice_lax(&[version_number << 4]),
                         Err(Content(Ip(UnsupportedIpVersion { version_number })))
                     );
                 }
@@ -1393,7 +1393,7 @@ mod test {
 
                 // normal read
                 {
-                    let actual = IpHeader::from_slice_lax(&buffer).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1409,7 +1409,7 @@ mod test {
                 // error len smaller then min header len
                 for len in 1..Ipv4Header::MIN_LEN {
                     assert_eq!(
-                        IpHeader::from_slice_lax(&buffer[..len]),
+                        IpHeaders::from_slice_lax(&buffer[..len]),
                         Err(Len(err::LenError {
                             required_len: Ipv4Header::MIN_LEN,
                             len,
@@ -1426,7 +1426,7 @@ mod test {
                     for bad_ihl in 0..5 {
                         bad_ihl_buffer[0] = (bad_ihl_buffer[0] & 0xf0) | bad_ihl;
                         assert_eq!(
-                            IpHeader::from_slice_lax(&bad_ihl_buffer),
+                            IpHeaders::from_slice_lax(&bad_ihl_buffer),
                             Err(Content(Ip(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl })))
                         );
                     }
@@ -1435,7 +1435,7 @@ mod test {
                 // ihl len error
                 for short_ihl in 5..usize::from(v4.ihl()) {
                     assert_eq!(
-                        IpHeader::from_slice_lax(&buffer[..4*short_ihl]),
+                        IpHeaders::from_slice_lax(&buffer[..4*short_ihl]),
                         Err(Len(err::LenError {
                             required_len: usize::from(v4.ihl())*4,
                             len: 4*short_ihl,
@@ -1448,7 +1448,7 @@ mod test {
 
                 // total_len bigger then slice len (fallback to slice len)
                 for payload_len in 0..payload.len(){
-                    let actual = IpHeader::from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1463,7 +1463,7 @@ mod test {
 
                 // len error ipv4 extensions
                 if v4_exts.header_len() > 0 {
-                    IpHeader::from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
+                    IpHeaders::from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
                 }
 
                 // content error ipv4 extensions
@@ -1478,7 +1478,7 @@ mod test {
                     // trigger a content error)
                     errored_buffer[v4.header_len() + 1] = 0;
                     assert_eq!(
-                        IpHeader::from_slice_lax(&errored_buffer),
+                        IpHeaders::from_slice_lax(&errored_buffer),
                         Err(Content(Ipv4Ext(ZeroPayloadLen)))
                     );
                 }
@@ -1493,10 +1493,10 @@ mod test {
                     buffer[2] = bad_total_len_be[0];
                     buffer[3] = bad_total_len_be[1];
 
-                    let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer[..]).unwrap();
 
                     let (v4_header, v4_exts) = header.v4().unwrap();
-                    let expected_headers = IpHeader::Version4(
+                    let expected_headers = IpHeaders::Version4(
                         {
                             let mut expected_v4 = v4_header.clone();
                             expected_v4.total_len = bad_total_len;
@@ -1527,7 +1527,7 @@ mod test {
 
                 // normal read
                 {
-                    let actual = IpHeader::from_slice_lax(&buffer).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1543,7 +1543,7 @@ mod test {
                 // smaller then header
                 for len in 1..Ipv6Header::LEN {
                     assert_eq!(
-                        IpHeader::from_slice_lax(&buffer[..len]),
+                        IpHeaders::from_slice_lax(&buffer[..len]),
                         Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
                             len,
@@ -1556,7 +1556,7 @@ mod test {
 
                 // extension len error
                 if v6_exts.header_len() > 0 {
-                    IpHeader::from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
+                    IpHeaders::from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
                 }
 
                 // extension content error
@@ -1579,14 +1579,14 @@ mod test {
                     // trigger a content error)
                     errored_buffer[auth_offset + 1] = 0;
                     assert_eq!(
-                        IpHeader::from_slice_lax(&errored_buffer),
+                        IpHeaders::from_slice_lax(&errored_buffer),
                         Err(Content(Ipv6Ext(IpAuth(ZeroPayloadLen))))
                     );
                 }
 
                 // slice smaller then payload len
                 for len in (v6.header_len()+v6_exts.header_len())..buffer.len() - 1 {
-                    let actual = IpHeader::from_slice_lax(&buffer[..len]).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer[..len]).unwrap();
                     assert_eq!(&actual.0, &header);
                     assert_eq!(
                         actual.1,
@@ -1606,10 +1606,10 @@ mod test {
                     buffer[4] = 0;
                     buffer[5] = 0;
 
-                    let actual = IpHeader::from_slice_lax(&buffer[..]).unwrap();
+                    let actual = IpHeaders::from_slice_lax(&buffer[..]).unwrap();
 
                     let (v6_header, v6_exts) = header.v6().unwrap();
-                    let expected_headers = IpHeader::Version6(
+                    let expected_headers = IpHeaders::Version6(
                         {
                             let mut expected_v6 = v6_header.clone();
                             expected_v6.payload_length = 0;
@@ -1649,7 +1649,7 @@ mod test {
 
             // read
             {
-                let actual = IpHeader::ipv4_from_slice(&buffer).unwrap();
+                let actual = IpHeaders::ipv4_from_slice(&buffer).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -1663,11 +1663,11 @@ mod test {
             }
 
             // read error ipv4 header
-            IpHeader::ipv4_from_slice(&buffer[..1]).unwrap_err();
+            IpHeaders::ipv4_from_slice(&buffer[..1]).unwrap_err();
 
             // read error ipv4 extensions
             if v4_exts.header_len() > 0 {
-                IpHeader::ipv4_from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
+                IpHeaders::ipv4_from_slice(&buffer[..v4.header_len() + 1]).unwrap_err();
             }
 
             // total length smaller the header
@@ -1680,7 +1680,7 @@ mod test {
                 buffer[2] = bad_total_len_be[0];
                 buffer[3] = bad_total_len_be[1];
                 assert_eq!(
-                    IpHeader::ipv4_from_slice(&buffer[..]).unwrap_err(),
+                    IpHeaders::ipv4_from_slice(&buffer[..]).unwrap_err(),
                     err::ipv4::SliceError::Len(LenError{
                         required_len: v4.header_len(),
                         len: bad_total_len as usize,
@@ -1705,7 +1705,7 @@ mod test {
 
             // empty error
             assert_eq!(
-                IpHeader::ipv4_from_slice_lax(&[]),
+                IpHeaders::ipv4_from_slice_lax(&[]),
                 Err(Len(err::LenError {
                     required_len: 20,
                     len: 0,
@@ -1724,7 +1724,7 @@ mod test {
 
             // normal read
             {
-                let actual = IpHeader::ipv4_from_slice_lax(&buffer).unwrap();
+                let actual = IpHeaders::ipv4_from_slice_lax(&buffer).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -1740,7 +1740,7 @@ mod test {
             // error len smaller then min header len
             for len in 1..Ipv4Header::MIN_LEN {
                 assert_eq!(
-                    IpHeader::ipv4_from_slice_lax(&buffer[..len]),
+                    IpHeaders::ipv4_from_slice_lax(&buffer[..len]),
                     Err(Len(err::LenError {
                         required_len: Ipv4Header::MIN_LEN,
                         len,
@@ -1757,7 +1757,7 @@ mod test {
                 for bad_ihl in 0..5 {
                     bad_ihl_buffer[0] = (bad_ihl_buffer[0] & 0xf0) | bad_ihl;
                     assert_eq!(
-                        IpHeader::ipv4_from_slice_lax(&bad_ihl_buffer),
+                        IpHeaders::ipv4_from_slice_lax(&bad_ihl_buffer),
                         Err(Header(HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
                     );
                 }
@@ -1766,7 +1766,7 @@ mod test {
             // ihl len error
             for short_ihl in 5..usize::from(v4.ihl()) {
                 assert_eq!(
-                    IpHeader::ipv4_from_slice_lax(&buffer[..4*short_ihl]),
+                    IpHeaders::ipv4_from_slice_lax(&buffer[..4*short_ihl]),
                     Err(Len(err::LenError {
                         required_len: usize::from(v4.ihl())*4,
                         len: 4*short_ihl,
@@ -1779,7 +1779,7 @@ mod test {
 
             // total_len bigger then slice len (fallback to slice len)
             for payload_len in 0..payload.len(){
-                let actual = IpHeader::ipv4_from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
+                let actual = IpHeaders::ipv4_from_slice_lax(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -1794,7 +1794,7 @@ mod test {
 
             // len error ipv4 extensions
             if v4_exts.header_len() > 0 {
-                IpHeader::ipv4_from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
+                IpHeaders::ipv4_from_slice_lax(&buffer[..v4.header_len() + 1]).unwrap_err();
             }
 
             // content error ipv4 extensions
@@ -1807,7 +1807,7 @@ mod test {
                 // trigger a content error)
                 errored_buffer[v4.header_len() + 1] = 0;
                 assert_eq!(
-                    IpHeader::ipv4_from_slice_lax(&errored_buffer),
+                    IpHeaders::ipv4_from_slice_lax(&errored_buffer),
                     Err(Exts(ZeroPayloadLen))
                 );
             }
@@ -1822,10 +1822,10 @@ mod test {
                 buffer[2] = bad_total_len_be[0];
                 buffer[3] = bad_total_len_be[1];
 
-                let actual = IpHeader::ipv4_from_slice_lax(&buffer[..]).unwrap();
+                let actual = IpHeaders::ipv4_from_slice_lax(&buffer[..]).unwrap();
 
                 let (v4_header, v4_exts) = header.v4().unwrap();
-                let expected_headers = IpHeader::Version4(
+                let expected_headers = IpHeaders::Version4(
                     {
                         let mut expected_v4 = v4_header.clone();
                         expected_v4.total_len = bad_total_len;
@@ -1862,7 +1862,7 @@ mod test {
 
             // len error
             {
-                let actual = IpHeader::ipv6_from_slice(&buffer).unwrap();
+                let actual = IpHeaders::ipv6_from_slice(&buffer).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -1876,11 +1876,11 @@ mod test {
             }
 
             // read error header
-            IpHeader::ipv6_from_slice(&buffer[..1]).unwrap_err();
+            IpHeaders::ipv6_from_slice(&buffer[..1]).unwrap_err();
 
             // read error ipv4 extensions
             if v6_exts.header_len() > 0 {
-                IpHeader::ipv6_from_slice(&buffer[..Ipv6Header::LEN + 1]).unwrap_err();
+                IpHeaders::ipv6_from_slice(&buffer[..Ipv6Header::LEN + 1]).unwrap_err();
             }
 
             // len error (with payload len zero)
@@ -1892,7 +1892,7 @@ mod test {
                 buffer[5] = 0;
 
                 assert!(
-                    IpHeader::ipv6_from_slice(
+                    IpHeaders::ipv6_from_slice(
                         &buffer[..buffer.len() - payload.len() - 2]
                     ).is_err()
                 );
@@ -1913,7 +1913,7 @@ mod test {
 
             // empty error
             assert_eq!(
-                IpHeader::ipv6_from_slice_lax(&[]),
+                IpHeaders::ipv6_from_slice_lax(&[]),
                 Err(Len(err::LenError {
                     required_len: Ipv6Header::LEN,
                     len: 0,
@@ -1935,14 +1935,14 @@ mod test {
                 let mut bad_vers_buffer = buffer.clone();
                 bad_vers_buffer[0] = (bad_vers_buffer[0] & 0xf) | (bad_version << 4);
                 assert_eq!(
-                    IpHeader::ipv6_from_slice_lax(&bad_vers_buffer),
+                    IpHeaders::ipv6_from_slice_lax(&bad_vers_buffer),
                     Err(Header(UnexpectedVersion { version_number: bad_version }))
                 );
             }
 
             // normal read
             {
-                let actual = IpHeader::ipv6_from_slice_lax(&buffer).unwrap();
+                let actual = IpHeaders::ipv6_from_slice_lax(&buffer).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -1958,7 +1958,7 @@ mod test {
             // smaller then header
             for len in 1..Ipv6Header::LEN {
                 assert_eq!(
-                    IpHeader::ipv6_from_slice_lax(&buffer[..len]),
+                    IpHeaders::ipv6_from_slice_lax(&buffer[..len]),
                     Err(Len(err::LenError {
                         required_len: Ipv6Header::LEN,
                         len,
@@ -1971,7 +1971,7 @@ mod test {
 
             // extension len error
             if v6_exts.header_len() > 0 {
-                IpHeader::ipv6_from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
+                IpHeaders::ipv6_from_slice_lax(&buffer[..v6.header_len() + 1]).unwrap_err();
             }
 
             // extension content error
@@ -1992,14 +1992,14 @@ mod test {
                 // trigger a content error)
                 errored_buffer[auth_offset + 1] = 0;
                 assert_eq!(
-                    IpHeader::ipv6_from_slice_lax(&errored_buffer),
+                    IpHeaders::ipv6_from_slice_lax(&errored_buffer),
                     Err(Exts(IpAuth(ZeroPayloadLen)))
                 );
             }
 
             // slice smaller then payload len
             for len in (v6.header_len()+v6_exts.header_len())..buffer.len() - 1 {
-                let actual = IpHeader::ipv6_from_slice_lax(&buffer[..len]).unwrap();
+                let actual = IpHeaders::ipv6_from_slice_lax(&buffer[..len]).unwrap();
                 assert_eq!(&actual.0, &header);
                 assert_eq!(
                     actual.1,
@@ -2019,10 +2019,10 @@ mod test {
                 buffer[4] = 0;
                 buffer[5] = 0;
 
-                let actual = IpHeader::ipv6_from_slice_lax(&buffer[..]).unwrap();
+                let actual = IpHeaders::ipv6_from_slice_lax(&buffer[..]).unwrap();
 
                 let (v6_header, v6_exts) = header.v6().unwrap();
-                let expected_headers = IpHeader::Version6(
+                let expected_headers = IpHeaders::Version6(
                     {
                         let mut expected_v6 = v6_header.clone();
                         expected_v6.payload_length = 0;
@@ -2059,7 +2059,7 @@ mod test {
             {
                 let mut cursor = Cursor::new(&[]);
                 assert!(
-                    IpHeader::read(&mut cursor)
+                    IpHeaders::read(&mut cursor)
                     .unwrap_err()
                     .io()
                     .is_some()
@@ -2069,7 +2069,7 @@ mod test {
             {
                 let mut cursor = Cursor::new(&[0xf << 4]);
                 assert_eq!(
-                    IpHeader::read(&mut cursor).unwrap_err().content().unwrap(),
+                    IpHeaders::read(&mut cursor).unwrap_err().content().unwrap(),
                     Ip(UnsupportedIpVersion {
                         version_number: 0xf
                     })
@@ -2084,7 +2084,7 @@ mod test {
                 // read
                 {
                     let mut cursor = Cursor::new(&buffer[..]);
-                    let actual = IpHeader::read(&mut cursor).unwrap();
+                    let actual = IpHeaders::read(&mut cursor).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                 }
@@ -2096,7 +2096,7 @@ mod test {
                     buffer[0] = (buffer[0] & 0b1111_0000) | bad_ihl;
                     let mut cursor = Cursor::new(&buffer[..]);
                     assert_eq!(
-                        IpHeader::read(&mut cursor)
+                        IpHeaders::read(&mut cursor)
                         .unwrap_err()
                         .content()
                         .unwrap(),
@@ -2117,7 +2117,7 @@ mod test {
                     buffer[3] = bad_total_len_be[1];
                     let mut cursor = Cursor::new(&buffer[..]);
                     assert_eq!(
-                        IpHeader::read(&mut cursor)
+                        IpHeaders::read(&mut cursor)
                         .unwrap_err()
                         .len()
                         .unwrap(),
@@ -2135,7 +2135,7 @@ mod test {
                 {
                     let mut cursor = Cursor::new(&buffer[..1]);
                     assert!(
-                        IpHeader::read(&mut cursor)
+                        IpHeaders::read(&mut cursor)
                         .unwrap_err()
                         .io()
                         .is_some()
@@ -2145,7 +2145,7 @@ mod test {
                 // read error ipv4 extensions
                 if v4_exts.header_len() > 0 {
                     let mut cursor = Cursor::new(&buffer[..v4.header_len() + 1]);
-                    IpHeader::read(&mut cursor).unwrap_err();
+                    IpHeaders::read(&mut cursor).unwrap_err();
                 }
 
                 // len error in extensions
@@ -2159,7 +2159,7 @@ mod test {
                     buffer[3] = bad_total_len_be[1];
                     let mut cursor = Cursor::new(&buffer[..]);
                     assert_eq!(
-                        IpHeader::read(&mut cursor)
+                        IpHeaders::read(&mut cursor)
                         .unwrap_err()
                         .len()
                         .unwrap(),
@@ -2180,7 +2180,7 @@ mod test {
                     buffer[v4.header_len() + 1] = 0;
                     let mut cursor = Cursor::new(&buffer[..]);
                     assert_eq!(
-                        IpHeader::read(&mut cursor)
+                        IpHeaders::read(&mut cursor)
                         .unwrap_err()
                         .content()
                         .unwrap(),
@@ -2200,7 +2200,7 @@ mod test {
                 // ok case
                 {
                     let mut cursor = Cursor::new(&buffer[..]);
-                    let actual = IpHeader::read(&mut cursor).unwrap();
+                    let actual = IpHeaders::read(&mut cursor).unwrap();
                     assert_eq!(actual.0, header);
                     assert_eq!(actual.1, header.next_header().unwrap());
                 }
@@ -2209,7 +2209,7 @@ mod test {
                 {
                     let mut cursor = Cursor::new(&buffer[..1]);
                     assert!(
-                        IpHeader::read(&mut cursor).unwrap_err().io().is_some()
+                        IpHeaders::read(&mut cursor).unwrap_err().io().is_some()
                     );
                 }
 
@@ -2217,7 +2217,7 @@ mod test {
                 if v6_exts.header_len() > 0 {
                     let mut cursor = Cursor::new(&buffer[..Ipv6Header::LEN + 1]);
                     assert!(
-                        IpHeader::read(&mut cursor).unwrap_err().io().is_some()
+                        IpHeaders::read(&mut cursor).unwrap_err().io().is_some()
                     );
                 }
 
@@ -2232,7 +2232,7 @@ mod test {
                     // expect a length error
                     let mut cursor = Cursor::new(&buffer[..]);
                     assert!(
-                        IpHeader::read(&mut cursor).unwrap_err().len().is_some()
+                        IpHeaders::read(&mut cursor).unwrap_err().len().is_some()
                     );
                 }
 
@@ -2246,7 +2246,7 @@ mod test {
                         buffer[auth_offset + 1] = 0;
                         let mut cursor = Cursor::new(&buffer[..]);
                         assert_eq!(
-                            IpHeader::read(&mut cursor)
+                            IpHeaders::read(&mut cursor)
                             .unwrap_err()
                             .content()
                             .unwrap(),
@@ -2274,7 +2274,7 @@ mod test {
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
 
-                let actual = IpHeader::from_slice(&buffer).unwrap().0;
+                let actual = IpHeaders::from_slice(&buffer).unwrap().0;
                 assert_eq!(header, actual);
 
                 // write error v4 header
@@ -2304,7 +2304,7 @@ mod test {
                 // write content error v4 extension headers
                 if v4_exts.header_len() > 0 {
                     // cause a missing reference error
-                    let header = IpHeader::Version4(
+                    let header = IpHeaders::Version4(
                         {
                             let mut v4 = v4.clone();
                             // skips extension header
@@ -2329,7 +2329,7 @@ mod test {
                 let mut buffer = Vec::with_capacity(header.header_len());
                 header.write(&mut buffer).unwrap();
 
-                let actual = IpHeader::from_slice(&buffer).unwrap().0;
+                let actual = IpHeaders::from_slice(&buffer).unwrap().0;
                 assert_eq!(header, actual);
 
                 // write error v6 header
@@ -2358,7 +2358,7 @@ mod test {
                 // write content error v4 extension headers
                 if v6_exts.header_len() > 0 {
                     // cause a missing reference error
-                    let header = IpHeader::Version6(
+                    let header = IpHeaders::Version6(
                         {
                             let mut v6 = v6.clone();
                             // skips extension header
@@ -2386,11 +2386,11 @@ mod test {
         ) {
             assert_eq!(
                 v4.header_len() + v4_exts.header_len(),
-                IpHeader::Version4(v4, v4_exts).header_len()
+                IpHeaders::Version4(v4, v4_exts).header_len()
             );
             assert_eq!(
                 Ipv6Header::LEN + v6_exts.header_len(),
-                IpHeader::Version6(v6, v6_exts).header_len()
+                IpHeaders::Version6(v6, v6_exts).header_len()
             );
         }
     }
@@ -2413,7 +2413,7 @@ mod test {
                 header.protocol = exts.set_next_headers(post_header);
                 assert_eq!(
                     Ok(post_header),
-                    IpHeader::Version4(header, exts).next_header()
+                    IpHeaders::Version4(header, exts).next_header()
                 );
             }
             {
@@ -2422,7 +2422,7 @@ mod test {
                 header.next_header = exts.set_next_headers(post_header);
                 assert_eq!(
                     Ok(post_header),
-                    IpHeader::Version6(header, exts).next_header()
+                    IpHeaders::Version6(header, exts).next_header()
                 );
             }
         }
@@ -2441,7 +2441,7 @@ mod test {
         ) {
             // ipv4 (with valid payload length)
             {
-                let mut actual = IpHeader::Version4(
+                let mut actual = IpHeaders::Version4(
                     v4.clone(),
                     v4_exts.clone()
                 );
@@ -2449,7 +2449,7 @@ mod test {
 
                 assert_eq!(
                     actual,
-                    IpHeader::Version4(
+                    IpHeaders::Version4(
                         {
                             let mut re = v4.clone();
                             re.set_payload_len(v4_exts.header_len() + payload_len).unwrap();
@@ -2461,7 +2461,7 @@ mod test {
             }
             // ipv6 (with valid payload length)
             {
-                let mut actual = IpHeader::Version6(
+                let mut actual = IpHeaders::Version6(
                     v6.clone(),
                     v6_exts.clone()
                 );
@@ -2469,7 +2469,7 @@ mod test {
 
                 assert_eq!(
                     actual,
-                    IpHeader::Version6(
+                    IpHeaders::Version6(
                         {
                             let mut re = v6.clone();
                             re.set_payload_length(v6_exts.header_len() + payload_len).unwrap();
@@ -2482,7 +2482,7 @@ mod test {
 
             // v4 (with invalid size)
             {
-                let mut actual = IpHeader::Version4(
+                let mut actual = IpHeaders::Version4(
                     v4.clone(),
                     v4_exts.clone()
                 );
@@ -2491,7 +2491,7 @@ mod test {
 
             // v6 (with invalid size)
             {
-                let mut actual = IpHeader::Version6(
+                let mut actual = IpHeaders::Version6(
                     v6.clone(),
                     v6_exts.clone()
                 );
@@ -2511,13 +2511,13 @@ mod test {
             // ipv4
             assert_eq!(
                 v4.is_fragmenting_payload(),
-                IpHeader::Version4(v4.clone(), v4_exts.clone()).is_fragmenting_payload()
+                IpHeaders::Version4(v4.clone(), v4_exts.clone()).is_fragmenting_payload()
             );
 
             // ipv6
             assert_eq!(
                 v6_exts.is_fragmenting_payload(),
-                IpHeader::Version6(v6.clone(), v6_exts.clone()).is_fragmenting_payload()
+                IpHeaders::Version6(v6.clone(), v6_exts.clone()).is_fragmenting_payload()
             );
         }
     }

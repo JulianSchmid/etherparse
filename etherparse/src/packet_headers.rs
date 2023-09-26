@@ -19,7 +19,7 @@ pub struct PacketHeaders<'a> {
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
     /// IPv4 or IPv6 header and IP extension headers if present.
-    pub ip: Option<IpHeader>,
+    pub ip: Option<IpHeaders>,
     /// TCP or UDP header if present.
     pub transport: Option<TransportHeader>,
     /// Rest of the packet that could not be decoded as a header (usually the payload).
@@ -200,7 +200,7 @@ impl<'a> PacketHeaders<'a> {
         match ether_type {
             IPV4 => {
                 // read ipv4 header & extensions and payload slice
-                let (ip, ip_payload) = IpHeader::ipv4_from_slice(rest).map_err(|err| {
+                let (ip, ip_payload) = IpHeaders::ipv4_from_slice(rest).map_err(|err| {
                     use err::ipv4::SliceError as I;
                     match err {
                         I::Len(err) => Len(add_offset(err, rest)),
@@ -227,7 +227,7 @@ impl<'a> PacketHeaders<'a> {
             }
             IPV6 => {
                 // read ipv6 header & extensions and payload slice
-                let (ip, ip_payload) = IpHeader::ipv6_from_slice(rest).map_err(|err| {
+                let (ip, ip_payload) = IpHeaders::ipv6_from_slice(rest).map_err(|err| {
                     use err::ipv6::SliceError as I;
                     match err {
                         I::Len(err) => Len(add_offset(err, rest)),
@@ -304,7 +304,7 @@ impl<'a> PacketHeaders<'a> {
         use err::packet::IpSliceError::*;
 
         // read ip headers
-        let (ip_header, ip_payload) = IpHeader::from_slice(slice).map_err(|err| {
+        let (ip_header, ip_payload) = IpHeaders::from_slice(slice).map_err(|err| {
             use err::ip::HeadersSliceError as I;
             match err {
                 I::Len(err) => Len(err),
@@ -469,7 +469,7 @@ mod test {
             ref udp in udp_any(),
         ) {
             use VlanHeader::*;
-            use IpHeader::*;
+            use IpHeaders::*;
             use TransportHeader::*;
 
             // none
@@ -719,7 +719,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeader::Version4(ipv4.clone(), Default::default()));
+                test.ip = Some(IpHeaders::Version4(ipv4.clone(), Default::default()));
 
                 // ok ipv4
                 from_x_slice_transport_variants(&test);
@@ -782,7 +782,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeader::Version4(
+                test.ip = Some(IpHeaders::Version4(
                     {
                         let mut ipv4 = ipv4.clone();
                         ipv4.protocol = ip_number::AUTH;
@@ -860,7 +860,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeader::Version6(ipv6.clone(), Default::default()));
+                test.ip = Some(IpHeaders::Version6(ipv6.clone(), Default::default()));
                 test.set_payload_len(0);
 
                 // ok ipv6
@@ -932,7 +932,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeader::Version6(
+                test.ip = Some(IpHeaders::Version6(
                     {
                         let mut ipv6 = ipv6.clone();
                         ipv6.next_header = ip_number::IPV6_FRAG;
@@ -1058,8 +1058,8 @@ mod test {
                             required_len: udp.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::UdpHeader,
                             layer_start_offset: base_len,
@@ -1104,8 +1104,8 @@ mod test {
                             required_len: tcp.header_len() as usize,
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::TcpHeader,
                             layer_start_offset: base_len,
@@ -1166,8 +1166,8 @@ mod test {
                             required_len: icmpv4.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::Icmpv4,
                             layer_start_offset: base_len,
@@ -1211,8 +1211,8 @@ mod test {
                             required_len: icmpv6.header_len(),
                             len,
                             len_source: match test.ip.as_ref().unwrap() {
-                                IpHeader::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeader::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::Icmpv6,
                             layer_start_offset: base_len,
@@ -1278,8 +1278,8 @@ mod test {
             if let Some(ip) = &test.ip {
                 let result = PacketHeaders::from_ether_type(
                     match ip {
-                        IpHeader::Version4(_, _) => ether_type::IPV4,
-                        IpHeader::Version6(_, _) => ether_type::IPV6,
+                        IpHeaders::Version4(_, _) => ether_type::IPV4,
+                        IpHeaders::Version6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )
@@ -1339,8 +1339,8 @@ mod test {
             if let Some(ip) = &test.ip {
                 let err = PacketHeaders::from_ether_type(
                     match ip {
-                        IpHeader::Version4(_, _) => ether_type::IPV4,
-                        IpHeader::Version6(_, _) => ether_type::IPV6,
+                        IpHeaders::Version4(_, _) => ether_type::IPV4,
+                        IpHeaders::Version6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )

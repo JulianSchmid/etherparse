@@ -1,11 +1,11 @@
-use crate::{EtherType, Ethernet2Header, IpHeader, TransportHeader, VlanHeader};
+use crate::{EtherType, Ethernet2Header, IpHeaders, TransportHeader, VlanHeader};
 use alloc::vec::Vec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {
     pub link: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
-    pub ip: Option<IpHeader>,
+    pub ip: Option<IpHeaders>,
     pub transport: Option<TransportHeader>,
 }
 
@@ -28,11 +28,11 @@ impl TestPacket {
         }
         if let Some(ip) = &self.ip {
             match ip {
-                IpHeader::Version4(ipv4, exts) => {
+                IpHeaders::Version4(ipv4, exts) => {
                     ipv4.write_raw(&mut result).unwrap();
                     exts.write(&mut result, ipv4.protocol).unwrap();
                 }
-                IpHeader::Version6(ipv6, exts) => {
+                IpHeaders::Version6(ipv6, exts) => {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
                 }
@@ -62,7 +62,7 @@ impl TestPacket {
     }
 
     pub fn set_payload_len(&mut self, payload_len: usize) {
-        use IpHeader::*;
+        use IpHeaders::*;
         match &mut self.ip {
             None => {}
             Some(Version4(ref mut header, ref mut exts)) => {
@@ -99,7 +99,7 @@ impl TestPacket {
 
     /// Set the length relative to the end of the ip headers.
     pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
-        use IpHeader::*;
+        use IpHeaders::*;
         match self.ip.as_mut().unwrap() {
             Version4(ref mut header, ref mut exts) => {
                 header

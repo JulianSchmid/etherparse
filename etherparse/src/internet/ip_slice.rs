@@ -861,7 +861,7 @@ mod test {
                 header
             };
 
-            let ipv4 = IpHeader::Version4(
+            let ipv4 = IpHeaders::Version4(
                 ipv4_header.clone(),
                 ipv4_exts.clone()
             );
@@ -873,7 +873,7 @@ mod test {
                 header
             };
 
-            let ipv6 = IpHeader::Version6(
+            let ipv6 = IpHeaders::Version6(
                 ipv6_header.clone(),
                 ipv6_exts.clone()
             );
@@ -984,7 +984,7 @@ mod test {
         ) {
             use err::ip::{SliceError::*, HeadersError::*, HeaderError::*};
             use err::ip_auth::HeaderError::*;
-            use crate::IpHeader;
+            use crate::IpHeaders;
 
             // zero payload
             assert_eq!(
@@ -1027,7 +1027,7 @@ mod test {
                     header
                 };
 
-                let ipv4 = IpHeader::Version4(
+                let ipv4 = IpHeaders::Version4(
                     ipv4_header.clone(),
                     ipv4_exts.clone()
                 );
@@ -1173,7 +1173,7 @@ mod test {
                     header
                 };
 
-                let ipv6 = IpHeader::Version6(
+                let ipv6 = IpHeaders::Version6(
                     ipv6_header.clone(),
                     ipv6_exts.clone()
                 );
