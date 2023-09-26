@@ -1,4 +1,4 @@
-use super::HeaderError;
+use super::HeadersError;
 use crate::err::LenError;
 
 /// Error when decoding an IP header via a `std::io::Read` source.
@@ -14,7 +14,7 @@ pub enum HeaderReadError {
     Len(LenError),
 
     /// Error caused by the contents of the header.
-    Content(HeaderError),
+    Content(HeadersError),
 }
 
 #[cfg(feature = "std")]
@@ -44,7 +44,7 @@ impl HeaderReadError {
     /// Returns the `err::ip::HeaderError` value if the `HeaderReadError` is `Content`.
     /// Otherwise `None` is returned.
     #[inline]
-    pub fn content(self) -> Option<HeaderError> {
+    pub fn content(self) -> Option<HeadersError> {
         use HeaderReadError::*;
         match self {
             Content(value) => Some(value),
@@ -85,7 +85,7 @@ mod test {
 
     #[test]
     fn debug() {
-        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+        let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -115,7 +115,7 @@ mod test {
             assert_eq!(format!("{}", Len(err.clone())), format!("{}", err));
         }
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -139,7 +139,7 @@ mod test {
         .source()
         .is_some());
         assert!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
+            Content(HeadersError::UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );
@@ -154,7 +154,7 @@ mod test {
         .io()
         .is_some());
         assert!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
+            Content(HeadersError::UnsupportedIpVersion { version_number: 6 })
                 .io()
                 .is_none()
         );
@@ -191,7 +191,7 @@ mod test {
             .content()
         );
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(Some(err.clone()), Content(err.clone()).content());
         }
     }

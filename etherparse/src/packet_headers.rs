@@ -305,7 +305,7 @@ impl<'a> PacketHeaders<'a> {
 
         // read ip headers
         let (ip_header, ip_payload) = IpHeader::from_slice(slice).map_err(|err| {
-            use err::ip::HeaderSliceError as I;
+            use err::ip::HeadersSliceError as I;
             match err {
                 I::Len(err) => Len(err),
                 I::Content(err) => Ip(err),
@@ -769,7 +769,7 @@ mod test {
                         EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::Ip(err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader {
+                        IpSliceError::Ip(err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader {
                             ihl: 0,
                         }),
                     );
@@ -838,7 +838,7 @@ mod test {
                         &test,
                         &data,
                         EthSliceError::Ipv4Exts(err.clone()),
-                        IpSliceError::Ip(err::ip::HeaderError::Ipv4Ext(err.clone())),
+                        IpSliceError::Ip(err::ip::HeadersError::Ipv4Ext(err.clone())),
                     );
                 }
             }
@@ -912,7 +912,7 @@ mod test {
                         EthSliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
                             version_number: 0,
                         }),
-                        IpSliceError::Ip(err::ip::HeaderError::UnsupportedIpVersion {
+                        IpSliceError::Ip(err::ip::HeadersError::UnsupportedIpVersion {
                             version_number: 0,
                         }),
                     );
@@ -987,7 +987,7 @@ mod test {
                         &test,
                         &data,
                         EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
-                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
+                        IpSliceError::Ip(err::ip::HeadersError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::IpAuth(err.clone()),
                         )),
                     );
@@ -1005,7 +1005,7 @@ mod test {
                         &test,
                         &data,
                         EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
-                        IpSliceError::Ip(err::ip::HeaderError::Ipv6Ext(
+                        IpSliceError::Ip(err::ip::HeadersError::Ipv6Ext(
                             err::ipv6_exts::HeaderError::HopByHopNotAtStart,
                         )),
                     );

@@ -1,22 +1,22 @@
-use super::HeaderError;
+use super::HeadersError;
 use crate::err::LenError;
 
 /// Error when decoding an IP header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum HeaderSliceError {
+pub enum HeadersSliceError {
     /// Error when an length error is encountered (e.g. unexpected
     /// end of slice).
     Len(LenError),
 
     /// Error caused by the contents of the header.
-    Content(HeaderError),
+    Content(HeadersError),
 }
 
-impl HeaderSliceError {
+impl HeadersSliceError {
     /// Adds an offset value to all slice length related fields.
     #[inline]
     pub const fn add_slice_offset(self, offset: usize) -> Self {
-        use HeaderSliceError::*;
+        use HeadersSliceError::*;
         match self {
             Len(err) => Len(err.add_offset(offset)),
             Content(err) => Content(err),
@@ -24,9 +24,9 @@ impl HeaderSliceError {
     }
 }
 
-impl core::fmt::Display for HeaderSliceError {
+impl core::fmt::Display for HeadersSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeaderSliceError::*;
+        use HeadersSliceError::*;
         match self {
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
@@ -35,9 +35,9 @@ impl core::fmt::Display for HeaderSliceError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeaderSliceError {
+impl std::error::Error for HeadersSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeaderSliceError::*;
+        use HeadersSliceError::*;
         match self {
             Len(err) => Some(err),
             Content(err) => Some(err),
@@ -47,7 +47,7 @@ impl std::error::Error for HeaderSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeaderSliceError::*, *};
+    use super::{HeadersSliceError::*, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn add_slice_offset() {
-        use HeaderSliceError::*;
+        use HeadersSliceError::*;
         assert_eq!(
             Len(LenError {
                 required_len: 1,
@@ -77,14 +77,14 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 1 }).add_slice_offset(200),
-            Content(HeaderError::UnsupportedIpVersion { version_number: 1 })
+            Content(HeadersError::UnsupportedIpVersion { version_number: 1 }).add_slice_offset(200),
+            Content(HeadersError::UnsupportedIpVersion { version_number: 1 })
         );
     }
 
     #[test]
     fn debug() {
-        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+        let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(HeaderError::UnsupportedIpVersion { version_number: 6 });
+        let err = Content(HeadersError::UnsupportedIpVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -121,7 +121,7 @@ mod tests {
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -139,7 +139,7 @@ mod tests {
         .source()
         .is_some());
         assert!(
-            Content(HeaderError::UnsupportedIpVersion { version_number: 6 })
+            Content(HeadersError::UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );

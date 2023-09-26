@@ -2,7 +2,7 @@ use crate::*;
 
 /// Error when decoding the IP header part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum HeaderError {
+pub enum HeadersError {
     /// Error when the IP header version field is not equal to 4 or 6.
     UnsupportedIpVersion {
         /// The unexpected version number in the IP header.
@@ -22,9 +22,9 @@ pub enum HeaderError {
     Ipv6Ext(err::ipv6_exts::HeaderError),
 }
 
-impl core::fmt::Display for HeaderError {
+impl core::fmt::Display for HeadersError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeaderError::*;
+        use HeadersError::*;
         match self {
             UnsupportedIpVersion { version_number } => write!(f, "IP Header Error: Encountered '{}' as IP version number in the IP header (only '4' or '6' are supported).", version_number),
             Ipv4HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
@@ -35,9 +35,9 @@ impl core::fmt::Display for HeaderError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeaderError {
+impl std::error::Error for HeadersError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeaderError::*;
+        use HeadersError::*;
         match self {
             UnsupportedIpVersion { version_number: _ } => None,
             Ipv4HeaderLengthSmallerThanHeader { ihl: _ } => None,
@@ -49,7 +49,7 @@ impl std::error::Error for HeaderError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeaderError::*, *};
+    use super::{HeadersError::*, *};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -67,7 +67,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
+        let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();

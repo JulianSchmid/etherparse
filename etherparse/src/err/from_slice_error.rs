@@ -13,7 +13,7 @@ pub enum FromSliceError {
     DoubleVlan(double_vlan::HeaderError),
 
     /// Error while parsing a IP header.
-    Ip(ip::HeaderError),
+    Ip(ip::HeadersError),
 
     /// Error while parsing a IP authentication header.
     IpAuth(ip_auth::HeaderError),
@@ -44,7 +44,7 @@ impl FromSliceError {
             _ => None,
         }
     }
-    pub fn ip(&self) -> Option<&ip::HeaderError> {
+    pub fn ip(&self) -> Option<&ip::HeadersError> {
         match self {
             FromSliceError::Ip(err) => Some(err),
             _ => None,
@@ -142,15 +142,15 @@ impl From<double_vlan::HeaderSliceError> for FromSliceError {
 
 // ip error conversions
 
-impl From<ip::HeaderError> for FromSliceError {
-    fn from(value: ip::HeaderError) -> Self {
+impl From<ip::HeadersError> for FromSliceError {
+    fn from(value: ip::HeadersError) -> Self {
         FromSliceError::Ip(value)
     }
 }
 
-impl From<ip::HeaderSliceError> for FromSliceError {
-    fn from(value: ip::HeaderSliceError) -> Self {
-        use ip::HeaderSliceError::*;
+impl From<ip::HeadersSliceError> for FromSliceError {
+    fn from(value: ip::HeadersSliceError) -> Self {
+        use ip::HeadersSliceError::*;
         match value {
             Len(err) => FromSliceError::Len(err),
             Content(err) => FromSliceError::Ip(err),
@@ -163,7 +163,7 @@ impl From<ip::SliceError> for FromSliceError {
         use ip::SliceError::*;
         match value {
             Len(err) => FromSliceError::Len(err),
-            IpHeader(err) => FromSliceError::Ip(err),
+            IpHeaders(err) => FromSliceError::Ip(err),
         }
     }
 }
@@ -361,7 +361,7 @@ mod tests {
             ),
             (
                 "Ip",
-                Ip(ip::HeaderError::UnsupportedIpVersion {
+                Ip(ip::HeadersError::UnsupportedIpVersion {
                     version_number: 123,
                 }),
             ),
@@ -405,7 +405,7 @@ mod tests {
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
-            Ip(ip::HeaderError::UnsupportedIpVersion {
+            Ip(ip::HeadersError::UnsupportedIpVersion {
                 version_number: 123,
             }),
             IpAuth(ip_auth::HeaderError::ZeroPayloadLen),
@@ -433,7 +433,7 @@ mod tests {
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
         };
-        let ip_error = || ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+        let ip_error = || ip::HeadersError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
         let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
@@ -528,7 +528,7 @@ mod tests {
 
         // ip errors
         {
-            let header_error = || ip::HeaderError::UnsupportedIpVersion {
+            let header_error = || ip::HeadersError::UnsupportedIpVersion {
                 version_number: 123,
             };
             assert_eq!(
@@ -537,19 +537,19 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(ip::HeaderSliceError::Content(header_error()))
+                FromSliceError::from(ip::HeadersSliceError::Content(header_error()))
                     .ip()
                     .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                FromSliceError::from(ip::HeaderSliceError::Len(len_error()))
+                FromSliceError::from(ip::HeadersSliceError::Len(len_error()))
                     .len()
                     .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(ip::HeaderSliceError::Content(header_error()))
+                FromSliceError::from(ip::HeadersSliceError::Content(header_error()))
                     .ip()
                     .unwrap()
             );
@@ -561,7 +561,7 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(ip::SliceError::IpHeader(header_error()))
+                FromSliceError::from(ip::SliceError::IpHeaders(header_error()))
                     .ip()
                     .unwrap()
             );
@@ -719,7 +719,7 @@ mod tests {
 
         // packet error
         {
-            let ip_error = || ip::HeaderError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+            let ip_error = || ip::HeadersError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
             let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
             let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
