@@ -48,9 +48,8 @@ mod tests {
 
     #[test]
     fn debug() {
-        
         assert_eq!(
-            "IpHeaders(UnsupportedIpVersion { version_number: 6 })",
+            "Ip(UnsupportedIpVersion { version_number: 6 })",
             format!("{:?}", Ip(UnsupportedIpVersion { version_number: 6 }))
         );
     }
