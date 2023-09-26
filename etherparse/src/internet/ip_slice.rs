@@ -112,8 +112,8 @@ impl<'a> IpSlice<'a> {
 
                     // check that the ihl has at least the length of the base IPv4 header
                     if ihl < 5 {
-                        use err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader;
-                        return Err(IpHeader(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
+                        return Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl }));
                     }
 
                     // check there is enough data for the header
@@ -190,7 +190,7 @@ impl<'a> IpSlice<'a> {
                                         return Err(Len(l));
                                     }
                                     E::Content(err) => {
-                                        return Err(IpHeader(ip::HeaderError::Ipv4Ext(err)))
+                                        return Err(IpHeaders(ip::HeadersError::Ipv4Ext(err)))
                                     }
                                 },
                             };
@@ -297,7 +297,7 @@ impl<'a> IpSlice<'a> {
                                         err.layer_start_offset += Ipv6Header::LEN;
                                         Len(err)
                                     }
-                                    I::Content(err) => IpHeader(ip::HeaderError::Ipv6Ext(err)),
+                                    I::Content(err) => IpHeaders(ip::HeadersError::Ipv6Ext(err)),
                                 }
                             })?;
 
@@ -313,7 +313,7 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
+                version_number => Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
                     version_number,
                 })),
             }
@@ -383,8 +383,8 @@ impl<'a> IpSlice<'a> {
 
                     // check that the ihl has at least the lenght of the base IPv4 header
                     if ihl < 5 {
-                        use err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader;
-                        return Err(IpHeader(Ipv4HeaderLengthSmallerThanHeader { ihl }));
+                        use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
+                        return Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl }));
                     }
 
                     // check there is enough data for the header
@@ -462,7 +462,7 @@ impl<'a> IpSlice<'a> {
                                         return Err(Len(l));
                                     }
                                     E::Content(err) => {
-                                        return Err(IpHeader(ip::HeaderError::Ipv4Ext(err)))
+                                        return Err(IpHeaders(ip::HeadersError::Ipv4Ext(err)))
                                     }
                                 },
                             };
@@ -555,7 +555,7 @@ impl<'a> IpSlice<'a> {
                                         err.layer_start_offset += Ipv6Header::LEN;
                                         Len(err)
                                     }
-                                    I::Content(err) => IpHeader(ip::HeaderError::Ipv6Ext(err)),
+                                    I::Content(err) => IpHeaders(ip::HeadersError::Ipv6Ext(err)),
                                 }
                             })?;
 
@@ -571,7 +571,7 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
+                version_number => Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
                     version_number,
                 })),
             }
@@ -984,7 +984,7 @@ mod test {
             ipv6_header in ipv6_any(),
             mut ipv6_exts in ipv6_extensions_with(ip_number::UDP)
         ) {
-            use err::ip::{SliceError::*, HeaderError::*};
+            use err::ip::{SliceError::*, HeadersError::*};
             use err::ip_auth::HeaderError::*;
             use crate::IpHeader;
 
@@ -1005,7 +1005,7 @@ mod test {
                 if bad_version != 4 && bad_version != 6 {
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&[bad_version << 4]),
-                        Err(IpHeader(err::ip::HeaderError::UnsupportedIpVersion {
+                        Err(IpHeaders(err::ip::HeadersError::UnsupportedIpVersion {
                             version_number: bad_version,
                         }))
                     );
@@ -1065,10 +1065,10 @@ mod test {
                     // inject bad IHL
                     buffer[0] = (buffer[0] & 0xf0u8) | bad_ihl;
 
-                    use err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader;
+                    use err::ip::HeadersError::Ipv4HeaderLengthSmallerThanHeader;
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&buffer),
-                        Err(IpHeader(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
+                        Err(IpHeaders(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
                     );
                 }
 
@@ -1162,7 +1162,7 @@ mod test {
                     buffer[ipv4_header.header_len() + 1] = 0;
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&buffer),
-                        Err(IpHeader(Ipv4Ext(ZeroPayloadLen)))
+                        Err(IpHeaders(Ipv4Ext(ZeroPayloadLen)))
                     );
                 }
             }
@@ -1302,7 +1302,7 @@ mod test {
 
                 // extension content error
                 if ipv6_exts.auth.is_some() {
-                    use err::ip::HeaderError::Ipv6Ext;
+                    use err::ip::HeadersError::Ipv6Ext;
                     use err::ipv6_exts::HeaderError::IpAuth;
 
                     // introduce a auth header zero payload error
@@ -1319,7 +1319,7 @@ mod test {
                     buffer[auth_offset + 1] = 0;
                     assert_eq!(
                         IpSlice::from_ip_slice_lax(&buffer),
-                        Err(IpHeader(Ipv6Ext(IpAuth(ZeroPayloadLen))))
+                        Err(IpHeaders(Ipv6Ext(IpAuth(ZeroPayloadLen))))
                     );
                 }
             }

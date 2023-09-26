@@ -1,6 +1,6 @@
 use super::super::*;
 #[cfg(feature = "std")]
-use crate::err::ip::HeaderWriteError;
+use crate::err::ip::HeadersWriteError;
 use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 
 /// Internet protocol headers version 4 & 6.
@@ -40,7 +40,7 @@ impl IpHeader {
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpNumber, &[u8]), err::ip::HeaderSliceError> {
+    ) -> Result<(IpHeader, IpNumber, &[u8]), err::ip::HeadersSliceError> {
         let (header, payload) = IpHeader::from_slice(slice)?;
         Ok((header, payload.ip_number, payload.payload))
     }
@@ -56,8 +56,8 @@ impl IpHeader {
     /// fields in the IP headers use [`IpHeader::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeaderSliceError> {
-        use err::ip::{HeaderError::*, HeaderSliceError::*};
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
+        use err::ip::{HeadersError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -309,8 +309,8 @@ impl IpHeader {
     /// * The value `0`.
     pub fn from_slice_lax(
         slice: &[u8],
-    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeaderSliceError> {
-        use err::ip::{HeaderError::*, HeaderSliceError::*};
+    ) -> Result<(IpHeader, IpPayload<'_>), err::ip::HeadersSliceError> {
+        use err::ip::{HeadersError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -846,7 +846,7 @@ impl IpHeader {
         reader: &mut T,
     ) -> Result<(IpHeader, IpNumber), err::ip::HeaderReadError> {
         use crate::io::LimitedReader;
-        use err::ip::{HeaderError::*, HeaderReadError::*};
+        use err::ip::{HeadersError::*, HeaderReadError::*};
 
         let value = {
             let mut buf = [0; 1];
@@ -939,9 +939,9 @@ impl IpHeader {
     /// Writes an IP (v4 or v6) header to the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeaderWriteError> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeadersWriteError> {
         use crate::IpHeader::*;
-        use HeaderWriteError::*;
+        use HeadersWriteError::*;
         match *self {
             Version4(ref header, ref extensions) => {
                 header.write(writer).map_err(Io)?;
@@ -1062,7 +1062,7 @@ impl IpHeader {
 mod test {
     use crate::{
         err::{
-            ip::{HeaderError, HeaderSliceError},
+            ip::{HeadersError, HeadersSliceError},
             Layer, LenError, LenSource,
         },
         ip_number::*,
@@ -1221,7 +1221,7 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
-            use err::ip::{HeaderError::*, HeaderSliceError::*};
+            use err::ip::{HeadersError::*, HeadersSliceError::*};
 
             // empty error
             assert_eq!(
@@ -1289,7 +1289,7 @@ mod test {
                     buffer[3] = bad_total_len_be[1];
                     assert_eq!(
                         IpHeader::from_slice(&buffer[..]).unwrap_err(),
-                        HeaderSliceError::Len(LenError{
+                        HeadersSliceError::Len(LenError{
                             required_len: v4.header_len(),
                             len: bad_total_len as usize,
                             len_source: LenSource::Ipv4HeaderTotalLen,
@@ -1357,7 +1357,7 @@ mod test {
             v6 in ipv6_any(),
             v6_exts in ipv6_extensions_any(),
         ) {
-            use err::ip::{HeaderError::*, HeaderSliceError::*};
+            use err::ip::{HeadersError::*, HeadersSliceError::*};
 
             let payload = [1,2,3,4];
 
@@ -1469,8 +1469,8 @@ mod test {
                 // content error ipv4 extensions
                 if v4_exts.auth.is_some() {
                     use err::ip_auth::HeaderError::ZeroPayloadLen;
-                    use err::ip::HeaderSliceError::Content;
-                    use err::ip::HeaderError::Ipv4Ext;
+                    use err::ip::HeadersSliceError::Content;
+                    use err::ip::HeadersError::Ipv4Ext;
 
                     // introduce a auth header zero payload error
                     let mut errored_buffer = buffer.clone();
@@ -1562,8 +1562,8 @@ mod test {
                 // extension content error
                 if v6_exts.auth.is_some() {
                     use err::ip_auth::HeaderError::ZeroPayloadLen;
-                    use err::ip::HeaderSliceError::Content;
-                    use err::ip::HeaderError::Ipv6Ext;
+                    use err::ip::HeadersSliceError::Content;
+                    use err::ip::HeadersError::Ipv6Ext;
                     use err::ipv6_exts::HeaderError::IpAuth;
 
                     // introduce a auth header zero payload error
@@ -2065,7 +2065,7 @@ mod test {
             }
             // version error
             {
-                use err::ip::HeaderError::*;
+                use err::ip::HeadersError::*;
                 let mut cursor = Cursor::new(&[0xf << 4]);
                 assert_eq!(
                     IpHeader::read(&mut cursor).unwrap_err().content().unwrap(),
@@ -2099,7 +2099,7 @@ mod test {
                         .unwrap_err()
                         .content()
                         .unwrap(),
-                        HeaderError::Ipv4HeaderLengthSmallerThanHeader{
+                        HeadersError::Ipv4HeaderLengthSmallerThanHeader{
                             ihl: bad_ihl
                         }
                     );
@@ -2183,7 +2183,7 @@ mod test {
                         .unwrap_err()
                         .content()
                         .unwrap(),
-                        HeaderError::Ipv4Ext(
+                        HeadersError::Ipv4Ext(
                             err::ip_auth::HeaderError::ZeroPayloadLen
                         )
                     );
@@ -2249,7 +2249,7 @@ mod test {
                             .unwrap_err()
                             .content()
                             .unwrap(),
-                            HeaderError::Ipv6Ext(err::ipv6_exts::HeaderError::IpAuth(
+                            HeadersError::Ipv6Ext(err::ipv6_exts::HeaderError::IpAuth(
                                 err::ip_auth::HeaderError::ZeroPayloadLen
                             ))
                         );

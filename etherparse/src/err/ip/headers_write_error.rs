@@ -3,7 +3,7 @@ use crate::err::{ipv4_exts, ipv6_exts};
 /// Error when writing IPv4 extension headers.
 #[cfg(feature = "std")]
 #[derive(Debug)]
-pub enum HeaderWriteError {
+pub enum HeadersWriteError {
     /// IO error encountered while writing.
     Io(std::io::Error),
     /// IPv4 extensions can not be serialized (e.g. order
@@ -15,11 +15,11 @@ pub enum HeaderWriteError {
 }
 
 #[cfg(feature = "std")]
-impl HeaderWriteError {
+impl HeadersWriteError {
     /// Returns a reference to the [`std::io::Error`] if the value is an `Io`.
     pub fn io(&self) -> Option<&std::io::Error> {
         match self {
-            HeaderWriteError::Io(err) => Some(err),
+            HeadersWriteError::Io(err) => Some(err),
             _ => None,
         }
     }
@@ -28,7 +28,7 @@ impl HeaderWriteError {
     /// if the value is an `Ipv4Exts`.
     pub fn ipv4_exts(&self) -> Option<&ipv4_exts::ExtsWalkError> {
         match self {
-            HeaderWriteError::Ipv4Exts(err) => Some(err),
+            HeadersWriteError::Ipv4Exts(err) => Some(err),
             _ => None,
         }
     }
@@ -37,16 +37,16 @@ impl HeaderWriteError {
     /// if the value is an `Ipv6Exts`.
     pub fn ipv6_exts(&self) -> Option<&ipv6_exts::ExtsWalkError> {
         match self {
-            HeaderWriteError::Ipv6Exts(err) => Some(err),
+            HeadersWriteError::Ipv6Exts(err) => Some(err),
             _ => None,
         }
     }
 }
 
 #[cfg(feature = "std")]
-impl core::fmt::Display for HeaderWriteError {
+impl core::fmt::Display for HeadersWriteError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeaderWriteError::*;
+        use HeadersWriteError::*;
         match self {
             Io(err) => err.fmt(f),
             Ipv4Exts(err) => err.fmt(f),
@@ -56,9 +56,9 @@ impl core::fmt::Display for HeaderWriteError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeaderWriteError {
+impl std::error::Error for HeadersWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeaderWriteError::*;
+        use HeadersWriteError::*;
         match self {
             Io(ref err) => Some(err),
             Ipv4Exts(ref err) => Some(err),
@@ -69,7 +69,7 @@ impl std::error::Error for HeaderWriteError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeaderWriteError::*, *};
+    use super::{HeadersWriteError::*, *};
     use crate::*;
     use alloc::format;
     use std::error::Error;

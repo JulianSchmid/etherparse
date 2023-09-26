@@ -7,7 +7,7 @@ pub enum SliceError {
     Len(LenError),
 
     /// Error when decoding an IP header or IP extension header.
-    IpHeader(ip::HeaderError),
+    IpHeaders(ip::HeadersError),
 }
 
 impl core::fmt::Display for SliceError {
@@ -15,7 +15,7 @@ impl core::fmt::Display for SliceError {
         use SliceError::*;
         match self {
             Len(err) => err.fmt(f),
-            IpHeader(err) => err.fmt(f),
+            IpHeaders(err) => err.fmt(f),
         }
     }
 }
@@ -26,14 +26,14 @@ impl std::error::Error for SliceError {
         use SliceError::*;
         match self {
             Len(err) => Some(err),
-            IpHeader(err) => Some(err),
+            IpHeaders(err) => Some(err),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{super::HeaderError, SliceError::*};
+    use super::{super::HeadersError, SliceError::*};
     use crate::err::{ip, Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -44,16 +44,16 @@ mod tests {
 
     #[test]
     fn debug() {
-        let err = ip::HeaderError::UnsupportedIpVersion { version_number: 6 };
+        let err = ip::HeadersError::UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
-            format!("IpHeader({:?})", err.clone()),
-            format!("{:?}", IpHeader(err))
+            format!("IpHeaders({:?})", err.clone()),
+            format!("{:?}", IpHeaders(err))
         );
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = IpHeader(HeaderError::UnsupportedIpVersion { version_number: 6 });
+        let err = IpHeaders(HeadersError::UnsupportedIpVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -83,8 +83,8 @@ mod tests {
         }
         // header
         {
-            let err = HeaderError::UnsupportedIpVersion { version_number: 6 };
-            assert_eq!(format!("{}", &err), format!("{}", IpHeader(err.clone())));
+            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
+            assert_eq!(format!("{}", &err), format!("{}", IpHeaders(err.clone())));
         }
     }
 
@@ -101,7 +101,7 @@ mod tests {
         .source()
         .is_some());
         assert!(
-            IpHeader(HeaderError::UnsupportedIpVersion { version_number: 6 })
+            IpHeaders(HeadersError::UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );

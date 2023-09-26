@@ -6,7 +6,7 @@ pub enum IpSliceError {
     /// Length related errors (e.g. not enough data in slice).
     Len(err::LenError),
     /// Error when decoding an IP header (v4 or v6).
-    Ip(err::ip::HeaderError),
+    Ip(err::ip::HeadersError),
     /// Error when decoding a TCP header.
     Tcp(err::tcp::HeaderError),
 }
@@ -48,13 +48,13 @@ mod tests {
 
     #[test]
     fn debug() {
-        let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
+        let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
         assert_eq!(format!("Ip({:?})", err.clone()), format!("{:?}", Ip(err)));
     }
 
     #[test]
     fn clone_eq_hash() {
-        let err = Ip(err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 });
+        let err = Ip(err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -85,7 +85,7 @@ mod tests {
 
         // IpHeader
         {
-            let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
+            let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
             assert_eq!(format!("{}", err), format!("{}", Ip(err)));
         }
 
@@ -113,7 +113,7 @@ mod tests {
 
         // IpHeader
         {
-            let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
+            let err = err::ip::HeadersError::UnsupportedIpVersion { version_number: 1 };
             assert!(Ip(err).source().is_some());
         }
 
