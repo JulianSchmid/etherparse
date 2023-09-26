@@ -35,8 +35,8 @@ impl IpHeaders {
         }
     }
 
-    /// Renamed to `IpHeader::from_slice`
-    #[deprecated(since = "0.10.1", note = "Renamed to `IpHeader::from_slice`")]
+    /// Renamed to [`IpHeaders::from_slice`]
+    #[deprecated(since = "0.10.1", note = "Renamed to `IpHeaders::from_slice`")]
     #[inline]
     pub fn read_from_slice(
         slice: &[u8],
@@ -45,7 +45,7 @@ impl IpHeaders {
         Ok((header, payload.ip_number, payload.payload))
     }
 
-    /// Read an [`IpHeader`] from a slice and return the headers & payload of
+    /// Read an [`IpHeaders`] from a slice and return the headers & payload of
     /// the IP packet (determined based on the length fields in the IP header).
     ///
     /// Note that his function returns an [`crate::err::LenError`] if the given slice
@@ -53,7 +53,7 @@ impl IpHeaders {
     /// be present.
     ///
     /// If you want to ignore these kind of length errors based on the length
-    /// fields in the IP headers use [`IpHeader::from_slice_lax`] instead.
+    /// fields in the IP headers use [`IpHeaders::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(IpHeaders, IpPayload<'_>), err::ip::HeadersSliceError> {
@@ -265,11 +265,11 @@ impl IpHeaders {
         }
     }
 
-    /// Reads an `IpHeader` & seperates the payload from the given slice with
+    /// Reads an [`IpHeaders`] & seperates the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
-    /// If you want to only receive correct IpPayloads use [`IpHeader::from_slice`]
+    /// If you want to only receive correct IpPayloads use [`IpHeaders::from_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:
@@ -510,7 +510,7 @@ impl IpHeaders {
     /// should be present.
     ///
     /// If you want to ignore these kind of length errors based on the length
-    /// fields in the IP headers use [`IpHeader::ipv4_from_slice_lax`] instead.
+    /// fields in the IP headers use [`IpHeaders::ipv4_from_slice_lax`] instead.
     pub fn ipv4_from_slice(
         slice: &[u8],
     ) -> Result<(IpHeaders, IpPayload<'_>), err::ipv4::SliceError> {
@@ -586,7 +586,7 @@ impl IpHeaders {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
-    /// If you want to only receive correct IpPayloads use [`IpHeader::ipv4_from_slice`]
+    /// If you want to only receive correct IpPayloads use [`IpHeaders::ipv4_from_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:
@@ -754,7 +754,7 @@ impl IpHeaders {
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
-    /// If you want to only receive correct IpPayloads use [`IpHeader::ipv6_from_slice`]
+    /// If you want to only receive correct IpPayloads use [`IpHeaders::ipv6_from_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:

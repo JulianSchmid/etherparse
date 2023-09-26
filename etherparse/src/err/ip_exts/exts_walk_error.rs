@@ -1,7 +1,7 @@
 use crate::err::{ipv4_exts, ipv6_exts};
 
 /// Errors while serializing or determining the next_header of
-/// an [`crate::IpHeader`].
+/// an [`crate::IpHeaders`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ExtsWalkError {
     /// Error within the IPv4 extensions headers.
