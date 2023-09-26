@@ -3,7 +3,7 @@ use crate::err::LenError;
 
 /// Error when decoding an IP header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum HeadersSliceError {
+pub enum LaxHeaderSliceError {
     /// Error when an length error is encountered (e.g. unexpected
     /// end of slice).
     Len(LenError),
@@ -12,11 +12,11 @@ pub enum HeadersSliceError {
     Content(HeadersError),
 }
 
-impl HeadersSliceError {
+impl LaxHeaderSliceError {
     /// Adds an offset value to all slice length related fields.
     #[inline]
     pub const fn add_slice_offset(self, offset: usize) -> Self {
-        use HeadersSliceError::*;
+        use LaxHeaderSliceError::*;
         match self {
             Len(err) => Len(err.add_offset(offset)),
             Content(err) => Content(err),
@@ -24,9 +24,9 @@ impl HeadersSliceError {
     }
 }
 
-impl core::fmt::Display for HeadersSliceError {
+impl core::fmt::Display for LaxHeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeadersSliceError::*;
+        use LaxHeaderSliceError::*;
         match self {
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
@@ -35,9 +35,9 @@ impl core::fmt::Display for HeadersSliceError {
 }
 
 #[cfg(feature = "std")]
-impl std::error::Error for HeadersSliceError {
+impl std::error::Error for LaxHeaderSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeadersSliceError::*;
+        use LaxHeaderSliceError::*;
         match self {
             Len(err) => Some(err),
             Content(err) => Some(err),
@@ -47,7 +47,7 @@ impl std::error::Error for HeadersSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersSliceError::*, super::{HeadersError::*, HeaderError::*}, *};
+    use super::{LaxHeaderSliceError::*, super::{HeaderError::*, HeadersError::*}, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -58,7 +58,7 @@ mod tests {
 
     #[test]
     fn add_slice_offset() {
-        use HeadersSliceError::*;
+        use LaxHeaderSliceError::*;
         assert_eq!(
             Len(LenError {
                 required_len: 1,

@@ -79,13 +79,13 @@ impl std::error::Error for HeaderReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use super::{HeaderReadError::*, *};
+    use super::{HeaderReadError::*, super::HeaderError::*, super::HeadersError::*, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
 
     #[test]
     fn debug() {
-        let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
+        let err = HeadersError::Ip(UnsupportedIpVersion { version_number: 6 });
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -115,7 +115,7 @@ mod test {
             assert_eq!(format!("{}", Len(err.clone())), format!("{}", err));
         }
         {
-            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
+            let err = Ip(UnsupportedIpVersion { version_number: 6 });
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -139,7 +139,7 @@ mod test {
         .source()
         .is_some());
         assert!(
-            Content(HeadersError::UnsupportedIpVersion { version_number: 6 })
+            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
                 .source()
                 .is_some()
         );
@@ -154,7 +154,7 @@ mod test {
         .io()
         .is_some());
         assert!(
-            Content(HeadersError::UnsupportedIpVersion { version_number: 6 })
+            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
                 .io()
                 .is_none()
         );
@@ -191,7 +191,7 @@ mod test {
             .content()
         );
         {
-            let err = HeadersError::UnsupportedIpVersion { version_number: 6 };
+            let err = Ip(UnsupportedIpVersion { version_number: 6 });
             assert_eq!(Some(err.clone()), Content(err.clone()).content());
         }
     }
