@@ -1,4 +1,4 @@
-use super::HeadersError;
+use super::HeaderError;
 use crate::err::LenError;
 
 /// Error when decoding an IP header from a slice.
@@ -9,7 +9,7 @@ pub enum LaxHeaderSliceError {
     Len(LenError),
 
     /// Error caused by the contents of the header.
-    Content(HeadersError),
+    Content(HeaderError),
 }
 
 impl LaxHeaderSliceError {
@@ -47,7 +47,7 @@ impl std::error::Error for LaxHeaderSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{LaxHeaderSliceError::*, super::{HeaderError::*, HeadersError::*}, *};
+    use super::{LaxHeaderSliceError::*, super::HeaderError::*, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -77,14 +77,14 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(Ip(UnsupportedIpVersion { version_number: 1 })).add_slice_offset(200),
-            Content(Ip(UnsupportedIpVersion { version_number: 1 }))
+            Content(UnsupportedIpVersion { version_number: 1 }).add_slice_offset(200),
+            Content(UnsupportedIpVersion { version_number: 1 })
         );
     }
 
     #[test]
     fn debug() {
-        let err = Ip(UnsupportedIpVersion { version_number: 6 });
+        let err = UnsupportedIpVersion { version_number: 6 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -93,7 +93,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(Ip(UnsupportedIpVersion { version_number: 6 }));
+        let err = Content(UnsupportedIpVersion { version_number: 6 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -121,7 +121,7 @@ mod tests {
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
         {
-            let err = Ip(UnsupportedIpVersion { version_number: 6 });
+            let err = UnsupportedIpVersion { version_number: 6 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -139,7 +139,7 @@ mod tests {
         .source()
         .is_some());
         assert!(
-            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
+            Content(UnsupportedIpVersion { version_number: 6 })
                 .source()
                 .is_some()
         );
