@@ -465,6 +465,9 @@ impl<'a> CursorSlice<'a> {
         use ether_type::*;
         use VlanSlice::*;
 
+        // cache the starting slice so the later combining
+        // of outer & inner vlan is defined behavior (for miri)
+        let outer_start_slice = self.slice;
         let outer = SingleVlanHeaderSlice::from_slice(self.slice)
             .map_err(|err| Len(err.add_offset(self.offset)))?;
 
@@ -482,7 +485,7 @@ impl<'a> CursorSlice<'a> {
                     // SAFETY: Safe as the length of the slice was previously verified.
                     slice: unsafe {
                         core::slice::from_raw_parts(
-                            outer.slice().as_ptr(),
+                            outer_start_slice.as_ptr(),
                             outer.slice().len() + inner.slice().len(),
                         )
                     },
