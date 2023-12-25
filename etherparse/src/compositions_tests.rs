@@ -320,16 +320,12 @@ impl ComponentTest {
                     Some(TransportHeader::Icmpv6(actual.header())),
                 Some(TransportSlice::Udp(actual)) => Some(TransportHeader::Udp(actual.to_header())),
                 Some(TransportSlice::Tcp(actual)) => Some(TransportHeader::Tcp(actual.to_header())),
-                Some(TransportSlice::Unknown(_)) => None,
                 None => None,
             }
         );
         // additional check for the contents of Unknown
         if self.transport.is_none() {
             match result.transport.as_ref() {
-                Some(TransportSlice::Unknown(ip_num)) => {
-                    assert_eq!(*ip_num, self.ip.as_ref().unwrap().next_header().unwrap())
-                }
                 None => assert!(result.transport.is_none()),
                 _ => unreachable!(),
             }
@@ -340,14 +336,14 @@ impl ComponentTest {
             // icmp slices contain the complete payload, the payload itself will be empty
             Some(TransportSlice::Icmpv4(icmpv4)) => {
                 assert_eq!(&self.payload[..], icmpv4.payload());
-                assert_eq!(0, result.payload.len());
+                assert_eq!(0, result.payload.slice().len());
             }
             Some(TransportSlice::Icmpv6(icmpv6)) => {
                 assert_eq!(&self.payload[..], icmpv6.payload());
-                assert_eq!(0, result.payload.len());
+                assert_eq!(0, result.payload.slice().len());
             }
             // for other cases
-            _ => assert_eq!(&self.payload[..], &result.payload[..]),
+            _ => assert_eq!(&self.payload[..], &result.payload.slice()[..]),
         }
     }
 
@@ -610,7 +606,7 @@ fn test_packet_slicing_panics() {
         vlan: None,
         ip: None,
         transport: None,
-        payload: &v[..],
+        payload: PayloadSlice::Tcp(&v[..]),
     };
     ComponentTest {
         link: Some(Ethernet2Header {

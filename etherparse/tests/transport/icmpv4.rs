@@ -107,7 +107,7 @@ mod icmpv4_regression {
         use TransportSlice::*;
         let icmp4 = match echo.transport.unwrap() {
             Icmpv4(icmp4) => icmp4,
-            Icmpv6(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+            Icmpv6(_) | Udp(_) | Tcp(_) => panic!("Misparsed header!"),
         };
         assert!(matches!(icmp4.icmp_type(), Icmpv4Type::EchoRequest(_)));
     }

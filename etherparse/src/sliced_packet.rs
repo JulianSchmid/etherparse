@@ -1,6 +1,4 @@
-use crate::err::LenSource;
-
-use super::*;
+use crate::*;
 
 /// Packet slice split into multiple slices containing the different headers & payload.
 ///
@@ -62,7 +60,7 @@ pub struct SlicedPacket<'a> {
     /// For example if transport field contains Some(Udp(_)) then the payload field points to the udp payload.
     /// On the other hand if the transport field contains None then the payload contains the payload of
     /// next field containing a Some value (in order of transport, ip, vlan, link).
-    pub payload: &'a [u8],
+    pub payload: PayloadSlice<'a>,
 }
 
 impl<'a> SlicedPacket<'a> {
@@ -102,7 +100,7 @@ impl<'a> SlicedPacket<'a> {
     /// }
     /// ```
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, err::packet::EthSliceError> {
-        CursorSlice::new(data).slice_ethernet2()
+        SlicedPacketCursor::new(data).slice_ethernet2()
     }
 
     /// Separates a network packet slice into different slices containing the headers using
@@ -163,17 +161,20 @@ impl<'a> SlicedPacket<'a> {
     ) -> Result<SlicedPacket, err::packet::EthSliceError> {
         use ether_type::*;
         match ether_type {
-            IPV4 => CursorSlice::new(data).slice_ipv4(),
-            IPV6 => CursorSlice::new(data).slice_ipv6(),
+            IPV4 => SlicedPacketCursor::new(data).slice_ipv4(),
+            IPV6 => SlicedPacketCursor::new(data).slice_ipv6(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                CursorSlice::new(data).slice_vlan()
+                SlicedPacketCursor::new(data).slice_vlan()
             }
             _ => Ok(SlicedPacket {
                 link: None,
                 vlan: None,
                 ip: None,
                 transport: None,
-                payload: data,
+                payload: PayloadSlice::Ether(EtherPayloadSlice{
+                    ether_type,
+                    payload: data,
+                }),
             }),
         }
     }
@@ -220,7 +221,7 @@ impl<'a> SlicedPacket<'a> {
     /// #
     /// use etherparse::{ether_type, SlicedPacket};
     ///
-    /// match SlicedPacket::from_ether_type(ether_type::IPV4, packet) {
+    /// match SlicedPacket::from_ether_type_lax(ether_type::IPV4, packet) {
     ///     Err(value) => println!("Err {:?}", value),
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
@@ -236,17 +237,20 @@ impl<'a> SlicedPacket<'a> {
     ) -> Result<SlicedPacket, err::packet::EthSliceError> {
         use ether_type::*;
         match ether_type {
-            IPV4 => CursorSlice::new(data).slice_ipv4_lax(),
-            IPV6 => CursorSlice::new(data).slice_ipv6_lax(),
+            IPV4 => SlicedPacketCursor::new(data).slice_ipv4_lax(),
+            IPV6 => SlicedPacketCursor::new(data).slice_ipv6_lax(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                CursorSlice::new(data).slice_vlan_lax()
+                SlicedPacketCursor::new(data).slice_vlan_lax()
             }
             _ => Ok(SlicedPacket {
                 link: None,
                 vlan: None,
                 ip: None,
                 transport: None,
-                payload: data,
+                payload: PayloadSlice::Ether(EtherPayloadSlice{
+                    ether_type,
+                    payload: data,
+                }),
             }),
         }
     }
@@ -288,7 +292,7 @@ impl<'a> SlicedPacket<'a> {
     /// }
     /// ```
     pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket, err::packet::IpSliceError> {
-        CursorSlice::new(data).slice_ip()
+        SlicedPacketCursor::new(data).slice_ip()
     }
 
     /// Seperates a network packet slice into different slices containing
@@ -343,7 +347,7 @@ impl<'a> SlicedPacket<'a> {
     /// }
     /// ```
     pub fn from_ip_lax(data: &'a [u8]) -> Result<SlicedPacket, err::packet::IpSliceError> {
-        CursorSlice::new(data).slice_ip_lax()
+        SlicedPacketCursor::new(data).slice_ip_lax()
     }
 
     /// If the slice in the `payload` field contains an ethernet payload
@@ -375,611 +379,12 @@ impl<'a> SlicedPacket<'a> {
     }
 }
 
-///Helper class for slicing packets
-struct CursorSlice<'a> {
-    pub slice: &'a [u8],
-    pub offset: usize,
-    pub len_source: LenSource,
-    pub result: SlicedPacket<'a>,
-}
-
-impl<'a> CursorSlice<'a> {
-    pub fn new(slice: &'a [u8]) -> CursorSlice<'a> {
-        CursorSlice {
-            slice,
-            offset: 0,
-            len_source: LenSource::Slice,
-            result: SlicedPacket {
-                link: None,
-                vlan: None,
-                ip: None,
-                transport: None,
-                payload: slice,
-            },
-        }
-    }
-
-    fn move_by_slice(&mut self, other: &'a [u8]) {
-        unsafe {
-            use core::slice::from_raw_parts;
-            self.slice = from_raw_parts(
-                self.slice.as_ptr().add(other.len()),
-                self.slice.len() - other.len(),
-            );
-        }
-        self.offset += other.len();
-    }
-
-    pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-        use ether_type::*;
-        use LinkSlice::*;
-
-        let result = Ethernet2HeaderSlice::from_slice(self.slice)
-            .map_err(|err| Len(err.add_offset(self.offset)))?;
-
-        //cache the ether_type for later
-        let ether_type = result.ether_type();
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.link = Some(Ethernet2(result));
-
-        //continue parsing (if required)
-        match ether_type {
-            IPV4 => self.slice_ipv4(),
-            IPV6 => self.slice_ipv6(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan(),
-            _ => Ok(self.slice_payload()),
-        }
-    }
-
-    pub fn slice_ethernet2_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-        use ether_type::*;
-        use LinkSlice::*;
-
-        let result = Ethernet2HeaderSlice::from_slice(self.slice)
-            .map_err(|err| Len(err.add_offset(self.offset)))?;
-
-        //cache the ether_type for later
-        let ether_type = result.ether_type();
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.link = Some(Ethernet2(result));
-
-        //continue parsing (if required)
-        match ether_type {
-            IPV4 => self.slice_ipv4_lax(),
-            IPV6 => self.slice_ipv6_lax(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                self.slice_vlan_lax()
-            }
-            _ => Ok(self.slice_payload()),
-        }
-    }
-
-    pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-        use ether_type::*;
-        use VlanSlice::*;
-
-        // cache the starting slice so the later combining
-        // of outer & inner vlan is defined behavior (for miri)
-        let outer_start_slice = self.slice;
-        let outer = SingleVlanHeaderSlice::from_slice(self.slice)
-            .map_err(|err| Len(err.add_offset(self.offset)))?;
-
-        //check if it is a double vlan header
-        match outer.ether_type() {
-            //in case of a double vlan header continue with the inner
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                self.move_by_slice(outer.slice());
-                let inner = SingleVlanHeaderSlice::from_slice(self.slice)
-                    .map_err(|err| Len(err.add_offset(self.offset)))?;
-                self.move_by_slice(inner.slice());
-
-                let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
-                    // SAFETY: Safe as the length of the slice was previously verified.
-                    slice: unsafe {
-                        core::slice::from_raw_parts(
-                            outer_start_slice.as_ptr(),
-                            outer.slice().len() + inner.slice().len(),
-                        )
-                    },
-                }));
-
-                match inner_ether_type {
-                    IPV4 => self.slice_ipv4(),
-                    IPV6 => self.slice_ipv6(),
-                    _ => Ok(self.slice_payload()),
-                }
-            }
-            value => {
-                //set the vlan header and continue the normal parsing
-                self.move_by_slice(outer.slice());
-                self.result.vlan = Some(SingleVlan(outer));
-
-                match value {
-                    IPV4 => self.slice_ipv4(),
-                    IPV6 => self.slice_ipv6(),
-                    _ => Ok(self.slice_payload()),
-                }
-            }
-        }
-    }
-
-    pub fn slice_vlan_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-        use ether_type::*;
-        use VlanSlice::*;
-
-        let outer = SingleVlanHeaderSlice::from_slice(self.slice)
-            .map_err(|err| Len(err.add_offset(self.offset)))?;
-
-        //check if it is a double vlan header
-        match outer.ether_type() {
-            //in case of a double vlan header continue with the inner
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                self.move_by_slice(outer.slice());
-                let inner = SingleVlanHeaderSlice::from_slice(self.slice)
-                    .map_err(|err| Len(err.add_offset(self.offset)))?;
-                self.move_by_slice(inner.slice());
-
-                let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
-                    // SAFETY: Safe as the lenght of the slice was previously verified.
-                    slice: unsafe {
-                        core::slice::from_raw_parts(
-                            outer.slice().as_ptr(),
-                            outer.slice().len() + inner.slice().len(),
-                        )
-                    },
-                }));
-
-                match inner_ether_type {
-                    IPV4 => self.slice_ipv4_lax(),
-                    IPV6 => self.slice_ipv6_lax(),
-                    _ => Ok(self.slice_payload()),
-                }
-            }
-            value => {
-                //set the vlan header and continue the normal parsing
-                self.move_by_slice(outer.slice());
-                self.result.vlan = Some(SingleVlan(outer));
-
-                match value {
-                    IPV4 => self.slice_ipv4(),
-                    IPV6 => self.slice_ipv6(),
-                    _ => Ok(self.slice_payload()),
-                }
-            }
-        }
-    }
-
-    pub fn slice_ip(mut self) -> Result<SlicedPacket<'a>, err::packet::IpSliceError> {
-        use err::packet::IpSliceError::*;
-
-        // slice header, extension headers and identify payload range
-        let ip = IpSlice::from_ip_slice(self.slice).map_err(|err| {
-            use err::ip::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::IpHeaders(err) => Ip(err),
-            }
-        })?;
-
-        // safe data needed
-        let payload = ip.payload().clone();
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = payload.len_source;
-        self.slice = payload.payload;
-        self.result.ip = Some(ip);
-
-        // continue to the lower layers
-        if payload.fragmented {
-            Ok(self.slice_payload())
-        } else {
-            match payload.ip_number {
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_ip_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::IpSliceError> {
-        use err::packet::IpSliceError::*;
-
-        // slice header, extension headers and identify payload range
-        let ip = IpSlice::from_ip_slice_lax(self.slice).map_err(|err| {
-            use err::ip::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::IpHeaders(err) => Ip(err),
-            }
-        })?;
-
-        // safe data needed
-        let payload = ip.payload().clone();
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = payload.len_source;
-        self.slice = payload.payload;
-        self.result.ip = Some(ip);
-
-        // continue to the lower layers
-        if payload.fragmented {
-            Ok(self.slice_payload())
-        } else {
-            match payload.ip_number {
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-
-        // slice ipv4 header & extension headers
-        let ipv4 = Ipv4Slice::from_slice(self.slice).map_err(|err| {
-            use err::ipv4::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::Header(err) => Ipv4(err),
-                I::Exts(err) => Ipv4Exts(err),
-            }
-        })?;
-
-        // safe data needed in following steps
-        let payload = ipv4.payload().clone();
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = payload.len_source;
-        self.slice = payload.payload;
-        self.result.ip = Some(IpSlice::Ipv4(ipv4));
-
-        if payload.fragmented {
-            Ok(self.slice_payload())
-        } else {
-            match payload.ip_number {
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_ipv4_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-
-        // slice ipv4 header & extension headers
-        let ipv4 = Ipv4Slice::from_slice_lax(self.slice).map_err(|err| {
-            use err::ipv4::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::Header(err) => Ipv4(err),
-                I::Exts(err) => Ipv4Exts(err),
-            }
-        })?;
-
-        // safe data needed in following steps
-        let payload = ipv4.payload().clone();
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            payload.payload.as_ptr().offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = payload.len_source;
-        self.slice = payload.payload;
-        self.result.ip = Some(IpSlice::Ipv4(ipv4));
-
-        if payload.fragmented {
-            Ok(self.slice_payload())
-        } else {
-            match payload.ip_number {
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-
-        let ipv6 = Ipv6Slice::from_slice(self.slice).map_err(|err| {
-            use err::ipv6::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::Header(err) => Ipv6(err),
-                I::Exts(err) => Ipv6Exts(err),
-            }
-        })?;
-
-        // safe data needed in following steps
-        let payload_ip_number = ipv6.payload().ip_number;
-        let fragmented = ipv6.payload().fragmented;
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            ipv6.payload()
-                .payload
-                .as_ptr()
-                .offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = ipv6.payload().len_source;
-        self.slice = ipv6.payload().payload;
-        self.result.ip = Some(IpSlice::Ipv6(ipv6));
-
-        // only try to decode the transport layer if the payload
-        // is not fragmented
-        if fragmented {
-            Ok(self.slice_payload())
-        } else {
-            //parse the data bellow
-            match payload_ip_number {
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_ipv6_lax(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
-
-        let ipv6 = Ipv6Slice::from_slice_lax(self.slice).map_err(|err| {
-            use err::ipv6::SliceError as I;
-            match err {
-                I::Len(mut err) => {
-                    err.layer_start_offset += self.offset;
-                    Len(err)
-                }
-                I::Header(err) => Ipv6(err),
-                I::Exts(err) => Ipv6Exts(err),
-            }
-        })?;
-
-        // safe data needed in following steps
-        let payload_ip_number = ipv6.payload().ip_number;
-        let fragmented = ipv6.payload().fragmented;
-
-        // set the new data
-        self.offset += unsafe {
-            // SAFETY: The payload is a subslice of self.slice.
-            // therefor calculating the offset from it is safe and
-            // the result should always be a positive number.
-            ipv6.payload()
-                .payload
-                .as_ptr()
-                .offset_from(self.slice.as_ptr()) as usize
-        };
-        self.len_source = ipv6.payload().len_source;
-        self.slice = ipv6.payload().payload;
-        self.result.ip = Some(IpSlice::Ipv6(ipv6));
-
-        // only try to decode the transport layer if the payload
-        // is not fragmented
-        if fragmented {
-            Ok(self.slice_payload())
-        } else {
-            //parse the data bellow
-            match payload_ip_number {
-                ip_number::ICMP => self.slice_icmp4().map_err(Len),
-                ip_number::UDP => self.slice_udp().map_err(Len),
-                ip_number::TCP => self.slice_tcp().map_err(|err| {
-                    use err::tcp::HeaderSliceError as I;
-                    match err {
-                        I::Len(err) => Len(err),
-                        I::Content(err) => Tcp(err),
-                    }
-                }),
-                ip_number::IPV6_ICMP => self.slice_icmp6().map_err(Len),
-                value => {
-                    use TransportSlice::*;
-                    self.result.transport = Some(Unknown(value));
-                    Ok(self.slice_payload())
-                }
-            }
-        }
-    }
-
-    pub fn slice_icmp4(mut self) -> Result<SlicedPacket<'a>, err::LenError> {
-        use crate::TransportSlice::*;
-
-        let result = Icmpv4Slice::from_slice(self.slice).map_err(|mut err| {
-            err.layer_start_offset += self.offset;
-            if LenSource::Slice == err.len_source {
-                err.len_source = self.len_source;
-            }
-            err
-        })?;
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.transport = Some(Icmpv4(result));
-
-        //done
-        Ok(self.slice_payload())
-    }
-
-    pub fn slice_icmp6(mut self) -> Result<SlicedPacket<'a>, err::LenError> {
-        use crate::TransportSlice::*;
-
-        let result = Icmpv6Slice::from_slice(self.slice).map_err(|mut err| {
-            err.layer_start_offset += self.offset;
-            if LenSource::Slice == err.len_source {
-                err.len_source = self.len_source;
-            }
-            err
-        })?;
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.transport = Some(Icmpv6(result));
-
-        //done
-        Ok(self.slice_payload())
-    }
-
-    pub fn slice_udp(mut self) -> Result<SlicedPacket<'a>, err::LenError> {
-        use crate::TransportSlice::*;
-
-        let result = UdpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
-            err.layer_start_offset += self.offset;
-            if LenSource::Slice == err.len_source {
-                err.len_source = self.len_source;
-            }
-            err
-        })?;
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.transport = Some(Udp(result));
-
-        //done
-        Ok(self.slice_payload())
-    }
-
-    pub fn slice_tcp(mut self) -> Result<SlicedPacket<'a>, err::tcp::HeaderSliceError> {
-        use crate::TransportSlice::*;
-
-        let result = TcpHeaderSlice::from_slice(self.slice).map_err(|mut err| {
-            use err::tcp::HeaderSliceError::Len;
-            if let Len(err) = &mut err {
-                err.layer_start_offset += self.offset;
-                if LenSource::Slice == err.len_source {
-                    err.len_source = self.len_source;
-                }
-            }
-            err
-        })?;
-
-        //set the new data
-        self.move_by_slice(result.slice());
-        self.result.transport = Some(Tcp(result));
-
-        //done
-        Ok(self.slice_payload())
-    }
-
-    pub fn slice_payload(mut self) -> SlicedPacket<'a> {
-        self.result.payload = self.slice;
-        self.result
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::err::{
         packet::{EthSliceError, IpSliceError},
-        Layer, LenError,
+        Layer, LenError, LenSource,
     };
     use crate::test_gens::*;
     use crate::test_packet::TestPacket;
@@ -998,7 +403,7 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Icmpv4(&[]),
         };
         assert_eq!(header.clone(), header);
     }
@@ -1011,7 +416,7 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Icmpv4(&[]),
         };
         assert_eq!(
             format!("{:?}", header),
@@ -1772,7 +1177,17 @@ mod test {
                 let transport_len = test.transport.as_ref().map_or(0, |t| t.header_len());
                 assert_eq!(
                     result.payload,
-                    &data[data.len() - expected_payload.len() - transport_len..]
+                    PayloadSlice::Ip(
+                        IpPayloadSlice {
+                            ip_number: test.ip.as_ref().unwrap().next_header().unwrap(),
+                            fragmented: true,
+                            len_source: match test.ip.as_ref().unwrap() {
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            },
+                            payload: &data[data.len() - expected_payload.len() - transport_len..],
+                        }
+                    )
                 );
             } else {
                 use TransportHeader as H;
@@ -1781,32 +1196,52 @@ mod test {
                     Some(S::Icmpv4(icmpv4)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv4(icmpv4.header())));
                         assert_eq!(icmpv4.payload(), expected_payload);
-                        assert_eq!(result.payload, &[]);
+                        assert_eq!(result.payload, PayloadSlice::Icmpv4(&[]));
                     }
                     Some(S::Icmpv6(icmpv6)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv6(icmpv6.header())));
                         assert_eq!(icmpv6.payload(), expected_payload);
-                        assert_eq!(result.payload, &[]);
+                        assert_eq!(result.payload, PayloadSlice::Icmpv6(&[]));
                     }
                     Some(S::Udp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Udp(s.to_header())));
-                        assert_eq!(result.payload, expected_payload);
+                        assert_eq!(result.payload, PayloadSlice::Udp(expected_payload));
                     }
                     Some(S::Tcp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Tcp(s.to_header())));
-                        assert_eq!(result.payload, expected_payload);
-                    }
-                    Some(S::Unknown(next_ip_number)) => {
-                        assert_eq!(&test.transport, &None);
-                        assert_eq!(
-                            *next_ip_number,
-                            test.ip.as_ref().unwrap().next_header().unwrap()
-                        );
-                        assert_eq!(result.payload, expected_payload);
+                        assert_eq!(result.payload, PayloadSlice::Tcp(expected_payload));
                     }
                     None => {
                         assert_eq!(&test.transport, &None);
-                        assert_eq!(result.payload, expected_payload);
+                        assert_eq!(
+                            result.payload,
+                            match test.ip.as_ref() {
+                                Some(hdr) => {
+                                    PayloadSlice::Ip(
+                                        IpPayloadSlice{
+                                            ip_number: hdr.next_header().unwrap(),
+                                            fragmented: hdr.is_fragmenting_payload(),
+                                            len_source: match &hdr {
+                                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                            },
+                                            payload: expected_payload
+                                        }
+                                    )
+                                },
+                                None => PayloadSlice::Ether(EtherPayloadSlice{
+                                    ether_type: if let Some(v) = &test.vlan {
+                                            match v {
+                                                VlanHeader::Single(v) => v.ether_type,
+                                                VlanHeader::Double(d) => d.inner.ether_type,
+                                            }
+                                        } else {
+                                            test.link.as_ref().unwrap().ether_type
+                                        },
+                                    payload: expected_payload,
+                                })
+                            }
+                        );
                     }
                 }
             }
@@ -1921,7 +1356,7 @@ mod test {
                     vlan: None,
                     ip: None,
                     transport: None,
-                    payload: &[]
+                    payload: PayloadSlice::Udp(&[]),
                 };
                 assert_eq!(None, s.payload_ether_type());
             }

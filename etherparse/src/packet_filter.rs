@@ -225,7 +225,7 @@ impl Filter {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::test_gens::*;
+    use crate::{test_gens::*, err::LenSource};
     use alloc::vec::Vec;
     use proptest::*;
 
@@ -588,7 +588,31 @@ mod test {
                     }
                     None => None,
                 },
-                payload: &payload[..],
+                payload: match &self.transport {
+                    Some(TransportHeader::Icmpv4(_)) => PayloadSlice::Icmpv4(&payload[..]),
+                    Some(TransportHeader::Icmpv6(_)) => PayloadSlice::Icmpv6(&payload[..]),
+                    Some(TransportHeader::Udp(_)) => PayloadSlice::Udp(&payload[..]),
+                    Some(TransportHeader::Tcp(_)) => PayloadSlice::Tcp(&payload[..]),
+                    None => if let Some(ip) = self.ip.as_ref() {
+                        PayloadSlice::Ip(IpPayloadSlice {
+                            ip_number: ip.next_header().unwrap(),
+                            fragmented: ip.is_fragmenting_payload(),
+                            len_source: match ip {
+                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            },
+                            payload: &payload[..],
+                        })
+                    } else {
+                        PayloadSlice::Ether(EtherPayloadSlice {
+                            ether_type: match &self.vlan {
+                                Some(v) => v.next_header(),
+                                None => self.link.as_ref().unwrap().ether_type,
+                            },
+                            payload: &payload[..],
+                        })
+                    }
+                },
             };
 
             assert_eq!(expected_result, self.filter.applies_to_slice(&slice));

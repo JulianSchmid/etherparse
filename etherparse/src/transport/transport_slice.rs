@@ -1,4 +1,4 @@
-use crate::{Icmpv4Slice, Icmpv6Slice, IpNumber, TcpHeaderSlice, UdpHeaderSlice};
+use crate::{Icmpv4Slice, Icmpv6Slice, TcpHeaderSlice, UdpHeaderSlice};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
@@ -10,14 +10,12 @@ pub enum TransportSlice<'a> {
     Udp(UdpHeaderSlice<'a>),
     /// A slice containing a TCP header.
     Tcp(TcpHeaderSlice<'a>),
-    /// Unknonwn transport layer protocol. The value is the last parsed ip protocol number.
-    Unknown(IpNumber),
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{ip_number::IGMP, TcpHeader, UdpHeader};
+    use crate::{TcpHeader, UdpHeader};
     use alloc::{format, vec::Vec};
 
     #[test]
@@ -51,16 +49,6 @@ mod test {
 
             // debug
             assert_eq!(format!("{:?}", slice), format!("Tcp({:?})", t));
-        }
-        // unknown
-        {
-            let slice = TransportSlice::Unknown(IGMP);
-
-            // clone & eq
-            assert_eq!(slice.clone(), slice);
-
-            // debug
-            assert_eq!(format!("{:?}", slice), format!("Unknown({:?})", IGMP));
         }
     }
 }

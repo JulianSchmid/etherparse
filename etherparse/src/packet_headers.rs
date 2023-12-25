@@ -371,7 +371,7 @@ impl<'a> PacketHeaders<'a> {
 
 /// helper function to process transport headers
 fn read_transport(
-    ip_payload: IpPayload,
+    ip_payload: IpPayloadSlice,
 ) -> Result<(Option<TransportHeader>, &[u8]), err::tcp::HeaderSliceError> {
     if ip_payload.fragmented {
         Ok((None, ip_payload.payload))

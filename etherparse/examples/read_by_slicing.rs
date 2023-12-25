@@ -99,9 +99,6 @@ fn main() {
                         value.options_iterator().collect();
                     println!("    {:?}", options);
                 }
-                Some(Unknown(ip_protocol)) => {
-                    println!("  Unknwon Protocol (ip protocol number {:?}", ip_protocol)
-                }
                 None => {}
             }
         }

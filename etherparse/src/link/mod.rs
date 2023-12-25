@@ -1,5 +1,6 @@
 pub mod double_vlan_header;
 pub mod double_vlan_header_slice;
+pub mod ether_payload_slice;
 pub mod ether_type_impl;
 pub mod ethernet2_header;
 pub mod ethernet2_header_slice;

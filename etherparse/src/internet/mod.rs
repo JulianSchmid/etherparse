@@ -3,7 +3,7 @@ pub mod ip_auth_header_slice;
 pub mod ip_frag_offset;
 pub mod ip_header;
 pub mod ip_number_impl;
-pub mod ip_payload;
+pub mod ip_payload_slice;
 pub mod ip_slice;
 pub mod ipv4_dscp;
 pub mod ipv4_ecn;
