@@ -253,6 +253,7 @@ pub mod err;
 mod link;
 pub use crate::link::double_vlan_header::*;
 pub use crate::link::double_vlan_header_slice::*;
+pub use crate::link::ether_payload_slice::*;
 pub use crate::link::ether_type_impl::*;
 pub use crate::link::ethernet2_header::*;
 pub use crate::link::ethernet2_header_slice::*;
@@ -273,7 +274,7 @@ pub use crate::internet::ip_auth_header_slice::*;
 pub use crate::internet::ip_frag_offset::*;
 pub use crate::internet::ip_header::*;
 pub use crate::internet::ip_number_impl::*;
-pub use crate::internet::ip_payload::*;
+pub use crate::internet::ip_payload_slice::*;
 pub use crate::internet::ip_slice::*;
 pub use crate::internet::ipv4_dscp::*;
 pub use crate::internet::ipv4_ecn::*;
@@ -332,6 +333,12 @@ mod compositions_tests;
 
 mod helpers;
 
+mod lax_sliced_packet;
+pub use lax_sliced_packet::*;
+
+mod lax_sliced_packet_cursor;
+pub(crate) use lax_sliced_packet_cursor::*;
+
 #[cfg(feature = "std")]
 mod packet_builder;
 #[cfg(feature = "std")]
@@ -340,8 +347,14 @@ pub use crate::packet_builder::*;
 mod packet_headers;
 pub use crate::packet_headers::*;
 
+mod payload_slice;
+pub use crate::payload_slice::*;
+
 mod sliced_packet;
 pub use crate::sliced_packet::*;
+
+mod sliced_packet_cursor;
+pub(crate) use sliced_packet_cursor::*;
 
 pub mod packet_filter;
 

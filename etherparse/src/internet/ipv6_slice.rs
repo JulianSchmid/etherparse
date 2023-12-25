@@ -1,12 +1,12 @@
 use crate::err::{ipv6::SliceError, Layer, LenError, LenSource};
-use crate::{IpPayload, Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
+use crate::{IpPayloadSlice, Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
 
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ipv6Slice<'a> {
     pub(crate) header: Ipv6HeaderSlice<'a>,
     pub(crate) exts: Ipv6ExtensionsSlice<'a>,
-    pub(crate) payload: IpPayload<'a>,
+    pub(crate) payload: IpPayloadSlice<'a>,
 }
 
 impl<'a> Ipv6Slice<'a> {
@@ -92,7 +92,7 @@ impl<'a> Ipv6Slice<'a> {
         Ok(Ipv6Slice {
             header,
             exts,
-            payload: IpPayload {
+            payload: IpPayloadSlice {
                 ip_number: payload_ip_number,
                 fragmented,
                 len_source,
@@ -210,7 +210,7 @@ impl<'a> Ipv6Slice<'a> {
         Ok(Ipv6Slice {
             header,
             exts,
-            payload: IpPayload {
+            payload: IpPayloadSlice {
                 ip_number: payload_ip_number,
                 fragmented,
                 len_source,
@@ -234,7 +234,7 @@ impl<'a> Ipv6Slice<'a> {
     /// Returns a slice containing the data after the IPv6 header
     /// and IPv6 extensions headers.
     #[inline]
-    pub fn payload(&self) -> &IpPayload<'a> {
+    pub fn payload(&self) -> &IpPayloadSlice<'a> {
         &self.payload
     }
 
@@ -344,7 +344,7 @@ mod test {
                 prop_assert!(actual.extensions().first_header().is_none());
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -364,7 +364,7 @@ mod test {
                 );
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -384,7 +384,7 @@ mod test {
                 prop_assert!(actual.extensions().first_header().is_none());
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Slice,
@@ -408,7 +408,7 @@ mod test {
                 );
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Slice,
@@ -576,7 +576,7 @@ mod test {
                 prop_assert!(actual.extensions().first_header().is_none());
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -596,7 +596,7 @@ mod test {
                 );
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -616,7 +616,7 @@ mod test {
                 prop_assert!(actual.extensions().first_header().is_none());
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Slice,
@@ -640,7 +640,7 @@ mod test {
                 );
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Slice,
@@ -692,7 +692,7 @@ mod test {
                 );
                 prop_assert_eq!(
                     actual.payload(),
-                    &IpPayload{
+                    &IpPayloadSlice{
                         ip_number: UDP.into(),
                         fragmented: false,
                         len_source: LenSource::Slice,

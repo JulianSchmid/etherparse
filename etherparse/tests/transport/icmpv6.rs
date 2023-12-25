@@ -101,7 +101,7 @@ mod regression {
         use TransportSlice::*;
         let icmp6 = match echo.transport.unwrap() {
             Icmpv6(icmp6) => icmp6,
-            Icmpv4(_) | Udp(_) | Tcp(_) | Unknown(_) => panic!("Misparsed header!"),
+            Icmpv4(_) | Udp(_) | Tcp(_) => panic!("Misparsed header!"),
         };
         assert!(matches!(
             icmp6.header().icmp_type,

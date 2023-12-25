@@ -66,7 +66,7 @@ impl<'a> IpSlice<'a> {
     /// Returns a slice containing the data after the IP header
     /// and IP extensions headers.
     #[inline]
-    pub fn payload(&self) -> &IpPayload<'a> {
+    pub fn payload(&self) -> &IpPayloadSlice<'a> {
         use IpSlice::*;
         match self {
             Ipv4(ipv4) => ipv4.payload(),
@@ -204,7 +204,7 @@ impl<'a> IpSlice<'a> {
                             Ok(Ipv4(Ipv4Slice {
                                 header,
                                 exts: Ipv4ExtensionsSlice { auth: Some(auth) },
-                                payload: IpPayload {
+                                payload: IpPayloadSlice {
                                     ip_number: auth.next_header(),
                                     fragmented,
                                     len_source: LenSource::Ipv4HeaderTotalLen,
@@ -215,7 +215,7 @@ impl<'a> IpSlice<'a> {
                         ip_number => Ok(Ipv4(Ipv4Slice {
                             header,
                             exts: Ipv4ExtensionsSlice { auth: None },
-                            payload: IpPayload {
+                            payload: IpPayloadSlice {
                                 ip_number,
                                 fragmented,
                                 len_source: LenSource::Ipv4HeaderTotalLen,
@@ -304,7 +304,7 @@ impl<'a> IpSlice<'a> {
                     Ok(Ipv6(Ipv6Slice {
                         header,
                         exts,
-                        payload: IpPayload {
+                        payload: IpPayloadSlice {
                             ip_number: payload_ip_number,
                             fragmented,
                             len_source,
@@ -475,7 +475,7 @@ impl<'a> IpSlice<'a> {
                             Ok(Ipv4(Ipv4Slice {
                                 header,
                                 exts: Ipv4ExtensionsSlice { auth: Some(auth) },
-                                payload: IpPayload {
+                                payload: IpPayloadSlice {
                                     ip_number: auth.next_header(),
                                     fragmented,
                                     len_source,
@@ -486,7 +486,7 @@ impl<'a> IpSlice<'a> {
                         ip_number => Ok(Ipv4(Ipv4Slice {
                             header,
                             exts: Ipv4ExtensionsSlice { auth: None },
-                            payload: IpPayload {
+                            payload: IpPayloadSlice {
                                 ip_number,
                                 fragmented,
                                 len_source,
@@ -561,7 +561,7 @@ impl<'a> IpSlice<'a> {
                     Ok(Ipv6(Ipv6Slice {
                         header,
                         exts,
-                        payload: IpPayload {
+                        payload: IpPayloadSlice {
                             ip_number: payload_ip_number,
                             fragmented,
                             len_source,
@@ -768,7 +768,7 @@ mod test {
             data.extend_from_slice(&payload);
             assert_eq!(
                 IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).payload(),
-                &IpPayload {
+                &IpPayloadSlice {
                     ip_number: ip_number::UDP.into(),
                     fragmented: header.is_fragmenting_payload(),
                     len_source: LenSource::Ipv4HeaderTotalLen,
@@ -793,7 +793,7 @@ mod test {
             data.extend_from_slice(&payload);
             assert_eq!(
                 IpSlice::Ipv6(Ipv6Slice::from_slice(&data[..]).unwrap()).payload(),
-                &IpPayload {
+                &IpPayloadSlice {
                     ip_number: ip_number::UDP.into(),
                     fragmented: false,
                     len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -893,7 +893,7 @@ mod test {
                 assert_eq!(actual.extensions().to_header(), ipv4_exts);
                 assert_eq!(
                     actual.payload,
-                    IpPayload{
+                    IpPayloadSlice{
                         ip_number: ip_number::UDP.into(),
                         fragmented: ipv4_header.is_fragmenting_payload(),
                         len_source: LenSource::Ipv4HeaderTotalLen,
@@ -923,7 +923,7 @@ mod test {
                 );
                 assert_eq!(
                     actual.payload,
-                    IpPayload{
+                    IpPayloadSlice{
                         ip_number: ip_number::UDP.into(),
                         fragmented: ipv6_exts.is_fragmenting_payload(),
                         len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -962,7 +962,7 @@ mod test {
                 );
                 assert_eq!(
                     actual.payload,
-                    IpPayload{
+                    IpPayloadSlice{
                         ip_number: ip_number::UDP.into(),
                         fragmented: ipv6_exts.is_fragmenting_payload(),
                         len_source: LenSource::Slice,
@@ -1047,7 +1047,7 @@ mod test {
                     assert_eq!(actual.extensions().to_header(), ipv4_exts);
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv4_header.is_fragmenting_payload(),
                             len_source: LenSource::Ipv4HeaderTotalLen,
@@ -1101,7 +1101,7 @@ mod test {
                     assert_eq!(actual.extensions().to_header(), ipv4_exts);
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv4_header.is_fragmenting_payload(),
                             len_source: LenSource::Slice,
@@ -1129,7 +1129,7 @@ mod test {
                     assert_eq!(actual.extensions().to_header(), ipv4_exts);
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv4_header.is_fragmenting_payload(),
                             len_source: LenSource::Slice,
@@ -1199,7 +1199,7 @@ mod test {
                     );
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv6_exts.is_fragmenting_payload(),
                             len_source: LenSource::Ipv6HeaderPayloadLen,
@@ -1245,7 +1245,7 @@ mod test {
                     );
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv6_exts.is_fragmenting_payload(),
                             len_source: LenSource::Slice,
@@ -1280,7 +1280,7 @@ mod test {
                     );
                     assert_eq!(
                         actual.payload,
-                        IpPayload{
+                        IpPayloadSlice{
                             ip_number: ip_number::UDP.into(),
                             fragmented: ipv6_exts.is_fragmenting_payload(),
                             len_source: LenSource::Slice,

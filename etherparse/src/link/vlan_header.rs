@@ -28,6 +28,15 @@ impl VlanHeader {
         }
     }
 
+    /// Returns the ether type of the next header after the vlan header(s).
+    #[inline]
+    pub fn next_header(&self) -> EtherType {
+        match self {
+            VlanHeader::Single(s) => s.ether_type,
+            VlanHeader::Double(d) => d.inner.ether_type,
+        }
+    }
+
     /// Length of the serialized header(s) in bytes.
     #[inline]
     pub fn header_len(&self) -> usize {

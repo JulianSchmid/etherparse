@@ -2,7 +2,7 @@ use crate::{err::LenSource, IpNumber};
 
 /// Payload of an IP packet.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct IpPayload<'a> {
+pub struct IpPayloadSlice<'a> {
     /// Identifying content of the payload.
     pub ip_number: IpNumber,
 
