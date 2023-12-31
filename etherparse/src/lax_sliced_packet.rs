@@ -20,18 +20,3 @@ impl<'a> LaxSlicedPacket<'a> {
         //SlicedPacketCursor::new(data).slice_ethernet2()
     }
 }
-
-// PROBLEM:
-// - Errors differ based on the start parsing layer
-//
-// OPTIONS:
-// - Generic Argument
-//      - err::packet::EthSliceError
-//      - err::packet::IpSliceError
-//    + Allows genric function(?)
-//    - requires trait + user to generic it up
-//
-// - Non-Specific Error
-//    + No generics, can easily be re-used
-//    
-// 

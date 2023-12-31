@@ -253,13 +253,16 @@ pub mod err;
 mod link;
 pub use crate::link::double_vlan_header::*;
 pub use crate::link::double_vlan_header_slice::*;
+pub use crate::link::double_vlan_slice::*;
 pub use crate::link::ether_payload_slice::*;
 pub use crate::link::ether_type_impl::*;
-pub use crate::link::ethernet2_header::*;
 pub use crate::link::ethernet2_header_slice::*;
+pub use crate::link::ethernet2_header::*;
+pub use crate::link::ethernet2_slice::*;
 pub use crate::link::link_slice::*;
 pub use crate::link::single_vlan_header::*;
 pub use crate::link::single_vlan_header_slice::*;
+pub use crate::link::single_vlan_slice::*;
 pub use crate::link::vlan_header::*;
 pub use crate::link::vlan_id::*;
 pub use crate::link::vlan_pcp::*;
@@ -319,6 +322,7 @@ pub use crate::transport::tcp_option_read_error::*;
 pub use crate::transport::tcp_option_write_error::*;
 pub use crate::transport::tcp_options::*;
 pub use crate::transport::tcp_options_iterator::*;
+pub use crate::transport::tcp_slice::*;
 pub use crate::transport::transport_header::*;
 pub use crate::transport::transport_slice::*;
 pub use crate::transport::udp_header::*;
@@ -332,6 +336,7 @@ pub mod checksum;
 mod compositions_tests;
 
 mod helpers;
+pub(crate) use helpers::*;
 
 mod lax_sliced_packet;
 pub use lax_sliced_packet::*;
@@ -356,8 +361,6 @@ pub use crate::sliced_packet::*;
 mod sliced_packet_cursor;
 pub(crate) use sliced_packet_cursor::*;
 
-pub mod packet_filter;
-
 #[cfg(test)]
 pub(crate) mod test_packet;
 
@@ -373,87 +376,3 @@ pub type ReadError = err::ReadError;
 #[cfg(feature = "std")]
 #[deprecated(since = "0.14.0", note = "Please use the type err::Field instead.")]
 pub type ErrorField = err::ValueType;
-
-/// Helper function for reading big endian u16 values from a ptr unchecked.
-///
-/// # Safety
-///
-/// It is in the responsibility of the caller to ensure there are at least 2
-/// bytes accessable via the ptr. If this is not the case undefined behavior
-/// will be triggered.
-#[inline]
-unsafe fn get_unchecked_be_u16(ptr: *const u8) -> u16 {
-    u16::from_be_bytes([*ptr, *ptr.add(1)])
-}
-
-/// Helper function for reading big endian u32 values from a ptr unchecked.
-///
-/// # Safety
-///
-/// It is in the responsibility of the caller to ensure there are at least 4
-/// bytes accessable via the ptr. If this is not the case undefined behavior
-/// will be triggered.
-#[inline]
-unsafe fn get_unchecked_be_u32(ptr: *const u8) -> u32 {
-    u32::from_be_bytes([*ptr, *ptr.add(1), *ptr.add(2), *ptr.add(3)])
-}
-
-/// Helper function for reading a 4 byte fixed-size array.
-///
-/// # Safety
-///
-/// It is in the responsibility of the caller to ensure there are at least 4
-/// bytes accessable via the ptr. If this is not the case undefined behavior
-/// will be triggered.
-#[inline]
-unsafe fn get_unchecked_4_byte_array(ptr: *const u8) -> [u8; 4] {
-    [*ptr, *ptr.add(1), *ptr.add(2), *ptr.add(3)]
-}
-
-/// Helper function for reading a 6 byte fixed-size array.
-///
-/// # Safety
-///
-/// It is in the responsibility of the caller to ensure there are at least 6
-/// bytes accessable via the ptr. If this is not the case undefined behavior
-/// will be triggered.
-#[inline]
-unsafe fn get_unchecked_6_byte_array(ptr: *const u8) -> [u8; 6] {
-    [
-        *ptr,
-        *ptr.add(1),
-        *ptr.add(2),
-        *ptr.add(3),
-        *ptr.add(4),
-        *ptr.add(5),
-    ]
-}
-
-/// Helper function for reading a 16 byte fixed-size array.
-///
-/// # Safety
-///
-/// It is in the responsibility of the caller to ensure there are at least 16
-/// bytes accessable via the ptr. If this is not the case undefined behavior
-/// will be triggered.
-#[inline]
-unsafe fn get_unchecked_16_byte_array(ptr: *const u8) -> [u8; 16] {
-    [
-        *ptr,
-        *ptr.add(1),
-        *ptr.add(2),
-        *ptr.add(3),
-        *ptr.add(4),
-        *ptr.add(5),
-        *ptr.add(6),
-        *ptr.add(7),
-        *ptr.add(8),
-        *ptr.add(9),
-        *ptr.add(10),
-        *ptr.add(11),
-        *ptr.add(12),
-        *ptr.add(13),
-        *ptr.add(14),
-        *ptr.add(15),
-    ]
-}

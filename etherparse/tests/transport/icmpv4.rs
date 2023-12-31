@@ -127,7 +127,7 @@ mod icmpv4_regression {
             // reset it and recalculate
             icmp4.checksum = 0;
             assert_eq!(
-                icmp4.icmp_type.calc_checksum(request.payload),
+                icmp4.icmp_type.calc_checksum(request.payload.slice()),
                 valid_checksum
             );
         }

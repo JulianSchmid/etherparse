@@ -370,7 +370,7 @@ mod test {
                 //error case
                 {
                     let mut transport = Tcp(tcp.clone());
-                    let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
+                    let len = (core::u16::MAX - tcp.header_len_u16()) as usize + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
                         //      otherwise a key constraint of slices is not fulfilled

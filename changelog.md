@@ -23,6 +23,7 @@
 
 ### Breaking Changes:
 
+* `packet_filter` has been removed
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
 * Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
 * `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.

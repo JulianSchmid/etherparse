@@ -6,7 +6,7 @@ use crate::{
 /// A slice containing an tcp header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TcpHeaderSlice<'a> {
-    slice: &'a [u8],
+    pub(crate) slice: &'a [u8],
 }
 
 impl<'a> TcpHeaderSlice<'a> {
@@ -28,14 +28,46 @@ impl<'a> TcpHeaderSlice<'a> {
         // SAFETY:
         // Safe as it is checked at the start of the function that the
         // length of the slice is at least TcpHeader::MIN_LEN (20).
-        let data_offset = unsafe { (*slice.get_unchecked(12) & 0xf0) >> 4 };
-        let len = data_offset as usize * 4;
+        let header_len = unsafe {
+            // The length of the TCP header can be determined via
+            // the data offset field of the TCP header. "data offset" 
+            // stores the offset in 4 byte steps from the start of the
+            // header to the payload of the header.
+            //
+            // "data offset" is stored in the upper 4 bits
+            // (aka 0b1111_0000) of byte 12. To get to total length
+            // in bytes of the header data offset has to be multiplied
+            // by 4. So the naive version to get the length of
+            // the header would be:
+            //
+            // ```
+            // let data_offset = (*slice.get_unchecked(12) & 0xf0) >> 4;
+            // let len = data_offset * 4;
+            // ```
+            //
+            // But a multiplication by 4 can be replaced by 2
+            // left shift:
+            //
+            // ```
+            // let data_offset = (*slice.get_unchecked(12) & 0xf0) >> 4;
+            // let len = data_offset << 2;
+            // ```
+            //
+            // And finally the shifts can be combined to one:
+            //
+            // ```
+            // let len = (*slice.get_unchecked(12) & 0xf0) >> 2;
+            // ```
+            usize::from((*slice.get_unchecked(12) & 0xf0) >> 2)
+        };
 
-        if data_offset < TcpHeader::MIN_DATA_OFFSET {
-            Err(Content(DataOffsetTooSmall { data_offset }))
-        } else if slice.len() < len {
+        if header_len < TcpHeader::MIN_LEN {
+            Err(Content(DataOffsetTooSmall {
+                data_offset: (header_len >> 2) as u8,
+            }))
+        } else if slice.len() < header_len {
             Err(Len(err::LenError {
-                required_len: len,
+                required_len: header_len,
                 len: slice.len(),
                 len_source: err::LenSource::Slice,
                 layer: err::Layer::TcpHeader,
@@ -47,10 +79,11 @@ impl<'a> TcpHeaderSlice<'a> {
                 // SAFETY:
                 // Safe as there is a check above that the slice length
                 // is at least len.
-                slice: unsafe { core::slice::from_raw_parts(slice.as_ptr(), len) },
+                slice: unsafe { core::slice::from_raw_parts(slice.as_ptr(), header_len) },
             })
         }
     }
+
     /// Returns the slice containing the tcp header
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
@@ -283,7 +316,7 @@ impl<'a> TcpHeaderSlice<'a> {
         }
     }
 
-    /// Calculates the upd header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
+    /// Calculates the TCP header checksum based on a ipv4 header and returns the result. This does NOT set the checksum.
     pub fn calc_checksum_ipv4(
         &self,
         ip_header: &Ipv4HeaderSlice,
@@ -322,7 +355,7 @@ impl<'a> TcpHeaderSlice<'a> {
         ))
     }
 
-    /// Calculates the upd header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
+    /// Calculates the TCP header checksum based on a ipv6 header and returns the result. This does NOT set the checksum..
     pub fn calc_checksum_ipv6(
         &self,
         ip_header: &Ipv6HeaderSlice,
@@ -524,7 +557,7 @@ mod test {
             let tcp = TcpHeader::new(0, 0, 40905, 0);
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 0,
                 ip_number::TCP,
@@ -569,7 +602,7 @@ mod test {
 
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 20,
                 ip_number::TCP,
@@ -614,7 +647,7 @@ mod test {
 
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 20,
                 ip_number::TCP,
@@ -642,7 +675,7 @@ mod test {
         {
             // write the tcp header
             let tcp: TcpHeader = Default::default();
-            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len_u16()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
             let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]).unwrap();
@@ -658,7 +691,7 @@ mod test {
                 tcp_slice.calc_checksum_ipv4(&ip_slice, &tcp_payload),
                 Err(ValueTooBigError {
                     actual: len,
-                    max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
+                    max_allowed: usize::from(core::u16::MAX - tcp.header_len_u16()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
                 })
             );
@@ -746,7 +779,7 @@ mod test {
         {
             // write the tcp header
             let tcp: TcpHeader = Default::default();
-            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len_u16()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
 
@@ -758,7 +791,7 @@ mod test {
                 tcp_slice.calc_checksum_ipv4_raw([0; 4], [0; 4], &tcp_payload),
                 Err(ValueTooBigError {
                     actual: len,
-                    max_allowed: usize::from(core::u16::MAX - tcp.header_len()),
+                    max_allowed: usize::from(core::u16::MAX - tcp.header_len_u16()),
                     value_type: ValueType::TcpPayloadLengthIpv4,
                 })
             );
@@ -793,7 +826,7 @@ mod test {
             let ip_header = Ipv6Header {
                 traffic_class: 1,
                 flow_label: 0x81806.try_into().unwrap(),
-                payload_length: tcp_payload.len() as u16 + tcp.header_len(),
+                payload_length: tcp_payload.len() as u16 + tcp.header_len_u16(),
                 next_header: ip_number::TCP,
                 hop_limit: 40,
                 source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],

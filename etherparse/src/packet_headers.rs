@@ -22,8 +22,8 @@ pub struct PacketHeaders<'a> {
     pub ip: Option<IpHeaders>,
     /// TCP or UDP header if present.
     pub transport: Option<TransportHeader>,
-    /// Rest of the packet that could not be decoded as a header (usually the payload).
-    pub payload: &'a [u8],
+    /// Payload of the last parsed layer.
+    pub payload: PayloadSlice<'a>,
 }
 
 impl<'a> PacketHeaders<'a> {
@@ -160,7 +160,10 @@ impl<'a> PacketHeaders<'a> {
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Ether(EtherPayloadSlice {
+                ether_type,
+                payload: rest,
+            }),
         };
 
         //parse vlan header(s)
@@ -174,6 +177,10 @@ impl<'a> PacketHeaders<'a> {
                 //set the rest & ether_type for the following operations
                 rest = outer_rest;
                 ether_type = outer.ether_type;
+                result.payload = PayloadSlice::Ether(EtherPayloadSlice {
+                    ether_type: ether_type,
+                    payload: rest
+                });
 
                 //parse second vlan header if present
                 match ether_type {
@@ -185,6 +192,10 @@ impl<'a> PacketHeaders<'a> {
                         //set the rest & ether_type for the following operations
                         rest = inner_rest;
                         ether_type = inner.ether_type;
+                        result.payload = PayloadSlice::Ether(EtherPayloadSlice {
+                            ether_type: ether_type,
+                            payload: rest
+                        });
 
                         Some(Double(DoubleVlanHeader { outer, inner }))
                     }
@@ -212,9 +223,10 @@ impl<'a> PacketHeaders<'a> {
                 // set the next
                 rest = ip_payload.payload;
                 result.ip = Some(ip);
+                result.payload = PayloadSlice::Ip(ip_payload.clone());
 
                 // decode transport layer
-                let (transport, transport_rest) = read_transport(ip_payload).map_err(|err| {
+                let (transport, payload) = read_transport(ip_payload).map_err(|err| {
                     use err::tcp::HeaderSliceError as I;
                     match err {
                         I::Len(err) => Len(add_offset(err, rest)),
@@ -222,8 +234,8 @@ impl<'a> PacketHeaders<'a> {
                     }
                 })?;
 
-                rest = transport_rest;
                 result.transport = transport;
+                result.payload = payload;
             }
             IPV6 => {
                 // read ipv6 header & extensions and payload slice
@@ -239,9 +251,10 @@ impl<'a> PacketHeaders<'a> {
                 //set the ip result & rest
                 rest = ip_payload.payload;
                 result.ip = Some(ip);
+                result.payload = PayloadSlice::Ip(ip_payload.clone());
 
                 // decode transport layer
-                let (transport, transport_rest) = read_transport(ip_payload).map_err(|err| {
+                let (transport, payload) = read_transport(ip_payload).map_err(|err| {
                     use err::tcp::HeaderSliceError as I;
                     match err {
                         I::Len(err) => Len(add_offset(err, rest)),
@@ -249,14 +262,11 @@ impl<'a> PacketHeaders<'a> {
                     }
                 })?;
 
-                rest = transport_rest;
                 result.transport = transport;
+                result.payload = payload;
             }
             _ => {}
         };
-
-        // finally update the rest slice based on the cursor position
-        result.payload = rest;
 
         Ok(result)
     }
@@ -317,14 +327,14 @@ impl<'a> PacketHeaders<'a> {
             vlan: None,
             ip: Some(ip_header),
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Ip(ip_payload.clone()),
         };
 
         // cache rest for offset addition
         let rest = ip_payload.payload;
 
         // try to parse the transport header (only if data is not fragmented)
-        let (transport, rest) = read_transport(ip_payload).map_err(|err| {
+        let (transport, payload) = read_transport(ip_payload).map_err(|err| {
             use err::tcp::HeaderSliceError as I;
             match err {
                 I::Len(mut err) => {
@@ -340,41 +350,19 @@ impl<'a> PacketHeaders<'a> {
 
         // update output
         result.transport = transport;
-        result.payload = rest;
+        result.payload = payload;
 
         Ok(result)
     }
 
-    /// If the slice in the `payload` field contains an ethernet payload
-    /// this method returns the ether type number describing the payload type.
-    ///
-    /// The ether type number can come from an ethernet II header or a
-    /// VLAN header depending on which headers are present.
-    ///
-    /// In case that `ip` and/or `transport` fields are the filled None
-    /// is returned, as the payload contents then are defined by a
-    /// lower layer protocol described in these fields.
-    pub fn payload_ether_type(&self) -> Option<EtherType> {
-        if self.ip.is_some() || self.transport.is_some() {
-            None
-        } else if let Some(vlan) = &self.vlan {
-            use VlanHeader::*;
-            match vlan {
-                Single(s) => Some(s.ether_type),
-                Double(d) => Some(d.inner.ether_type),
-            }
-        } else {
-            self.link.as_ref().map(|l| l.ether_type)
-        }
-    }
 }
 
 /// helper function to process transport headers
 fn read_transport(
     ip_payload: IpPayloadSlice,
-) -> Result<(Option<TransportHeader>, &[u8]), err::tcp::HeaderSliceError> {
+) -> Result<(Option<TransportHeader>, PayloadSlice), err::tcp::HeaderSliceError> {
     if ip_payload.fragmented {
-        Ok((None, ip_payload.payload))
+        Ok((None, PayloadSlice::Ip(ip_payload)))
     } else {
         // helper function to set the len source in len errors
         let add_len_source = |mut len_error: LenError| -> err::tcp::HeaderSliceError {
@@ -387,22 +375,22 @@ fn read_transport(
         use crate::ip_number::*;
         use err::tcp::HeaderSliceError::*;
         match ip_payload.ip_number {
-            ICMP => Icmpv4Header::from_slice(ip_payload.payload)
+            ICMP => Icmpv4Slice::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Icmpv4(value.0)), value.1)),
-            IPV6_ICMP => Icmpv6Header::from_slice(ip_payload.payload)
+                .map(|value| (Some(TransportHeader::Icmpv4(value.header())), PayloadSlice::Icmpv4(value.payload()))),
+            IPV6_ICMP => Icmpv6Slice::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Icmpv6(value.0)), value.1)),
+                .map(|value| (Some(TransportHeader::Icmpv6(value.header())), PayloadSlice::Icmpv6(value.payload()))),
             UDP => UdpHeader::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Udp(value.0)), value.1)),
+                .map(|value| (Some(TransportHeader::Udp(value.0)), PayloadSlice::Udp(value.1))),
             TCP => TcpHeader::from_slice(ip_payload.payload)
                 .map_err(|err| match err {
                     Len(err) => add_len_source(err),
                     Content(err) => Content(err),
                 })
-                .map(|value| (Some(TransportHeader::Tcp(value.0)), value.1)),
-            _ => Ok((None, ip_payload.payload)),
+                .map(|value| (Some(TransportHeader::Tcp(value.0)), PayloadSlice::Tcp(value.1))),
+            _ => Ok((None, PayloadSlice::Ip(ip_payload))),
         }
     }
 }
@@ -414,9 +402,7 @@ mod test {
         packet::{EthSliceError, IpSliceError},
         LenError,
     };
-    use crate::test_gens::*;
     use crate::test_packet::TestPacket;
-    use proptest::prelude::*;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
         ether_type::VLAN_TAGGED_FRAME,
@@ -432,7 +418,10 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Ether(EtherPayloadSlice {
+                ether_type: EtherType(0),
+                payload: &[],
+            }),
         };
         assert_eq!(
             &format!("{:?}", header),
@@ -454,109 +443,12 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: &[],
+            payload: PayloadSlice::Ether(EtherPayloadSlice {
+                ether_type: EtherType(0),
+                payload: &[],
+            }),
         };
         assert_eq!(header.clone(), header);
-    }
-
-    proptest! {
-        #[test]
-        fn payload_ether_type(
-            ref eth in ethernet_2_unknown(),
-            ref vlan_outer in vlan_single_unknown(),
-            ref vlan_inner in vlan_single_unknown(),
-            ref ipv4 in ipv4_unknown(),
-            ref udp in udp_any(),
-        ) {
-            use VlanHeader::*;
-            use IpHeaders::*;
-            use TransportHeader::*;
-
-            // none
-            assert_eq!(
-                None,
-                PacketHeaders{
-                    link: None,
-                    vlan: None,
-                    ip: None,
-                    transport: None,
-                    payload: &[]
-                }.payload_ether_type()
-            );
-
-            // ethernet header only
-            assert_eq!(
-                Some(eth.ether_type),
-                PacketHeaders{
-                    link: Some(eth.clone()),
-                    vlan: None,
-                    ip: None,
-                    transport: None,
-                    payload: &[]
-                }.payload_ether_type()
-            );
-
-            // single vlan header
-            assert_eq!(
-                Some(vlan_outer.ether_type),
-                PacketHeaders{
-                    link: Some(eth.clone()),
-                    vlan: Some(Single(vlan_outer.clone())),
-                    ip: None,
-                    transport: None,
-                    payload: &[]
-                }.payload_ether_type()
-            );
-
-            // double vlan header
-            assert_eq!(
-                Some(vlan_inner.ether_type),
-                PacketHeaders{
-                    link: Some(eth.clone()),
-                    vlan: Some(
-                        Double(
-                            DoubleVlanHeader {
-                                outer: vlan_outer.clone(),
-                                inner: vlan_inner.clone()
-                            }
-                        )
-                    ),
-                    ip: None,
-                    transport: None,
-                    payload: &[]
-                }.payload_ether_type()
-            );
-
-            // ip present
-            assert_eq!(
-                None,
-                PacketHeaders{
-                    link: Some(eth.clone()),
-                    vlan: None,
-                    ip: Some(
-                        Version4(ipv4.clone(), Default::default())
-                    ),
-                    transport: None,
-                    payload: &[]
-                }.payload_ether_type()
-            );
-
-            // transport present
-            assert_eq!(
-                None,
-                PacketHeaders{
-                    link: Some(eth.clone()),
-                    vlan: None,
-                    ip: Some(
-                        Version4(ipv4.clone(), Default::default())
-                    ),
-                    transport: Some(
-                        Udp(udp.clone())
-                    ),
-                    payload: &[]
-                }.payload_ether_type()
-            );
-        }
     }
 
     #[test]
@@ -1255,7 +1147,7 @@ mod test {
                 assert_eq!(result.transport, None);
             } else {
                 assert_eq!(result.transport, test.transport);
-                assert_eq!(result.payload, &[1, 2, 3, 4]);
+                assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
             }
         }
         // from_ether_type (vlan at start)
@@ -1269,7 +1161,7 @@ mod test {
                     assert_eq!(result.transport, None);
                 } else {
                     assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload, &[1, 2, 3, 4]);
+                    assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
                 }
             }
         }
@@ -1291,7 +1183,7 @@ mod test {
                     assert_eq!(result.transport, None);
                 } else {
                     assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload, &[1, 2, 3, 4]);
+                    assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
                 }
             }
         }
@@ -1305,7 +1197,7 @@ mod test {
                 assert_eq!(result.transport, None);
             } else {
                 assert_eq!(result.transport, test.transport);
-                assert_eq!(result.payload, &[1, 2, 3, 4]);
+                assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
             }
         }
     }

@@ -17,6 +17,9 @@ impl UdpHeader {
     /// Serialized size of an UDP header in bytes/octets.
     pub const LEN: usize = 8;
 
+    /// Serialized size of an UDP header in bytes/octets in an [`u16`].
+    pub const LEN_U16: u16 = 8;
+
     #[deprecated(since = "0.14.0", note = "Use `UdpHeader::LEN` instead")]
     pub const SERIALIZED_SIZE: usize = UdpHeader::LEN;
 
@@ -257,11 +260,20 @@ impl UdpHeader {
 
     /// Length of the serialized header in bytes.
     ///
-    /// The function always returns the constant UdpHeader::LEN
+    /// The function always returns the constant [`crate::UdpHeader::LEN`]
     /// and exists to keep the methods consistent with other headers.
     #[inline]
-    pub fn header_len(&self) -> usize {
+    pub const fn header_len(&self) -> usize {
         UdpHeader::LEN
+    }
+
+    /// Length of the serialized header in bytes in an [`u16`].
+    ///
+    /// The function always returns the constant [`crate::UdpHeader::LEN_U16`]
+    /// and exists to keep the methods consistent with other headers.
+    #[inline]
+    pub const fn header_len_u16(&self) -> u16 {
+        UdpHeader::LEN_U16
     }
 
     /// Returns the serialized form of the header as a statically

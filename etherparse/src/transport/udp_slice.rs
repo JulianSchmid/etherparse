@@ -1,7 +1,4 @@
-use crate::{
-    err::{Layer, LenError, LenSource},
-    UdpHeader, UdpHeaderSlice,
-};
+use crate::{*, err::*};
 
 /// Slice containing the UDP headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -31,7 +28,7 @@ impl<'a> UdpSlice<'a> {
             });
         }
 
-        // fallback to the slice length in
+        // fallback to the slice length in case length is set to 0
         if len == 0 {
             Ok(UdpSlice { slice })
         } else {
@@ -55,19 +52,25 @@ impl<'a> UdpSlice<'a> {
         }
     }
 
+    /// Return the slice containing the UDP header & payload.
+    #[inline]
+    pub fn slice(&self) -> &'a [u8] {
+        self.slice
+    }
+
     /// Return the slice containing the UDP header.
-    pub fn header(&'a self) -> UdpHeaderSlice<'a> {
-        UdpHeaderSlice {
-            slice: unsafe {
-                // SAFETY: Safe as the slice length was verified
-                // to be at least UdpHeader::LEN by "from_slice".
-                core::slice::from_raw_parts(self.slice.as_ptr(), UdpHeader::LEN)
-            },
+    #[inline]
+    pub fn header_slice(&self) -> &'a [u8] {
+        unsafe {
+            // SAFETY: Safe as the slice length was verified
+            // to be at least UdpHeader::LEN by "from_slice".
+            core::slice::from_raw_parts(self.slice.as_ptr(), UdpHeader::LEN)
         }
     }
 
     /// Returns the slice containing the UDP payload.
-    pub fn payload(&'a self) -> &'a [u8] {
+    #[inline]
+    pub fn payload(&self) -> &'a [u8] {
         unsafe {
             // SAFETY: Safe as the slice length was verified
             // to be at least UdpHeader::LEN by "from_slice".
@@ -77,6 +80,66 @@ impl<'a> UdpSlice<'a> {
             )
         }
     }
+    /// Reads the "udp source port" in the UDP header.
+    #[inline]
+    pub fn source_port(&self) -> u16 {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::LEN (8).
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr()) }
+    }
+
+    /// Reads the "udp destination port" in the UDP header.
+    #[inline]
+    pub fn destination_port(&self) -> u16 {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::LEN (8).
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) }
+    }
+
+    /// Reads the "length" field in the UDP header.
+    #[inline]
+    pub fn length(&self) -> u16 {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::LEN (8).
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
+    }
+
+    /// Reads the "checksum" from the slice.
+    #[inline]
+    pub fn checksum(&self) -> u16 {
+        // SAFETY:
+        // Safe as the contructor checks that the slice has
+        // at least the length of UdpHeader::LEN (8).
+        unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(6)) }
+    }
+
+    /// Length of the UDP header (equal to [`crate::UdpHeader::LEN`]).
+    #[inline]
+    pub const fn header_len(&self) -> usize {
+        UdpHeader::LEN
+    }
+
+    /// Length of the UDP header in an [`u16`] (equal to [`crate::UdpHeader::LEN_U16`]).
+    #[inline]
+    pub const fn header_len_u16(&self) -> u16 {
+        UdpHeader::LEN_U16
+    }
+
+    /// Decode all the fields of the UDP header and copy the results
+    /// to a UdpHeader struct.
+    #[inline]
+    pub fn to_header(&self) -> UdpHeader {
+        UdpHeader {
+            source_port: self.source_port(),
+            destination_port: self.destination_port(),
+            length: self.length(),
+            checksum: self.checksum(),
+        }
+    }
+
 }
 
 #[cfg(test)]
@@ -116,19 +179,56 @@ mod test {
         }
     }
 
+
+    proptest! {
+        #[test]
+        fn getters(
+            udp_base in udp_any()
+        ) {
+            let udp = {
+                let mut udp = udp_base.clone();
+                udp.length = UdpHeader::LEN as u16;
+                udp
+            };
+            let data = {
+                let mut data = Vec::with_capacity(
+                    udp.header_len()
+                );
+                data.extend_from_slice(&udp.to_bytes());
+                data
+            };
+
+            // normal decode
+            {
+                let slice = UdpSlice::from_slice(&data).unwrap();
+                assert_eq!(slice.slice(), &data);
+                assert_eq!(slice.header_slice(), &data);
+                assert_eq!(slice.payload(), &[]);
+                assert_eq!(slice.source_port(), udp.source_port);
+                assert_eq!(slice.destination_port(), udp.destination_port);
+                assert_eq!(slice.length(), udp.length);
+                assert_eq!(slice.checksum(), udp.checksum);
+                assert_eq!(slice.to_header(), udp);
+            }
+        }
+    }
+
     proptest! {
         #[test]
         fn from_slice(
             udp_base in udp_any()
         ) {
             let payload: [u8;4] = [1,2,3,4];
-            let data = {
-                let mut data = Vec::with_capacity(
-                    udp_base.header_len() +
-                    payload.len()
-                );
+            let udp = {
                 let mut udp = udp_base.clone();
                 udp.length = (UdpHeader::LEN + payload.len()) as u16;
+                udp
+            };
+            let data = {
+                let mut data = Vec::with_capacity(
+                    udp.header_len() +
+                    payload.len()
+                );
                 data.extend_from_slice(&udp.to_bytes());
                 data.extend_from_slice(&payload);
                 data
@@ -137,13 +237,7 @@ mod test {
             // normal decode
             {
                 let slice = UdpSlice::from_slice(&data).unwrap();
-                {
-                    let header = slice.header();
-                    assert_eq!(header.source_port(), udp_base.source_port);
-                    assert_eq!(header.destination_port(), udp_base.destination_port);
-                    assert_eq!(header.checksum(), udp_base.checksum);
-                    assert_eq!(header.length() as usize, payload.len() + UdpHeader::LEN);
-                }
+                assert_eq!(udp, slice.to_header());
                 assert_eq!(payload, slice.payload());
             }
 
@@ -159,13 +253,14 @@ mod test {
                 }
 
                 let slice = UdpSlice::from_slice(&mod_data).unwrap();
-                {
-                    let header = slice.header();
-                    assert_eq!(header.source_port(), udp_base.source_port);
-                    assert_eq!(header.destination_port(), udp_base.destination_port);
-                    assert_eq!(header.checksum(), udp_base.checksum);
-                    assert_eq!(header.length(), reduced_len);
-                }
+                assert_eq!(
+                    slice.to_header(), 
+                    {
+                        let mut expected = slice.to_header();
+                        expected.length = reduced_len;
+                        expected
+                    }
+                );
                 assert_eq!(&payload[..payload.len() - 1], slice.payload());
             }
 
@@ -177,13 +272,11 @@ mod test {
                 mod_data[5] = 0;
 
                 let slice = UdpSlice::from_slice(&mod_data).unwrap();
-                {
-                    let header = slice.header();
-                    assert_eq!(header.source_port(), udp_base.source_port);
-                    assert_eq!(header.destination_port(), udp_base.destination_port);
-                    assert_eq!(header.checksum(), udp_base.checksum);
-                    assert_eq!(header.length(), 0);
-                }
+
+                assert_eq!(slice.source_port(), udp_base.source_port);
+                assert_eq!(slice.destination_port(), udp_base.destination_port);
+                assert_eq!(slice.checksum(), udp_base.checksum);
+                assert_eq!(slice.length(), 0);
                 assert_eq!(&payload, slice.payload());
             }
 

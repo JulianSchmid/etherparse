@@ -89,7 +89,7 @@ mod regression {
             assert_eq!(
                 icmp6
                     .icmp_type
-                    .calc_checksum(iph.source, iph.destination, request.payload),
+                    .calc_checksum(iph.source, iph.destination, request.payload.slice()),
                 Ok(valid_checksum)
             );
         }

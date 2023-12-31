@@ -89,7 +89,7 @@ impl TestPacket {
         match &mut self.transport {
             None => {}
             Some(Udp(ref mut udp)) => {
-                udp.length = payload_len as u16;
+                udp.length = udp.header_len_u16() + payload_len as u16;
             }
             Some(Tcp(_)) => {}
             Some(Icmpv4(_)) => {}

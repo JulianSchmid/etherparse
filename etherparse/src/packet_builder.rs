@@ -2613,7 +2613,7 @@ mod test {
 
             //ip v4 header
             let mut ip_expected = Ipv4Header::new(
-                in_payload.len() as u16 + input.header_len(),
+                in_payload.len() as u16 + input.header_len_u16(),
                 21, //ttl
                 ip_number::TCP,
                 [13,14,15,16],
@@ -2990,7 +2990,7 @@ mod test {
                     Some(TransportHeader::Icmpv4(icmp_expected)),
                     actual.transport
                 );
-                assert_eq!(actual.payload, adapted_payload);
+                assert_eq!(actual.payload.slice(), adapted_payload);
             };
 
             // icmpv4
@@ -3209,7 +3209,7 @@ mod test {
                     Some(TransportHeader::Icmpv4(icmp_expected)),
                     actual.transport
                 );
-                assert_eq!(actual.payload, adapted_payload);
+                assert_eq!(actual.payload.slice(), adapted_payload);
             };
 
             // icmpv4
@@ -3336,7 +3336,7 @@ mod test {
                     Some(TransportHeader::Icmpv6(icmp_expected)),
                     actual.transport
                 );
-                assert_eq!(actual.payload, &payload);
+                assert_eq!(actual.payload.slice(), &payload);
             };
 
             // icmpv6
