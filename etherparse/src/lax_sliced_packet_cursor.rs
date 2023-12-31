@@ -1,4 +1,7 @@
-use crate::{*, err::{LenSource, Layer, packet::SliceError}};
+use crate::{
+    err::{packet::SliceError, Layer, LenSource},
+    *,
+};
 
 pub(crate) enum ExpectedIpProto {
     Ipv4,
@@ -19,7 +22,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             slice,
             offset: 0,
             len_source: LenSource::Slice,
-            result: LaxSlicedPacket{
+            result: LaxSlicedPacket {
                 packet: SlicedPacket {
                     link: None,
                     vlan: None,
@@ -35,10 +38,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
     fn move_by(&mut self, len: usize) {
         unsafe {
             use core::slice::from_raw_parts;
-            self.slice = from_raw_parts(
-                self.slice.as_ptr().add(len),
-                self.slice.len() - len,
-            );
+            self.slice = from_raw_parts(self.slice.as_ptr().add(len), self.slice.len() - len);
         }
         self.offset += len;
     }
@@ -63,7 +63,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         match ether_type {
             IPV4 => Ok(self.slice_ip(Some(ExpectedIpProto::Ipv4))),
             IPV6 => Ok(self.slice_ip(Some(ExpectedIpProto::Ipv6))),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => Ok(self.slice_vlan(ether_type)),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                Ok(self.slice_vlan(ether_type))
+            }
             ether_type => Ok(self.result),
         }
     }
@@ -78,7 +80,10 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         let outer = match SingleVlanSlice::from_slice(self.slice) {
             Ok(v) => v,
             Err(err) => {
-                self.result.stop_err = Some((SliceError::Len(err.add_offset(self.offset)), Layer::VlanHeader));
+                self.result.stop_err = Some((
+                    SliceError::Len(err.add_offset(self.offset)),
+                    Layer::VlanHeader,
+                ));
                 return self.result;
             }
         };
@@ -89,11 +94,13 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         match outer.ether_type() {
             //in case of a double vlan header continue with the inner
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                
                 let inner = match SingleVlanSlice::from_slice(self.slice) {
                     Ok(v) => v,
                     Err(err) => {
-                        self.result.stop_err = Some((SliceError::Len(err.add_offset(self.offset)), Layer::VlanHeader));
+                        self.result.stop_err = Some((
+                            SliceError::Len(err.add_offset(self.offset)),
+                            Layer::VlanHeader,
+                        ));
                         return self.result;
                     }
                 };
@@ -110,18 +117,15 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     _ => self.result,
                 }
             }
-            value => {
-                match value {
-                    IPV4 => self.slice_ip(Some(ExpectedIpProto::Ipv4)),
-                    IPV6 => self.slice_ip(Some(ExpectedIpProto::Ipv6)),
-                    _ => self.result,
-                }
-            }
+            value => match value {
+                IPV4 => self.slice_ip(Some(ExpectedIpProto::Ipv4)),
+                IPV6 => self.slice_ip(Some(ExpectedIpProto::Ipv6)),
+                _ => self.result,
+            },
         }
     }
 
     pub fn slice_ip(mut self, expected_type: Option<ExpectedIpProto>) -> LaxSlicedPacket<'a> {
         todo!()
     }
-
 }

@@ -47,7 +47,7 @@ impl std::error::Error for LaxHeaderSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{LaxHeaderSliceError::*, super::HeaderError::*, *};
+    use super::{super::HeaderError::*, LaxHeaderSliceError::*, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -138,10 +138,8 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(
-            Content(UnsupportedIpVersion { version_number: 6 })
-                .source()
-                .is_some()
-        );
+        assert!(Content(UnsupportedIpVersion { version_number: 6 })
+            .source()
+            .is_some());
     }
 }

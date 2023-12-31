@@ -130,10 +130,14 @@ mod tests {
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 3
-            }).content(),
+            })
+            .content(),
             None
         );
-        assert_eq!(Content(HeaderError::HopByHopNotAtStart).content(), Some(&HeaderError::HopByHopNotAtStart));
+        assert_eq!(
+            Content(HeaderError::HopByHopNotAtStart).content(),
+            Some(&HeaderError::HopByHopNotAtStart)
+        );
     }
 
     #[test]

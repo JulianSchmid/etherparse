@@ -1,4 +1,4 @@
-use crate::{*, err::*};
+use crate::{err::*, *};
 
 /// Slice containing a VLAN header & payload.
 #[derive(Clone, Eq, PartialEq)]
@@ -9,7 +9,9 @@ pub struct DoubleVlanSlice<'a> {
 impl<'a> DoubleVlanSlice<'a> {
     /// Try creating a [`DoubleVlanSlice`] from a slice containing the
     /// VLAN header & payload.
-    pub fn from_slice(slice: &'a [u8]) -> Result<DoubleVlanSlice<'a>, err::double_vlan::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<DoubleVlanSlice<'a>, err::double_vlan::HeaderSliceError> {
         use err::double_vlan::{HeaderError::*, HeaderSliceError::*};
 
         // check length
@@ -45,9 +47,7 @@ impl<'a> DoubleVlanSlice<'a> {
     /// Outer VLAN header & payload (includes header of inner vlan header).
     #[inline]
     pub fn outer(&self) -> SingleVlanSlice {
-        SingleVlanSlice {
-            slice: self.slice
-        }
+        SingleVlanSlice { slice: self.slice }
     }
 
     /// Inner VLAN header & payload.
@@ -59,12 +59,11 @@ impl<'a> DoubleVlanSlice<'a> {
                 // to be DoubleVlanHeader::LEN (aka 2*SingleVlanHeader::LEN).
                 core::slice::from_raw_parts(
                     self.slice.as_ptr().add(SingleVlanHeader::LEN),
-                    self.slice.len() - SingleVlanHeader::LEN
+                    self.slice.len() - SingleVlanHeader::LEN,
                 )
-            }
+            },
         }
     }
-
 
     /// Decode all the fields and copy the results to a DoubleVlanHeader struct
     #[inline]
@@ -79,7 +78,7 @@ impl<'a> DoubleVlanSlice<'a> {
     /// identifying it's content type after bother VLAN headers.
     #[inline]
     pub fn payload(&self) -> EtherPayloadSlice<'a> {
-        EtherPayloadSlice{
+        EtherPayloadSlice {
             ether_type: self.inner().ether_type(),
             payload: self.payload_slice(),
         }
@@ -110,10 +109,10 @@ impl<'a> DoubleVlanSlice<'a> {
 impl<'a> core::fmt::Debug for DoubleVlanSlice<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DoubleVlanSlice")
-        .field("outer", &self.outer().to_header())
-        .field("inner", &self.inner().to_header())
-        .field("payload", &self.payload())
-        .finish()
+            .field("outer", &self.outer().to_header())
+            .field("inner", &self.inner().to_header())
+            .field("payload", &self.payload())
+            .finish()
     }
 }
 

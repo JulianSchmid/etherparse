@@ -1,4 +1,4 @@
-use crate::{*, err::*};
+use crate::{err::*, *};
 
 /// Slice containing the UDP headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -139,7 +139,6 @@ impl<'a> UdpSlice<'a> {
             checksum: self.checksum(),
         }
     }
-
 }
 
 #[cfg(test)]
@@ -178,7 +177,6 @@ mod test {
             prop_assert_eq!(slice.clone(), slice);
         }
     }
-
 
     proptest! {
         #[test]
@@ -254,7 +252,7 @@ mod test {
 
                 let slice = UdpSlice::from_slice(&mod_data).unwrap();
                 assert_eq!(
-                    slice.to_header(), 
+                    slice.to_header(),
                     {
                         let mut expected = slice.to_header();
                         expected.length = reduced_len;

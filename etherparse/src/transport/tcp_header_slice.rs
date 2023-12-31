@@ -30,7 +30,7 @@ impl<'a> TcpHeaderSlice<'a> {
         // length of the slice is at least TcpHeader::MIN_LEN (20).
         let header_len = unsafe {
             // The length of the TCP header can be determined via
-            // the data offset field of the TCP header. "data offset" 
+            // the data offset field of the TCP header. "data offset"
             // stores the offset in 4 byte steps from the start of the
             // header to the payload of the header.
             //

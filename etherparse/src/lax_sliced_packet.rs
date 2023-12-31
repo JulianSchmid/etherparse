@@ -1,4 +1,4 @@
-use crate::{*, err::Layer};
+use crate::{err::Layer, *};
 
 /// Packet slice split into multiple slices containing
 /// the different headers & payload.

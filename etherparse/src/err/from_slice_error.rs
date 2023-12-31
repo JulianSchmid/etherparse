@@ -361,9 +361,11 @@ mod tests {
             ),
             (
                 "Ip",
-                Ip(ip::HeadersError::Ip(ip::HeaderError::UnsupportedIpVersion {
-                    version_number: 123,
-                })),
+                Ip(ip::HeadersError::Ip(
+                    ip::HeaderError::UnsupportedIpVersion {
+                        version_number: 123,
+                    },
+                )),
             ),
             ("IpAuth", IpAuth(ip_auth::HeaderError::ZeroPayloadLen)),
             (
@@ -405,9 +407,11 @@ mod tests {
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
-            Ip(ip::HeadersError::Ip(ip::HeaderError::UnsupportedIpVersion {
-                version_number: 123,
-            })),
+            Ip(ip::HeadersError::Ip(
+                ip::HeaderError::UnsupportedIpVersion {
+                    version_number: 123,
+                },
+            )),
             IpAuth(ip_auth::HeaderError::ZeroPayloadLen),
             Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 }),
             Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 }),
@@ -528,9 +532,11 @@ mod tests {
 
         // ip errors
         {
-            let header_error = || ip::HeadersError::Ip(ip::HeaderError::UnsupportedIpVersion {
-                version_number: 123,
-            });
+            let header_error = || {
+                ip::HeadersError::Ip(ip::HeaderError::UnsupportedIpVersion {
+                    version_number: 123,
+                })
+            };
             assert_eq!(
                 &header_error(),
                 FromSliceError::from(header_error()).ip().unwrap()

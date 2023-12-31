@@ -1,4 +1,4 @@
-use crate::{*, err::*};
+use crate::{err::*, *};
 
 /// Slice containing a VLAN header & payload.
 #[derive(Clone, Eq, PartialEq)]
@@ -21,9 +21,7 @@ impl<'a> SingleVlanSlice<'a> {
             });
         }
 
-        Ok(SingleVlanSlice {
-            slice,
-        })
+        Ok(SingleVlanSlice { slice })
     }
 
     /// Returns the slice containing the VLAN header and payload.
@@ -33,7 +31,7 @@ impl<'a> SingleVlanSlice<'a> {
     }
 
     /// Read the "priority_code_point" field of the VLAN header.
-    /// 
+    ///
     /// This is a 3 bit number which refers to the IEEE 802.1p class
     /// of service and maps to the frame priority level.
     #[inline]
@@ -46,7 +44,7 @@ impl<'a> SingleVlanSlice<'a> {
     }
 
     /// Read the "drop_eligible_indicator" flag of the VLAN header.
-    /// 
+    ///
     /// Indicates that the frame may be dropped under the presence
     /// of congestion.
     #[inline]
@@ -73,7 +71,7 @@ impl<'a> SingleVlanSlice<'a> {
     }
 
     /// Read the "Tag protocol identifier" field from the VLAN header.
-    /// 
+    ///
     /// Refer to the "EtherType" for a list of possible supported values.
     #[inline]
     pub fn ether_type(&self) -> EtherType {
@@ -99,10 +97,7 @@ impl<'a> SingleVlanSlice<'a> {
             // SAFETY:
             // Safe as the contructor checks that the slice has
             // at least the length of SingleVlanHeader::LEN (4).
-            core::slice::from_raw_parts(
-                self.slice.as_ptr(),
-                SingleVlanHeader::LEN,
-            )
+            core::slice::from_raw_parts(self.slice.as_ptr(), SingleVlanHeader::LEN)
         }
     }
 
@@ -110,7 +105,7 @@ impl<'a> SingleVlanSlice<'a> {
     /// identifying it's content type.
     #[inline]
     pub fn payload(&self) -> EtherPayloadSlice<'a> {
-        EtherPayloadSlice{
+        EtherPayloadSlice {
             ether_type: self.ether_type(),
             payload: self.payload_slice(),
         }
@@ -141,9 +136,9 @@ impl<'a> SingleVlanSlice<'a> {
 impl<'a> core::fmt::Debug for SingleVlanSlice<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SingleVlanSlice")
-        .field("header", &self.to_header())
-        .field("payload", &self.payload())
-        .finish()
+            .field("header", &self.to_header())
+            .field("payload", &self.payload())
+            .finish()
     }
 }
 

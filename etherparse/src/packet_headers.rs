@@ -179,7 +179,7 @@ impl<'a> PacketHeaders<'a> {
                 ether_type = outer.ether_type;
                 result.payload = PayloadSlice::Ether(EtherPayloadSlice {
                     ether_type: ether_type,
-                    payload: rest
+                    payload: rest,
                 });
 
                 //parse second vlan header if present
@@ -194,7 +194,7 @@ impl<'a> PacketHeaders<'a> {
                         ether_type = inner.ether_type;
                         result.payload = PayloadSlice::Ether(EtherPayloadSlice {
                             ether_type: ether_type,
-                            payload: rest
+                            payload: rest,
                         });
 
                         Some(Double(DoubleVlanHeader { outer, inner }))
@@ -354,7 +354,6 @@ impl<'a> PacketHeaders<'a> {
 
         Ok(result)
     }
-
 }
 
 /// helper function to process transport headers
@@ -377,19 +376,39 @@ fn read_transport(
         match ip_payload.ip_number {
             ICMP => Icmpv4Slice::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Icmpv4(value.header())), PayloadSlice::Icmpv4(value.payload()))),
+                .map(|value| {
+                    (
+                        Some(TransportHeader::Icmpv4(value.header())),
+                        PayloadSlice::Icmpv4(value.payload()),
+                    )
+                }),
             IPV6_ICMP => Icmpv6Slice::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Icmpv6(value.header())), PayloadSlice::Icmpv6(value.payload()))),
+                .map(|value| {
+                    (
+                        Some(TransportHeader::Icmpv6(value.header())),
+                        PayloadSlice::Icmpv6(value.payload()),
+                    )
+                }),
             UDP => UdpHeader::from_slice(ip_payload.payload)
                 .map_err(add_len_source)
-                .map(|value| (Some(TransportHeader::Udp(value.0)), PayloadSlice::Udp(value.1))),
+                .map(|value| {
+                    (
+                        Some(TransportHeader::Udp(value.0)),
+                        PayloadSlice::Udp(value.1),
+                    )
+                }),
             TCP => TcpHeader::from_slice(ip_payload.payload)
                 .map_err(|err| match err {
                     Len(err) => add_len_source(err),
                     Content(err) => Content(err),
                 })
-                .map(|value| (Some(TransportHeader::Tcp(value.0)), PayloadSlice::Tcp(value.1))),
+                .map(|value| {
+                    (
+                        Some(TransportHeader::Tcp(value.0)),
+                        PayloadSlice::Tcp(value.1),
+                    )
+                }),
             _ => Ok((None, PayloadSlice::Ip(ip_payload))),
         }
     }
@@ -661,9 +680,9 @@ mod test {
                         EthSliceError::Ipv4(
                             err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                         ),
-                        IpSliceError::Ip(err::ip::HeadersError::Ip(err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader {
-                            ihl: 0,
-                        })),
+                        IpSliceError::Ip(err::ip::HeadersError::Ip(
+                            err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
+                        )),
                     );
                 }
             }
@@ -792,7 +811,7 @@ mod test {
 
                 // content error ipv6
                 {
-                    use err::ip::{HeadersError, HeaderError::*};
+                    use err::ip::{HeaderError::*, HeadersError};
                     let mut data = test.to_vec(&[]);
 
                     // inject an invalid ip version

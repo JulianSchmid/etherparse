@@ -349,14 +349,16 @@ impl ComponentTest {
                 assert_eq!(&self.payload[..], tcp.payload());
             }
             // check ip next
-            None => if let Some(ip) = result.ip.as_ref() {
+            None => {
+                if let Some(ip) = result.ip.as_ref() {
                     assert_eq!(&self.payload[..], ip.payload().payload);
-            } else {
-                if let Some(vlan) = result.vlan.as_ref() {
-                    assert_eq!(&self.payload[..], vlan.payload().payload);
                 } else {
-                    if let Some(LinkSlice::Ethernet2(eth)) = result.link.as_ref() {
-                        assert_eq!(&self.payload[..], eth.payload().payload);
+                    if let Some(vlan) = result.vlan.as_ref() {
+                        assert_eq!(&self.payload[..], vlan.payload().payload);
+                    } else {
+                        if let Some(LinkSlice::Ethernet2(eth)) = result.link.as_ref() {
+                            assert_eq!(&self.payload[..], eth.payload().payload);
+                        }
                     }
                 }
             }

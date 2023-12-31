@@ -1,9 +1,9 @@
-use crate::{*, link::ether_payload_slice::EtherPayloadSlice};
+use crate::{link::ether_payload_slice::EtherPayloadSlice, *};
 
 /// Payload together with an identifier the type of content.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum PayloadSlice<'a> {
-    /// Payload with it's type identified by an ether type number 
+    /// Payload with it's type identified by an ether type number
     /// (e.g. after an ethernet II or vlan header).
     Ether(EtherPayloadSlice<'a>),
     /// Payload with is's type identified by an ip number (e.g.
@@ -21,7 +21,7 @@ pub enum PayloadSlice<'a> {
     Icmpv6(&'a [u8]),
 }
 
-impl<'a>  PayloadSlice<'a> {
+impl<'a> PayloadSlice<'a> {
     pub fn slice(&self) -> &'a [u8] {
         match self {
             PayloadSlice::Ether(s) => s.payload,
