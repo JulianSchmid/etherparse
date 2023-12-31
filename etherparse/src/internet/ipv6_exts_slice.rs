@@ -403,7 +403,6 @@ mod test {
         }
     }
 
-
     proptest! {
         #[test]
         fn from_slice_lax(

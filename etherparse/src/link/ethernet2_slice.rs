@@ -1,4 +1,4 @@
-use crate::{*, err::*};
+use crate::{err::*, *};
 
 /// Slice containing an Ethernet 2 headers & payload.
 #[derive(Clone, Eq, PartialEq)]
@@ -23,16 +23,13 @@ impl<'a> Ethernet2Slice<'a> {
             });
         }
 
-        Ok(Ethernet2Slice {
-            fcs_len: 0,
-            slice,
-        })
+        Ok(Ethernet2Slice { fcs_len: 0, slice })
     }
 
     /// Try creating a [`Ethernet2Slice`] from a slice containing the
     /// Ethernet 2 header & payload with a CRC 32 bit FCS (frame
     /// check sequence) at the end.
-    /// 
+    ///
     /// In case you are not sure if your ethernet2 frame has a FCS or not
     /// use [`Ethernet2Slice::from_slice_with_fcs`] instead and rely on the
     /// lower layers (e.g. IP) to determine the correct payload length.
@@ -49,10 +46,7 @@ impl<'a> Ethernet2Slice<'a> {
             });
         }
 
-        Ok(Ethernet2Slice {
-            fcs_len,
-            slice,
-        })
+        Ok(Ethernet2Slice { fcs_len, slice })
     }
 
     /// Returns the slice containing the ethernet 2 header
@@ -92,7 +86,7 @@ impl<'a> Ethernet2Slice<'a> {
 
     /// Returns the frame check sequence if present.
     #[inline]
-    pub fn fcs(&self) -> Option<[u8;4]> {
+    pub fn fcs(&self) -> Option<[u8; 4]> {
         if self.fcs_len == 4 {
             // SAFETY: Safe as the slice length was verified
             // to be at least Ethernet2Header::LEN + fcs_len by
@@ -125,10 +119,7 @@ impl<'a> Ethernet2Slice<'a> {
             // SAFETY:
             // Safe as the contructor checks that the slice has
             // at least the length of Ethernet2Header::LEN (14).
-            core::slice::from_raw_parts(
-                self.slice.as_ptr(),
-                Ethernet2Header::LEN,
-            )
+            core::slice::from_raw_parts(self.slice.as_ptr(), Ethernet2Header::LEN)
         }
     }
 
@@ -167,10 +158,10 @@ impl<'a> Ethernet2Slice<'a> {
 impl<'a> core::fmt::Debug for Ethernet2Slice<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ethernet2Slice")
-        .field("header", &self.to_header())
-        .field("payload", &self.payload())
-        .field("fcs", &self.fcs())
-        .finish()
+            .field("header", &self.to_header())
+            .field("payload", &self.payload())
+            .field("fcs", &self.fcs())
+            .finish()
     }
 }
 

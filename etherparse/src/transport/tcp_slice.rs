@@ -1,4 +1,7 @@
-use crate::{*, err::{ValueTooBigError, ValueType}};
+use crate::{
+    err::{ValueTooBigError, ValueType},
+    *,
+};
 
 /// Slice containing the TCP header & payload.
 #[derive(Clone, Eq, PartialEq)]
@@ -8,7 +11,6 @@ pub struct TcpSlice<'a> {
 }
 
 impl<'a> TcpSlice<'a> {
-
     /// Try creating a [`TcpSlice`] from a slice containing the
     /// TCP header and the TCP payload.
     pub fn from_slice(slice: &'a [u8]) -> Result<TcpSlice<'a>, err::tcp::HeaderSliceError> {
@@ -30,7 +32,7 @@ impl<'a> TcpSlice<'a> {
         // length of the slice is at least TcpHeader::MIN_LEN (20).
         let header_len = unsafe {
             // The length of the TCP header can be determined via
-            // the data offset field of the TCP header. "data offset" 
+            // the data offset field of the TCP header. "data offset"
             // stores the offset in 4 byte steps from the start of the
             // header to the payload of the header.
             //
@@ -63,7 +65,7 @@ impl<'a> TcpSlice<'a> {
 
         if header_len < TcpHeader::MIN_LEN {
             Err(Content(DataOffsetTooSmall {
-                data_offset: (header_len >> 2) as u8
+                data_offset: (header_len >> 2) as u8,
             }))
         } else if slice.len() < header_len {
             Err(Len(err::LenError {
@@ -95,10 +97,7 @@ impl<'a> TcpSlice<'a> {
         unsafe {
             // SAFETY: Safe as the slice was verified
             // to be at least header_len long.
-            core::slice::from_raw_parts(
-                self.slice.as_ptr(),
-                self.header_len,
-            )
+            core::slice::from_raw_parts(self.slice.as_ptr(), self.header_len)
         }
     }
 
@@ -170,7 +169,7 @@ impl<'a> TcpSlice<'a> {
     /// Read the number of 32 bit words in the TCP Header.
     ///
     /// This indicates where the payload begins. The TCP header
-    /// (even one including options) is an integral number of 32 
+    /// (even one including options) is an integral number of 32
     /// bits long.
     #[inline]
     pub fn data_offset(&self) -> u8 {
@@ -354,7 +353,7 @@ impl<'a> TcpSlice<'a> {
     pub fn calc_checksum_ipv4(
         &self,
         source_ip: [u8; 4],
-        destination_ip: [u8; 4]
+        destination_ip: [u8; 4],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
         if usize::from(core::u16::MAX) < self.slice.len() {
@@ -371,7 +370,7 @@ impl<'a> TcpSlice<'a> {
                 .add_4bytes(source_ip)
                 .add_4bytes(destination_ip)
                 .add_2bytes([0, ip_number::TCP.0])
-                .add_2bytes((self.slice.len() as u16).to_be_bytes())
+                .add_2bytes((self.slice.len() as u16).to_be_bytes()),
         ))
     }
 
@@ -383,7 +382,6 @@ impl<'a> TcpSlice<'a> {
         source: [u8; 16],
         destination: [u8; 16],
     ) -> Result<u16, ValueTooBigError<usize>> {
-
         // check that the total length fits into the field
         #[cfg(not(target_pointer_width = "32"))]
         if (core::u32::MAX as usize) < self.slice.len() {
@@ -400,15 +398,12 @@ impl<'a> TcpSlice<'a> {
                 .add_16bytes(source)
                 .add_16bytes(destination)
                 .add_2bytes([0, ip_number::TCP.0])
-                .add_4bytes((self.slice.len() as u32).to_be_bytes())
+                .add_4bytes((self.slice.len() as u32).to_be_bytes()),
         ))
     }
 
     /// This method takes the sum of the pseudo ip header and calculates the rest of the checksum.
-    fn calc_checksum_post_ip(
-        &self,
-        ip_pseudo_header_sum: checksum::Sum16BitWords
-    ) -> u16 {
+    fn calc_checksum_post_ip(&self, ip_pseudo_header_sum: checksum::Sum16BitWords) -> u16 {
         ip_pseudo_header_sum
             .add_slice(&self.slice[..16]) //until checksum
             .add_slice(&self.slice[18..])
@@ -420,9 +415,9 @@ impl<'a> TcpSlice<'a> {
 impl<'a> core::fmt::Debug for TcpSlice<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TcpSlice")
-        .field("header", &self.to_header())
-        .field("payload", &self.payload())
-        .finish()
+            .field("header", &self.to_header())
+            .field("payload", &self.payload())
+            .finish()
     }
 }
 
@@ -563,7 +558,6 @@ mod test {
         }
     }
 
-
     #[test]
     fn calc_checksum_ipv4() {
         use TcpOptionElement::*;
@@ -572,16 +566,13 @@ mod test {
         {
             let payload = [1, 2, 3, 4, 5, 6, 7, 8];
             let tcp = TcpHeader::new(0, 0, 40905, 0);
-            
+
             let mut data = Vec::with_capacity(tcp.header_len() + payload.len());
             data.extend_from_slice(&tcp.to_bytes());
             data.extend_from_slice(&payload);
 
             let tcp_slice = TcpSlice::from_slice(&data).unwrap();
-            assert_eq!(
-                Ok(0x0),
-                tcp_slice.calc_checksum_ipv4([0; 4], [0; 4])
-            );
+            assert_eq!(Ok(0x0), tcp_slice.calc_checksum_ipv4([0; 4], [0; 4]));
         }
 
         // a header with options
@@ -701,7 +692,7 @@ mod test {
         // error
         #[cfg(target_pointer_width = "64")]
         {
-            let slice = TcpSlice{
+            let slice = TcpSlice {
                 header_len: TcpHeader::MIN_LEN,
                 // lets create a slice of that size that points to zero
                 // (as most systems can not allocate blocks of the size of u32::MAX)
@@ -712,7 +703,7 @@ mod test {
                     use core::ptr::NonNull;
                     core::slice::from_raw_parts(
                         NonNull::<u8>::dangling().as_ptr(),
-                        (core::u32::MAX as usize) + 1
+                        (core::u32::MAX as usize) + 1,
                     )
                 },
             };
@@ -731,5 +722,4 @@ mod test {
             );
         }
     }
-
 }

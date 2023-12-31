@@ -504,7 +504,11 @@ mod test {
         }
     }
 
-    fn combine_v4(v4: &Ipv4Header, ext: &crate::Ipv4Extensions, payload: &[u8]) -> crate::IpHeaders {
+    fn combine_v4(
+        v4: &Ipv4Header,
+        ext: &crate::Ipv4Extensions,
+        payload: &[u8],
+    ) -> crate::IpHeaders {
         use crate::ip_number::{AUTH, UDP};
         crate::IpHeaders::Version4(
             {

@@ -69,9 +69,9 @@ impl From<err::packet::EthSliceError> for SliceError {
 
 impl From<err::packet::IpSliceError> for SliceError {
     fn from(value: err::packet::IpSliceError) -> Self {
+        use err::ip::HeadersError as X;
         use err::packet::IpSliceError as I;
         use SliceError as O;
-        use err::ip::HeadersError as X;
         match value {
             I::Len(err) => O::Len(err),
             I::Ip(iperr) => match iperr {
@@ -138,7 +138,10 @@ mod tests {
         // IpHeader
         {
             let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
-            assert_eq!(format!("{}", err), format!("{}", err::packet::SliceError::Ip(err)));
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", err::packet::SliceError::Ip(err))
+            );
         }
 
         // Ipv4Header
@@ -224,7 +227,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn from_eth_slice_error() {
         use err::packet::EthSliceError as I;
@@ -281,9 +283,9 @@ mod tests {
 
     #[test]
     fn from_ip_slice_error() {
+        use err::ip::HeadersError as X;
         use err::packet::IpSliceError as I;
         use SliceError as O;
-        use err::ip::HeadersError as X;
 
         // Len
         {
@@ -326,5 +328,4 @@ mod tests {
             assert_eq!(actual, O::Tcp(err));
         }
     }
-
 }

@@ -33,7 +33,10 @@ impl std::error::Error for SliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{super::{HeadersError::*, HeaderError::*}, SliceError::*};
+    use super::{
+        super::{HeaderError::*, HeadersError::*},
+        SliceError::*,
+    };
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -100,10 +103,8 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(
-            IpHeaders(Ip(UnsupportedIpVersion { version_number: 6 }))
-                .source()
-                .is_some()
-        );
+        assert!(IpHeaders(Ip(UnsupportedIpVersion { version_number: 6 }))
+            .source()
+            .is_some());
     }
 }

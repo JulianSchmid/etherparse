@@ -38,7 +38,7 @@ impl std::error::Error for HeadersError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersError::*, super::HeaderError::*, *};
+    use super::{super::HeaderError::*, HeadersError::*, *};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

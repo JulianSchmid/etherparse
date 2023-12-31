@@ -92,7 +92,7 @@ impl<'a> IpSlice<'a> {
     /// of the IP packet.
     pub fn from_ip_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
-        use err::ip::{SliceError::*, HeaderError::*, HeadersError::*};
+        use err::ip::{HeaderError::*, HeadersError::*, SliceError::*};
         use IpSlice::*;
 
         if slice.is_empty() {
@@ -312,9 +312,7 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion {
-                    version_number,
-                }))),
+                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion { version_number }))),
             }
         }
     }
@@ -362,7 +360,7 @@ impl<'a> IpSlice<'a> {
     /// * The value `0`.
     pub fn from_ip_slice_lax(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
-        use err::ip::{SliceError::*, HeaderError::*, HeadersError::*};
+        use err::ip::{HeaderError::*, HeadersError::*, SliceError::*};
         use IpSlice::*;
 
         if slice.is_empty() {
@@ -569,9 +567,7 @@ impl<'a> IpSlice<'a> {
                         },
                     }))
                 }
-                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion {
-                    version_number,
-                }))),
+                version_number => Err(IpHeaders(Ip(UnsupportedIpVersion { version_number }))),
             }
         }
     }

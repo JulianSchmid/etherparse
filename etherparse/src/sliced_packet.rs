@@ -403,10 +403,7 @@ mod test {
             format!("{:?}", header),
             format!(
                 "SlicedPacket {{ link: {:?}, vlan: {:?}, ip: {:?}, transport: {:?} }}",
-                header.link,
-                header.vlan,
-                header.ip,
-                header.transport,
+                header.link, header.vlan, header.ip, header.transport,
             )
         );
     }
@@ -610,7 +607,7 @@ mod test {
 
                 // ipv4 content error (ihl length too small)
                 {
-                    use err::ip::{HeadersError, HeaderError::*};
+                    use err::ip::{HeaderError::*, HeadersError};
 
                     let mut data = test.to_vec(&[]);
                     let ipv4_offset = data.len() - ipv4.header_len();
@@ -783,7 +780,7 @@ mod test {
 
                 // content error ipv6
                 {
-                    use err::ip::{HeadersError, HeaderError::*};
+                    use err::ip::{HeaderError::*, HeadersError};
 
                     let mut data = test.to_vec(&[]);
 
@@ -1118,11 +1115,7 @@ mod test {
     }
 
     fn from_x_slice_assert_ok(test_base: &TestPacket) {
-        fn assert_test_result(
-            test: &TestPacket,
-            expected_payload: &[u8],
-            result: &SlicedPacket,
-        ) {
+        fn assert_test_result(test: &TestPacket, expected_payload: &[u8], result: &SlicedPacket) {
             // check if fragmenting
             let is_fragmented = test.is_ip_payload_fragmented();
 

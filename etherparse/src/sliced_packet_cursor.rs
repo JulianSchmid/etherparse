@@ -1,5 +1,4 @@
-use crate::{*, err::LenSource};
-
+use crate::{err::LenSource, *};
 
 /// Helper class for slicing packets
 pub(crate) struct SlicedPacketCursor<'a> {
@@ -27,10 +26,7 @@ impl<'a> SlicedPacketCursor<'a> {
     fn move_by(&mut self, len: usize) {
         unsafe {
             use core::slice::from_raw_parts;
-            self.slice = from_raw_parts(
-                self.slice.as_ptr().add(len),
-                self.slice.len() - len,
-            );
+            self.slice = from_raw_parts(self.slice.as_ptr().add(len), self.slice.len() - len);
         }
         self.offset += len;
     }
@@ -78,7 +74,9 @@ impl<'a> SlicedPacketCursor<'a> {
         match ether_type {
             IPV4 => self.slice_ipv4_lax(),
             IPV6 => self.slice_ipv6_lax(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan_lax(),
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                self.slice_vlan_lax()
+            }
             _ => Ok(self.result),
         }
     }
@@ -100,7 +98,6 @@ impl<'a> SlicedPacketCursor<'a> {
         match outer.ether_type() {
             //in case of a double vlan header continue with the inner
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                
                 let inner = SingleVlanSlice::from_slice(self.slice)
                     .map_err(|err| Len(err.add_offset(self.offset)))?;
                 self.move_by(inner.header_len());

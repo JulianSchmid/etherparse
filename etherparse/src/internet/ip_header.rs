@@ -60,7 +60,7 @@ impl IpHeaders {
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(IpHeaders, IpPayloadSlice<'_>), err::ip::HeadersSliceError> {
-        use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
+        use err::ip::{HeaderError::*, HeadersError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -313,7 +313,7 @@ impl IpHeaders {
     pub fn from_slice_lax(
         slice: &[u8],
     ) -> Result<(IpHeaders, IpPayloadSlice<'_>), err::ip::HeadersSliceError> {
-        use err::ip::{HeadersError::*, HeaderError::*, HeadersSliceError::*};
+        use err::ip::{HeaderError::*, HeadersError::*, HeadersSliceError::*};
 
         if slice.is_empty() {
             Err(Len(err::LenError {
@@ -849,7 +849,7 @@ impl IpHeaders {
         reader: &mut T,
     ) -> Result<(IpHeaders, IpNumber), err::ip::HeaderReadError> {
         use crate::io::LimitedReader;
-        use err::ip::{HeadersError::*, HeaderError::*, HeaderReadError::*};
+        use err::ip::{HeaderError::*, HeaderReadError::*, HeadersError::*};
 
         let value = {
             let mut buf = [0; 1];
@@ -942,7 +942,10 @@ impl IpHeaders {
     /// Writes an IP (v4 or v6) header to the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), HeadersWriteError> {
+    pub fn write<T: std::io::Write + Sized>(
+        &self,
+        writer: &mut T,
+    ) -> Result<(), HeadersWriteError> {
         use crate::IpHeaders::*;
         use HeadersWriteError::*;
         match *self {

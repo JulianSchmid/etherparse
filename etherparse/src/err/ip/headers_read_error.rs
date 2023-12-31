@@ -79,7 +79,7 @@ impl std::error::Error for HeaderReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use super::{HeaderReadError::*, super::HeaderError::*, super::HeadersError::*, *};
+    use super::{super::HeaderError::*, super::HeadersError::*, HeaderReadError::*, *};
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
 
@@ -138,11 +138,9 @@ mod test {
         })
         .source()
         .is_some());
-        assert!(
-            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
-                .source()
-                .is_some()
-        );
+        assert!(Content(Ip(UnsupportedIpVersion { version_number: 6 }))
+            .source()
+            .is_some());
     }
 
     #[test]
@@ -153,11 +151,9 @@ mod test {
         ))
         .io()
         .is_some());
-        assert!(
-            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
-                .io()
-                .is_none()
-        );
+        assert!(Content(Ip(UnsupportedIpVersion { version_number: 6 }))
+            .io()
+            .is_none());
     }
 
     #[test]

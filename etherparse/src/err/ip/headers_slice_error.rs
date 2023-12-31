@@ -47,7 +47,11 @@ impl std::error::Error for HeadersSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{HeadersSliceError::*, super::{HeadersError::*, HeaderError::*}, *};
+    use super::{
+        super::{HeaderError::*, HeadersError::*},
+        HeadersSliceError::*,
+        *,
+    };
     use crate::err::{Layer, LenError, LenSource};
     use alloc::format;
     use std::{
@@ -138,10 +142,8 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(
-            Content(Ip(UnsupportedIpVersion { version_number: 6 }))
-                .source()
-                .is_some()
-        );
+        assert!(Content(Ip(UnsupportedIpVersion { version_number: 6 }))
+            .source()
+            .is_some());
     }
 }

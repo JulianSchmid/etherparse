@@ -1,5 +1,3 @@
-
-
 /// Helper function for reading big endian u16 values from a ptr unchecked.
 ///
 /// # Safety

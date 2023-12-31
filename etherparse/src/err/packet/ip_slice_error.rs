@@ -38,7 +38,10 @@ impl std::error::Error for IpSliceError {
 #[cfg(test)]
 mod tests {
     use super::{IpSliceError::*, *};
-    use crate::err::{Layer, LenSource, ip::{HeadersError, HeaderError::*}};
+    use crate::err::{
+        ip::{HeaderError::*, HeadersError},
+        Layer, LenSource,
+    };
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
