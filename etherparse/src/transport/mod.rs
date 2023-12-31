@@ -17,6 +17,7 @@ pub mod tcp_option_read_error;
 pub mod tcp_option_write_error;
 pub mod tcp_options;
 pub mod tcp_options_iterator;
+pub mod tcp_slice;
 pub mod transport_header;
 pub mod transport_slice;
 pub mod udp_header;

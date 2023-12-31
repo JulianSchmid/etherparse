@@ -159,8 +159,14 @@ impl TcpHeader {
 
     /// Returns the length of the header including the options.
     #[inline]
-    pub fn header_len(&self) -> u16 {
-        20 + (self.options.len_u8() as u16)
+    pub fn header_len(&self) -> usize {
+        20 + self.options.len()
+    }
+
+    /// Returns the length of the header including the options.
+    #[inline]
+    pub fn header_len_u16(&self) -> u16 {
+        20 + u16::from(self.options.len_u8())
     }
 
     /// Returns the options size in bytes based on the currently set data_offset. Returns None if the data_offset is smaller then the minimum size or bigger then the maximum supported size.
@@ -462,7 +468,7 @@ impl TcpHeader {
         }
 
         // calculate the checksum
-        let tcp_len = self.header_len() + (payload.len() as u16);
+        let tcp_len = self.header_len_u16() + (payload.len() as u16);
         Ok(self.calc_checksum_post_ip(
             checksum::Sum16BitWords::new()
                 .add_4bytes(source_ip)
@@ -499,7 +505,7 @@ impl TcpHeader {
             });
         }
 
-        let tcp_len = u32::from(self.header_len()) + (payload.len() as u32);
+        let tcp_len = u32::from(self.header_len_u16()) + (payload.len() as u32);
         Ok(self.calc_checksum_post_ip(
             checksum::Sum16BitWords::new()
                 .add_16bytes(source)
@@ -969,6 +975,16 @@ mod test {
         fn header_len(header in tcp_any()) {
             assert_eq!(
                 header.header_len(),
+                (20 + header.options.len())
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len_u16(header in tcp_any()) {
+            assert_eq!(
+                header.header_len_u16(),
                 (20 + header.options.len()) as u16
             );
         }
@@ -1409,7 +1425,7 @@ mod test {
             for data_offset in 0..TcpHeader::MIN_DATA_OFFSET {
                 let bytes = {
                     let mut bytes = header.to_bytes();
-                    bytes[12] = (bytes[12] & 0xf) | ((data_offset << 4) & 0xf0);
+                    bytes[12] = (bytes[12] & 0b1111) | ((data_offset << 4) & 0b1111_0000);
                     bytes
                 };
                 assert_eq!(
@@ -1530,7 +1546,7 @@ mod test {
             let tcp = TcpHeader::new(0, 0, 40905, 0);
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 0,
                 ip_number::TCP,
@@ -1568,7 +1584,7 @@ mod test {
 
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 20,
                 //contained protocol is udp
@@ -1605,7 +1621,7 @@ mod test {
 
             let ip_header = Ipv4Header::new(
                 //payload length
-                tcp.header_len() + (tcp_payload.len() as u16),
+                tcp.header_len_u16() + (tcp_payload.len() as u16),
                 //time to live
                 20,
                 //contained protocol is udp
@@ -1625,7 +1641,7 @@ mod test {
         {
             // write the udp header
             let tcp: TcpHeader = Default::default();
-            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len_u16()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
             let ip_header = Ipv4Header::new(0, 0, ip_number::TCP, [0; 4], [0; 4]).unwrap();
@@ -1709,7 +1725,7 @@ mod test {
         {
             // write the udp header
             let tcp: TcpHeader = Default::default();
-            let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
+            let len = (core::u16::MAX - tcp.header_len_u16()) as usize + 1;
             let mut tcp_payload = Vec::with_capacity(len);
             tcp_payload.resize(len, 0);
             assert_eq!(
@@ -1750,7 +1766,7 @@ mod test {
             let ip_header = Ipv6Header {
                 traffic_class: 1,
                 flow_label: 0x81806.try_into().unwrap(),
-                payload_length: tcp_payload.len() as u16 + tcp.header_len(),
+                payload_length: tcp_payload.len() as u16 + tcp.header_len_u16(),
                 next_header: ip_number::TCP,
                 hop_limit: 40,
                 source: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],

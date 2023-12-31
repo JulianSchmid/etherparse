@@ -48,19 +48,10 @@ pub struct SlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanSlice<'a>>,
-    /// IPv4 or IPv6 header and IP extension headers if present.
+    /// IPv4 or IPv6 header, IP extension headers & payload if present.
     pub ip: Option<IpSlice<'a>>,
-    /// TCP or UDP header if present.
+    /// TCP or UDP header & payload if present.
     pub transport: Option<TransportSlice<'a>>,
-    /// The payload field points to the rest of the packet that could not be parsed by etherparse.
-    ///
-    /// Depending on what other fields contain a "Some" values the payload contains the corresponding
-    /// payload.
-    ///
-    /// For example if transport field contains Some(Udp(_)) then the payload field points to the udp payload.
-    /// On the other hand if the transport field contains None then the payload contains the payload of
-    /// next field containing a Some value (in order of transport, ip, vlan, link).
-    pub payload: PayloadSlice<'a>,
 }
 
 impl<'a> SlicedPacket<'a> {
@@ -171,10 +162,6 @@ impl<'a> SlicedPacket<'a> {
                 vlan: None,
                 ip: None,
                 transport: None,
-                payload: PayloadSlice::Ether(EtherPayloadSlice{
-                    ether_type,
-                    payload: data,
-                }),
             }),
         }
     }
@@ -247,10 +234,6 @@ impl<'a> SlicedPacket<'a> {
                 vlan: None,
                 ip: None,
                 transport: None,
-                payload: PayloadSlice::Ether(EtherPayloadSlice{
-                    ether_type,
-                    payload: data,
-                }),
             }),
         }
     }
@@ -403,7 +386,6 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: PayloadSlice::Icmpv4(&[]),
         };
         assert_eq!(header.clone(), header);
     }
@@ -416,17 +398,15 @@ mod test {
             vlan: None,
             ip: None,
             transport: None,
-            payload: PayloadSlice::Icmpv4(&[]),
         };
         assert_eq!(
             format!("{:?}", header),
             format!(
-                "SlicedPacket {{ link: {:?}, vlan: {:?}, ip: {:?}, transport: {:?}, payload: {:?} }}",
+                "SlicedPacket {{ link: {:?}, vlan: {:?}, ip: {:?}, transport: {:?} }}",
                 header.link,
                 header.vlan,
                 header.ip,
                 header.transport,
-                header.payload
             )
         );
     }
@@ -1141,7 +1121,6 @@ mod test {
         fn assert_test_result(
             test: &TestPacket,
             expected_payload: &[u8],
-            data: &[u8],
             result: &SlicedPacket,
         ) {
             // check if fragmenting
@@ -1174,21 +1153,6 @@ mod test {
             // check transport header & payload
             if is_fragmented {
                 assert_eq!(result.transport, None);
-                let transport_len = test.transport.as_ref().map_or(0, |t| t.header_len());
-                assert_eq!(
-                    result.payload,
-                    PayloadSlice::Ip(
-                        IpPayloadSlice {
-                            ip_number: test.ip.as_ref().unwrap().next_header().unwrap(),
-                            fragmented: true,
-                            len_source: match test.ip.as_ref().unwrap() {
-                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
-                            },
-                            payload: &data[data.len() - expected_payload.len() - transport_len..],
-                        }
-                    )
-                );
             } else {
                 use TransportHeader as H;
                 use TransportSlice as S;
@@ -1196,52 +1160,19 @@ mod test {
                     Some(S::Icmpv4(icmpv4)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv4(icmpv4.header())));
                         assert_eq!(icmpv4.payload(), expected_payload);
-                        assert_eq!(result.payload, PayloadSlice::Icmpv4(&[]));
                     }
                     Some(S::Icmpv6(icmpv6)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv6(icmpv6.header())));
                         assert_eq!(icmpv6.payload(), expected_payload);
-                        assert_eq!(result.payload, PayloadSlice::Icmpv6(&[]));
                     }
                     Some(S::Udp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Udp(s.to_header())));
-                        assert_eq!(result.payload, PayloadSlice::Udp(expected_payload));
                     }
                     Some(S::Tcp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Tcp(s.to_header())));
-                        assert_eq!(result.payload, PayloadSlice::Tcp(expected_payload));
                     }
                     None => {
                         assert_eq!(&test.transport, &None);
-                        assert_eq!(
-                            result.payload,
-                            match test.ip.as_ref() {
-                                Some(hdr) => {
-                                    PayloadSlice::Ip(
-                                        IpPayloadSlice{
-                                            ip_number: hdr.next_header().unwrap(),
-                                            fragmented: hdr.is_fragmenting_payload(),
-                                            len_source: match &hdr {
-                                                IpHeaders::Version4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                                IpHeaders::Version6(_, _) => LenSource::Ipv6HeaderPayloadLen,
-                                            },
-                                            payload: expected_payload
-                                        }
-                                    )
-                                },
-                                None => PayloadSlice::Ether(EtherPayloadSlice{
-                                    ether_type: if let Some(v) = &test.vlan {
-                                            match v {
-                                                VlanHeader::Single(v) => v.ether_type,
-                                                VlanHeader::Double(d) => d.inner.ether_type,
-                                            }
-                                        } else {
-                                            test.link.as_ref().unwrap().ether_type
-                                        },
-                                    payload: expected_payload,
-                                })
-                            }
-                        );
                     }
                 }
             }
@@ -1263,13 +1194,13 @@ mod test {
         // from_ethernet
         if test.link.is_some() {
             let result = SlicedPacket::from_ethernet(&data).unwrap();
-            assert_test_result(&test, &payload, &data, &result);
+            assert_test_result(&test, &payload, &result);
         }
         // from_ether_type (vlan at start)
         if test.link.is_none() && test.vlan.is_some() {
             for ether_type in VLAN_ETHER_TYPES {
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
-                assert_test_result(&test, &payload, &data, &result);
+                assert_test_result(&test, &payload, &result);
             }
         }
         // from_ether_type (ip at start)
@@ -1283,13 +1214,13 @@ mod test {
                     &data,
                 )
                 .unwrap();
-                assert_test_result(&test, &payload, &data, &result);
+                assert_test_result(&test, &payload, &result);
             }
         }
         // from_ip_slice
         if test.link.is_none() && test.vlan.is_none() && test.ip.is_some() {
             let result = SlicedPacket::from_ip(&data).unwrap();
-            assert_test_result(&test, &payload, &data, &result);
+            assert_test_result(&test, &payload, &result);
         }
     }
 
@@ -1356,7 +1287,6 @@ mod test {
                     vlan: None,
                     ip: None,
                     transport: None,
-                    payload: PayloadSlice::Udp(&[]),
                 };
                 assert_eq!(None, s.payload_ether_type());
             }

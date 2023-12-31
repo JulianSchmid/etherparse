@@ -4,7 +4,7 @@ use core::slice::from_raw_parts;
 ///A slice containing an ethernet 2 header of a network package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Ethernet2HeaderSlice<'a> {
-    slice: &'a [u8],
+    pub(crate) slice: &'a [u8],
 }
 
 impl<'a> Ethernet2HeaderSlice<'a> {
@@ -81,7 +81,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
         EtherType(unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) })
     }
 
-    /// Decode all the fields and copy the results to a [``] struct
+    /// Decode all the fields and copy the results to a [`Ethernet2Header`] struct
     pub fn to_header(&self) -> Ethernet2Header {
         Ethernet2Header {
             source: self.source(),

@@ -4,7 +4,7 @@ use crate::*;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkSlice<'a> {
     /// A slice containing an Ethernet II header.
-    Ethernet2(Ethernet2HeaderSlice<'a>),
+    Ethernet2(Ethernet2Slice<'a>),
 }
 
 impl<'a> LinkSlice<'a> {
@@ -29,7 +29,7 @@ mod test {
         #[test]
         fn debug_clone_eq(ref eth in ethernet_2_unknown()) {
             let bytes = eth.to_bytes();
-            let e = Ethernet2HeaderSlice::from_slice(&bytes).unwrap();
+            let e = Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap();
             let slice = LinkSlice::Ethernet2(
                 e.clone()
             );
@@ -50,7 +50,7 @@ mod test {
         fn to_header(ref eth in ethernet_2_unknown()) {
             let bytes = eth.to_bytes();
             let slice = LinkSlice::Ethernet2(
-                Ethernet2HeaderSlice::from_slice(&bytes).unwrap()
+                Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap()
             );
 
             // clone & eq

@@ -1,15 +1,15 @@
-use crate::{Icmpv4Slice, Icmpv6Slice, TcpHeaderSlice, UdpHeaderSlice};
+use crate::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
-    /// A slice containing an Icmp4 header
+    /// A slice containing an Icmp4 header & payload.
     Icmpv4(Icmpv4Slice<'a>),
-    /// A slice containing an Icmp6 header
+    /// A slice containing an Icmp6 header & payload.
     Icmpv6(Icmpv6Slice<'a>),
-    /// A slice containing an UDP header.
-    Udp(UdpHeaderSlice<'a>),
+    /// A slice containing an UDP header & payload.
+    Udp(UdpSlice<'a>),
     /// A slice containing a TCP header.
-    Tcp(TcpHeaderSlice<'a>),
+    Tcp(TcpSlice<'a>),
 }
 
 #[cfg(test)]
@@ -24,7 +24,7 @@ mod test {
         {
             let header: UdpHeader = Default::default();
             let raw = header.to_bytes();
-            let u = UdpHeaderSlice::from_slice(&raw).unwrap();
+            let u = UdpSlice::from_slice(&raw).unwrap();
             let slice = TransportSlice::Udp(u.clone());
 
             // clone & eq
@@ -41,7 +41,7 @@ mod test {
                 header.write(&mut buffer).unwrap();
                 buffer
             };
-            let t = TcpHeaderSlice::from_slice(&buffer).unwrap();
+            let t = TcpSlice::from_slice(&buffer).unwrap();
             let slice = TransportSlice::Tcp(t.clone());
 
             // clone & eq

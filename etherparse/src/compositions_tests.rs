@@ -104,6 +104,9 @@ impl ComponentTest {
                 }
             }
         }
+        if let Some(TransportHeader::Udp(udp)) = test.transport.as_mut() {
+            udp.length = udp.header_len_u16() + self.payload.len() as u16;
+        }
 
         //packet with ethernet2 & vlan headers
         {
@@ -275,7 +278,7 @@ impl ComponentTest {
         assert_eq!(self.vlan, actual.vlan);
         assert_eq!(self.ip, self.ip);
         assert_eq!(self.transport, actual.transport);
-        assert_eq!(self.payload[..], actual.payload[..]);
+        assert_eq!(self.payload[..], actual.payload.slice()[..]);
     }
 
     fn assert_sliced_packet(&self, result: SlicedPacket) {
@@ -283,14 +286,14 @@ impl ComponentTest {
         assert_eq!(result, result);
 
         //ethernet & vlan
-        assert_eq!(self.link, result.link.map(|ref x| x.to_header()));
-        assert_eq!(self.vlan, result.vlan.map(|ref x| x.to_header()));
+        assert_eq!(self.link, result.link.as_ref().map(|ref x| x.to_header()));
+        assert_eq!(self.vlan, result.vlan.as_ref().map(|ref x| x.to_header()));
 
         //ip
         assert_eq!(self.ip, {
             use self::IpHeaders::*;
             use crate::IpSlice::*;
-            match result.ip {
+            match result.ip.as_ref() {
                 Some(Ipv4(actual)) => Some(Version4(
                     actual.header().to_header(),
                     Ipv4Extensions {
@@ -310,7 +313,7 @@ impl ComponentTest {
             }
         });
 
-        //transport
+        // transport header
         assert_eq!(
             self.transport,
             match result.transport.as_ref() {
@@ -333,17 +336,30 @@ impl ComponentTest {
 
         //payload
         match result.transport.as_ref() {
-            // icmp slices contain the complete payload, the payload itself will be empty
             Some(TransportSlice::Icmpv4(icmpv4)) => {
                 assert_eq!(&self.payload[..], icmpv4.payload());
-                assert_eq!(0, result.payload.slice().len());
             }
             Some(TransportSlice::Icmpv6(icmpv6)) => {
                 assert_eq!(&self.payload[..], icmpv6.payload());
-                assert_eq!(0, result.payload.slice().len());
             }
-            // for other cases
-            _ => assert_eq!(&self.payload[..], &result.payload.slice()[..]),
+            Some(TransportSlice::Udp(udp)) => {
+                assert_eq!(&self.payload[..], udp.payload());
+            }
+            Some(TransportSlice::Tcp(tcp)) => {
+                assert_eq!(&self.payload[..], tcp.payload());
+            }
+            // check ip next
+            None => if let Some(ip) = result.ip.as_ref() {
+                    assert_eq!(&self.payload[..], ip.payload().payload);
+            } else {
+                if let Some(vlan) = result.vlan.as_ref() {
+                    assert_eq!(&self.payload[..], vlan.payload().payload);
+                } else {
+                    if let Some(LinkSlice::Ethernet2(eth)) = result.link.as_ref() {
+                        assert_eq!(&self.payload[..], eth.payload().payload);
+                    }
+                }
+            }
         }
     }
 
@@ -600,13 +616,11 @@ proptest! {
 #[test]
 #[should_panic]
 fn test_packet_slicing_panics() {
-    let v = Vec::new();
     let s = SlicedPacket {
         link: None,
         vlan: None,
         ip: None,
         transport: None,
-        payload: PayloadSlice::Tcp(&v[..]),
     };
     ComponentTest {
         link: Some(Ethernet2Header {
