@@ -65,7 +65,7 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
     #[inline]
     pub fn fragment_offset(&self) -> IpFragOffset {
         unsafe {
-            // SAFETY: Safe as the resulting number is guranteed to be only
+            // SAFETY: Safe as the resulting number is guaranteed to be only
             // 13 bit long.
             IpFragOffset::new_unchecked(u16::from_be_bytes([
                 // SAFETY:

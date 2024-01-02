@@ -304,7 +304,7 @@ impl<'a> Icmpv4Slice<'a> {
         // usafe code easier.
         let header_len = match self.type_u8() {
             // SAFETY:
-            // Lenght safe as the contructor checks that the slice has
+            // length safe as the contructor checks that the slice has
             // the length of TimestampMessage::SERIALIZED_SIZE (20)
             // for the messages types TYPE_TIMESTAMP and TYPE_TIMESTAMP_REPLY.
             TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
@@ -315,13 +315,13 @@ impl<'a> Icmpv4Slice<'a> {
                 }
             }
             // SAFETY:
-            // Lenght safe as the contructor checks that the slice has
+            // length safe as the contructor checks that the slice has
             // at least the length of Icmpv4Header::MIN_LEN(8) for
             // all message types.
             _ => 8,
         };
         // SAFETY:
-        // Lenghts have been depending on type in the constructor of the
+        // lengths have been depending on type in the constructor of the
         // ICMPv4Slice.
         unsafe {
             core::slice::from_raw_parts(

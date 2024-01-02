@@ -102,12 +102,12 @@ impl IpFragOffset {
 
     /// Creates an [`IpFragOffset`] without checking that the value
     /// is smaller or equal than [`IpFragOffset::MAX_U16`] (13 bit unsigned integer).
-    /// The caller must gurantee that `value <= IpFragOffset::MAX_U16`.
+    /// The caller must guarantee that `value <= IpFragOffset::MAX_U16`.
     ///
     /// # Safety
     ///
     /// `value` must be smaller or equal than [`IpFragOffset::MAX_U16`]
-    /// otherwise the behaviour of functions or datastructures relying
+    /// otherwise the behavior of functions or data structures relying
     /// on this pre-requirement is undefined.
     #[inline]
     pub const unsafe fn new_unchecked(value: u16) -> IpFragOffset {

@@ -1,10 +1,10 @@
 /// Errors that can be encountered while decoding an IP
-/// authentification header.
+/// authentication header.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the payload length is zero and therefor
     /// too small to contain the minimum fields of the IP
-    /// authentification itelf.
+    /// authentication itself.
     ZeroPayloadLen,
 }
 
@@ -12,7 +12,7 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            ZeroPayloadLen => write!(f, "IP Authentification Header Error: Payload Length too small (0). The payload length must be at least 1."),
+            ZeroPayloadLen => write!(f, "IP Authentication Header Error: Payload Length too small (0). The payload length must be at least 1."),
         }
     }
 }
@@ -59,7 +59,7 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "IP Authentification Header Error: Payload Length too small (0). The payload length must be at least 1.",
+            "IP Authentication Header Error: Payload Length too small (0). The payload length must be at least 1.",
             format!("{}", ZeroPayloadLen)
         );
     }

@@ -112,7 +112,7 @@ impl<'a> Ipv6Slice<'a> {
         &self.payload
     }
 
-    /// Returns true if the payload is flagged as beeing fragmented.
+    /// Returns true if the payload is flagged as being fragmented.
     #[inline]
     pub fn is_payload_fragmented(&self) -> bool {
         self.payload.fragmented

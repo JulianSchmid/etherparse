@@ -5,11 +5,11 @@ use super::*;
 /// as all errors from these functions can be converted into this type.
 #[derive(Debug)]
 pub enum ReadError {
-    /// IO error was encoutered while reading header or expected packet contents.
+    /// IO error was encountered while reading header or expected packet contents.
     Io(std::io::Error),
 
     /// Error when parsing had to be aborted because of a length error (usually
-    /// not enough data beeing available).
+    /// not enough data being available).
     Len(LenError),
 
     /// Error while parsing a double vlan header.
@@ -18,7 +18,7 @@ pub enum ReadError {
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
 
-    /// Error while parsing a IP authentification header.
+    /// Error while parsing a IP authentication header.
     IpAuth(ip_auth::HeaderError),
 
     /// Error while parsing a IPv4 header.
@@ -453,7 +453,7 @@ mod tests {
                 format!("{}({:?})", prefix, value.source().unwrap())
             );
         }
-        // io handled seperately as source points to the underlying type
+        // io handled separately as source points to the underlying type
         {
             let io_error = || std::io::Error::new(std::io::ErrorKind::Other, "some error");
             assert_eq!(
@@ -489,7 +489,7 @@ mod tests {
             // display
             assert_eq!(format!("{}", value), format!("{}", value.source().unwrap()));
         }
-        // io handled seperately as source points to the underlying type
+        // io handled separately as source points to the underlying type
         {
             let io_error = || std::io::Error::new(std::io::ErrorKind::Other, "some error");
             assert_eq!(format!("{}", io_error()), format!("{}", Io(io_error())));

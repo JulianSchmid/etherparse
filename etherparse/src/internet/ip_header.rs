@@ -31,8 +31,8 @@ impl IpHeader {
     /// containing the rest of the payload of IP packet (determined based
     /// on the header).
     ///
-    /// Note that his function verfies `total_length` for IPv4 and
-    /// `payload_lenght` for IPv6 and that the extension headers are contained
+    /// Note that his function verifies `total_length` for IPv4 and
+    /// `payload_length` for IPv6 and that the extension headers are contained
     /// within.
     pub fn from_slice(
         slice: &[u8],
@@ -163,7 +163,7 @@ impl IpHeader {
                     let header = {
                         // SAFETY:
                         // This is safe as the slice length is checked to be
-                        // at least Ipv6Header::LEN (40) befpre this code block.
+                        // at least Ipv6Header::LEN (40) before this code block.
                         unsafe {
                             Ipv6HeaderSlice::from_slice_unchecked(core::slice::from_raw_parts(
                                 slice.as_ptr(),
@@ -287,7 +287,7 @@ impl IpHeader {
             }));
         } else {
             unsafe {
-                // Safe as the payload_len <= header_rest.len is verfied above
+                // Safe as the payload_len <= header_rest.len is verified above
                 core::slice::from_raw_parts(header_rest.as_ptr(), payload_len)
             }
         };
@@ -628,7 +628,7 @@ mod test {
     use proptest::prelude::*;
     use std::io::Cursor;
 
-    const EXTESION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
+    const EXTENSION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
         AUTH,
         IPV6_DEST_OPTIONS,
         IPV6_HOP_BY_HOP,
@@ -1303,7 +1303,7 @@ mod test {
             v6_exts in ipv6_extensions_any(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             {

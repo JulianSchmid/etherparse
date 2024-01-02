@@ -12,7 +12,7 @@ pub enum ExtPayloadLenError {
 
     /// Error when the payload length can not be represented
     /// as a multiple of 8-bytes in the extension header
-    /// (`0 == (payload.len() + 2) % 8` is not fullfilled).
+    /// (`0 == (payload.len() + 2) % 8` is not fulfilled).
     Unaligned(usize),
 }
 

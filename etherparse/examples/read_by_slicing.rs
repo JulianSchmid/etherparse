@@ -5,13 +5,13 @@ fn main() {
     let builder = PacketBuilder::ethernet2(
         //source mac
         [1, 2, 3, 4, 5, 6],
-        //destionation mac
+        //destination mac
         [7, 8, 9, 10, 11, 12],
     )
     .ipv4(
         //source ip
         [192, 168, 1, 1],
-        //desitionation ip
+        //destination ip
         [192, 168, 1, 2],
         //time to life
         20,

@@ -5,7 +5,7 @@ use crate::err::LenError;
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderLimitedReadError {
-    /// IO error was encoutered while reading header.
+    /// IO error was encountered while reading header.
     Io(std::io::Error),
 
     /// Error when parsing had to be aborted because a

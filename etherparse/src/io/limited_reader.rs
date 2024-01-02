@@ -69,7 +69,7 @@ impl<T: std::io::Read + Sized> LimitedReader<T> {
         self.read_len
     }
 
-    /// Set currrent position as starting position for a layer.
+    /// Set current position as starting position for a layer.
     pub fn start_layer(&mut self, layer: Layer) {
         self.layer_offset += self.read_len;
         self.max_len -= self.read_len;

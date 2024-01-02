@@ -10,7 +10,7 @@ pub struct BadOptionsLen {
 
 impl core::fmt::Display for BadOptionsLen {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Slice of lenght {} cannot be set as IPv4 header options. The length must be a multiple of 4 and at maximum 40.", self.bad_len)
+        write!(f, "Slice of length {} cannot be set as IPv4 header options. The length must be a multiple of 4 and at maximum 40.", self.bad_len)
     }
 }
 
@@ -61,7 +61,7 @@ mod tests {
         let err = BadOptionsLen { bad_len: 123 };
         assert_eq!(
             format!("{}", err),
-            "Slice of lenght 123 cannot be set as IPv4 header options. The length must be a multiple of 4 and at maximum 40."
+            "Slice of length 123 cannot be set as IPv4 header options. The length must be a multiple of 4 and at maximum 40."
         );
     }
 

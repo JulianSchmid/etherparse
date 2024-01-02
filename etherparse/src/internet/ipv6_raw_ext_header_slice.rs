@@ -80,7 +80,7 @@ impl<'a> Ipv6RawExtHeaderSlice<'a> {
     /// must at least be at least 8 and `(slice[1] + 1)*8`. The data that the
     /// slice points must also be valid (meaning no nullptr or alike allowed).
     ///
-    /// If these precondtions are not fullfilled the behavior of this function
+    /// If these preconditions are not fulfilled the behavior of this function
     /// and the methods of the return [`IpAuthHeaderSlice`] will be undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> Ipv6RawExtHeaderSlice<'a> {
         Ipv6RawExtHeaderSlice {

@@ -4,7 +4,7 @@ use crate::err::LenError;
 #[derive(Debug)]
 #[cfg(feature = "std")]
 pub enum LimitedReadError {
-    /// IO error was encoutered while reading header or
+    /// IO error was encountered while reading header or
     /// expected packet contents.
     Io(std::io::Error),
 

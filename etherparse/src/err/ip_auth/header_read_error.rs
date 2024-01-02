@@ -1,10 +1,10 @@
 use super::HeaderError;
 
-/// Error when decoding an IP authentification header via a `std::io::Read` source.
+/// Error when decoding an IP authentication header via a `std::io::Read` source.
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
-    /// IO error was encoutered while reading header.
+    /// IO error was encountered while reading header.
     Io(std::io::Error),
 
     /// Error caused by the contents of the header.
@@ -41,7 +41,7 @@ impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
         match self {
-            Io(err) => write!(f, "IP Authentification Header IO Error: {}", err),
+            Io(err) => write!(f, "IP Authentication Header IO Error: {}", err),
             Content(value) => value.fmt(f),
         }
     }
@@ -80,7 +80,7 @@ mod test {
                 "failed to fill whole buffer",
             );
             assert_eq!(
-                format!("IP Authentification Header IO Error: {}", err),
+                format!("IP Authentication Header IO Error: {}", err),
                 format!("{}", Io(err))
             );
         }

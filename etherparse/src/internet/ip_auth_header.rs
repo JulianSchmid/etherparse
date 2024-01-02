@@ -60,16 +60,16 @@ impl Default for IpAuthHeader {
             spi: 0,
             sequence_number: 0,
             raw_icv_len: 0,
-            raw_icv_buffer: [0; 0xfe * 4]
+            raw_icv_buffer: [0; 0xfe * 4],
         }
     }
 }
 
 impl<'a> IpAuthHeader {
-    /// Minimum length of an IP authentifcation header in bytes/octets.
+    /// Minimum length of an IP authentication header in bytes/octets.
     pub const MIN_LEN: usize = 4 + 4 + 4;
 
-    /// Maximum length of an IP authentifcation header in bytes/octets.
+    /// Maximum length of an IP authentication header in bytes/octets.
     ///
     /// This number is calculated by taking the maximum value
     /// that the "payload length" field supports (0xff) adding 2 and
@@ -78,7 +78,7 @@ impl<'a> IpAuthHeader {
     pub const MAX_LEN: usize = 4 * (0xff + 2);
 
     /// The maximum amount of bytes/octets that can be stored in the ICV
-    /// part of an IP authentification header.
+    /// part of an IP authentication header.
     pub const MAX_ICV_LEN: usize = 0xfe * 4;
 
     /// Create a new authentication header with the given parameters.
@@ -86,9 +86,9 @@ impl<'a> IpAuthHeader {
     /// Note: The length of the raw_icv slice must be a multiple of 4
     /// and the maximum allowed length is 1016 bytes
     /// (`IpAuthHeader::MAX_ICV_LEN`). If the slice length does
-    /// not fullfill these requirements the value is not copied and an
+    /// not fulfill these requirements the value is not copied and an
     /// [`crate::err::ip_auth::IcvLenError`] is returned.
-    /// If successfull an Ok(()) is returned.
+    /// If successful an Ok(()) is returned.
     pub fn new(
         next_header: IpNumber,
         spi: u32,
@@ -222,9 +222,9 @@ impl<'a> IpAuthHeader {
     /// Sets the icv value to the given raw value. The length of the slice must be
     /// a multiple of 4 and the maximum allowed length is 1016 bytes
     /// (`IpAuthHeader::MAX_ICV_LEN`). If the slice length does
-    /// not fullfill these requirements the value is not copied and an
+    /// not fulfill these requirements the value is not copied and an
     /// [`crate::err::ip_auth::IcvLenError`] is returned.
-    /// If successfull an Ok(()) is returned.
+    /// If successful an Ok(()) is returned.
     pub fn set_raw_icv(&mut self, raw_icv: &[u8]) -> Result<(), IcvLenError> {
         use IcvLenError::*;
         if raw_icv.len() > IpAuthHeader::MAX_ICV_LEN {
@@ -314,7 +314,9 @@ mod test {
 
     #[test]
     fn default() {
-        let default_header = IpAuthHeader { ..Default::default() };
+        let default_header = IpAuthHeader {
+            ..Default::default()
+        };
 
         assert_eq!(default_header.next_header, IpNumber(255));
         assert_eq!(default_header.spi, 0);

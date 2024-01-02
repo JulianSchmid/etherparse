@@ -1,7 +1,7 @@
 use crate::IpNumber;
 
 /// Errors in content of IPv4 header extensions that prevent serialization
-/// or determinining the next header.
+/// or determining the next header.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum ExtsWalkError {
     /// Error when a header in [`crate::Ipv4Extensions`] is never referenced even

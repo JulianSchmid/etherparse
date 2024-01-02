@@ -236,7 +236,7 @@ mod test {
     proptest! {
         #[test]
         fn write(input in ethernet_2_any()) {
-            // successfull write
+            // successful write
             {
                 let mut buffer: Vec<u8> = Vec::with_capacity(14);
                 input.write(&mut buffer).unwrap();

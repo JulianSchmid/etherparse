@@ -2,7 +2,7 @@ use core::borrow::{Borrow, BorrowMut};
 
 /// Options present in an [`crate::Ipv4Header`].
 ///
-/// IPv4 header options can only have a lenght that
+/// IPv4 header options can only have a length that
 /// is a multiple of 4 bytes (meaning 4, 8, 12, ...) and
 /// a maximum length of 40 bytes (40 bytes the maximum length is
 /// limited by maximum value of the "intra header length" field

@@ -4,7 +4,7 @@ use super::HeaderError;
 #[cfg(feature = "std")]
 #[derive(Debug)]
 pub enum HeaderReadError {
-    /// IO error was encoutered while reading header.
+    /// IO error was encountered while reading header.
     Io(std::io::Error),
 
     /// Error caused by the contents of the header.

@@ -1,7 +1,7 @@
 use super::HeaderError;
 use crate::err::LenError;
 
-/// Error when decoding an IP authentification header from a slice.
+/// Error when decoding an IP authentication header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderSliceError {
     /// Error when an length error is encountered (e.g. unexpected

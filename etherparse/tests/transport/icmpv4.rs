@@ -21,7 +21,7 @@ mod icmpv4_regression {
     fn ip4_echo_marshall_unmarshall() {
         let builder = PacketBuilder::ipv4(
             [192, 168, 1, 1], //source ip
-            [192, 168, 1, 2], //desitionation ip
+            [192, 168, 1, 2], //destination ip
             20,
         ) //time to life
         .icmpv4_echo_request(1, 2);

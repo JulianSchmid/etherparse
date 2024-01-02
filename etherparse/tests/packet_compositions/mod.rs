@@ -596,7 +596,7 @@ proptest! {
     }
 }
 
-///Test that assert_sliced_packet is panicing when the ethernet header is missing
+///Test that assert_sliced_packet is panicking when the ethernet header is missing
 #[test]
 #[should_panic]
 fn test_packet_slicing_panics() {

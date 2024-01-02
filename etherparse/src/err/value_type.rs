@@ -23,16 +23,16 @@ pub enum ValueType {
     /// IPv6 Header "payload length" field present in an
     /// [`crate::Ipv6Header`].
     Ipv6PayloadLength,
-    /// Payload length used when calculcating the checksum of a
+    /// Payload length used when calculating the checksum of a
     /// [`crate::UdpHeader`] for IPv4.
     UdpPayloadLengthIpv4,
-    /// Payload length used when calculcating the checksum of a
+    /// Payload length used when calculating the checksum of a
     /// [`crate::UdpHeader`] for IPv6.
     UdpPayloadLengthIpv6,
-    /// Payload length used when calculcating the checksum of a
+    /// Payload length used when calculating the checksum of a
     /// [`crate::TcpHeader`] for IPv4.
     TcpPayloadLengthIpv4,
-    /// Payload length used when calculcating the checksum of a
+    /// Payload length used when calculating the checksum of a
     /// [`crate::TcpHeader`] for IPv6.
     TcpPayloadLengthIpv6,
     /// Variable length data of an ICMPv6 packet.

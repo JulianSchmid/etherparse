@@ -59,7 +59,7 @@ impl Ipv6FragmentHeader {
         Ok(Ipv6FragmentHeader {
             next_header: IpNumber(buffer[0]),
             fragment_offset: unsafe {
-                // SAFE as the resulting number is guranteed to have at most
+                // SAFE as the resulting number is guaranteed to have at most
                 // 13 bits.
                 IpFragOffset::new_unchecked(u16::from_be_bytes([
                     (buffer[2] >> 3) & 0b0001_1111u8,
@@ -90,7 +90,7 @@ impl Ipv6FragmentHeader {
         Ok(Ipv6FragmentHeader {
             next_header: IpNumber(buffer[0]),
             fragment_offset: unsafe {
-                // SAFE as the resulting number is guranteed to have at most
+                // SAFE as the resulting number is guaranteed to have at most
                 // 13 bits.
                 IpFragOffset::new_unchecked(u16::from_be_bytes([
                     (buffer[2] >> 3) & 0b0001_1111u8,

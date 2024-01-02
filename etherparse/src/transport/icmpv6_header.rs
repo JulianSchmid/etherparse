@@ -33,7 +33,7 @@ impl Icmpv6Header {
     #[deprecated(since = "0.14.0", note = "Please use Icmpv6Header::MAX_LEN instead")]
     pub const MAX_SERIALIZED_SIZE: usize = Icmpv6Header::MAX_LEN;
 
-    /// Setups a new header with the checksum beeing set to 0.
+    /// Setups a new header with the checksum being set to 0.
     #[inline]
     pub fn new(icmp_type: Icmpv6Type) -> Icmpv6Header {
         Icmpv6Header {
@@ -227,7 +227,7 @@ mod test {
                 //         a segmentation fault will be triggered.
                 let too_big_slice = unsafe {
                     //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
+                    //      otherwise a key constraint of slices is not fulfilled
                     //      which can lead to crashes in release mode.
                     use core::ptr::NonNull;
                     core::slice::from_raw_parts(
@@ -403,7 +403,7 @@ mod test {
                 //         a segmentation fault will be triggered.
                 let too_big_slice = unsafe {
                     //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
+                    //      otherwise a key constraint of slices is not fulfilled
                     //      which can lead to crashes in release mode.
                     use core::ptr::NonNull;
                     core::slice::from_raw_parts(

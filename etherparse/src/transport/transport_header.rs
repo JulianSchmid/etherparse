@@ -46,7 +46,7 @@ impl TransportHeader {
         }
     }
 
-    /// Returns Result::Some containing a mutable refernce to the tcp header if self has the value Tcp.
+    /// Returns Result::Some containing a mutable reference to the tcp header if self has the value Tcp.
     /// Otherwise None is returned.
     pub fn mut_tcp(&mut self) -> Option<&mut TcpHeader> {
         use crate::TransportHeader::*;
@@ -339,7 +339,7 @@ mod test {
                     let len = (core::u16::MAX as usize) - UdpHeader::LEN + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
-                        //      otherwise a key constraint of slices is not fullfilled
+                        //      otherwise a key constraint of slices is not fulfilled
                         //      which can lead to crashes in release mode.
                         use core::ptr::NonNull;
                         slice::from_raw_parts(
@@ -373,7 +373,7 @@ mod test {
                     let len = (core::u16::MAX - tcp.header_len()) as usize + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
-                        //      otherwise a key constraint of slices is not fullfilled
+                        //      otherwise a key constraint of slices is not fulfilled
                         //      which can lead to crashes in release mode.
                         use core::ptr::NonNull;
                         slice::from_raw_parts(
@@ -440,7 +440,7 @@ mod test {
                     let len = (core::u32::MAX as usize) - UdpHeader::LEN + 1;
                     let payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
-                        //      otherwise a key constraint of slices is not fullfilled
+                        //      otherwise a key constraint of slices is not fulfilled
                         //      which can lead to crashes in release mode.
                         use core::ptr::NonNull;
                         slice::from_raw_parts(
@@ -475,7 +475,7 @@ mod test {
                     let len = (core::u32::MAX - tcp.header_len() as u32) as usize + 1;
                     let tcp_payload = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
-                        //      otherwise a key constraint of slices is not fullfilled
+                        //      otherwise a key constraint of slices is not fulfilled
                         //      which can lead to crashes in release mode.
                         use core::ptr::NonNull;
                         slice::from_raw_parts(
@@ -525,7 +525,7 @@ mod test {
                     //         a segmentation fault will be triggered.
                     let too_big_slice = unsafe {
                         //NOTE: The pointer must be initialized with a non null value
-                        //      otherwise a key constraint of slices is not fullfilled
+                        //      otherwise a key constraint of slices is not fulfilled
                         //      which can lead to crashes in release mode.
                         use core::ptr::NonNull;
                         core::slice::from_raw_parts(
