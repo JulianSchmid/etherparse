@@ -21,12 +21,12 @@ use std::{io, marker};
 ///
 /// let builder = PacketBuilder::
 ///     ethernet2([1,2,3,4,5,6],     //source mac
-///               [7,8,9,10,11,12]) //destionation mac
+///               [7,8,9,10,11,12]) //destination mac
 ///    .ipv4([192,168,1,1], //source ip
-///          [192,168,1,2], //desitionation ip
+///          [192,168,1,2], //destination ip
 ///          20)            //time to life
 ///    .udp(21,    //source port
-///         1234); //desitnation port
+///         1234); //destination port
 ///
 /// //payload of the udp packet
 /// let payload = [1,2,3,4,5,6,7,8];
@@ -108,12 +108,12 @@ impl PacketBuilder {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///    .ipv4([192,168,1,1], //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -152,10 +152,10 @@ impl PacketBuilder {
     /// #
     /// let builder = PacketBuilder::
     ///    ipv4([192,168,1,1],  //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -202,7 +202,7 @@ impl PacketBuilder {
     ///         //hop_limit
     ///         47)
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -252,7 +252,7 @@ impl PacketBuilder {
     ///        ).unwrap(),
     ///        Default::default()))
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -283,7 +283,7 @@ impl PacketBuilder {
     ///         },
     ///         Default::default()))
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -334,12 +334,12 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///    .ipv4([192,168,1,1], //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -448,7 +448,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///         //hop_limit
     ///         47)
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -497,7 +497,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///     .vlan(VlanHeader::Single(
     ///         SingleVlanHeader{
     ///             pcp: 1.try_into().unwrap(),
@@ -506,10 +506,10 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///             ether_type: 0.into() // will be overwritten during write
     ///         }))
     ///     .ipv4([192,168,1,1], //source ip
-    ///           [192,168,1,2], //desitionation ip
+    ///           [192,168,1,2], //destination ip
     ///           20)            //time to life
     ///     .udp(21,    //source port
-    ///          1234); //desitnation port
+    ///          1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -541,13 +541,13 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
-    ///           [192,168,1,2], //desitionation ip
+    ///           [192,168,1,2], //destination ip
     ///           20)            //time to life
     ///     .udp(21,    //source port
-    ///          1234); //desitnation port
+    ///          1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -584,14 +584,14 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///     .double_vlan(0x123.try_into().unwrap(), // outer vlan identifier
     ///                  0x234.try_into().unwrap()) // inner vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
-    ///           [192,168,1,2], //desitionation ip
+    ///           [192,168,1,2], //destination ip
     ///           20)            //time to life
     ///     .udp(21,    //source port
-    ///          1234); //desitnation port
+    ///          1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -695,7 +695,7 @@ impl PacketBuilderStep<VlanHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv6(
     ///         //source
@@ -705,7 +705,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///         //hop_limit
     ///         47)
     ///     .udp(21,    //source port
-    ///          1234); //desitnation port
+    ///          1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -742,13 +742,13 @@ impl PacketBuilderStep<VlanHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
     ///     .ipv4([192,168,1,1], //source ip
-    ///           [192,168,1,2], //desitionation ip
+    ///           [192,168,1,2], //destination ip
     ///           20)            //time to life
     ///     .udp(21,    //source port
-    ///          1234); //desitnation port
+    ///          1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -780,7 +780,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// If an ICMPv4 header gets added the payload used during the builders `write`
     /// call contains the bytes after the header and has different meanings
-    /// and contents based on the type. Ususally all statically sized values
+    /// and contents based on the type. Usually all statically sized values
     /// known based on the ICMPv4 type & code are part of the header and the
     /// payload is used to store contains the dynamic parts of the ICMPv4 packet.
     ///
@@ -796,7 +796,7 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///    ipv4([192,168,1,1],  //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .icmpv4(
     ///         Icmpv4Type::TimeExceeded(
@@ -832,7 +832,7 @@ impl PacketBuilderStep<IpHeader> {
 
     /// Adds an ICMPv4 header based on raw numbers.
     ///
-    /// This can be usefull when trying to build an ICMPv4 packet
+    /// This can be useful when trying to build an ICMPv4 packet
     /// which is not fully supported by etherparse and is the equivalent
     /// of using [`Icmpv4Type::Unknown`] together with
     /// [`PacketBuilderStep<IpHeader>::icmpv4`].
@@ -846,7 +846,7 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///    ipv4([192,168,1,1],  //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .icmpv4_raw(
     ///         253, // ICMPv4 type (e.g. 253 is RFC3692-style Experiment 1)
@@ -897,7 +897,7 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///    ipv4([192,168,1,1],  //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .icmpv4_echo_request(
     ///         123, // identifier
@@ -936,7 +936,7 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///    ipv4([192,168,1,1],  //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .icmpv4_echo_reply(
     ///         123, // identifier
@@ -968,7 +968,7 @@ impl PacketBuilderStep<IpHeader> {
     ///
     /// If an ICMPv6 header gets added the payload used during the builders `write`
     /// call contains the bytes after the header and has different meanings
-    /// and contents based on the type. Ususally all statically sized values
+    /// and contents based on the type. Usually all statically sized values
     /// known based on the ICMPv6 type & code are part of the header and the
     /// payload is used to store contains the dynamic parts of the ICMPv6 packet.
     ///
@@ -1024,7 +1024,7 @@ impl PacketBuilderStep<IpHeader> {
 
     /// Adds an ICMPv6 header based on raw values.
     ///
-    /// This can be usefull when trying to build an ICMPv6 packet
+    /// This can be useful when trying to build an ICMPv6 packet
     /// which is not fully supported by etherparse and is the equivalent
     /// of using [`Icmpv6Type::Unknown`] together with
     /// [`PacketBuilderStep<IpHeader>::icmpv6`].
@@ -1179,12 +1179,12 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     //source mac
-    ///               [7,8,9,10,11,12]) //destionation mac
+    ///               [7,8,9,10,11,12]) //destination mac
     ///    .ipv4([192,168,1,1], //source ip
-    ///          [192,168,1,2], //desitionation ip
+    ///          [192,168,1,2], //destination ip
     ///          20)            //time to life
     ///    .udp(21,    //source port
-    ///         1234); //desitnation port
+    ///         1234); //destination port
     ///
     /// //payload of the udp packet
     /// let payload = [1,2,3,4,5,6,7,8];
@@ -1221,9 +1221,9 @@ impl PacketBuilderStep<IpHeader> {
     /// #
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     // source mac
-    ///               [7,8,9,10,11,12]) // destionation mac
+    ///               [7,8,9,10,11,12]) // destination mac
     ///    .ipv4([192,168,1,1], // source ip
-    ///          [192,168,1,2], // desitionation ip
+    ///          [192,168,1,2], // destination ip
     ///          20)            // time to life
     ///    .tcp(21,    // source port
     ///         12,    // destination port
@@ -1269,7 +1269,7 @@ impl PacketBuilderStep<IpHeader> {
     /// ```
     /// # use etherparse::PacketBuilder;
     /// use etherparse::TcpHeader;
-    /// 
+    ///
     /// let mut tcp_header = TcpHeader::new(
     ///     21,     // source port
     ///     12,     // destination port
@@ -1279,12 +1279,12 @@ impl PacketBuilderStep<IpHeader> {
     /// tcp_header.psh = true;
     /// tcp_header.ack = true;
     /// tcp_header.acknowledgment_number = 1;
-    /// 
+    ///
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],     // source mac
-    ///               [7,8,9,10,11,12]) // destionation mac
+    ///               [7,8,9,10,11,12]) // destination mac
     ///    .ipv4([192,168,1,1], // source ip
-    ///          [192,168,1,2], // desitionation ip
+    ///          [192,168,1,2], // destination ip
     ///          20)            // time to life
     ///    .tcp_header(tcp_header);
     ///
@@ -1718,7 +1718,7 @@ fn final_write<T: io::Write + Sized, B>(
                 }
             }
 
-            //finaly write the udp header & payload
+            //finally write the udp header & payload
             transport.write(writer).map_err(Io)?;
         }
     }
@@ -1752,11 +1752,11 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
 }
 
 #[cfg(test)]
-mod whitebox_tests {
+mod white_box_tests {
     use super::*;
     use alloc::vec::Vec;
 
-    //whitebox tests that need internal access
+    //white box tests that need internal access
     #[test]
     fn size() {
         assert_eq!(
