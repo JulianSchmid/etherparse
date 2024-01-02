@@ -4,7 +4,7 @@ use crate::ip_number::*;
 use std::io::Cursor;
 
 // IP numbers that are assigned ipv6 header extensions.
-const EXTESION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
+const EXTENSION_KNOWN_IP_NUMBERS: [IpNumber; 5] = [
     AUTH,
     IPV6_DEST_OPTIONS,
     IPV6_HOP_BY_HOP,
@@ -70,8 +70,8 @@ impl ExtensionTestPayload {
             AUTH => {
                 let mut raw: [u8; 0xff * 4 + 8] = [0; 0xff * 4 + 8];
                 raw[0] = next_header.0;
-                // authentfication header len is defined as
-                // '32-bit words (4-byteunits), minus "2"'
+                // authentication header len is defined as
+                // '32-bit words (4-byte units), minus "2"'
                 let len = if header_ext_len > 0 {
                     raw[1] = header_ext_len;
                     usize::from(header_ext_len) * 4
@@ -499,7 +499,7 @@ pub mod header {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
@@ -563,7 +563,7 @@ pub mod header {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -571,7 +571,7 @@ pub mod header {
                     &[header_size],
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -579,8 +579,8 @@ pub mod header {
                         &[header_size],
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],
@@ -597,7 +597,7 @@ pub mod header {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             use err::ipv6_exts::HeaderError::*;
@@ -647,7 +647,7 @@ pub mod header {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -655,7 +655,7 @@ pub mod header {
                     &[header_size],
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -663,8 +663,8 @@ pub mod header {
                         &[header_size],
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],
@@ -681,7 +681,7 @@ pub mod header {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             // no extension headers filled
@@ -765,7 +765,7 @@ pub mod header {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -774,7 +774,7 @@ pub mod header {
                     post_header,
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -783,8 +783,8 @@ pub mod header {
                         post_header,
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],
@@ -878,7 +878,7 @@ pub mod header {
             final_destination_options in ipv6_raw_ext_any(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 ),
         ) {
             // none filled
@@ -924,7 +924,7 @@ pub mod header {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 ),)
         {
             // test empty
@@ -970,7 +970,7 @@ pub mod header {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -979,7 +979,7 @@ pub mod header {
                     post_header,
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -988,8 +988,8 @@ pub mod header {
                         post_header,
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],
@@ -1183,7 +1183,7 @@ pub mod slice {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             use err::ipv6_exts::{HeaderError::*, HeaderSliceError::*};
@@ -1244,7 +1244,7 @@ pub mod slice {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -1252,7 +1252,7 @@ pub mod slice {
                     &[header_size],
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -1260,8 +1260,8 @@ pub mod slice {
                         &[header_size],
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],
@@ -1492,7 +1492,7 @@ pub mod slice_iter {
             header_size in any::<u8>(),
             post_header in ip_number_any()
                 .prop_filter("Must be a non ipv6 header relevant ip number".to_owned(),
-                    |v| !EXTESION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
+                    |v| !EXTENSION_KNOWN_IP_NUMBERS.iter().any(|&x| v == &x)
                 )
         ) {
             /// Run a test with the given ip numbers
@@ -1552,7 +1552,7 @@ pub mod slice_iter {
             }
 
             // test the parsing of different extension header combinations
-            for first_header in &EXTESION_KNOWN_IP_NUMBERS {
+            for first_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                 // single header parsing
                 run_test(
@@ -1560,7 +1560,7 @@ pub mod slice_iter {
                     &[header_size],
                 );
 
-                for second_header in &EXTESION_KNOWN_IP_NUMBERS {
+                for second_header in &EXTENSION_KNOWN_IP_NUMBERS {
 
                     // double header parsing
                     run_test(
@@ -1568,8 +1568,8 @@ pub mod slice_iter {
                         &[header_size],
                     );
 
-                    for third_header in &EXTESION_KNOWN_IP_NUMBERS {
-                        // tripple header parsing
+                    for third_header in &EXTENSION_KNOWN_IP_NUMBERS {
+                        // triple header parsing
                         run_test(
                             &[*first_header, *second_header, *third_header, post_header],
                             &[header_size],

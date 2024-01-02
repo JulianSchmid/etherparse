@@ -55,12 +55,12 @@ impl VlanPcp {
 
     /// Creates an [`VlanPcp`] without checking that the value
     /// is smaller or equal than [`VlanPcp::MAX_U8`] (3 bit unsigned integer).
-    /// The caller must gurantee that `value <= VlanPcp::MAX_U8`.
+    /// The caller must guarantee that `value <= VlanPcp::MAX_U8`.
     ///
     /// # Safety
     ///
     /// `value` must be smaller or equal than [`VlanPcp::MAX_U8`]
-    /// otherwise the behaviour of functions or datastructures relying
+    /// otherwise the behavior of functions or data structures relying
     /// on this pre-requirement is undefined.
     #[inline]
     pub const unsafe fn new_unchecked(value: u8) -> VlanPcp {

@@ -22,12 +22,12 @@ use super::*;
 /// # use etherparse::{SlicedPacket, PacketBuilder};
 /// # let builder = PacketBuilder::
 /// #    ethernet2([1,2,3,4,5,6],     //source mac
-/// #               [7,8,9,10,11,12]) //destionation mac
+/// #               [7,8,9,10,11,12]) //destination mac
 /// #    .ipv4([192,168,1,1], //source ip
-/// #          [192,168,1,2], //desitionation ip
+/// #          [192,168,1,2], //destination ip
 /// #          20)            //time to life
 /// #    .udp(21,    //source port
-/// #         1234); //desitnation port
+/// #         1234); // destination port
 /// #    //payload of the udp packet
 /// #    let payload = [1,2,3,4,5,6,7,8];
 /// #    //get some memory to store the serialized data
@@ -66,7 +66,7 @@ pub struct SlicedPacket<'a> {
 }
 
 impl<'a> SlicedPacket<'a> {
-    /// Seperates a network packet slice into different slices containing the headers from the ethernet header downwards.
+    /// Separates a network packet slice into different slices containing the headers from the ethernet header downwards.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
     /// with an ethernet II header.
@@ -79,12 +79,12 @@ impl<'a> SlicedPacket<'a> {
     /// # use etherparse::{SlicedPacket, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
-    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #               [7,8,9,10,11,12]) //destination mac
     /// #    .ipv4([192,168,1,1], //source ip
-    /// #          [192,168,1,2], //desitionation ip
+    /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); // destination port
     /// #    //payload of the udp packet
     /// #    let payload = [1,2,3,4,5,6,7,8];
     /// #    //get some memory to store the serialized data
@@ -105,7 +105,7 @@ impl<'a> SlicedPacket<'a> {
         CursorSlice::new(data).slice_ethernet2()
     }
 
-    /// Seperates a network packet slice into different slices containing the headers using
+    /// Separates a network packet slice into different slices containing the headers using
     /// the given `ether_type` number to identify the first header.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. Currently supported
@@ -128,12 +128,12 @@ impl<'a> SlicedPacket<'a> {
     /// # use etherparse::{Ethernet2Header, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
-    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #               [7,8,9,10,11,12]) //destination mac
     /// #    .ipv4([192,168,1,1], //source ip
-    /// #          [192,168,1,2], //desitionation ip
+    /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); // destination port
     /// # // payload of the udp packet
     /// # let payload = [1,2,3,4,5,6,7,8];
     /// # // get some memory to store the serialized data
@@ -178,7 +178,7 @@ impl<'a> SlicedPacket<'a> {
         }
     }
 
-    /// Seperates a network packet slice into different slices containing the headers from the ip header downwards.
+    /// Separates a network packet slice into different slices containing the headers from the ip header downwards.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
     /// with an IPv4 or IPv6 header.
@@ -191,10 +191,10 @@ impl<'a> SlicedPacket<'a> {
     /// # use etherparse::{SlicedPacket, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ipv4([192,168,1,1], //source ip
-    /// #         [192,168,1,2], //desitionation ip
+    /// #         [192,168,1,2], //destination ip
     /// #         20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); // destination port
     /// #    //payload of the udp packet
     /// #    let payload = [1,2,3,4,5,6,7,8];
     /// #    //get some memory to store the serialized data
@@ -325,7 +325,7 @@ impl<'a> CursorSlice<'a> {
 
                 let inner_ether_type = inner.ether_type();
                 self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
-                    // SAFETY: Safe as the lenght of the slice was previously verified.
+                    // SAFETY: Safe as the length of the slice was previously verified.
                     slice: unsafe {
                         core::slice::from_raw_parts(
                             outer.slice().as_ptr(),
@@ -816,7 +816,7 @@ mod test {
                     }
                 }
 
-                // ipv4 content error (ihl lenght too small)
+                // ipv4 content error (ihl length too small)
                 {
                     let mut data = test.to_vec(&[]);
                     let ipv4_offset = data.len() - ipv4.header_len();

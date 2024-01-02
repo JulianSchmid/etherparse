@@ -73,7 +73,7 @@ impl Ipv6Header {
         Ok(Ipv6Header {
             traffic_class: (version_rest << 4) | (buffer[0] >> 4),
             flow_label: unsafe {
-                // SAFETY: Safe as the bitmask & 0 contant gurantee that the value
+                // SAFETY: Safe as the bitmask & 0 contant guarantee that the value
                 // does not exceed 20 bytes.
                 Ipv6FlowLabel::new_unchecked(u32::from_be_bytes([
                     0,
@@ -225,7 +225,7 @@ impl Ipv6Header {
             _ => return Ok(next_header),
         };
 
-        //Sadly seek does not return an error if the seek could not be fullfilled.
+        //Sadly seek does not return an error if the seek could not be fulfilled.
         //Some implementations do not even truncate the returned position to the
         //last valid one. std::io::Cursor for example just moves the position
         //over the border of the given slice (e.g. returns position 15 even when

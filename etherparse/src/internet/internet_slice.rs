@@ -12,7 +12,7 @@ pub enum InternetSlice<'a> {
 }
 
 impl<'a> InternetSlice<'a> {
-    /// Returns a refernce to the `Ipv4Slice` if `self` is a `InternetSlice::Ipv4`.
+    /// Returns a reference to the `Ipv4Slice` if `self` is a `InternetSlice::Ipv4`.
     pub fn ipv4(&self) -> Option<&Ipv4Slice> {
         use InternetSlice::*;
         match self {
@@ -21,7 +21,7 @@ impl<'a> InternetSlice<'a> {
         }
     }
 
-    /// Returns a refernce to the `Ipv6Slice` if `self` is a `InternetSlice::Ipv6`.
+    /// Returns a reference to the `Ipv6Slice` if `self` is a `InternetSlice::Ipv6`.
     pub fn ipv6(&self) -> Option<&Ipv6Slice> {
         use InternetSlice::*;
         match self {
@@ -82,7 +82,7 @@ impl<'a> InternetSlice<'a> {
         }
     }
 
-    /// Seperates and validates IP headers (including extension headers)
+    /// Separates and validates IP headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IP packet.
     pub fn from_ip_slice(slice: &[u8]) -> Result<InternetSlice, err::ip::SliceError> {
@@ -105,7 +105,7 @@ impl<'a> InternetSlice<'a> {
                 4 => {
                     let ihl = first_byte & 0xf;
 
-                    // check that the ihl has at least the lenght of the base IPv4 header
+                    // check that the ihl has at least the length of the base IPv4 header
                     if ihl < 5 {
                         use err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader;
                         return Err(IpHeader(Ipv4HeaderLengthSmallerThanHeader { ihl }));
@@ -133,7 +133,7 @@ impl<'a> InternetSlice<'a> {
                         ))
                     };
 
-                    // check the total_lenat least contains the header
+                    // check the total_length at least contains the header
                     let total_len = usize::from(header.total_len());
                     if total_len < header_len {
                         return Err(Len(LenError {
@@ -145,7 +145,7 @@ impl<'a> InternetSlice<'a> {
                         }));
                     }
 
-                    // validate the total length agains the slice
+                    // validate the total length against the slice
                     let header_payload = if slice.len() < total_len {
                         return Err(Len(LenError {
                             required_len: total_len,
@@ -160,7 +160,7 @@ impl<'a> InternetSlice<'a> {
                                 // SAFETY: Safe as slice.len() >= header_len was validated
                                 // in a if statement above.
                                 slice.as_ptr().add(header_len),
-                                // SAFETY: Safe as total_length >= header_len was verfied in an
+                                // SAFETY: Safe as total_length >= header_len was verified in an
                                 // if statement above as well as that slice.len() >= total_length_usize.
                                 total_len - header_len,
                             )
@@ -168,7 +168,7 @@ impl<'a> InternetSlice<'a> {
                     };
 
                     // slice extension headers
-                    // decode the authentification header if needed
+                    // decode the authentication header if needed
                     let fragmented = header.is_fragmenting_payload();
                     match header.protocol() {
                         AUTH => {

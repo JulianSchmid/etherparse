@@ -52,12 +52,12 @@ impl Ipv4Dscp {
 
     /// Creates an [`Ipv4Dscp`] without checking that the value
     /// is smaller or equal than [`Ipv4Dscp::MAX_U8`] (6 bit unsigned integer).
-    /// The caller must gurantee that `value <= Ipv4Dscp::MAX_U8`.
+    /// The caller must guarantee that `value <= Ipv4Dscp::MAX_U8`.
     ///
     /// # Safety
     ///
     /// `value` must be smaller or equal than [`Ipv4Dscp::MAX_U8`]
-    /// otherwise the behaviour of functions or datastructures relying
+    /// otherwise the behavior of functions or data structures relying
     /// on this pre-requirement is undefined.
     #[inline]
     pub const unsafe fn new_unchecked(value: u8) -> Ipv4Dscp {

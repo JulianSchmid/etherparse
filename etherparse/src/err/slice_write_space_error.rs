@@ -15,7 +15,7 @@ pub struct SliceWriteSpaceError {
     pub layer: Layer,
 
     /// Offset from the start of the parsed data to the layer where the
-    /// length error occured.
+    /// length error occurred.
     pub layer_start_offset: usize,
 }
 

@@ -9,7 +9,7 @@ use crate::err::{Layer, LenSource};
 /// lower layer (e.g. length inherited from an IP header is too big to
 /// be used as an ICMP packet length).
 ///
-/// When the error is caused by not enough data beeing available
+/// When the error is caused by not enough data being available
 /// `required_len > len` must be true. While when the length from
 /// the upper layer is too big for the lower layer the inverse
 /// (`required_len < len`) must be true.
@@ -54,7 +54,7 @@ pub struct LenError {
     pub layer: Layer,
 
     /// Offset from the start of the parsed data to the layer where the
-    /// length error occured.
+    /// length error occurred.
     pub layer_start_offset: usize,
 }
 

@@ -18,8 +18,8 @@
 
 * `SlicedPacket` & `PacketHeaders` now also verify the total_length and payload length fields present in the IPv4 & IPv6 header. This means the `*from_slice*` methods newly throw an error not enough data is present and also newly limit the resulting payload size.
 * Removed `ReadError::Ipv6TooManyHeaderExtensions` error when calling `Ipv6Header::skip_all_header_extensions` and `Ipv6Header::skip_all_header_extensions_in_slice`.
-* The slice returned by `IpHeader::from_slice`is now the payload of the IP packet (determined by the length specified in the IP header). Previously whatever was left over from the input slice after parsing the IP header and extensions was returned. Now the slice length is limited based on the "payload lenght" field (IPv6) or "total length" field IPv4.
-* `Ipv4Header::from_slice` no longer verfies that the `total_len` has enough data to contain the header itself. This check is done when the complete packet is parsed. The check was removed as the `total_len` is sometimes set at a later stage (e.g. in the kernel) in some systems and I would still like to enable people to at least decode the header even if the total length was not yet set.
+* The slice returned by `IpHeader::from_slice`is now the payload of the IP packet (determined by the length specified in the IP header). Previously whatever was left over from the input slice after parsing the IP header and extensions was returned. Now the slice length is limited based on the "payload length" field (IPv6) or "total length" field IPv4.
+* `Ipv4Header::from_slice` no longer verifies that the `total_len` has enough data to contain the header itself. This check is done when the complete packet is parsed. The check was removed as the `total_len` is sometimes set at a later stage (e.g. in the kernel) in some systems and I would still like to enable people to at least decode the header even if the total length was not yet set.
 
 ### Breaking Changes:
 
@@ -38,7 +38,7 @@
 ### Bugfixes
 
 * `PacketHeaders::from_ip_slice` now only tries to decode the transport layer if the packet is not fragmented. Previously it would also try to decode the transport layer even if the packet contained only a fragment.
-* The IPv6 extension header skipping functions were previously checking that the slice length is at least 2 before checking if an extension header is even present. If less then two bytes were present an error was returned. This was wrong behavior, as there are no gurantees for other protocols that there are 2 bytes of data present. A check has been added, that validates the header type before checking the slice length. The following functions were corrected:
+* The IPv6 extension header skipping functions were previously checking that the slice length is at least 2 before checking if an extension header is even present. If less then two bytes were present an error was returned. This was wrong behavior, as there are no guarantees for other protocols that there are 2 bytes of data present. A check has been added, that validates the header type before checking the slice length. The following functions were corrected:
   * `Ipv6Header::skip_header_extension_in_slice`
   * `Ipv6Header::skip_all_header_extensions_in_slice`
 
@@ -86,7 +86,7 @@
 
 ## 0.10.1: Corrected Fragmentation Handling, Additional IP Extension Headers Support & Qualitiy of Life Improvements
 
-With this version the support for IPv6 gets extended and bugs in the parsing of fragmented packets as well as authentification headers are fixed. Additionally a bunch of performance improvements are included and new methods have been added (e.g. the method `to_bytes` for headers with static sizes).
+With this version the support for IPv6 gets extended and bugs in the parsing of fragmented packets as well as authentication headers are fixed. Additionally a bunch of performance improvements are included and new methods have been added (e.g. the method `to_bytes` for headers with static sizes).
 
 It has been almost two years since the last update and I think it is fair to say that I underestimated the effort it would take to introduce partial support for IPv6 extension headers. As it was so long sice the last update a bunch of changes have piled on. This also means there are some breaking changes in this version.
 
@@ -96,7 +96,7 @@ Special thanks to @Bren2010 for reporting the errors with fragmented packets.
 
 ### Extension headers added to `IpHeader` & `InternetSlice`
 
-With the added support for authentification headers (for both IPV4 and IPV6) and additional IPV6 extension headers support a place to store the results when parsing headers or slicing them had be chosen. After some though I decided to put the results into the enum values as a second argument. 
+With the added support for authentication headers (for both IPV4 and IPV6) and additional IPV6 extension headers support a place to store the results when parsing headers or slicing them had be chosen. After some though I decided to put the results into the enum values as a second argument. 
 
 So the signature of `IpHeader` has changed from
 
@@ -136,7 +136,7 @@ pub enum InternetSlice<'a> {
 
 ### `source()` & `destination()` return static arrays:
 
-Previously when slicing packets the the methods for accessing the `source` & `destionation` returned a slice reference:
+Previously when slicing packets the the methods for accessing the `source` & `destination` returned a slice reference:
 
 ```rust
 
@@ -226,14 +226,14 @@ will no longer use `ip_header.protocol` in their checksum calculations.
 
 ### General:
 
-* Corrected decoding & handling of authentification headers & encapsulating security payload for IPv6 packets.
+* Corrected decoding & handling of authentication headers & encapsulating security payload for IPv6 packets.
 * Added support for authentifaction headers in IPv4 packets.
 * Corrected handling of fragmented packets. `InternetSlice::from_*` & `PacketHeaders::from_*` no longer try to decode packets that have been flaged as fragmented (IPv4 & IPv6). Thanks to @Bren2010 for making a PR & noticing the issue.
-* Added support for parsing "IPv6 Fragment Headers" & "Authentification Headers"
+* Added support for parsing "IPv6 Fragment Headers" & "authentication Headers"
 
 ### Fixed bugs:
 
-* The length field in authentification fields was assumed to be in 8 octet units (same as hop-by-hop options header & the routing header). This was incorrect, the length field is in 4 octet units and the code has been corrected to support this.
+* The length field in authentication fields was assumed to be in 8 octet units (same as hop-by-hop options header & the routing header). This was incorrect, the length field is in 4 octet units and the code has been corrected to support this.
 * For the "Encapsulating Security Payload header" it was incorrectly assumed, that the basic build up is the same as for the other header extensions (with a next_header & header length field at the start of the header). Parsing of packets will now stop as soon as a "Encapsulating Security Payload header" is encountered.
 
 ### Breaking API changes:

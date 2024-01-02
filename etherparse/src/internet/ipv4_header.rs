@@ -152,7 +152,7 @@ impl Ipv4Header {
     }
 
     /// Length of the header in multiples of 4 bytes (often also called
-    /// IHL - Internet Header Lenght). This field is part of the serialized
+    /// IHL - Internet Header length). This field is part of the serialized
     /// header and determines / is determined by the byte length of the options.
     ///
     /// The minimum allowed length of a header is 5 (= 20 bytes) and the
@@ -289,7 +289,7 @@ impl Ipv4Header {
     ///
     /// If the value is not too big. Otherwise an error is returned.
     ///
-    /// Note that the set payload lenght is no longer valid if you change
+    /// Note that the set payload length is no longer valid if you change
     /// [`Ipv4Header::options`] length after calling [`Ipv4Header::set_payload_len`]
     /// as it uses  the length of options to calculate the `total_len` value.
     ///
@@ -353,7 +353,7 @@ impl Ipv4Header {
 
     /// Sets the options & header_length based on the provided length.
     /// The length of the given slice must be a multiple of 4 and maximum 40 bytes.
-    /// If the length is not fullfilling these constraints, no data is set and
+    /// If the length is not fulfilling these constraints, no data is set and
     /// an error is returned.
     #[deprecated(
         since = "0.14.0",

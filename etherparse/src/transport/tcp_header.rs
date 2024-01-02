@@ -1773,7 +1773,7 @@ mod test {
             //(as most systems can not allocate blocks of the size of u32::MAX)
             let tcp_payload = unsafe {
                 //NOTE: The pointer must be initialized with a non null value
-                //      otherwise a key constraint of slices is not fullfilled
+                //      otherwise a key constraint of slices is not fulfilled
                 //      which can lead to crashes in release mode.
                 use core::ptr::NonNull;
                 core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)
@@ -1847,7 +1847,7 @@ mod test {
             //(as most systems can not allocate blocks of the size of u32::MAX)
             let tcp_payload = unsafe {
                 //NOTE: The pointer must be initialized with a non null value
-                //      otherwise a key constraint of slices is not fullfilled
+                //      otherwise a key constraint of slices is not fulfilled
                 //      which can lead to crashes in release mode.
                 use core::ptr::NonNull;
                 core::slice::from_raw_parts(NonNull::<u8>::dangling().as_ptr(), len)

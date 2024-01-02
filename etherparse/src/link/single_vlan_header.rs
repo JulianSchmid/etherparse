@@ -41,13 +41,13 @@ impl SingleVlanHeader {
     pub fn from_bytes(bytes: [u8; 4]) -> SingleVlanHeader {
         SingleVlanHeader {
             pcp: unsafe {
-                // SAFETY: Safe as bitmasks gurantee that value does not exceed
+                // SAFETY: Safe as bitmasks guarantee that value does not exceed
                 //         0b0000_0111.
                 VlanPcp::new_unchecked((bytes[0] >> 5) & 0b0000_0111u8)
             },
             drop_eligible_indicator: 0 != (bytes[0] & 0b0001_0000u8),
             vlan_id: unsafe {
-                // SAFETY: Safe as bitmasks gurantee that value does not exceed
+                // SAFETY: Safe as bitmasks guarantee that value does not exceed
                 //         0b0000_1111_1111_1111.
                 VlanId::new_unchecked(u16::from_be_bytes([bytes[0] & 0b0000_1111u8, bytes[1]]))
             },

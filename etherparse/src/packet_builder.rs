@@ -1298,10 +1298,7 @@ impl PacketBuilderStep<IpHeader> {
     /// //serialize
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
-    pub fn tcp_header(
-        mut self,
-        tcp_header: TcpHeader,
-    ) -> PacketBuilderStep<TcpHeader> {
+    pub fn tcp_header(mut self, tcp_header: TcpHeader) -> PacketBuilderStep<TcpHeader> {
         self.state.transport_header = Some(TransportHeader::Tcp(tcp_header));
         //return for next step
         PacketBuilderStep {

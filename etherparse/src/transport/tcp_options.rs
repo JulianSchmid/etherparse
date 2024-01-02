@@ -316,7 +316,7 @@ impl TcpOptions {
                         len += 2;
                     }
                     SelectiveAcknowledgement(first, rest) => {
-                        //write guranteed data
+                        //write guaranteed data
                         {
                             let t = &mut buf[len..len + 10];
                             len += 10;

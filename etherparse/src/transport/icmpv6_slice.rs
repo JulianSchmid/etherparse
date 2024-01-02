@@ -232,7 +232,7 @@ mod test {
                 //         a segmentation fault will be triggered.
                 let too_big_slice = unsafe {
                     //NOTE: The pointer must be initialized with a non null value
-                    //      otherwise a key constraint of slices is not fullfilled
+                    //      otherwise a key constraint of slices is not fulfilled
                     //      which can lead to crashes in release mode.
                     use core::ptr::NonNull;
                     core::slice::from_raw_parts(

@@ -15,7 +15,7 @@ pub enum HeaderError {
         ihl: u8,
     },
 
-    /// Error in the IPv4 extension headers (only authentification header).
+    /// Error in the IPv4 extension headers (only authentication header).
     Ipv4Ext(err::ip_auth::HeaderError),
 
     /// Error in the IPv6 extension headers.

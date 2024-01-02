@@ -52,12 +52,12 @@ impl VlanId {
 
     /// Creates an [`VlanId`] WITHOUT checking that the value
     /// is smaller or equal than [`VlanId::MAX_U16`] (12 bit unsigned integer).
-    /// The caller must gurantee that `value <= VlanId::MAX_U16`.
+    /// The caller must guarantee that `value <= VlanId::MAX_U16`.
     ///
     /// # Safety
     ///
     /// `value` must be smaller or equal than [`VlanId::MAX_U16`]
-    /// otherwise the behaviour of functions or datastructures relying
+    /// otherwise the behavior of functions or data structures relying
     /// on this pre-requirement is undefined.
     #[inline]
     pub const unsafe fn new_unchecked(value: u16) -> VlanId {

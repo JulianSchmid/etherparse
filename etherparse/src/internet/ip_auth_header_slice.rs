@@ -43,7 +43,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
 
         // check length
         // note: The unit is different then all other ipv6 extension headers.
-        //       In the other headers the lenth is in 8 octets, but for authentication
+        //       In the other headers the length is in 8 octets, but for authentication
         //       headers the length is in 4 octets.
         let len = ((payload_len_enc as usize) + 2) * 4;
         if slice.len() < len {
@@ -69,11 +69,11 @@ impl<'a> IpAuthHeaderSlice<'a> {
     /// # Safety
     ///
     /// This method assumes that the slice was previously validated to contain
-    /// a valid authentification header. This means the slice length must at
+    /// a valid authentication header. This means the slice length must at
     /// least be at least 8 and `(slice[1] + 2)*4`. The data that the
     /// slice points must also be valid (meaning no nullptr or alike allowed).
     ///
-    /// If these precondtions are not fullfilled the behavior of this function
+    /// If these preconditions are not fulfilled the behavior of this function
     /// and the methods of the return IpAuthHeaderSlice will be undefined.
     pub unsafe fn from_slice_unchecked(slice: &'a [u8]) -> IpAuthHeaderSlice<'a> {
         IpAuthHeaderSlice {
@@ -81,7 +81,7 @@ impl<'a> IpAuthHeaderSlice<'a> {
         }
     }
 
-    /// Returns the slice containing the authentification header.
+    /// Returns the slice containing the authentication header.
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
         self.slice

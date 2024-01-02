@@ -119,7 +119,7 @@ impl Sum16BitWords {
     }
 
     /// Converts summed up words from an u32 to an u16 ones complement
-    /// with 0 beeing replaced by 0xffff (usefull for TCP and UDP).
+    /// with 0 being replaced by 0xffff (useful for TCP and UDP).
     ///
     /// This kind of checksum is used in TCP and UDP headers.
     #[inline]
@@ -129,7 +129,7 @@ impl Sum16BitWords {
     }
 
     /// Converts summed up words from an u32 to an u16 ones complement
-    /// with 0 beeing replaced by 0xffff (usefull for TCP and UDP).
+    /// with 0 being replaced by 0xffff (useful for TCP and UDP).
     ///
     /// This kind of checksum is used in TCP and UDP headers.
     #[inline]
@@ -318,7 +318,7 @@ pub mod u32_16bit_word {
             sum = add_2bytes(
                 sum,
                 // SAFETY:
-                // If check gurantees there to be at least
+                // If check guarantees there to be at least
                 // 2 bytes.
                 unsafe {
                     [
@@ -334,7 +334,7 @@ pub mod u32_16bit_word {
             sum = add_2bytes(
                 sum,
                 // SAFETY:
-                // If check gurantees there to be at least
+                // If check guarantees there to be at least
                 // 2 bytes.
                 unsafe { [*slice.get_unchecked(slice.len() - 1), 0] },
             );
@@ -344,7 +344,7 @@ pub mod u32_16bit_word {
         sum
     }
 
-    /// Converts summed up words from an u32 to an u16 with 0 beeing replaced by 0xffff (usefull
+    /// Converts summed up words from an u32 to an u16 with 0 being replaced by 0xffff (useful
     /// for TCP and UDP headers).
     ///
     /// This kind of checksum is used in TCP and udp headers.
@@ -606,7 +606,7 @@ pub mod u64_16bit_word {
             sum = add_4bytes(
                 sum,
                 // SAFETY:
-                // If check gurantees there to be at least
+                // If check guarantees there to be at least
                 // 2 bytes.
                 unsafe {
                     [
@@ -629,7 +629,7 @@ pub mod u64_16bit_word {
             sum = add_2bytes(
                 sum,
                 // SAFETY:
-                // If check gurantees there to be at least
+                // If check guarantees there to be at least
                 // 2 bytes.
                 unsafe {
                     [
@@ -645,7 +645,7 @@ pub mod u64_16bit_word {
             sum = add_2bytes(
                 sum,
                 // SAFETY:
-                // If check gurantees there to be at least
+                // If check guarantees there to be at least
                 // 2 bytes.
                 unsafe { [*slice.get_unchecked(slice.len() - 1), 0] },
             );
@@ -655,7 +655,7 @@ pub mod u64_16bit_word {
         sum
     }
 
-    /// Converts summed up words from an u64 to an u16 with 0 beeing replaced by 0xffff (usefull
+    /// Converts summed up words from an u64 to an u16 with 0 being replaced by 0xffff (useful
     /// for TCP and UDP headers).
     ///
     /// This kind of checksum is used in TCP and udp headers.

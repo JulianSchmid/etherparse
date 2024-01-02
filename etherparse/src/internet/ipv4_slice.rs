@@ -12,7 +12,7 @@ pub struct Ipv4Slice<'a> {
 }
 
 impl<'a> Ipv4Slice<'a> {
-    /// Seperates and validates IPv4 headers (including extension headers)
+    /// Separates and validates IPv4 headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IPv4 packet.
     pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
@@ -57,7 +57,7 @@ impl<'a> Ipv4Slice<'a> {
             }
         };
 
-        // decode the authentification header if needed
+        // decode the authentication header if needed
         let fragmented = header.is_fragmenting_payload();
         match header.protocol() {
             AUTH => {
@@ -137,7 +137,7 @@ impl<'a> Ipv4Slice<'a> {
         self.payload.ip_number
     }
 
-    /// Returns true if the payload is flagged as beeing fragmented.
+    /// Returns true if the payload is flagged as being fragmented.
     #[inline]
     pub fn is_payload_fragmented(&self) -> bool {
         self.header.is_fragmenting_payload()

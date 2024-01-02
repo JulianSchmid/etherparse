@@ -6,7 +6,7 @@ pub enum HeaderError {
     /// Error if the ipv6 hop by hop header does not occur directly after the ipv6 header (see rfc8200 chapter 4.1.)
     HopByHopNotAtStart,
 
-    /// Error in the ip authentification header.
+    /// Error in the ip authentication header.
     IpAuth(err::ip_auth::HeaderError),
 }
 

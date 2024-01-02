@@ -6,7 +6,7 @@ use super::*;
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FromSliceError {
     /// Error when parsing had to be aborted because of a length error (usually
-    /// not enough data beeing available).
+    /// not enough data being available).
     Len(LenError),
 
     /// Error while parsing a double vlan header.
@@ -15,7 +15,7 @@ pub enum FromSliceError {
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
 
-    /// Error while parsing a IP authentification header.
+    /// Error while parsing a IP authentication header.
     IpAuth(ip_auth::HeaderError),
 
     /// Error while parsing a IPv4 header.

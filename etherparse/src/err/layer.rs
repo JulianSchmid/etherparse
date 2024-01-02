@@ -1,39 +1,39 @@
 /// Layers on which an error can occur.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Layer {
-    /// Error occured in the ethernet 2 header.
+    /// Error occurred in the ethernet 2 header.
     Ethernet2Header,
-    /// Error occured in the vlan header.
+    /// Error occurred in the vlan header.
     VlanHeader,
-    /// Error occured when decoding an IP header (v4 or v6).
+    /// Error occurred when decoding an IP header (v4 or v6).
     IpHeader,
-    /// Error occured in the IPv4 layer.
+    /// Error occurred in the IPv4 layer.
     Ipv4Header,
-    /// Error occured verifying the total length of an IPv4 packet.
+    /// Error occurred verifying the total length of an IPv4 packet.
     Ipv4Packet,
-    /// Error occured in the IP authentification header.
+    /// Error occurred in the IP authentication header.
     IpAuthHeader,
-    /// Error occured in the IPv6 layer.
+    /// Error occurred in the IPv6 layer.
     Ipv6Header,
-    /// Error occured verifying the payload length of an IPv6 packet.
+    /// Error occurred verifying the payload length of an IPv6 packet.
     Ipv6Packet,
-    /// Error occured while decoding an IPv6 fragment header.
+    /// Error occurred while decoding an IPv6 fragment header.
     Ipv6FragHeader,
-    /// Error occured while decoding a generic IPv6 extension header.
+    /// Error occurred while decoding a generic IPv6 extension header.
     Ipv6ExtHeader,
-    /// Error occured while decoding an UDP header.
+    /// Error occurred while decoding an UDP header.
     UdpHeader,
-    /// Error occured verifying the length of the UDP payload.
+    /// Error occurred verifying the length of the UDP payload.
     UdpPayload,
-    /// Error occured while decoding a TCP header.
+    /// Error occurred while decoding a TCP header.
     TcpHeader,
-    /// Error occured while parsing an ICMP packet.
+    /// Error occurred while parsing an ICMP packet.
     Icmpv4,
-    /// Error occured while parsing an ICMP timestamp packet.
+    /// Error occurred while parsing an ICMP timestamp packet.
     Icmpv4Timestamp,
-    /// Error occured while parsing an ICMP timestamp reply packet.
+    /// Error occurred while parsing an ICMP timestamp reply packet.
     Icmpv4TimestampReply,
-    /// Error occured while parsing an ICMPv6 packet.
+    /// Error occurred while parsing an ICMPv6 packet.
     Icmpv6,
 }
 
@@ -47,7 +47,7 @@ impl Layer {
             IpHeader => "IP Header Error",
             Ipv4Header => "IPv4 Header Error",
             Ipv4Packet => "IPv4 Packet Error",
-            IpAuthHeader => "IP Authentification Header Error",
+            IpAuthHeader => "IP authentication Header Error",
             Ipv6Header => "IPv6 Header Error",
             Ipv6Packet => "IPv6 Packet Error",
             Ipv6FragHeader => "IPv6 Fragment Header Error",
@@ -72,7 +72,7 @@ impl core::fmt::Display for Layer {
             IpHeader => write!(f, "IP header"),
             Ipv4Header => write!(f, "IPv4 header"),
             Ipv4Packet => write!(f, "IPv4 packet"),
-            IpAuthHeader => write!(f, "IP authentification header"),
+            IpAuthHeader => write!(f, "IP authentication header"),
             Ipv6Header => write!(f, "IPv6 header"),
             Ipv6Packet => write!(f, "IPv6 packet"),
             Ipv6FragHeader => write!(f, "IPv6 fragment header"),
@@ -130,7 +130,7 @@ mod test {
             (IpHeader, "IP Header Error"),
             (Ipv4Header, "IPv4 Header Error"),
             (Ipv4Packet, "IPv4 Packet Error"),
-            (IpAuthHeader, "IP Authentification Header Error"),
+            (IpAuthHeader, "IP authentication Header Error"),
             (Ipv6Header, "IPv6 Header Error"),
             (Ipv6Packet, "IPv6 Packet Error"),
             (Ipv6FragHeader, "IPv6 Fragment Header Error"),
@@ -156,7 +156,7 @@ mod test {
             (IpHeader, "IP header"),
             (Ipv4Header, "IPv4 header"),
             (Ipv4Packet, "IPv4 packet"),
-            (IpAuthHeader, "IP authentification header"),
+            (IpAuthHeader, "IP authentication header"),
             (Ipv6Header, "IPv6 header"),
             (Ipv6Packet, "IPv6 packet"),
             (Ipv6FragHeader, "IPv6 fragment header"),

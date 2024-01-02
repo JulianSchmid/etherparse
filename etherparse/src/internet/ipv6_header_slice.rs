@@ -93,7 +93,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
             // SAFETY:
             // Slice access safe as the slice length is set to Ipv6Header::LEN (40)
             // during construction of the struct.
-            // Conversion to flow label safe as the bitmask & 0 constant gurantee
+            // Conversion to flow label safe as the bitmask & 0 constant guarantee
             // that the value does not exceed 20 bits.
             Ipv6FlowLabel::new_unchecked(u32::from_be_bytes([
                 0,

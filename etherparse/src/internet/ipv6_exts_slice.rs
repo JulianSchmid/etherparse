@@ -57,7 +57,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                         .map_err(|err| Len(err.add_offset(start_slice.len() - rest.len())))?;
                     // SAFETY:
                     // Ipv6RawExtHeaderSlice::from_slice always generates
-                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // a subslice from the given slice rest. Therefor it is guaranteed
                     // that len is always greater or equal the len of rest.
                     rest = unsafe {
                         let len = slice.slice().len();
@@ -70,7 +70,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                         .map_err(|err| Len(err.add_offset(start_slice.len() - rest.len())))?;
                     // SAFETY:
                     // Ipv6FragmentHeaderSlice::from_slice always generates
-                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // a subslice from the given slice rest. Therefor it is guaranteed
                     // that len is always greater or equal the len of rest.
                     rest = unsafe {
                         let len = slice.slice().len();
@@ -91,7 +91,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     })?;
                     // SAFETY:
                     // IpAuthHeaderSlice::from_slice always generates
-                    // a subslice from the given slice rest. Therefor it is guranteed
+                    // a subslice from the given slice rest. Therefor it is guaranteed
                     // that len is always greater or equal the len of rest.
                     rest = unsafe {
                         let len = slice.slice().len();

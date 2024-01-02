@@ -6,11 +6,11 @@ pub enum LenSource {
     Slice,
     /// Length
     Ipv4HeaderTotalLen,
-    /// Error occured in the IPv6 layer.
+    /// Error occurred in the IPv6 layer.
     Ipv6HeaderPayloadLen,
-    /// Error occured while decoding an UDP header.
+    /// Error occurred while decoding an UDP header.
     UdpHeaderLen,
-    /// Error occured while decoding a TCP header.
+    /// Error occurred while decoding a TCP header.
     TcpHeaderLen,
 }
 

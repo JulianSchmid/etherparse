@@ -1,5 +1,5 @@
 /// Error when creating an [`crate::IpAuthHeader`] and the
-/// length of the raw ICV is non representable in an IP authentification
+/// length of the raw ICV is non representable in an IP authentication
 /// header.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum IcvLenError {
@@ -8,8 +8,8 @@ pub enum IcvLenError {
     TooBig(usize),
 
     /// Error when the ICV length can not be represented
-    /// as a multiple of 4-bytes in the authentification header
-    /// (`0 == raw_icv.len() % 4` is not fullfilled).
+    /// as a multiple of 4-bytes in the authentication header
+    /// (`0 == raw_icv.len() % 4` is not fulfilled).
     Unaligned(usize),
 }
 
@@ -18,9 +18,9 @@ impl core::fmt::Display for IcvLenError {
         use IcvLenError::*;
         match self {
             TooBig(size) =>
-                write!(f, "Error the IP authentification header ICV length is too large. The ICV size ({} bytes) is larger then what can be be represented by the 'payload len' field in an IP authentification header.", size),
+                write!(f, "Error the IP authentication header ICV length is too large. The ICV size ({} bytes) is larger then what can be be represented by the 'payload len' field in an IP authentication header.", size),
             Unaligned(size) =>
-                write!(f, "Error the IP authentification header ICV length of {} bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes.", size),
+                write!(f, "Error the IP authentication header ICV length of {} bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes.", size),
         }
     }
 }
@@ -68,11 +68,11 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "Error the IP authentification header ICV length is too large. The ICV size (4000 bytes) is larger then what can be be represented by the 'payload len' field in an IP authentification header.",
+            "Error the IP authentication header ICV length is too large. The ICV size (4000 bytes) is larger then what can be be represented by the 'payload len' field in an IP authentication header.",
             format!("{}", TooBig(4000))
         );
         assert_eq!(
-            "Error the IP authentification header ICV length of 12 bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes.",
+            "Error the IP authentication header ICV length of 12 bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes.",
             format!("{}", Unaligned(12))
         );
     }
