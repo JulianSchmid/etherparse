@@ -124,6 +124,7 @@ impl Ipv4Extensions {
     /// headers together with the internet protocol number identifying the protocol
     /// that will be next.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + Sized>(
         reader: &mut T,
         start_ip_number: IpNumber,
@@ -142,6 +143,7 @@ impl Ipv4Extensions {
     /// headers together with the internet protocol number identifying the protocol
     /// that will be next.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_limited<T: std::io::Read + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
         start_ip_number: IpNumber,
@@ -158,6 +160,7 @@ impl Ipv4Extensions {
 
     /// Write the extensions to the writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,

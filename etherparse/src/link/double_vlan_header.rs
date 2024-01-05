@@ -38,6 +38,7 @@ impl DoubleVlanHeader {
 
     /// Read a double tagging header from the given source
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<DoubleVlanHeader, err::double_vlan::HeaderReadError> {
@@ -62,6 +63,7 @@ impl DoubleVlanHeader {
 
     /// Write the double IEEE 802.1Q VLAN tagging header
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         self.outer.write(writer)?;
         self.inner.write(writer)

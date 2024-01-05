@@ -22,6 +22,7 @@ impl core::fmt::Display for TransportChecksumError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for TransportChecksumError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use TransportChecksumError::*;

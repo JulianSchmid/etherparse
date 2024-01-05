@@ -44,6 +44,7 @@ impl core::fmt::Display for SliceWriteSpaceError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for SliceWriteSpaceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None

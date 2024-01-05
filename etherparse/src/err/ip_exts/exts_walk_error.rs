@@ -22,6 +22,7 @@ impl core::fmt::Display for ExtsWalkError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ExtsWalkError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use ExtsWalkError::*;

@@ -403,6 +403,7 @@ impl Ipv4Header {
     /// Reads an IPv4 header from the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv4Header, err::ipv4::HeaderReadError> {
@@ -422,6 +423,7 @@ impl Ipv4Header {
     /// Reads an IPv4 header assuming the version & ihl field have already
     /// been read (requires crate feature `std`).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_without_version<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         first_byte: u8,
@@ -503,6 +505,7 @@ impl Ipv4Header {
     /// Writes a given IPv4 header to the current position (this method automatically calculates
     /// the header length and checksum).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         // write with recalculations
         self.write_ipv4_header_internal(writer, self.calc_header_checksum())
@@ -511,6 +514,7 @@ impl Ipv4Header {
     /// Writes a given IPv4 header to the current position (this method just writes the specified
     /// checksum and does note compute it).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write_raw<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,

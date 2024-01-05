@@ -3,6 +3,7 @@ use crate::err::LenError;
 
 /// Error when decoding an IP authentication header via a `std::io::Read` source.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum HeaderLimitedReadError {
     /// IO error was encountered while reading header.
@@ -18,6 +19,7 @@ pub enum HeaderLimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl HeaderLimitedReadError {
     /// Returns the `std::io::Error` value if the `HeaderLimitedReadError` is `Io`.
     /// Otherwise `None` is returned.
@@ -54,6 +56,7 @@ impl HeaderLimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for HeaderLimitedReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderLimitedReadError::*;
@@ -66,6 +69,7 @@ impl core::fmt::Display for HeaderLimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for HeaderLimitedReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderLimitedReadError::*;

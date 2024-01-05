@@ -149,6 +149,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
     /// Return the ipv6 source address as an std::net::Ipv6Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn source_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.source())
@@ -166,6 +167,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
 
     /// Return the ipv6 destination address as an std::net::Ipv6Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn destination_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.destination())
@@ -182,6 +184,11 @@ impl<'a> Ipv6HeaderSlice<'a> {
             source: self.source(),
             destination: self.destination(),
         }
+    }
+
+    /// Returns the length of the IPv6 header in bytes (same as [`crate::Ipv6Header::LEN`]).
+    pub const fn header_len(&self) -> usize {
+        Ipv6Header::LEN
     }
 }
 

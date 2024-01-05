@@ -292,7 +292,7 @@ impl IpHeaders {
     /// length of the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
-    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// if the `len_source` value in the returned [`crate::IpPayload`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`] or
     /// [`LenSource::Ipv6HeaderPayloadLen`].
@@ -845,6 +845,7 @@ impl IpHeaders {
     /// Reads an IP (v4 or v6) header from the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<(IpHeaders, IpNumber), err::ip::HeaderReadError> {
@@ -942,6 +943,7 @@ impl IpHeaders {
     /// Writes an IP (v4 or v6) header to the current position (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,

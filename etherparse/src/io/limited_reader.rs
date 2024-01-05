@@ -9,6 +9,7 @@ use crate::err::{io::LimitedReadError, Layer, LenError, LenSource};
 /// An [`crate::err::LenError`] is returned as soon as more than the
 /// maximum read len is read.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub struct LimitedReader<T> {
     /// Reader from which data will be read.
     reader: T,
@@ -25,6 +26,7 @@ pub struct LimitedReader<T> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<T: std::io::Read + Sized> LimitedReader<T> {
     /// Setup a new limited reader.
     pub fn new(
@@ -104,6 +106,7 @@ impl<T: std::io::Read + Sized> LimitedReader<T> {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<T: core::fmt::Debug> core::fmt::Debug for LimitedReader<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("LimitedReader")

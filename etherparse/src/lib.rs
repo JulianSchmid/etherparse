@@ -240,6 +240,10 @@
 // Removes all std and alloc default imports & enables "non std" support.
 #![no_std]
 
+// enables https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html
+// for docs.rs
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(test)]
 extern crate alloc;
 #[cfg(test)]
@@ -272,36 +276,10 @@ pub use crate::link::vlan_slice::*;
 pub(crate) mod test_gens;
 
 mod internet;
-pub use crate::internet::ip_auth_header::*;
-pub use crate::internet::ip_auth_header_slice::*;
-pub use crate::internet::ip_frag_offset::*;
-pub use crate::internet::ip_header::*;
-pub use crate::internet::ip_number_impl::*;
-pub use crate::internet::ip_payload_slice::*;
-pub use crate::internet::ip_slice::*;
-pub use crate::internet::ipv4_dscp::*;
-pub use crate::internet::ipv4_ecn::*;
-pub use crate::internet::ipv4_exts::*;
-pub use crate::internet::ipv4_exts_slice::*;
-pub use crate::internet::ipv4_header::*;
-pub use crate::internet::ipv4_header_slice::*;
-pub use crate::internet::ipv4_options::*;
-pub use crate::internet::ipv4_slice::*;
-pub use crate::internet::ipv6_ext_slice::*;
-pub use crate::internet::ipv6_ext_slice_iter::*;
-pub use crate::internet::ipv6_exts::*;
-pub use crate::internet::ipv6_exts_slice::*;
-pub use crate::internet::ipv6_flow_label::*;
-pub use crate::internet::ipv6_fragment_header::*;
-pub use crate::internet::ipv6_fragment_header_slice::*;
-pub use crate::internet::ipv6_header::*;
-pub use crate::internet::ipv6_header_slice::*;
-pub use crate::internet::ipv6_raw_ext_header::*;
-pub use crate::internet::ipv6_raw_ext_header_slice::*;
-pub use crate::internet::ipv6_routing_exts::*;
-pub use crate::internet::ipv6_slice::*;
+pub use internet::*;
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub mod io;
 
 mod transport;
@@ -338,6 +316,9 @@ mod compositions_tests;
 mod helpers;
 pub(crate) use helpers::*;
 
+mod lax_payload;
+pub use lax_payload::*;
+
 mod lax_sliced_packet;
 pub use lax_sliced_packet::*;
 
@@ -366,6 +347,7 @@ pub(crate) mod test_packet;
 
 /// Deprecated use [err::ReadError] instead or use the specific error type returned by operation you are using.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[deprecated(
     since = "0.14.0",
     note = "Please use the type err::ReadError instead or use the specific error type returned by operation you are using."
@@ -374,5 +356,6 @@ pub type ReadError = err::ReadError;
 
 /// Deprecated use [err::ReadError] instead or use the specific error type returned by operation you are using.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[deprecated(since = "0.14.0", note = "Please use the type err::Field instead.")]
 pub type ErrorField = err::ValueType;

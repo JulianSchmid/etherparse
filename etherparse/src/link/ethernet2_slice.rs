@@ -31,7 +31,7 @@ impl<'a> Ethernet2Slice<'a> {
     /// check sequence) at the end.
     ///
     /// In case you are not sure if your ethernet2 frame has a FCS or not
-    /// use [`Ethernet2Slice::from_slice_with_fcs`] instead and rely on the
+    /// use [`Ethernet2Slice::from_slice_without_fcs`] instead and rely on the
     /// lower layers (e.g. IP) to determine the correct payload length.
     pub fn from_slice_with_crc32_fcs(slice: &'a [u8]) -> Result<Ethernet2Slice<'a>, LenError> {
         // check length

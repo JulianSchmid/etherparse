@@ -68,6 +68,7 @@ impl Icmpv6Header {
 
     /// Read a ICMPv6 header from the given reader
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + Sized>(reader: &mut T) -> Result<Icmpv6Header, std::io::Error> {
         // read the initial 8 bytes
         let mut start = [0u8; 8];
@@ -77,6 +78,7 @@ impl Icmpv6Header {
 
     /// Write the ICMPv6 header to the given writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }

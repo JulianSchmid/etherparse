@@ -57,6 +57,7 @@ impl SingleVlanHeader {
 
     /// Read a IEEE 802.1Q VLAN tagging header
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<SingleVlanHeader, std::io::Error> {
@@ -75,6 +76,7 @@ impl SingleVlanHeader {
     /// Write the IEEE 802.1Q VLAN tagging header
     #[inline]
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }

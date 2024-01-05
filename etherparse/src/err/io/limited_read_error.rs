@@ -3,6 +3,7 @@ use crate::err::LenError;
 /// Error that can occur when reading from a [`crate::io::LimitedReader`]
 #[derive(Debug)]
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub enum LimitedReadError {
     /// IO error was encountered while reading header or
     /// expected packet contents.
@@ -15,6 +16,7 @@ pub enum LimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl LimitedReadError {
     /// Returns the `std::io::Error` value if the `LimitedReadError` is `Io`.
     /// Otherwise `None` is returned.
@@ -40,6 +42,7 @@ impl LimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for LimitedReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use LimitedReadError::*;
@@ -51,6 +54,7 @@ impl core::fmt::Display for LimitedReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for LimitedReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use LimitedReadError::*;

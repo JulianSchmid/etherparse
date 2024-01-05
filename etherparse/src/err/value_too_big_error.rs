@@ -28,6 +28,7 @@ where
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl<T> std::error::Error for ValueTooBigError<T>
 where
     T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash,

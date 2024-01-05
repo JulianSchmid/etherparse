@@ -240,6 +240,7 @@ impl UdpHeader {
 
     /// Tries to read an udp header from the current position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<UdpHeader, std::io::Error> {
@@ -253,6 +254,7 @@ impl UdpHeader {
 
     /// Write the udp header without recalculating the checksum or length.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())?;
         Ok(())

@@ -37,6 +37,7 @@ impl core::fmt::Display for SliceError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for SliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use SliceError::*;

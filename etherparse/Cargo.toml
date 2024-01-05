@@ -27,3 +27,7 @@ arrayvec = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
 proptest = "1.0.0"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

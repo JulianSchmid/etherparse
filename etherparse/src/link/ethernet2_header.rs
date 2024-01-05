@@ -47,6 +47,7 @@ impl Ethernet2Header {
 
     /// Reads an Ethernet-II header from the current position of the read argument.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ethernet2Header, std::io::Error> {
@@ -83,6 +84,7 @@ impl Ethernet2Header {
 
     /// Writes a given Ethernet-II header to the current position of the write argument.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
