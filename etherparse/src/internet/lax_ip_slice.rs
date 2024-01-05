@@ -94,7 +94,7 @@ impl<'a> LaxIpSlice<'a> {
         }
     }
 
-    /// Seperates IP headers (include extension headers) & the IP payload from the given
+    /// Separates IP headers (include extension headers) & the IP payload from the given
     /// slice with less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///

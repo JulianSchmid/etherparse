@@ -22,7 +22,7 @@ impl<'a> LaxSlicedPacket<'a> {
         //SlicedPacketCursor::new(data).slice_ethernet2()
     }
 
-    /// Seperates a network packet slice into different slices containing the headers using
+    /// Separates a network packet slice into different slices containing the headers using
     /// the given `ether_type` number to identify the first header.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. Currently supported
@@ -97,7 +97,7 @@ impl<'a> LaxSlicedPacket<'a> {
          */
     }
 
-    /// Seperates a network packet slice into different slices containing
+    /// Separates a network packet slice into different slices containing
     /// the headers from the ip header downwards with lax length checks.
     ///
     /// This function allows the length in the IP header to be inconsistent

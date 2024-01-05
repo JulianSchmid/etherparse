@@ -10,7 +10,7 @@ pub struct Ipv6Slice<'a> {
 }
 
 impl<'a> Ipv6Slice<'a> {
-    /// Seperates and validates IPv6 headers (including extension headers)
+    /// Separates and validates IPv6 headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IPv6 packet (based on the payload length value in the header).
     ///
