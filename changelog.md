@@ -229,7 +229,7 @@ will no longer use `ip_header.protocol` in their checksum calculations.
 * Corrected decoding & handling of authentication headers & encapsulating security payload for IPv6 packets.
 * Added support for authentifaction headers in IPv4 packets.
 * Corrected handling of fragmented packets. `InternetSlice::from_*` & `PacketHeaders::from_*` no longer try to decode packets that have been flaged as fragmented (IPv4 & IPv6). Thanks to @Bren2010 for making a PR & noticing the issue.
-* Added support for parsing "IPv6 Fragment Headers" & "authentication Headers"
+* Added support for parsing "IPv6 Fragment Headers" & "Authentication Headers"
 
 ### Fixed bugs:
 
