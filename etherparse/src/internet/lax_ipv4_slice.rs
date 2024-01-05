@@ -22,7 +22,7 @@ pub struct LaxIpv4Slice<'a> {
 
 impl<'a> LaxIpv4Slice<'a> {
 
-    /// Seperates and validates IPv4 headers (including extension headers) &
+    /// Separates and validates IPv4 headers (including extension headers) &
     /// the payload from the given slice with less strict length checks
     /// (usefull for cut off packet or for packets with unset length fields).
     ///

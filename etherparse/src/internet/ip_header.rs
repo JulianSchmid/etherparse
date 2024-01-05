@@ -268,7 +268,7 @@ impl IpHeaders {
         }
     }
 
-    /// Reads an [`IpHeaders`] & seperates the payload from the given slice with
+    /// Reads an [`IpHeaders`] & Separates the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
@@ -585,7 +585,7 @@ impl IpHeaders {
         ))
     }
 
-    /// Reads an IPv4 header (+ extensions) & seperates the payload from the given slice with
+    /// Reads an IPv4 header (+ extensions) & Separates the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
@@ -753,7 +753,7 @@ impl IpHeaders {
         ))
     }
 
-    /// Reads an IPv6 header (+ extensions) & seperates the payload from the given slice with
+    /// Reads an IPv6 header (+ extensions) & Separates the payload from the given slice with
     /// less strict length checks (usefull for cut off packet or for packets with
     /// unset length fields).
     ///
