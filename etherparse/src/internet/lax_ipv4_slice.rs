@@ -7,10 +7,10 @@ use crate::{*, err::LenSource};
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
-/// * Parsing packets that have been cut off. This is, for example, usefull to
+/// * Parsing packets that have been cut off. This is, for example, useful to
 ///   parse packets returned via ICMP as these usually only contain the start.
 /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
-///   This can be usefull when parsing packets which have been recorded in a
+///   This can be useful when parsing packets which have been recorded in a
 ///   layer before the length field was set (e.g. before the operating
 ///   system set the length fields).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -24,17 +24,17 @@ impl<'a> LaxIpv4Slice<'a> {
 
     /// Separates and validates IPv4 headers (including extension headers) &
     /// the payload from the given slice with less strict length checks
-    /// (usefull for cut off packet or for packets with unset length fields).
+    /// (useful for cut off packet or for packets with unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`Ipv4Slice::from_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
-    ///   This can be usefull when parsing packets which have been recorded in a
+    ///   This can be useful when parsing packets which have been recorded in a
     ///   layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
@@ -113,7 +113,7 @@ impl<'a> LaxIpv4Slice<'a> {
                 )
             };
 
-        // decode the authentification header if needed
+        // decode the authentication header if needed
         let fragmented = header.is_fragmenting_payload();
         match header.protocol() {
             AUTH => {
@@ -217,7 +217,7 @@ impl<'a> LaxIpv4Slice<'a> {
         self.payload.ip_number
     }
 
-    /// Returns true if the payload is flagged as beeing fragmented.
+    /// Returns true if the payload is flagged as being fragmented.
     #[inline]
     pub fn is_payload_fragmented(&self) -> bool {
         self.header.is_fragmenting_payload()

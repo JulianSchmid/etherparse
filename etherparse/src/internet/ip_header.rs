@@ -269,7 +269,7 @@ impl IpHeaders {
     }
 
     /// Reads an [`IpHeaders`] & Separates the payload from the given slice with
-    /// less strict length checks (usefull for cut off packet or for packets with
+    /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::from_slice`]
@@ -277,10 +277,10 @@ impl IpHeaders {
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) or `payload_length` (for IPv6)
-    ///   have not yet been set. This can be usefull when parsing packets which have been
+    ///   have not yet been set. This can be useful when parsing packets which have been
     ///   recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
@@ -586,7 +586,7 @@ impl IpHeaders {
     }
 
     /// Reads an IPv4 header (+ extensions) & Separates the payload from the given slice with
-    /// less strict length checks (usefull for cut off packet or for packets with
+    /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::ipv4_from_slice`]
@@ -594,10 +594,10 @@ impl IpHeaders {
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) have not yet been set.
-    ///   This can be usefull when parsing packets which have been recorded in a
+    ///   This can be useful when parsing packets which have been recorded in a
     ///   layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
@@ -754,7 +754,7 @@ impl IpHeaders {
     }
 
     /// Reads an IPv6 header (+ extensions) & Separates the payload from the given slice with
-    /// less strict length checks (usefull for cut off packet or for packets with
+    /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::ipv6_from_slice`]
@@ -762,10 +762,10 @@ impl IpHeaders {
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `payload_length` (in the IPv6 header) has not
-    ///   yet been set. This can be usefull when parsing packets which have been
+    ///   yet been set. This can be useful when parsing packets which have been
     ///  recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///

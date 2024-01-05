@@ -4,13 +4,22 @@ use crate::{err::Layer, *};
 /// the different headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaxSlicedPacket<'a> {
-    /// Parsed part of the packet.
-    pub packet: SlicedPacket<'a>,
+    /// Ethernet II header if present.
+    pub link: Option<LinkSlice<'a>>,
+
+    /// Single or double vlan headers if present.
+    pub vlan: Option<VlanSlice<'a>>,
+
+    /// IPv4 or IPv6 header, IP extension headers & payload if present.
+    pub ip: Option<IpSlice<'a>>,
+
+    /// TCP or UDP header & payload if present.
+    pub transport: Option<TransportSlice<'a>>,
 
     /// Last successfully parsed layer.
     pub last_parsed_layer: Layer,
 
-    /// Error that stopped the parsing and the layer on which the stop occured.
+    /// Error that stopped the parsing and the layer on which the stop occurred.
     pub stop_err: Option<(err::packet::SliceError, Layer)>,
 }
 
@@ -47,7 +56,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
     /// #               [7,8,9,10,11,12]) //destionation mac
     /// #    .ipv4([192,168,1,1], //source ip
-    /// #          [192,168,1,2], //desitionation ip
+    /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
     /// #         1234); //desitnation port
@@ -116,7 +125,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// # use etherparse::{SlicedPacket, PacketBuilder, IpSlice, err::LenSource};
     /// # let builder = PacketBuilder::
     /// #    ipv4([192,168,1,1], //source ip
-    /// #         [192,168,1,2], //desitionation ip
+    /// #         [192,168,1,2], //destination ip
     /// #         20)            //time to life
     /// #    .udp(21,    //source port
     /// #         1234); //desitnation port

@@ -32,7 +32,7 @@ impl Ipv4Extensions {
     /// Collects all known ipv4 extension headers in a slice until an error
     /// is encountered or a "non IP extension header" is found and
     /// returns the successfully parsed parts (+ the unparsed slice
-    /// it's [`IpNumber`] and the error if one occured).
+    /// it's [`IpNumber`] and the error if one occurred).
     ///
     /// The returned values are
     ///
@@ -52,7 +52,7 @@ impl Ipv4Extensions {
     /// let (ipv4_exts, next_ip_num, next_data, err) =
     ///     Ipv4Extensions::from_slice_lax(AUTHENTICATION_HEADER, &data);
     ///
-    /// // authentification header is separated and no error occured
+    /// // authentication header is separated and no error occurred
     /// assert!(ipv4_exts.auth.is_some());
     /// assert_eq!(next_ip_num, UDP);
     /// assert_eq!(next_data, &[]);
@@ -78,7 +78,7 @@ impl Ipv4Extensions {
     /// assert!(err.is_none());
     /// ```
     ///
-    /// In case an error occured the original data gets
+    /// In case an error occurred the original data gets
     /// returned together with the error:
     ///
     /// ```
@@ -305,7 +305,7 @@ mod test {
                 let (ipv4_exts, next_ip_num, next_data, err) =
                     Ipv4Extensions::from_slice_lax(AUTHENTICATION_HEADER, &data);
 
-                // authentification header is separated and no error occured
+                // authentication header is separated and no error occurred
                 assert_eq!(ipv4_exts.auth, Some(auth.clone()));
                 assert_eq!(next_ip_num, auth.next_header);
                 assert_eq!(next_data, &[]);
