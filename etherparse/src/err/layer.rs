@@ -11,7 +11,7 @@ pub enum Layer {
     Ipv4Header,
     /// Error occurred verifying the total length of an IPv4 packet.
     Ipv4Packet,
-    /// Error occurred in the IP authentication header.
+    /// Error occurred in the IP Authentication header.
     IpAuthHeader,
     /// Error occurred in the IPv6 layer.
     Ipv6Header,
@@ -47,7 +47,7 @@ impl Layer {
             IpHeader => "IP Header Error",
             Ipv4Header => "IPv4 Header Error",
             Ipv4Packet => "IPv4 Packet Error",
-            IpAuthHeader => "IP authentication Header Error",
+            IpAuthHeader => "IP Authentication Header Error",
             Ipv6Header => "IPv6 Header Error",
             Ipv6Packet => "IPv6 Packet Error",
             Ipv6FragHeader => "IPv6 Fragment Header Error",
@@ -72,7 +72,7 @@ impl core::fmt::Display for Layer {
             IpHeader => write!(f, "IP header"),
             Ipv4Header => write!(f, "IPv4 header"),
             Ipv4Packet => write!(f, "IPv4 packet"),
-            IpAuthHeader => write!(f, "IP authentication header"),
+            IpAuthHeader => write!(f, "IP Authentication header"),
             Ipv6Header => write!(f, "IPv6 header"),
             Ipv6Packet => write!(f, "IPv6 packet"),
             Ipv6FragHeader => write!(f, "IPv6 fragment header"),
@@ -130,7 +130,7 @@ mod test {
             (IpHeader, "IP Header Error"),
             (Ipv4Header, "IPv4 Header Error"),
             (Ipv4Packet, "IPv4 Packet Error"),
-            (IpAuthHeader, "IP authentication Header Error"),
+            (IpAuthHeader, "IP Authentication Header Error"),
             (Ipv6Header, "IPv6 Header Error"),
             (Ipv6Packet, "IPv6 Packet Error"),
             (Ipv6FragHeader, "IPv6 Fragment Header Error"),
@@ -156,7 +156,7 @@ mod test {
             (IpHeader, "IP header"),
             (Ipv4Header, "IPv4 header"),
             (Ipv4Packet, "IPv4 packet"),
-            (IpAuthHeader, "IP authentication header"),
+            (IpAuthHeader, "IP Authentication header"),
             (Ipv6Header, "IPv6 header"),
             (Ipv6Packet, "IPv6 packet"),
             (Ipv6FragHeader, "IPv6 fragment header"),

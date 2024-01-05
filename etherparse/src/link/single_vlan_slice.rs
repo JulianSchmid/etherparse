@@ -38,7 +38,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn priority_code_point(&self) -> VlanPcp {
         unsafe {
             // SAFETY: Safe as slice len checked in constructor to be at least 4 &
-            // the bitmask gurantees values does not exceed 0b0000_0111.
+            // the bitmask guarantees values does not exceed 0b0000_0111.
             VlanPcp::new_unchecked((*self.slice.get_unchecked(0) >> 5) & 0b0000_0111)
         }
     }

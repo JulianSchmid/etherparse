@@ -122,7 +122,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     /// Collects all ipv6 extension headers in a slice until an error
     /// is encountered or a "non IP extension header" is found and
     /// returns the successfully parsed parts (+ the unparsed slice
-    /// it's `IpNumber` and the error if one occured).
+    /// it's `IpNumber` and the error if one occurred).
     ///
     /// The returned values are
     ///

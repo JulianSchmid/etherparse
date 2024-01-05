@@ -7,10 +7,10 @@ use crate::{*, err::*};
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
-/// * Parsing packets that have been cut off. This is, for example, usefull to
+/// * Parsing packets that have been cut off. This is, for example, useful to
 ///   parse packets returned via ICMP as these usually only contain the start.
 /// * Parsing packets where the `total_len` (for IPv4) or `payload_len` (for IPv6)
-///   have not yet been set. This can be usefull when parsing packets which have
+///   have not yet been set. This can be useful when parsing packets which have
 ///   been recorded in a layer before the length field was set (e.g. before the
 ///   operating system set the length fields).
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -22,7 +22,7 @@ pub enum LaxIpSlice<'a> {
 }
 
 impl<'a> LaxIpSlice<'a> {
-    /// Returns a refernce to the `Ipv4Slice` if `self` is a `IpSlice::Ipv4`.
+    /// Returns a reference to the `Ipv4Slice` if `self` is a `IpSlice::Ipv4`.
     pub fn ipv4(&self) -> Option<&LaxIpv4Slice> {
         use LaxIpSlice::*;
         match self {
@@ -31,7 +31,7 @@ impl<'a> LaxIpSlice<'a> {
         }
     }
 
-    /// Returns a refernce to the `Ipv6Slice` if `self` is a `IpSlice::Ipv6`.
+    /// Returns a reference to the `Ipv6Slice` if `self` is a `IpSlice::Ipv6`.
     pub fn ipv6(&self) -> Option<&LaxIpv6Slice> {
         use LaxIpSlice::*;
         match self {
@@ -95,7 +95,7 @@ impl<'a> LaxIpSlice<'a> {
     }
 
     /// Separates IP headers (include extension headers) & the IP payload from the given
-    /// slice with less strict length checks (usefull for cut off packet or for packets with
+    /// slice with less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`crate::IpSlice::from_ip_slice`]
@@ -103,10 +103,10 @@ impl<'a> LaxIpSlice<'a> {
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `total_len` (for IPv4) or `payload_length` (for IPv6)
-    ///   have not yet been set. This can be usefull when parsing packets which have been
+    ///   have not yet been set. This can be useful when parsing packets which have been
     ///   recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
@@ -158,7 +158,7 @@ impl<'a> LaxIpSlice<'a> {
                 4 => {
                     let ihl = first_byte & 0xf;
 
-                    // check that the ihl has at least the lenght of the base IPv4 header
+                    // check that the ihl has at least the length of the base IPv4 header
                     if ihl < 5 {
                         return Err(E::Content(Ipv4HeaderLengthSmallerThanHeader { ihl }));
                     }
@@ -239,7 +239,7 @@ impl<'a> LaxIpSlice<'a> {
                         };
 
                     // slice extension headers
-                    // decode the authentification header if needed
+                    // decode the authentication header if needed
                     let fragmented = header.is_fragmenting_payload();
                     match header.protocol() {
                         AUTH => {

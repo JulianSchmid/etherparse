@@ -102,7 +102,7 @@ impl<'a> Ipv6Slice<'a> {
     }
 
     /// Seperate an IPv6 header (+ extensions) & the payload from the given slice with
-    /// less strict length checks (usefull for cut off packet or for packets with
+    /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`crate::Ipv4Slice::from_slice`]
@@ -110,10 +110,10 @@ impl<'a> Ipv6Slice<'a> {
     ///
     /// The main usecases for this functions are:
     ///
-    /// * Parsing packets that have been cut off. This is, for example, usefull to
+    /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `payload_length` (in the IPv6 header) has not
-    ///   yet been set. This can be usefull when parsing packets which have been
+    ///   yet been set. This can be useful when parsing packets which have been
     ///  recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///

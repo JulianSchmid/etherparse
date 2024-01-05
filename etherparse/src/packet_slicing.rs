@@ -203,7 +203,7 @@ impl<'a> SlicedPacket<'a> {
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
     /// #               [7,8,9,10,11,12]) //destionation mac
     /// #    .ipv4([192,168,1,1], //source ip
-    /// #          [192,168,1,2], //desitionation ip
+    /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
     /// #         1234); //desitnation port
@@ -310,7 +310,7 @@ impl<'a> SlicedPacket<'a> {
     /// # use etherparse::{SlicedPacket, PacketBuilder, IpSlice, err::LenSource};
     /// # let builder = PacketBuilder::
     /// #    ipv4([192,168,1,1], //source ip
-    /// #         [192,168,1,2], //desitionation ip
+    /// #         [192,168,1,2], //destination ip
     /// #         20)            //time to life
     /// #    .udp(21,    //source port
     /// #         1234); //desitnation port
@@ -526,7 +526,7 @@ impl<'a> CursorSlice<'a> {
 
                 let inner_ether_type = inner.ether_type();
                 self.result.vlan = Some(DoubleVlan(DoubleVlanHeaderSlice {
-                    // SAFETY: Safe as the lenght of the slice was previously verified.
+                    // SAFETY: Safe as the length of the slice was previously verified.
                     slice: unsafe {
                         core::slice::from_raw_parts(
                             outer.slice().as_ptr(),
