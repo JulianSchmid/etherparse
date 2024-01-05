@@ -1,5 +1,6 @@
 pub mod double_vlan;
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub mod io;
 pub mod ip;
 pub mod ip_auth;

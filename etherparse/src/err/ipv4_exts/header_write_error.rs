@@ -2,6 +2,7 @@ use super::ExtsWalkError;
 
 /// Error when writing IPv4 extension headers.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum HeaderWriteError {
     /// IO error encountered while writing.
@@ -11,6 +12,7 @@ pub enum HeaderWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl HeaderWriteError {
     /// Returns a reference to the [`std::io::Error`] if the value is an [`HeaderWriteError::Io`].
     pub fn io(&self) -> Option<&std::io::Error> {
@@ -30,6 +32,7 @@ impl HeaderWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for HeaderWriteError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderWriteError::*;
@@ -41,6 +44,7 @@ impl core::fmt::Display for HeaderWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for HeaderWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderWriteError::*;

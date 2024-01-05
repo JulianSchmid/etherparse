@@ -125,6 +125,7 @@ impl<'a> IpAuthHeader {
 
     /// Read an authentication header from the current reader position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + Sized>(
         reader: &mut T,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderReadError> {
@@ -164,6 +165,7 @@ impl<'a> IpAuthHeader {
     /// Read an authentication header from the current reader position
     /// with a limited reader.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_limited<T: std::io::Read + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
     ) -> Result<IpAuthHeader, err::ip_auth::HeaderLimitedReadError> {
@@ -240,6 +242,7 @@ impl<'a> IpAuthHeader {
 
     /// Writes the given authentication header to the current position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         let spi_be = self.spi.to_be_bytes();
         let sequence_number_be = self.sequence_number.to_be_bytes();

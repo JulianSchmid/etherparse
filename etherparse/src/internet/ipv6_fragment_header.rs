@@ -47,6 +47,7 @@ impl Ipv6FragmentHeader {
 
     /// Read an fragment header from the current reader position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv6FragmentHeader, std::io::Error> {
@@ -73,6 +74,7 @@ impl Ipv6FragmentHeader {
 
     /// Read an fragment header from the current reader position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
     ) -> Result<Ipv6FragmentHeader, crate::err::io::LimitedReadError> {
@@ -104,6 +106,7 @@ impl Ipv6FragmentHeader {
 
     /// Writes a given IPv6 fragment header to the current position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }

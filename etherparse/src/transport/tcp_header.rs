@@ -222,6 +222,7 @@ impl TcpHeader {
 
     /// Read a tcp header from the current position
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + Sized>(
         reader: &mut T,
     ) -> Result<TcpHeader, err::tcp::HeaderReadError> {
@@ -281,6 +282,7 @@ impl TcpHeader {
 
     /// Write the tcp header to a stream (does NOT calculate the checksum).
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         //check that the data offset is within range
         let src_be = self.source_port.to_be_bytes();

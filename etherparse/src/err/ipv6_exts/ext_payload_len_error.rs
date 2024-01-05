@@ -31,6 +31,7 @@ impl core::fmt::Display for ExtPayloadLenError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ExtPayloadLenError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         None

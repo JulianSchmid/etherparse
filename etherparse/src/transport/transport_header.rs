@@ -165,6 +165,7 @@ impl TransportHeader {
 
     /// Write the transport header to the given writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         use crate::TransportHeader::*;
         match self {

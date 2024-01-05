@@ -2,6 +2,7 @@ use crate::err::{ipv4_exts, ipv6_exts, ValueTooBigError};
 
 /// Error while writing packet
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum BuildWriteError {
     /// IO error while writing packet.
@@ -26,6 +27,7 @@ pub enum BuildWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl BuildWriteError {
     /// Returns the [`std::io::Error`] value if the `BuildWriteError` is an `Io`.
     /// Otherwise `None` is returned.
@@ -70,6 +72,7 @@ impl BuildWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for BuildWriteError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use BuildWriteError::*;
@@ -84,6 +87,7 @@ impl core::fmt::Display for BuildWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for BuildWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use BuildWriteError::*;

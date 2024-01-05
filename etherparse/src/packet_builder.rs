@@ -94,6 +94,7 @@ use std::{io, marker};
 ///     * [`PacketBuilderStep<Icmpv6Header>::write`]
 ///     * [`PacketBuilderStep<Icmpv6Header>::size`]
 ///
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub struct PacketBuilder {}
 
 impl PacketBuilder {
@@ -317,11 +318,13 @@ struct PacketImpl {
 }
 
 ///An unfinished packet that is build with the packet builder
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub struct PacketBuilderStep<LastStep> {
     state: PacketImpl,
     _marker: marker::PhantomData<LastStep>,
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Ethernet2Header> {
     /// Add an IPv4 header
     ///
@@ -630,6 +633,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<VlanHeader> {
     ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
@@ -775,6 +779,7 @@ impl PacketBuilderStep<VlanHeader> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<IpHeaders> {
     /// Adds an ICMPv4 header of the given [`Icmpv4Type`] to the packet.
     ///
@@ -1332,6 +1337,7 @@ impl PacketBuilderStep<IpHeaders> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Icmpv4Header> {
     /// Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(
@@ -1348,6 +1354,7 @@ impl PacketBuilderStep<Icmpv4Header> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Icmpv6Header> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(
@@ -1364,6 +1371,7 @@ impl PacketBuilderStep<Icmpv6Header> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
     pub fn write<T: io::Write + Sized>(
@@ -1380,6 +1388,7 @@ impl PacketBuilderStep<UdpHeader> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<TcpHeader> {
     ///Set ns flag (ECN-nonce - concealment protection; experimental: see RFC 3540)
     pub fn ns(mut self) -> PacketBuilderStep<TcpHeader> {

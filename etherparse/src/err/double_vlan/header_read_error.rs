@@ -4,6 +4,7 @@ use super::HeaderError;
 ///
 /// Requires crate feature `std`.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum HeaderReadError {
     /// IO error was encountered while reading header.
@@ -14,6 +15,7 @@ pub enum HeaderReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl HeaderReadError {
     /// Returns the `std::io::Error` value if the `HeaderReadError` is `Io`.
     /// Otherwise `None` is returned.
@@ -39,6 +41,7 @@ impl HeaderReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
@@ -50,6 +53,7 @@ impl core::fmt::Display for HeaderReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for HeaderReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeaderReadError::*;

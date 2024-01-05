@@ -290,6 +290,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Return the ipv4 source address as an std::net::Ipv4Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn source_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.source())
@@ -306,6 +307,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Return the ipv4 destination address as an std::net::Ipv4Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn destination_addr(&self) -> Ipv4Addr {
         Ipv4Addr::from(self.destination())

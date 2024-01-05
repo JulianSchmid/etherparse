@@ -374,6 +374,7 @@ impl Ipv6Extensions {
     /// the hop by hop header is required to be located directly after the IPv6 header according
     /// to RFC 8200.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         start_ip_number: IpNumber,
@@ -496,6 +497,7 @@ impl Ipv6Extensions {
     /// the hop by hop header is required to be located directly after the IPv6 header according
     /// to RFC 8200.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_limited<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut crate::io::LimitedReader<T>,
         start_ip_number: IpNumber,
@@ -612,6 +614,7 @@ impl Ipv6Extensions {
     /// the case an [`err::ipv6_exts::HeaderWriteError::Content`] error is
     /// returned.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(
         &self,
         writer: &mut T,

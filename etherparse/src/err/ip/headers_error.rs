@@ -25,6 +25,7 @@ impl core::fmt::Display for HeadersError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for HeadersError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeadersError::*;

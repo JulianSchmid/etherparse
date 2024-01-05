@@ -19,6 +19,7 @@ impl VlanHeader {
 
     /// Write the IEEE 802.1Q VLAN single or double tagging header
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         use VlanHeader::*;

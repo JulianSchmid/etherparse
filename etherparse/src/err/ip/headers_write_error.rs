@@ -2,6 +2,7 @@ use crate::err::{ipv4_exts, ipv6_exts};
 
 /// Error when writing IPv4 extension headers.
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
 pub enum HeadersWriteError {
     /// IO error encountered while writing.
@@ -15,6 +16,7 @@ pub enum HeadersWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl HeadersWriteError {
     /// Returns a reference to the [`std::io::Error`] if the value is an `Io`.
     pub fn io(&self) -> Option<&std::io::Error> {
@@ -44,6 +46,7 @@ impl HeadersWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl core::fmt::Display for HeadersWriteError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeadersWriteError::*;
@@ -56,6 +59,7 @@ impl core::fmt::Display for HeadersWriteError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for HeadersWriteError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         use HeadersWriteError::*;

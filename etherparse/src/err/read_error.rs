@@ -4,6 +4,7 @@ use super::*;
 /// as a "catch all" type for errors caused by `from_slice` or `read` functions
 /// as all errors from these functions can be converted into this type.
 #[derive(Debug)]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub enum ReadError {
     /// IO error was encountered while reading header or expected packet contents.
     Io(std::io::Error),
@@ -34,6 +35,7 @@ pub enum ReadError {
     Tcp(tcp::HeaderError),
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl ReadError {
     pub fn io(&self) -> Option<&std::io::Error> {
         match self {
@@ -109,6 +111,7 @@ impl core::fmt::Display for ReadError {
 }
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
@@ -126,13 +129,14 @@ impl std::error::Error for ReadError {
 }
 
 // io & len error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<std::io::Error> for ReadError {
     fn from(value: std::io::Error) -> Self {
         ReadError::Io(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<LenError> for ReadError {
     fn from(value: LenError) -> Self {
         ReadError::Len(value)
@@ -140,13 +144,14 @@ impl From<LenError> for ReadError {
 }
 
 // double vlan error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<double_vlan::HeaderError> for ReadError {
     fn from(value: double_vlan::HeaderError) -> Self {
         ReadError::DoubleVlan(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<double_vlan::HeaderReadError> for ReadError {
     fn from(value: double_vlan::HeaderReadError) -> Self {
         use double_vlan::HeaderReadError::*;
@@ -157,6 +162,7 @@ impl From<double_vlan::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<double_vlan::HeaderSliceError> for ReadError {
     fn from(value: double_vlan::HeaderSliceError) -> Self {
         use double_vlan::HeaderSliceError::*;
@@ -168,13 +174,14 @@ impl From<double_vlan::HeaderSliceError> for ReadError {
 }
 
 // ip error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip::HeadersError> for ReadError {
     fn from(value: ip::HeadersError) -> Self {
         ReadError::Ip(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip::HeaderReadError> for ReadError {
     fn from(value: ip::HeaderReadError) -> Self {
         use ip::HeaderReadError::*;
@@ -186,6 +193,7 @@ impl From<ip::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip::HeadersSliceError> for ReadError {
     fn from(value: ip::HeadersSliceError) -> Self {
         use ip::HeadersSliceError::*;
@@ -196,6 +204,7 @@ impl From<ip::HeadersSliceError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip::SliceError> for ReadError {
     fn from(value: ip::SliceError) -> Self {
         use ip::SliceError::*;
@@ -207,13 +216,14 @@ impl From<ip::SliceError> for ReadError {
 }
 
 // ip auth error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip_auth::HeaderError> for ReadError {
     fn from(value: ip_auth::HeaderError) -> Self {
         ReadError::IpAuth(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip_auth::HeaderReadError> for ReadError {
     fn from(value: ip_auth::HeaderReadError) -> Self {
         use ip_auth::HeaderReadError::*;
@@ -224,6 +234,7 @@ impl From<ip_auth::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip_auth::HeaderSliceError> for ReadError {
     fn from(value: ip_auth::HeaderSliceError) -> Self {
         use ip_auth::HeaderSliceError::*;
@@ -235,13 +246,14 @@ impl From<ip_auth::HeaderSliceError> for ReadError {
 }
 
 // ipv4 error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv4::HeaderError> for ReadError {
     fn from(value: ipv4::HeaderError) -> Self {
         ReadError::Ipv4(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv4::HeaderReadError> for ReadError {
     fn from(value: ipv4::HeaderReadError) -> Self {
         use ipv4::HeaderReadError::*;
@@ -252,6 +264,7 @@ impl From<ipv4::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv4::HeaderSliceError> for ReadError {
     fn from(value: ipv4::HeaderSliceError) -> Self {
         use ipv4::HeaderSliceError::*;
@@ -262,6 +275,7 @@ impl From<ipv4::HeaderSliceError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv4::SliceError> for ReadError {
     fn from(value: ipv4::SliceError) -> Self {
         use ipv4::SliceError::*;
@@ -274,13 +288,14 @@ impl From<ipv4::SliceError> for ReadError {
 }
 
 // ipv6 error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6::HeaderError> for ReadError {
     fn from(value: ipv6::HeaderError) -> Self {
         ReadError::Ipv6(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6::HeaderReadError> for ReadError {
     fn from(value: ipv6::HeaderReadError) -> Self {
         use ipv6::HeaderReadError::*;
@@ -291,6 +306,7 @@ impl From<ipv6::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6::HeaderSliceError> for ReadError {
     fn from(value: ipv6::HeaderSliceError) -> Self {
         use ipv6::HeaderSliceError::*;
@@ -301,6 +317,7 @@ impl From<ipv6::HeaderSliceError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6::SliceError> for ReadError {
     fn from(value: ipv6::SliceError) -> Self {
         use ipv6::SliceError::*;
@@ -313,13 +330,14 @@ impl From<ipv6::SliceError> for ReadError {
 }
 
 // ipv6 exts error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6_exts::HeaderError> for ReadError {
     fn from(value: ipv6_exts::HeaderError) -> Self {
         ReadError::Ipv6Exts(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6_exts::HeaderReadError> for ReadError {
     fn from(value: ipv6_exts::HeaderReadError) -> Self {
         use ipv6_exts::HeaderReadError::*;
@@ -330,6 +348,7 @@ impl From<ipv6_exts::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ipv6_exts::HeaderSliceError> for ReadError {
     fn from(value: ipv6_exts::HeaderSliceError) -> Self {
         use ipv6_exts::HeaderSliceError::*;
@@ -341,7 +360,7 @@ impl From<ipv6_exts::HeaderSliceError> for ReadError {
 }
 
 // packet error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<packet::EthSliceError> for ReadError {
     fn from(value: packet::EthSliceError) -> Self {
         use packet::EthSliceError::*;
@@ -356,6 +375,7 @@ impl From<packet::EthSliceError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<packet::IpSliceError> for ReadError {
     fn from(value: packet::IpSliceError) -> Self {
         use packet::IpSliceError::*;
@@ -368,13 +388,14 @@ impl From<packet::IpSliceError> for ReadError {
 }
 
 // tcp error conversions
-
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<tcp::HeaderError> for ReadError {
     fn from(value: tcp::HeaderError) -> Self {
         ReadError::Tcp(value)
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<tcp::HeaderReadError> for ReadError {
     fn from(value: tcp::HeaderReadError) -> Self {
         use tcp::HeaderReadError::*;
@@ -385,6 +406,7 @@ impl From<tcp::HeaderReadError> for ReadError {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<tcp::HeaderSliceError> for ReadError {
     fn from(value: tcp::HeaderSliceError) -> Self {
         use tcp::HeaderSliceError::*;

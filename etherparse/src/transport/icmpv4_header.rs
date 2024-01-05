@@ -64,6 +64,7 @@ impl Icmpv4Header {
 
     /// Reads an ICMPv4 header from the given reader.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + Sized>(reader: &mut T) -> Result<Icmpv4Header, std::io::Error> {
         let mut bytes = [0u8; Icmpv4Header::MAX_LEN];
 
@@ -91,6 +92,7 @@ impl Icmpv4Header {
 
     /// Write the ICMPv4 header to the given writer.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }

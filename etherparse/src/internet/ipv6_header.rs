@@ -66,6 +66,7 @@ impl Ipv6Header {
 
     ///Reads an IPv6 header from the current position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
     ) -> Result<Ipv6Header, err::ipv6::HeaderReadError> {
@@ -82,6 +83,7 @@ impl Ipv6Header {
 
     ///Reads an IPv6 header assuming the version & flow_label field have already been read.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn read_without_version<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         version_rest: u8,
@@ -218,6 +220,7 @@ impl Ipv6Header {
 
     ///Skips the ipv6 header extension and returns the next ip protocol number
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn skip_header_extension<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         next_header: IpNumber,
@@ -262,6 +265,7 @@ impl Ipv6Header {
 
     ///Skips all ipv6 header extensions and returns the next ip protocol number
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn skip_all_header_extensions<T: std::io::Read + std::io::Seek + Sized>(
         reader: &mut T,
         next_header: IpNumber,
@@ -279,12 +283,14 @@ impl Ipv6Header {
 
     ///Writes a given IPv6 header to the current position.
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write_all(&self.to_bytes())
     }
 
     /// Return the ipv6 source address as an std::net::Ipv6Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn source_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.source)
@@ -292,6 +298,7 @@ impl Ipv6Header {
 
     /// Return the ipv6 destination address as an std::net::Ipv6Addr
     #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     #[inline]
     pub fn destination_addr(&self) -> std::net::Ipv6Addr {
         std::net::Ipv6Addr::from(self.destination)
