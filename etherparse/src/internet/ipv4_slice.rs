@@ -21,7 +21,7 @@ impl<'a> Ipv4Slice<'a> {
     /// should be present.
     ///
     /// If you want to ignore these kind of length errors based on the length
-    /// fields in the IP headers use [`LaxIpv4Slice::from_slice`] instead.
+    /// fields in the IP headers use [`crate::LaxIpv4Slice::from_slice`] instead.
     pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
         use crate::ip_number::AUTH;
 

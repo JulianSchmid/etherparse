@@ -56,10 +56,10 @@ impl<'a> LaxIpv4Slice<'a> {
     ///
     /// Additionally you can check if more data was expected based on the
     /// `total_len` but the given slice was too small by checking if `incomplete`
-    /// is set to `true` in the returned [`LaxIpPayload`].
+    /// is set to `true` in the returned [`LaxIpPayloadSlice`].
     ///
     /// You can check if the slice length was used as a substitude by checking
-    /// if the `len_source` value in the returned [`LaxIpPayload`] is set to
+    /// if the `len_source` value in the returned [`LaxIpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
 
