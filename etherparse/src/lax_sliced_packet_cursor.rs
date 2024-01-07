@@ -3,11 +3,6 @@ use crate::{
     *,
 };
 
-pub(crate) enum ExpectedIpProto {
-    Ipv4,
-    Ipv6,
-}
-
 /// Helper class for laxly slicing packets.
 pub(crate) struct LaxSlicedPacketCursor<'a> {
     pub offset: usize,
@@ -45,8 +40,8 @@ impl<'a> LaxSlicedPacketCursor<'a> {
 
         // continue parsing (if required)
         match payload.ether_type {
-            IPV4 => Ok(cursor.slice_ip(payload.payload, Some(ExpectedIpProto::Ipv4))),
-            IPV6 => Ok(cursor.slice_ip(payload.payload, Some(ExpectedIpProto::Ipv6))),
+            IPV4 => Ok(cursor.slice_ip(payload.payload)),
+            IPV6 => Ok(cursor.slice_ip(payload.payload)),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 Ok(cursor.slice_vlan(payload.payload))
             }
@@ -70,8 +65,8 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         };
         use ether_type::*;
         match ether_type {
-            IPV4 => cursor.slice_ip(slice, Some(ExpectedIpProto::Ipv4)),
-            IPV6 => cursor.slice_ip(slice, Some(ExpectedIpProto::Ipv6)),
+            IPV4 => cursor.slice_ip(slice),
+            IPV6 => cursor.slice_ip(slice),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 cursor.slice_vlan(slice)
             }
@@ -164,14 +159,14 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 }));
 
                 match inner_ether_type {
-                    IPV4 => self.slice_ip(inner.payload_slice(), Some(ExpectedIpProto::Ipv4)),
-                    IPV6 => self.slice_ip(inner.payload_slice(), Some(ExpectedIpProto::Ipv6)),
+                    IPV4 => self.slice_ip(inner.payload_slice()),
+                    IPV6 => self.slice_ip(inner.payload_slice()),
                     _ => self.result,
                 }
             }
             value => match value {
-                IPV4 => self.slice_ip(outer.payload_slice(), Some(ExpectedIpProto::Ipv4)),
-                IPV6 => self.slice_ip(outer.payload_slice(), Some(ExpectedIpProto::Ipv6)),
+                IPV4 => self.slice_ip(outer.payload_slice()),
+                IPV6 => self.slice_ip(outer.payload_slice()),
                 _ => self.result,
             },
         }

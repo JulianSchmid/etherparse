@@ -381,24 +381,6 @@ mod test {
         }
     }
 
-    fn combine_v4(
-        v4: &Ipv4Header,
-        ext: &crate::Ipv4Extensions,
-        payload: &[u8],
-    ) -> crate::IpHeaders {
-        use crate::ip_number::{AUTH, UDP};
-        crate::IpHeaders::Version4(
-            {
-                let mut v4 = v4.clone();
-                v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
-                v4.total_len = (v4.header_len() + ext.header_len() + payload.len()) as u16;
-                v4.header_checksum = v4.calc_header_checksum();
-                v4
-            },
-            ext.clone(),
-        )
-    }
-
     #[test]
     fn is_payload_fragmented() {
         use crate::ip_number::UDP;

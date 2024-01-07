@@ -1752,7 +1752,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Icmpv4(ref value)) => value.header_len(),
         Some(Icmpv6(ref value)) => value.header_len(),
         Some(Udp(_)) => UdpHeader::LEN,
-        Some(Tcp(ref value)) => value.header_len() as usize,
+        Some(Tcp(ref value)) => value.header_len(),
         None => 0,
     } + payload_size
 }

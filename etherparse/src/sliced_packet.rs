@@ -999,7 +999,7 @@ mod test {
                 match result.link.as_ref() {
                     Some(s) => match s {
                         LinkSlice::Ethernet2(e) => Some(e.to_header()),
-                        LinkSlice::EtherPayload(e) => None,
+                        LinkSlice::EtherPayload(_) => None,
                     },
                     None => None,
                 }
