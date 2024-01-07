@@ -388,11 +388,8 @@ impl<'a> LaxIpSlice<'a> {
                         Ipv6ExtensionsSlice::from_slice_lax(header.next_header(), header_payload);
 
                     // add len offset
-                    match ext_stop_err.as_mut() {
-                        Some((S::Len(l), _)) => {
-                            l.layer_start_offset += header.header_len();
-                        }
-                        _ => {}
+                    if let Some((S::Len(l), _)) = ext_stop_err.as_mut() {
+                        l.layer_start_offset += header.header_len();
                     }
                     let fragmented = exts.is_fragmenting_payload();
                     Ok((

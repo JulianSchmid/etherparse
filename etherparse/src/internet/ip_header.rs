@@ -804,17 +804,19 @@ impl IpHeaders {
 
         // restrict slice by the length specified in the header
         let payload_len: usize = header.payload_length.into();
-        let (header_payload, len_source) =
-            if (payload_len == 0 && header_rest.len() > 0) || payload_len > header_rest.len() {
-                (header_rest, LenSource::Slice)
-            } else {
-                unsafe {
-                    (
-                        core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
-                        LenSource::Ipv6HeaderPayloadLen,
-                    )
-                }
-            };
+        let (header_payload, len_source) = if (payload_len == 0
+            && (false == header_rest.is_empty()))
+            || payload_len > header_rest.len()
+        {
+            (header_rest, LenSource::Slice)
+        } else {
+            unsafe {
+                (
+                    core::slice::from_raw_parts(header_rest.as_ptr(), payload_len),
+                    LenSource::Ipv6HeaderPayloadLen,
+                )
+            }
+        };
 
         // read ipv6 extensions headers
         let (exts, next_header, exts_rest) =

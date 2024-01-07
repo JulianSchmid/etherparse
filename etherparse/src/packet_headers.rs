@@ -178,7 +178,7 @@ impl<'a> PacketHeaders<'a> {
                 rest = outer_rest;
                 ether_type = outer.ether_type;
                 result.payload = PayloadSlice::Ether(EtherPayloadSlice {
-                    ether_type: ether_type,
+                    ether_type,
                     payload: rest,
                 });
 
@@ -193,7 +193,7 @@ impl<'a> PacketHeaders<'a> {
                         rest = inner_rest;
                         ether_type = inner.ether_type;
                         result.payload = PayloadSlice::Ether(EtherPayloadSlice {
-                            ether_type: ether_type,
+                            ether_type,
                             payload: rest,
                         });
 

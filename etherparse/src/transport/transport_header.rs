@@ -107,7 +107,7 @@ impl TransportHeader {
         use crate::TransportHeader::*;
         match self {
             Udp(_) => UdpHeader::LEN,
-            Tcp(value) => usize::from(value.header_len()),
+            Tcp(value) => value.header_len(),
             Icmpv4(value) => value.header_len(),
             Icmpv6(value) => value.header_len(),
         }

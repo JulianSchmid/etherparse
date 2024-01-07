@@ -77,10 +77,7 @@ impl<'a> TcpSlice<'a> {
             }))
         } else {
             //done
-            Ok(TcpSlice::<'a> {
-                header_len: header_len,
-                slice,
-            })
+            Ok(TcpSlice::<'a> { header_len, slice })
         }
     }
 
