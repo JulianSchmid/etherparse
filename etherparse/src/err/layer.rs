@@ -3,6 +3,8 @@
 pub enum Layer {
     /// Error occurred in the ethernet 2 header.
     Ethernet2Header,
+    /// Payload identified by an ether type number (e.g. after an ethernet 2 header).
+    EtherPayload,
     /// Error occurred in the vlan header.
     VlanHeader,
     /// Error occurred when decoding an IP header (v4 or v6).
@@ -17,10 +19,16 @@ pub enum Layer {
     Ipv6Header,
     /// Error occurred verifying the payload length of an IPv6 packet.
     Ipv6Packet,
-    /// Error occurred while decoding an IPv6 fragment header.
-    Ipv6FragHeader,
     /// Error occurred while decoding a generic IPv6 extension header.
     Ipv6ExtHeader,
+    /// Error occurred while decoding "IPv6 Hop-by-Hop Option" extension header.
+    Ipv6HopByHopHeader,
+    /// Error occurred while decoding "IPv6 Destination Options" extension header.
+    Ipv6DestOptionsHeader,
+    /// Error occurred while decoding "IPv6 Routing" extension header.
+    Ipv6RouteHeader,
+    /// Error occurred while decoding an IPv6 fragment header.
+    Ipv6FragHeader,
     /// Error occurred while decoding an UDP header.
     UdpHeader,
     /// Error occurred verifying the length of the UDP payload.
@@ -43,6 +51,7 @@ impl Layer {
         use Layer::*;
         match self {
             Ethernet2Header => "Ethernet 2 Header Error",
+            EtherPayload => "Payload with Ether Type Error",
             VlanHeader => "VLAN Header Error",
             IpHeader => "IP Header Error",
             Ipv4Header => "IPv4 Header Error",
@@ -50,8 +59,11 @@ impl Layer {
             IpAuthHeader => "IP Authentication Header Error",
             Ipv6Header => "IPv6 Header Error",
             Ipv6Packet => "IPv6 Packet Error",
-            Ipv6FragHeader => "IPv6 Fragment Header Error",
             Ipv6ExtHeader => "IPv6 Extension Header Error",
+            Ipv6HopByHopHeader => "IPv6 Hop-by-Hop Option Header Error",
+            Ipv6DestOptionsHeader => "IPv6 Destination Options Header Error",
+            Ipv6RouteHeader => "IPv6 Routing Header Error",
+            Ipv6FragHeader => "IPv6 Fragment Header Error",
             UdpHeader => "UDP Header Error",
             UdpPayload => "UDP Payload Error",
             TcpHeader => "TCP Header Error",
@@ -68,6 +80,7 @@ impl core::fmt::Display for Layer {
         use Layer::*;
         match self {
             Ethernet2Header => write!(f, "Ethernet 2 header"),
+            EtherPayload => write!(f, "Ether type payload"),
             VlanHeader => write!(f, "VLAN header"),
             IpHeader => write!(f, "IP header"),
             Ipv4Header => write!(f, "IPv4 header"),
@@ -75,8 +88,11 @@ impl core::fmt::Display for Layer {
             IpAuthHeader => write!(f, "IP Authentication header"),
             Ipv6Header => write!(f, "IPv6 header"),
             Ipv6Packet => write!(f, "IPv6 packet"),
-            Ipv6FragHeader => write!(f, "IPv6 fragment header"),
             Ipv6ExtHeader => write!(f, "IPv6 extension header"),
+            Ipv6HopByHopHeader => write!(f, "IPv6 hop-by-hop option header"),
+            Ipv6DestOptionsHeader => write!(f, "IPv6 destination options header"),
+            Ipv6RouteHeader => write!(f, "IPv6 routing header"),
+            Ipv6FragHeader => write!(f, "IPv6 fragment header"),
             UdpHeader => write!(f, "UDP header"),
             UdpPayload => write!(f, "UDP payload"),
             TcpHeader => write!(f, "TCP header"),
@@ -133,8 +149,11 @@ mod test {
             (IpAuthHeader, "IP Authentication Header Error"),
             (Ipv6Header, "IPv6 Header Error"),
             (Ipv6Packet, "IPv6 Packet Error"),
-            (Ipv6FragHeader, "IPv6 Fragment Header Error"),
             (Ipv6ExtHeader, "IPv6 Extension Header Error"),
+            (Ipv6HopByHopHeader, "IPv6 Hop-by-Hop Option Header Error"),
+            (Ipv6DestOptionsHeader, "IPv6 Destination Options Header Error"),
+            (Ipv6RouteHeader, "IPv6 Routing Header Error"),
+            (Ipv6FragHeader, "IPv6 Fragment Header Error"),
             (UdpHeader, "UDP Header Error"),
             (UdpPayload, "UDP Payload Error"),
             (TcpHeader, "TCP Header Error"),
@@ -159,8 +178,11 @@ mod test {
             (IpAuthHeader, "IP Authentication header"),
             (Ipv6Header, "IPv6 header"),
             (Ipv6Packet, "IPv6 packet"),
-            (Ipv6FragHeader, "IPv6 fragment header"),
             (Ipv6ExtHeader, "IPv6 extension header"),
+            (Ipv6HopByHopHeader, "IPv6 hop-by-hop option header"),
+            (Ipv6DestOptionsHeader, "IPv6 destination options header"),
+            (Ipv6RouteHeader, "IPv6 routing header"),
+            (Ipv6FragHeader, "IPv6 fragment header"),
             (UdpHeader, "UDP header"),
             (UdpPayload, "UDP payload"),
             (TcpHeader, "TCP header"),

@@ -135,7 +135,7 @@ impl<'a> LaxIpSlice<'a> {
     ///
     /// * Bigger then the given slice (payload cannot fully be seperated).
     /// * The value `0`.
-    pub fn from_ip_slice(slice: &[u8]) -> Result<(LaxIpSlice, Option<err::ipv6_exts::HeaderSliceError>), err::ip::LaxHeaderSliceError> {
+    pub fn from_ip_slice(slice: &[u8]) -> Result<(LaxIpSlice, Option<(err::ipv6_exts::HeaderSliceError, err::Layer)>), err::ip::LaxHeaderSliceError> {
         use crate::ip_number::AUTH;
         use err::ip::HeaderError::*;
         use err::ip::LaxHeaderSliceError as E;
@@ -285,8 +285,14 @@ impl<'a> LaxIpSlice<'a> {
                                             },
                                         }),
                                         match err {
-                                            A::Len(l) => Some(S::Len(l.add_offset(header.slice().len()))),
-                                            A::Content(l) => Some(S::Content(SH::IpAuth(l))),
+                                            A::Len(l) => Some((
+                                                S::Len(l.add_offset(header.slice().len())),
+                                                err::Layer::IpAuthHeader
+                                            )),
+                                            A::Content(l) => Some((
+                                                S::Content(SH::IpAuth(l)),
+                                                err::Layer::IpAuthHeader
+                                            )),
                                         }
                                     ))
                                 },
@@ -375,7 +381,7 @@ impl<'a> LaxIpSlice<'a> {
                     
                     // add len offset
                     match ext_stop_err.as_mut() {
-                        Some(S::Len(l)) => {
+                        Some((S::Len(l), _)) => {
                             l.layer_start_offset += header.header_len();
                         },
                         _ => {},
@@ -844,13 +850,16 @@ mod test {
                     let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer[..bad_len]).unwrap();
                     assert_eq!(
                         actual_stop_err,
-                        Some(S::Len(LenError{
-                            required_len: ipv4_exts.header_len(),
-                            len: bad_len - ipv4_header.header_len(),
-                            len_source: LenSource::Slice,
-                            layer: Layer::IpAuthHeader,
-                            layer_start_offset: ipv4_header.header_len(),
-                        }))
+                        Some((
+                            S::Len(LenError{
+                                required_len: ipv4_exts.header_len(),
+                                len: bad_len - ipv4_header.header_len(),
+                                len_source: LenSource::Slice,
+                                layer: Layer::IpAuthHeader,
+                                layer_start_offset: ipv4_header.header_len(),
+                            }),
+                            Layer::IpAuthHeader
+                        ))
                     );
                     assert_eq!(actual.ipv4().unwrap().clone().header().to_header(), ipv4_header);
                     assert_eq!(
@@ -874,7 +883,10 @@ mod test {
 
                     assert_eq!(
                         actual_stop_err,
-                        Some(S::Content(ipv6_exts::HeaderError::IpAuth(ZeroPayloadLen)))
+                        Some((
+                            S::Content(ipv6_exts::HeaderError::IpAuth(ZeroPayloadLen)),
+                            Layer::IpAuthHeader
+                        ))
                     );
                     assert_eq!(actual.ipv4().unwrap().clone().header().to_header(), ipv4_header);
                     assert_eq!(
@@ -1031,13 +1043,16 @@ mod test {
                     assert_eq!(actual.header.to_header(), ipv6_header);
                     assert_eq!(
                         actual_stop_err,
-                        Some(S::Len(LenError{
-                            required_len: 8,
-                            len: bad_len - ipv6_header.header_len(),
-                            len_source: LenSource::Slice,
-                            layer: Layer::Ipv6ExtHeader,
-                            layer_start_offset: ipv6_header.header_len(),
-                        }))
+                        Some((
+                            S::Len(LenError{
+                                required_len: 8,
+                                len: bad_len - ipv6_header.header_len(),
+                                len_source: LenSource::Slice,
+                                layer: Layer::Ipv6ExtHeader,
+                                layer_start_offset: ipv6_header.header_len(),
+                            }),
+                            Layer::Ipv6HopByHopHeader
+                        ))
                     );
                     assert_eq!(
                         actual.payload,
@@ -1072,7 +1087,10 @@ mod test {
                     assert_eq!(actual.header.to_header(), ipv6_header);
                     assert_eq!(
                         actual_stop_err,
-                        Some(S::Content(ipv6_exts::HeaderError::IpAuth(ZeroPayloadLen)))
+                        Some((
+                            S::Content(ipv6_exts::HeaderError::IpAuth(ZeroPayloadLen)),
+                            Layer::IpAuthHeader,
+                        ))
                     );
                 }
             }
