@@ -1,13 +1,13 @@
-use crate::{*, err::LenSource};
+use crate::{err::LenSource, *};
 
 /// Laxly identified payload of an IP packet (potentially incomplete).
-/// 
+///
 /// To check if the payload is complete check the `incomplete` field.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaxIpPayloadSlice<'a> {
     /// True if the length field in the IP header indicates more data
     /// should be present but it was not (aka the packet data is cut off).
-    /// 
+    ///
     /// Note that this different from fragmentation. If a packet is
     /// fragmented the length field in the individual IP headers is
     /// still correctly set.

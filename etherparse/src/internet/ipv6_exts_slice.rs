@@ -176,7 +176,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                                     err::Layer::Ipv6DestOptionsHeader
                                 } else {
                                     err::Layer::Ipv6RouteHeader
-                                }
+                                },
                             ));
                             break;
                         }
@@ -197,7 +197,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                         Err(err) => {
                             error = Some((
                                 Len(err.add_offset(start_slice.len() - rest.len())),
-                                err::Layer::Ipv6FragHeader
+                                err::Layer::Ipv6FragHeader,
                             ));
                             break;
                         }
@@ -223,10 +223,12 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                         Err(err) => {
                             error = Some((
                                 match err {
-                                    I::Len(err) => Len(err.add_offset(start_slice.len() - rest.len())),
+                                    I::Len(err) => {
+                                        Len(err.add_offset(start_slice.len() - rest.len()))
+                                    }
                                     I::Content(err) => Content(IpAuth(err)),
                                 },
-                                err::Layer::IpAuthHeader
+                                err::Layer::IpAuthHeader,
                             ));
                             break;
                         }

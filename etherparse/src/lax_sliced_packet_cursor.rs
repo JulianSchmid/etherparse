@@ -15,8 +15,9 @@ pub(crate) struct LaxSlicedPacketCursor<'a> {
 }
 
 impl<'a> LaxSlicedPacketCursor<'a> {
-
-    pub fn parse_from_ethernet2(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::packet::EthSliceError> {
+    pub fn parse_from_ethernet2(
+        slice: &'a [u8],
+    ) -> Result<LaxSlicedPacket<'a>, err::packet::EthSliceError> {
         use err::packet::EthSliceError::*;
         use ether_type::*;
         use LinkSlice::*;
@@ -53,10 +54,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         }
     }
 
-    pub fn parse_from_ether_type(
-        ether_type: EtherType,
-        slice: &'a [u8],
-    ) -> LaxSlicedPacket<'a> {
+    pub fn parse_from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
         let cursor = LaxSlicedPacketCursor {
             offset: 0,
             result: LaxSlicedPacket {
@@ -77,11 +75,13 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 cursor.slice_vlan(slice)
             }
-            _ => cursor.result
+            _ => cursor.result,
         }
     }
 
-    pub fn parse_from_ip(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::ip::LaxHeaderSliceError> {
+    pub fn parse_from_ip(
+        slice: &'a [u8],
+    ) -> Result<LaxSlicedPacket<'a>, err::ip::LaxHeaderSliceError> {
         let (ip, stop_err) = LaxIpSlice::from_ip_slice(slice)?;
         let is_ip_v4 = match &ip {
             LaxIpSlice::Ipv4(_) => true,
@@ -97,26 +97,29 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 ip: Some(ip),
                 transport: None,
                 stop_err: stop_err.map(|(stop_err, stop_layer)| {
+                    use err::ipv6_exts::HeaderError as E;
                     use err::ipv6_exts::HeaderSliceError as I;
                     use err::packet::SliceError as O;
-                    use err::ipv6_exts::HeaderError as E;
                     (
                         match stop_err {
                             I::Len(l) => O::Len(l.add_offset(offset)),
                             I::Content(c) => match c {
                                 E::HopByHopNotAtStart => O::Ipv6Exts(E::HopByHopNotAtStart),
-                                E::IpAuth(auth) => if is_ip_v4 {
-                                    O::Ipv4Exts(auth)
-                                } else {
-                                    O::Ipv6Exts(E::IpAuth(auth))
-                                },
+                                E::IpAuth(auth) => {
+                                    if is_ip_v4 {
+                                        O::Ipv4Exts(auth)
+                                    } else {
+                                        O::Ipv6Exts(E::IpAuth(auth))
+                                    }
+                                }
                             },
                         },
-                        stop_layer
+                        stop_layer,
                     )
                 }),
             },
-        }.slice_transport(payload))
+        }
+        .slice_transport(payload))
     }
 
     pub fn slice_vlan(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
@@ -174,8 +177,11 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_ip(mut self, slice: &'a [u8], expected_type: Option<ExpectedIpProto>) -> LaxSlicedPacket<'a> {
-
+    pub fn slice_ip(
+        mut self,
+        slice: &'a [u8],
+        expected_type: Option<ExpectedIpProto>,
+    ) -> LaxSlicedPacket<'a> {
         // ip slice
         let ip = match LaxIpSlice::from_ip_slice(slice) {
             Ok(ip) => ip,
@@ -186,19 +192,19 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     I::Len(mut l) => {
                         l.layer_start_offset += self.offset;
                         (O::Len(l), Layer::IpHeader)
-                    },
+                    }
                     I::Content(c) => (O::Ip(c), Layer::IpHeader),
                 });
                 return self.result;
-            },
+            }
         };
         self.result.ip = Some(ip.0.clone());
-        
+
         // stop in case there was a stop error in the ip extension headers
         if let Some((stop_err, stop_layer)) = ip.1 {
+            use err::ipv6_exts::HeaderError as E;
             use err::ipv6_exts::HeaderSliceError as I;
             use err::packet::SliceError as O;
-            use err::ipv6_exts::HeaderError as E;
             self.result.stop_err = Some((
                 match stop_err {
                     I::Len(l) => O::Len(l.add_offset(self.offset)),
@@ -210,7 +216,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                         },
                     },
                 },
-                stop_layer
+                stop_layer,
             ));
         }
 
@@ -228,68 +234,60 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             return self.result;
         }
         match slice.ip_number {
-            ip_number::ICMP => {
-                match Icmpv4Slice::from_slice(slice.payload) {
-                    Ok(icmp) => {
-                        self.offset += icmp.slice().len();
-                        self.result.transport = Some(TransportSlice::Icmpv4(icmp));
-                    },
-                    Err(mut err) => {
-                        err.layer_start_offset += self.offset;
-                        err.len_source = slice.len_source;
-                        self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
-                    },
+            ip_number::ICMP => match Icmpv4Slice::from_slice(slice.payload) {
+                Ok(icmp) => {
+                    self.offset += icmp.slice().len();
+                    self.result.transport = Some(TransportSlice::Icmpv4(icmp));
+                }
+                Err(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    err.len_source = slice.len_source;
+                    self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
                 }
             },
-            ip_number::UDP => {
-                match UdpSlice::from_slice(slice.payload) {
-                    Ok(udp) => {
-                        self.offset += udp.slice().len();
-                        self.result.transport = Some(TransportSlice::Udp(udp));
-                    }
-                    Err(mut err) => {
-                        err.layer_start_offset += self.offset;
-                        err.len_source = slice.len_source;
-                        self.result.stop_err = Some((O::Len(err), Layer::UdpHeader));
-                    }
+            ip_number::UDP => match UdpSlice::from_slice(slice.payload) {
+                Ok(udp) => {
+                    self.offset += udp.slice().len();
+                    self.result.transport = Some(TransportSlice::Udp(udp));
+                }
+                Err(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    err.len_source = slice.len_source;
+                    self.result.stop_err = Some((O::Len(err), Layer::UdpHeader));
                 }
             },
-            ip_number::TCP => {
-                match TcpSlice::from_slice(slice.payload) {
-                    Ok(tcp) => {
-                        self.offset += tcp.slice().len();
-                        self.result.transport = Some(TransportSlice::Tcp(tcp));
-                    },
-                    Err(err) => {
-                        use err::tcp::HeaderSliceError as I;
-                        self.result.stop_err = Some((
-                            match err {
-                                I::Len(mut l) => {
-                                    l.layer_start_offset += self.offset;
-                                    l.len_source = slice.len_source;
-                                    O::Len(l)
-                                },
-                                I::Content(c) => O::Tcp(c),
-                            },
-                            Layer::TcpHeader
-                        ));
-                    },
+            ip_number::TCP => match TcpSlice::from_slice(slice.payload) {
+                Ok(tcp) => {
+                    self.offset += tcp.slice().len();
+                    self.result.transport = Some(TransportSlice::Tcp(tcp));
+                }
+                Err(err) => {
+                    use err::tcp::HeaderSliceError as I;
+                    self.result.stop_err = Some((
+                        match err {
+                            I::Len(mut l) => {
+                                l.layer_start_offset += self.offset;
+                                l.len_source = slice.len_source;
+                                O::Len(l)
+                            }
+                            I::Content(c) => O::Tcp(c),
+                        },
+                        Layer::TcpHeader,
+                    ));
                 }
             },
-            ip_number::IPV6_ICMP => {
-                match Icmpv6Slice::from_slice(slice.payload) {
-                    Ok(icmp) => {
-                        self.offset += icmp.slice().len();
-                        self.result.transport = Some(TransportSlice::Icmpv6(icmp));
-                    },
-                    Err(mut err) => {
-                        err.layer_start_offset += self.offset;
-                        err.len_source = slice.len_source;
-                        self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
-                    },
+            ip_number::IPV6_ICMP => match Icmpv6Slice::from_slice(slice.payload) {
+                Ok(icmp) => {
+                    self.offset += icmp.slice().len();
+                    self.result.transport = Some(TransportSlice::Icmpv6(icmp));
                 }
-            }
-            _ => {},
+                Err(mut err) => {
+                    err.layer_start_offset += self.offset;
+                    err.len_source = slice.len_source;
+                    self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
+                }
+            },
+            _ => {}
         }
         self.result
     }

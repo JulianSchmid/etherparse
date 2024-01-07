@@ -295,7 +295,7 @@ impl ComponentTest {
                 },
                 None => None,
             }
-        );//.unwrap_or(None).map(|ref x| x.to_header()));
+        ); //.unwrap_or(None).map(|ref x| x.to_header()));
         assert_eq!(self.vlan, result.vlan.as_ref().map(|ref x| x.to_header()));
 
         //ip
