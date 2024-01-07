@@ -151,7 +151,10 @@ mod test {
             (Ipv6Packet, "IPv6 Packet Error"),
             (Ipv6ExtHeader, "IPv6 Extension Header Error"),
             (Ipv6HopByHopHeader, "IPv6 Hop-by-Hop Option Header Error"),
-            (Ipv6DestOptionsHeader, "IPv6 Destination Options Header Error"),
+            (
+                Ipv6DestOptionsHeader,
+                "IPv6 Destination Options Header Error",
+            ),
             (Ipv6RouteHeader, "IPv6 Routing Header Error"),
             (Ipv6FragHeader, "IPv6 Fragment Header Error"),
             (UdpHeader, "UDP Header Error"),

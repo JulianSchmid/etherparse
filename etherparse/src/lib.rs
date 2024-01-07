@@ -239,7 +239,6 @@
 #![allow(clippy::bool_comparison)]
 // Removes all std and alloc default imports & enables "non std" support.
 #![no_std]
-
 // enables https://doc.rust-lang.org/beta/unstable-book/language-features/doc-cfg.html
 // for docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]

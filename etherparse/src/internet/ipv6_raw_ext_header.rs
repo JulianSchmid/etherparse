@@ -58,7 +58,7 @@ impl Default for Ipv6RawExtHeader {
         Ipv6RawExtHeader {
             next_header: IpNumber(255),
             header_length: 0,
-            payload_buffer: [0; 0xff * 8 + 6]
+            payload_buffer: [0; 0xff * 8 + 6],
         }
     }
 }
@@ -249,7 +249,9 @@ mod test {
 
     #[test]
     fn default() {
-        let default_header = Ipv6RawExtHeader { ..Default::default() };
+        let default_header = Ipv6RawExtHeader {
+            ..Default::default()
+        };
 
         assert_eq!(default_header.next_header, IpNumber(255));
         assert_eq!(default_header.header_length, 0);

@@ -1,7 +1,10 @@
-use crate::{*, err::{ipv6, ipv6_exts, LenSource}};
+use crate::{
+    err::{ipv6, ipv6_exts, LenSource},
+    *,
+};
 
 /// Slice containing laxly separated IPv6 headers & payload.
-/// 
+///
 /// Compared to the normal [`Ipv6Slice`] this slice allows the
 /// payload to incomplete/cut off and errors in the extension headers.
 ///
@@ -21,7 +24,6 @@ pub struct LaxIpv6Slice<'a> {
 }
 
 impl<'a> LaxIpv6Slice<'a> {
-
     /// Seperate an IPv6 header (+ extensions) & the payload from the given slice with
     /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
@@ -57,7 +59,15 @@ impl<'a> LaxIpv6Slice<'a> {
     ///
     /// * Bigger then the given slice (payload cannot fully be seperated).
     /// * The value `0`.
-    pub fn from_slice(slice: &'a [u8]) -> Result<(LaxIpv6Slice<'a>, Option<(ipv6_exts::HeaderSliceError, err::Layer)>), ipv6::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<
+        (
+            LaxIpv6Slice<'a>,
+            Option<(ipv6_exts::HeaderSliceError, err::Layer)>,
+        ),
+        ipv6::HeaderSliceError,
+    > {
         // try reading the header
         let header = Ipv6HeaderSlice::from_slice(slice)?;
 
@@ -110,7 +120,7 @@ impl<'a> LaxIpv6Slice<'a> {
         // parse extension headers
         let (exts, payload_ip_number, payload, mut ext_stop_err) =
             Ipv6ExtensionsSlice::from_slice_lax(header.next_header(), header_payload);
-        
+
         // modify length errors
         if let Some((ipv6_exts::HeaderSliceError::Len(err), _)) = &mut ext_stop_err {
             err.len_source = len_source;
@@ -130,7 +140,7 @@ impl<'a> LaxIpv6Slice<'a> {
                     payload,
                 },
             },
-            ext_stop_err
+            ext_stop_err,
         ))
     }
 
@@ -164,10 +174,10 @@ impl<'a> LaxIpv6Slice<'a> {
 mod test {
     use super::*;
     use crate::{
+        err::{Layer, LenError, LenSource},
         ip_number::{AUTH, IGMP, UDP},
         test_gens::*,
         Ipv6FragmentHeader,
-        err::{LenError, LenSource, Layer},
     };
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;

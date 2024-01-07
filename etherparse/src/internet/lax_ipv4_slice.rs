@@ -1,7 +1,7 @@
-use crate::{*, err::LenSource};
+use crate::{err::LenSource, *};
 
 /// Slice containing laxly separated IPv4 headers & payload.
-/// 
+///
 /// Compared to the normal [`Ipv4Slice`] this slice allows the
 /// payload to incomplete/cut off and errors in the extension headers.
 ///
@@ -21,7 +21,6 @@ pub struct LaxIpv4Slice<'a> {
 }
 
 impl<'a> LaxIpv4Slice<'a> {
-
     /// Separates and validates IPv4 headers (including extension headers) &
     /// the payload from the given slice with less strict length checks
     /// (useful for cut off packet or for packets with unset length fields).
@@ -39,19 +38,19 @@ impl<'a> LaxIpv4Slice<'a> {
     ///   system set the length fields).
     ///
     /// # Differences to `Ipv4Slice::from_slice`:
-    /// 
+    ///
     /// There are two main differences:
-    /// 
+    ///
     /// * The lax version allows inconsistent `total_len` values in the IPv4 header
     /// * Errors when parsing a header extension will still return the parse result
     ///   until the error was encountered.
-    /// 
+    ///
     /// ## What happens in the `total_len` value is inconsistent?
     ///
     /// When the total_length value in the IPv4 header is inconsistent the
     /// length of the given slice is used as a substitute. This can happen
     /// if the `total_length` field in the IPv4 header is:
-    /// 
+    ///
     ///  * Bigger then the given slice (payload cannot fully be seperated).
     ///  * Too small to contain at least the IPv4 header.
     ///
@@ -63,8 +62,11 @@ impl<'a> LaxIpv4Slice<'a> {
     /// if the `len_source` value in the returned [`LaxIpPayload`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
-    
-    pub fn from_slice(slice: &[u8]) -> Result<(LaxIpv4Slice, Option<err::ip_auth::HeaderSliceError>), err::ipv4::HeaderSliceError> {
+
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(LaxIpv4Slice, Option<err::ip_auth::HeaderSliceError>), err::ipv4::HeaderSliceError>
+    {
         use crate::ip_number::AUTH;
 
         // decode the header
@@ -72,46 +74,45 @@ impl<'a> LaxIpv4Slice<'a> {
 
         // validate total_len at least contains the header
         let header_total_len: usize = header.total_len().into();
-        let (header_payload, len_source, incomplete) =
-            if header_total_len < header.slice().len() {
-                // total_length is smaller then the header itself
-                // fall back to the slice for the length
-                (
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            slice.as_ptr().add(header.slice().len()),
-                            slice.len() - header.slice().len(),
-                        )
-                    },
-                    LenSource::Slice,
-                    // note that we have no indication that the packet is incomplete
-                    false
-                )
-            } else if header_total_len > slice.len() {
-                // more data was expected, fallback to slice and report payload as "incomplete"
-                (
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            slice.as_ptr().add(header.slice().len()),
-                            slice.len() - header.slice().len(),
-                        )
-                    },
-                    LenSource::Slice,
-                    true // incomplete
-                )
-            } else {
-                // all good the packet seems to be complete
-                (
-                    unsafe {
-                        core::slice::from_raw_parts(
-                            slice.as_ptr().add(header.slice().len()),
-                            header_total_len - header.slice().len(),
-                        )
-                    },
-                    LenSource::Ipv4HeaderTotalLen,
-                    false
-                )
-            };
+        let (header_payload, len_source, incomplete) = if header_total_len < header.slice().len() {
+            // total_length is smaller then the header itself
+            // fall back to the slice for the length
+            (
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(header.slice().len()),
+                        slice.len() - header.slice().len(),
+                    )
+                },
+                LenSource::Slice,
+                // note that we have no indication that the packet is incomplete
+                false,
+            )
+        } else if header_total_len > slice.len() {
+            // more data was expected, fallback to slice and report payload as "incomplete"
+            (
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(header.slice().len()),
+                        slice.len() - header.slice().len(),
+                    )
+                },
+                LenSource::Slice,
+                true, // incomplete
+            )
+        } else {
+            // all good the packet seems to be complete
+            (
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(header.slice().len()),
+                        header_total_len - header.slice().len(),
+                    )
+                },
+                LenSource::Ipv4HeaderTotalLen,
+                false,
+            )
+        };
 
         // decode the authentication header if needed
         let fragmented = header.is_fragmenting_payload();
@@ -142,9 +143,9 @@ impl<'a> LaxIpv4Slice<'a> {
                                     payload,
                                 },
                             },
-                            None
+                            None,
                         ))
-                    },
+                    }
                     Err(err) => {
                         let err = match err {
                             E::Len(mut l) => {
@@ -167,9 +168,9 @@ impl<'a> LaxIpv4Slice<'a> {
                                     payload: header_payload,
                                 },
                             },
-                            Some(err)
+                            Some(err),
                         ))
-                    },
+                    }
                 }
             }
             ip_number => Ok((
@@ -184,7 +185,7 @@ impl<'a> LaxIpv4Slice<'a> {
                         payload: header_payload,
                     },
                 },
-                None
+                None,
             )),
         }
     }
@@ -227,7 +228,7 @@ impl<'a> LaxIpv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{ip_number::AUTH, test_gens::*, IpHeaders, Ipv4Header, err::LenError};
+    use crate::{err::LenError, ip_number::AUTH, test_gens::*, IpHeaders, Ipv4Header};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
@@ -417,7 +418,7 @@ mod test {
             // content error ipv4 extensions
             if v4_exts.auth.is_some() {
                 use err::ip_auth::HeaderError::ZeroPayloadLen;
-                
+
 
                 // introduce a auth header zero payload error
                 let mut errored_buffer = buffer.clone();

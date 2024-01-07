@@ -21,8 +21,6 @@ pub struct LaxSlicedPacket<'a> {
 }
 
 impl<'a> LaxSlicedPacket<'a> {
-
-    
     pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::packet::EthSliceError> {
         LaxSlicedPacketCursor::parse_from_ethernet2(slice)
     }
@@ -74,7 +72,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///     // in case an error is encountered parsing is stopped
     ///     println!("Error on layer {}: {:?}", stop_err, error_layer);
     /// }
-    /// 
+    ///
     /// // parts that could be parsed without error
     /// println!("link: {:?}", packet.link);
     /// println!("vlan: {:?}", packet.vlan);
@@ -82,10 +80,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// println!("transport: {:?}", packet.transport);
     ///
     /// ```
-    pub fn from_ether_type(
-        ether_type: EtherType,
-        slice: &'a [u8],
-    ) -> LaxSlicedPacket {
+    pub fn from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket {
         LaxSlicedPacketCursor::parse_from_ether_type(ether_type, slice)
     }
 

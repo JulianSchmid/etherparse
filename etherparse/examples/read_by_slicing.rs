@@ -44,10 +44,9 @@ fn main() {
                     value.source(),
                     value.destination()
                 ),
-                Some(EtherPayload(payload)) => println!(
-                    "  EtherPayload (ether type {:?})",
-                    payload.ether_type
-                ),
+                Some(EtherPayload(payload)) => {
+                    println!("  EtherPayload (ether type {:?})", payload.ether_type)
+                }
                 None => {}
             }
 
