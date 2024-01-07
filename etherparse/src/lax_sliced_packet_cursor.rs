@@ -177,11 +177,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_ip(
-        mut self,
-        slice: &'a [u8],
-        expected_type: Option<ExpectedIpProto>,
-    ) -> LaxSlicedPacket<'a> {
+    pub fn slice_ip(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
         // ip slice
         let ip = match LaxIpSlice::from_ip_slice(slice) {
             Ok(ip) => ip,
