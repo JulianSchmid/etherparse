@@ -57,7 +57,7 @@ impl<'a> LaxIpv6Slice<'a> {
     ///
     /// * Bigger then the given slice (payload cannot fully be seperated).
     /// * The value `0`.
-    pub fn from_slice(slice: &'a [u8]) -> Result<(LaxIpv6Slice<'a>, Option<ipv6_exts::HeaderSliceError>), ipv6::HeaderSliceError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<(LaxIpv6Slice<'a>, Option<(ipv6_exts::HeaderSliceError, err::Layer)>), ipv6::HeaderSliceError> {
         // try reading the header
         let header = Ipv6HeaderSlice::from_slice(slice)?;
 
@@ -112,7 +112,7 @@ impl<'a> LaxIpv6Slice<'a> {
             Ipv6ExtensionsSlice::from_slice_lax(header.next_header(), header_payload);
         
         // modify length errors
-        if let Some(ipv6_exts::HeaderSliceError::Len(err)) = &mut ext_stop_err {
+        if let Some((ipv6_exts::HeaderSliceError::Len(err), _)) = &mut ext_stop_err {
             err.len_source = len_source;
             err.layer_start_offset += Ipv6Header::LEN;
         };
@@ -403,13 +403,16 @@ mod test {
                 let (actual, actual_stop_err) = LaxIpv6Slice::from_slice(&data_with_ext[..required_len - 1]).unwrap();
                 prop_assert_eq!(
                     actual_stop_err.unwrap(),
-                    ipv6_exts::HeaderSliceError::Len(LenError{
-                        required_len: required_len - Ipv6Header::LEN,
-                        len: required_len - Ipv6Header::LEN - 1,
-                        len_source: LenSource::Slice,
-                        layer: Layer::IpAuthHeader,
-                        layer_start_offset: Ipv6Header::LEN,
-                    })
+                    (
+                        ipv6_exts::HeaderSliceError::Len(LenError{
+                            required_len: required_len - Ipv6Header::LEN,
+                            len: required_len - Ipv6Header::LEN - 1,
+                            len_source: LenSource::Slice,
+                            layer: Layer::IpAuthHeader,
+                            layer_start_offset: Ipv6Header::LEN,
+                        }),
+                        err::Layer::IpAuthHeader
+                    )
                 );
                 prop_assert_eq!(actual.header().slice(), &data_with_ext[..ipv6_base.header_len()]);
                 prop_assert_eq!(
@@ -440,14 +443,17 @@ mod test {
                 let (actual, actual_stop_err) = LaxIpv6Slice::from_slice(&data).unwrap();
                 prop_assert_eq!(
                     actual_stop_err.unwrap(),
-                    ipv6_exts::HeaderSliceError::Len(
-                        LenError{
-                            required_len: auth_base.header_len(),
-                            len: auth_base.header_len() - 1,
-                            len_source: LenSource::Ipv6HeaderPayloadLen,
-                            layer: Layer::IpAuthHeader,
-                            layer_start_offset: ipv6_base.header_len(),
-                        }
+                    (
+                        ipv6_exts::HeaderSliceError::Len(
+                            LenError{
+                                required_len: auth_base.header_len(),
+                                len: auth_base.header_len() - 1,
+                                len_source: LenSource::Ipv6HeaderPayloadLen,
+                                layer: Layer::IpAuthHeader,
+                                layer_start_offset: ipv6_base.header_len(),
+                            }
+                        ),
+                        err::Layer::IpAuthHeader
                     )
                 );
                 prop_assert_eq!(actual.header().slice(), &data[..ipv6_base.header_len()]);
@@ -475,9 +481,12 @@ mod test {
 
                 prop_assert_eq!(
                     actual_stop_error.unwrap(),
-                    ipv6_exts::HeaderSliceError::Content(ipv6_exts::HeaderError::IpAuth(
-                        ip_auth::HeaderError::ZeroPayloadLen
-                    ))
+                    (
+                        ipv6_exts::HeaderSliceError::Content(ipv6_exts::HeaderError::IpAuth(
+                            ip_auth::HeaderError::ZeroPayloadLen
+                        )),
+                        err::Layer::IpAuthHeader
+                    )
                 );
                 prop_assert_eq!(
                     actual.header().slice(),

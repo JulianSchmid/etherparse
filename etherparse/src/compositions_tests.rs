@@ -286,7 +286,16 @@ impl ComponentTest {
         assert_eq!(result, result);
 
         //ethernet & vlan
-        assert_eq!(self.link, result.link.as_ref().map(|ref x| x.to_header()));
+        assert_eq!(
+            self.link,
+            match result.link.as_ref() {
+                Some(l) => match l {
+                    LinkSlice::Ethernet2(e) => Some(e.to_header()),
+                    LinkSlice::EtherPayload(_) => None,
+                },
+                None => None,
+            }
+        );//.unwrap_or(None).map(|ref x| x.to_header()));
         assert_eq!(self.vlan, result.vlan.as_ref().map(|ref x| x.to_header()));
 
         //ip

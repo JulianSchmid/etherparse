@@ -11,13 +11,10 @@ pub struct LaxSlicedPacket<'a> {
     pub vlan: Option<VlanSlice<'a>>,
 
     /// IPv4 or IPv6 header, IP extension headers & payload if present.
-    pub ip: Option<IpSlice<'a>>,
+    pub ip: Option<LaxIpSlice<'a>>,
 
     /// TCP or UDP header & payload if present.
     pub transport: Option<TransportSlice<'a>>,
-
-    /// Last successfully parsed layer.
-    pub last_parsed_layer: Layer,
 
     /// Error that stopped the parsing and the layer on which the stop occurred.
     pub stop_err: Option<(err::packet::SliceError, Layer)>,
@@ -26,9 +23,8 @@ pub struct LaxSlicedPacket<'a> {
 impl<'a> LaxSlicedPacket<'a> {
 
     
-    pub fn from_ethernet(data: &'a [u8]) -> Result<LaxSlicedPacket, err::packet::EthSliceError> {
-        todo!()
-        //SlicedPacketCursor::new(data).slice_ethernet2()
+    pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::packet::EthSliceError> {
+        LaxSlicedPacketCursor::parse_from_ethernet2(slice)
     }
 
     /// Separates a network packet slice into different slices containing the headers using
@@ -71,39 +67,26 @@ impl<'a> LaxSlicedPacket<'a> {
     /// # // skip ethernet 2 header so we can parse from there downwards
     /// # let packet = &complete_packet[Ethernet2Header::LEN..];
     /// #
-    /// use etherparse::{ether_type, SlicedPacket};
+    /// use etherparse::{ether_type, LaxSlicedPacket};
     ///
-    /// match LaxSlicedPacket::from_ether_type(ether_type::IPV4, packet) {
-    ///     Err(value) => println!("Err {:?}", value),
-    ///     Ok(value) => {
-    ///         println!("link: {:?}", value.link);
-    ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("ip: {:?}", value.ip);
-    ///         println!("transport: {:?}", value.transport);
-    ///     }
+    /// let packet = LaxSlicedPacket::from_ether_type(ether_type::IPV4, packet);
+    /// if let Some((stop_err, error_layer)) = packet.stop_err.as_ref() {
+    ///     // in case an error is encountered parsing is stopped
+    ///     println!("Error on layer {}: {:?}", stop_err, error_layer);
     /// }
+    /// 
+    /// // parts that could be parsed without error
+    /// println!("link: {:?}", packet.link);
+    /// println!("vlan: {:?}", packet.vlan);
+    /// println!("ip: {:?}", packet.ip);
+    /// println!("transport: {:?}", packet.transport);
+    ///
     /// ```
     pub fn from_ether_type(
         ether_type: EtherType,
-        data: &'a [u8],
-    ) -> Result<LaxSlicedPacket, err::packet::EthSliceError> {
-        todo!();
-        /*
-        use ether_type::*;
-        match ether_type {
-            IPV4 => SlicedPacketCursor::new(data).slice_ipv4_lax(),
-            IPV6 => SlicedPacketCursor::new(data).slice_ipv6_lax(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                SlicedPacketCursor::new(data).slice_vlan_lax()
-            }
-            _ => Ok(SlicedPacket {
-                link: None,
-                vlan: None,
-                ip: None,
-                transport: None,
-            }),
-        }
-         */
+        slice: &'a [u8],
+    ) -> LaxSlicedPacket {
+        LaxSlicedPacketCursor::parse_from_ether_type(ether_type, slice)
     }
 
     /// Separates a network packet slice into different slices containing
@@ -122,7 +105,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// Basic usage:
     ///
     ///```
-    /// # use etherparse::{SlicedPacket, PacketBuilder, IpSlice, err::LenSource};
+    /// # use etherparse::{PacketBuilder, IpSlice, err::LenSource};
     /// # let builder = PacketBuilder::
     /// #    ipv4([192,168,1,1], //source ip
     /// #         [192,168,1,2], //destination ip
@@ -135,9 +118,20 @@ impl<'a> LaxSlicedPacket<'a> {
     /// #    let mut packet = Vec::<u8>::with_capacity(
     /// #                            builder.size(payload.len()));
     /// #    builder.write(&mut packet, &payload).unwrap();
+    /// use etherparse::LaxSlicedPacket;
+    ///
     /// match LaxSlicedPacket::from_ip(&packet) {
-    ///     Err(value) => println!("Err {:?}", value),
+    ///     Err(value) => {
+    ///         // An error is returned in case the ip header could
+    ///         // not parsed (other errors are stored in the "stop_err" field)
+    ///         println!("Err {:?}", value)
+    ///     },
     ///     Ok(value) => {
+    ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///             // error is encountered after the ip header (stops parsing)
+    ///             println!("Error on layer {}: {:?}", stop_err, error_layer);
+    ///         }
+    ///
     ///         // link & vlan fields are empty when parsing from ip downwards
     ///         assert_eq!(None, value.link);
     ///         assert_eq!(None, value.vlan);
@@ -157,8 +151,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ip(data: &'a [u8]) -> Result<LaxSlicedPacket, err::packet::IpSliceError> {
-        todo!()
-        //SlicedPacketCursor::new(data).slice_ip_lax()
+    pub fn from_ip(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::ip::LaxHeaderSliceError> {
+        LaxSlicedPacketCursor::parse_from_ip(slice)
     }
 }

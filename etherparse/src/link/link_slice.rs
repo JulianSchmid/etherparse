@@ -5,15 +5,28 @@ use crate::*;
 pub enum LinkSlice<'a> {
     /// A slice containing an Ethernet II header.
     Ethernet2(Ethernet2Slice<'a>),
+
+    /// Ether payload without header.
+    EtherPayload(EtherPayloadSlice<'a>),
 }
 
 impl<'a> LinkSlice<'a> {
     /// Convert the link slice to a header (currently just the
     /// ethernet2 header as this is the only value it can take).
-    pub fn to_header(&self) -> Ethernet2Header {
+    pub fn to_header(&self) -> Option<Ethernet2Header> {
         use LinkSlice::*;
         match self {
-            Ethernet2(slice) => slice.to_header(),
+            Ethernet2(slice) => Some(slice.to_header()),
+            EtherPayload(_) => None,
+        }
+    }
+
+    /// Returns the link layer payload (slice + ether type number).
+    pub fn payload(&self) -> EtherPayloadSlice<'a> {
+        use LinkSlice::*;
+        match self {
+            Ethernet2(s) => s.payload().clone(),
+            EtherPayload(p) => p.clone(),
         }
     }
 }
@@ -48,16 +61,26 @@ mod test {
     proptest! {
         #[test]
         fn to_header(ref eth in ethernet_2_unknown()) {
-            let bytes = eth.to_bytes();
-            let slice = LinkSlice::Ethernet2(
-                Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap()
-            );
-
-            // clone & eq
-            assert_eq!(
-                slice.to_header(),
-                *eth
-            );
+            {
+                let bytes = eth.to_bytes();
+                let slice = LinkSlice::Ethernet2(
+                    Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap()
+                );
+                assert_eq!(
+                    slice.to_header(),
+                    Some(eth.clone())
+                );
+            }
+            {
+                let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
+                    ether_type: ether_type::IPV4,
+                    payload: &[]
+                });
+                assert_eq!(
+                    slice.to_header(),
+                    None
+                );
+            }
         }
     }
 }

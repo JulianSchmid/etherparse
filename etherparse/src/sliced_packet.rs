@@ -228,6 +228,7 @@ impl<'a> SlicedPacket<'a> {
             use LinkSlice::*;
             match link {
                 Ethernet2(eth) => Some(eth.ether_type()),
+                EtherPayload(e) => Some(e.ether_type),
             }
         } else {
             None
@@ -993,7 +994,16 @@ mod test {
             let is_fragmented = test.is_ip_payload_fragmented();
 
             // check headers
-            assert_eq!(test.link, result.link.as_ref().map(|e| e.to_header()));
+            assert_eq!(
+                test.link,
+                match result.link.as_ref() {
+                    Some(s) => match s {
+                        LinkSlice::Ethernet2(e) => Some(e.to_header()),
+                        LinkSlice::EtherPayload(e) => None,
+                    },
+                    None => None,
+                }
+            );
             assert_eq!(test.vlan, result.vlan.as_ref().map(|e| e.to_header()));
             assert_eq!(
                 test.ip,

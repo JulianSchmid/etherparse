@@ -137,7 +137,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         Ipv6ExtensionsSlice,
         IpNumber,
         &'a [u8],
-        Option<err::ipv6_exts::HeaderSliceError>,
+        Option<(err::ipv6_exts::HeaderSliceError, err::Layer)>,
     ) {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
@@ -155,7 +155,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     next_header = slice.next_header();
                 }
                 Err(err) => {
-                    error = Some(Len(err));
+                    error = Some((Len(err), err::Layer::Ipv6HopByHopHeader));
                 }
             }
         }
@@ -163,14 +163,21 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         while error.is_none() {
             match next_header {
                 IPV6_HOP_BY_HOP => {
-                    error = Some(Content(HopByHopNotAtStart));
+                    error = Some((Content(HopByHopNotAtStart), err::Layer::Ipv6HopByHopHeader));
                     break;
                 }
                 IPV6_DEST_OPTIONS | IPV6_ROUTE => {
                     let slice = match Ipv6RawExtHeaderSlice::from_slice(rest) {
                         Ok(s) => s,
                         Err(err) => {
-                            error = Some(Len(err.add_offset(start_slice.len() - rest.len())));
+                            error = Some((
+                                Len(err.add_offset(start_slice.len() - rest.len())),
+                                if next_header == IPV6_DEST_OPTIONS {
+                                    err::Layer::Ipv6DestOptionsHeader
+                                } else {
+                                    err::Layer::Ipv6RouteHeader
+                                }
+                            ));
                             break;
                         }
                     };
@@ -188,7 +195,10 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     let slice = match Ipv6FragmentHeaderSlice::from_slice(rest) {
                         Ok(s) => s,
                         Err(err) => {
-                            error = Some(Len(err.add_offset(start_slice.len() - rest.len())));
+                            error = Some((
+                                Len(err.add_offset(start_slice.len() - rest.len())),
+                                err::Layer::Ipv6FragHeader
+                            ));
                             break;
                         }
                     };
@@ -211,10 +221,13 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
                     let slice = match IpAuthHeaderSlice::from_slice(rest) {
                         Ok(s) => s,
                         Err(err) => {
-                            error = Some(match err {
-                                I::Len(err) => Len(err.add_offset(start_slice.len() - rest.len())),
-                                I::Content(err) => Content(IpAuth(err)),
-                            });
+                            error = Some((
+                                match err {
+                                    I::Len(err) => Len(err.add_offset(start_slice.len() - rest.len())),
+                                    I::Content(err) => Content(IpAuth(err)),
+                                },
+                                err::Layer::IpAuthHeader
+                            ));
                             break;
                         }
                     };
@@ -437,7 +450,7 @@ mod test {
                     // a hop by hop header that is not at the start triggers an error
                     assert_eq!(
                         Ipv6ExtensionsSlice::from_slice_lax(ip_numbers[0], e.slice()).3.unwrap(),
-                        Content(HopByHopNotAtStart)
+                        (Content(HopByHopNotAtStart), err::Layer::Ipv6HopByHopHeader)
                     );
                 } else {
                     // normal read
@@ -457,7 +470,7 @@ mod test {
                         );
                         assert_eq!(&e.slice()[offset..e.slice().len() - 1], actual.2);
                         assert_eq!(
-                            actual.3.unwrap(),
+                            actual.3.unwrap().0,
                             Len(err::LenError {
                                 required_len: e.slice().len() - offset,
                                 len: e.slice().len() - offset - 1,
@@ -514,7 +527,7 @@ mod test {
                 assert_eq!(actual.0.slice(), &[]);
                 assert_eq!(actual.1, AUTH);
                 assert_eq!(actual.2, &bytes[..]);
-                assert_eq!(actual.3.unwrap().content().unwrap(), &IpAuth(ZeroPayloadLen));
+                assert_eq!(actual.3.unwrap().0.content().unwrap(), &IpAuth(ZeroPayloadLen));
             }
         }
     }
