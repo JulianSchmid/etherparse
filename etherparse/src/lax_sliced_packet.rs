@@ -85,11 +85,11 @@ impl<'a> LaxSlicedPacket<'a> {
     }
 
     /// Separates a network packet slice into different slices containing
-    /// the headers from the ip header downwards with lax length checks.
+    /// the headers from the ip header downwards with lax checks.
     ///
     /// This function allows the length in the IP header to be inconsistent
     /// (e.g. data is missing from the slice) and falls back to the length of
-    /// slice. See [`IpSlice::from_ip_slice_lax`] for a detailed description
+    /// slice. See [`LaxIpSlice::from_ip_slice`] for a detailed description
     /// of when the slice length is used as a fallback.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function

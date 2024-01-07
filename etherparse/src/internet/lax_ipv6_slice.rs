@@ -48,7 +48,7 @@ impl<'a> LaxIpv6Slice<'a> {
     /// used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
-    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// if the `len_source` value in the returned [`IpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv6HeaderPayloadLen`].
     ///
