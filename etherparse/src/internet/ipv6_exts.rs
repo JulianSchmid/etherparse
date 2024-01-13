@@ -18,6 +18,7 @@ use crate::{err::ipv6_exts::*, *};
 /// * IP Mobility
 /// * Site Multihoming by IPv6 Intermediation (SHIM6)
 #[derive(Clone, Debug, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6Extensions {
     pub hop_by_hop_options: Option<Ipv6RawExtHeader>,
     pub destination_options: Option<Ipv6RawExtHeader>,

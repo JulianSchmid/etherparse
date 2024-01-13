@@ -3,6 +3,7 @@ use arrayvec::ArrayVec;
 
 /// The statically sized data at the start of an ICMPv6 packet (at least the first 8 bytes of an ICMPv6 packet).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Icmpv6Header {
     /// Type & type specific values & code.
     pub icmp_type: Icmpv6Type,

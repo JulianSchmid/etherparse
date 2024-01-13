@@ -85,6 +85,7 @@ use crate::{
 /// # }
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw in this enum value.

@@ -4,6 +4,7 @@ use super::*;
 ///
 /// Source: <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5>
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ParameterProblemCode {
     /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
     ErroneousHeaderField = 0,

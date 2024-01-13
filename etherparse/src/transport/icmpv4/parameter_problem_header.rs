@@ -1,6 +1,7 @@
 /// The header of an ICMPv4 Parameter Problems (contents up to
 /// the offending ip header).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ParameterProblemHeader {
     /// Identifies the octet where an error was detected.
     ///

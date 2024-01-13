@@ -2,6 +2,7 @@ use super::*;
 
 /// ICMPv6 parameter problem header.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParameterProblemHeader {
     /// The code can offer additional informations about what kind of parameter
     /// problem caused the error.

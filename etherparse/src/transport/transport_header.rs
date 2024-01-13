@@ -5,6 +5,7 @@ use crate::{
 
 /// The possible headers on the transport layer
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TransportHeader {
     Udp(UdpHeader),
     Tcp(TcpHeader),

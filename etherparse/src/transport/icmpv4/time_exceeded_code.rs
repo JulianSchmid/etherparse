@@ -2,6 +2,7 @@ use super::*;
 
 /// Code values for ICMPv4 time exceeded message.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TimeExceededCode {
     /// Time-to-live exceeded in transit.
     TtlExceededInTransit = 0,

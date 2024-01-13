@@ -25,6 +25,7 @@ pub type Ipv6RawExtensionHeader = Ipv6RawExtHeader;
 /// * Host Identity Protocol
 /// * Shim6 Protocol
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6RawExtHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
