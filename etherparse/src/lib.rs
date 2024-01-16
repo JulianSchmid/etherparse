@@ -274,8 +274,8 @@ pub use crate::link::vlan_slice::*;
 #[cfg(test)]
 pub(crate) mod test_gens;
 
-mod internet;
-pub use internet::*;
+mod net;
+pub use net::*;
 
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
