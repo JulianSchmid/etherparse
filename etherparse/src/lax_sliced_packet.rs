@@ -11,7 +11,7 @@ pub struct LaxSlicedPacket<'a> {
     pub vlan: Option<VlanSlice<'a>>,
 
     /// IPv4 or IPv6 header, IP extension headers & payload if present.
-    pub ip: Option<LaxIpSlice<'a>>,
+    pub net: Option<LaxNetSlice<'a>>,
 
     /// TCP or UDP header & payload if present.
     pub transport: Option<TransportSlice<'a>>,
@@ -76,7 +76,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// // parts that could be parsed without error
     /// println!("link: {:?}", packet.link);
     /// println!("vlan: {:?}", packet.vlan);
-    /// println!("ip: {:?}", packet.ip);
+    /// println!("net: {:?}", packet.net);
     /// println!("transport: {:?}", packet.transport);
     ///
     /// ```
@@ -131,9 +131,9 @@ impl<'a> LaxSlicedPacket<'a> {
     ///         assert_eq!(None, value.link);
     ///         assert_eq!(None, value.vlan);
     ///
-    ///         // ip & transport (udp or tcp)
-    ///         println!("ip: {:?}", value.ip);
-    ///         if let Some(ip_payload) = value.ip.as_ref().map(|ip| ip.payload()) {
+    ///         // net (ip) & transport (udp or tcp)
+    ///         println!("net: {:?}", value.net);
+    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload()).flatten() {
     ///             // the ip payload len_source field can be used to check
     ///             // if the slice length was used as a fallback value
     ///             if ip_payload.len_source == LenSource::Slice {

@@ -22,7 +22,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             result: LaxSlicedPacket {
                 link: None,
                 vlan: None,
-                ip: None,
+                net: None,
                 transport: None,
                 stop_err: None,
             },
@@ -58,7 +58,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     payload: slice,
                 })),
                 vlan: None,
-                ip: None,
+                net: None,
                 transport: None,
                 stop_err: None,
             },
@@ -89,7 +89,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             result: LaxSlicedPacket {
                 link: None,
                 vlan: None,
-                ip: Some(ip),
+                net: Some(ip.into()),
                 transport: None,
                 stop_err: stop_err.map(|(stop_err, stop_layer)| {
                     use err::ipv6_exts::HeaderError as E;
@@ -189,7 +189,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 return self.result;
             }
         };
-        self.result.ip = Some(ip.0.clone());
+        self.result.net = Some(ip.0.clone().into());
 
         // stop in case there was a stop error in the ip extension headers
         if let Some((stop_err, stop_layer)) = ip.1 {

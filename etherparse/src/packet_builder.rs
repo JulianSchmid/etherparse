@@ -2992,8 +2992,8 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Ipv4(ip_expected, Default::default())),
-                    actual.ip
+                    Some(NetHeaders::Ipv4(ip_expected, Default::default())),
+                    actual.net
                 );
                 assert_eq!(
                     Some(TransportHeader::Icmpv4(icmp_expected)),
@@ -3211,8 +3211,8 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Ipv6(ip_expected, Default::default())),
-                    actual.ip
+                    Some(NetHeaders::Ipv6(ip_expected, Default::default())),
+                    actual.net
                 );
                 assert_eq!(
                     Some(TransportHeader::Icmpv4(icmp_expected)),
@@ -3338,8 +3338,8 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Ipv6(ip_expected, Default::default())),
-                    actual.ip
+                    Some(NetHeaders::Ipv6(ip_expected, Default::default())),
+                    actual.net
                 );
                 assert_eq!(
                     Some(TransportHeader::Icmpv6(icmp_expected)),

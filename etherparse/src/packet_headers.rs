@@ -19,7 +19,7 @@ pub struct PacketHeaders<'a> {
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
     /// IPv4 or IPv6 header and IP extension headers if present.
-    pub ip: Option<IpHeaders>,
+    pub net: Option<NetHeaders>,
     /// TCP or UDP header if present.
     pub transport: Option<TransportHeader>,
     /// Payload of the last parsed layer.
@@ -63,7 +63,7 @@ impl<'a> PacketHeaders<'a> {
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
     ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("ip: {:?}", value.ip);
+    ///         println!("net: {:?}", value.net);
     ///         println!("transport: {:?}", value.transport);
     ///     }
     /// }
@@ -133,7 +133,7 @@ impl<'a> PacketHeaders<'a> {
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
     ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("ip: {:?}", value.ip);
+    ///         println!("net: {:?}", value.net);
     ///         println!("transport: {:?}", value.transport);
     ///     }
     /// }
@@ -158,7 +158,7 @@ impl<'a> PacketHeaders<'a> {
         let mut result = PacketHeaders {
             link: None,
             vlan: None,
-            ip: None,
+            net: None,
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type,
@@ -222,7 +222,7 @@ impl<'a> PacketHeaders<'a> {
 
                 // set the next
                 rest = ip_payload.payload;
-                result.ip = Some(ip);
+                result.net = Some(ip.into());
                 result.payload = PayloadSlice::Ip(ip_payload.clone());
 
                 // decode transport layer
@@ -250,7 +250,7 @@ impl<'a> PacketHeaders<'a> {
 
                 //set the ip result & rest
                 rest = ip_payload.payload;
-                result.ip = Some(ip);
+                result.net = Some(ip.into());
                 result.payload = PayloadSlice::Ip(ip_payload.clone());
 
                 // decode transport layer
@@ -305,7 +305,7 @@ impl<'a> PacketHeaders<'a> {
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
     ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("ip: {:?}", value.ip);
+    ///         println!("net: {:?}", value.net);
     ///         println!("transport: {:?}", value.transport);
     ///     }
     /// }
@@ -325,7 +325,7 @@ impl<'a> PacketHeaders<'a> {
         let mut result = PacketHeaders {
             link: None,
             vlan: None,
-            ip: Some(ip_header),
+            net: Some(ip_header.into()),
             transport: None,
             payload: PayloadSlice::Ip(ip_payload.clone()),
         };
@@ -435,7 +435,7 @@ mod test {
         let header = PacketHeaders {
             link: None,
             vlan: None,
-            ip: None,
+            net: None,
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type: EtherType(0),
@@ -445,10 +445,10 @@ mod test {
         assert_eq!(
             &format!("{:?}", header),
             &format!(
-                "PacketHeaders {{ link: {:?}, vlan: {:?}, ip: {:?}, transport: {:?}, payload: {:?} }}",
+                "PacketHeaders {{ link: {:?}, vlan: {:?}, net: {:?}, transport: {:?}, payload: {:?} }}",
                 header.link,
                 header.vlan,
-                header.ip,
+                header.net,
                 header.transport,
                 header.payload
             )
@@ -460,7 +460,7 @@ mod test {
         let header = PacketHeaders {
             link: None,
             vlan: None,
-            ip: None,
+            net: None,
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type: EtherType(0),
@@ -476,7 +476,7 @@ mod test {
         from_x_slice_vlan_variants(&TestPacket {
             link: None,
             vlan: None,
-            ip: None,
+            net: None,
             transport: None,
         });
 
@@ -490,7 +490,7 @@ mod test {
             let test = TestPacket {
                 link: Some(eth.clone()),
                 vlan: None,
-                ip: None,
+                net: None,
                 transport: None,
             };
 
@@ -630,7 +630,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeaders::Ipv4(ipv4.clone(), Default::default()));
+                test.net = Some(NetHeaders::Ipv4(ipv4.clone(), Default::default()));
 
                 // ok ipv4
                 from_x_slice_transport_variants(&test);
@@ -693,7 +693,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV4);
-                test.ip = Some(IpHeaders::Ipv4(
+                test.net = Some(NetHeaders::Ipv4(
                     {
                         let mut ipv4 = ipv4.clone();
                         ipv4.protocol = ip_number::AUTH;
@@ -771,7 +771,7 @@ mod test {
             {
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeaders::Ipv6(ipv6.clone(), Default::default()));
+                test.net = Some(NetHeaders::Ipv6(ipv6.clone(), Default::default()));
                 test.set_payload_len(0);
 
                 // ok ipv6
@@ -843,7 +843,7 @@ mod test {
 
                 let mut test = base.clone();
                 test.set_ether_type(ether_type::IPV6);
-                test.ip = Some(IpHeaders::Ipv6(
+                test.net = Some(NetHeaders::Ipv6(
                     {
                         let mut ipv6 = ipv6.clone();
                         ipv6.next_header = ip_number::IPV6_FRAG;
@@ -931,7 +931,7 @@ mod test {
         from_x_slice_assert_ok(base);
 
         // transport can only be set if ip is present
-        if let Some(ip) = &base.ip {
+        if let Some(ip) = &base.net {
             // udp
             {
                 let udp = UdpHeader {
@@ -941,10 +941,13 @@ mod test {
                     checksum: 4,
                 };
                 let mut test = base.clone();
-                test.ip = Some({
-                    let mut ip = ip.clone();
+                test.net = Some({
+                    let mut ip = match ip {
+                        NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
+                        NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                    };
                     ip.set_next_headers(ip_number::UDP);
-                    ip
+                    ip.into()
                 });
                 test.transport = Some(TransportHeader::Udp(udp.clone()));
                 test.set_payload_len(0);
@@ -968,9 +971,9 @@ mod test {
                         let err = LenError {
                             required_len: udp.header_len(),
                             len,
-                            len_source: match test.ip.as_ref().unwrap() {
-                                IpHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            len_source: match test.net.as_ref().unwrap() {
+                                NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::UdpHeader,
                             layer_start_offset: base_len,
@@ -989,10 +992,13 @@ mod test {
             {
                 let tcp = TcpHeader::new(1, 2, 3, 4);
                 let mut test = base.clone();
-                test.ip = Some({
-                    let mut ip = ip.clone();
+                test.net = Some({
+                    let mut ip = match ip {
+                        NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
+                        NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                    };
                     ip.set_next_headers(ip_number::TCP);
-                    ip
+                    ip.into()
                 });
                 test.transport = Some(TransportHeader::Tcp(tcp.clone()));
                 test.set_payload_len(0);
@@ -1014,9 +1020,9 @@ mod test {
                         let err = LenError {
                             required_len: tcp.header_len() as usize,
                             len,
-                            len_source: match test.ip.as_ref().unwrap() {
-                                IpHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            len_source: match test.net.as_ref().unwrap() {
+                                NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::TcpHeader,
                             layer_start_offset: base_len,
@@ -1053,10 +1059,13 @@ mod test {
                 let icmpv4 =
                     Icmpv4Header::new(Icmpv4Type::EchoReply(IcmpEchoHeader { id: 1, seq: 2 }));
                 let mut test = base.clone();
-                test.ip = Some({
-                    let mut ip = ip.clone();
+                test.net = Some({
+                    let mut ip = match ip {
+                        NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
+                        NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                    };
                     ip.set_next_headers(ip_number::ICMP);
-                    ip
+                    ip.into()
                 });
                 test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
 
@@ -1076,9 +1085,9 @@ mod test {
                         let err = LenError {
                             required_len: icmpv4.header_len(),
                             len,
-                            len_source: match test.ip.as_ref().unwrap() {
-                                IpHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            len_source: match test.net.as_ref().unwrap() {
+                                NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::Icmpv4,
                             layer_start_offset: base_len,
@@ -1098,10 +1107,13 @@ mod test {
                 let icmpv6 =
                     Icmpv6Header::new(Icmpv6Type::EchoReply(IcmpEchoHeader { id: 1, seq: 2 }));
                 let mut test = base.clone();
-                test.ip = Some({
-                    let mut ip = ip.clone();
+                test.net = Some({
+                    let mut ip = match ip {
+                        NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
+                        NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                    };
                     ip.set_next_headers(ip_number::IPV6_ICMP);
-                    ip
+                    ip.into()
                 });
                 test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
 
@@ -1121,9 +1133,9 @@ mod test {
                         let err = LenError {
                             required_len: icmpv6.header_len(),
                             len,
-                            len_source: match test.ip.as_ref().unwrap() {
-                                IpHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
-                                IpHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                            len_source: match test.net.as_ref().unwrap() {
+                                NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
+                                NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
                             },
                             layer: err::Layer::Icmpv6,
                             layer_start_offset: base_len,
@@ -1161,7 +1173,7 @@ mod test {
             let result = PacketHeaders::from_ethernet_slice(&data).unwrap();
             assert_eq!(result.link, test.link);
             assert_eq!(result.vlan, test.vlan);
-            assert_eq!(result.ip, test.ip);
+            assert_eq!(result.net, test.net);
             if is_fragmented {
                 assert_eq!(result.transport, None);
             } else {
@@ -1175,7 +1187,7 @@ mod test {
                 let result = PacketHeaders::from_ether_type(ether_type, &data).unwrap();
                 assert_eq!(result.link, test.link);
                 assert_eq!(result.vlan, test.vlan);
-                assert_eq!(result.ip, test.ip);
+                assert_eq!(result.net, test.net);
                 if is_fragmented {
                     assert_eq!(result.transport, None);
                 } else {
@@ -1186,18 +1198,18 @@ mod test {
         }
         // from_ether_type (ip at start)
         if test.link.is_none() && test.vlan.is_none() {
-            if let Some(ip) = &test.ip {
+            if let Some(ip) = &test.net {
                 let result = PacketHeaders::from_ether_type(
                     match ip {
-                        IpHeaders::Ipv4(_, _) => ether_type::IPV4,
-                        IpHeaders::Ipv6(_, _) => ether_type::IPV6,
+                        NetHeaders::Ipv4(_, _) => ether_type::IPV4,
+                        NetHeaders::Ipv6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )
                 .unwrap();
                 assert_eq!(result.link, test.link);
                 assert_eq!(result.vlan, test.vlan);
-                assert_eq!(result.ip, test.ip);
+                assert_eq!(result.net, test.net);
                 if is_fragmented {
                     assert_eq!(result.transport, None);
                 } else {
@@ -1207,11 +1219,11 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.vlan.is_none() && test.ip.is_some() {
+        if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
             let result = PacketHeaders::from_ip_slice(&data).unwrap();
             assert_eq!(result.link, test.link);
             assert_eq!(result.vlan, test.vlan);
-            assert_eq!(result.ip, test.ip);
+            assert_eq!(result.net, test.net);
             if is_fragmented {
                 assert_eq!(result.transport, None);
             } else {
@@ -1247,11 +1259,11 @@ mod test {
         }
         // from_ether_type (ip at start)
         if test.link.is_none() && test.vlan.is_none() {
-            if let Some(ip) = &test.ip {
+            if let Some(ip) = &test.net {
                 let err = PacketHeaders::from_ether_type(
                     match ip {
-                        IpHeaders::Ipv4(_, _) => ether_type::IPV4,
-                        IpHeaders::Ipv6(_, _) => ether_type::IPV6,
+                        NetHeaders::Ipv4(_, _) => ether_type::IPV4,
+                        NetHeaders::Ipv6(_, _) => ether_type::IPV6,
                     },
                     &data,
                 )
@@ -1260,7 +1272,7 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.vlan.is_none() && test.ip.is_some() {
+        if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
             assert_eq!(ip_err, PacketHeaders::from_ip_slice(&data).unwrap_err());
         }
     }

@@ -3,9 +3,6 @@ use super::super::*;
 use crate::err::ip::HeadersWriteError;
 use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
 
-#[deprecated(since = "0.14.0", note = "`IpHeader` was renamed to `IpHeaders`")]
-pub type IpHeader = IpHeaders;
-
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]

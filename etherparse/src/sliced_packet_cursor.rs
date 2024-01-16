@@ -17,7 +17,7 @@ impl<'a> SlicedPacketCursor<'a> {
             result: SlicedPacket {
                 link: None,
                 vlan: None,
-                ip: None,
+                net: None,
                 transport: None,
             },
         }
@@ -120,7 +120,7 @@ impl<'a> SlicedPacketCursor<'a> {
         };
         self.len_source = payload.len_source;
         self.slice = payload.payload;
-        self.result.ip = Some(ip);
+        self.result.net = Some(ip.into());
 
         // continue to the lower layers
         if payload.fragmented {
@@ -170,7 +170,7 @@ impl<'a> SlicedPacketCursor<'a> {
         };
         self.len_source = payload.len_source;
         self.slice = payload.payload;
-        self.result.ip = Some(IpSlice::Ipv4(ipv4));
+        self.result.net = Some(NetSlice::Ipv4(ipv4));
 
         if payload.fragmented {
             Ok(self.result)
@@ -221,7 +221,7 @@ impl<'a> SlicedPacketCursor<'a> {
         };
         self.len_source = ipv6.payload().len_source;
         self.slice = ipv6.payload().payload;
-        self.result.ip = Some(IpSlice::Ipv6(ipv6));
+        self.result.net = Some(NetSlice::Ipv6(ipv6));
 
         // only try to decode the transport layer if the payload
         // is not fragmented

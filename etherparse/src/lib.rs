@@ -54,7 +54,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("ip: {:?}", value.ip);
+//!         println!("net: {:?}", value.net);
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }
@@ -90,7 +90,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("ip: {:?}", value.ip);
+//!         println!("net: {:?}", value.net);
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }

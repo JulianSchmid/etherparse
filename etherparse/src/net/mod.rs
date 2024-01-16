@@ -93,3 +93,12 @@ pub use lax_ipv4_slice::*;
 
 mod lax_ipv6_slice;
 pub use lax_ipv6_slice::*;
+
+mod lax_net_slice;
+pub use lax_net_slice::*;
+
+mod net_headers;
+pub use net_headers::*;
+
+mod net_slice;
+pub use net_slice::*;
