@@ -676,14 +676,18 @@ impl IpHeaders {
 
         // read the header
         let (header, header_rest) = Ipv4Header::from_slice(slice).map_err(|err| {
-            use err::ipv4::HeaderSliceError as I0;
-            use err::ipv4::HeaderError as I1;
             use err::ip::HeaderError as O;
+            use err::ipv4::HeaderError as I1;
+            use err::ipv4::HeaderSliceError as I0;
             match err {
                 I0::Len(err) => Len(err),
                 I0::Content(err) => Content(match err {
-                    I1::UnexpectedVersion { version_number } => O::UnsupportedIpVersion { version_number },
-                    I1::HeaderLengthSmallerThanHeader { ihl } => O::Ipv4HeaderLengthSmallerThanHeader { ihl },
+                    I1::UnexpectedVersion { version_number } => {
+                        O::UnsupportedIpVersion { version_number }
+                    }
+                    I1::HeaderLengthSmallerThanHeader { ihl } => {
+                        O::Ipv4HeaderLengthSmallerThanHeader { ihl }
+                    }
                 }),
             }
         })?;
