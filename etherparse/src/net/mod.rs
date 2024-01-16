@@ -7,8 +7,8 @@ pub use ip_auth_header_slice::*;
 mod ip_frag_offset;
 pub use ip_frag_offset::*;
 
-mod ip_header;
-pub use ip_header::*;
+mod ip_headers;
+pub use ip_headers::*;
 
 mod ip_number_impl;
 pub use ip_number_impl::*;
