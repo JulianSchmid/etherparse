@@ -300,8 +300,8 @@ impl ComponentTest {
 
         //ip
         assert_eq!(self.ip, {
-            use crate::IpSlice::*;
-            match result.ip.as_ref() {
+            use crate::NetSlice::*;
+            match result.net.as_ref() {
                 Some(Ipv4(actual)) => Some(IpHeaders::Ipv4(
                     actual.header().to_header(),
                     Ipv4Extensions {
@@ -358,8 +358,14 @@ impl ComponentTest {
             }
             // check ip next
             None => {
-                if let Some(ip) = result.ip.as_ref() {
-                    assert_eq!(&self.payload[..], ip.payload().payload);
+                if let Some(ip) = result.net.as_ref() {
+                    assert_eq!(
+                        &self.payload[..],
+                        match ip {
+                            NetSlice::Ipv4(s) => s.payload.payload,
+                            NetSlice::Ipv6(s) => s.payload.payload,
+                        }
+                    );
                 } else {
                     if let Some(vlan) = result.vlan.as_ref() {
                         assert_eq!(&self.payload[..], vlan.payload().payload);
@@ -629,7 +635,7 @@ fn test_packet_slicing_panics() {
     let s = SlicedPacket {
         link: None,
         vlan: None,
-        ip: None,
+        net: None,
         transport: None,
     };
     ComponentTest {

@@ -3,7 +3,7 @@ use crate::{err::*, *};
 /// Slice containing laxly separated IPv4 or IPv6 headers & payload.
 ///
 /// Compared to the normal [`IpSlice`] this slice allows the
-/// payload to incomplete/cut off and errors in the extension headers.
+/// payload to be incomplete/cut off and allowed errors in the extension headers.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
@@ -40,6 +40,14 @@ impl<'a> LaxIpSlice<'a> {
         }
     }
 
+    /// Returns true if the payload is fragmented.
+    pub fn is_fragmenting_payload(&self) -> bool {
+        match self {
+            LaxIpSlice::Ipv4(s) => s.is_payload_fragmented(),
+            LaxIpSlice::Ipv6(s) => s.is_payload_fragmented(),
+        }
+    }
+
     /// Return the source address as an std::net::Ipvddr (requires
     /// crate feature `std`).
     #[cfg(feature = "std")]
@@ -70,6 +78,19 @@ impl<'a> LaxIpSlice<'a> {
         match self {
             Ipv4(ipv4) => ipv4.payload(),
             Ipv6(ipv6) => ipv6.payload(),
+        }
+    }
+
+    /// Returns the ip number the type of payload of the IP packet.
+    ///
+    /// This function returns the ip number stored in the last
+    /// IP header or extension header.
+    #[inline]
+    pub fn payload_ip_number(&self) -> IpNumber {
+        use LaxIpSlice::*;
+        match self {
+            Ipv4(ipv4) => ipv4.payload().ip_number,
+            Ipv6(ipv6) => ipv6.payload().ip_number,
         }
     }
 
@@ -449,6 +470,55 @@ mod test {
         }
     }
 
+    #[test]
+    fn is_fragmenting_payload() {
+        for fragment in [false, true] {
+            use ip_number::UDP;
+            // ipv4
+            {
+                let mut ipv4 = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
+                if fragment {
+                    ipv4.fragment_offset = 123.try_into().unwrap();
+                }
+
+                let data = ipv4.to_bytes();
+                let ipv4_slice = LaxIpv4Slice::from_slice(&data).unwrap().0;
+                assert_eq!(
+                    fragment,
+                    LaxIpSlice::Ipv4(ipv4_slice).is_fragmenting_payload()
+                );
+            }
+
+            // ipv6
+            {
+                let ipv6_frag = Ipv6FragmentHeader {
+                    next_header: UDP,
+                    fragment_offset: IpFragOffset::ZERO,
+                    more_fragments: fragment,
+                    identification: 0,
+                };
+                let ipv6 = Ipv6Header {
+                    traffic_class: 0,
+                    flow_label: 1.try_into().unwrap(),
+                    payload_length: ipv6_frag.header_len() as u16,
+                    next_header: ip_number::IPV6_FRAG,
+                    hop_limit: 4,
+                    source: [1; 16],
+                    destination: [2; 16],
+                };
+                let mut data = Vec::with_capacity(ipv6.header_len() + ipv6_frag.header_len());
+                data.extend_from_slice(&ipv6.to_bytes());
+                data.extend_from_slice(&ipv6_frag.to_bytes());
+
+                assert_eq!(
+                    fragment,
+                    LaxIpSlice::Ipv6(LaxIpv6Slice::from_slice(&data).unwrap().0)
+                        .is_fragmenting_payload()
+                );
+            }
+        }
+    }
+
     #[cfg(feature = "std")]
     #[test]
     fn source_addr() {
@@ -571,6 +641,42 @@ mod test {
                     len_source: LenSource::Ipv6HeaderPayloadLen,
                     payload: &payload,
                 }
+            );
+        }
+    }
+
+    #[test]
+    fn payload_ip_number() {
+        use crate::ip_number::{IGMP, UDP};
+
+        // ipv4
+        {
+            let data = Ipv4Header::new(0, 1, UDP, [3, 4, 5, 6], [7, 8, 9, 10])
+                .unwrap()
+                .to_bytes();
+            assert_eq!(
+                UDP,
+                LaxIpSlice::Ipv4(LaxIpv4Slice::from_slice(&data[..]).unwrap().0)
+                    .payload_ip_number()
+            );
+        }
+
+        // ipv6
+        {
+            let data = Ipv6Header {
+                traffic_class: 0,
+                flow_label: 1.try_into().unwrap(),
+                payload_length: 0,
+                next_header: IGMP,
+                hop_limit: 4,
+                source: [1; 16],
+                destination: [2; 16],
+            }
+            .to_bytes();
+
+            assert_eq!(
+                IGMP,
+                LaxIpSlice::Ipv6(LaxIpv6Slice::from_slice(&data).unwrap().0).payload_ip_number()
             );
         }
     }

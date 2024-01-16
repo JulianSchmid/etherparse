@@ -82,8 +82,8 @@ mod regression {
             assert_eq!(valid_checksum, checksum);
             // reset it and recalculate
             icmp6.checksum = 0;
-            let iph = match request.ip {
-                Some(IpHeaders::Ipv6(ipv6, _)) => ipv6,
+            let iph = match request.net {
+                Some(NetHeaders::Ipv6(ipv6, _)) => ipv6,
                 _ => panic!("Failed to parse ipv6 part of packet?!"),
             };
             assert_eq!(

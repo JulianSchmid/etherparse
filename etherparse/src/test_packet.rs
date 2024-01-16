@@ -1,11 +1,11 @@
-use crate::{EtherType, Ethernet2Header, IpHeaders, TransportHeader, VlanHeader};
+use crate::*;
 use alloc::vec::Vec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {
     pub link: Option<Ethernet2Header>,
     pub vlan: Option<VlanHeader>,
-    pub ip: Option<IpHeaders>,
+    pub net: Option<NetHeaders>,
     pub transport: Option<TransportHeader>,
 }
 
@@ -13,7 +13,7 @@ impl TestPacket {
     pub fn len(&self, payload: &[u8]) -> usize {
         self.link.as_ref().map_or(0, |x| x.header_len())
             + self.vlan.as_ref().map_or(0, |x| x.header_len())
-            + self.ip.as_ref().map_or(0, |x| x.header_len())
+            + self.net.as_ref().map_or(0, |x| x.header_len())
             + self.transport.as_ref().map_or(0, |x| x.header_len())
             + payload.len()
     }
@@ -26,13 +26,13 @@ impl TestPacket {
         if let Some(vlan) = &self.vlan {
             vlan.write(&mut result).unwrap();
         }
-        if let Some(ip) = &self.ip {
+        if let Some(ip) = &self.net {
             match ip {
-                IpHeaders::Ipv4(ipv4, exts) => {
+                NetHeaders::Ipv4(ipv4, exts) => {
                     ipv4.write_raw(&mut result).unwrap();
                     exts.write(&mut result, ipv4.protocol).unwrap();
                 }
-                IpHeaders::Ipv6(ipv6, exts) => {
+                NetHeaders::Ipv6(ipv6, exts) => {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
                 }
@@ -62,8 +62,8 @@ impl TestPacket {
     }
 
     pub fn set_payload_len(&mut self, payload_len: usize) {
-        use IpHeaders::*;
-        match &mut self.ip {
+        use NetHeaders::*;
+        match &mut self.net {
             None => {}
             Some(Ipv4(ref mut header, ref mut exts)) => {
                 header
@@ -99,8 +99,8 @@ impl TestPacket {
 
     /// Set the length relative to the end of the ip headers.
     pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
-        use IpHeaders::*;
-        match self.ip.as_mut().unwrap() {
+        use NetHeaders::*;
+        match self.net.as_mut().unwrap() {
             Ipv4(ref mut header, ref mut exts) => {
                 header
                     .set_payload_len((exts.header_len() as isize + payload_len_from_ip_on) as usize)
@@ -117,8 +117,11 @@ impl TestPacket {
     }
 
     pub fn is_ip_payload_fragmented(&self) -> bool {
-        self.ip
+        self.net
             .as_ref()
-            .map_or(false, |ip| ip.is_fragmenting_payload())
+            .map_or(false, |net| match net {
+                NetHeaders::Ipv4(h, _) => h.is_fragmenting_payload(),
+                NetHeaders::Ipv6(_, e) => e.is_fragmenting_payload(),
+            })
     }
 }
