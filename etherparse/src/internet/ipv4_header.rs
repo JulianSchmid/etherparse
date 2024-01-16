@@ -383,13 +383,13 @@ impl Ipv4Header {
     /// If you want to have correctly seperated payload including the IP extension
     /// headers use
     ///
-    /// * [`IpHeaders::ipv4_from_slice`] (decodes all the fields of the IP headers)
+    /// * [`IpHeaders::from_ipv4_slice`] (decodes all the fields of the IP headers)
     /// * [`Ipv4Slice::from_slice`] (just identifies the ranges in the slice where
     ///   the headers and payload are present)
     ///
     /// or
     ///
-    /// * [`IpHeaders::ipv4_from_slice_lax`]
+    /// * [`IpHeaders::from_ipv4_slice_lax`]
     /// * [`LaxIpv4Slice::from_slice`]
     ///
     /// for a laxer version which falls back to slice length when the `total_length`

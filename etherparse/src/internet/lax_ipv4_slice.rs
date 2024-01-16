@@ -274,7 +274,7 @@ mod test {
         payload: &[u8],
     ) -> crate::IpHeaders {
         use crate::ip_number::UDP;
-        crate::IpHeaders::Version4(
+        crate::IpHeaders::Ipv4(
             {
                 let mut v4 = v4.clone();
                 v4.protocol = if ext.auth.is_some() { AUTH } else { UDP };
@@ -321,8 +321,8 @@ mod test {
             {
                 let (actual, actual_stop_err) = LaxIpv4Slice::from_slice(&buffer).unwrap();
                 assert_eq!(None, actual_stop_err);
-                assert_eq!(&actual.header.to_header(), header.v4().unwrap().0);
-                assert_eq!(&actual.extensions().to_header(), header.v4().unwrap().1);
+                assert_eq!(&actual.header.to_header(), header.ipv4().unwrap().0);
+                assert_eq!(&actual.extensions().to_header(), header.ipv4().unwrap().1);
                 assert_eq!(
                     actual.payload,
                     LaxIpPayloadSlice{
@@ -379,7 +379,7 @@ mod test {
             for payload_len in 0..payload.len(){
                 let (actual, stop_err) = LaxIpv4Slice::from_slice(&buffer[..v4.header_len() + v4_exts.header_len() + payload_len]).unwrap();
                 assert_eq!(stop_err, None);
-                assert_eq!(&actual.header().to_header(), header.v4().unwrap().0);
+                assert_eq!(&actual.header().to_header(), header.ipv4().unwrap().0);
                 assert_eq!(
                     actual.payload(),
                     &LaxIpPayloadSlice{
@@ -395,7 +395,7 @@ mod test {
             // len error ipv4 extensions
             if v4_exts.header_len() > 0 {
                 let (actual, stop_err) = LaxIpv4Slice::from_slice(&buffer[..v4.header_len() + 1]).unwrap();
-                assert_eq!(&actual.header().to_header(), header.v4().unwrap().0);
+                assert_eq!(&actual.header().to_header(), header.ipv4().unwrap().0);
                 assert_eq!(
                     actual.payload(),
                     &LaxIpPayloadSlice{
@@ -411,7 +411,7 @@ mod test {
                     len: 1,
                     len_source: LenSource::Slice,
                     layer: err::Layer::IpAuthHeader,
-                    layer_start_offset: header.v4().unwrap().0.header_len()
+                    layer_start_offset: header.ipv4().unwrap().0.header_len()
                 })));
             }
 
@@ -427,9 +427,9 @@ mod test {
                 errored_buffer[v4.header_len() + 1] = 0;
 
                 let (actual, stop_err) = LaxIpv4Slice::from_slice(&errored_buffer).unwrap();
-                assert_eq!(&actual.header().to_header(), header.v4().unwrap().0);
+                assert_eq!(&actual.header().to_header(), header.ipv4().unwrap().0);
                 assert!(actual.extensions().is_empty());
-                let auth_offset = header.v4().unwrap().0.header_len();
+                let auth_offset = header.ipv4().unwrap().0.header_len();
                 let payload_end = auth_offset + v4_exts.auth.map(|v| v.header_len()).unwrap() + payload.len();
                 assert_eq!(
                     actual.payload(),
@@ -457,8 +457,8 @@ mod test {
                 let (actual, actual_stop_error) = LaxIpv4Slice::from_slice(&buffer[..]).unwrap();
                 assert_eq!(actual_stop_error, None);
 
-                let (v4_header, v4_exts) = header.v4().unwrap();
-                let expected_headers = IpHeaders::Version4(
+                let (v4_header, v4_exts) = header.ipv4().unwrap();
+                let expected_headers = IpHeaders::Ipv4(
                     {
                         let mut expected_v4 = v4_header.clone();
                         expected_v4.total_len = bad_total_len;
@@ -466,7 +466,7 @@ mod test {
                     },
                     v4_exts.clone()
                 );
-                assert_eq!(expected_headers.v4().unwrap().0, &actual.header().to_header());
+                assert_eq!(expected_headers.ipv4().unwrap().0, &actual.header().to_header());
                 assert_eq!(
                     actual.payload(),
                     &LaxIpPayloadSlice{
