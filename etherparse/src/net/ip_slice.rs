@@ -1,6 +1,6 @@
 use crate::{
     err::{ip, Layer, LenError, LenSource},
-    *
+    *,
 };
 
 /// Slice containing the IP header (v4 or v6), extension headers &

@@ -117,11 +117,9 @@ impl TestPacket {
     }
 
     pub fn is_ip_payload_fragmented(&self) -> bool {
-        self.net
-            .as_ref()
-            .map_or(false, |net| match net {
-                NetHeaders::Ipv4(h, _) => h.is_fragmenting_payload(),
-                NetHeaders::Ipv6(_, e) => e.is_fragmenting_payload(),
-            })
+        self.net.as_ref().map_or(false, |net| match net {
+            NetHeaders::Ipv4(h, _) => h.is_fragmenting_payload(),
+            NetHeaders::Ipv6(_, e) => e.is_fragmenting_payload(),
+        })
     }
 }
