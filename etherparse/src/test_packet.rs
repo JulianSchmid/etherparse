@@ -28,11 +28,11 @@ impl TestPacket {
         }
         if let Some(ip) = &self.ip {
             match ip {
-                IpHeaders::Version4(ipv4, exts) => {
+                IpHeaders::Ipv4(ipv4, exts) => {
                     ipv4.write_raw(&mut result).unwrap();
                     exts.write(&mut result, ipv4.protocol).unwrap();
                 }
-                IpHeaders::Version6(ipv6, exts) => {
+                IpHeaders::Ipv6(ipv6, exts) => {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
                 }
@@ -65,7 +65,7 @@ impl TestPacket {
         use IpHeaders::*;
         match &mut self.ip {
             None => {}
-            Some(Version4(ref mut header, ref mut exts)) => {
+            Some(Ipv4(ref mut header, ref mut exts)) => {
                 header
                     .set_payload_len(
                         exts.header_len()
@@ -74,7 +74,7 @@ impl TestPacket {
                     )
                     .unwrap();
             }
-            Some(Version6(ref mut header, ref mut exts)) => {
+            Some(Ipv6(ref mut header, ref mut exts)) => {
                 header
                     .set_payload_length(
                         exts.header_len()
@@ -101,12 +101,12 @@ impl TestPacket {
     pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
         use IpHeaders::*;
         match self.ip.as_mut().unwrap() {
-            Version4(ref mut header, ref mut exts) => {
+            Ipv4(ref mut header, ref mut exts) => {
                 header
                     .set_payload_len((exts.header_len() as isize + payload_len_from_ip_on) as usize)
                     .unwrap();
             }
-            Version6(ref mut header, ref mut exts) => {
+            Ipv6(ref mut header, ref mut exts) => {
                 header
                     .set_payload_length(
                         (exts.header_len() as isize + payload_len_from_ip_on) as usize,

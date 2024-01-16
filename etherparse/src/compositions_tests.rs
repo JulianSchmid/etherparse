@@ -49,11 +49,11 @@ impl ComponentTest {
             None => {}
         }
         match &self.ip {
-            Some(IpHeaders::Version4(header, exts)) => {
+            Some(IpHeaders::Ipv4(header, exts)) => {
                 header.write_raw(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.protocol).unwrap();
             }
-            Some(IpHeaders::Version6(header, exts)) => {
+            Some(IpHeaders::Ipv6(header, exts)) => {
                 header.write(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.next_header).unwrap();
             }
@@ -86,7 +86,7 @@ impl ComponentTest {
         // set the payload length
         if let Some(ip) = test.ip.as_mut() {
             match ip {
-                IpHeaders::Version4(ipv4, exts) => {
+                IpHeaders::Ipv4(ipv4, exts) => {
                     ipv4.set_payload_len(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -94,7 +94,7 @@ impl ComponentTest {
                     )
                     .unwrap();
                 }
-                IpHeaders::Version6(ipv6, exts) => {
+                IpHeaders::Ipv6(ipv6, exts) => {
                     ipv6.set_payload_length(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -237,13 +237,13 @@ impl ComponentTest {
         if let Some(ip) = self.ip.as_ref() {
             use IpHeaders::*;
             match ip {
-                Version4(header, exts) => {
+                Ipv4(header, exts) => {
                     builder.add(header.header_len());
                     if let Some(auth) = exts.auth.as_ref() {
                         builder.add(auth.header_len());
                     }
                 }
-                Version6(header, exts) => {
+                Ipv6(header, exts) => {
                     builder.add(header.header_len());
                     if let Some(e) = exts.hop_by_hop_options.as_ref() {
                         builder.add(e.header_len());
@@ -300,16 +300,15 @@ impl ComponentTest {
 
         //ip
         assert_eq!(self.ip, {
-            use self::IpHeaders::*;
             use crate::IpSlice::*;
             match result.ip.as_ref() {
-                Some(Ipv4(actual)) => Some(Version4(
+                Some(Ipv4(actual)) => Some(IpHeaders::Ipv4(
                     actual.header().to_header(),
                     Ipv4Extensions {
                         auth: actual.extensions().auth.map(|ref x| x.to_header()),
                     },
                 )),
-                Some(Ipv6(actual)) => Some(Version6(
+                Some(Ipv6(actual)) => Some(IpHeaders::Ipv6(
                     actual.header().to_header(),
                     Ipv6Extensions::from_slice(
                         actual.header().next_header(),
@@ -446,7 +445,7 @@ impl ComponentTest {
                 if false == frag.is_fragmenting_payload() {
                     frag.more_fragments = true;
                 }
-                let mut header = IpHeaders::Version4(frag, ip_exts.clone());
+                let mut header = IpHeaders::Ipv4(frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header
             });
@@ -462,7 +461,7 @@ impl ComponentTest {
                 let mut non_frag = ip.clone();
                 non_frag.more_fragments = false;
                 non_frag.fragment_offset = 0.try_into().unwrap();
-                let mut header = IpHeaders::Version4(non_frag, ip_exts.clone());
+                let mut header = IpHeaders::Ipv4(non_frag, ip_exts.clone());
                 header.set_next_headers(ip.protocol);
                 header
             });
@@ -496,7 +495,7 @@ impl ComponentTest {
                         0,
                     ));
                 }
-                let mut header = IpHeaders::Version6(ip.clone(), frag);
+                let mut header = IpHeaders::Ipv6(ip.clone(), frag);
                 header.set_next_headers(ip.next_header);
                 header
             });
@@ -509,7 +508,7 @@ impl ComponentTest {
             test.ip = Some({
                 let mut non_frag = ip_exts.clone();
                 non_frag.fragment = None;
-                let mut header = IpHeaders::Version6(ip.clone(), non_frag);
+                let mut header = IpHeaders::Ipv6(ip.clone(), non_frag);
                 header.set_next_headers(ip.next_header);
                 header
             });

@@ -83,7 +83,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             LaxIpSlice::Ipv6(_) => false,
         };
         let payload = ip.payload().clone();
-        let offset = (ip.payload().payload.as_ptr() as usize) - (slice.as_ptr() as usize);
+        let offset = (payload.payload.as_ptr() as usize) - (slice.as_ptr() as usize);
         Ok(LaxSlicedPacketCursor {
             offset,
             result: LaxSlicedPacket {

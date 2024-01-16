@@ -243,7 +243,7 @@ impl PacketBuilder {
     /// #
     /// let builder = PacketBuilder::
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    ip(IpHeaders::Version4(
+    ///    ip(IpHeaders::Ipv4(
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
@@ -272,7 +272,7 @@ impl PacketBuilder {
     /// # use etherparse::*;
     /// #
     /// let builder = PacketBuilder::
-    ///    ip(IpHeaders::Version6(
+    ///    ip(IpHeaders::Ipv6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0.try_into().unwrap(),
@@ -361,7 +361,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         time_to_live: u8,
     ) -> PacketBuilderStep<IpHeaders> {
         //add ip header
-        self.state.ip_header = Some(IpHeaders::Version4(
+        self.state.ip_header = Some(IpHeaders::Ipv4(
             Ipv4Header {
                 source,
                 destination,
@@ -390,7 +390,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    .ip(IpHeaders::Version4(
+    ///    .ip(IpHeaders::Ipv4(
     ///        Ipv4Header::new(
     ///            0, //payload_len will be replaced during write
     ///            12, //time_to_live
@@ -409,7 +409,7 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// let builder = PacketBuilder::
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
-    ///    .ip(IpHeaders::Version6(
+    ///    .ip(IpHeaders::Ipv6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0.try_into().unwrap(),
@@ -469,7 +469,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         destination: [u8; 16],
         hop_limit: u8,
     ) -> PacketBuilderStep<IpHeaders> {
-        self.state.ip_header = Some(IpHeaders::Version6(
+        self.state.ip_header = Some(IpHeaders::Ipv6(
             Ipv6Header {
                 traffic_class: 0,
                 flow_label: Ipv6FlowLabel::ZERO,
@@ -646,7 +646,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///               [7,8,9,10,11,12])
     ///    .single_vlan(0x132.try_into().unwrap())
     ///    //payload_len, protocol & checksum will be replaced during write
-    ///    .ip(IpHeaders::Version4(
+    ///    .ip(IpHeaders::Ipv4(
     ///         Ipv4Header::new(
     ///             0, //payload_len will be replaced during write
     ///             12, //time_to_live
@@ -666,7 +666,7 @@ impl PacketBuilderStep<VlanHeader> {
     ///     ethernet2([1,2,3,4,5,6],
     ///               [7,8,9,10,11,12])
     ///    .single_vlan(0x132.try_into().unwrap())
-    ///    .ip(IpHeaders::Version6(
+    ///    .ip(IpHeaders::Ipv6(
     ///         Ipv6Header{
     ///             traffic_class: 0,
     ///             flow_label: 0.try_into().unwrap(),
@@ -1560,8 +1560,8 @@ fn final_write<T: io::Write + Sized, B>(
     let ip_ether_type = {
         use crate::IpHeaders::*;
         match builder.state.ip_header {
-            Some(Version4(_, _)) => ether_type::IPV4,
-            Some(Version6(_, _)) => ether_type::IPV6,
+            Some(Ipv4(_, _)) => ether_type::IPV4,
+            Some(Ipv6(_, _)) => ether_type::IPV6,
             None => panic!("Missing ip header"),
         }
     };
@@ -1612,7 +1612,7 @@ fn final_write<T: io::Write + Sized, B>(
             // number and next_header fields are set in the write call
             // directly and don't need to be set here again.
             match ip_header {
-                Version4(mut ip, ext) => {
+                Ipv4(mut ip, ext) => {
                     ip.set_payload_len(ext.header_len() + payload.len())
                         .map_err(PayloadLen)?;
                     ip.write(writer).map_err(Io)?;
@@ -1624,7 +1624,7 @@ fn final_write<T: io::Write + Sized, B>(
                         }
                     })?;
                 }
-                Version6(mut ip, ext) => {
+                Ipv6(mut ip, ext) => {
                     ip.set_payload_length(ext.header_len() + payload.len())
                         .map_err(PayloadLen)?;
                     ip.write(writer).map_err(Io)?;
@@ -1640,7 +1640,7 @@ fn final_write<T: io::Write + Sized, B>(
         }
         Some(mut transport) => {
             match ip_header {
-                Version4(mut ip, mut ext) => {
+                Ipv4(mut ip, mut ext) => {
                     //set total length & udp payload length (ip checks that the payload length is ok)
                     let transport_size = transport.header_len() + payload.len();
                     ip.set_payload_len(ext.header_len() + transport_size)
@@ -1684,7 +1684,7 @@ fn final_write<T: io::Write + Sized, B>(
                         }
                     })?;
                 }
-                Version6(mut ip, mut ext) => {
+                Ipv6(mut ip, mut ext) => {
                     //set total length
                     let transport_size = transport.header_len() + payload.len();
                     ip.set_payload_length(ext.header_len() + transport_size)
@@ -1745,8 +1745,8 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Double(_)) => DoubleVlanHeader::LEN,
         None => 0,
     } + match builder.state.ip_header {
-        Some(Version4(ref value, ref ext)) => value.header_len() + ext.header_len(),
-        Some(Version6(_, ref ext)) => Ipv6Header::LEN + ext.header_len(),
+        Some(Ipv4(ref value, ref ext)) => value.header_len() + ext.header_len(),
+        Some(Ipv6(_, ref ext)) => Ipv6Header::LEN + ext.header_len(),
         None => 0,
     } + match builder.state.transport_header {
         Some(Icmpv4(ref value)) => value.header_len(),
@@ -1874,7 +1874,7 @@ mod test {
         //generate
         let in_payload = [22, 23, 24, 25];
         let mut serialized = Vec::new();
-        let builder = PacketBuilder::ip(IpHeaders::Version4(
+        let builder = PacketBuilder::ip(IpHeaders::Ipv4(
             Ipv4Header::new(
                 in_payload.len() as u16,
                 21,
@@ -1951,7 +1951,7 @@ mod test {
         //generate
         let in_payload = [48, 49, 50, 51];
         let mut serialized = Vec::new();
-        let builder = PacketBuilder::ip(IpHeaders::Version6(
+        let builder = PacketBuilder::ip(IpHeaders::Ipv6(
             Ipv6Header {
                 traffic_class: 0,
                 flow_label: Ipv6FlowLabel::ZERO,
@@ -2145,7 +2145,7 @@ mod test {
         //generate
         let in_payload = [24, 25, 26, 27];
         let mut serialized = Vec::new();
-        PacketBuilder::ip(IpHeaders::Version4(
+        PacketBuilder::ip(IpHeaders::Ipv4(
             Ipv4Header::new(
                 0,                //payload_len will be replaced during write
                 12,               //time_to_live
@@ -2442,7 +2442,7 @@ mod test {
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
         PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
-            .ip(IpHeaders::Version6(
+            .ip(IpHeaders::Ipv6(
                 Ipv6Header {
                     traffic_class: 1,
                     flow_label: 2.try_into().unwrap(),
@@ -2526,7 +2526,7 @@ mod test {
                 vlan_id: 0x123.try_into().unwrap(),
                 ether_type: 0.into(), //should be overwritten
             }))
-            .ip(IpHeaders::Version6(
+            .ip(IpHeaders::Ipv6(
                 Ipv6Header {
                     traffic_class: 1,
                     flow_label: 2.try_into().unwrap(),
@@ -2992,7 +2992,7 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Version4(ip_expected, Default::default())),
+                    Some(IpHeaders::Ipv4(ip_expected, Default::default())),
                     actual.ip
                 );
                 assert_eq!(
@@ -3211,7 +3211,7 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Version6(ip_expected, Default::default())),
+                    Some(IpHeaders::Ipv6(ip_expected, Default::default())),
                     actual.ip
                 );
                 assert_eq!(
@@ -3338,7 +3338,7 @@ mod test {
                     actual.link
                 );
                 assert_eq!(
-                    Some(IpHeaders::Version6(ip_expected, Default::default())),
+                    Some(IpHeaders::Ipv6(ip_expected, Default::default())),
                     actual.ip
                 );
                 assert_eq!(
