@@ -2,7 +2,10 @@ use crate::*;
 
 /// Deprecated use [`crate::NetSlice`] or [`crate::IpSlice`] instead.
 #[cfg(feature = "std")]
-#[deprecated(since = "0.14.0", note = "Deprecated use crate::NetSlice or crate::IpSlice instead")]
+#[deprecated(
+    since = "0.14.0",
+    note = "Deprecated use crate::NetSlice or crate::IpSlice instead"
+)]
 pub use NetSlice as InternetSlice;
 
 /// Slice containing the network headers & payloads (e.g. IPv4, IPv6, ARP).
