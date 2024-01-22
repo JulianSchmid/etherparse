@@ -3,7 +3,8 @@ use crate::{err::LenSource, *};
 /// Slice containing laxly separated IPv4 headers & payload.
 ///
 /// Compared to the normal [`Ipv4Slice`] this slice allows the
-/// payload to incomplete/cut off and errors in the extension headers.
+/// payload to be incomplete/cut off and errors to be present in
+/// the IpPayload.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
@@ -41,9 +42,14 @@ impl<'a> LaxIpv4Slice<'a> {
     ///
     /// There are two main differences:
     ///
-    /// * The lax version allows inconsistent `total_len` values in the IPv4 header
-    /// * Errors when parsing a header extension will still return the parse result
-    ///   until the error was encountered.
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `Ipv4Slice::from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `LaxIpv4Slice::from_slice` ignores inconsistent `total_len` values. When the `total_len`
+    ///   value in the IPv4 header are inconsistant the length of the given slice is
+    ///   used as a substitute.
     ///
     /// ## What happens in the `total_len` value is inconsistent?
     ///
