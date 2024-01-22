@@ -77,7 +77,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
     pub fn parse_from_ip(
         slice: &'a [u8],
     ) -> Result<LaxSlicedPacket<'a>, err::ip::LaxHeaderSliceError> {
-        let (ip, stop_err) = LaxIpSlice::from_ip_slice(slice)?;
+        let (ip, stop_err) = LaxIpSlice::from_slice(slice)?;
         let is_ip_v4 = match &ip {
             LaxIpSlice::Ipv4(_) => true,
             LaxIpSlice::Ipv6(_) => false,
@@ -174,7 +174,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
 
     pub fn slice_ip(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
         // ip slice
-        let ip = match LaxIpSlice::from_ip_slice(slice) {
+        let ip = match LaxIpSlice::from_slice(slice) {
             Ok(ip) => ip,
             Err(e) => {
                 use err::ip::LaxHeaderSliceError as I;

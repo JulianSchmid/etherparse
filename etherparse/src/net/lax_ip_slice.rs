@@ -3,7 +3,7 @@ use crate::{err::*, *};
 /// Slice containing laxly separated IPv4 or IPv6 headers & payload.
 ///
 /// Compared to the normal [`IpSlice`] this slice allows the
-/// payload to be incomplete/cut off and allowed errors in the extension headers.
+/// payload to be incomplete/cut off and errors in the IpPayload.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
@@ -94,11 +94,11 @@ impl<'a> LaxIpSlice<'a> {
         }
     }
 
-    /// Separates IP headers (include extension headers) & the IP payload from the given
-    /// slice with less strict length checks (useful for cut off packet or for packets with
-    /// unset length fields).
+    /// Separates IP headers (include extension headers) & the IP payload from the given slice
+    /// as far as possible without encountering an error and with less strict length checks.
+    /// This function is usefull for cut off packet or for packets with unset length fields.
     ///
-    /// If you want to only receive correct IpPayloads use [`crate::IpSlice::from_ip_slice`]
+    /// If you want to only receive correct IpPayloads use [`IpSlice::from_ip_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:
@@ -110,12 +110,19 @@ impl<'a> LaxIpSlice<'a> {
     ///   recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
-    /// # Differences to `from_ip_slice`:
+    /// # Differences to `IpSlice::from_slice`:
     ///
-    /// The main differences is that the function ignores inconsistent
-    /// `total_len` (in IPv4 headers) and `payload_length` (in IPv6 headers)
-    /// values. When these length values in the IP header are inconsistant the
-    /// length of the given slice is used as a substitute.
+    // There are two main differences:
+    ///
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `from_slice_lax` ignores inconsistent `total_len` (in IPv4 headers) and
+    ///   inconsistent `payload_length` (in IPv6 headers) values. When these length
+    ///   values in the IP header are inconsistant the length of the given slice is
+    ///   used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if `result.payload().len_source` is set to [`LenSource::Slice`].
@@ -135,7 +142,7 @@ impl<'a> LaxIpSlice<'a> {
     ///
     /// * Bigger then the given slice (payload cannot fully be seperated).
     /// * The value `0`.
-    pub fn from_ip_slice(
+    pub fn from_slice(
         slice: &[u8],
     ) -> Result<
         (
@@ -697,7 +704,7 @@ mod test {
 
             // zero payload
             assert_eq!(
-                LaxIpSlice::from_ip_slice(&[]),
+                LaxIpSlice::from_slice(&[]),
                 Err(E::Len(LenError{
                     required_len: 1,
                     len: 0,
@@ -711,7 +718,7 @@ mod test {
             for bad_version in 0..0xfu8 {
                 if bad_version != 4 && bad_version != 6 {
                     assert_eq!(
-                        LaxIpSlice::from_ip_slice(&[bad_version << 4]),
+                        LaxIpSlice::from_slice(&[bad_version << 4]),
                         Err(E::Content(UnsupportedIpVersion {
                             version_number: bad_version,
                         }))
@@ -749,7 +756,7 @@ mod test {
                 // happy path v4
                 {
                     // run test
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     assert!(actual.ipv6().is_none());
                     let actual = actual.ipv4().unwrap().clone();
@@ -775,7 +782,7 @@ mod test {
                     buffer[0] = (buffer[0] & 0xf0u8) | bad_ihl;
 
                     assert_eq!(
-                        LaxIpSlice::from_ip_slice(&buffer),
+                        LaxIpSlice::from_slice(&buffer),
                         Err(E::Content(Ipv4HeaderLengthSmallerThanHeader { ihl: bad_ihl }))
                     );
                 }
@@ -783,7 +790,7 @@ mod test {
                 // slice smaller then header error
                 for bad_len in 1..ipv4_header.header_len() {
                     assert_eq!(
-                        LaxIpSlice::from_ip_slice(&buffer[..bad_len]),
+                        LaxIpSlice::from_slice(&buffer[..bad_len]),
                         Err(E::Len(LenError{
                             required_len: ipv4_header.header_len(),
                             len: bad_len,
@@ -804,7 +811,7 @@ mod test {
                     buffer[3] = bad_len_be[1];
 
                     // expect a valid parse with length source "slice"
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     let actual = actual.ipv4().unwrap().clone();
                     let mut expected_header = ipv4_header.clone();
@@ -834,7 +841,7 @@ mod test {
                     buffer[3] = bad_len_be[1];
 
                     // expect a valid parse with length source "slice" & incomplete set
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     let actual = actual.ipv4().unwrap().clone();
                     let mut expected_header = ipv4_header.clone();
@@ -857,7 +864,7 @@ mod test {
                 if ipv4_exts.auth.is_some() {
                     let bad_len = ipv4_header.header_len() + ipv4_exts.header_len() - 1;
 
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer[..bad_len]).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer[..bad_len]).unwrap();
                     assert_eq!(
                         actual_stop_err,
                         Some((
@@ -889,7 +896,7 @@ mod test {
                     let mut buffer = buffer.clone();
                     buffer[ipv4_header.header_len() + 1] = 0;
 
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
 
                     assert_eq!(
                         actual_stop_err,
@@ -934,7 +941,7 @@ mod test {
                 // happy path v6
                 {
                     // run test
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     assert!(actual.ipv4().is_none());
                     let actual = actual.ipv6().unwrap().clone();
@@ -961,7 +968,7 @@ mod test {
                 // len error when parsing header
                 for bad_len in 1..ipv6_header.header_len() {
                     assert_eq!(
-                        LaxIpSlice::from_ip_slice(&buffer[..bad_len]),
+                        LaxIpSlice::from_slice(&buffer[..bad_len]),
                         Err(E::Len(LenError{
                             required_len: ipv6_header.header_len(),
                             len: bad_len,
@@ -981,7 +988,7 @@ mod test {
                     buffer[5] = 0;
 
                     // run test
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     let actual = actual.ipv6().unwrap().clone();
                     let mut expected_header = ipv6_header.clone();
@@ -1017,7 +1024,7 @@ mod test {
                     buffer[5] = bad_payload_len_be[1];
 
                     // run test
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     assert_eq!(None, actual_stop_err);
                     let actual = actual.ipv6().unwrap().clone();
                     let mut expected_header = ipv6_header.clone();
@@ -1047,7 +1054,7 @@ mod test {
                 if ipv6_exts.hop_by_hop_options.is_some() {
                     let bad_len = Ipv6Header::LEN + 1;
 
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer[..bad_len]).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer[..bad_len]).unwrap();
 
                     let actual = actual.ipv6().unwrap().clone();
                     assert_eq!(actual.header.to_header(), ipv6_header);
@@ -1092,7 +1099,7 @@ mod test {
                     // trigger a content error)
                     buffer[auth_offset + 1] = 0;
 
-                    let (actual, actual_stop_err) = LaxIpSlice::from_ip_slice(&buffer).unwrap();
+                    let (actual, actual_stop_err) = LaxIpSlice::from_slice(&buffer).unwrap();
                     let actual = actual.ipv6().unwrap().clone();
                     assert_eq!(actual.header.to_header(), ipv6_header);
                     assert_eq!(

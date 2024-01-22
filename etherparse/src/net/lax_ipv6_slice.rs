@@ -6,7 +6,8 @@ use crate::{
 /// Slice containing laxly separated IPv6 headers & payload.
 ///
 /// Compared to the normal [`Ipv6Slice`] this slice allows the
-/// payload to incomplete/cut off and errors in the extension headers.
+/// payload to incomplete/cut off and errors to be present in
+/// the IpPayload.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
@@ -42,10 +43,16 @@ impl<'a> LaxIpv6Slice<'a> {
     ///
     /// # Differences to `from_slice`:
     ///
-    /// The main differences is that the function ignores inconsistent
-    /// `payload_length` values (in IPv6 headers). When these length values
-    /// in the IP header are inconsistant the length of the given slice is
-    /// used as a substitute.
+    /// There are two main differences:
+    ///
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `Ipv4Slice::from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `LaxIpv4Slice::from_slice` ignores inconsistent `payload_length` values. When the
+    ///   `payload_length` value in the IPv6 header is inconsistant the length of
+    ///   the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if the `len_source` value in the returned [`IpPayloadSlice`] is set to

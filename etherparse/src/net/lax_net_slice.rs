@@ -3,7 +3,8 @@ use crate::*;
 /// Slice containing laxly parsed the network headers & payloads (e.g. IPv4, IPv6, ARP).
 ///
 /// Compared to the normal [`NetSlice`] this slice allows the
-/// payload to be incomplete/cut off and also errors in the extension headers.
+/// payload to be incomplete/cut off and errors to be present in
+/// the IpPayload.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
