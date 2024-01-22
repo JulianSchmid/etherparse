@@ -53,7 +53,7 @@ impl IpHeaders {
     /// be present.
     ///
     /// If you want to ignore these kind of length errors based on the length
-    /// fields in the IP headers use [`IpHeaders::from_ip_slice_lax`] instead.
+    /// fields in the IP headers use [`IpHeaders::from_slice_lax`] instead.
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(IpHeaders, IpPayloadSlice<'_>), err::ip::HeadersSliceError> {
@@ -265,9 +265,9 @@ impl IpHeaders {
         }
     }
 
-    /// Reads an [`IpHeaders`] & Separates the payload from the given slice with
-    /// less strict length checks (useful for cut off packet or for packets with
-    /// unset length fields).
+    /// Reads an [`IpHeaders`] as far as possible without error & separates the
+    /// payload from the given slice with less strict length checks. This function is
+    /// usefull for cut off packet or for packets with unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::from_slice`]
     /// instead.
@@ -283,10 +283,17 @@ impl IpHeaders {
     ///
     /// # Differences to `from_slice`:
     ///
-    /// The main differences is that the function ignores inconsistent
-    /// `total_len` (in IPv4 headers) and `payload_length` (in IPv6 headers)
-    /// values. When these length values in the IP header are inconsistant the
-    /// length of the given slice is used as a substitute.
+    /// There are two main differences:
+    ///
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `from_slice_lax` ignores inconsistent `total_len` (in IPv4 headers) and
+    ///   inconsistent `payload_length` (in IPv6 headers) values. When these length
+    ///   values in the IP header are inconsistant the length of the given slice is
+    ///   used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
     /// if the `len_source` value in the returned [`LaxIpPayloadSlice`] is set to
@@ -625,9 +632,9 @@ impl IpHeaders {
         ))
     }
 
-    /// Reads an IPv4 header (+ extensions) & Separates the payload from the given slice with
-    /// less strict length checks (useful for cut off packet or for packets with
-    /// unset length fields).
+    /// Reads an IPv4 header & its extensions headers as far as is possible without encountering an
+    /// error & separates the payload from the given slice with less strict length checks.
+    /// This function is usefull for cut off packet or for packets with unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::from_ipv4_slice`]
     /// instead.
@@ -643,12 +650,19 @@ impl IpHeaders {
     ///
     /// # Differences to `from_ipv4_slice`:
     ///
-    /// The main differences is that the function ignores inconsistent
-    /// `total_len` values (in IPv4 headers). When the total_length value in the IPv4
-    /// header is inconsistant the length of the given slice is used as a substitute.
+    /// There are two main differences:
+    ///
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `from_ipv4_slice_lax` ignores inconsistent `total_len` values. When the `total_len`
+    ///   value in the IPv4 header are inconsistant the length of the given slice is
+    ///   used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
-    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// if the `len_source` value in the returned [`crate::LaxIpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
     ///
@@ -813,9 +827,9 @@ impl IpHeaders {
         ))
     }
 
-    /// Reads an IPv6 header (+ extensions) & Separates the payload from the given slice with
-    /// less strict length checks (useful for cut off packet or for packets with
-    /// unset length fields).
+    /// Reads an IPv6 header & its extensions headers as far as is possible without encountering an
+    /// error & separates the payload from the given slice with less strict length checks.
+    /// This function is usefull for cut off packet or for packets with unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::from_ipv6_slice`]
     /// instead.
@@ -831,13 +845,19 @@ impl IpHeaders {
     ///
     /// # Differences to `from_slice`:
     ///
-    /// The main differences is that the function ignores inconsistent
-    /// `payload_length` values (in IPv6 headers). When these length values
-    /// in the IP header are inconsistant the length of the given slice is
-    /// used as a substitute.
+    /// There are two main differences:
+    ///
+    /// * Errors in the expansion headers will only stop the parsing and return an `Ok`
+    ///   with the successfully parsed parts and the error as optional. Only if an
+    ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
+    ///   In the normal `from_slice` function an `Err` is returned if an error is
+    ///   encountered in an exteions header.
+    /// * `from_slice_lax` ignores inconsistent `payload_length` values. When the
+    ///   `payload_length` value in the IPv6 header is inconsistant the length of
+    ///   the given slice is used as a substitute.
     ///
     /// You can check if the slice length was used as a substitude by checking
-    /// if the `len_source` value in the returned [`IpPayload`] is set to
+    /// if the `len_source` value in the returned [`LaxIpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv6HeaderPayloadLen`].
     ///

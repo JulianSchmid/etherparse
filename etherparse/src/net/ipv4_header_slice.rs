@@ -22,7 +22,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// or
     ///
     /// * [`crate::IpHeaders::from_ipv4_slice_lax`]
-    /// * [`crate::Ipv4Slice::from_slice_lax`]
+    /// * [`crate::LaxIpv4Slice::from_slice`]
     ///
     /// for a laxer version which falls back to slice length only when the total_length
     /// field in the header is inconsistent.
