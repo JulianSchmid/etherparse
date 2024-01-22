@@ -296,7 +296,7 @@ impl<'a> SlicedPacket<'a> {
     ///
     /// This function allows the length in the IP header to be inconsistent
     /// (e.g. data is missing from the slice) and falls back to the length of
-    /// slice. See [`IpSlice::from_ip_slice_lax`] for a detailed description
+    /// slice. See [`IpSlice::from_slice_lax`] for a detailed description
     /// of when the slice length is used as a fallback.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function
@@ -612,7 +612,7 @@ impl<'a> CursorSlice<'a> {
         use err::packet::IpSliceError::*;
 
         // slice header, extension headers and identify payload range
-        let ip = IpSlice::from_ip_slice_lax(self.slice).map_err(|err| {
+        let ip = IpSlice::from_slice_lax(self.slice).map_err(|err| {
             use err::ip::SliceError as I;
             match err {
                 I::Len(mut err) => {
