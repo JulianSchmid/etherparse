@@ -52,6 +52,31 @@ impl<'a> UdpSlice<'a> {
         }
     }
 
+    /// Try decoding length from UDP header and restrict slice to the length
+    /// of the header including the payload if possible. If not the slice length
+    /// is used as a fallback value.
+    ///
+    /// Note that this method fall also backs to the length of the slice
+    /// in the case the length field in the UDP header is set to zero or smaller
+    /// then the minimum header length.
+    pub fn from_slice_lax(slice: &'a [u8]) -> Result<UdpSlice<'a>, LenError> {
+        // slice header
+        let header = UdpHeaderSlice::from_slice(slice)?;
+
+        // validate the length of the slice and fallback to the slice
+        // length if the slice is smaller then expected or zero.
+        let len: usize = header.length().into();
+        if slice.len() < len || len < UdpHeader::LEN {
+            Ok(UdpSlice { slice })
+        } else {
+            Ok(UdpSlice {
+                // SAFETY: Safe as slice.len() was validated before to
+                // be at least as big as "len".
+                slice: unsafe { core::slice::from_raw_parts(slice.as_ptr(), len) },
+            })
+        }
+    }
+
     /// Return the slice containing the UDP header & payload.
     #[inline]
     pub fn slice(&self) -> &'a [u8] {
@@ -80,6 +105,17 @@ impl<'a> UdpSlice<'a> {
             )
         }
     }
+
+    /// Value that was used to determine the length of the payload.
+    #[inline]
+    pub fn payload_len_source(&self) -> LenSource {
+        if usize::from(self.length()) == self.slice.len() {
+            LenSource::UdpHeaderLen
+        } else {
+            LenSource::Slice
+        }
+    }
+
     /// Reads the "udp source port" in the UDP header.
     #[inline]
     pub fn source_port(&self) -> u16 {
@@ -171,7 +207,7 @@ mod test {
                 format!("{:?}", slice),
                 format!(
                     "UdpSlice {{ slice: {:?} }}",
-                    &data[..],
+                    &data[..]
                 )
             );
             prop_assert_eq!(slice.clone(), slice);
@@ -323,6 +359,100 @@ mod test {
                         layer_start_offset: 0
                     }
                 );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_slice_lax(
+            udp_base in udp_any()
+        ) {
+            let payload: [u8;4] = [1,2,3,4];
+            let udp = {
+                let mut udp = udp_base.clone();
+                udp.length = (UdpHeader::LEN + payload.len()) as u16;
+                udp
+            };
+            let data = {
+                let mut data = Vec::with_capacity(
+                    udp.header_len() +
+                    payload.len()
+                );
+                data.extend_from_slice(&udp.to_bytes());
+                data.extend_from_slice(&payload);
+                data
+            };
+
+            // normal decode
+            {
+                let slice = UdpSlice::from_slice_lax(&data).unwrap();
+                assert_eq!(udp, slice.to_header());
+                assert_eq!(payload, slice.payload());
+                assert_eq!(slice.payload_len_source(), LenSource::UdpHeaderLen);
+            }
+
+            // decode a payload smaller then the given slice
+            {
+                let mut mod_data = data.clone();
+                let reduced_len = (UdpHeader::LEN + payload.len() - 1) as u16;
+                // inject the reduced length
+                {
+                    let rl_be = reduced_len.to_be_bytes();
+                    mod_data[4] = rl_be[0];
+                    mod_data[5] = rl_be[1];
+                }
+
+                let slice = UdpSlice::from_slice_lax(&mod_data).unwrap();
+                assert_eq!(
+                    slice.to_header(),
+                    {
+                        let mut expected = slice.to_header();
+                        expected.length = reduced_len;
+                        expected
+                    }
+                );
+                assert_eq!(&payload[..payload.len() - 1], slice.payload());
+                assert_eq!(slice.payload_len_source(), LenSource::UdpHeaderLen);
+            }
+
+            // if length is zero the length given by the slice should be used
+            for len in 0..UdpHeader::LEN_U16{
+                // inject zero as length
+                let mut mod_data = data.clone();
+                mod_data[4] = len.to_be_bytes()[0];
+                mod_data[5] = len.to_be_bytes()[1];
+
+                let slice = UdpSlice::from_slice_lax(&mod_data).unwrap();
+
+                assert_eq!(slice.source_port(), udp_base.source_port);
+                assert_eq!(slice.destination_port(), udp_base.destination_port);
+                assert_eq!(slice.checksum(), udp_base.checksum);
+                assert_eq!(slice.length(), len);
+                assert_eq!(&payload, slice.payload());
+                assert_eq!(slice.payload_len_source(), LenSource::Slice);
+            }
+
+            // too little data to even decode the header
+            for len in 0..UdpHeader::LEN {
+                assert_eq!(
+                    UdpSlice::from_slice_lax(&data[..len]).unwrap_err(),
+                    LenError {
+                        required_len: UdpHeader::LEN,
+                        len,
+                        len_source: LenSource::Slice,
+                        layer: Layer::UdpHeader,
+                        layer_start_offset: 0,
+                    }
+                );
+            }
+
+            // slice length smaller then the length described in the header
+            {
+                let slice = UdpSlice::from_slice_lax(&data[..data.len() - 1]).unwrap();
+                assert_eq!(udp, slice.to_header());
+                assert_eq!(&payload[..payload.len() - 1], slice.payload());
+                assert_eq!(slice.payload_len_source(), LenSource::Slice);
             }
         }
     }
