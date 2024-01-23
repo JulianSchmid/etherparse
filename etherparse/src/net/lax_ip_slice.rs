@@ -3,7 +3,8 @@ use crate::{err::*, *};
 /// Slice containing laxly separated IPv4 or IPv6 headers & payload.
 ///
 /// Compared to the normal [`IpSlice`] this slice allows the
-/// payload to be incomplete/cut off and errors in the IpPayload.
+/// payload to be incomplete/cut off and errors to be present in
+/// the IpPayload.
 ///
 /// The main usecases for "laxly" parsed slices are are:
 ///
