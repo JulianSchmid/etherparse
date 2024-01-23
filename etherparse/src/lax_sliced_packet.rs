@@ -85,12 +85,20 @@ impl<'a> LaxSlicedPacket<'a> {
     }
 
     /// Separates a network packet slice into different slices containing
-    /// the headers from the ip header downwards with lax checks.
+    /// the headers from the ip header downwards with lax length checks
+    /// and will still return a result even if an error is encountered in
+    /// a layer (except IP).
     ///
-    /// This function allows the length in the IP header to be inconsistent
-    /// (e.g. data is missing from the slice) and falls back to the length of
-    /// slice. See [`LaxIpSlice::from_ip_slice`] for a detailed description
-    /// of when the slice length is used as a fallback.
+    /// This function has two main differences to `SlicedPacket::from_ip`:
+    ///
+    /// * Errors encountered bellow the IpHeader will only stop the parsing and
+    ///   return an `Ok` with the successfully parsed parts and the error as optional.
+    ///   Only if an unrecoverable error is encountered in the IP header itself an
+    ///   `Err` is returned.
+    /// * Length in the IP header & UDP headers are allowed to be inconsistent with the
+    ///   given slice length (e.g. data is missing from the slice). In this case it falls
+    ///   back to the length of slice. See [`LaxIpSlice::from_ip_slice`] for a detailed
+    ///   description of when the slice length is used as a fallback.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function
     /// assumes the given data starts with an IPv4 or IPv6 header.
