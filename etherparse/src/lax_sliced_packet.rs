@@ -21,14 +21,77 @@ pub struct LaxSlicedPacket<'a> {
 }
 
 impl<'a> LaxSlicedPacket<'a> {
+    /// Separates a network packet slice into different slices containing the
+    /// headers from the ethernet header downwards with lax length checks and
+    /// non-terminating errors.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{Ethernet2Header, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //destination ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut packet, &payload).unwrap();
+    /// #
+    /// use etherparse::{ether_type, LaxSlicedPacket, err::LenSource};
+    ///
+    /// match LaxSlicedPacket::from_ethernet(&packet) {
+    ///     Err(value) => {
+    ///         // An error is returned in case the ethernet II header could
+    ///         // not be parsed (other errors are stored in the "stop_err" field)
+    ///         println!("Err {:?}", value)
+    ///     },
+    ///     Ok(value) => {
+    ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///             // error was encountered after parsing the ethernet 2 header
+    ///             println!("Error on layer {}: {:?}", stop_err, error_layer);
+    ///         }
+    ///
+    ///         // parts that could be parsed without error
+    ///         println!("link: {:?}", value.link);
+    ///         println!("vlan: {:?}", value.vlan);
+    ///         println!("net: {:?}", value.net);
+    ///         println!("transport: {:?}", value.transport);
+    ///
+    ///         // net (ip) & transport (udp or tcp)
+    ///         println!("net: {:?}", value.net);
+    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload()).flatten() {
+    ///             // the ip payload len_source field can be used to check
+    ///             // if the slice length was used as a fallback value
+    ///             if ip_payload.len_source == LenSource::Slice {
+    ///                 println!("  Used slice length as fallback to identify the IP payload");
+    ///             } else {
+    ///                 println!("  IP payload could correctly be identfied via the length field in the header");
+    ///             }
+    ///         }
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// }
+    ///
+    /// ```
     pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::packet::EthSliceError> {
         LaxSlicedPacketCursor::parse_from_ethernet2(slice)
     }
 
     /// Separates a network packet slice into different slices containing the headers using
-    /// the given `ether_type` number to identify the first header.
+    /// the given `ether_type` number to identify the first header with lax length
+    /// checks and non-terminating errors.
     ///
-    /// The result is returned as a [`SlicedPacket`] struct. Currently supported
+    /// The result is returned as a [`LaxSlicedPacket`] struct. Currently supported
     /// ether type numbers are:
     ///
     /// * `ether_type::IPV4`
@@ -97,7 +160,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///   `Err` is returned.
     /// * Length in the IP header & UDP headers are allowed to be inconsistent with the
     ///   given slice length (e.g. data is missing from the slice). In this case it falls
-    ///   back to the length of slice. See [`LaxIpSlice::from_ip_slice`] for a detailed
+    ///   back to the length of slice. See [`LaxIpSlice::from_slice`] for a detailed
     ///   description of when the slice length is used as a fallback.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function
