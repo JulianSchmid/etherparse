@@ -236,7 +236,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
                 }
             },
-            ip_number::UDP => match UdpSlice::from_slice(slice.payload) {
+            ip_number::UDP => match UdpSlice::from_slice_lax(slice.payload) {
                 Ok(udp) => {
                     self.offset += udp.slice().len();
                     self.result.transport = Some(TransportSlice::Udp(udp));
