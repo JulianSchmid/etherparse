@@ -300,8 +300,11 @@ impl<'a> LaxIpSlice<'a> {
                                             },
                                         }),
                                         match err {
-                                            A::Len(l) => Some((
-                                                S::Len(l.add_offset(header.slice().len())),
+                                            A::Len(mut l) => Some((
+                                                S::Len({
+                                                    l.len_source = len_source;
+                                                    l.add_offset(header.slice().len())
+                                                }),
                                                 err::Layer::IpAuthHeader,
                                             )),
                                             A::Content(l) => Some((
@@ -397,6 +400,7 @@ impl<'a> LaxIpSlice<'a> {
 
                     // add len offset
                     if let Some((S::Len(l), _)) = ext_stop_err.as_mut() {
+                        l.len_source = len_source;
                         l.layer_start_offset += header.header_len();
                     }
                     let fragmented = exts.is_fragmenting_payload();

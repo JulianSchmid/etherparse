@@ -19,7 +19,7 @@ pub enum NetSlice<'a> {
 
 impl<'a> NetSlice<'a> {
     #[inline]
-    pub fn ip_payload(&self) -> Option<&IpPayloadSlice<'a>> {
+    pub fn ip_payload_ref(&self) -> Option<&IpPayloadSlice<'a>> {
         match self {
             NetSlice::Ipv4(s) => Some(&s.payload),
             NetSlice::Ipv6(s) => Some(&s.payload),

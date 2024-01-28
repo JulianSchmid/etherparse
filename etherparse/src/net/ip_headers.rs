@@ -265,9 +265,10 @@ impl IpHeaders {
         }
     }
 
-    /// Reads an [`IpHeaders`] as far as possible without error & separates the
-    /// payload from the given slice with less strict length checks. This function is
-    /// usefull for cut off packet or for packets with unset length fields).
+    /// Reads an [`IpHeaders`] as far as possible without encountering an error &
+    /// separates the payload from the given slice with less strict length checks.
+    /// This function is usefull for cut off packet or for packets with unset length
+    /// fields).
     ///
     /// If you want to only receive correct IpPayloads use [`IpHeaders::from_slice`]
     /// instead.
