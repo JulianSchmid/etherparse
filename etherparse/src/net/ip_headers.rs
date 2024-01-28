@@ -484,7 +484,7 @@ impl IpHeaders {
                     // restrict slice by the length specified in the header
                     let payload_len = usize::from(header.payload_length);
                     let (header_payload, len_source, incomplete) =
-                        if (header.payload_length == 0) && slice.len() > 0 {
+                        if (header.payload_length == 0) && (false == slice.is_empty()) {
                             // TODO: Add payload length parsing from the jumbogram
                             unsafe {
                                 (
