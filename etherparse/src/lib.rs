@@ -315,8 +315,11 @@ mod compositions_tests;
 mod helpers;
 pub(crate) use helpers::*;
 
-mod lax_payload;
-pub use lax_payload::*;
+mod lax_packet_headers;
+pub use lax_packet_headers::*;
+
+mod lax_payload_slice;
+pub use lax_payload_slice::*;
 
 mod lax_sliced_packet;
 pub use lax_sliced_packet::*;
