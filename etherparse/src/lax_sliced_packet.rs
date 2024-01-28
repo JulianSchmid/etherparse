@@ -302,6 +302,23 @@ mod test {
                 }
             }
         }
+
+        // unknown ether_type
+        {
+            let payload = [1, 2, 3, 4];
+            let actual = LaxSlicedPacket::from_ether_type(0.into(), &payload);
+            assert_eq!(
+                actual.link,
+                Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+                    ether_type: 0.into(),
+                    payload: &payload
+                }))
+            );
+            assert_eq!(None, actual.vlan);
+            assert_eq!(None, actual.net);
+            assert_eq!(None, actual.transport);
+            assert_eq!(None, actual.stop_err);
+        }
     }
 
     fn from_x_slice_vlan_variants(base: &TestPacket) {
