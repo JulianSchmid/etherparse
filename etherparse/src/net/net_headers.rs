@@ -52,3 +52,101 @@ impl From<IpHeaders> for NetHeaders {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use alloc::format;
+
+    #[test]
+    fn debug() {
+        let h = Ipv4Header {
+            ..Default::default()
+        };
+        let e = Ipv4Extensions {
+            ..Default::default()
+        };
+        let n = NetHeaders::Ipv4(h.clone(), e.clone());
+        assert_eq!(format!("{n:?}"), format!("Ipv4({h:?}, {e:?})"));
+    }
+
+    #[test]
+    fn clone_eq() {
+        let n = NetHeaders::Ipv4(Default::default(), Default::default());
+        assert_eq!(n, n.clone())
+    }
+
+    #[test]
+    fn ipv4_ref() {
+        // ipv4
+        {
+            let h: Ipv4Header = Default::default();
+            let e: Ipv4Extensions = Default::default();
+            let s = NetHeaders::Ipv4(h.clone(), e.clone());
+            assert_eq!(s.ipv4_ref(), Some((&h, &e)));
+        }
+        // ipv6
+        {
+            let h: Ipv6Header = Default::default();
+            let e: Ipv6Extensions = Default::default();
+            let s = NetHeaders::Ipv6(h.clone(), e.clone());
+            assert_eq!(s.ipv4_ref(), None);
+        }
+    }
+
+    #[test]
+    fn ipv6_ref() {
+        // ipv4
+        {
+            let h: Ipv4Header = Default::default();
+            let e: Ipv4Extensions = Default::default();
+            let s = NetHeaders::Ipv4(h.clone(), e.clone());
+            assert_eq!(s.ipv6_ref(), None);
+        }
+        // ipv6
+        {
+            let h: Ipv6Header = Default::default();
+            let e: Ipv6Extensions = Default::default();
+            let s = NetHeaders::Ipv6(h.clone(), e.clone());
+            assert_eq!(s.ipv6_ref(), Some((&h, &e)));
+        }
+    }
+
+    #[test]
+    fn header_len() {
+        // ipv4
+        {
+            let h: Ipv4Header = Default::default();
+            let e: Ipv4Extensions = Default::default();
+            let s = NetHeaders::Ipv4(h.clone(), e.clone());
+            assert_eq!(s.header_len(), h.header_len() + e.header_len());
+        }
+        // ipv6
+        {
+            let h: Ipv6Header = Default::default();
+            let e: Ipv6Extensions = Default::default();
+            let s = NetHeaders::Ipv6(h.clone(), e.clone());
+            assert_eq!(s.header_len(), h.header_len() + e.header_len());
+        }
+    }
+
+    #[test]
+    fn from() {
+        // ipv4
+        {
+            let h: Ipv4Header = Default::default();
+            let e: Ipv4Extensions = Default::default();
+            let s = IpHeaders::Ipv4(h.clone(), e.clone());
+            let a: NetHeaders = s.clone().into();
+            assert_eq!(a, NetHeaders::Ipv4(h.clone(), e.clone()));
+        }
+        // ipv6
+        {
+            let h: Ipv6Header = Default::default();
+            let e: Ipv6Extensions = Default::default();
+            let s = IpHeaders::Ipv6(h.clone(), e.clone());
+            let a: NetHeaders = s.clone().into();
+            assert_eq!(a, NetHeaders::Ipv6(h.clone(), e.clone()));
+        }
+    }
+}
