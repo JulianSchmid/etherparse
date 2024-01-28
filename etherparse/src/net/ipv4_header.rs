@@ -70,6 +70,9 @@ impl Ipv4Header {
     /// Minimum length of an IPv4 header in bytes/octets.
     pub const MIN_LEN: usize = 20;
 
+    /// Minimum length of an IPv4 header in bytes/octets as an `u16`.
+    pub const MIN_LEN_U16: u16 = 20;
+
     /// Maximum length of an IPv4 header in bytes/octets.
     ///
     /// This number is calculated by taking the maximum value
