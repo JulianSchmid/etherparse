@@ -15,6 +15,24 @@ pub enum NetHeaders {
 }
 
 impl NetHeaders {
+    /// Returns references to the IPv4 header & extensions if the header contains IPv4 values.
+    pub fn ipv4_ref(&self) -> Option<(&Ipv4Header, &Ipv4Extensions)> {
+        if let NetHeaders::Ipv4(header, exts) = self {
+            Some((header, exts))
+        } else {
+            None
+        }
+    }
+
+    /// Returns references to the IPv6 header & extensions if the header contains IPv6 values.
+    pub fn ipv6_ref(&self) -> Option<(&Ipv6Header, &Ipv6Extensions)> {
+        if let NetHeaders::Ipv6(header, exts) = self {
+            Some((header, exts))
+        } else {
+            None
+        }
+    }
+
     /// Returns the size when the header & extension headers are serialized
     pub fn header_len(&self) -> usize {
         use crate::NetHeaders::*;

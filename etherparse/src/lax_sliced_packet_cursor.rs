@@ -10,10 +10,7 @@ pub(crate) struct LaxSlicedPacketCursor<'a> {
 }
 
 impl<'a> LaxSlicedPacketCursor<'a> {
-    pub fn parse_from_ethernet2(
-        slice: &'a [u8],
-    ) -> Result<LaxSlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    pub fn parse_from_ethernet2(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::LenError> {
         use ether_type::*;
         use LinkSlice::*;
 
@@ -28,8 +25,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             },
         };
 
-        let result = Ethernet2Slice::from_slice_without_fcs(slice)
-            .map_err(|err| Len(err.add_offset(cursor.offset)))?;
+        let result = Ethernet2Slice::from_slice_without_fcs(slice)?;
 
         // cache the ether_type for later
         let payload = result.payload();
@@ -97,7 +93,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     use err::packet::SliceError as O;
                     (
                         match stop_err {
-                            I::Len(l) => O::Len(l.add_offset(offset)),
+                            I::Len(l) => O::Len(l),
                             I::Content(c) => match c {
                                 E::HopByHopNotAtStart => O::Ipv6Exts(E::HopByHopNotAtStart),
                                 E::IpAuth(auth) => {
@@ -275,7 +271,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 Err(mut err) => {
                     err.layer_start_offset += self.offset;
                     err.len_source = slice.len_source;
-                    self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
+                    self.result.stop_err = Some((O::Len(err), Layer::Icmpv6));
                 }
             },
             _ => {}
