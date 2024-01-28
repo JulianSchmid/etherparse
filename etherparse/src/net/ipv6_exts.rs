@@ -1,4 +1,7 @@
-use crate::{err::ipv6_exts::*, *};
+use crate::{
+    err::{ipv6_exts::*, Layer},
+    *,
+};
 
 /// IPv6 extension headers present after the ip header.
 ///
@@ -186,7 +189,7 @@ impl Ipv6Extensions {
         Ipv6Extensions,
         IpNumber,
         &[u8],
-        Option<err::ipv6_exts::HeaderSliceError>,
+        Option<(err::ipv6_exts::HeaderSliceError, err::Layer)>,
     ) {
         let mut result: Ipv6Extensions = Default::default();
         let mut rest = slice;
@@ -204,7 +207,12 @@ impl Ipv6Extensions {
                     result.hop_by_hop_options = Some(slice.to_header());
                 }
                 Err(error) => {
-                    return (result, next_header, rest, Some(Len(error)));
+                    return (
+                        result,
+                        next_header,
+                        rest,
+                        Some((Len(error), Layer::Ipv6HopByHopHeader)),
+                    );
                 }
             }
         }
@@ -212,7 +220,12 @@ impl Ipv6Extensions {
         loop {
             match next_header {
                 IPV6_HOP_BY_HOP => {
-                    return (result, next_header, rest, Some(Content(HopByHopNotAtStart)));
+                    return (
+                        result,
+                        next_header,
+                        rest,
+                        Some((Content(HopByHopNotAtStart), Layer::Ipv6HopByHopHeader)),
+                    );
                 }
                 IPV6_DEST_OPTIONS => {
                     if let Some(ref mut routing) = result.routing {
@@ -233,7 +246,10 @@ impl Ipv6Extensions {
                                         result,
                                         next_header,
                                         rest,
-                                        Some(Len(err.add_offset(slice.len() - rest.len()))),
+                                        Some((
+                                            Len(err.add_offset(slice.len() - rest.len())),
+                                            Layer::Ipv6DestOptionsHeader,
+                                        )),
                                     );
                                 }
                             }
@@ -253,7 +269,10 @@ impl Ipv6Extensions {
                                     result,
                                     next_header,
                                     rest,
-                                    Some(Len(err.add_offset(slice.len() - rest.len()))),
+                                    Some((
+                                        Len(err.add_offset(slice.len() - rest.len())),
+                                        Layer::Ipv6DestOptionsHeader,
+                                    )),
                                 );
                             }
                         }
@@ -278,7 +297,10 @@ impl Ipv6Extensions {
                                     result,
                                     next_header,
                                     rest,
-                                    Some(Len(err.add_offset(slice.len() - rest.len()))),
+                                    Some((
+                                        Len(err.add_offset(slice.len() - rest.len())),
+                                        Layer::Ipv6RouteHeader,
+                                    )),
                                 );
                             }
                         }
@@ -300,7 +322,10 @@ impl Ipv6Extensions {
                                     result,
                                     next_header,
                                     rest,
-                                    Some(Len(err.add_offset(slice.len() - rest.len()))),
+                                    Some((
+                                        Len(err.add_offset(slice.len() - rest.len())),
+                                        Layer::Ipv6FragHeader,
+                                    )),
                                 );
                             }
                         }
@@ -324,12 +349,15 @@ impl Ipv6Extensions {
                                     result,
                                     next_header,
                                     rest,
-                                    Some(match err {
-                                        I::Len(err) => {
-                                            Len(err.add_offset(slice.len() - rest.len()))
-                                        }
-                                        I::Content(err) => Content(O::IpAuth(err)),
-                                    }),
+                                    Some((
+                                        match err {
+                                            I::Len(err) => {
+                                                Len(err.add_offset(slice.len() - rest.len()))
+                                            }
+                                            I::Content(err) => Content(O::IpAuth(err)),
+                                        },
+                                        Layer::IpAuthHeader,
+                                    )),
                                 );
                             }
                         }
@@ -1785,7 +1813,7 @@ mod test {
                 if e.exts_hop_by_hop_error() {
                     // a hop by hop header that is not at the start triggers an error
                     let actual = Ipv6Extensions::from_slice_lax(ip_numbers[0], e.slice());
-                    assert_eq!(actual.3.unwrap(), Content(HopByHopNotAtStart));
+                    assert_eq!(actual.3.unwrap(), (Content(HopByHopNotAtStart), Layer::Ipv6HopByHopHeader));
                 } else {
                     // normal read
                     let norm_actual = Ipv6Extensions::from_slice_lax(ip_numbers[0], e.slice());
@@ -1805,7 +1833,7 @@ mod test {
                         assert_eq!(actual.0, expected.0);
                         assert_eq!(actual.1, expected.1);
                         assert_eq!(actual.2, expected.2);
-                        let len_err = actual.3.unwrap().len_error().unwrap().clone();
+                        let len_err = actual.3.unwrap().0.len_error().unwrap().clone();
                         assert_eq!(len_err.len, norm_len - 1 - expected.0.header_len());
                         assert_eq!(len_err.len_source, err::LenSource::Slice);
                         assert_eq!(
@@ -1861,7 +1889,7 @@ mod test {
 
                 use err::ipv6_exts::HeaderError::IpAuth;
                 use err::ip_auth::HeaderError::ZeroPayloadLen;
-                assert_eq!(actual.3.unwrap(), Content(IpAuth(ZeroPayloadLen)));
+                assert_eq!(actual.3.unwrap(), (Content(IpAuth(ZeroPayloadLen)), Layer::IpAuthHeader));
             }
         }
     }
