@@ -23,8 +23,10 @@ pub enum LaxNetSlice<'a> {
 }
 
 impl<'a> LaxNetSlice<'a> {
+    /// Returns a reference to ip payload if the net slice contains
+    /// an ipv4 or ipv6 slice.
     #[inline]
-    pub fn ip_payload(&self) -> Option<&LaxIpPayloadSlice<'a>> {
+    pub fn ip_payload_ref(&self) -> Option<&LaxIpPayloadSlice<'a>> {
         match self {
             LaxNetSlice::Ipv4(s) => Some(&s.payload),
             LaxNetSlice::Ipv6(s) => Some(&s.payload),
@@ -38,6 +40,173 @@ impl<'a> From<LaxIpSlice<'a>> for LaxNetSlice<'a> {
         match value {
             LaxIpSlice::Ipv4(ipv4) => LaxNetSlice::Ipv4(ipv4),
             LaxIpSlice::Ipv6(ipv6) => LaxNetSlice::Ipv6(ipv6),
+        }
+    }
+}
+
+impl<'a> From<LaxIpv4Slice<'a>> for LaxNetSlice<'a> {
+    #[inline]
+    fn from(value: LaxIpv4Slice<'a>) -> LaxNetSlice<'a> {
+        LaxNetSlice::Ipv4(value)
+    }
+}
+
+impl<'a> From<LaxIpv6Slice<'a>> for LaxNetSlice<'a> {
+    #[inline]
+    fn from(value: LaxIpv6Slice<'a>) -> LaxNetSlice<'a> {
+        LaxNetSlice::Ipv6(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::*;
+    use alloc::{format, vec::Vec};
+
+    #[test]
+    fn debug() {
+        let bytes = Ipv6Header {
+            next_header: IpNumber::UDP,
+            ..Default::default()
+        }
+        .to_bytes();
+        let s = LaxIpv6Slice::from_slice(&bytes).unwrap().0;
+        let n = LaxNetSlice::Ipv6(s.clone());
+        assert_eq!(format!("{n:?}"), format!("Ipv6({s:?})"));
+    }
+
+    #[test]
+    fn clone_eq() {
+        let bytes = Ipv6Header {
+            next_header: IpNumber::UDP,
+            ..Default::default()
+        }
+        .to_bytes();
+        let s = LaxNetSlice::Ipv6(LaxIpv6Slice::from_slice(&bytes).unwrap().0);
+        assert_eq!(s, s.clone())
+    }
+
+    #[test]
+    fn ip_payload_ref() {
+        // ipv4
+        {
+            let payload = [1, 2, 3, 4];
+            let bytes = {
+                let mut bytes = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+                bytes.extend_from_slice(
+                    &(Ipv4Header {
+                        total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                        protocol: IpNumber::UDP,
+                        ..Default::default()
+                    })
+                    .to_bytes(),
+                );
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+            let s = LaxNetSlice::Ipv4(LaxIpv4Slice::from_slice(&bytes).unwrap().0);
+            assert_eq!(
+                s.ip_payload_ref(),
+                Some(&LaxIpPayloadSlice {
+                    ip_number: IpNumber::UDP,
+                    fragmented: false,
+                    len_source: err::LenSource::Ipv4HeaderTotalLen,
+                    payload: &payload,
+                    incomplete: false,
+                })
+            );
+        }
+        // ipv6
+        {
+            let payload = [1, 2, 3, 4];
+            let bytes = {
+                let mut bytes = Vec::with_capacity(Ipv6Header::LEN + 4);
+                bytes.extend_from_slice(
+                    &(Ipv6Header {
+                        next_header: IpNumber::UDP,
+                        payload_length: 4,
+                        ..Default::default()
+                    })
+                    .to_bytes(),
+                );
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+            let s = LaxNetSlice::Ipv6(LaxIpv6Slice::from_slice(&bytes).unwrap().0);
+            assert_eq!(
+                s.ip_payload_ref(),
+                Some(&LaxIpPayloadSlice {
+                    ip_number: IpNumber::UDP,
+                    fragmented: false,
+                    len_source: err::LenSource::Ipv6HeaderPayloadLen,
+                    payload: &payload,
+                    incomplete: false,
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn from() {
+        // IpSlice::Ipv4
+        {
+            let payload = [1, 2, 3, 4];
+            let bytes = {
+                let mut bytes = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+                bytes.extend_from_slice(
+                    &(Ipv4Header {
+                        total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                        protocol: IpNumber::UDP,
+                        ..Default::default()
+                    })
+                    .to_bytes(),
+                );
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+            let i = LaxIpv4Slice::from_slice(&bytes).unwrap().0;
+            let actual: LaxNetSlice = LaxIpSlice::Ipv4(i.clone()).into();
+            assert_eq!(LaxNetSlice::Ipv4(i.clone()), actual);
+        }
+        // LaxIpv4Slice
+        {
+            let payload = [1, 2, 3, 4];
+            let bytes = {
+                let mut bytes = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+                bytes.extend_from_slice(
+                    &(Ipv4Header {
+                        total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                        protocol: IpNumber::UDP,
+                        ..Default::default()
+                    })
+                    .to_bytes(),
+                );
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+            let i = LaxIpv4Slice::from_slice(&bytes).unwrap().0;
+            let actual: LaxNetSlice = i.clone().into();
+            assert_eq!(LaxNetSlice::Ipv4(i.clone()), actual);
+        }
+        // IpSlice::Ipv6
+        {
+            let payload = [1, 2, 3, 4];
+            let bytes = {
+                let mut bytes = Vec::with_capacity(Ipv6Header::LEN + 4);
+                bytes.extend_from_slice(
+                    &(Ipv6Header {
+                        next_header: IpNumber::UDP,
+                        payload_length: 4,
+                        ..Default::default()
+                    })
+                    .to_bytes(),
+                );
+                bytes.extend_from_slice(&payload);
+                bytes
+            };
+            let i = LaxIpv6Slice::from_slice(&bytes).unwrap().0;
+            let actual: LaxNetSlice = i.clone().into();
+            assert_eq!(LaxNetSlice::Ipv6(i.clone()), actual);
         }
     }
 }

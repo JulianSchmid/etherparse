@@ -69,7 +69,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///
     ///         // net (ip) & transport (udp or tcp)
     ///         println!("net: {:?}", value.net);
-    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload()).flatten() {
+    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload_ref()).flatten() {
     ///             // the ip payload len_source field can be used to check
     ///             // if the slice length was used as a fallback value
     ///             if ip_payload.len_source == LenSource::Slice {
@@ -204,7 +204,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///
     ///         // net (ip) & transport (udp or tcp)
     ///         println!("net: {:?}", value.net);
-    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload()).flatten() {
+    ///         if let Some(ip_payload) = value.net.as_ref().map(|net| net.ip_payload_ref()).flatten() {
     ///             // the ip payload len_source field can be used to check
     ///             // if the slice length was used as a fallback value
     ///             if ip_payload.len_source == LenSource::Slice {
