@@ -128,6 +128,14 @@ mod test {
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 
+    #[test]
+    fn default() {
+        let e: Ethernet2Header = Default::default();
+        assert_eq!([0u8; 6], e.source);
+        assert_eq!([0u8; 6], e.destination);
+        assert_eq!(EtherType(0), e.ether_type);
+    }
+
     proptest! {
         #[test]
         fn from_slice(
