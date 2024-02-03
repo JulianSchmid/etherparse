@@ -47,7 +47,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// # );
     /// # builder.write(&mut packet, &payload).unwrap();
     /// #
-    /// use etherparse::{ether_type, LaxSlicedPacket, err::LenSource};
+    /// use etherparse::{ether_type, LaxSlicedPacket, LenSource};
     ///
     /// match LaxSlicedPacket::from_ethernet(&packet) {
     ///     Err(value) => {
@@ -171,7 +171,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// Basic usage:
     ///
     ///```
-    /// # use etherparse::{PacketBuilder, IpSlice, err::LenSource};
+    /// # use etherparse::{PacketBuilder, IpSlice, LenSource};
     /// # let builder = PacketBuilder::
     /// #    ipv4([192,168,1,1], //source ip
     /// #         [192,168,1,2], //destination ip
@@ -225,7 +225,7 @@ impl<'a> LaxSlicedPacket<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{packet::SliceError, Layer, LenError, LenSource};
+    use crate::err::{packet::SliceError, Layer, LenError};
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [

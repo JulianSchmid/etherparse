@@ -86,7 +86,8 @@ impl Ipv4Extensions {
     ///     Ipv4Extensions,
     ///     IpAuthHeader,
     ///     ip_number::AUTHENTICATION_HEADER,
-    ///     err::{ip_auth::HeaderSliceError::Len, LenError, LenSource, Layer}
+    ///     LenSource,
+    ///     err::{ip_auth::HeaderSliceError::Len, LenError, Layer}
     /// };
     ///
     /// // providing not enough data
@@ -284,7 +285,7 @@ mod test {
                 Len(err::LenError {
                     required_len: AUTH_HEADER_LEN,
                     len: auth_header.header_len() - 1,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::IpAuthHeader,
                     layer_start_offset: 0,
                 })

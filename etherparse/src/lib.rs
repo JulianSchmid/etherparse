@@ -327,6 +327,9 @@ pub use lax_sliced_packet::*;
 mod lax_sliced_packet_cursor;
 pub(crate) use lax_sliced_packet_cursor::*;
 
+mod len_source;
+pub use len_source::*;
+
 #[cfg(feature = "std")]
 mod packet_builder;
 #[cfg(feature = "std")]

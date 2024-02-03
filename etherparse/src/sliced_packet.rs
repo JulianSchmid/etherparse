@@ -241,7 +241,7 @@ mod test {
     use super::*;
     use crate::err::{
         packet::{EthSliceError, IpSliceError},
-        Layer, LenError, LenSource,
+        Layer, LenError
     };
     use crate::test_gens::*;
     use crate::test_packet::TestPacket;

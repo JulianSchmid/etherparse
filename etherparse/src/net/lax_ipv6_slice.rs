@@ -1,5 +1,5 @@
 use crate::{
-    err::{ipv6, ipv6_exts, LenSource},
+    err::{ipv6, ipv6_exts},
     *,
 };
 
@@ -181,7 +181,7 @@ impl<'a> LaxIpv6Slice<'a> {
 mod test {
     use super::*;
     use crate::{
-        err::{Layer, LenError, LenSource},
+        err::{Layer, LenError},
         ip_number::{AUTH, IGMP, UDP},
         test_gens::*,
         Ipv6FragmentHeader,
@@ -390,8 +390,6 @@ mod test {
 
             // payload length larger then slice (fallback to slice length)
             {
-                use crate::err::LenSource;
-
                 let len = ipv6_base.header_len() + payload.len() - 1;
                 let (actual , actual_stop_err) = LaxIpv6Slice::from_slice(&data_without_ext[..len]).unwrap();
                 prop_assert_eq!(actual_stop_err, None);
@@ -414,7 +412,7 @@ mod test {
 
             // payload length error auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv6_base.header_len() + auth_base.header_len();
                 let (actual, actual_stop_err) = LaxIpv6Slice::from_slice(&data_with_ext[..required_len - 1]).unwrap();
@@ -446,7 +444,7 @@ mod test {
 
             // auth length error
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 // inject payload length that is smaller then the auth header
                 let mut data = data_with_ext.clone();

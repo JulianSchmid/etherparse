@@ -16,7 +16,7 @@ impl<'a> Ipv6FragmentHeaderSlice<'a> {
             Err(err::LenError {
                 required_len: 8,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ipv6FragHeader,
                 layer_start_offset: 0,
             })
@@ -220,7 +220,7 @@ mod test {
                     err::LenError{
                         required_len: 8,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv6FragHeader,
                         layer_start_offset: 0,
                     }

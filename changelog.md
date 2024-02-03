@@ -2,10 +2,6 @@
 
 ## 0.14.0
 
-### TODO before release
-
-* TODO: Use lengths in IP, UDP & TCP headers to correctly identify payload.
-
 ### New
 
 * Added non-allocating `to_bytes()` methods that return `arrayvec::ArrayVec<u8, Header::MAX_LEN>` to the following headers:

@@ -272,7 +272,7 @@ impl Icmpv4Header {
 #[cfg(test)]
 mod test {
     use crate::{
-        err::{Layer, LenError, LenSource},
+        err::{Layer, LenError},
         icmpv4::*,
         test_gens::*,
         *,

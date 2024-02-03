@@ -1,4 +1,4 @@
-use crate::err::{LenError, LenSource};
+use crate::err::LenError;
 
 use super::*;
 
@@ -504,7 +504,7 @@ mod test {
                     let err = LenError {
                         required_len: eth.header_len(),
                         len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ethernet2Header,
                         layer_start_offset: 0,
                     };
@@ -550,7 +550,7 @@ mod test {
                         let err = LenError {
                             required_len: single.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::VlanHeader,
                             layer_start_offset: base_len,
                         };
@@ -598,7 +598,7 @@ mod test {
                         let err = LenError {
                             required_len: SingleVlanHeader::LEN,
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::VlanHeader,
                             layer_start_offset: base_len,
                         };
@@ -644,7 +644,7 @@ mod test {
                         let err = LenError {
                             required_len: ipv4.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: base_len,
                         };
@@ -722,7 +722,7 @@ mod test {
                     let err = LenError {
                         required_len: auth.header_len(),
                         len,
-                        len_source: err::LenSource::Ipv4HeaderTotalLen,
+                        len_source: LenSource::Ipv4HeaderTotalLen,
                         layer: err::Layer::IpAuthHeader,
                         layer_start_offset: base_len,
                     };
@@ -786,7 +786,7 @@ mod test {
                         let err = err::LenError {
                             required_len: ipv6.header_len(),
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: base_len,
                         };

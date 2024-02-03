@@ -257,7 +257,7 @@ impl Ipv4Header {
     ///
     /// // in case the total_len is smaller then the header itself an
     /// // error is returned
-    /// use etherparse::err::{LenError, Layer, LenSource};
+    /// use etherparse::{LenSource, err::{LenError, Layer}};
     /// assert_eq!(
     ///     bad_header.payload_len(),
     ///     Err(LenError {
@@ -276,7 +276,7 @@ impl Ipv4Header {
         if header_len <= self.total_len {
             Ok(self.total_len - header_len)
         } else {
-            use err::{Layer, LenError, LenSource};
+            use err::{Layer, LenError};
             Err(LenError {
                 required_len: header_len.into(),
                 len: self.total_len.into(),
@@ -706,7 +706,7 @@ impl Default for Ipv4Header {
 #[cfg(test)]
 mod test {
     use crate::{
-        err::{Layer, LenError, LenSource, ValueTooBigError, ValueType},
+        err::{Layer, LenError, ValueTooBigError, ValueType},
         test_gens::*,
         *,
     };
@@ -1144,7 +1144,7 @@ mod test {
                                 header.header_len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }))

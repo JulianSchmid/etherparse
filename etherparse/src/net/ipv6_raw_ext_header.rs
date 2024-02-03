@@ -370,7 +370,7 @@ mod test {
                                 header.header_len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }

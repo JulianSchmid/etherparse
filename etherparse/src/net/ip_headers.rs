@@ -1,7 +1,7 @@
-use super::super::*;
+use crate::*;
 #[cfg(feature = "std")]
 use crate::err::ip::HeadersWriteError;
-use crate::err::{Layer, LenError, LenSource, ValueTooBigError};
+use crate::err::{Layer, LenError, ValueTooBigError};
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -63,7 +63,7 @@ impl IpHeaders {
             Err(Len(err::LenError {
                 required_len: 1,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             }))
@@ -75,7 +75,7 @@ impl IpHeaders {
                         return Err(Len(err::LenError {
                             required_len: Ipv4Header::MIN_LEN,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }));
@@ -175,7 +175,7 @@ impl IpHeaders {
                         return Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         }));
@@ -331,7 +331,7 @@ impl IpHeaders {
             Err(Len(err::LenError {
                 required_len: 1,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             }))
@@ -343,7 +343,7 @@ impl IpHeaders {
                         return Err(Len(err::LenError {
                             required_len: Ipv4Header::MIN_LEN,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }));
@@ -463,7 +463,7 @@ impl IpHeaders {
                         return Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         }));
@@ -1166,7 +1166,7 @@ mod test {
     use crate::{
         err::{
             ip::{HeadersError, HeadersSliceError},
-            Layer, LenError, LenSource,
+            Layer, LenError,
         },
         ip_number::*,
         test_gens::*,
@@ -1332,7 +1332,7 @@ mod test {
                 Err(Len(err::LenError {
                     required_len: 1,
                     len: 0,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::IpHeader,
                     layer_start_offset: 0,
                 }))
@@ -1470,7 +1470,7 @@ mod test {
                 Err(Len(err::LenError {
                     required_len: 1,
                     len: 0,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::IpHeader,
                     layer_start_offset: 0,
                 }))
@@ -1517,7 +1517,7 @@ mod test {
                         Err(Len(err::LenError {
                             required_len: Ipv4Header::MIN_LEN,
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }))
@@ -1543,7 +1543,7 @@ mod test {
                         Err(Len(err::LenError {
                             required_len: usize::from(v4.ihl())*4,
                             len: 4*short_ihl,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }))
@@ -1655,7 +1655,7 @@ mod test {
                         Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
                             len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         }))
@@ -1823,7 +1823,7 @@ mod test {
                 Err(Len(err::LenError {
                     required_len: 20,
                     len: 0,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::Ipv4Header,
                     layer_start_offset: 0,
                 }))
@@ -1859,7 +1859,7 @@ mod test {
                     Err(Len(err::LenError {
                         required_len: Ipv4Header::MIN_LEN,
                         len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv4Header,
                         layer_start_offset: 0,
                     }))
@@ -1885,7 +1885,7 @@ mod test {
                     Err(Len(err::LenError {
                         required_len: usize::from(v4.ihl())*4,
                         len: 4*short_ihl,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv4Header,
                         layer_start_offset: 0,
                     }))
@@ -2036,7 +2036,7 @@ mod test {
                 Err(Len(err::LenError {
                     required_len: Ipv6Header::LEN,
                     len: 0,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::Ipv6Header,
                     layer_start_offset: 0,
                 }))
@@ -2082,7 +2082,7 @@ mod test {
                     Err(Len(err::LenError {
                         required_len: Ipv6Header::LEN,
                         len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv6Header,
                         layer_start_offset: 0,
                     }))

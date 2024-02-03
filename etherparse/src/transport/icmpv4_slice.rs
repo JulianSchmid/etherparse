@@ -24,7 +24,7 @@ impl<'a> Icmpv4Slice<'a> {
             return Err(err::LenError {
                 required_len: Icmpv4Header::MIN_LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Icmpv4,
                 layer_start_offset: 0,
             });
@@ -43,7 +43,7 @@ impl<'a> Icmpv4Slice<'a> {
                     return Err(err::LenError {
                         required_len: TimestampMessage::LEN,
                         len: slice.len(),
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Icmpv4Timestamp,
                         layer_start_offset: 0,
                     });
@@ -54,7 +54,7 @@ impl<'a> Icmpv4Slice<'a> {
                     return Err(err::LenError {
                         required_len: TimestampMessage::LEN,
                         len: slice.len(),
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Icmpv4TimestampReply,
                         layer_start_offset: 0,
                     });
@@ -361,7 +361,7 @@ mod test {
                 err::LenError {
                     required_len: Icmpv4Header::MIN_LEN,
                     len: bad_len,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::Icmpv4,
                     layer_start_offset: 0,
                 }
@@ -389,7 +389,7 @@ mod test {
                     err::LenError {
                         required_len: TimestampMessage::LEN,
                         len: bad_len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: if ts_type_u8 == TYPE_TIMESTAMP {
                             err::Layer::Icmpv4Timestamp
                         } else {
@@ -407,7 +407,7 @@ mod test {
                     err::LenError {
                         required_len: TimestampMessage::LEN,
                         len: bad_len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: if ts_type_u8 == TYPE_TIMESTAMP {
                             err::Layer::Icmpv4Timestamp
                         } else {

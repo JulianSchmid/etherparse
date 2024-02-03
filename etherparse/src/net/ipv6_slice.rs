@@ -1,5 +1,5 @@
-use crate::err::{ipv6::SliceError, Layer, LenError, LenSource};
-use crate::{IpPayloadSlice, Ipv6ExtensionsSlice, Ipv6Header, Ipv6HeaderSlice};
+use crate::err::{ipv6::SliceError, Layer, LenError};
+use crate::*;
 
 /// Slice containing the IPv6 headers & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -449,7 +449,7 @@ mod test {
 
             // payload length error without auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv6_base.header_len() + payload.len();
                 prop_assert_eq!(
@@ -466,7 +466,7 @@ mod test {
 
             // payload length error auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv6_base.header_len() + auth_base.header_len() + payload.len();
                 prop_assert_eq!(
@@ -483,7 +483,7 @@ mod test {
 
             // auth length error
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 // inject payload length that is smaller then the auth header
                 let mut data = data_with_ext.clone();
@@ -681,8 +681,6 @@ mod test {
 
             // payload length larger then slice (fallback to slice length)
             {
-                use crate::err::LenSource;
-
                 let len = ipv6_base.header_len() + payload.len() - 1;
                 let actual = Ipv6Slice::from_slice_lax(&data_without_ext[..len]).unwrap();
                 prop_assert_eq!(actual.header().slice(), &data_without_ext[..ipv6_base.header_len()]);
@@ -703,7 +701,7 @@ mod test {
 
             // payload length error auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv6_base.header_len() + auth_base.header_len();
                 prop_assert_eq!(
@@ -720,7 +718,7 @@ mod test {
 
             // auth length error
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 // inject payload length that is smaller then the auth header
                 let mut data = data_with_ext.clone();

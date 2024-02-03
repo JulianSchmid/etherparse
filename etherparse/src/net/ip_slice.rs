@@ -1,5 +1,5 @@
 use crate::{
-    err::{ip, Layer, LenError, LenSource},
+    err::{ip, Layer, LenError},
     *,
 };
 
@@ -98,7 +98,7 @@ impl<'a> IpSlice<'a> {
             Err(Len(err::LenError {
                 required_len: 1,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             }))
@@ -120,7 +120,7 @@ impl<'a> IpSlice<'a> {
                         return Err(Len(err::LenError {
                             required_len: header_len,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }));
@@ -229,7 +229,7 @@ impl<'a> IpSlice<'a> {
                         return Err(Len(err::LenError {
                             required_len: Ipv6Header::LEN,
                             len: slice.len(),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         }));

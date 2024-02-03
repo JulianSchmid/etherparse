@@ -58,7 +58,7 @@ impl std::error::Error for HeadersSliceError {
 #[cfg(test)]
 mod tests {
     use super::{HeadersSliceError::*, *};
-    use crate::err::{Layer, LenError, LenSource, ipv6_exts::HeaderError::*};
+    use crate::{err::{Layer, LenError, ipv6_exts::HeaderError::*}, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

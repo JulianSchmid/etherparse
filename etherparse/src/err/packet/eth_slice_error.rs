@@ -51,7 +51,7 @@ impl std::error::Error for EthSliceError {
 #[cfg(test)]
 mod tests {
     use super::{EthSliceError::*, *};
-    use crate::err::{Layer, LenSource};
+    use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

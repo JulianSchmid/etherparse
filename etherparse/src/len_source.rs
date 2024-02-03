@@ -1,4 +1,4 @@
-/// Sources of length values that limit lower layers.
+/// Sources of length limiting values (e.g. "ipv6 payload length field").
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum LenSource {
     /// Limiting length was the slice length (we don't know what determined

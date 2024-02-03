@@ -292,7 +292,7 @@ mod test {
                     err::LenError{
                         required_len: bytes.len(),
                         len: length,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Icmpv6,
                         layer_start_offset: 0
                     }
