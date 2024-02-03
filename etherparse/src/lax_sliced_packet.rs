@@ -58,7 +58,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///     Ok(value) => {
     ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
     ///             // error was encountered after parsing the ethernet 2 header
-    ///             println!("Error on layer {}: {:?}", stop_err, error_layer);
+    ///             println!("Error on layer {}: {:?}", error_layer, stop_err);
     ///         }
     ///
     ///         // parts that could be parsed without error
@@ -133,7 +133,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// let packet = LaxSlicedPacket::from_ether_type(ether_type::IPV4, packet);
     /// if let Some((stop_err, error_layer)) = packet.stop_err.as_ref() {
     ///     // in case an error is encountered parsing is stopped
-    ///     println!("Error on layer {}: {:?}", stop_err, error_layer);
+    ///     println!("Error on layer {}: {:?}", error_layer, stop_err);
     /// }
     ///
     /// // parts that could be parsed without error
@@ -195,7 +195,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///     Ok(value) => {
     ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
     ///             // error is encountered after the ip header (stops parsing)
-    ///             println!("Error on layer {}: {:?}", stop_err, error_layer);
+    ///             println!("Error on layer {}: {:?}", error_layer, stop_err);
     ///         }
     ///
     ///         // link & vlan fields are empty when parsing from ip downwards
