@@ -226,9 +226,7 @@ impl<'a> LaxSlicedPacket<'a> {
 mod test {
     use super::*;
     use crate::err::{packet::SliceError, Layer, LenError, LenSource};
-    use crate::test_gens::*;
     use crate::test_packet::TestPacket;
-    use proptest::prelude::*;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
         ether_type::VLAN_TAGGED_FRAME,
@@ -1360,118 +1358,6 @@ mod test {
                     }
                     _ => unreachable!("error in an unexpected layer"),
                 }
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn payload_ether_type(
-            ref eth in ethernet_2_unknown(),
-            ref vlan_outer in vlan_single_unknown(),
-            ref vlan_inner in vlan_single_unknown(),
-            ref ipv4 in ipv4_unknown(),
-            ref udp in udp_any(),
-        ) {
-            use IpHeaders::*;
-            use alloc::vec::Vec;
-
-            // empty
-            {
-                let s = SlicedPacket{
-                    link: None,
-                    vlan: None,
-                    net: None,
-                    transport: None,
-                };
-                assert_eq!(None, s.payload_ether_type());
-            }
-
-            // only ethernet
-            {
-                let mut serialized = Vec::with_capacity(eth.header_len());
-                eth.write(&mut serialized).unwrap();
-                assert_eq!(
-                    Some(eth.ether_type),
-                    SlicedPacket::from_ethernet(&serialized)
-                        .unwrap()
-                        .payload_ether_type()
-                );
-            }
-
-            // with single vlan
-            {
-                let mut eth_mod = eth.clone();
-                eth_mod.ether_type = ether_type::VLAN_TAGGED_FRAME;
-
-                let mut serialized = Vec::with_capacity(
-                    eth_mod.header_len() +
-                    vlan_outer.header_len()
-                );
-                eth_mod.write(&mut serialized).unwrap();
-                vlan_outer.write(&mut serialized).unwrap();
-                assert_eq!(
-                    Some(vlan_outer.ether_type),
-                    SlicedPacket::from_ethernet(&serialized)
-                        .unwrap()
-                        .payload_ether_type()
-                );
-            }
-
-            // with double vlan
-            {
-                let mut eth_mod = eth.clone();
-                eth_mod.ether_type = ether_type::VLAN_TAGGED_FRAME;
-
-                let mut vlan_outer_mod = vlan_outer.clone();
-                vlan_outer_mod.ether_type = ether_type::VLAN_TAGGED_FRAME;
-
-                let mut serialized = Vec::with_capacity(
-                    eth_mod.header_len() +
-                    vlan_outer_mod.header_len() +
-                    vlan_inner.header_len()
-                );
-                eth_mod.write(&mut serialized).unwrap();
-                vlan_outer_mod.write(&mut serialized).unwrap();
-                vlan_inner.write(&mut serialized).unwrap();
-                assert_eq!(
-                    Some(vlan_inner.ether_type),
-                    SlicedPacket::from_ethernet(&serialized)
-                        .unwrap()
-                        .payload_ether_type()
-                );
-            }
-
-            // with ip
-            {
-                let builder = PacketBuilder::ethernet2(eth.source, eth.destination)
-                    .ip(Ipv4(ipv4.clone(), Default::default()));
-
-                let mut serialized = Vec::with_capacity(builder.size(0));
-                builder.write(&mut serialized, ipv4.protocol, &[]).unwrap();
-
-                assert_eq!(
-                    None,
-                    SlicedPacket::from_ethernet(&serialized)
-                        .unwrap()
-                        .payload_ether_type()
-                );
-            }
-
-            // with transport
-            {
-                let builder = PacketBuilder::ethernet2(eth.source, eth.destination)
-                    .ip(Ipv4(ipv4.clone(), Default::default()))
-                    .udp(udp.source_port, udp.destination_port);
-                let mut serialized = Vec::with_capacity(builder.size(0));
-                builder.write(&mut serialized, &[]).unwrap();
-
-                assert_eq!(
-                    None,
-                    SlicedPacket::from_ethernet(&serialized)
-                        .unwrap()
-                        .payload_ether_type()
-                );
             }
         }
     }
