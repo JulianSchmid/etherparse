@@ -1,7 +1,7 @@
 use crate::{link::ether_payload_slice::EtherPayloadSlice, *};
 
 /// Payload together with an identifier the type of content.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum PayloadSlice<'a> {
     /// Payload with it's type identified by an ether type number
     /// (e.g. after an ethernet II or vlan header).
@@ -31,5 +31,73 @@ impl<'a> PayloadSlice<'a> {
             PayloadSlice::Icmpv4(s) => s,
             PayloadSlice::Icmpv6(s) => s,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use alloc::format;
+
+    #[test]
+    fn debug() {
+        assert_eq!(
+            format!("Udp({:?})", &[0u8; 0]),
+            format!("{:?}", PayloadSlice::Udp(&[]))
+        );
+    }
+
+    #[test]
+    fn clone_eq_hash_ord() {
+        let s = PayloadSlice::Udp(&[]);
+        assert_eq!(s.clone(), s);
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let a_hash = {
+            let mut hasher = DefaultHasher::new();
+            s.hash(&mut hasher);
+            hasher.finish()
+        };
+        let b_hash = {
+            let mut hasher = DefaultHasher::new();
+            s.clone().hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(a_hash, b_hash);
+
+        use std::cmp::Ordering;
+        assert_eq!(s.clone().cmp(&s), Ordering::Equal);
+        assert_eq!(s.clone().partial_cmp(&s), Some(Ordering::Equal));
+    }
+
+    #[test]
+    fn slice() {
+        let payload = [1, 2, 3, 4];
+
+        use PayloadSlice::*;
+        assert_eq!(
+            Ether(EtherPayloadSlice {
+                ether_type: EtherType::IPV4,
+                payload: &payload
+            })
+            .slice(),
+            &payload
+        );
+        assert_eq!(
+            Ip(IpPayloadSlice {
+                ip_number: IpNumber::IPV4,
+                fragmented: false,
+                len_source: LenSource::Slice,
+                payload: &payload
+            })
+            .slice(),
+            &payload
+        );
+        assert_eq!(Udp(&payload).slice(), &payload);
+        assert_eq!(Tcp(&payload).slice(), &payload);
+        assert_eq!(Icmpv4(&payload).slice(), &payload);
+        assert_eq!(Icmpv6(&payload).slice(), &payload);
     }
 }

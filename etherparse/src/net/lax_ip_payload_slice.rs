@@ -3,7 +3,7 @@ use crate::*;
 /// Laxly identified payload of an IP packet (potentially incomplete).
 ///
 /// To check if the payload is complete check the `incomplete` field.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct LaxIpPayloadSlice<'a> {
     /// True if the length field in the IP header indicates more data
     /// should be present but it was not (aka the packet data is cut off).
@@ -29,4 +29,63 @@ pub struct LaxIpPayloadSlice<'a> {
 
     /// Payload
     pub payload: &'a [u8],
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use alloc::format;
+
+    #[test]
+    fn debug() {
+        let s = LaxIpPayloadSlice {
+            incomplete: false,
+            ip_number: IpNumber::UDP,
+            fragmented: true,
+            len_source: LenSource::Slice,
+            payload: &[],
+        };
+        assert_eq!(
+            format!(
+                "LaxIpPayloadSlice {{ incomplete: {:?}, ip_number: {:?}, fragmented: {:?}, len_source: {:?}, payload: {:?} }}",
+                s.incomplete,
+                s.ip_number,
+                s.fragmented,
+                s.len_source,
+                s.payload
+            ),
+            format!("{:?}", s)
+        );
+    }
+
+    #[test]
+    fn clone_eq_hash_ord() {
+        let s = LaxIpPayloadSlice {
+            incomplete: false,
+            ip_number: IpNumber::UDP,
+            fragmented: true,
+            len_source: LenSource::Slice,
+            payload: &[],
+        };
+        assert_eq!(s.clone(), s);
+
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let a_hash = {
+            let mut hasher = DefaultHasher::new();
+            s.hash(&mut hasher);
+            hasher.finish()
+        };
+        let b_hash = {
+            let mut hasher = DefaultHasher::new();
+            s.clone().hash(&mut hasher);
+            hasher.finish()
+        };
+        assert_eq!(a_hash, b_hash);
+
+        use std::cmp::Ordering;
+        assert_eq!(s.clone().cmp(&s), Ordering::Equal);
+        assert_eq!(s.clone().partial_cmp(&s), Some(Ordering::Equal));
+    }
 }
