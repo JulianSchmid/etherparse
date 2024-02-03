@@ -420,7 +420,10 @@ impl From<tcp::HeaderSliceError> for ReadError {
 #[cfg(test)]
 mod tests {
     use crate::EtherType;
-    use crate::{LenSource, err::{ReadError::*, *}};
+    use crate::{
+        err::{ReadError::*, *},
+        LenSource,
+    };
     use std::error::Error;
     use std::format;
 

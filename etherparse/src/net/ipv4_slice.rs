@@ -1,6 +1,6 @@
 use crate::{
-    *,
     err::{ipv4::SliceError, Layer, LenError},
+    *,
 };
 
 /// Slice containing the IPv4 headers & payload.

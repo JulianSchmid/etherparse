@@ -1,7 +1,7 @@
-use crate::*;
 #[cfg(feature = "std")]
 use crate::err::ip::HeadersWriteError;
 use crate::err::{Layer, LenError, ValueTooBigError};
+use crate::*;
 
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -433,8 +433,8 @@ impl IpHeaders {
 
                     let stop_err = stop_err.map(|err| {
                         use err::ip_auth::HeaderSliceError as I;
-                        use err::ip_exts::HeadersSliceError as O;
                         use err::ip_exts::HeaderError as OC;
+                        use err::ip_exts::HeadersSliceError as O;
                         match err {
                             I::Len(mut l) => O::Len({
                                 l.layer_start_offset += header_len;
@@ -530,9 +530,9 @@ impl IpHeaders {
                         Ipv6Extensions::from_slice_lax(header.next_header, header_payload);
 
                     let stop_err = stop_err.map(|(err, layer)| {
-                        use err::ipv6_exts::HeaderSliceError as I;
-                        use err::ip_exts::HeadersSliceError as O;
                         use err::ip_exts::HeaderError::Ipv6Ext;
+                        use err::ip_exts::HeadersSliceError as O;
+                        use err::ipv6_exts::HeaderSliceError as I;
                         (
                             match err {
                                 I::Len(mut l) => {
@@ -540,13 +540,10 @@ impl IpHeaders {
                                     l.len_source = len_source;
                                     O::Len(l)
                                 }
-                                I::Content(c) => {
-                                    O::Content(Ipv6Ext(c))
-                                },
+                                I::Content(c) => O::Content(Ipv6Ext(c)),
                             },
-                            layer
+                            layer,
                         )
-
                     });
 
                     let fragmented = exts.is_fragmenting_payload();

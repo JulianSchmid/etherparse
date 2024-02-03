@@ -13,7 +13,6 @@ pub enum HeadersSliceError {
 }
 
 impl HeadersSliceError {
-
     /// Returns the [`crate::err::LenError`] if the error is an Len.
     pub fn len_error(&self) -> Option<&LenError> {
         use HeadersSliceError::*;
@@ -58,7 +57,10 @@ impl std::error::Error for HeadersSliceError {
 #[cfg(test)]
 mod tests {
     use super::{HeadersSliceError::*, *};
-    use crate::{err::{Layer, LenError, ipv6_exts::HeaderError::*}, LenSource};
+    use crate::{
+        err::{ipv6_exts::HeaderError::*, Layer, LenError},
+        LenSource,
+    };
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -85,7 +87,10 @@ mod tests {
                 layer_start_offset: 3
             })
         );
-        assert_eq!(Content(HeaderError::Ipv6Ext(HopByHopNotAtStart)).len_error(), None);
+        assert_eq!(
+            Content(HeaderError::Ipv6Ext(HopByHopNotAtStart)).len_error(),
+            None
+        );
     }
 
     #[test]
@@ -163,6 +168,8 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(Content(HeaderError::Ipv6Ext(HopByHopNotAtStart)).source().is_some());
+        assert!(Content(HeaderError::Ipv6Ext(HopByHopNotAtStart))
+            .source()
+            .is_some());
     }
 }
