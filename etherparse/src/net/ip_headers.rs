@@ -321,7 +321,7 @@ impl IpHeaders {
         (
             IpHeaders,
             LaxIpPayloadSlice<'_>,
-            Option<(err::ipv6_exts::HeaderSliceError, Layer)>,
+            Option<(err::ip_exts::HeadersSliceError, Layer)>,
         ),
         err::ip::LaxHeaderSliceError,
     > {
@@ -433,15 +433,15 @@ impl IpHeaders {
 
                     let stop_err = stop_err.map(|err| {
                         use err::ip_auth::HeaderSliceError as I;
-                        use err::ipv6_exts::HeaderError as C;
-                        use err::ipv6_exts::HeaderSliceError as O;
+                        use err::ip_exts::HeadersSliceError as O;
+                        use err::ip_exts::HeaderError as OC;
                         match err {
                             I::Len(mut l) => O::Len({
                                 l.layer_start_offset += header_len;
                                 l.len_source = len_source;
                                 l
                             }),
-                            I::Content(c) => O::Content(C::IpAuth(c)),
+                            I::Content(c) => O::Content(OC::Ipv4Ext(c)),
                         }
                     });
 
@@ -484,7 +484,7 @@ impl IpHeaders {
                     // restrict slice by the length specified in the header
                     let payload_len = usize::from(header.payload_length);
                     let (header_payload, len_source, incomplete) =
-                        if (header.payload_length == 0) && (false == slice.is_empty()) {
+                        if (header.payload_length == 0) && (Ipv6Header::LEN < slice.len()) {
                             // TODO: Add payload length parsing from the jumbogram
                             unsafe {
                                 (
@@ -526,14 +526,28 @@ impl IpHeaders {
                             }
                         };
 
-                    let (exts, next_header, rest, mut stop_err) =
+                    let (exts, next_header, rest, stop_err) =
                         Ipv6Extensions::from_slice_lax(header.next_header, header_payload);
 
-                    use err::ipv6_exts::HeaderSliceError as O;
-                    if let Some((O::Len(err), _)) = stop_err.as_mut() {
-                        err.layer_start_offset += Ipv6Header::LEN;
-                        err.len_source = len_source;
-                    }
+                    let stop_err = stop_err.map(|(err, layer)| {
+                        use err::ipv6_exts::HeaderSliceError as I;
+                        use err::ip_exts::HeadersSliceError as O;
+                        use err::ip_exts::HeaderError::Ipv6Ext;
+                        (
+                            match err {
+                                I::Len(mut l) => {
+                                    l.layer_start_offset += Ipv6Header::LEN;
+                                    l.len_source = len_source;
+                                    O::Len(l)
+                                }
+                                I::Content(c) => {
+                                    O::Content(Ipv6Ext(c))
+                                },
+                            },
+                            layer
+                        )
+
+                    });
 
                     let fragmented = exts.is_fragmenting_payload();
                     Ok((
@@ -1561,8 +1575,8 @@ mod test {
                 // content error ipv4 extensions
                 if v4_exts.auth.is_some() {
                     use err::ip_auth::HeaderError::ZeroPayloadLen;
-                    use err::ipv6_exts::HeaderSliceError::Content;
-                    use err::ipv6_exts::HeaderError::IpAuth;
+                    use err::ip_exts::HeadersSliceError::Content;
+                    use err::ip_exts::HeaderError::Ipv4Ext;
 
                     // introduce a auth header zero payload error
                     let mut errored_buffer = buffer.clone();
@@ -1572,7 +1586,7 @@ mod test {
 
                     let (_, _, stop_err) = IpHeaders::from_slice_lax(&errored_buffer).unwrap();
 
-                    assert_eq!(stop_err, Some((Content(IpAuth(ZeroPayloadLen)), Layer::IpAuthHeader)));
+                    assert_eq!(stop_err, Some((Content(Ipv4Ext(ZeroPayloadLen)), Layer::IpAuthHeader)));
                 }
 
                 // total length smaller the header (fallback to slice len)
@@ -1658,7 +1672,8 @@ mod test {
                 // extension content error
                 if v6_exts.auth.is_some() {
                     use err::ip_auth::HeaderError::ZeroPayloadLen;
-                    use err::ipv6_exts::HeaderSliceError::Content;
+                    use err::ip_exts::HeadersSliceError::Content;
+                    use err::ip_exts::HeaderError::Ipv6Ext;
                     use err::ipv6_exts::HeaderError::IpAuth;
 
                     // introduce a auth header zero payload error
@@ -1677,7 +1692,7 @@ mod test {
                     let (_, _, stop_err) = IpHeaders::from_slice_lax(&errored_buffer).unwrap();
                     assert_eq!(
                         stop_err,
-                        Some((Content(IpAuth(ZeroPayloadLen)), Layer::IpAuthHeader))
+                        Some((Content(Ipv6Ext(IpAuth(ZeroPayloadLen))), Layer::IpAuthHeader))
                     );
                 }
 
