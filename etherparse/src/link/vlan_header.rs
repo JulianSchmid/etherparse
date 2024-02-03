@@ -119,6 +119,25 @@ mod test {
 
     proptest! {
         #[test]
+        fn next_header(
+            single in vlan_single_any(),
+            double in vlan_double_any(),
+        ) {
+            // single
+            {
+                let value = VlanHeader::Single(single.clone());
+                assert_eq!(value.next_header(), single.ether_type);
+            }
+            // double
+            {
+                let value = VlanHeader::Double(double.clone());
+                assert_eq!(value.next_header(), double.inner.ether_type);
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
         fn header_len(
             single in vlan_single_any(),
             double in vlan_double_any(),

@@ -235,6 +235,7 @@ mod test {
                 assert_eq!(None, slice.fcs());
                 assert_eq!(eth, slice.to_header());
                 assert_eq!(&data, slice.slice());
+                assert_eq!(&data[..Ethernet2Header::LEN], slice.header_slice());
             }
             // with fcs
             {
@@ -253,6 +254,7 @@ mod test {
                 assert_eq!(Some([5, 6, 7, 8]), slice.fcs());
                 assert_eq!(eth, slice.to_header());
                 assert_eq!(&data, slice.slice());
+                assert_eq!(&data[..Ethernet2Header::LEN], slice.header_slice());
             }
         }
     }

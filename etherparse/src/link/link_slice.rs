@@ -35,7 +35,7 @@ impl<'a> LinkSlice<'a> {
 mod test {
     use super::*;
     use crate::test_gens::*;
-    use alloc::format;
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {
@@ -79,6 +79,36 @@ mod test {
                 assert_eq!(
                     slice.to_header(),
                     None
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn payload(ref eth in ethernet_2_unknown()) {
+            let p = [1,2,3,4];
+            {
+                let mut bytes = Vec::with_capacity(Ethernet2Header::LEN + p.len());
+                bytes.extend_from_slice(&eth.to_bytes());
+                bytes.extend_from_slice(&p);
+                let slice = LinkSlice::Ethernet2(
+                    Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap()
+                );
+                assert_eq!(
+                    slice.payload(),
+                    EtherPayloadSlice{ ether_type: eth.ether_type, payload: &p }
+                );
+            }
+            {
+                let p = [1,2,3,4];
+                let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
+                    ether_type: eth.ether_type,
+                    payload: &p
+                });
+                assert_eq!(
+                    slice.payload(),
+                    EtherPayloadSlice{ ether_type: eth.ether_type, payload: &p }
                 );
             }
         }
