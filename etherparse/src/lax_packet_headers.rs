@@ -134,6 +134,102 @@ impl<'a> LaxPacketHeaders<'a> {
         Ok(result)
     }
 
+    /// Separates a network packet into different headers using
+    /// the given `ether_type` number to identify the first header with lax length
+    /// checks and non-terminating errors.
+    ///
+    /// The result is returned as a [`LaxSlicedPacket`] struct. Currently supported
+    /// ether type numbers are:
+    ///
+    /// * `ether_type::IPV4`
+    /// * `ether_type::IPV6`
+    /// * `ether_type::VLAN_TAGGED_FRAME`
+    /// * `ether_type::PROVIDER_BRIDGING`
+    /// * `ether_type::VLAN_DOUBLE_TAGGED_FRAME`
+    ///
+    /// If an unsupported ether type is given the given slice will be set as payload
+    /// and all other fields will be set to `None`.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{Ethernet2Header, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    ethernet2([1,2,3,4,5,6],     //source mac
+    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //destination ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut complete_packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut complete_packet, &payload).unwrap();
+    /// # // skip ethernet 2 header so we can parse from there downwards
+    /// # let packet = &complete_packet[Ethernet2Header::LEN..];
+    /// #
+    /// use etherparse::{ether_type, LaxPacketHeaders, LenSource, LaxPayloadSlice};
+    ///
+    /// let value = LaxPacketHeaders::from_ether_type(ether_type::IPV4, &packet);
+    ///
+    /// if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///     // error was encountered after parsing the ethernet 2 header
+    ///     println!("Error on layer {}: {:?}", error_layer, stop_err);
+    /// }
+    ///
+    /// // parts that could be parsed without error
+    /// println!("link: {:?}", value.link);
+    /// println!("vlan: {:?}", value.vlan);
+    /// println!("net: {:?}", value.net);
+    /// println!("transport: {:?}", value.transport);
+    ///
+    /// // net (ip) & transport (udp or tcp)
+    /// println!("net: {:?}", value.net);
+    /// match value.payload {
+    ///     LaxPayloadSlice::Ether(e) => {
+    ///         println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
+    ///     }
+    ///     LaxPayloadSlice::Ip(ip) => {
+    ///         println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
+    ///         if ip.incomplete {
+    ///             println!("  IP payload incomplete (length in IP header indicated more data should be present)");
+    ///         }
+    ///         if ip.fragmented {
+    ///             println!("  IP payload fragmented");
+    ///         }
+    ///     }
+    ///     LaxPayloadSlice::Udp{ payload, incomplete } => {
+    ///         println!("UDP payload: {:?}", payload);
+    ///         if incomplete {
+    ///             println!("  UDP payload incomplete (length in UDP or IP header indicated more data should be present)");
+    ///         }
+    ///     }
+    ///     LaxPayloadSlice::Tcp{ payload, incomplete } => {
+    ///         println!("TCP payload: {:?}", payload);
+    ///         if incomplete {
+    ///             println!("  TCP payload incomplete (length in IP header indicated more data should be present)");
+    ///         }
+    ///     }
+    ///     LaxPayloadSlice::Icmpv4{ payload, incomplete } => {
+    ///         println!("Icmpv4 payload: {:?}", payload);
+    ///         if incomplete {
+    ///             println!("  Icmpv4 payload incomplete (length in IP header indicated more data should be present)");
+    ///         }
+    ///     }
+    ///     LaxPayloadSlice::Icmpv6{ payload, incomplete } => {
+    ///         println!("Icmpv6 payload: {:?}", payload);
+    ///         if incomplete {
+    ///             println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
+    ///         }
+    ///     }
+    /// }
+    /// ```
     pub fn from_ether_type(mut ether_type: EtherType, slice: &'a [u8]) -> LaxPacketHeaders<'a> {
         use err::packet::SliceError::*;
 
