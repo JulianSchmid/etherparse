@@ -38,7 +38,10 @@ mod tests {
         super::{HeaderError::*, HeadersError::*},
         SliceError::*,
     };
-    use crate::{err::{Layer, LenError}, LenSource};
+    use crate::{
+        err::{Layer, LenError},
+        LenSource,
+    };
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

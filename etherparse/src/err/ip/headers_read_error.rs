@@ -84,7 +84,10 @@ impl std::error::Error for HeaderReadError {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::{super::HeaderError::*, super::HeadersError::*, HeaderReadError::*, *};
-    use crate::{err::{Layer, LenError}, LenSource};
+    use crate::{
+        err::{Layer, LenError},
+        LenSource,
+    };
     use alloc::format;
 
     #[test]

@@ -183,8 +183,10 @@ impl<'a> LaxPacketHeaders<'a> {
     ///     println!("Error on layer {}: {:?}", error_layer, stop_err);
     /// }
     ///
+    /// // link is unfilled
+    /// assert_eq!(value.link, None);
+    ///
     /// // parts that could be parsed without error
-    /// println!("link: {:?}", value.link);
     /// println!("vlan: {:?}", value.vlan);
     /// println!("net: {:?}", value.net);
     /// println!("transport: {:?}", value.transport);
@@ -305,45 +307,155 @@ impl<'a> LaxPacketHeaders<'a> {
 
         // parse ip
         match ether_type {
-            IPV4 | IPV6 => {
-                match result.add_ip(offset, rest) {
-                    Ok(_) => {},
-                    Err(err) => {
-                        use err::ip::LaxHeaderSliceError as I;
-                        result.stop_err = Some(match err {
-                            I::Len(mut l) => {
-                                l.layer_start_offset += offset;
-                                (Len(l), Layer::IpHeader)
-                            }
-                            I::Content(c) => (Ip(c), Layer::IpHeader),
-                        });
-                        return result;
-                    }
+            IPV4 | IPV6 => match result.add_ip(offset, rest) {
+                Ok(_) => {}
+                Err(err) => {
+                    use err::ip::LaxHeaderSliceError as I;
+                    result.stop_err = Some(match err {
+                        I::Len(mut l) => {
+                            l.layer_start_offset += offset;
+                            (Len(l), Layer::IpHeader)
+                        }
+                        I::Content(c) => (Ip(c), Layer::IpHeader),
+                    });
+                    return result;
                 }
-            }
+            },
             _ => {}
         };
 
         result
     }
 
+    /// Separates a network packet slice into different headers from the
+    /// ip header downwards with lax length checks and will still return
+    /// a result even if an error is encountered in a layer (except IP).
+    ///
+    /// This function has two main differences to [`PacketHeaders::from_ip_slice`]:
+    ///
+    /// * Errors encountered bellow the IpHeader will only stop the parsing and
+    ///   return an `Ok` with the successfully parsed parts and the error as optional.
+    ///   Only if an unrecoverable error is encountered in the IP header itself an
+    ///   `Err` is returned.
+    /// * Length in the IP header & UDP headers are allowed to be inconsistent with the
+    ///   given slice length (e.g. data is missing from the slice). In this case it falls
+    ///   back to the length of slice. See [`LaxIpSlice::from_slice`] for a detailed
+    ///   description of when the slice length is used as a fallback.
+    ///
+    /// The result is returned as a [`SlicedPacket`] struct. This function
+    /// assumes the given data starts with an IPv4 or IPv6 header.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{PacketBuilder, Ethernet2Header};
+    /// # let builder = PacketBuilder::
+    /// #    ipv4([192,168,1,1], //source ip
+    /// #         [192,168,1,2], //destination ip
+    /// #         20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //desitnation port
+    /// # //payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut complete_packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut complete_packet, &payload).unwrap();
+    /// # // skip ethernet 2 header so we can parse from there downwards
+    /// # let packet = &complete_packet[Ethernet2Header::LEN..];
+    /// #
+    /// use etherparse::{ether_type, LaxPacketHeaders, LenSource, LaxPayloadSlice};
+    ///
+    /// match LaxPacketHeaders::from_ip(&packet) {
+    ///     Err(value) => {
+    ///         // An error is returned in case the ip header could
+    ///         // not be parsed (other errors are stored in the "stop_err" field)
+    ///         println!("Err {:?}", value)
+    ///     },
+    ///     Ok(value) => {
+    ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///             // error was encountered after parsing the ethernet 2 header
+    ///             println!("Error on layer {}: {:?}", error_layer, stop_err);
+    ///         }
+    ///
+    ///         // link & vlan is unfilled
+    ///         assert_eq!(value.link, None);
+    ///         assert_eq!(value.vlan, None);
+    ///
+    ///         // parts that could be parsed without error
+    ///         println!("net: {:?}", value.net);
+    ///         println!("transport: {:?}", value.transport);
+    ///
+    ///         // net (ip) & transport (udp or tcp)
+    ///         println!("net: {:?}", value.net);
+    ///         match value.payload {
+    ///             // if you parse from IP down there will be no ether payload
+    ///             LaxPayloadSlice::Ether(e) => unreachable!(),
+    ///             LaxPayloadSlice::Ip(ip) => {
+    ///                 println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
+    ///                 if ip.incomplete {
+    ///                     println!("  IP payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///                 if ip.fragmented {
+    ///                     println!("  IP payload fragmented");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Udp{ payload, incomplete } => {
+    ///                 println!("UDP payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  UDP payload incomplete (length in UDP or IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Tcp{ payload, incomplete } => {
+    ///                 println!("TCP payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  TCP payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Icmpv4{ payload, incomplete } => {
+    ///                 println!("Icmpv4 payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  Icmpv4 payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Icmpv6{ payload, incomplete } => {
+    ///                 println!("Icmpv6 payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// ```
     pub fn from_ip(slice: &'a [u8]) -> Result<LaxPacketHeaders, err::ip::LaxHeaderSliceError> {
-        let mut result = Self{
+        let mut result = Self {
             link: None,
             vlan: None,
             net: None,
             transport: None,
             // dummy initialize (will be overwritten if add_ip is successfull)
-            payload: LaxPayloadSlice::Udp { payload: &[], incomplete: true },
+            payload: LaxPayloadSlice::Udp {
+                payload: &[],
+                incomplete: true,
+            },
             stop_err: None,
         };
         result.add_ip(0, slice)?;
         Ok(result)
     }
 
-    fn add_ip(&mut self, offset: usize, slice: &'a [u8]) -> Result<(), err::ip::LaxHeaderSliceError> {
+    fn add_ip(
+        &mut self,
+        offset: usize,
+        slice: &'a [u8],
+    ) -> Result<(), err::ip::LaxHeaderSliceError> {
         use err::packet::SliceError::*;
-        
+
         // read ipv4 header & extensions and payload slice
         let (ip, ip_payload, stop_err) = IpHeaders::from_slice_lax(slice)?;
 
@@ -353,8 +465,8 @@ impl<'a> LaxPacketHeaders<'a> {
 
         // if a stop error was encountered return it
         if let Some((err, layer)) = stop_err {
-            use err::ip_exts::HeadersSliceError as I;
             use err::ip_exts::HeaderError as IC;
+            use err::ip_exts::HeadersSliceError as I;
 
             self.stop_err = Some((
                 match err {
@@ -437,7 +549,7 @@ impl<'a> LaxPacketHeaders<'a> {
                             payload: t.1,
                             incomplete: ip_payload.incomplete,
                         };
-                    },
+                    }
                     Err(e) => match e {
                         Len(l) => {
                             self.stop_err = Some((add_len_source(l), Layer::TcpHeader));
@@ -453,7 +565,6 @@ impl<'a> LaxPacketHeaders<'a> {
         Ok(())
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -475,7 +586,10 @@ mod test {
             net: None,
             transport: None,
             stop_err: None,
-            payload: LaxPayloadSlice::Udp { payload: &[], incomplete: false },
+            payload: LaxPayloadSlice::Udp {
+                payload: &[],
+                incomplete: false,
+            },
         };
         assert_eq!(header.clone(), header);
     }
@@ -483,7 +597,10 @@ mod test {
     #[test]
     fn debug() {
         use alloc::format;
-        let payload = LaxPayloadSlice::Udp { payload: &[], incomplete: false };
+        let payload = LaxPayloadSlice::Udp {
+            payload: &[],
+            incomplete: false,
+        };
         let header = LaxPacketHeaders {
             link: None,
             vlan: None,
@@ -1276,20 +1393,14 @@ mod test {
                     if data.len() >= vlan_offset + DoubleVlanHeader::LEN {
                         assert_eq!(test.vlan, actual.vlan);
                     } else if data.len() >= vlan_offset + SingleVlanHeader::LEN {
-                        assert_eq!(
-                            Some(VlanHeader::Single(d.outer.clone())),
-                            actual.vlan
-                        );
+                        assert_eq!(Some(VlanHeader::Single(d.outer.clone())), actual.vlan);
                     } else {
                         assert_eq!(None, actual.vlan);
                     }
                 }
                 Some(VlanHeader::Single(s)) => {
                     if data.len() >= vlan_offset + SingleVlanHeader::LEN {
-                        assert_eq!(
-                            Some(VlanHeader::Single(s.clone())),
-                            actual.vlan
-                        );
+                        assert_eq!(Some(VlanHeader::Single(s.clone())), actual.vlan);
                     } else {
                         assert_eq!(None, actual.vlan);
                     }
@@ -1330,19 +1441,43 @@ mod test {
                 match &actual.transport {
                     Some(H::Icmpv4(icmpv4)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv4(icmpv4.clone())));
-                        assert_eq!(actual.payload, LaxPayloadSlice::Icmpv4 { payload: expected_payload, incomplete: false });
+                        assert_eq!(
+                            actual.payload,
+                            LaxPayloadSlice::Icmpv4 {
+                                payload: expected_payload,
+                                incomplete: false
+                            }
+                        );
                     }
                     Some(H::Icmpv6(icmpv6)) => {
                         assert_eq!(&test.transport, &Some(H::Icmpv6(icmpv6.clone())));
-                        assert_eq!(actual.payload, LaxPayloadSlice::Icmpv6 { payload: expected_payload, incomplete: false });
+                        assert_eq!(
+                            actual.payload,
+                            LaxPayloadSlice::Icmpv6 {
+                                payload: expected_payload,
+                                incomplete: false
+                            }
+                        );
                     }
                     Some(H::Udp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Udp(s.clone())));
-                        assert_eq!(actual.payload, LaxPayloadSlice::Udp { payload: expected_payload, incomplete: false });
+                        assert_eq!(
+                            actual.payload,
+                            LaxPayloadSlice::Udp {
+                                payload: expected_payload,
+                                incomplete: false
+                            }
+                        );
                     }
                     Some(H::Tcp(s)) => {
                         assert_eq!(&test.transport, &Some(H::Tcp(s.clone())));
-                        assert_eq!(actual.payload, LaxPayloadSlice::Tcp { payload: expected_payload, incomplete: false });
+                        assert_eq!(
+                            actual.payload,
+                            LaxPayloadSlice::Tcp {
+                                payload: expected_payload,
+                                incomplete: false
+                            }
+                        );
                     }
                     None => {
                         assert_eq!(&test.transport, &None);
@@ -1371,7 +1506,7 @@ mod test {
                     None => {
                         assert_eq!(test.link, actual.link);
                         compare_vlan(test, data, &actual);
-                        assert_eq!(test.net,actual.net);
+                        assert_eq!(test.net, actual.net);
                         compare_transport(
                             test,
                             test.is_ip_payload_fragmented(),
@@ -1411,7 +1546,7 @@ mod test {
                     | Some(Layer::Icmpv6) => {
                         assert_eq!(test.link, actual.link);
                         compare_vlan(test, data, &actual);
-                        assert_eq!(test.net,actual.net);
+                        assert_eq!(test.net, actual.net);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
@@ -1459,7 +1594,7 @@ mod test {
                     | Some(Layer::UdpHeader)
                     | Some(Layer::Icmpv4)
                     | Some(Layer::Icmpv6) => {
-                        assert_eq!(test.net,actual.net);
+                        assert_eq!(test.net, actual.net);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
@@ -1476,11 +1611,11 @@ mod test {
                 };
                 let actual = LaxPacketHeaders::from_ether_type(ether_type, &data);
                 assert_eq!(actual.stop_err, expected_stop_err);
-                assert_eq!(None,actual.link);
+                assert_eq!(None, actual.link);
                 assert_eq!(test.vlan, None);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {
-                        assert_eq!(test.net,actual.net);
+                        assert_eq!(test.net, actual.net);
                         compare_transport(
                             test,
                             test.is_ip_payload_fragmented(),
@@ -1513,7 +1648,7 @@ mod test {
                     | Some(Layer::UdpHeader)
                     | Some(Layer::Icmpv4)
                     | Some(Layer::Icmpv6) => {
-                        assert_eq!(test.net,actual.net);
+                        assert_eq!(test.net, actual.net);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }

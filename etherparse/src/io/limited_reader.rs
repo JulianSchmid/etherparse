@@ -1,4 +1,7 @@
-use crate::{*, err::{io::LimitedReadError, Layer, LenError}};
+use crate::{
+    err::{io::LimitedReadError, Layer, LenError},
+    *,
+};
 
 /// Encapsulated reader with an maximum allowed read length.
 ///
