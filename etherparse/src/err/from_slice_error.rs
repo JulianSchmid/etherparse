@@ -310,7 +310,7 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 
 #[cfg(test)]
 mod tests {
-    use crate::EtherType;
+    use crate::{EtherType, LenSource};
 
     use super::{FromSliceError::*, *};
     use core::hash::{Hash, Hasher};

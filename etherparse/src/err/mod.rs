@@ -24,9 +24,6 @@ pub use layer::*;
 mod len_error;
 pub use len_error::*;
 
-mod len_source;
-pub use len_source::*;
-
 mod value_too_big_error;
 pub use value_too_big_error::*;
 

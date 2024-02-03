@@ -83,7 +83,7 @@ impl std::error::Error for HeaderLimitedReadError {
 
 #[cfg(all(test, feature = "std"))]
 mod test {
-    use crate::err::{Layer, LenSource};
+    use crate::{err::Layer, LenSource};
 
     use super::{HeaderLimitedReadError::*, *};
     use alloc::format;

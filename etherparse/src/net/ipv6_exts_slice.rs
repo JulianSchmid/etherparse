@@ -376,7 +376,7 @@ mod test {
                             Len(err::LenError {
                                 required_len: e.slice().len() - offset,
                                 len: e.slice().len() - offset - 1,
-                                len_source: err::LenSource::Slice,
+                                len_source: LenSource::Slice,
                                 layer: match ip_numbers[ip_numbers.len() - 2] {
                                     AUTH => err::Layer::IpAuthHeader,
                                     IPV6_FRAG => err::Layer::Ipv6FragHeader,
@@ -476,7 +476,7 @@ mod test {
                             Len(err::LenError {
                                 required_len: e.slice().len() - offset,
                                 len: e.slice().len() - offset - 1,
-                                len_source: err::LenSource::Slice,
+                                len_source: LenSource::Slice,
                                 layer: match ip_numbers[ip_numbers.len() - 2] {
                                     AUTH => err::Layer::IpAuthHeader,
                                     IPV6_FRAG => err::Layer::Ipv6FragHeader,

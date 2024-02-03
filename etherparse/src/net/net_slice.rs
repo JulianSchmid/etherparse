@@ -105,7 +105,7 @@ mod tests {
                 Some(&IpPayloadSlice {
                     ip_number: IpNumber::UDP,
                     fragmented: false,
-                    len_source: err::LenSource::Ipv4HeaderTotalLen,
+                    len_source: LenSource::Ipv4HeaderTotalLen,
                     payload: &payload
                 })
             );
@@ -132,7 +132,7 @@ mod tests {
                 Some(&IpPayloadSlice {
                     ip_number: IpNumber::UDP,
                     fragmented: false,
-                    len_source: err::LenSource::Ipv6HeaderPayloadLen,
+                    len_source: LenSource::Ipv6HeaderPayloadLen,
                     payload: &payload
                 })
             );

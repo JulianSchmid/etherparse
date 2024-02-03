@@ -1726,7 +1726,7 @@ mod test {
                             Len(err::LenError {
                                 required_len: read_len - offset,
                                 len: read_len - offset - 1,
-                                len_source: err::LenSource::Slice,
+                                len_source: LenSource::Slice,
                                 layer: match last_header.unwrap() {
                                     AUTH => err::Layer::IpAuthHeader,
                                     IPV6_FRAG => err::Layer::Ipv6FragHeader,
@@ -1835,7 +1835,7 @@ mod test {
                         assert_eq!(actual.2, expected.2);
                         let len_err = actual.3.unwrap().0.len_error().unwrap().clone();
                         assert_eq!(len_err.len, norm_len - 1 - expected.0.header_len());
-                        assert_eq!(len_err.len_source, err::LenSource::Slice);
+                        assert_eq!(len_err.len_source, LenSource::Slice);
                         assert_eq!(
                             len_err.layer,
                             match expected.3.unwrap() {
@@ -2003,7 +2003,7 @@ mod test {
                 )
         ) {
             use err::ipv6_exts::HeaderError::*;
-            use err::{Layer, LenSource};
+            use err::Layer;
             use std::io::Cursor;
             use crate::io::LimitedReader;
 

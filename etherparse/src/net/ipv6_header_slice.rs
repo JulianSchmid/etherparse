@@ -17,7 +17,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
             return Err(Len(err::LenError {
                 required_len: Ipv6Header::LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ipv6Header,
                 layer_start_offset: 0,
             }));
@@ -253,7 +253,7 @@ mod test {
                         Len(err::LenError{
                             required_len: Ipv6Header::LEN,
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         })

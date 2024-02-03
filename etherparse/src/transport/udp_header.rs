@@ -958,7 +958,7 @@ mod test {
                     err::LenError{
                         required_len: UdpHeader::LEN,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::UdpHeader,
                         layer_start_offset: 0,
                     }

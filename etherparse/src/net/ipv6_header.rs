@@ -156,7 +156,7 @@ impl Ipv6Header {
                 Err(err::LenError {
                     required_len: len,
                     len: slice.len(),
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::Ipv6ExtHeader,
                     layer_start_offset: 0,
                 })
@@ -167,7 +167,7 @@ impl Ipv6Header {
             Err(err::LenError {
                 required_len: 2,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ipv6ExtHeader,
                 layer_start_offset: 0,
             })
@@ -443,7 +443,7 @@ mod test {
                         Len(err::LenError{
                             required_len: Ipv6Header::LEN,
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         })
@@ -489,7 +489,7 @@ mod test {
                         Len(err::LenError{
                             required_len: Ipv6Header::LEN,
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6Header,
                             layer_start_offset: 0,
                         })
@@ -605,7 +605,7 @@ mod test {
                                 bytes.len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -632,7 +632,7 @@ mod test {
                                 bytes.len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -660,7 +660,7 @@ mod test {
                                 bytes.len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: 0,
                         }
@@ -816,7 +816,7 @@ mod test {
                         err::LenError {
                             required_len: get_expected(len) - get_offset(len),
                             len: len - get_offset(len),
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv6ExtHeader,
                             layer_start_offset: get_offset(len),
                         }

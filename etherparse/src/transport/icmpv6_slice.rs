@@ -24,7 +24,7 @@ impl<'a> Icmpv6Slice<'a> {
             return Err(err::LenError {
                 required_len: Icmpv6Header::MIN_LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Icmpv6,
                 layer_start_offset: 0,
             });
@@ -33,7 +33,7 @@ impl<'a> Icmpv6Slice<'a> {
             return Err(err::LenError {
                 required_len: icmpv6::MAX_ICMPV6_BYTE_LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Icmpv6,
                 layer_start_offset: 0,
             });
@@ -209,7 +209,7 @@ mod test {
                     err::LenError{
                         required_len: Icmpv6Header::MIN_LEN,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Icmpv6,
                         layer_start_offset: 0,
                     }
@@ -245,7 +245,7 @@ mod test {
                     err::LenError{
                         required_len: u32::MAX as usize,
                         len: bad_len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Icmpv6,
                         layer_start_offset: 0
                     }

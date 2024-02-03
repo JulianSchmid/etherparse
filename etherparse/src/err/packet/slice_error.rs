@@ -88,7 +88,7 @@ impl From<err::packet::IpSliceError> for SliceError {
 #[cfg(test)]
 mod tests {
     use super::{SliceError::*, *};
-    use crate::err::{Layer, LenSource};
+    use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

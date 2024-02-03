@@ -1,4 +1,4 @@
-use super::*;
+use crate::err::*;
 
 /// Type aggregating errors that can be caused by reading. This type can be used
 /// as a "catch all" type for errors caused by `from_slice` or `read` functions
@@ -95,7 +95,7 @@ impl ReadError {
 
 impl core::fmt::Display for ReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use ReadError::*;
+        use crate::err::ReadError::*;
         match self {
             Io(err) => err.fmt(f),
             Len(err) => err.fmt(f),
@@ -420,8 +420,7 @@ impl From<tcp::HeaderSliceError> for ReadError {
 #[cfg(test)]
 mod tests {
     use crate::EtherType;
-
-    use super::{ReadError::*, *};
+    use crate::{LenSource, err::{ReadError::*, *}};
     use std::error::Error;
     use std::format;
 

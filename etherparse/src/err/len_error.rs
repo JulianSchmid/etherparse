@@ -1,4 +1,4 @@
-use crate::err::{Layer, LenSource};
+use crate::{err::Layer, LenSource};
 
 /// Error when different lengths are conflicting with each other (e.g. not
 /// enough data in a slice to decode a header).
@@ -31,7 +31,7 @@ use crate::err::{Layer, LenSource};
 ///     len: 1,
 ///     // The provided length was determined by the total length field in the
 ///     // IPv4 header:
-///     len_source: err::LenSource::Ipv4HeaderTotalLen,
+///     len_source: LenSource::Ipv4HeaderTotalLen,
 ///     // Offset in bytes from the start of decoding (ethernet in this) case
 ///     // to the expected UDP header start:
 ///     layer_start_offset: Ethernet2Header::LEN + Ipv4Header::MIN_LEN
@@ -224,7 +224,7 @@ mod test {
     fn fmt() {
         // len sources based tests (not enough data)
         {
-            use LenSource::*;
+            use crate::LenSource::*;
             let len_source_tests = [
                 (Slice, "IPv4 Header Error: Not enough data to decode 'IPv4 header'. 2 byte(s) would be required, but only 1 byte(s) are available based on the slice length."),
                 (Ipv4HeaderTotalLen, "IPv4 Header Error: Not enough data to decode 'IPv4 header'. 2 byte(s) would be required, but only 1 byte(s) are available based on the length calculated from the IPv4 header 'total length' field."),
@@ -267,7 +267,7 @@ mod test {
 
         // len sources based tests (length too big)
         {
-            use LenSource::*;
+            use crate::LenSource::*;
             let len_source_tests = [
                 (Slice, "IPv4 Header Error: Length of 2 byte(s) is too big for an 'IPv4 header' (maximum is 1 bytes). The slice length was used to determine the length."),
                 (Ipv4HeaderTotalLen, "IPv4 Header Error: Length of 2 byte(s) is too big for an 'IPv4 header' (maximum is 1 bytes). The length calculated from the IPv4 header 'total length' field was used to determine the length."),

@@ -1,6 +1,6 @@
 use crate::{
-    err::{ipv4::SliceError, Layer, LenError, LenSource},
-    IpAuthHeaderSlice, IpNumber, IpPayloadSlice, Ipv4ExtensionsSlice, Ipv4HeaderSlice,
+    *,
+    err::{ipv4::SliceError, Layer, LenError},
 };
 
 /// Slice containing the IPv4 headers & payload.
@@ -304,7 +304,7 @@ mod test {
 
             // payload length error without auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv4_base.header_len() + payload.len();
                 prop_assert_eq!(
@@ -321,7 +321,7 @@ mod test {
 
             // payload length error auth header
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 let required_len = ipv4_base.header_len() + auth.header_len() + payload.len();
                 prop_assert_eq!(
@@ -338,7 +338,7 @@ mod test {
 
             // auth length error
             {
-                use crate::err::{LenError, LenSource, Layer};
+                use crate::err::{LenError, Layer};
 
                 // inject a total_length that is smaller then the auth header
                 let mut data = data_with_ext.clone();

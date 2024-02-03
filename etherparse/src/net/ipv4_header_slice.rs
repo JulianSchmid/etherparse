@@ -35,7 +35,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
             return Err(Len(err::LenError {
                 required_len: Ipv4Header::MIN_LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
                 layer_start_offset: 0,
             }));
@@ -63,7 +63,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
             return Err(Len(err::LenError {
                 required_len: header_length,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ipv4Header,
                 layer_start_offset: 0,
             }));
@@ -177,7 +177,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// let bad_slice = Ipv4HeaderSlice::from_slice(&bad_bytes).unwrap();
     /// // in case the total_len is smaller then the header itself an
     /// // error is returned
-    /// use etherparse::err::{LenError, Layer, LenSource};
+    /// use etherparse::{err::{LenError, Layer}, LenSource};
     /// assert_eq!(
     ///     bad_slice.payload_len(),
     ///     Err(LenError {
@@ -198,7 +198,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         if header_len <= total_len {
             Ok(total_len - header_len)
         } else {
-            use err::{Layer, LenError, LenSource};
+            use err::{Layer, LenError};
             Err(LenError {
                 required_len: header_len.into(),
                 len: total_len.into(),
@@ -418,7 +418,7 @@ mod test {
                                 header.header_len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::Ipv4Header,
                             layer_start_offset: 0,
                         }))

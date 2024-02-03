@@ -1,4 +1,4 @@
-use crate::{err::LenSource, *};
+use crate::*;
 
 /// Helper class for slicing packets
 pub(crate) struct SlicedPacketCursor<'a> {

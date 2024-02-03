@@ -1,4 +1,4 @@
-use crate::{err::LenSource, *};
+use crate::*;
 
 /// Slice containing laxly separated IPv4 headers & payload.
 ///
@@ -310,7 +310,7 @@ mod test {
                 Err(E::Len(err::LenError {
                     required_len: 20,
                     len: 0,
-                    len_source: err::LenSource::Slice,
+                    len_source: LenSource::Slice,
                     layer: err::Layer::Ipv4Header,
                     layer_start_offset: 0,
                 }))
@@ -348,7 +348,7 @@ mod test {
                     Err(E::Len(err::LenError {
                         required_len: Ipv4Header::MIN_LEN,
                         len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv4Header,
                         layer_start_offset: 0,
                     }))
@@ -374,7 +374,7 @@ mod test {
                     Err(E::Len(err::LenError {
                         required_len: usize::from(v4.ihl())*4,
                         len: 4*short_ihl,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ipv4Header,
                         layer_start_offset: 0,
                     }))

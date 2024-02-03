@@ -16,7 +16,7 @@ impl<'a> UdpHeaderSlice<'a> {
             return Err(err::LenError {
                 required_len: UdpHeader::LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::UdpHeader,
                 layer_start_offset: 0,
             });
@@ -115,7 +115,7 @@ mod test {
                     err::LenError{
                         required_len: UdpHeader::LEN,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::UdpHeader,
                         layer_start_offset: 0,
                     }

@@ -163,7 +163,7 @@ impl<'a> LaxIpSlice<'a> {
             Err(E::Len(err::LenError {
                 required_len: 1,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::IpHeader,
                 layer_start_offset: 0,
             }))

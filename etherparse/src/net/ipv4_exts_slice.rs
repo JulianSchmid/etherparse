@@ -91,7 +91,8 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     ///     Ipv4ExtensionsSlice,
     ///     IpAuthHeader,
     ///     ip_number::AUTHENTICATION_HEADER,
-    ///     err::{ip_auth::HeaderSliceError::Len, LenError, LenSource, Layer}
+    ///     LenSource,
+    ///     err::{ip_auth::HeaderSliceError::Len, LenError, Layer}
     /// };
     ///
     /// // providing not enough data

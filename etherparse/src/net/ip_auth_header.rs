@@ -306,7 +306,7 @@ impl<'a> IpAuthHeader {
 mod test {
     use super::*;
     use crate::{
-        err::{Layer, LenError, LenSource},
+        err::{Layer, LenError},
         io::LimitedReader,
         test_gens::*,
     };
@@ -482,7 +482,7 @@ mod test {
                                 header.header_len()
                             },
                             len: len,
-                            len_source: err::LenSource::Slice,
+                            len_source: LenSource::Slice,
                             layer: err::Layer::IpAuthHeader,
                             layer_start_offset: 0,
                         })

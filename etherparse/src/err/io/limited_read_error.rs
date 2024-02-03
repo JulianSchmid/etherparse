@@ -68,7 +68,7 @@ impl std::error::Error for LimitedReadError {
 #[cfg(all(test, feature = "std"))]
 mod test {
     use super::{LimitedReadError::*, *};
-    use crate::err::{Layer, LenSource};
+    use crate::{err::Layer, LenSource};
     use alloc::format;
 
     #[test]

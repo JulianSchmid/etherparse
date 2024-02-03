@@ -15,7 +15,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
             return Err(err::LenError {
                 required_len: Ethernet2Header::LEN,
                 len: slice.len(),
-                len_source: err::LenSource::Slice,
+                len_source: LenSource::Slice,
                 layer: err::Layer::Ethernet2Header,
                 layer_start_offset: 0,
             });
@@ -122,7 +122,7 @@ mod test {
                     Err(err::LenError{
                         required_len: Ethernet2Header::LEN,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer: err::Layer::Ethernet2Header,
                         layer_start_offset: 0,
                     })

@@ -150,7 +150,7 @@ mod test {
                     err::LenError{
                         required_len: 4,
                         len: len,
-                        len_source: err::LenSource::Slice,
+                        len_source: LenSource::Slice,
                         layer:  err::Layer::VlanHeader,
                         layer_start_offset: 0,
                     }
