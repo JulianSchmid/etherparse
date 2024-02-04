@@ -2,23 +2,47 @@
 
 ## 0.14.0
 
+### Highlights
+
+* `SlicedPacket` & `PacketHeaders` now use the length fields in the headers to determine the payload length.
+* The payload(s) in `SlicedPacket` now can be accessed via the layer slices (e.g. `link.unwrap().payload()`).
+* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistancy checks present in `SlicedPacket` & `PacketHeaders`.
+* `SlicedPacket.ip` & `PacketHeaders.ip` have been renamed to `SlicedPacket.net` & `PacketHeaders.net`
+* Added `no_std` support.
+* Errors are now more fine granular (in case you want a general error type you can convert all errors via `into` & `from` into `err::FromSliceError` or `err::ReadError`).
+* Added `to_bytes()` methods to most header types.
+* Added slice types which contain both the header(s) and payload (e.g. `IpSlice`, `UdpSlice`).
+* Added payload types (e.g. `IpPayloadSlice`, `EtherPayloadSlice`) which contain the slice & informations about the payload type (e.g. the IpNumber in case of an `IpPayloadSlice`).
+
+### What happened?
+
+This version took more then a year to complete. Which for sure was not my plan when starting out.
+
+I started out trying to implement correct handing of "payload lengths" (aka actually using the length fields in headers to determine the payload). This was needed, as without it, incorrect data would sometimes creep into the payload of and IP packet (see https://github.com/JulianSchmid/etherparse/issues/35 ). But this "simple" feature triggered a chain reaction of changes that required me to re-architect big parts of the crate. Specifically the error types were an major issue, which I did not forsee costing so much time and at some time.
+
+But no matter, now it is done. Sadly there are quiet some breaking changes, but I think the crate is now in a better position for future changes & behaves correcter then in the past. There are also quiet a lot of quality of life changes.
+
 ### New
 
 * Added non-allocating `to_bytes()` methods that return `arrayvec::ArrayVec<u8, Header::MAX_LEN>` to the following headers:
   * `Ipv4Header`
-  * TODO Add to all headers that have write methods
+* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistancy checks present in `SlicedPacket` & `PacketHeaders`.
+* `no_std` Support was added. To enable use etherparse without default features: `etherparse = { version = "0.14", default-features = false }`
 * Added `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
 * Added `InternetSlice::source_addr` & `InternetSlice::destination_addr` to get the source & destination as `std::net::IpAddr` (thanks to @nagy)
 
 ### Changes in Behavior
 
 * `SlicedPacket` & `PacketHeaders` now also verify the total_length and payload length fields present in the IPv4 & IPv6 header. This means the `*from_slice*` methods newly throw an error not enough data is present and also newly limit the resulting payload size.
+* The payload(s) in `SlicedPacket` now can be accessed via the layer fields (e.g. `link.unwrap().payload()`).
+* The payload in `PacketHeaders` now is an enum that indicates from which layer the payload came.
 * Removed `ReadError::Ipv6TooManyHeaderExtensions` error when calling `Ipv6Header::skip_all_header_extensions` and `Ipv6Header::skip_all_header_extensions_in_slice`.
 * The slice returned by `IpHeader::from_slice`is now the payload of the IP packet (determined by the length specified in the IP header). Previously whatever was left over from the input slice after parsing the IP header and extensions was returned. Now the slice length is limited based on the "payload length" field (IPv6) or "total length" field IPv4.
 * `Ipv4Header::from_slice` no longer verifies that the `total_len` has enough data to contain the header itself. This check is done when the complete packet is parsed. The check was removed as the `total_len` is sometimes set at a later stage (e.g. in the kernel) in some systems and I would still like to enable people to at least decode the header even if the total length was not yet set.
 
 ### Breaking Changes:
 
+* `ip` as been renamed to `net` in `SlicedPacket` and `PacketHeaders`
 * `packet_filter` has been removed
 * Refactored error types so functions & methods (mostly) only return error types that they can cause.
 * Removed `SerializedSize` trait and deprecated `SERIALIZED_SIZE`. Newly added constants `Header::LEN`, `Header::MIN_LEN` & `Header::MAX_LEN` to the headers as an replacement.
@@ -47,7 +71,7 @@
 ### Deprecations / Renames:
 
 * The following types have been renamed (alias with the old name exist for backwards compatibility but will trigger a deprecation warning):
-  * `InternetSlice` to `IpSlice`
+  * `InternetSlice` to `NetSlice` & `IpSlice`
   * `IpAuthenticationHeader` to `IpAuthHeader`
   * `IpAuthenticationHeaderSlice` to `IpAuthHeaderSlice`
   * `Ipv6RawExtensionHeader` to `Ipv6RawExtHeader`
@@ -56,7 +80,8 @@
 ### Internal Changes:
 
 * Seperated proptest generators into seperate library `etherparse_proptest_generators`
-* TODO Split modules up into one file per struct/enum and moved tests there
+* Split modules up into one file per struct/enum and moved tests there
+* Applied rust fmt
 
 ## 0.13.0
 
