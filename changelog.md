@@ -6,13 +6,13 @@
 
 * `SlicedPacket` & `PacketHeaders` now use the length fields in the headers to determine the payload length.
 * The payload(s) in `SlicedPacket` now can be accessed via the layer slices (e.g. `link.unwrap().payload()`).
-* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistancy checks present in `SlicedPacket` & `PacketHeaders`.
+* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistency checks present in `SlicedPacket` & `PacketHeaders`.
 * `SlicedPacket.ip` & `PacketHeaders.ip` have been renamed to `SlicedPacket.net` & `PacketHeaders.net`
 * Added `no_std` support.
 * Errors are now more fine granular (in case you want a general error type you can convert all errors via `into` & `from` into `err::FromSliceError` or `err::ReadError`).
 * Added `to_bytes()` methods to most header types.
 * Added slice types which contain both the header(s) and payload (e.g. `IpSlice`, `UdpSlice`).
-* Added payload types (e.g. `IpPayloadSlice`, `EtherPayloadSlice`) which contain the slice & informations about the payload type (e.g. the IpNumber in case of an `IpPayloadSlice`).
+* Added payload types (e.g. `IpPayloadSlice`, `EtherPayloadSlice`) which contain the slice & information about the payload type (e.g. the IpNumber in case of an `IpPayloadSlice`).
 
 ### What happened?
 
@@ -26,7 +26,7 @@ But no matter, now it is done. Sadly there are quiet some breaking changes, but 
 
 * Added non-allocating `to_bytes()` methods that return `arrayvec::ArrayVec<u8, Header::MAX_LEN>` to the following headers:
   * `Ipv4Header`
-* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistancy checks present in `SlicedPacket` & `PacketHeaders`.
+* Added `LaxSlicedPacket` & `LaxPacketHeaders` to allow for parsing of packets without length checks & other inconsistency checks present in `SlicedPacket` & `PacketHeaders`.
 * `no_std` Support was added. To enable use etherparse without default features: `etherparse = { version = "0.14", default-features = false }`
 * Added `LEN` or `MIN_LEN` & `MAX_LEN` constants to all headers & packets.
 * Added `InternetSlice::source_addr` & `InternetSlice::destination_addr` to get the source & destination as `std::net::IpAddr` (thanks to @nagy)
@@ -54,7 +54,7 @@ But no matter, now it is done. Sadly there are quiet some breaking changes, but 
 * `Ipv4Header.fragments_offset` renamed to `Ipv4Header.fragment_offset`.
 * `SingleVlanHeader.vlan_identifier` renamed to `SingleVlanHeader.vlan_id`.
 * Type of `vlan_id` in `SingleVlanHeader` changed from `u16` to `VlanId`.
-* Moved options of `Ipv4Header` and `TcpHeader` into seperate structs and made all fields in `Ipv4Header` & `TcpHeader` public for easier default initialisation.
+* Moved options of `Ipv4Header` and `TcpHeader` into separate structs and made all fields in `Ipv4Header` & `TcpHeader` public for easier default initialization.
 
 ### Bugfixes
 
@@ -63,7 +63,7 @@ But no matter, now it is done. Sadly there are quiet some breaking changes, but 
   * `Ipv6Header::skip_header_extension_in_slice`
   * `Ipv6Header::skip_all_header_extensions_in_slice`
 
-* Previously the manual `core::fmt::Debug` implementations for some types were not correctly inserting newlines & identation when `{:#?}` was used for debug printing. This has been corrected for the following types:
+* Previously the manual `core::fmt::Debug` implementations for some types were not correctly inserting newlines & indentation when `{:#?}` was used for debug printing. This has been corrected for the following types:
   * `Ipv4Header`
   * `IpAuthHeader`
   * `Ipv6RawExtHeader`
@@ -79,7 +79,7 @@ But no matter, now it is done. Sadly there are quiet some breaking changes, but 
 
 ### Internal Changes:
 
-* Seperated proptest generators into seperate library `etherparse_proptest_generators`
+* Separated proptest generators into separate library `etherparse_proptest_generators`
 * Split modules up into one file per struct/enum and moved tests there
 * Applied rust fmt
 
