@@ -8,14 +8,13 @@ To run the scripts in this folder you have to install a few tools on your system
 
 ```sh
 # nightly toolchain
-rustup toolchain install nightly
+rustup toolchain install stable
 
 # llvm toolchain for nightly
 rustup component add llvm-tools-preview
-rustup component add --toolchain nightly llvm-tools-preview
 
 # cargo-binutils and rustfilt for nightly
-cargo +nightly install cargo-binutils rustfilt
+cargo install cargo-binutils rustfilt
 
 # jq from your package manager of choice (just replace brew with apt or a similar manager)
 brew install jq
