@@ -183,7 +183,7 @@ There is also an [example for TCP packets](etherparse/examples/write_tcp.rs) ava
 
 Check out the [PacketBuilder documentation](https://docs.rs/etherparse/~0/etherparse/struct.PacketBuilder.html) for more information.
 
-### Manually serialising each header
+### Manually serializing each header
 Alternatively it is possible to manually build a packet ([example](etherparse/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
 
 Read the documentations of the different methods for a more details:
