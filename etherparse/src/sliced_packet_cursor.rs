@@ -97,7 +97,7 @@ impl<'a> SlicedPacketCursor<'a> {
         use err::packet::SliceError::*;
 
         // slice header, extension headers and identify payload range
-        let ip = IpSlice::from_ip_slice(self.slice).map_err(|err| {
+        let ip = IpSlice::from_slice(self.slice).map_err(|err| {
             use err::ip::SliceError as I;
             match err {
                 I::Len(mut err) => {

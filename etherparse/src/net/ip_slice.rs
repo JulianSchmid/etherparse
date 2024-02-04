@@ -89,7 +89,7 @@ impl<'a> IpSlice<'a> {
     /// Separates and validates IP headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IP packet.
-    pub fn from_ip_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
+    pub fn from_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
         use crate::ip_number::AUTH;
         use err::ip::{HeaderError::*, HeadersError::*, SliceError::*};
         use IpSlice::*;
@@ -626,7 +626,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = IpSlice::from_ip_slice(&data).unwrap();
+                let actual = IpSlice::from_slice(&data).unwrap();
                 assert!(actual.ipv6().is_none());
                 let actual = actual.ipv4().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv4_header);
@@ -650,7 +650,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = crate::IpSlice::from_ip_slice(&data).unwrap();
+                let actual = crate::IpSlice::from_slice(&data).unwrap();
                 assert!(actual.ipv4().is_none());
                 let actual = actual.ipv6().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv6_header);
@@ -689,7 +689,7 @@ mod test {
                 data.extend_from_slice(&payload);
 
                 // run test
-                let actual = crate::IpSlice::from_ip_slice(&data).unwrap();
+                let actual = crate::IpSlice::from_slice(&data).unwrap();
                 assert!(actual.ipv4().is_none());
                 let actual = actual.ipv6().unwrap().clone();
                 assert_eq!(actual.header.to_header(), ipv6_header);

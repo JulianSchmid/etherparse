@@ -363,7 +363,7 @@ mod tests {
             (
                 "Ip",
                 Ip(ip::HeaderError::UnsupportedIpVersion {
-                        version_number: 123,
+                    version_number: 123,
                 }),
             ),
             ("IpAuth", IpAuth(ip_auth::HeaderError::ZeroPayloadLen)),
@@ -529,10 +529,8 @@ mod tests {
 
         // ip errors
         {
-            let header_error = || {
-                ip::HeaderError::UnsupportedIpVersion {
-                    version_number: 123,
-                }
+            let header_error = || ip::HeaderError::UnsupportedIpVersion {
+                version_number: 123,
             };
             assert_eq!(
                 &header_error(),
@@ -540,9 +538,11 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(ip::HeadersSliceError::Content(
-                    ip::HeadersError::Ip(header_error())
-                )).ip().unwrap()
+                FromSliceError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
             assert_eq!(
                 &len_error(),
@@ -558,9 +558,11 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                FromSliceError::from(ip::SliceError::IpHeaders(
-                    ip::HeadersError::Ip(header_error())
-                )).ip().unwrap()
+                FromSliceError::from(ip::SliceError::IpHeaders(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
         }
 

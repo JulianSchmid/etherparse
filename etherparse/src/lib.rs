@@ -19,6 +19,7 @@
 //! ```
 //!
 //! # What is etherparse?
+//!
 //! Etherparse is intended to provide the basic network parsing functions that allow for easy analysis, transformation or generation of recorded network data.
 //!
 //! Some key points are:
@@ -67,7 +68,14 @@
 //! * [`SlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
 //! * [`SlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
 //!
+//! In case you want to parse cut off packets (e.g. packets returned in in ICMP message) you can use the "lax" parsing methods:
+//!
+//! * [`LaxSlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
+//! * [`LaxSlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
+//! * [`LaxSlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
+//!
 //! ## Deserializing all headers into structs
+//!
 //! This option deserializes all known headers and transferes their contents to header structs.
 //! ```rust
 //! # use etherparse::{PacketHeaders, PacketBuilder};
@@ -103,10 +111,35 @@
 //! * [`PacketHeaders::from_ether_type`] for parsing a slice starting after an Ethernet II header
 //! * [`PacketHeaders::from_ip_slice`] for parsing from an IPv4 or IPv6 downwards
 //!
-//! ## Manually slicing & parsing packets
-//! It is also possible to manually slice & parse a packet. For each header type there is are metods that create a slice or struct from a memory slice.
+//! In case you want to parse cut off packets (e.g. packets returned in in ICMP message) you can use the "lax" parsing methods:
 //!
-//! Have a look at the documentation for the \[NAME\]Slice.from_slice methods, if you want to create your own slices:
+//! * [`LaxPacketHeaders::from_ethernet`] for parsing from an Ethernet II header downwards
+//! * [`LaxPacketHeaders::from_ether_type`] for parsing a slice starting after an Ethernet II header
+//! * [`LaxPacketHeaders::from_ip`] for parsing from an IPv4 or IPv6 downwards
+//!
+//! ## Manually slicing only one packet layer
+//!
+//! It is also possible to only slice one packet layer:
+//!
+//! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
+//! * [`SingleVlanSlice::from_slice`] & [`DoubleVlanSlice::from_slice`]
+//! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
+//! * [`Ipv4Slice::from_slice`] & [`LaxIpv4Slice::from_slice`]
+//! * [`Ipv6Slice::from_slice`] & [`LaxIpv6Slice::from_slice`]
+//! * [`UdpSlice::from_slice`] & [`UdpSlice::from_slice_lax`]
+//! * [`TcpSlice::from_slice`]
+//! * [`Icmpv4Slice::from_slice`]
+//! * [`Icmpv6Slice::from_slice`]
+//!
+//! The resulting data types allow access to both the header(s) and the payload of the layer
+//! and will automatially limit the length of payload if the layer has a length field limiting the
+//! paylod (e.g. the payload of IPv6 packets will be limited by the "payload length" field in
+//! an IPv6 header).
+//!
+//! ## Manually slicing & parsing only headers
+//!
+//! It is also possible just to parse headers. Have a look at the documentation for the
+//! following \[NAME\]HeaderSlice.from_slice methods, if you want to just slice the header:
 //!
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
@@ -120,8 +153,6 @@
 //! * [`Ipv6FragmentHeaderSlice::from_slice`]
 //! * [`UdpHeaderSlice::from_slice`]
 //! * [`TcpHeaderSlice::from_slice`]
-//! * [`Icmpv4Slice::from_slice`]
-//! * [`Icmpv6Slice::from_slice`]
 //!
 //! And for deserialization into the corresponding header structs have a look at:
 //!
@@ -142,10 +173,12 @@
 //! * [`Icmpv6Header::read`] & [`Icmpv6Header::from_slice`]
 //!
 //! # How to generate fake packet data?
+//!
 //! ## Packet Builder
+//!
 //! The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 //!
-//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_udp.rs)
+//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_udp.rs)
 //! ```rust
 //! use etherparse::PacketBuilder;
 //!
@@ -170,30 +203,36 @@
 //! builder.write(&mut result, &payload).unwrap();
 //! ```
 //!
-//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_tcp.rs) available.
+//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_tcp.rs) available.
 //!
 //! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more informations.
 //!
 //! ## Manually serialising each header
-//! Alternativly it is possible to manually build a packet ([example](https://github.com/JulianSchmid/etherparse/blob/0.10.1/examples/write_ipv4_udp.rs)). Generally each struct representing a header has a "write" method that allows it to be serialized. These write methods sometimes automatically calculate checksums and fill them in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid checksum), it is also possible to call a "write_raw" method that will simply serialize the data without doing checksum calculations.
+//!
+//! Alternativly it is possible to manually build a packet
+//! ([example](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_ipv4_udp.rs)).
+//! Generally each struct representing a header has a "write" method that allows it to be
+//! serialized. These write methods sometimes automatically calculate checksums and fill them
+//! in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid
+//! checksum), it is also possible to call a "write_raw" method that will simply serialize the data
+//! without doing checksum calculations.
 //!
 //! Read the documentations of the different methods for a more details:
 //!
-//! * [`Ethernet2Header::write`]
-//! * [`SingleVlanHeader::write`]
-//! * [`DoubleVlanHeader::write`]
-//! * [`Ipv4Header::write`]
-//! * [`Ipv4Header::write_raw`]
+//! * [`Ethernet2Header::to_bytes`] & [`Ethernet2Header::write`]
+//! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
+//! * [`DoubleVlanHeader::to_bytes`] & [`DoubleVlanHeader::write`]
+//! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]
 //! * [`Ipv4Extensions::write`]
-//! * [`Ipv6Header::write`]
+//! * [`Ipv6Header::to_bytes`] & [`Ipv6Header::write`]
 //! * [`Ipv6Extensions::write`]
-//! * [`Ipv6RawExtHeader::write`]
-//! * [`IpAuthHeader::write`]
-//! * [`Ipv6FragmentHeader::write`]
-//! * [`UdpHeader::write`]
-//! * [`TcpHeader::write`]
-//! * [`Icmpv4Header::write`]
-//! * [`Icmpv6Header::write`]
+//! * [`Ipv6RawExtHeader::to_bytes`] & [`Ipv6RawExtHeader::write`]
+//! * [`IpAuthHeader::to_bytes`] & [`IpAuthHeader::write`]
+//! * [`Ipv6FragmentHeader::to_bytes`] & [`Ipv6FragmentHeader::write`]
+//! * [`UdpHeader::to_bytes`] & [`UdpHeader::write`]
+//! * [`TcpHeader::to_bytes`] & [`TcpHeader::write`]
+//! * [`Icmpv4Header::to_bytes`] & [`Icmpv4Header::write`]
+//! * [`Icmpv6Header::to_bytes`] & [`Icmpv6Header::write`]
 //!
 //! # References
 //! * Darpa Internet Program Protocol Specification [RFC 791](https://tools.ietf.org/html/rfc791)

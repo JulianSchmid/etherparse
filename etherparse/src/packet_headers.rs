@@ -68,9 +68,7 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ethernet_slice(
-        slice: &'a [u8],
-    ) -> Result<PacketHeaders, err::packet::SliceError> {
+    pub fn from_ethernet_slice(slice: &'a [u8]) -> Result<PacketHeaders, err::packet::SliceError> {
         use err::packet::SliceError::Len;
 
         let (ethernet, rest) = Ethernet2Header::from_slice(slice).map_err(Len)?;
@@ -421,7 +419,7 @@ fn read_transport(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{LenError, packet::SliceError};
+    use crate::err::{packet::SliceError, LenError};
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
@@ -510,11 +508,7 @@ mod test {
                         layer_start_offset: 0,
                     };
 
-                    from_slice_assert_err(
-                        &test,
-                        &data[..len],
-                        SliceError::Len(err.clone()),
-                    );
+                    from_slice_assert_err(&test, &data[..len], SliceError::Len(err.clone()));
                 }
             }
         }
@@ -662,7 +656,7 @@ mod test {
                                         err.clone()
                                     }
                                 })
-                            }
+                            },
                         );
                     }
                 }
@@ -686,7 +680,7 @@ mod test {
                             SliceError::Ip(
                                 err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
                             )
-                        }
+                        },
                     );
                 }
             }
@@ -748,11 +742,7 @@ mod test {
 
                     // expect an error
                     let err = err::ip_auth::HeaderError::ZeroPayloadLen;
-                    from_slice_assert_err(
-                        &test,
-                        &data,
-                        SliceError::Ipv4Exts(err.clone()),
-                    );
+                    from_slice_assert_err(&test, &data, SliceError::Ipv4Exts(err.clone()));
                 }
             }
         }
@@ -809,7 +799,7 @@ mod test {
                                         err.clone()
                                     }
                                 })
-                            }
+                            },
                         );
                     }
                 }
@@ -831,10 +821,8 @@ mod test {
                                 version_number: 0,
                             })
                         } else {
-                            SliceError::Ip(UnsupportedIpVersion {
-                                version_number: 0,
-                            })
-                        }
+                            SliceError::Ip(UnsupportedIpVersion { version_number: 0 })
+                        },
                     );
                 }
             }
@@ -1043,11 +1031,7 @@ mod test {
                         data[base_len + 12] = data[base_len + 12] & 0b0000_1111;
 
                         let err = err::tcp::HeaderError::DataOffsetTooSmall { data_offset: 0 };
-                        from_slice_assert_err(
-                            &test,
-                            &data,
-                            SliceError::Tcp(err.clone()),
-                        );
+                        from_slice_assert_err(&test, &data, SliceError::Tcp(err.clone()));
                     }
                 }
             }
@@ -1231,11 +1215,7 @@ mod test {
 
     /// Check that the given errors get triggered if presented with the given
     /// data.
-    fn from_slice_assert_err(
-        test: &TestPacket,
-        data: &[u8],
-        err: SliceError,
-    ) {
+    fn from_slice_assert_err(test: &TestPacket, data: &[u8], err: SliceError) {
         // from_ethernet_slice
         if test.link.is_some() {
             assert_eq!(
