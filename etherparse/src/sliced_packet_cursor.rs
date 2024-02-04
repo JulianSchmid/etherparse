@@ -31,8 +31,8 @@ impl<'a> SlicedPacketCursor<'a> {
         self.offset += len;
     }
 
-    pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
         use ether_type::*;
         use LinkSlice::*;
 
@@ -55,8 +55,8 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
         use ether_type::*;
         use VlanSlice::*;
 
@@ -93,8 +93,8 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_ip(mut self) -> Result<SlicedPacket<'a>, err::packet::IpSliceError> {
-        use err::packet::IpSliceError::*;
+    pub fn slice_ip(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
 
         // slice header, extension headers and identify payload range
         let ip = IpSlice::from_ip_slice(self.slice).map_err(|err| {
@@ -104,7 +104,11 @@ impl<'a> SlicedPacketCursor<'a> {
                     err.layer_start_offset += self.offset;
                     Len(err)
                 }
-                I::IpHeaders(err) => Ip(err),
+                I::IpHeaders(err) => match err {
+                    err::ip::HeadersError::Ip(err) => Ip(err),
+                    err::ip::HeadersError::Ipv4Ext(err) => Ipv4Exts(err),
+                    err::ip::HeadersError::Ipv6Ext(err) => Ipv6Exts(err),
+                },
             }
         })?;
 
@@ -142,8 +146,8 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    pub fn slice_ipv4(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
 
         // slice ipv4 header & extension headers
         let ipv4 = Ipv4Slice::from_slice(self.slice).map_err(|err| {
@@ -191,8 +195,8 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    pub fn slice_ipv6(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
 
         let ipv6 = Ipv6Slice::from_slice(self.slice).map_err(|err| {
             use err::ipv6::SliceError as I;
