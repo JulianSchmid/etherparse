@@ -645,10 +645,8 @@ mod tests {
 
         // ip errors
         {
-            let header_error = || {
-                ip::HeaderError::UnsupportedIpVersion {
-                    version_number: 123,
-                }
+            let header_error = || ip::HeaderError::UnsupportedIpVersion {
+                version_number: 123,
             };
             assert_eq!(
                 &header_error(),
@@ -656,9 +654,11 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ip(header_error())))
-                    .ip()
-                    .unwrap()
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
             assert_eq!(
                 &len_error(),
@@ -671,9 +671,11 @@ mod tests {
                 .is_some());
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(header_error())))
-                    .ip()
-                    .unwrap()
+                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
             assert_eq!(
                 &len_error(),
@@ -683,9 +685,11 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(header_error())))
-                    .ip()
-                    .unwrap()
+                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
             assert_eq!(
                 &len_error(),
@@ -695,9 +699,11 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::SliceError::IpHeaders(ip::HeadersError::Ip(header_error())))
-                    .ip()
-                    .unwrap()
+                ReadError::from(ip::SliceError::IpHeaders(ip::HeadersError::Ip(
+                    header_error()
+                )))
+                .ip()
+                .unwrap()
             );
         }
 
