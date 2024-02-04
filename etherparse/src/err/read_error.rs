@@ -17,7 +17,7 @@ pub enum ReadError {
     DoubleVlan(double_vlan::HeaderError),
 
     /// Error while parsing a IP header.
-    Ip(ip::HeadersError),
+    Ip(ip::HeaderError),
 
     /// Error while parsing a IP authentication header.
     IpAuth(ip_auth::HeaderError),
@@ -55,7 +55,7 @@ impl ReadError {
             _ => None,
         }
     }
-    pub fn ip(&self) -> Option<&ip::HeadersError> {
+    pub fn ip(&self) -> Option<&ip::HeaderError> {
         match self {
             ReadError::Ip(err) => Some(err),
             _ => None,
@@ -175,9 +175,20 @@ impl From<double_vlan::HeaderSliceError> for ReadError {
 
 // ip error conversions
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<ip::HeaderError> for ReadError {
+    fn from(value: ip::HeaderError) -> Self {
+        ReadError::Ip(value)
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<ip::HeadersError> for ReadError {
     fn from(value: ip::HeadersError) -> Self {
-        ReadError::Ip(value)
+        match value {
+            ip::HeadersError::Ip(err) => ReadError::Ip(err),
+            ip::HeadersError::Ipv4Ext(err) => ReadError::IpAuth(err),
+            ip::HeadersError::Ipv6Ext(err) => ReadError::Ipv6Exts(err),
+        }
     }
 }
 
@@ -188,7 +199,7 @@ impl From<ip::HeaderReadError> for ReadError {
         match value {
             Io(err) => ReadError::Io(err),
             Len(err) => ReadError::Len(err),
-            Content(err) => ReadError::Ip(err),
+            Content(err) => err.into(),
         }
     }
 }
@@ -199,7 +210,7 @@ impl From<ip::HeadersSliceError> for ReadError {
         use ip::HeadersSliceError::*;
         match value {
             Len(err) => ReadError::Len(err),
-            Content(err) => ReadError::Ip(err),
+            Content(err) => err.into(),
         }
     }
 }
@@ -210,7 +221,7 @@ impl From<ip::SliceError> for ReadError {
         use ip::SliceError::*;
         match value {
             Len(err) => ReadError::Len(err),
-            IpHeaders(err) => ReadError::Ip(err),
+            IpHeaders(err) => err.into(),
         }
     }
 }
@@ -361,27 +372,16 @@ impl From<ipv6_exts::HeaderSliceError> for ReadError {
 
 // packet error conversions
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl From<packet::EthSliceError> for ReadError {
-    fn from(value: packet::EthSliceError) -> Self {
-        use packet::EthSliceError::*;
+impl From<packet::SliceError> for ReadError {
+    fn from(value: packet::SliceError) -> Self {
+        use packet::SliceError::*;
         match value {
             Len(err) => ReadError::Len(err),
+            Ip(err) => ReadError::Ip(err),
             Ipv4(err) => ReadError::Ipv4(err),
             Ipv6(err) => ReadError::Ipv6(err),
             Ipv4Exts(err) => ReadError::IpAuth(err),
             Ipv6Exts(err) => ReadError::Ipv6Exts(err),
-            Tcp(err) => ReadError::Tcp(err),
-        }
-    }
-}
-
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl From<packet::IpSliceError> for ReadError {
-    fn from(value: packet::IpSliceError) -> Self {
-        use packet::IpSliceError::*;
-        match value {
-            Len(err) => ReadError::Len(err),
-            Ip(err) => ReadError::Ip(err),
             Tcp(err) => ReadError::Tcp(err),
         }
     }
@@ -448,11 +448,9 @@ mod tests {
             ),
             (
                 "Ip",
-                Ip(ip::HeadersError::Ip(
-                    ip::HeaderError::UnsupportedIpVersion {
-                        version_number: 123,
-                    },
-                )),
+                Ip(ip::HeaderError::UnsupportedIpVersion {
+                    version_number: 123,
+                }),
             ),
             ("IpAuth", IpAuth(ip_auth::HeaderError::ZeroPayloadLen)),
             (
@@ -502,11 +500,9 @@ mod tests {
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
-            Ip(ip::HeadersError::Ip(
-                ip::HeaderError::UnsupportedIpVersion {
-                    version_number: 123,
-                },
-            )),
+            Ip(ip::HeaderError::UnsupportedIpVersion {
+                version_number: 123,
+            }),
             IpAuth(ip_auth::HeaderError::ZeroPayloadLen),
             Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 }),
             Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 }),
@@ -539,7 +535,7 @@ mod tests {
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
         };
-        let ip_error = || ip::HeadersError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+        let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
         let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
@@ -650,9 +646,9 @@ mod tests {
         // ip errors
         {
             let header_error = || {
-                ip::HeadersError::Ip(ip::HeaderError::UnsupportedIpVersion {
+                ip::HeaderError::UnsupportedIpVersion {
                     version_number: 123,
-                })
+                }
             };
             assert_eq!(
                 &header_error(),
@@ -660,7 +656,7 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeaderReadError::Content(header_error()))
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ip(header_error())))
                     .ip()
                     .unwrap()
             );
@@ -675,7 +671,7 @@ mod tests {
                 .is_some());
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeadersSliceError::Content(header_error()))
+                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(header_error())))
                     .ip()
                     .unwrap()
             );
@@ -687,7 +683,7 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::HeadersSliceError::Content(header_error()))
+                ReadError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ip(header_error())))
                     .ip()
                     .unwrap()
             );
@@ -699,7 +695,7 @@ mod tests {
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(ip::SliceError::IpHeaders(header_error()))
+                ReadError::from(ip::SliceError::IpHeaders(ip::HeadersError::Ip(header_error())))
                     .ip()
                     .unwrap()
             );
@@ -893,67 +889,53 @@ mod tests {
 
         // packet error
         {
-            let ip_error = || ip::HeadersError::Ipv4Ext(ip_auth::HeaderError::ZeroPayloadLen);
+            let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
             let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
             let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
             let ipv6_exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
             let tcp_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
 
-            // EthSliceError
-            assert_eq!(
-                &len_error(),
-                ReadError::from(packet::EthSliceError::Len(len_error()))
-                    .len()
-                    .unwrap()
-            );
-            assert_eq!(
-                &ipv4_error(),
-                ReadError::from(packet::EthSliceError::Ipv4(ipv4_error()))
-                    .ipv4()
-                    .unwrap()
-            );
-            assert_eq!(
-                &ipv6_error(),
-                ReadError::from(packet::EthSliceError::Ipv6(ipv6_error()))
-                    .ipv6()
-                    .unwrap()
-            );
-            assert_eq!(
-                &ip_auth_error(),
-                ReadError::from(packet::EthSliceError::Ipv4Exts(ip_auth_error()))
-                    .ip_auth()
-                    .unwrap()
-            );
-            assert_eq!(
-                &ipv6_exts_error(),
-                ReadError::from(packet::EthSliceError::Ipv6Exts(ipv6_exts_error()))
-                    .ipv6_exts()
-                    .unwrap()
-            );
-            assert_eq!(
-                &tcp_error(),
-                ReadError::from(packet::EthSliceError::Tcp(tcp_error()))
-                    .tcp()
-                    .unwrap()
-            );
-
             // IpSliceError
             assert_eq!(
                 &len_error(),
-                ReadError::from(packet::IpSliceError::Len(len_error()))
+                ReadError::from(packet::SliceError::Len(len_error()))
                     .len()
                     .unwrap()
             );
             assert_eq!(
                 &ip_error(),
-                ReadError::from(packet::IpSliceError::Ip(ip_error()))
+                ReadError::from(packet::SliceError::Ip(ip_error()))
                     .ip()
                     .unwrap()
             );
             assert_eq!(
+                &ipv4_error(),
+                ReadError::from(packet::SliceError::Ipv4(ipv4_error()))
+                    .ipv4()
+                    .unwrap()
+            );
+            assert_eq!(
+                &ipv6_error(),
+                ReadError::from(packet::SliceError::Ipv6(ipv6_error()))
+                    .ipv6()
+                    .unwrap()
+            );
+            assert_eq!(
+                &ip_auth_error(),
+                ReadError::from(packet::SliceError::Ipv4Exts(ip_auth_error()))
+                    .ip_auth()
+                    .unwrap()
+            );
+            assert_eq!(
+                &ipv6_exts_error(),
+                ReadError::from(packet::SliceError::Ipv6Exts(ipv6_exts_error()))
+                    .ipv6_exts()
+                    .unwrap()
+            );
+            assert_eq!(
                 &tcp_error(),
-                ReadError::from(packet::IpSliceError::Tcp(tcp_error()))
+                ReadError::from(packet::SliceError::Tcp(tcp_error()))
                     .tcp()
                     .unwrap()
             );

@@ -70,8 +70,8 @@ impl<'a> PacketHeaders<'a> {
     /// ```
     pub fn from_ethernet_slice(
         slice: &'a [u8],
-    ) -> Result<PacketHeaders, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::Len;
+    ) -> Result<PacketHeaders, err::packet::SliceError> {
+        use err::packet::SliceError::Len;
 
         let (ethernet, rest) = Ethernet2Header::from_slice(slice).map_err(Len)?;
         let mut result = Self::from_ether_type(ethernet.ether_type, rest);
@@ -141,8 +141,8 @@ impl<'a> PacketHeaders<'a> {
     pub fn from_ether_type(
         mut ether_type: EtherType,
         slice: &'a [u8],
-    ) -> Result<PacketHeaders, err::packet::EthSliceError> {
-        use err::packet::EthSliceError::*;
+    ) -> Result<PacketHeaders, err::packet::SliceError> {
+        use err::packet::SliceError::*;
 
         let mut rest = slice;
 
@@ -310,15 +310,19 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ip_slice(slice: &[u8]) -> Result<PacketHeaders, err::packet::IpSliceError> {
-        use err::packet::IpSliceError::*;
+    pub fn from_ip_slice(slice: &[u8]) -> Result<PacketHeaders, err::packet::SliceError> {
+        use err::packet::SliceError::*;
 
         // read ip headers
         let (ip_header, ip_payload) = IpHeaders::from_slice(slice).map_err(|err| {
             use err::ip::HeadersSliceError as I;
             match err {
                 I::Len(err) => Len(err),
-                I::Content(err) => Ip(err),
+                I::Content(err) => match err {
+                    err::ip::HeadersError::Ip(err) => Ip(err),
+                    err::ip::HeadersError::Ipv4Ext(err) => Ipv4Exts(err),
+                    err::ip::HeadersError::Ipv6Ext(err) => Ipv6Exts(err),
+                },
             }
         })?;
 
@@ -417,10 +421,7 @@ fn read_transport(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{
-        packet::{EthSliceError, IpSliceError},
-        LenError,
-    };
+    use crate::err::{LenError, packet::SliceError};
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
@@ -512,8 +513,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data[..len],
-                        EthSliceError::Len(err.clone()),
-                        IpSliceError::Len(err.clone()),
+                        SliceError::Len(err.clone()),
                     );
                 }
             }
@@ -557,8 +557,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
                 }
@@ -605,8 +604,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
                 }
@@ -651,17 +649,20 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len({
-                                if len < 1 {
-                                    let mut err = err.clone();
-                                    err.required_len = 1;
-                                    err.layer = err::Layer::IpHeader;
-                                    err
-                                } else {
-                                    err.clone()
-                                }
-                            }),
+                            if test.link.is_some() || test.vlan.is_some() {
+                                SliceError::Len(err.clone())
+                            } else {
+                                SliceError::Len({
+                                    if len < 1 {
+                                        let mut err = err.clone();
+                                        err.required_len = 1;
+                                        err.layer = err::Layer::IpHeader;
+                                        err
+                                    } else {
+                                        err.clone()
+                                    }
+                                })
+                            }
                         );
                     }
                 }
@@ -677,12 +678,15 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4(
-                            err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
-                        ),
-                        IpSliceError::Ip(err::ip::HeadersError::Ip(
-                            err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
-                        )),
+                        if test.link.is_some() || test.vlan.is_some() {
+                            SliceError::Ipv4(
+                                err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
+                            )
+                        } else {
+                            SliceError::Ip(
+                                err::ip::HeaderError::Ipv4HeaderLengthSmallerThanHeader { ihl: 0 },
+                            )
+                        }
                     );
                 }
             }
@@ -730,8 +734,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data[..base_len + len],
-                        EthSliceError::Len(err.clone()),
-                        IpSliceError::Len(err.clone()),
+                        SliceError::Len(err.clone()),
                     );
                 }
 
@@ -748,8 +751,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv4Exts(err.clone()),
-                        IpSliceError::Ip(err::ip::HeadersError::Ipv4Ext(err.clone())),
+                        SliceError::Ipv4Exts(err.clone()),
                     );
                 }
             }
@@ -794,24 +796,27 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len({
-                                if len < 1 {
-                                    let mut err = err.clone();
-                                    err.required_len = 1;
-                                    err.layer = err::Layer::IpHeader;
-                                    err
-                                } else {
-                                    err.clone()
-                                }
-                            }),
+                            if test.link.is_some() || test.vlan.is_some() {
+                                SliceError::Len(err.clone())
+                            } else {
+                                SliceError::Len({
+                                    if len < 1 {
+                                        let mut err = err.clone();
+                                        err.required_len = 1;
+                                        err.layer = err::Layer::IpHeader;
+                                        err
+                                    } else {
+                                        err.clone()
+                                    }
+                                })
+                            }
                         );
                     }
                 }
 
                 // content error ipv6
                 {
-                    use err::ip::{HeaderError::*, HeadersError};
+                    use err::ip::HeaderError::*;
                     let mut data = test.to_vec(&[]);
 
                     // inject an invalid ip version
@@ -821,12 +826,15 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
-                            version_number: 0,
-                        }),
-                        IpSliceError::Ip(HeadersError::Ip(UnsupportedIpVersion {
-                            version_number: 0,
-                        })),
+                        if test.link.is_some() || test.vlan.is_some() {
+                            SliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
+                                version_number: 0,
+                            })
+                        } else {
+                            SliceError::Ip(UnsupportedIpVersion {
+                                version_number: 0,
+                            })
+                        }
                     );
                 }
             }
@@ -882,8 +890,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data[..base_len + len],
-                        EthSliceError::Len(err.clone()),
-                        IpSliceError::Len(err.clone()),
+                        SliceError::Len(err.clone()),
                     );
                 }
 
@@ -898,10 +905,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
-                        IpSliceError::Ip(err::ip::HeadersError::Ipv6Ext(
-                            err::ipv6_exts::HeaderError::IpAuth(err.clone()),
-                        )),
+                        SliceError::Ipv6Exts(err::ipv6_exts::HeaderError::IpAuth(err.clone())),
                     );
                 }
 
@@ -916,10 +920,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        EthSliceError::Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
-                        IpSliceError::Ip(err::ip::HeadersError::Ipv6Ext(
-                            err::ipv6_exts::HeaderError::HopByHopNotAtStart,
-                        )),
+                        SliceError::Ipv6Exts(err::ipv6_exts::HeaderError::HopByHopNotAtStart),
                     );
                 }
             }
@@ -981,8 +982,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
                 }
@@ -1030,8 +1030,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
 
@@ -1047,8 +1046,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data,
-                            EthSliceError::Tcp(err.clone()),
-                            IpSliceError::Tcp(err.clone()),
+                            SliceError::Tcp(err.clone()),
                         );
                     }
                 }
@@ -1095,8 +1093,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
                 }
@@ -1143,8 +1140,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            EthSliceError::Len(err.clone()),
-                            IpSliceError::Len(err.clone()),
+                            SliceError::Len(err.clone()),
                         );
                     }
                 }
@@ -1238,13 +1234,12 @@ mod test {
     fn from_slice_assert_err(
         test: &TestPacket,
         data: &[u8],
-        eth_err: EthSliceError,
-        ip_err: IpSliceError,
+        err: SliceError,
     ) {
         // from_ethernet_slice
         if test.link.is_some() {
             assert_eq!(
-                eth_err.clone(),
+                err.clone(),
                 PacketHeaders::from_ethernet_slice(&data).unwrap_err()
             );
         }
@@ -1252,7 +1247,7 @@ mod test {
         if test.link.is_none() && test.vlan.is_some() {
             for ether_type in VLAN_ETHER_TYPES {
                 assert_eq!(
-                    eth_err.clone(),
+                    err.clone(),
                     PacketHeaders::from_ether_type(ether_type, &data).unwrap_err()
                 );
             }
@@ -1268,12 +1263,12 @@ mod test {
                     &data,
                 )
                 .unwrap_err();
-                assert_eq!(err, eth_err.clone());
+                assert_eq!(err, err.clone());
             }
         }
         // from_ip_slice
         if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
-            assert_eq!(ip_err, PacketHeaders::from_ip_slice(&data).unwrap_err());
+            assert_eq!(err, PacketHeaders::from_ip_slice(&data).unwrap_err());
         }
     }
 }
