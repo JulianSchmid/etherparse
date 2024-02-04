@@ -24,7 +24,7 @@
 //!
 //! Some key points are:
 //!
-//! * It is completly written in Rust and thoroughly tested.
+//! * It is completely written in Rust and thoroughly tested.
 //! * Special attention has been paid to not use allocations or syscalls.
 //! * The package is still in development and can & will still change.
 //! * The current focus of development is on the most popular protocols in the internet & transport layer.
@@ -33,7 +33,7 @@
 //! Etherparse gives you two options for parsing network packages automatically:
 //!
 //! ## Slicing the packet
-//! Here the different components in a packet are seperated without parsing all their fields. For each header a slice is generated that allows access to the fields of a header.
+//! Here the different components in a packet are separated without parsing all their fields. For each header a slice is generated that allows access to the fields of a header.
 //! ```
 //! # use etherparse::{SlicedPacket, PacketBuilder};
 //! # let builder = PacketBuilder::
@@ -43,7 +43,7 @@
 //! #          [192,168,1,2], //destination ip
 //! #          20)            //time to life
 //! #    .udp(21,    //source port
-//! #         1234); //desitnation port
+//! #         1234); //destination port
 //! #    //payload of the udp packet
 //! #    let payload = [1,2,3,4,5,6,7,8];
 //! #    //get some memory to store the serialized data
@@ -76,7 +76,7 @@
 //!
 //! ## Deserializing all headers into structs
 //!
-//! This option deserializes all known headers and transferes their contents to header structs.
+//! This option deserializes all known headers and transfers their contents to header structs.
 //! ```rust
 //! # use etherparse::{PacketHeaders, PacketBuilder};
 //! # let builder = PacketBuilder::
@@ -86,7 +86,7 @@
 //! #          [192,168,1,2], //destination ip
 //! #          20)            //time to life
 //! #    .udp(21,    //source port
-//! #         1234); //desitnation port
+//! #         1234); //destination port
 //! #    //payload of the udp packet
 //! #    let payload = [1,2,3,4,5,6,7,8];
 //! #    //get some memory to store the serialized data
@@ -132,8 +132,8 @@
 //! * [`Icmpv6Slice::from_slice`]
 //!
 //! The resulting data types allow access to both the header(s) and the payload of the layer
-//! and will automatially limit the length of payload if the layer has a length field limiting the
-//! paylod (e.g. the payload of IPv6 packets will be limited by the "payload length" field in
+//! and will automatically limit the length of payload if the layer has a length field limiting the
+//! payload (e.g. the payload of IPv6 packets will be limited by the "payload length" field in
 //! an IPv6 header).
 //!
 //! ## Manually slicing & parsing only headers
@@ -186,10 +186,10 @@
 //!     ethernet2([1,2,3,4,5,6],     //source mac
 //!                [7,8,9,10,11,12]) //destination mac
 //!     .ipv4([192,168,1,1], //source ip
-//!           [192,168,1,2], //desitination ip
+//!           [192,168,1,2], //destination ip
 //!           20)            //time to life
 //!     .udp(21,    //source port
-//!          1234); //desitnation port
+//!          1234); //destination port
 //!
 //! //payload of the udp packet
 //! let payload = [1,2,3,4,5,6,7,8];
@@ -205,11 +205,11 @@
 //!
 //! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_tcp.rs) available.
 //!
-//! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more informations.
+//! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more information.
 //!
-//! ## Manually serialising each header
+//! ## Manually serializing each header
 //!
-//! Alternativly it is possible to manually build a packet
+//! Alternatively it is possible to manually build a packet
 //! ([example](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_ipv4_udp.rs)).
 //! Generally each struct representing a header has a "write" method that allows it to be
 //! serialized. These write methods sometimes automatically calculate checksums and fill them
