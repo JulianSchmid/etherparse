@@ -28,6 +28,7 @@ jobs:
       run: coverage/coverage.bash
       shell: bash
     - name: Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v3
       with:
         files: target/coverage/export.lcov.txt
+        fail_ci_if_error: true
