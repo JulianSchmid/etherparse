@@ -47,7 +47,7 @@ match SlicedPacket::from_ethernet(&packet) {
     Ok(value) => {
         println!("link: {:?}", value.link);
         println!("vlan: {:?}", value.vlan);
-        println!("ip: {:?}", value.ip);
+        println!("net: {:?}", value.net); // contains ip
         println!("transport: {:?}", value.transport);
     }
 }
@@ -74,7 +74,7 @@ match PacketHeaders::from_ethernet_slice(&packet) {
     Ok(value) => {
         println!("link: {:?}", value.link);
         println!("vlan: {:?}", value.vlan);
-        println!("ip: {:?}", value.ip);
+        println!("net: {:?}", value.net); // contains ip
         println!("transport: {:?}", value.transport);
     }
 }
