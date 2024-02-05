@@ -1,5 +1,9 @@
 # Changelog:
 
+## 0.14.1
+
+Corrected example in README.md (replaced `ip` with `net`).
+
 ## 0.14.0
 
 ### Highlights

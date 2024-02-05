@@ -55,7 +55,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("net: {:?}", value.net);
+//!         println!("net: {:?}", value.net); // contains ip
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }
@@ -98,7 +98,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("net: {:?}", value.net);
+//!         println!("net: {:?}", value.net); // contains ip
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }
@@ -178,7 +178,7 @@
 //!
 //! The PacketBuilder struct provides a high level interface for quickly creating network packets. The PacketBuilder will automatically set fields which can be deduced from the content and compositions of the packet itself (e.g. checksums, lengths, ethertype, ip protocol number).
 //!
-//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_udp.rs)
+//! [Example:](https://github.com/JulianSchmid/etherparse/blob/0.14.1/examples/write_udp.rs)
 //! ```rust
 //! use etherparse::PacketBuilder;
 //!
@@ -203,14 +203,14 @@
 //! builder.write(&mut result, &payload).unwrap();
 //! ```
 //!
-//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_tcp.rs) available.
+//! There is also an [example for TCP packets](https://github.com/JulianSchmid/etherparse/blob/0.14.1/examples/write_tcp.rs) available.
 //!
 //! Check out the [PacketBuilder documentation](struct.PacketBuilder.html) for more information.
 //!
 //! ## Manually serializing each header
 //!
 //! Alternatively it is possible to manually build a packet
-//! ([example](https://github.com/JulianSchmid/etherparse/blob/0.14.0/examples/write_ipv4_udp.rs)).
+//! ([example](https://github.com/JulianSchmid/etherparse/blob/0.14.1/examples/write_ipv4_udp.rs)).
 //! Generally each struct representing a header has a "write" method that allows it to be
 //! serialized. These write methods sometimes automatically calculate checksums and fill them
 //! in. In case this is unwanted behavior (e.g. if you want to generate a packet with an invalid
