@@ -1,5 +1,9 @@
 # Changelog:
 
+## 0.14.2
+
+Corrected enum docs.rs links in README.md (for `IpSlice` & `IpHeaders`).
+
 ## 0.14.1
 
 Corrected example in README.md (replaced `ip` with `net`).

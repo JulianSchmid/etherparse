@@ -99,7 +99,7 @@ It is also possible to only slice one packet layer:
 
 * [`Ethernet2Slice::from_slice_without_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_without_fcs) & [`Ethernet2Slice::from_slice_with_crc32_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_with_crc32_fcs)
 * [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanSlice.html#method.from_slice) & [`DoubleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanSlice.html#method.from_slice)
-* [`IpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.IpSlice.html#method.from_slice) & [`LaxIpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpSlice.html#method.from_slice)
+* [`IpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpSlice.html#method.from_slice) & [`LaxIpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.LaxIpSlice.html#method.from_slice)
 * [`Ipv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Slice.html#method.from_slice) & [`LaxIpv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv4Slice.html#method.from_slice)
 * [`Ipv6Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Slice.html#method.from_slice) & [`LaxIpv6Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv6Slice.html#method.from_slice)
 * [`UdpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.UdpSlice.html#method.from_slice) & [`UdpSlice::from_slice_lax`](https://docs.rs/etherparse/~0/etherparse/struct.UdpSlice.html#method.from_slice_lax)
@@ -135,7 +135,7 @@ And for deserialization into the corresponding header structs have a look at:
 * [`Ethernet2Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.from_slice)
 * [`SingleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
 * [`DoubleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
-* [`IpHeaders::read`](https://docs.rs/etherparse/~0/etherparse/struct.IpHeaders.html#method.read) & [`IpHeaders::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.IpHeaders.html#method.from_slice)
+* [`IpHeaders::read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.read) & [`IpHeaders::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.from_slice)
 * [`Ipv4Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
 * [`Ipv4Extensions::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.read) & [`Ipv4Extensions::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.from_slice)
 * [`Ipv6Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.read) & [`Ipv6Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.from_slice)
