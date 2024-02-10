@@ -220,6 +220,43 @@ impl<'a> LaxSlicedPacket<'a> {
     pub fn from_ip(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::ip::LaxHeaderSliceError> {
         LaxSlicedPacketCursor::parse_from_ip(slice)
     }
+
+    /// Returns the last ether payload of the packet (if one is present).
+    ///
+    /// If VLAN header is present the payload after the most inner VLAN
+    /// header is returned and if there is no VLAN header is present in the
+    /// link field is returned.
+    pub fn ether_payload(&self) -> Option<EtherPayloadSlice<'a>> {
+        if let Some(vlan) = self.vlan.as_ref() {
+            match vlan {
+                VlanSlice::SingleVlan(s) => Some(s.payload()),
+                VlanSlice::DoubleVlan(s) => Some(s.payload()),
+            }
+        } else {
+            if let Some(eth) = self.link.as_ref() {
+                match eth {
+                    LinkSlice::Ethernet2(e) => Some(e.payload()),
+                    LinkSlice::EtherPayload(e) => Some(e.clone()),
+                }
+            } else {
+                None
+            }
+        }
+    }
+
+    /// Return the IP payload after the the IP header and the IP extension
+    /// headers (if one is present).
+    pub fn ip_payload(&self) -> Option<&LaxIpPayloadSlice<'a>> {
+        if let Some(net) = self.net.as_ref() {
+            use LaxNetSlice::*;
+            match net {
+                Ipv4(v) => Some(v.payload()),
+                Ipv6(v) => Some(v.payload()),
+            }
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -263,6 +300,204 @@ mod test {
                 header.link, header.vlan, header.net, header.transport, header.stop_err
             )
         );
+    }
+
+    #[test]
+    fn ether_payload() {
+        use alloc::vec::*;
+
+        // no content
+        assert_eq!(
+            LaxSlicedPacket {
+                link: None,
+                vlan: None,
+                net: None,
+                transport: None,
+                stop_err: None
+            }
+            .ether_payload(),
+            None
+        );
+
+        // only ethernet header II
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ethernet2Header::LEN + 4);
+            buf.extend_from_slice(
+                &Ethernet2Header {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                LaxSlicedPacket::from_ethernet(&buf)
+                    .unwrap()
+                    .ether_payload(),
+                Some(EtherPayloadSlice {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    payload: &payload
+                })
+            );
+        }
+
+        // ether type payload
+        {
+            let payload = [1, 2, 3, 4];
+            assert_eq!(
+                LaxSlicedPacket {
+                    link: Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+                        ether_type: EtherType::WAKE_ON_LAN,
+                        payload: &payload
+                    })),
+                    vlan: None,
+                    net: None,
+                    transport: None,
+                    stop_err: None,
+                }
+                .ether_payload(),
+                Some(EtherPayloadSlice {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    payload: &payload
+                })
+            );
+        }
+
+        // single vlan header
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ethernet2Header::LEN + SingleVlanHeader::LEN + 4);
+            buf.extend_from_slice(
+                &Ethernet2Header {
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                LaxSlicedPacket::from_ethernet(&buf)
+                    .unwrap()
+                    .ether_payload(),
+                Some(EtherPayloadSlice {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    payload: &payload
+                })
+            );
+        }
+
+        // double vlan header
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ethernet2Header::LEN + SingleVlanHeader::LEN * 2 + 4);
+            buf.extend_from_slice(
+                &Ethernet2Header {
+                    ether_type: EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                LaxSlicedPacket::from_ethernet(&buf)
+                    .unwrap()
+                    .ether_payload(),
+                Some(EtherPayloadSlice {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    payload: &payload
+                })
+            );
+        }
+    }
+
+    #[test]
+    fn ip_payload() {
+        use alloc::vec::*;
+
+        // no content
+        assert_eq!(
+            LaxSlicedPacket {
+                link: None,
+                vlan: None,
+                net: None,
+                transport: None,
+                stop_err: None,
+            }
+            .ip_payload(),
+            None
+        );
+
+        // ipv4
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+            buf.extend_from_slice(
+                &Ipv4Header {
+                    protocol: IpNumber::ARIS,
+                    total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                LaxSlicedPacket::from_ip(&buf).unwrap().ip_payload(),
+                Some(&LaxIpPayloadSlice {
+                    payload: &payload,
+                    ip_number: IpNumber::ARIS,
+                    fragmented: false,
+                    len_source: LenSource::Ipv4HeaderTotalLen,
+                    incomplete: false,
+                })
+            );
+        }
+
+        // ipv6
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv6Header::LEN + 4);
+            buf.extend_from_slice(
+                &Ipv6Header {
+                    payload_length: 4,
+                    next_header: IpNumber::ARGUS,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                LaxSlicedPacket::from_ip(&buf).unwrap().ip_payload(),
+                Some(&LaxIpPayloadSlice {
+                    payload: &payload,
+                    ip_number: IpNumber::ARGUS,
+                    fragmented: false,
+                    len_source: LenSource::Ipv6HeaderPayloadLen,
+                    incomplete: false,
+                })
+            );
+        }
     }
 
     #[test]
