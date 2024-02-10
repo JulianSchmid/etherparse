@@ -246,15 +246,13 @@ impl<'a> SlicedPacket<'a> {
                 VlanSlice::SingleVlan(s) => Some(s.payload()),
                 VlanSlice::DoubleVlan(s) => Some(s.payload()),
             }
-        } else {
-            if let Some(eth) = self.link.as_ref() {
-                match eth {
-                    LinkSlice::Ethernet2(e) => Some(e.payload()),
-                    LinkSlice::EtherPayload(e) => Some(e.clone()),
-                }
-            } else {
-                None
+        } else if let Some(eth) = self.link.as_ref() {
+            match eth {
+                LinkSlice::Ethernet2(e) => Some(e.payload()),
+                LinkSlice::EtherPayload(e) => Some(e.clone()),
             }
+        } else {
+            None
         }
     }
 
