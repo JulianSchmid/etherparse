@@ -224,7 +224,7 @@ mod test {
         #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         #[test]
         fn from_slice_too_big_error(
-            bad_len in ((core::u32::MAX as usize) + 1)..=core::usize::MAX,
+            bad_len in ((core::u32::MAX as usize) + 1)..=(core::isize::MAX as usize),
         ) {
             // too large packet error case
             {

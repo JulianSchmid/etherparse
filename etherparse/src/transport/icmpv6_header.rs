@@ -219,7 +219,7 @@ mod test {
             ip_header in ipv6_any(),
             icmp_type in icmpv6_type_any(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=(core::isize::MAX as usize),
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
 
@@ -395,7 +395,7 @@ mod test {
             icmp_type in icmpv6_type_any(),
             start_checksum in any::<u16>(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=(core::isize::MAX as usize),
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
 

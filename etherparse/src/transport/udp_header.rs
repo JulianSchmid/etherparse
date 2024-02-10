@@ -316,7 +316,7 @@ mod test {
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
             good_payload_length in 0..=((core::u16::MAX as usize) - UdpHeader::LEN),
-            bad_payload_length in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_payload_length in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
 
             // normal working call
@@ -386,7 +386,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
             // normal case
             assert_eq!(
@@ -490,7 +490,7 @@ mod test {
             dummy_checksum in any::<u16>(),
             ipv4 in ipv4_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
             // normal case
             {
@@ -620,7 +620,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u16::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
             // normal case
             assert_eq!(
@@ -723,7 +723,7 @@ mod test {
             destination_port in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
             // normal case
             assert_eq!(
@@ -827,7 +827,7 @@ mod test {
             dummy_checksum in any::<u16>(),
             ipv6 in ipv6_any(),
             payload in proptest::collection::vec(any::<u8>(), 0..20),
-            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=usize::MAX,
+            bad_len in ((core::u32::MAX as usize) - UdpHeader::LEN + 1)..=(isize::MAX as usize),
         ) {
             // normal case
             {
