@@ -609,7 +609,7 @@ mod test {
             code_u8 in any::<u8>(),
             bytes5to8 in any::<[u8;4]>(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=(core::isize::MAX as usize),
             payload in proptest::collection::vec(any::<u8>(), 0..64)
         ) {
             use Icmpv6Type::*;
@@ -718,7 +718,7 @@ mod test {
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
             // max length is u32::MAX - header_len (7)
-            bad_len in (core::u32::MAX - 7) as usize..=core::usize::MAX,
+            bad_len in (core::u32::MAX - 7) as usize..=(core::isize::MAX as usize),
             payload in proptest::collection::vec(any::<u8>(), 0..1024)
         ) {
             // size error case
