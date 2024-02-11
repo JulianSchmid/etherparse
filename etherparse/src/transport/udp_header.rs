@@ -718,6 +718,7 @@ mod test {
 
     proptest! {
         #[test]
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         fn calc_checksum_ipv6(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),
@@ -821,6 +822,7 @@ mod test {
 
     proptest! {
         #[test]
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         fn calc_checksum_ipv6_raw(
             source_port in any::<u16>(),
             destination_port in any::<u16>(),

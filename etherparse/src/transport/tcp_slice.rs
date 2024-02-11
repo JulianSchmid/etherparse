@@ -380,7 +380,7 @@ impl<'a> TcpSlice<'a> {
         destination: [u8; 16],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         if (core::u32::MAX as usize) < self.slice.len() {
             return Err(ValueTooBigError {
                 actual: self.slice.len(),

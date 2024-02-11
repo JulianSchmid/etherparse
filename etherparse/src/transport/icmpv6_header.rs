@@ -214,7 +214,7 @@ mod test {
     }
 
     proptest! {
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         #[test]
         fn with_checksum(
             ip_header in ipv6_any(),
@@ -391,7 +391,7 @@ mod test {
 
     proptest! {
         #[test]
-        #[cfg(not(target_pointer_width = "32"))]
+        #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
         fn update_checksum(
             ip_header in ipv6_any(),
             icmp_type in icmpv6_type_any(),
