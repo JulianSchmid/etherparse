@@ -602,6 +602,7 @@ mod test {
 
     proptest! {
         #[test]
+        #[cfg(not(target_pointer_width = "32"))]
         fn calc_checksum(
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
@@ -714,6 +715,7 @@ mod test {
 
     proptest! {
         #[test]
+        #[cfg(not(target_pointer_width = "32"))]
         fn to_header(
             ip_header in ipv6_any(),
             icmpv6_type in icmpv6_type_any(),
