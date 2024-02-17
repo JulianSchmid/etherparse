@@ -1,6 +1,9 @@
 mod build_write_error;
 pub use build_write_error::*;
 
+mod checksum_error;
+pub use checksum_error::*;
+
 mod slice_error;
 pub use slice_error::*;
 
