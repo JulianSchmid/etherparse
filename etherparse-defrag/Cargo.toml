@@ -1,17 +1,14 @@
 [package]
 name = "etherparse-defrag"
-version = "0.14.2"
+version = "0.14.0"
 authors = ["Julian Schmid <info@julianschmid.name>"]
 edition = "2021"
 repository = "https://github.com/JulianSchmid/etherparse"
 description = "Crate to reconstruct fragmented IP packets."
 categories = ["network-programming", "parser-implementations"]
-keywords = ["ipv4", "ipv6", "vlan", "udp", "tcp"]
+keywords = ["ipv4", "ipv6"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
-exclude = [
-    ".gitignore"
-]
 
 [dependencies]
 etherparse = { version = "0.14.2", path = "../etherparse" }
