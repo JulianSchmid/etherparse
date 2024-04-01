@@ -42,6 +42,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     /// The caller must ensured that the given slice has the length of
     /// [`Ethernet2Header::LEN`]
     #[inline]
+    #[cfg(feature = "std")]
     pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ethernet2HeaderSlice {
         debug_assert!(slice.len() == Ethernet2Header::LEN);
         Ethernet2HeaderSlice { slice }

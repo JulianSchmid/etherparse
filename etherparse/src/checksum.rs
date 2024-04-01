@@ -7,7 +7,7 @@ pub struct Sum16BitWords {
     sum: u64,
 
     /// Partial sum
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     sum: u32,
 }
 
@@ -20,7 +20,7 @@ impl Sum16BitWords {
     /// has a length that is not multiple of 2 the last byte
     /// will be padded with 0.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn add_slice(self, slice: &[u8]) -> Sum16BitWords {
         Sum16BitWords {
             sum: u32_16bit_word::add_slice(self.sum, slice),
@@ -40,7 +40,7 @@ impl Sum16BitWords {
 
     /// Add a 2 byte word.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn add_2bytes(self, value: [u8; 2]) -> Sum16BitWords {
         Sum16BitWords {
             sum: u32_16bit_word::add_2bytes(self.sum, value),
@@ -58,7 +58,7 @@ impl Sum16BitWords {
 
     /// Add a 4 byte word.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn add_4bytes(&mut self, value: [u8; 4]) -> Sum16BitWords {
         Sum16BitWords {
             sum: u32_16bit_word::add_4bytes(self.sum, value),
@@ -76,7 +76,7 @@ impl Sum16BitWords {
 
     /// Add a 8 byte word.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn add_8bytes(&mut self, value: [u8; 8]) -> Sum16BitWords {
         self.add_4bytes([value[0], value[1], value[2], value[3]])
             .add_4bytes([value[4], value[5], value[6], value[7]])
@@ -105,7 +105,7 @@ impl Sum16BitWords {
     /// Converts summed up words from an u32 to an u16 ones complement
     /// which can be used in a ipv4 checksum.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn ones_complement(&self) -> u16 {
         u32_16bit_word::ones_complement(self.sum)
     }
@@ -123,7 +123,7 @@ impl Sum16BitWords {
     ///
     /// This kind of checksum is used in TCP and UDP headers.
     #[inline]
-    #[cfg(target_pointer_width = "32")]
+    #[cfg(any(target_pointer_width = "16", target_pointer_width = "32"))]
     pub fn to_ones_complement_with_no_zero(&self) -> u16 {
         u32_16bit_word::ones_complement_with_no_zero(self.sum)
     }

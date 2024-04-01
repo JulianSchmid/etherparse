@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use super::ExtsWalkError;
 
 /// Error when writing IPv6 extension headers.

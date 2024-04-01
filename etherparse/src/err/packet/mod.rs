@@ -1,4 +1,6 @@
+#[cfg(feature = "std")]
 mod build_write_error;
+#[cfg(feature = "std")]
 pub use build_write_error::*;
 
 mod slice_error;

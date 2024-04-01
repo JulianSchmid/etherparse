@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use crate::err::{ipv4_exts, ipv6_exts};
 
 /// Error when writing IPv4 extension headers.

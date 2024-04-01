@@ -1,3 +1,4 @@
+#[cfg(feature = "std")]
 use crate::*;
 
 /// Error when decoding the IP header part of a message.
