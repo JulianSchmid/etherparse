@@ -2,7 +2,8 @@
 
 ## 0.14.3
 
-Resolved compile errors for 16 bit systems.
+* Resolved compile errors for 16 bit systems.
+* Add 'ether_payload' & 'ip_payload' methods to SlicedPacket types.
 
 ## 0.14.2
 
