@@ -1,5 +1,9 @@
 # Changelog:
 
+## 0.14.3
+
+Resolved compile errors for 16 bit systems.
+
 ## 0.14.2
 
 Corrected enum docs.rs links in README.md (for `IpSlice` & `IpHeaders`).
