@@ -373,7 +373,6 @@ impl<'a> TcpSlice<'a> {
 
     /// Calculates the checksum for the current header in ipv6 mode and
     /// returns the result. This does NOT set the checksum.
-    #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     pub fn calc_checksum_ipv6(
         &self,
         source: [u8; 16],

@@ -1,4 +1,4 @@
-use crate::{link::ether_payload_slice::EtherPayloadSlice, *};
+use crate::*;
 
 /// Payload together with an identifier the type of content.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
