@@ -6,7 +6,7 @@
 
 # etherparse
 
-A zero allocation library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
+A mostly zero allocation library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
 Currently supported are:
 * Ethernet II
@@ -32,7 +32,7 @@ Etherparse is intended to provide the basic network parsing functions that allow
 Some key points are:
 
 * It is completely written in Rust and thoroughly tested.
-* Special attention has been paid to not use allocations or syscalls.
+* Special attention has been paid to not use allocations or syscalls except in the "defragmentation" code.
 * The package is still in development and can & will still change.
 * The current focus of development is on the most popular protocols in the internet & transport layer.
 
