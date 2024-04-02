@@ -1,5 +1,5 @@
-use crate::*;
-use etherparse::*;
+use crate::{*, defrag::*};
+use std::vec::Vec;
 
 /// Buffer to reconstruct a single fragmented IP packet.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
@@ -167,8 +167,8 @@ impl IpDefragBuf {
 
 #[cfg(test)]
 mod test {
-    use etherparse::*;
-    use crate::*;
+    use super::*;
+    use std::{format, vec};
 
     #[test]
     fn debug_clone_eq() {

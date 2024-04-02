@@ -2,6 +2,5 @@
 resolver = "2"
 members = [
     "etherparse",
-    "etherparse-defrag",
     "etherparse_proptest_generators",
 ]

@@ -1,6 +1,4 @@
-use etherparse::*;
-
-use crate::IpFragVersionSpecId;
+use crate::{*, defrag::*};
 
 /// Values identifying a fragmented packet.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
