@@ -1,6 +1,6 @@
-use crate::*;
-use etherparse::*;
+use crate::{*, defrag::*};
 use std::collections::HashMap;
+use std::vec::Vec;
 
 /// Pool of buffers to reconstruct multiple fragmented IP packets in
 /// parallel (re-uses buffers to minimize allocations).

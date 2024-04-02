@@ -302,6 +302,11 @@ extern crate std;
 /// Module containing error types that can be triggered.
 pub mod err;
 
+/// Module containing helpers to re-assemble fragmented packets (contains allocations).
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+pub mod defrag;
+
 mod link;
 pub use crate::link::arp_hardware_id::*;
 pub use crate::link::double_vlan_header::*;

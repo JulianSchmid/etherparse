@@ -1,4 +1,5 @@
-use etherparse::*;
+use crate::*;
+use std::vec::Vec;
 
 /// Payload of an IP packet.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
@@ -17,6 +18,7 @@ pub struct IpDefragPayloadVec {
 #[cfg(test)]
 mod test {
     use super::*;
+    use std::{format, vec};
 
     #[test]
     fn debug() {
