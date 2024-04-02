@@ -1,4 +1,4 @@
-use etherparse::IpFragOffset;
+use crate::*;
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum IpDefragError {
@@ -43,9 +43,9 @@ impl std::error::Error for IpDefragError {}
 
 #[cfg(test)]
 mod tests {
-    use etherparse::IpFragOffset;
-
+    use super::*;
     use super::IpDefragError::*;
+    use std::format;
 
     #[test]
     fn debug() {

@@ -34,6 +34,7 @@ impl IpFragRange {
 #[cfg(test)]
 mod test {
     use super::*;
+    use alloc::format;
 
     #[test]
     fn debug_clone_eq() {
