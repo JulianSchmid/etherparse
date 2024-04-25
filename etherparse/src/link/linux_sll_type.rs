@@ -9,9 +9,9 @@ use crate::err::{self, ValueTooBigError};
 /// ```
 /// use etherparse::LinuxSllType;
 ///
-/// // Convert to LinuxSllType using the from & into trait
-/// let link_type: LinuxSllType = u16_1.into()
-/// assert_eq!(LinuxSllType::BroadcastByOther, link_type)
+/// // Convert to LinuxSllType using the try_from & try_into trait
+/// let link_type: LinuxSllType = 1_u16.try_into().unwrap();
+/// assert_eq!(LinuxSllType::BroadcastByOther, link_type);
 ///
 /// // convert to u16 using the from & into trait
 /// let num: u16 = LinuxSllType::BroadcastByOther.into();
