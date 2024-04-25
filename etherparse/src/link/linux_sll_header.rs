@@ -1,6 +1,6 @@
 use crate::EtherType;
 
-use super::{arphrd_type::ARPHRDType, linux_sll_type::LinuxSllType};
+use super::{arp_hardware_id::ArpHardwareId, linux_sll_type::LinuxSllType};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinuxSllProtocolType {
@@ -31,7 +31,7 @@ pub struct LinuxSllHeader {
     /// Type of the captured packet
     pub packet_type: LinuxSllType,
     /// ARPHRD_ value for the link-layer device type
-    pub arp_hrd_type: ARPHRDType,
+    pub arp_hrd_type: ArpHardwareId,
     /// The size of the adress that is valid
     pub sender_address_valid_length: u16,
     /// The link-layer adress of the sender of the packet, with the meaningful 
