@@ -1,4 +1,4 @@
-pub mod arphrd_type;
+pub mod arp_hardware_id;
 pub mod double_vlan_header;
 pub mod double_vlan_header_slice;
 pub mod double_vlan_slice;

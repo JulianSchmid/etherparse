@@ -293,6 +293,7 @@ extern crate std;
 pub mod err;
 
 mod link;
+pub use crate::link::arp_hardware_id::*;
 pub use crate::link::double_vlan_header::*;
 pub use crate::link::double_vlan_header_slice::*;
 pub use crate::link::double_vlan_slice::*;
