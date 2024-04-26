@@ -1,28 +1,19 @@
-use crate::EtherType;
+use crate::{EtherType, LinuxNonstandardEtherType};
 
 use super::{arp_hardware_id::ArpHardwareId, linux_sll_packet_type::LinuxSllPacketType};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinuxSllProtocolType {
-    /// The protocol type does not have relevant information
-    Ignored,
-    /// Netlink protocol type for the associated Netlink payload
+    /// The protocol type should be ignored
+    Ignored(u16),
+    /// Netlink protocol type of the encapsulated payload
     NetlinkProtocolType(u16),
-    /// Generic Routing Encapsulation protocol type
+    /// Generic Routing Encapsulation protocol type for the encapsulated payload
     GenericRoutingEncapsulationProtocolType(u16),
-    /// The associated payload is a Novell 802.3 frame without an 802.2 LLC header
-    Novel802_3Frame,
-    /// The protocol type value is "0x0003", which is possibly an error on the 
-    /// capture, but it is not known the specific cause
-    Unknown,
-    /// The associated payload begins with a 802.2 LLC header.
-    LLC,
-    /// The associated payload is a CAN bus frame
-    CANBusFrame,
-    /// The associated payload is a CAN FD (CAN with Flexible Data-Rate) frame
-    CANFDFrame,
-    /// The associated payload's ether type
-    EtherType(EtherType)
+    /// EtherType of the encapsulated payload
+    EtherType(EtherType),
+    /// Non-standard ether types of the encapsulated payload
+    LinuxNonstandardEtherType(LinuxNonstandardEtherType),
 }
 
 /// Linux SLL Header
