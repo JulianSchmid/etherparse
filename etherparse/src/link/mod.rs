@@ -10,6 +10,7 @@ pub mod ethernet2_slice;
 pub mod linux_nonstandard_ether_type;
 pub mod linux_sll_header;
 pub mod linux_sll_packet_type;
+pub mod linux_sll_protocol_type;
 pub mod link_slice;
 pub mod single_vlan_header;
 pub mod single_vlan_header_slice;

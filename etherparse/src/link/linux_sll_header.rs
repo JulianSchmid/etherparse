@@ -1,20 +1,4 @@
-use crate::{EtherType, LinuxNonstandardEtherType};
-
-use super::{arp_hardware_id::ArpHardwareId, linux_sll_packet_type::LinuxSllPacketType};
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum LinuxSllProtocolType {
-    /// The protocol type should be ignored
-    Ignored(u16),
-    /// Netlink protocol type of the encapsulated payload
-    NetlinkProtocolType(u16),
-    /// Generic Routing Encapsulation protocol type for the encapsulated payload
-    GenericRoutingEncapsulationProtocolType(u16),
-    /// EtherType of the encapsulated payload
-    EtherType(EtherType),
-    /// Non-standard ether types of the encapsulated payload
-    LinuxNonstandardEtherType(LinuxNonstandardEtherType),
-}
+use crate::{ArpHardwareId, LinuxSllPacketType, LinuxSllProtocolType};
 
 /// Linux SLL Header
 #[derive(Clone, Debug, Eq, PartialEq)]
