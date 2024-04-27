@@ -98,6 +98,57 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    pub fn linux_sll_packet_type_any()
+        (value in 0..=LinuxSllPacketType::MAX_VAL)
+        -> LinuxSllPacketType
+    {
+        LinuxSllPacketType::try_from(value).unwrap()
+    }
+}
+
+prop_compose! {
+    pub fn linux_sll_arphrd()
+        (index in 0..=(LinuxSllProtocolType::SUPPORTED_ARPHWD.len()-1))
+        -> ArpHardwareId
+    {
+        LinuxSllProtocolType::SUPPORTED_ARPHWD[index]
+    }
+}
+
+prop_compose! {
+    pub fn linux_sll_sender_adress_any()
+        (mut sender_address in prop::collection::vec(any::<u8>(), 0..8))
+        -> (u16, [u8; 8])
+    {
+        let size = sender_address.len().try_into().unwrap();
+        sender_address.resize(8, 0);
+        let mut v: [u8; 8] = [0u8;8];
+        v.copy_from_slice(&sender_address);
+        
+        (size, v)
+    }
+}
+
+prop_compose! {
+    pub fn linux_sll_any()
+        (packet_type in linux_sll_packet_type_any(),
+        arp_hrd_type in linux_sll_arphrd(),
+        (sender_address_valid_length, sender_address) in linux_sll_sender_adress_any(),
+        protocol_num in any::<u16>()
+    )
+        -> LinuxSllHeader
+    {
+        LinuxSllHeader {
+            packet_type,
+            arp_hrd_type,
+            sender_address_valid_length,
+            sender_address,
+            protocol_type: LinuxSllProtocolType::try_from((arp_hrd_type, protocol_num)).unwrap()
+        }
+    }
+}
+
 pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
     ether_type::IPV4,
     ether_type::IPV6,

@@ -1,6 +1,6 @@
 use core::hint::unreachable_unchecked;
 
-use crate::err::{self, ValueTooBigError};
+use crate::err::{self};
 
 /// Represents an "Packet type", indicating the direction where it was sent, 
 /// used inside a SLL header
@@ -39,7 +39,7 @@ impl LinuxSllPacketType {
 }
 
 impl TryFrom<u16> for LinuxSllPacketType {
-    type Error = ValueTooBigError<u16>;
+    type Error = err::linux_sll::HeaderError;
 
     fn try_from(value: u16) -> Result<Self, Self::Error> {
         match value {
@@ -51,10 +51,8 @@ impl TryFrom<u16> for LinuxSllPacketType {
             5 => Ok(LinuxSllPacketType::LOOPBACK),
             6 => Ok(LinuxSllPacketType::USER),
             7 => Ok(LinuxSllPacketType::KERNEL),
-            LinuxSllPacketType::FIRST_INVALID..=u16::MAX => Err(ValueTooBigError {
-                actual: value,
-                max_allowed: LinuxSllPacketType::MAX_VAL,
-                value_type: err::ValueType::LinuxSllType,
+            LinuxSllPacketType::FIRST_INVALID..=u16::MAX => Err(err::linux_sll::HeaderError::UnsupportedPacketTypeField{
+                packet_type: value
             }),
         }
     }
@@ -94,7 +92,7 @@ mod test {
     use alloc::format;
 
     use super::*;
-    use crate::err::{self, ValueTooBigError};
+    use crate::err::{self};
 
     #[test]
     fn to_u16() {
@@ -118,16 +116,8 @@ mod test {
         assert_eq!(LinuxSllPacketType::try_from(5), Ok(LinuxSllPacketType::LOOPBACK));
         assert_eq!(LinuxSllPacketType::try_from(6), Ok(LinuxSllPacketType::USER));
         assert_eq!(LinuxSllPacketType::try_from(7), Ok(LinuxSllPacketType::KERNEL));
-        assert_eq!(LinuxSllPacketType::try_from(8), Err(ValueTooBigError {
-            actual: 8,
-            max_allowed: LinuxSllPacketType::MAX_VAL,
-            value_type: err::ValueType::LinuxSllType,
-        }));
-        assert_eq!(LinuxSllPacketType::try_from(123), Err(ValueTooBigError {
-            actual: 123,
-            max_allowed: LinuxSllPacketType::MAX_VAL,
-            value_type: err::ValueType::LinuxSllType,
-        }));
+        assert_eq!(LinuxSllPacketType::try_from(8), Err(err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 8 }));
+        assert_eq!(LinuxSllPacketType::try_from(123), Err(err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 }));
     }
 
     #[test]

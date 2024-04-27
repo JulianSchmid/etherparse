@@ -1,6 +1,8 @@
 /// Layers on which an error can occur.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum Layer {
+    /// Error occurred in the Linux Cooked Capture v1 (SLL) header.
+    LinuxSllHeader,
     /// Error occurred in the ethernet 2 header.
     Ethernet2Header,
     /// Payload identified by an ether type number (e.g. after an ethernet 2 header).
@@ -50,6 +52,7 @@ impl Layer {
     pub fn error_title(&self) -> &'static str {
         use Layer::*;
         match self {
+            LinuxSllHeader => "Linux Cooked Capture v1 Error",
             Ethernet2Header => "Ethernet 2 Header Error",
             EtherPayload => "Payload with Ether Type Error",
             VlanHeader => "VLAN Header Error",
@@ -79,6 +82,7 @@ impl core::fmt::Display for Layer {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use Layer::*;
         match self {
+            LinuxSllHeader => write!(f, "Linux Cooked Capture v1 header"),
             Ethernet2Header => write!(f, "Ethernet 2 header"),
             EtherPayload => write!(f, "Ether type payload"),
             VlanHeader => write!(f, "VLAN header"),

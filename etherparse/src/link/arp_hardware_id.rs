@@ -19,7 +19,7 @@
 /// ```
 ///
 
-#[derive(Clone, Eq, PartialEq, Default)]
+#[derive(Clone, Copy, Eq, PartialEq, Default, Hash)]
 pub struct ArpHardwareId(pub u16);
 
 impl ArpHardwareId {
@@ -108,7 +108,7 @@ impl From<ArpHardwareId> for u16 {
     }
 }
 
-impl core::fmt::Debug for ArpHardwareId {
+impl core::fmt::Display for ArpHardwareId {
     // Names sourced from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21
 
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -184,6 +184,11 @@ impl core::fmt::Debug for ArpHardwareId {
     }
 }
 
+impl core::fmt::Debug for ArpHardwareId {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(&self, f)
+    }
+}
 
 #[cfg(test)]
 mod test {
@@ -344,7 +349,7 @@ mod test {
 
 
     #[test]
-    fn dbg() {
+    fn display_dbg() {
         let pairs = &[
             (ArpHardwareId::NETROM, "0 (from KA9Q: NET/ROM pseudo)"),
             (ArpHardwareId::ETHER, "1 (Ethernet 10Mbps)"),
@@ -416,6 +421,7 @@ mod test {
         ];
 
         for (ether_type, str_value) in pairs {
+            assert_eq!(str_value, &format!("{}", ether_type));
             assert_eq!(str_value, &format!("{:?}", ether_type));
         }
     }

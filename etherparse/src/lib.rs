@@ -304,6 +304,7 @@ pub use crate::link::ethernet2_header_slice::*;
 pub use crate::link::ethernet2_slice::*;
 pub use crate::link::link_slice::*;
 pub use crate::link::linux_nonstandard_ether_type::*;
+pub use crate::link::linux_sll_header_slice::*;
 pub use crate::link::linux_sll_header::*;
 pub use crate::link::linux_sll_packet_type::*;
 pub use crate::link::linux_sll_protocol_type::*;
