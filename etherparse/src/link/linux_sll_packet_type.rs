@@ -35,6 +35,7 @@ impl LinuxSllPacketType {
     pub const KERNEL: LinuxSllPacketType = Self(7);
 
     pub const MAX_VAL: u16 = 7;
+    const FIRST_INVALID: u16 = LinuxSllPacketType::MAX_VAL+1;
 }
 
 impl TryFrom<u16> for LinuxSllPacketType {
@@ -50,7 +51,7 @@ impl TryFrom<u16> for LinuxSllPacketType {
             5 => Ok(LinuxSllPacketType::LOOPBACK),
             6 => Ok(LinuxSllPacketType::USER),
             7 => Ok(LinuxSllPacketType::KERNEL),
-            LinuxSllPacketType::MAX_VAL..=u16::MAX => Err(ValueTooBigError {
+            LinuxSllPacketType::FIRST_INVALID..=u16::MAX => Err(ValueTooBigError {
                 actual: value,
                 max_allowed: LinuxSllPacketType::MAX_VAL,
                 value_type: err::ValueType::LinuxSllType,
@@ -79,9 +80,9 @@ impl core::fmt::Debug for LinuxSllPacketType {
             5 => write!(f, "5 (MC/BRD frame looped back)"),
             6 => write!(f, "6 (Sent to user space)"),
             7 => write!(f, "7 (Sent to kernel space)"),
-            LinuxSllPacketType::MAX_VAL..=u16::MAX => {
+            LinuxSllPacketType::FIRST_INVALID..=u16::MAX => {
                 // SAFETY:
-                // Safe because values over MAX_VAL are never constructed
+                // Safe because values over MAX_VAL/FIRST_INVALID are never constructed
                 unsafe { unreachable_unchecked() }
             }
         }
