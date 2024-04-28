@@ -122,6 +122,7 @@
 //! It is also possible to only slice one packet layer:
 //!
 //! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
+//! * [`LinuxSllSlice::from_slice`]
 //! * [`SingleVlanSlice::from_slice`] & [`DoubleVlanSlice::from_slice`]
 //! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
 //! * [`Ipv4Slice::from_slice`] & [`LaxIpv4Slice::from_slice`]
@@ -316,7 +317,9 @@ pub use crate::link::linux_nonstandard_ether_type::*;
 pub use crate::link::linux_sll_header_slice::*;
 pub use crate::link::linux_sll_header::*;
 pub use crate::link::linux_sll_packet_type::*;
+pub use crate::link::linux_sll_payload_slice::*;
 pub use crate::link::linux_sll_protocol_type::*;
+pub use crate::link::linux_sll_slice::*;
 pub use crate::link::single_vlan_header::*;
 pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::single_vlan_slice::*;

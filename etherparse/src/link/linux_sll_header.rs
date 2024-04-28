@@ -26,7 +26,7 @@ impl LinuxSllHeader {
     #[inline]
     pub fn from_slice(slice: &[u8]) -> Result<(LinuxSllHeader, &[u8]), err::ReadError> {
         Ok((
-            LinuxSllHeaderSlice::from_slice(slice)?.to_header()?,
+            LinuxSllHeaderSlice::from_slice(slice)?.to_header(),
             &slice[LinuxSllHeader::LEN..],
         ))
     }
@@ -63,7 +63,7 @@ impl LinuxSllHeader {
 
         Ok(
             // SAFETY: Safe as the buffer contains exactly the needed LinuxSllHeader::LEN bytes.
-            unsafe { LinuxSllHeaderSlice::from_slice_unchecked(&buffer) }.to_header()?,
+            unsafe { LinuxSllHeaderSlice::from_slice_unchecked(&buffer) }.to_header(),
         )
     }
 

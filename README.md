@@ -98,6 +98,7 @@ In case you want to parse cut off packets (e.g. packets returned in in ICMP mess
 It is also possible to only slice one packet layer:
 
 * [`Ethernet2Slice::from_slice_without_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_without_fcs) & [`Ethernet2Slice::from_slice_with_crc32_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_with_crc32_fcs)
+* [`LinuxSllSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllSlice.html#method.from_slice)
 * [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanSlice.html#method.from_slice) & [`DoubleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanSlice.html#method.from_slice)
 * [`IpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpSlice.html#method.from_slice) & [`LaxIpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.LaxIpSlice.html#method.from_slice)
 * [`Ipv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Slice.html#method.from_slice) & [`LaxIpv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv4Slice.html#method.from_slice)
