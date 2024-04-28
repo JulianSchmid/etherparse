@@ -516,7 +516,7 @@ mod test {
                 ether_type: 0.into(),
             };
             let test = TestPacket {
-                link: Some(eth.clone()),
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 vlan: None,
                 net: None,
                 transport: None,

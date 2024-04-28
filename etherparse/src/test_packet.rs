@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {
-    pub link: Option<Ethernet2Header>,
+    pub link: Option<LinkHeader>,
     pub vlan: Option<VlanHeader>,
     pub net: Option<NetHeaders>,
     pub transport: Option<TransportHeader>,
@@ -57,7 +57,10 @@ impl TestPacket {
                 }
             }
         } else if let Some(link) = &mut self.link {
-            link.ether_type = ether_type;
+            match link {
+                LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = ether_type,
+                LinkHeader::LinuxSll(linux_sll) => linux_sll.protocol_type.change_value(ether_type.0),
+            }
         }
     }
 

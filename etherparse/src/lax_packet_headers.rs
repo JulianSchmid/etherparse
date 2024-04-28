@@ -16,7 +16,7 @@ use crate::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaxPacketHeaders<'a> {
     /// Ethernet II header if present.
-    pub link: Option<Ethernet2Header>,
+    pub link: Option<LinkHeader>,
 
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
@@ -127,7 +127,7 @@ impl<'a> LaxPacketHeaders<'a> {
     pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxPacketHeaders<'a>, err::LenError> {
         let (ethernet, rest) = Ethernet2Header::from_slice(slice)?;
         let mut result = Self::from_ether_type(ethernet.ether_type, rest);
-        result.link = Some(ethernet);
+        result.link = Some(LinkHeader::Ethernet2(ethernet));
         if let Some((SliceError::Len(l), _)) = result.stop_err.as_mut() {
             l.layer_start_offset += Ethernet2Header::LEN;
         }
@@ -636,7 +636,7 @@ mod test {
                 ether_type: 0.into(),
             };
             let test = TestPacket {
-                link: Some(eth.clone()),
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 vlan: None,
                 net: None,
                 transport: None,

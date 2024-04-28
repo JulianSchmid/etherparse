@@ -41,6 +41,20 @@ impl LinuxSllProtocolType {
         ArpHardwareId::FRAD,
         ArpHardwareId::ETHER
     ];
+
+    pub fn change_value(&mut self, value: u16) {
+        *self = match *self {
+            LinuxSllProtocolType::Ignored(_) => LinuxSllProtocolType::Ignored(value),
+            LinuxSllProtocolType::NetlinkProtocolType(_) => LinuxSllProtocolType::NetlinkProtocolType(value),
+            LinuxSllProtocolType::GenericRoutingEncapsulationProtocolType(_) => LinuxSllProtocolType::GenericRoutingEncapsulationProtocolType(value),
+            LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType (_) => {
+                match LinuxNonstandardEtherType::try_from(value) {
+                    Ok(v) => LinuxSllProtocolType::LinuxNonstandardEtherType(v),
+                    Err(_) => LinuxSllProtocolType::EtherType(EtherType(value))
+                }
+            }
+        }
+    }
 }
 
 impl TryFrom<(ArpHardwareId, u16)> for LinuxSllProtocolType {

@@ -129,11 +129,11 @@ impl PacketBuilder {
     pub fn ethernet2(source: [u8; 6], destination: [u8; 6]) -> PacketBuilderStep<Ethernet2Header> {
         PacketBuilderStep {
             state: PacketImpl {
-                ethernet2_header: Some(Ethernet2Header {
+                link_header: Some(LinkHeader::Ethernet2(Ethernet2Header {
                     source,
                     destination,
                     ether_type: EtherType(0), //the type identifier
-                }),
+                })),
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
@@ -175,7 +175,7 @@ impl PacketBuilder {
     ) -> PacketBuilderStep<IpHeaders> {
         PacketBuilderStep {
             state: PacketImpl {
-                ethernet2_header: None,
+                link_header: None,
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
@@ -222,7 +222,7 @@ impl PacketBuilder {
     ) -> PacketBuilderStep<IpHeaders> {
         PacketBuilderStep {
             state: PacketImpl {
-                ethernet2_header: None,
+                link_header: None,
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
@@ -299,7 +299,7 @@ impl PacketBuilder {
     pub fn ip(ip_header: IpHeaders) -> PacketBuilderStep<IpHeaders> {
         PacketBuilderStep {
             state: PacketImpl {
-                ethernet2_header: None,
+                link_header: None,
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
@@ -311,7 +311,7 @@ impl PacketBuilder {
 }
 
 struct PacketImpl {
-    ethernet2_header: Option<Ethernet2Header>,
+    link_header: Option<LinkHeader>,
     ip_header: Option<IpHeaders>,
     vlan_header: Option<VlanHeader>,
     transport_header: Option<TransportHeader>,
@@ -1566,19 +1566,24 @@ fn final_write<T: io::Write + Sized, B>(
         }
     };
 
-    //ethernetII header
-    if let Some(mut eth) = builder.state.ethernet2_header {
-        eth.ether_type = {
-            use crate::VlanHeader::*;
-            //determine the ether type depending on if there is a vlan tagging header
-            match builder.state.vlan_header {
-                Some(Single(_)) => ether_type::VLAN_TAGGED_FRAME,
-                Some(Double(_)) => ether_type::PROVIDER_BRIDGING,
-                //if no vlan header exists, the id is purely defined by the ip type
-                None => ip_ether_type,
+    //link header
+    if let Some(link) = builder.state.link_header {
+        match link {
+            LinkHeader::Ethernet2(mut eth) => {
+                eth.ether_type = {
+                    use crate::VlanHeader::*;
+                    //determine the ether type depending on if there is a vlan tagging header
+                    match builder.state.vlan_header {
+                        Some(Single(_)) => ether_type::VLAN_TAGGED_FRAME,
+                        Some(Double(_)) => ether_type::PROVIDER_BRIDGING,
+                        //if no vlan header exists, the id is purely defined by the ip type
+                        None => ip_ether_type,
+                    }
+                };
+                eth.write(writer).map_err(Io)?;
             }
-        };
-        eth.write(writer).map_err(Io)?;
+            LinkHeader::LinuxSll(mut linux_sll) => todo!()
+        }
     }
 
     //write the vlan header if it exists
@@ -1737,8 +1742,8 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     use crate::IpHeaders::*;
     use crate::TransportHeader::*;
     use crate::VlanHeader::*;
-    (match builder.state.ethernet2_header {
-        Some(_) => Ethernet2Header::LEN,
+    (match builder.state.link_header {
+        Some(ref header) => header.header_len(),
         None => 0,
     }) + match builder.state.vlan_header {
         Some(Single(_)) => SingleVlanHeader::LEN,
@@ -1769,7 +1774,7 @@ mod white_box_tests {
             0,
             PacketBuilderStep::<UdpHeader> {
                 state: PacketImpl {
-                    ethernet2_header: None,
+                    link_header: None,
                     ip_header: None,
                     vlan_header: None,
                     transport_header: None
@@ -1787,7 +1792,7 @@ mod white_box_tests {
         final_write(
             PacketBuilderStep::<UdpHeader> {
                 state: PacketImpl {
-                    ethernet2_header: None,
+                    link_header: None,
                     ip_header: None,
                     vlan_header: None,
                     transport_header: None,
@@ -2984,11 +2989,11 @@ mod test {
 
                 // check the packets could be decoded
                 assert_eq!(
-                    Some(Ethernet2Header{
+                    Some(LinkHeader::Ethernet2(Ethernet2Header{
                         source: [1,2,3,4,5,6],
                         destination: [7,8,9,10,11,12],
                         ether_type: ether_type::IPV4
-                    }),
+                    })),
                     actual.link
                 );
                 assert_eq!(
@@ -3203,11 +3208,11 @@ mod test {
 
                 // check the packets could be decoded
                 assert_eq!(
-                    Some(Ethernet2Header{
+                    Some(LinkHeader::Ethernet2(Ethernet2Header{
                         source: [1,2,3,4,5,6],
                         destination: [7,8,9,10,11,12],
                         ether_type: ether_type::IPV6
-                    }),
+                    })),
                     actual.link
                 );
                 assert_eq!(
@@ -3330,11 +3335,11 @@ mod test {
 
                 // check the packets could be decoded
                 assert_eq!(
-                    Some(Ethernet2Header{
+                    Some(LinkHeader::Ethernet2(Ethernet2Header{
                         source: [1,2,3,4,5,6],
                         destination: [7,8,9,10,11,12],
                         ether_type: ether_type::IPV6
-                    }),
+                    })),
                     actual.link
                 );
                 assert_eq!(

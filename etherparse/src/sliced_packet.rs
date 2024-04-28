@@ -519,7 +519,7 @@ mod test {
                 ether_type: 0.into(),
             };
             let test = TestPacket {
-                link: Some(eth.clone()),
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 vlan: None,
                 net: None,
                 transport: None,
@@ -1203,7 +1203,7 @@ mod test {
                 test.link,
                 match result.link.as_ref() {
                     Some(s) => match s {
-                        LinkSlice::Ethernet2(e) => Some(e.to_header()),
+                        LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
                         LinkSlice::EtherPayload(_) => None,
                     },
                     None => None,

@@ -13,10 +13,10 @@ pub enum LinkSlice<'a> {
 impl<'a> LinkSlice<'a> {
     /// Convert the link slice to a header (currently just the
     /// ethernet2 header as this is the only value it can take).
-    pub fn to_header(&self) -> Option<Ethernet2Header> {
+    pub fn to_header(&self) -> Option<LinkHeader> {
         use LinkSlice::*;
         match self {
-            Ethernet2(slice) => Some(slice.to_header()),
+            Ethernet2(slice) => Some(LinkHeader::Ethernet2(slice.to_header())),
             EtherPayload(_) => None,
         }
     }
@@ -68,7 +68,7 @@ mod test {
                 );
                 assert_eq!(
                     slice.to_header(),
-                    Some(eth.clone())
+                    Some(LinkHeader::Ethernet2(eth.clone()))
                 );
             }
             {
