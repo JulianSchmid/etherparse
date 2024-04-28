@@ -44,8 +44,16 @@ fn main() {
                     value.source(),
                     value.destination()
                 ),
+                Some(LinuxSll(value)) => println!(
+                    "  LinuxSll (packet type: {:?}, source address: {:?})",
+                    value.packet_type(),
+                    value.sender_address(),
+                ),
                 Some(EtherPayload(payload)) => {
                     println!("  EtherPayload (ether type {:?})", payload.ether_type)
+                }
+                Some(LinuxSllPayload(payload)) => {
+                    println!("  LinuxSllPayload (protocol type {:?})", payload.protocol_type)
                 }
                 None => {}
             }

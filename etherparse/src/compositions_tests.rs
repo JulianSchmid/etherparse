@@ -291,7 +291,9 @@ impl ComponentTest {
             match result.link.as_ref() {
                 Some(l) => match l {
                     LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
+                    LinkSlice::LinuxSll(e) => Some(LinkHeader::LinuxSll(e.to_header())),
                     LinkSlice::EtherPayload(_) => None,
+                    LinkSlice::LinuxSllPayload(_) => None,
                 },
                 None => None,
             }

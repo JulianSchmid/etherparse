@@ -16,7 +16,7 @@
 /// assert_eq!(0x0001, num);
 /// ```
 #[derive(Clone, Copy, Eq, PartialEq)]
-pub struct LinuxNonstandardEtherType(u16);
+pub struct LinuxNonstandardEtherType(pub(crate) u16);
 
 impl LinuxNonstandardEtherType {
     // Numbers sourced from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_ether.h?id=e33c4963bf536900f917fb65a687724d5539bc21

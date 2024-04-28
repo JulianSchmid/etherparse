@@ -1,5 +1,4 @@
-use crate::LinuxSllProtocolType;
-
+use crate::{EtherPayloadSlice, EtherType, LinuxSllProtocolType};
 
 /// Payload of Linux Cooked Capture v1 (SLL) packet
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -11,6 +10,36 @@ pub struct LinuxSllPayloadSlice<'a> {
     pub payload: &'a [u8],
 }
 
+impl<'a> From<EtherPayloadSlice<'a>> for LinuxSllPayloadSlice<'a> {
+    fn from(value: EtherPayloadSlice<'a>) -> LinuxSllPayloadSlice<'a> {
+        LinuxSllPayloadSlice {
+            protocol_type: LinuxSllProtocolType::EtherType(value.ether_type),
+            payload: value.payload
+        }
+    }
+}
+
+impl<'a> TryFrom<LinuxSllPayloadSlice<'a>> for EtherPayloadSlice<'a> {
+    type Error = ();
+
+    fn try_from(value: LinuxSllPayloadSlice<'a>) -> Result<EtherPayloadSlice<'a>, Self::Error> {
+        match value.protocol_type {
+            LinuxSllProtocolType::LinuxNonstandardEtherType(nonstandard_ether_type) => {
+                Ok(EtherPayloadSlice {
+                    ether_type: EtherType(nonstandard_ether_type.into()),
+                    payload: value.payload
+                })
+            },
+            LinuxSllProtocolType::EtherType(ether_type) => {
+                Ok(EtherPayloadSlice {
+                    ether_type,
+                    payload: value.payload
+                })
+            },
+            _ => Err(())
+        }
+    }
+}
 
 #[cfg(test)]
 mod test {

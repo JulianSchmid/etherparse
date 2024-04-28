@@ -228,7 +228,19 @@ impl<'a> SlicedPacket<'a> {
             use LinkSlice::*;
             match link {
                 Ethernet2(eth) => Some(eth.ether_type()),
+                LinkSlice::LinuxSll(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => {
+                        Some(EtherType(v))
+                    }
+                    _ => None
+                }
                 EtherPayload(e) => Some(e.ether_type),
+                LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
+                    LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => {
+                        Some(EtherType(v))
+                    }
+                    _ => None
+                }
             }
         } else {
             None
@@ -246,10 +258,18 @@ impl<'a> SlicedPacket<'a> {
                 VlanSlice::SingleVlan(s) => Some(s.payload()),
                 VlanSlice::DoubleVlan(s) => Some(s.payload()),
             }
-        } else if let Some(eth) = self.link.as_ref() {
-            match eth {
+        } else if let Some(link) = self.link.as_ref() {
+            match link {
                 LinkSlice::Ethernet2(e) => Some(e.payload()),
+                LinkSlice::LinuxSll(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.payload()).ok()?),
+                    _ => None
+                }
                 LinkSlice::EtherPayload(e) => Some(e.clone()),
+                LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
+                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.clone()).ok()?),
+                    _ => None
+                }
             }
         } else {
             None
@@ -1204,7 +1224,9 @@ mod test {
                 match result.link.as_ref() {
                     Some(s) => match s {
                         LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
+                        LinkSlice::LinuxSll(e) => Some(LinkHeader::LinuxSll(e.to_header())),
                         LinkSlice::EtherPayload(_) => None,
+                        LinkSlice::LinuxSllPayload(_) => None,
                     },
                     None => None,
                 }
