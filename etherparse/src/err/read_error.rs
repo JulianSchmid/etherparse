@@ -418,6 +418,7 @@ impl From<packet::SliceError> for ReadError {
         use packet::SliceError::*;
         match value {
             Len(err) => ReadError::Len(err),
+            LinuxSll(err) => ReadError::LinuxSll(err),
             Ip(err) => ReadError::Ip(err),
             Ipv4(err) => ReadError::Ipv4(err),
             Ipv6(err) => ReadError::Ipv6(err),
@@ -460,7 +461,7 @@ impl From<tcp::HeaderSliceError> for ReadError {
 
 #[cfg(test)]
 mod tests {
-    use crate::EtherType;
+    use crate::{ArpHardwareId, EtherType};
     use crate::{
         err::{ReadError::*, *},
         LenSource,
@@ -470,7 +471,7 @@ mod tests {
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, ReadError); 9] = [
+        let test_values: [(&str, ReadError); 10] = [
             (
                 "Len",
                 Len(LenError {
@@ -480,6 +481,10 @@ mod tests {
                     layer: Layer::Icmpv4,
                     layer_start_offset: 0,
                 }),
+            ),
+            (
+                "LinuxSll",
+                LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER })
             ),
             (
                 "DoubleVlan",
@@ -534,7 +539,7 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [ReadError; 9] = [
+        let test_values: [ReadError; 10] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
@@ -542,6 +547,7 @@ mod tests {
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
+            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
@@ -596,6 +602,10 @@ mod tests {
         // len
         assert_eq!(Len(len_error()).len(), Some(&len_error()));
         assert_eq!(Ipv4(ipv4_error()).len(), None);
+
+        // linux sll
+        assert_eq!(LinuxSll(linux_sll_error()).linux_sll(), Some(&linux_sll_error()));
+        assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
 
         // double_vlan
         assert_eq!(
@@ -656,6 +666,46 @@ mod tests {
         // io & len
         assert!(ReadError::from(io_error()).io().is_some());
         assert_eq!(&len_error(), ReadError::from(len_error()).len().unwrap());
+
+        // linux sll
+        {
+            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { 
+                arp_hardware_type: ArpHardwareId::ETHER 
+            };
+            assert_eq!(
+                &header_error(),
+                ReadError::from(header_error()).linux_sll().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderReadError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert!(
+                ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
+                    .io()
+                    .is_some()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+        }
 
         // double vlan errors
         {

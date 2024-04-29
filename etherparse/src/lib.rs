@@ -65,6 +65,7 @@
 //! Depending from which point downward you want to slice a package check out the functions:
 //!
 //! * [`SlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
+//! * [`SlicedPacket::from_linux_sll`] for parsing from a Linux Cooked Capture v1 (SLL) downwards
 //! * [`SlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
 //! * [`SlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
 //!

@@ -9,6 +9,9 @@ pub enum FromSliceError {
     /// not enough data being available).
     Len(LenError),
 
+    /// Error when decoding an Linux SLL header.
+    LinuxSll(linux_sll::HeaderError),
+
     /// Error while parsing a double vlan header.
     DoubleVlan(double_vlan::HeaderError),
 
@@ -35,6 +38,12 @@ impl FromSliceError {
     pub fn len(&self) -> Option<&LenError> {
         match self {
             FromSliceError::Len(err) => Some(err),
+            _ => None,
+        }
+    }
+    pub fn linux_sll(&self) -> Option<&linux_sll::HeaderError> {
+        match self {
+            FromSliceError::LinuxSll(err) => Some(err),
             _ => None,
         }
     }
@@ -87,6 +96,7 @@ impl core::fmt::Display for FromSliceError {
         use FromSliceError::*;
         match self {
             Len(err) => err.fmt(f),
+            LinuxSll(err) => err.fmt(f), 
             DoubleVlan(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
@@ -104,6 +114,7 @@ impl std::error::Error for FromSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             FromSliceError::Len(err) => Some(err),
+            FromSliceError::LinuxSll(err) => Some(err),
             FromSliceError::DoubleVlan(err) => Some(err),
             FromSliceError::Ip(err) => Some(err),
             FromSliceError::IpAuth(err) => Some(err),
@@ -122,6 +133,25 @@ impl From<LenError> for FromSliceError {
         FromSliceError::Len(value)
     }
 }
+
+// linux sll conversions
+
+impl From<linux_sll::HeaderError> for FromSliceError {
+    fn from(value: linux_sll::HeaderError) -> Self {
+        FromSliceError::LinuxSll(value)
+    }
+}
+
+impl From<linux_sll::HeaderSliceError> for FromSliceError {
+    fn from(value: linux_sll::HeaderSliceError) -> Self {
+        use linux_sll::HeaderSliceError::*;
+        match value {
+            Len(err) => FromSliceError::Len(err),
+            Content(err) => FromSliceError::LinuxSll(err),
+        }
+    }
+}
+
 
 // double vlan error conversions
 
@@ -280,6 +310,7 @@ impl From<packet::SliceError> for FromSliceError {
         use packet::SliceError::*;
         match value {
             Len(err) => FromSliceError::Len(err),
+            LinuxSll(err) => FromSliceError::LinuxSll(err),
             Ip(err) => FromSliceError::Ip(err),
             Ipv4(err) => FromSliceError::Ipv4(err),
             Ipv6(err) => FromSliceError::Ipv6(err),
@@ -310,7 +341,7 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{EtherType, LenSource};
+    use crate::{ArpHardwareId, EtherType, LenSource};
 
     use super::{FromSliceError::*, *};
     use core::hash::{Hash, Hasher};
@@ -395,7 +426,7 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [FromSliceError; 8] = [
+        let test_values: [FromSliceError; 9] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
@@ -403,6 +434,7 @@ mod tests {
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
+            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER  }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
@@ -431,6 +463,7 @@ mod tests {
             layer: Layer::Icmpv4,
             layer_start_offset: 0,
         };
+        let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER };
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
         };
@@ -444,6 +477,10 @@ mod tests {
         // len
         assert_eq!(Len(len_error()).len(), Some(&len_error()));
         assert_eq!(Ipv4(ipv4_error()).len(), None);
+
+        // linux_sll
+        assert_eq!(LinuxSll(linux_sll_error()).linux_sll(), Some(&linux_sll_error())); 
+        assert_eq!(Ipv4(ipv4_error()).linux_sll(), None); 
 
         // double_vlan
         assert_eq!(
@@ -497,6 +534,33 @@ mod tests {
             &len_error(),
             FromSliceError::from(len_error()).len().unwrap()
         );
+
+        // linux sll
+        {
+            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER };
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(header_error()).linux_sll().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                FromSliceError::from(linux_sll::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                FromSliceError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+        }
 
         // double vlan errors
         {

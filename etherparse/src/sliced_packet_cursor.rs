@@ -55,6 +55,30 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
+    pub fn slice_linux_sll(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
+
+        let result = LinuxSllSlice::from_slice(self.slice)
+            .map_err(|err| match err {
+                err::linux_sll::HeaderSliceError::Len(len) => Len(len.add_offset(self.offset)),
+                err::linux_sll::HeaderSliceError::Content(content) => err::packet::SliceError::LinuxSll(content),
+            })?;
+
+        //cache the protocol type for later
+        let protocol_type = result.protocol_type();
+
+        //set the new data
+        self.move_by(result.header_len());
+        self.result.link = Some(LinkSlice::LinuxSll(result));
+
+        //continue parsing (if required)
+        match protocol_type {
+            LinuxSllProtocolType::EtherType(EtherType::IPV4) => self.slice_ipv4(),
+            LinuxSllProtocolType::EtherType(EtherType::IPV6) => self.slice_ipv6(),
+            _ => Ok(self.result),
+        }
+    }
+
     pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         use err::packet::SliceError::*;
         use ether_type::*;

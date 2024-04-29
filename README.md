@@ -57,6 +57,7 @@ This is the faster option if your code is not interested in all fields of all th
 Depending from which point downward you want to slice a package check out the functions:
 
 * [`SlicedPacket::from_ethernet`](https://docs.rs/etherparse/~0/etherparse/struct.SlicedPacket.html#method.from_ethernet) for parsing from an Ethernet II header downwards
+* [`SlicedPacket::from_linux_sll`](https://docs.rs/etherparse/~0/etherparse/struct.SlicedPacket.html#method.from_linux_sll) for parsing from a Linux Cooked Capture v1 (SLL) downwards
 * [`SlicedPacket::from_ether_type`](https://docs.rs/etherparse/~0/etherparse/struct.SlicedPacket.html#method.from_ether_type) for parsing a slice starting after an Ethernet II header
 * [`SlicedPacket::from_ip`](https://docs.rs/etherparse/~0/etherparse/struct.SlicedPacket.html#method.from_ip) for parsing from an IPv4 or IPv6 downwards
 
