@@ -163,14 +163,14 @@ mod test {
             // call with not enough data in the slice
             for len in 0..=13 {
                 assert_eq!(
-                    LinuxSllHeader::from_slice(&buffer[..len]).unwrap_err().len().unwrap().to_owned(),
-                    err::LenError{
+                    LinuxSllHeader::from_slice(&buffer[..len]).unwrap_err(),
+                    err::linux_sll::HeaderSliceError::Len(err::LenError{
                         required_len: LinuxSllHeader::LEN,
                         len: len,
                         len_source: LenSource::Slice,
                         layer: err::Layer::LinuxSllHeader,
                         layer_start_offset: 0,
-                    }
+                    })
                 );
             }
         }
