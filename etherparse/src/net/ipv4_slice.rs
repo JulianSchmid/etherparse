@@ -154,7 +154,7 @@ impl<'a> Ipv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{ip_number, test_gens::*, Ipv4Header};
+    use crate::test_gens::*;
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 

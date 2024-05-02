@@ -54,7 +54,6 @@ impl std::error::Error for SliceWriteSpaceError {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::Layer;
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

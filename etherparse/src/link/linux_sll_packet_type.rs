@@ -90,9 +90,7 @@ impl core::fmt::Debug for LinuxSllPacketType {
 #[cfg(test)]
 mod test {
     use alloc::format;
-
     use super::*;
-    use crate::err::{self};
 
     #[test]
     fn to_u16() {

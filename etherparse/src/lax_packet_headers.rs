@@ -569,7 +569,6 @@ impl<'a> LaxPacketHeaders<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{packet::SliceError, Layer, LenError};
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [

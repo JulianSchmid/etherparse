@@ -138,7 +138,7 @@ impl LinuxSllHeader {
 mod test {
     use super::*;
     use crate::{test_gens::*, LenSource};
-    use alloc::{borrow::ToOwned, format, vec::Vec};
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::{Cursor, ErrorKind};
 

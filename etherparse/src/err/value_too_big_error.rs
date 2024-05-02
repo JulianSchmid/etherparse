@@ -45,7 +45,7 @@ mod test {
         collections::hash_map::DefaultHasher,
         error::Error,
         format,
-        hash::{Hash, Hasher},
+        hash::Hasher,
     };
 
     #[test]

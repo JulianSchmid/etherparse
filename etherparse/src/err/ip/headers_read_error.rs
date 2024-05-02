@@ -85,7 +85,7 @@ impl std::error::Error for HeaderReadError {
 mod test {
     use super::{super::HeaderError::*, super::HeadersError::*, HeaderReadError::*, *};
     use crate::{
-        err::{Layer, LenError},
+        err::Layer,
         LenSource,
     };
     use alloc::format;

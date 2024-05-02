@@ -68,7 +68,7 @@ impl std::error::Error for HeaderSliceError {
 mod tests {
     use super::{HeaderSliceError::*, *};
     use crate::{
-        err::{Layer, LenError},
+        err::Layer,
         LenSource,
     };
     use alloc::format;

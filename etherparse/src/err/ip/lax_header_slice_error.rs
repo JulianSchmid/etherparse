@@ -50,7 +50,7 @@ impl std::error::Error for LaxHeaderSliceError {
 mod tests {
     use super::{super::HeaderError::*, LaxHeaderSliceError::*, *};
     use crate::{
-        err::{Layer, LenError},
+        err::Layer,
         LenSource,
     };
     use alloc::format;

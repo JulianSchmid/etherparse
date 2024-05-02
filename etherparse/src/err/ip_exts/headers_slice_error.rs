@@ -58,7 +58,7 @@ impl std::error::Error for HeadersSliceError {
 mod tests {
     use super::{HeadersSliceError::*, *};
     use crate::{
-        err::{ipv6_exts::HeaderError::*, Layer, LenError},
+        err::{ipv6_exts::HeaderError::*, Layer},
         LenSource,
     };
     use alloc::format;

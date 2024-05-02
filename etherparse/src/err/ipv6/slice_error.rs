@@ -41,7 +41,7 @@ impl std::error::Error for SliceError {
 mod tests {
     use super::{super::HeaderError, SliceError::*, *};
     use crate::{
-        err::{ip_auth, Layer, LenError},
+        err::{ip_auth, Layer},
         LenSource,
     };
     use alloc::format;

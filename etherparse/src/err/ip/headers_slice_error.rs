@@ -54,7 +54,7 @@ mod tests {
         *,
     };
     use crate::{
-        err::{Layer, LenError},
+        err::Layer,
         LenSource,
     };
     use alloc::format;

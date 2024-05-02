@@ -60,7 +60,7 @@ impl std::error::Error for SliceError {
 #[cfg(test)]
 mod tests {
     use super::{SliceError::*, *};
-    use crate::{err::Layer, LenSource};
+    use crate::err::Layer;
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

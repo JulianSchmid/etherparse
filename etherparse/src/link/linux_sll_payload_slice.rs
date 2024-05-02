@@ -43,8 +43,6 @@ impl<'a> TryFrom<LinuxSllPayloadSlice<'a>> for EtherPayloadSlice<'a> {
 
 #[cfg(test)]
 mod test {
-    use crate::EtherType;
-
     use super::*;
     use alloc::format;
 
