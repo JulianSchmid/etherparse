@@ -33,14 +33,12 @@ impl LinuxSllHeader {
 
     /// Read an SLL header from a static sized byte array.
     #[inline]
-    pub fn from_bytes(bytes: [u8; 16]) -> Result<LinuxSllHeader, err::ReadError> {
-        use err::linux_sll::HeaderSliceError::Content;
-        
-        let packet_type = LinuxSllPacketType::try_from(u16::from_be_bytes([bytes[0], bytes[1]])).map_err(Content)?;
+    pub fn from_bytes(bytes: [u8; 16]) -> Result<LinuxSllHeader, err::linux_sll::HeaderError> {
+        let packet_type = LinuxSllPacketType::try_from(u16::from_be_bytes([bytes[0], bytes[1]]))?;
         let arp_hrd_type = ArpHardwareId::from(u16::from_be_bytes([bytes[2], bytes[3]]));
         let sender_address_valid_length = u16::from_be_bytes([bytes[4], bytes[5]]);
         let sender_address = [bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13]];
-        let protocol_type = LinuxSllProtocolType::try_from((arp_hrd_type, u16::from_be_bytes([bytes[14], bytes[15]]))).map_err(Content)?;
+        let protocol_type = LinuxSllProtocolType::try_from((arp_hrd_type, u16::from_be_bytes([bytes[14], bytes[15]])))?;
 
         Ok(LinuxSllHeader {
             packet_type,
