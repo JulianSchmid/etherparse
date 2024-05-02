@@ -15,7 +15,7 @@ use super::*;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PacketHeaders<'a> {
     /// Ethernet II header if present.
-    pub link: Option<Ethernet2Header>,
+    pub link: Option<LinkHeader>,
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
     /// IPv4 or IPv6 header and IP extension headers if present.
@@ -76,7 +76,7 @@ impl<'a> PacketHeaders<'a> {
 
         match &mut result {
             // inject ethernet header into the result
-            Ok(result) => result.link = Some(ethernet),
+            Ok(result) => result.link = Some(LinkHeader::Ethernet2(ethernet)),
             // add the ethernet header to the overall offset in case there is a length error
             Err(Len(err)) => err.layer_start_offset += Ethernet2Header::LEN,
             _ => {}
@@ -419,7 +419,7 @@ fn read_transport(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{packet::SliceError, LenError};
+    use crate::err::packet::SliceError;
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
@@ -487,7 +487,7 @@ mod test {
                 ether_type: 0.into(),
             };
             let test = TestPacket {
-                link: Some(eth.clone()),
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 vlan: None,
                 net: None,
                 transport: None,

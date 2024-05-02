@@ -65,6 +65,7 @@
 //! Depending from which point downward you want to slice a package check out the functions:
 //!
 //! * [`SlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
+//! * [`SlicedPacket::from_linux_sll`] for parsing from a Linux Cooked Capture v1 (SLL) downwards
 //! * [`SlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
 //! * [`SlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
 //!
@@ -122,6 +123,7 @@
 //! It is also possible to only slice one packet layer:
 //!
 //! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
+//! * [`LinuxSllSlice::from_slice`]
 //! * [`SingleVlanSlice::from_slice`] & [`DoubleVlanSlice::from_slice`]
 //! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
 //! * [`Ipv4Slice::from_slice`] & [`LaxIpv4Slice::from_slice`]
@@ -142,6 +144,7 @@
 //! following \[NAME\]HeaderSlice.from_slice methods, if you want to just slice the header:
 //!
 //! * [`Ethernet2HeaderSlice::from_slice`]
+//! * [`LinuxSllHeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
 //! * [`DoubleVlanHeaderSlice::from_slice`]
 //! * [`Ipv4HeaderSlice::from_slice`]
@@ -157,6 +160,7 @@
 //! And for deserialization into the corresponding header structs have a look at:
 //!
 //! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
+//! * [`LinuxSllHeader::read`] & [`LinuxSllHeader::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
 //! * [`DoubleVlanHeader::read`] & [`DoubleVlanHeader::from_slice`]
 //! * [`IpHeaders::read`] & [`IpHeaders::from_slice`]
@@ -220,6 +224,7 @@
 //! Read the documentations of the different methods for a more details:
 //!
 //! * [`Ethernet2Header::to_bytes`] & [`Ethernet2Header::write`]
+//! * [`LinuxSllHeader::to_bytes`] & [`LinuxSllHeader::write`]
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
 //! * [`DoubleVlanHeader::to_bytes`] & [`DoubleVlanHeader::write`]
 //! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]
@@ -260,6 +265,11 @@
 //! * [Internet Control Message Protocol version 6 (ICMPv6) Parameters](https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml)
 //! * Multicast Listener Discovery (MLD) for IPv6 [RFC 2710](https://datatracker.ietf.org/doc/html/rfc2710)
 //! * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
+//! * [LINKTYPE_LINUX_SLL](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html) on tcpdump
+//! * LINUX_SLL [header definition](https://github.com/the-tcpdump-group/libpcap/blob/a932566fa1f6df16176ac702b1762ea1cd9ed9a3/pcap/sll.h) on libpcap
+//! * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
+//! * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
+//! * [Arp hardware identifiers definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
 
 // # Reason for 'bool_comparison' disable:
 //
@@ -293,6 +303,7 @@ extern crate std;
 pub mod err;
 
 mod link;
+pub use crate::link::arp_hardware_id::*;
 pub use crate::link::double_vlan_header::*;
 pub use crate::link::double_vlan_header_slice::*;
 pub use crate::link::double_vlan_slice::*;
@@ -301,7 +312,15 @@ pub use crate::link::ether_type_impl::*;
 pub use crate::link::ethernet2_header::*;
 pub use crate::link::ethernet2_header_slice::*;
 pub use crate::link::ethernet2_slice::*;
+pub use crate::link::link_header::*;
 pub use crate::link::link_slice::*;
+pub use crate::link::linux_nonstandard_ether_type::*;
+pub use crate::link::linux_sll_header::*;
+pub use crate::link::linux_sll_header_slice::*;
+pub use crate::link::linux_sll_packet_type::*;
+pub use crate::link::linux_sll_payload_slice::*;
+pub use crate::link::linux_sll_protocol_type::*;
+pub use crate::link::linux_sll_slice::*;
 pub use crate::link::single_vlan_header::*;
 pub use crate::link::single_vlan_header_slice::*;
 pub use crate::link::single_vlan_slice::*;

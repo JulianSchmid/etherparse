@@ -19,7 +19,7 @@ mod test {
     use super::LenSource::*;
     use alloc::format;
     use std::{
-        cmp::{Ord, Ordering},
+        cmp::Ordering,
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
     };

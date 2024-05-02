@@ -37,6 +37,8 @@ pub enum ValueType {
     TcpPayloadLengthIpv6,
     /// Variable length data of an ICMPv6 packet.
     Icmpv6PayloadLength,
+    /// Packet type of a Linux Cooked Capture v1 (SLL)
+    LinuxSllType,
 }
 
 impl core::fmt::Display for ValueType {
@@ -56,6 +58,7 @@ impl core::fmt::Display for ValueType {
             TcpPayloadLengthIpv4 => write!(f, "TCP Payload Length (in IPv4 checksum calculation)"),
             TcpPayloadLengthIpv6 => write!(f, "TCP Payload Length (in IPv6 checksum calculation)"),
             Icmpv6PayloadLength => write!(f, "ICMPv6 Payload Length"),
+            LinuxSllType => write!(f, "Linux Cooked Capture v1 (SLL)"),
         }
     }
 }

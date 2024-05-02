@@ -49,10 +49,7 @@ impl std::error::Error for HeaderSliceError {
 #[cfg(test)]
 mod tests {
     use super::{HeaderSliceError::*, *};
-    use crate::{
-        err::{Layer, LenError},
-        LenSource,
-    };
+    use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

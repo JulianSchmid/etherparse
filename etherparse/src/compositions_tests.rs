@@ -6,7 +6,7 @@ use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ComponentTest {
-    link: Option<Ethernet2Header>,
+    link: Option<LinkHeader>,
     vlan: Option<VlanHeader>,
     ip: Option<IpHeaders>,
     transport: Option<TransportHeader>,
@@ -142,26 +142,32 @@ impl ComponentTest {
 
             // PacketHeaders::from_ether_type
             ether_down.assert_headers(
-                PacketHeaders::from_ether_type(test.link.as_ref().unwrap().ether_type, &buffer[..])
-                    .unwrap(),
+                PacketHeaders::from_ether_type(
+                    test.link.clone().unwrap().ethernet2().unwrap().ether_type,
+                    &buffer[..],
+                )
+                .unwrap(),
             );
 
             // SlicedPacket::from_ether_type
             ether_down.assert_sliced_packet(
-                SlicedPacket::from_ether_type(test.link.as_ref().unwrap().ether_type, &buffer[..])
-                    .unwrap(),
+                SlicedPacket::from_ether_type(
+                    test.link.clone().unwrap().ethernet2().unwrap().ether_type,
+                    &buffer[..],
+                )
+                .unwrap(),
             );
 
             // create unexpected end of slice errors for the different headers
             for len in ether_down.invalid_ser_lengths() {
                 if let Some(len) = len {
                     assert!(PacketHeaders::from_ether_type(
-                        test.link.as_ref().unwrap().ether_type,
+                        test.link.clone().unwrap().ethernet2().unwrap().ether_type,
                         &buffer[..len]
                     )
                     .is_err());
                     assert!(SlicedPacket::from_ether_type(
-                        test.link.as_ref().unwrap().ether_type,
+                        test.link.clone().unwrap().ethernet2().unwrap().ether_type,
                         &buffer[..len]
                     )
                     .is_err());
@@ -290,8 +296,10 @@ impl ComponentTest {
             self.link,
             match result.link.as_ref() {
                 Some(l) => match l {
-                    LinkSlice::Ethernet2(e) => Some(e.to_header()),
+                    LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
+                    LinkSlice::LinuxSll(e) => Some(LinkHeader::LinuxSll(e.to_header())),
                     LinkSlice::EtherPayload(_) => None,
+                    LinkSlice::LinuxSllPayload(_) => None,
                 },
                 None => None,
             }
@@ -608,7 +616,7 @@ proptest! {
                 link: Some({
                     let mut result = eth.clone();
                     result.ether_type = ether_type;
-                    result
+                    LinkHeader::Ethernet2(result)
                 }),
                 vlan: None,
                 ip: None,
@@ -639,11 +647,11 @@ fn test_packet_slicing_panics() {
         transport: None,
     };
     ComponentTest {
-        link: Some(Ethernet2Header {
+        link: Some(LinkHeader::Ethernet2(Ethernet2Header {
             source: [0; 6],
             destination: [0; 6],
             ether_type: 0.into(),
-        }),
+        })),
         vlan: None,
         ip: None,
         transport: None,

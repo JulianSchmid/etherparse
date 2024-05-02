@@ -1,22 +1,22 @@
-use super::HeadersError;
+use super::HeaderError;
 use crate::err::LenError;
 
-/// Error when decoding an IP header from a slice.
+/// Error when decoding Linux Cooked Capture v1 (SLL) header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-pub enum HeadersSliceError {
+pub enum HeaderSliceError {
     /// Error when an length error is encountered (e.g. unexpected
     /// end of slice).
     Len(LenError),
 
     /// Error caused by the contents of the header.
-    Content(HeadersError),
+    Content(HeaderError),
 }
 
-impl HeadersSliceError {
+impl HeaderSliceError {
     /// Adds an offset value to all slice length related fields.
     #[inline]
     pub const fn add_slice_offset(self, offset: usize) -> Self {
-        use HeadersSliceError::*;
+        use HeaderSliceError::*;
         match self {
             Len(err) => Len(err.add_offset(offset)),
             Content(err) => Content(err),
@@ -24,9 +24,9 @@ impl HeadersSliceError {
     }
 }
 
-impl core::fmt::Display for HeadersSliceError {
+impl core::fmt::Display for HeaderSliceError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        use HeadersSliceError::*;
+        use HeaderSliceError::*;
         match self {
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
@@ -36,9 +36,9 @@ impl core::fmt::Display for HeadersSliceError {
 
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for HeadersSliceError {
+impl std::error::Error for HeaderSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        use HeadersSliceError::*;
+        use HeaderSliceError::*;
         match self {
             Len(err) => Some(err),
             Content(err) => Some(err),
@@ -48,11 +48,7 @@ impl std::error::Error for HeadersSliceError {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        super::{HeaderError::*, HeadersError::*},
-        HeadersSliceError::*,
-        *,
-    };
+    use super::{HeaderSliceError::*, *};
     use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
@@ -63,11 +59,10 @@ mod tests {
 
     #[test]
     fn add_slice_offset() {
-        use HeadersSliceError::*;
         assert_eq!(
             Len(LenError {
                 required_len: 1,
-                layer: Layer::Icmpv4,
+                layer: Layer::LinuxSllHeader,
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 3
@@ -75,21 +70,22 @@ mod tests {
             .add_slice_offset(200),
             Len(LenError {
                 required_len: 1,
-                layer: Layer::Icmpv4,
+                layer: Layer::LinuxSllHeader,
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 203
             })
         );
         assert_eq!(
-            Content(Ip(UnsupportedIpVersion { version_number: 1 })).add_slice_offset(200),
-            Content(Ip(UnsupportedIpVersion { version_number: 1 }))
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
+                .add_slice_offset(200),
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
         );
     }
 
     #[test]
     fn debug() {
-        let err = Ip(UnsupportedIpVersion { version_number: 6 });
+        let err = HeaderError::UnsupportedPacketTypeField { packet_type: 0 };
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -98,7 +94,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(Ip(UnsupportedIpVersion { version_number: 6 }));
+        let err = Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 });
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -118,7 +114,7 @@ mod tests {
         {
             let err = LenError {
                 required_len: 1,
-                layer: Layer::Icmpv4,
+                layer: Layer::LinuxSllHeader,
                 len: 2,
                 len_source: LenSource::Slice,
                 layer_start_offset: 3,
@@ -126,7 +122,7 @@ mod tests {
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
         {
-            let err = Ip(UnsupportedIpVersion { version_number: 6 });
+            let err = HeaderError::UnsupportedPacketTypeField { packet_type: 0 };
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -136,15 +132,17 @@ mod tests {
     fn source() {
         assert!(Len(LenError {
             required_len: 1,
-            layer: Layer::Icmpv4,
+            layer: Layer::LinuxSllHeader,
             len: 2,
             len_source: LenSource::Slice,
             layer_start_offset: 3
         })
         .source()
         .is_some());
-        assert!(Content(Ip(UnsupportedIpVersion { version_number: 6 }))
-            .source()
-            .is_some());
+        assert!(
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
+                .source()
+                .is_some()
+        );
     }
 }

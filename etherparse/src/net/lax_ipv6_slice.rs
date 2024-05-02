@@ -184,7 +184,6 @@ mod test {
         err::{Layer, LenError},
         ip_number::{AUTH, IGMP, UDP},
         test_gens::*,
-        Ipv6FragmentHeader,
     };
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;

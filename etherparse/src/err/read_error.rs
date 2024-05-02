@@ -31,6 +31,9 @@ pub enum ReadError {
     /// Error while parsing a IPv6 extension header.
     Ipv6Exts(ipv6_exts::HeaderError),
 
+    /// Error while parsing a Linux Cooked Capture v1 (SLL)
+    LinuxSll(linux_sll::HeaderError),
+
     /// Error while parsing a TCP extension header.
     Tcp(tcp::HeaderError),
 }
@@ -85,6 +88,12 @@ impl ReadError {
             _ => None,
         }
     }
+    pub fn linux_sll(&self) -> Option<&linux_sll::HeaderError> {
+        match self {
+            ReadError::LinuxSll(err) => Some(err),
+            _ => None,
+        }
+    }
     pub fn tcp(&self) -> Option<&tcp::HeaderError> {
         match self {
             ReadError::Tcp(err) => Some(err),
@@ -105,6 +114,7 @@ impl core::fmt::Display for ReadError {
             Ipv4(err) => err.fmt(f),
             Ipv6(err) => err.fmt(f),
             Ipv6Exts(err) => err.fmt(f),
+            LinuxSll(err) => err.fmt(f),
             Tcp(err) => err.fmt(f),
         }
     }
@@ -123,6 +133,7 @@ impl std::error::Error for ReadError {
             ReadError::Ipv4(err) => Some(err),
             ReadError::Ipv6(err) => Some(err),
             ReadError::Ipv6Exts(err) => Some(err),
+            ReadError::LinuxSll(err) => Some(err),
             ReadError::Tcp(err) => Some(err),
         }
     }
@@ -370,6 +381,36 @@ impl From<ipv6_exts::HeaderSliceError> for ReadError {
     }
 }
 
+// linux sll error conversions
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<linux_sll::HeaderError> for ReadError {
+    fn from(value: linux_sll::HeaderError) -> Self {
+        ReadError::LinuxSll(value)
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<linux_sll::HeaderReadError> for ReadError {
+    fn from(value: linux_sll::HeaderReadError) -> Self {
+        use linux_sll::HeaderReadError::*;
+        match value {
+            Io(err) => ReadError::Io(err),
+            Content(err) => ReadError::LinuxSll(err),
+        }
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<linux_sll::HeaderSliceError> for ReadError {
+    fn from(value: linux_sll::HeaderSliceError) -> Self {
+        use linux_sll::HeaderSliceError::*;
+        match value {
+            Len(err) => ReadError::Len(err),
+            Content(err) => ReadError::LinuxSll(err),
+        }
+    }
+}
+
 // packet error conversions
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<packet::SliceError> for ReadError {
@@ -377,6 +418,7 @@ impl From<packet::SliceError> for ReadError {
         use packet::SliceError::*;
         match value {
             Len(err) => ReadError::Len(err),
+            LinuxSll(err) => ReadError::LinuxSll(err),
             Ip(err) => ReadError::Ip(err),
             Ipv4(err) => ReadError::Ipv4(err),
             Ipv6(err) => ReadError::Ipv6(err),
@@ -419,17 +461,17 @@ impl From<tcp::HeaderSliceError> for ReadError {
 
 #[cfg(test)]
 mod tests {
-    use crate::EtherType;
     use crate::{
         err::{ReadError::*, *},
         LenSource,
     };
+    use crate::{ArpHardwareId, EtherType};
     use std::error::Error;
     use std::format;
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, ReadError); 8] = [
+        let test_values: [(&str, ReadError); 10] = [
             (
                 "Len",
                 Len(LenError {
@@ -438,6 +480,12 @@ mod tests {
                     len_source: LenSource::Slice,
                     layer: Layer::Icmpv4,
                     layer_start_offset: 0,
+                }),
+            ),
+            (
+                "LinuxSll",
+                LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                    arp_hardware_type: ArpHardwareId::ETHER,
                 }),
             ),
             (
@@ -466,6 +514,10 @@ mod tests {
                 Ipv6Exts(ipv6_exts::HeaderError::HopByHopNotAtStart),
             ),
             (
+                "LinuxSll",
+                LinuxSll(linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 }),
+            ),
+            (
                 "Tcp",
                 Tcp(tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
             ),
@@ -489,13 +541,16 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [ReadError; 8] = [
+        let test_values: [ReadError; 10] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
                 len_source: LenSource::Slice,
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
+            }),
+            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
             }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
@@ -507,6 +562,7 @@ mod tests {
             Ipv4(ipv4::HeaderError::UnexpectedVersion { version_number: 1 }),
             Ipv6(ipv6::HeaderError::UnexpectedVersion { version_number: 1 }),
             Ipv6Exts(ipv6_exts::HeaderError::HopByHopNotAtStart),
+            LinuxSll(linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 }),
             Tcp(tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 }),
         ];
         for value in &test_values {
@@ -540,6 +596,8 @@ mod tests {
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
         let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
         let ipv6_exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+        let linux_sll_error =
+            || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
         let tcp_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
 
         // io
@@ -549,6 +607,13 @@ mod tests {
         // len
         assert_eq!(Len(len_error()).len(), Some(&len_error()));
         assert_eq!(Ipv4(ipv4_error()).len(), None);
+
+        // linux sll
+        assert_eq!(
+            LinuxSll(linux_sll_error()).linux_sll(),
+            Some(&linux_sll_error())
+        );
+        assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
 
         // double_vlan
         assert_eq!(
@@ -580,6 +645,13 @@ mod tests {
         );
         assert_eq!(IpAuth(ip_auth_error()).ipv6_exts(), None);
 
+        // linux_sll
+        assert_eq!(
+            LinuxSll(linux_sll_error()).linux_sll(),
+            Some(&linux_sll_error())
+        );
+        assert_eq!(IpAuth(ip_auth_error()).linux_sll(), None);
+
         // tcp
         assert_eq!(Tcp(tcp_error()).tcp(), Some(&tcp_error()));
         assert_eq!(IpAuth(ip_auth_error()).tcp(), None);
@@ -602,6 +674,44 @@ mod tests {
         // io & len
         assert!(ReadError::from(io_error()).io().is_some());
         assert_eq!(&len_error(), ReadError::from(len_error()).len().unwrap());
+
+        // linux sll
+        {
+            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            };
+            assert_eq!(
+                &header_error(),
+                ReadError::from(header_error()).linux_sll().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderReadError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert!(ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+        }
 
         // double vlan errors
         {
@@ -889,6 +999,43 @@ mod tests {
                 &header_error(),
                 ReadError::from(ipv6_exts::HeaderSliceError::Content(header_error()))
                     .ipv6_exts()
+                    .unwrap()
+            );
+        }
+
+        // linux_sll errors
+        {
+            let header_error =
+                || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
+            assert_eq!(
+                &header_error(),
+                ReadError::from(header_error()).linux_sll().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderReadError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert!(ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
                     .unwrap()
             );
         }

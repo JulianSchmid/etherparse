@@ -232,10 +232,24 @@ impl<'a> LaxSlicedPacket<'a> {
                 VlanSlice::SingleVlan(s) => Some(s.payload()),
                 VlanSlice::DoubleVlan(s) => Some(s.payload()),
             }
-        } else if let Some(eth) = self.link.as_ref() {
-            match eth {
+        } else if let Some(link) = self.link.as_ref() {
+            match link {
                 LinkSlice::Ethernet2(e) => Some(e.payload()),
+                LinkSlice::LinuxSll(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
+                    }
+                    _ => None,
+                },
                 LinkSlice::EtherPayload(e) => Some(e.clone()),
+                LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.clone()).ok()?)
+                    }
+                    _ => None,
+                },
             }
         } else {
             None
@@ -260,7 +274,7 @@ impl<'a> LaxSlicedPacket<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{packet::SliceError, Layer, LenError};
+    use crate::err::{packet::SliceError, LenError};
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [
@@ -516,7 +530,7 @@ mod test {
                 ether_type: 0.into(),
             };
             let test = TestPacket {
-                link: Some(eth.clone()),
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 vlan: None,
                 net: None,
                 transport: None,

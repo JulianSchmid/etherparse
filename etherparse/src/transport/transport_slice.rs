@@ -15,7 +15,6 @@ pub enum TransportSlice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{TcpHeader, UdpHeader};
     use alloc::{format, vec::Vec};
 
     #[test]

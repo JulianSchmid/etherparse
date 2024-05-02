@@ -234,7 +234,7 @@ impl<'a> LaxIpv4Slice<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{err::LenError, ip_number::AUTH, test_gens::*, IpHeaders, Ipv4Header};
+    use crate::{err::LenError, ip_number::AUTH, test_gens::*};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 

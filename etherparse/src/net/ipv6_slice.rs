@@ -251,7 +251,6 @@ mod test {
     use crate::{
         ip_number::{AUTH, IGMP, UDP},
         test_gens::*,
-        Ipv6FragmentHeader,
     };
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;

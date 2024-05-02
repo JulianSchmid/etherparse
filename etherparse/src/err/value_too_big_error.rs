@@ -41,12 +41,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::{
-        collections::hash_map::DefaultHasher,
-        error::Error,
-        format,
-        hash::{Hash, Hasher},
-    };
+    use std::{collections::hash_map::DefaultHasher, error::Error, format, hash::Hasher};
 
     #[test]
     fn fmt() {
