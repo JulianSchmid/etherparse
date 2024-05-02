@@ -38,7 +38,7 @@ pub enum ValueType {
     /// Variable length data of an ICMPv6 packet.
     Icmpv6PayloadLength,
     /// Packet type of a Linux Cooked Capture v1 (SLL)
-    LinuxSllType
+    LinuxSllType,
 }
 
 impl core::fmt::Display for ValueType {

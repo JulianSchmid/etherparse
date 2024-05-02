@@ -177,8 +177,8 @@ impl PacketBuilder {
     /// builder.write(&mut result, &payload).unwrap();
     /// ```
     pub fn linux_sll(
-        packet_type: LinuxSllPacketType, 
-        sender_address_valid_length: u16, 
+        packet_type: LinuxSllPacketType,
+        sender_address_valid_length: u16,
         sender_address: [u8; 8],
     ) -> PacketBuilderStep<LinuxSllHeader> {
         PacketBuilderStep {
@@ -188,7 +188,7 @@ impl PacketBuilder {
                     arp_hrd_type: ArpHardwareId::ETHER,
                     sender_address_valid_length,
                     sender_address,
-                    protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)) // Will be overwitten when writing depending on the net layer
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwitten when writing depending on the net layer
                 })),
                 vlan_header: None,
                 ip_header: None,
@@ -1785,7 +1785,7 @@ fn final_write<T: io::Write + Sized, B>(
                 eth.write(writer).map_err(Io)?;
             }
             LinkHeader::LinuxSll(mut linux_sll) => {
-                // Assumes that next layers are ether based. If more types of 
+                // Assumes that next layers are ether based. If more types of
                 // layers are supported, this should be updated
                 debug_assert_eq!(linux_sll.arp_hrd_type, ArpHardwareId::ETHER);
 

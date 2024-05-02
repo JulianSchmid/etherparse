@@ -49,10 +49,7 @@ impl std::error::Error for HeaderSliceError {
 #[cfg(test)]
 mod tests {
     use super::{HeaderSliceError::*, *};
-    use crate::{
-        err::Layer,
-        LenSource,
-    };
+    use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,
@@ -81,7 +78,7 @@ mod tests {
         );
         assert_eq!(
             Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
-            .add_slice_offset(200),
+                .add_slice_offset(200),
             Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
         );
     }
@@ -142,8 +139,10 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
-        .source()
-        .is_some());
+        assert!(
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 0 })
+                .source()
+                .is_some()
+        );
     }
 }

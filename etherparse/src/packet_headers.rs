@@ -419,7 +419,7 @@ fn read_transport(
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::err::{packet::SliceError};
+    use crate::err::packet::SliceError;
     use crate::test_packet::TestPacket;
 
     const VLAN_ETHER_TYPES: [EtherType; 3] = [

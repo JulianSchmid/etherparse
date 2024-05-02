@@ -14,7 +14,7 @@ impl<'a> From<EtherPayloadSlice<'a>> for LinuxSllPayloadSlice<'a> {
     fn from(value: EtherPayloadSlice<'a>) -> LinuxSllPayloadSlice<'a> {
         LinuxSllPayloadSlice {
             protocol_type: LinuxSllProtocolType::EtherType(value.ether_type),
-            payload: value.payload
+            payload: value.payload,
         }
     }
 }
@@ -27,16 +27,14 @@ impl<'a> TryFrom<LinuxSllPayloadSlice<'a>> for EtherPayloadSlice<'a> {
             LinuxSllProtocolType::LinuxNonstandardEtherType(nonstandard_ether_type) => {
                 Ok(EtherPayloadSlice {
                     ether_type: EtherType(nonstandard_ether_type.into()),
-                    payload: value.payload
+                    payload: value.payload,
                 })
-            },
-            LinuxSllProtocolType::EtherType(ether_type) => {
-                Ok(EtherPayloadSlice {
-                    ether_type,
-                    payload: value.payload
-                })
-            },
-            _ => Err(())
+            }
+            LinuxSllProtocolType::EtherType(ether_type) => Ok(EtherPayloadSlice {
+                ether_type,
+                payload: value.payload,
+            }),
+            _ => Err(()),
         }
     }
 }

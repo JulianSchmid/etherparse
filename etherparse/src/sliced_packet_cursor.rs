@@ -58,11 +58,12 @@ impl<'a> SlicedPacketCursor<'a> {
     pub fn slice_linux_sll(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         use err::packet::SliceError::*;
 
-        let result = LinuxSllSlice::from_slice(self.slice)
-            .map_err(|err| match err {
-                err::linux_sll::HeaderSliceError::Len(len) => Len(len.add_offset(self.offset)),
-                err::linux_sll::HeaderSliceError::Content(content) => err::packet::SliceError::LinuxSll(content),
-            })?;
+        let result = LinuxSllSlice::from_slice(self.slice).map_err(|err| match err {
+            err::linux_sll::HeaderSliceError::Len(len) => Len(len.add_offset(self.offset)),
+            err::linux_sll::HeaderSliceError::Content(content) => {
+                err::packet::SliceError::LinuxSll(content)
+            }
+        })?;
 
         //cache the protocol type for later
         let protocol_type = result.protocol_type();

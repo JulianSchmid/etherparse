@@ -9,7 +9,9 @@ pub struct LinuxSllHeaderSlice<'a> {
 
 impl<'a> LinuxSllHeaderSlice<'a> {
     /// Creates a SLL header slice from an other slice.
-    pub fn from_slice(slice: &'a [u8]) -> Result<LinuxSllHeaderSlice<'a>, err::linux_sll::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<LinuxSllHeaderSlice<'a>, err::linux_sll::HeaderSliceError> {
         //check length
         if slice.len() < LinuxSllHeader::LEN {
             return Err(err::linux_sll::HeaderSliceError::Len(err::LenError {
@@ -36,13 +38,13 @@ impl<'a> LinuxSllHeaderSlice<'a> {
         // SAFETY:
         // Safe as it is checked at the start of the function that the
         // length of the slice is at least LinuxSllHeader::LEN (16).
-        let arp_hardware_id  = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
+        let arp_hardware_id = unsafe { get_unchecked_be_u16(slice.as_ptr().add(2)) };
         let arp_hardware_id = ArpHardwareId::from(arp_hardware_id);
 
         // SAFETY:
         // Safe as it is checked at the start of the function that the
         // length of the slice is at least LinuxSllHeader::LEN (16).
-        let protocol_type  = unsafe { get_unchecked_be_u16(slice.as_ptr().add(14)) };
+        let protocol_type = unsafe { get_unchecked_be_u16(slice.as_ptr().add(14)) };
 
         if let Err(err) = LinuxSllProtocolType::try_from((arp_hardware_id, protocol_type)) {
             return Err(err::linux_sll::HeaderSliceError::Content(err));
@@ -57,8 +59,8 @@ impl<'a> LinuxSllHeaderSlice<'a> {
         })
     }
 
-    /// Converts the given slice into a SLL header slice WITHOUT any checks to 
-    /// ensure that the data present is an sll header or that the slice length 
+    /// Converts the given slice into a SLL header slice WITHOUT any checks to
+    /// ensure that the data present is an sll header or that the slice length
     /// is matching the header length.
     ///
     /// If you are not sure what this means, use [`LinuxSllHeaderSlice::from_slice`]
@@ -114,7 +116,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
 
-    /// Read the link layer address field. Only the first 
+    /// Read the link layer address field. Only the first
     /// `LinuxSllHeaderSlice::link_layer_address_length` bytes are meaningful
     #[inline]
     pub fn sender_address_full(&self) -> [u8; 8] {
@@ -124,11 +126,11 @@ impl<'a> LinuxSllHeaderSlice<'a> {
         unsafe { get_unchecked_8_byte_array(self.slice.as_ptr().add(6)) }
     }
 
-    /// Get the meaningful bytes of the slice of the link layer address 
+    /// Get the meaningful bytes of the slice of the link layer address
     #[inline]
     pub fn sender_address(&self) -> &'a [u8] {
         let length = self.sender_address_valid_length() as usize;
-        &self.slice[6..min(6+length,6+ 8)]
+        &self.slice[6..min(6 + length, 6 + 8)]
     }
 
     /// Read the protocol type field
@@ -142,7 +144,9 @@ impl<'a> LinuxSllHeaderSlice<'a> {
 
         // SAFETY:
         // Safe as the constructor checks that the arphwd + protocol are supported
-        unsafe { LinuxSllProtocolType::try_from((arp_harware_type, protocol_type_raw)).unwrap_unchecked() }
+        unsafe {
+            LinuxSllProtocolType::try_from((arp_harware_type, protocol_type_raw)).unwrap_unchecked()
+        }
     }
 
     /// Decode all the fields and copy the results to a [`LinuxSllHeader`] struct
@@ -152,7 +156,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
             arp_hrd_type: self.arp_hardware_type(),
             sender_address_valid_length: self.sender_address_valid_length(),
             sender_address: self.sender_address_full(),
-            protocol_type: self.protocol_type()
+            protocol_type: self.protocol_type(),
         }
     }
 }

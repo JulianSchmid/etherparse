@@ -1,4 +1,8 @@
-use crate::{err::{self, Layer}, ArpHardwareId, LenSource, LinuxSllHeader, LinuxSllHeaderSlice, LinuxSllPacketType, LinuxSllPayloadSlice, LinuxSllProtocolType};
+use crate::{
+    err::{self, Layer},
+    ArpHardwareId, LenSource, LinuxSllHeader, LinuxSllHeaderSlice, LinuxSllPacketType,
+    LinuxSllPayloadSlice, LinuxSllProtocolType,
+};
 
 /// Slice containing a Linux Cooked Capture v1 (SLL) header & payload.
 #[derive(Clone, Eq, PartialEq)]
@@ -10,7 +14,9 @@ pub struct LinuxSllSlice<'a> {
 impl<'a> LinuxSllSlice<'a> {
     /// Try creating a [`LinuxSllSlice`] from a slice containing the
     /// header & payload
-    pub fn from_slice(slice: &'a [u8]) -> Result<LinuxSllSlice<'a>, err::linux_sll::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &'a [u8],
+    ) -> Result<LinuxSllSlice<'a>, err::linux_sll::HeaderSliceError> {
         // check length
         if slice.len() < LinuxSllHeader::LEN {
             return Err(err::linux_sll::HeaderSliceError::Len(err::LenError {
@@ -25,8 +31,11 @@ impl<'a> LinuxSllSlice<'a> {
         // extract header
         match LinuxSllHeaderSlice::from_slice(&slice[0..LinuxSllHeader::LEN]) {
             Err(err) => Err(err),
-            Ok(header_slice) => Ok(LinuxSllSlice{header_slice, header_and_payload_slice: slice})
-        }        
+            Ok(header_slice) => Ok(LinuxSllSlice {
+                header_slice,
+                header_and_payload_slice: slice,
+            }),
+        }
     }
 
     /// Returns the slice containing the Linux Cooked Capture v1 (SLL) header &
@@ -54,27 +63,27 @@ impl<'a> LinuxSllSlice<'a> {
         self.header_slice.sender_address_valid_length()
     }
 
-    /// Read the link layer address field from the header. Only the first 
+    /// Read the link layer address field from the header. Only the first
     /// `LinuxSllSlice::link_layer_address_length` bytes are meaningful
     #[inline]
     pub fn sender_address_full(&self) -> [u8; 8] {
         self.header_slice.sender_address_full()
     }
 
-    /// Get the meaningful bytes of the slice of the link layer address from 
+    /// Get the meaningful bytes of the slice of the link layer address from
     /// the header
     #[inline]
-    pub fn sender_address(&self) -> &'a [u8]  {
+    pub fn sender_address(&self) -> &'a [u8] {
         self.header_slice.sender_address()
     }
 
     /// Read the protocol type field from the header
     #[inline]
-    pub fn protocol_type(&self) -> LinuxSllProtocolType  {
+    pub fn protocol_type(&self) -> LinuxSllProtocolType {
         self.header_slice.protocol_type()
     }
 
-    /// Decode all the header fields and copy the results to a 
+    /// Decode all the header fields and copy the results to a
     /// [`LinuxSllHeader`] struct
     pub fn to_header(&self) -> LinuxSllHeader {
         LinuxSllHeader {
@@ -104,16 +113,18 @@ impl<'a> LinuxSllSlice<'a> {
     /// Slice only containing the payload
     #[inline]
     pub fn payload_slice(&self) -> &'a [u8] {
-        // SAFETY: Safe as the slice length was verified to be at least 
+        // SAFETY: Safe as the slice length was verified to be at least
         // LinuxSllHeader::LEN by "from_slice".
         unsafe {
             core::slice::from_raw_parts(
-                self.header_and_payload_slice.as_ptr().add(LinuxSllHeader::LEN),
+                self.header_and_payload_slice
+                    .as_ptr()
+                    .add(LinuxSllHeader::LEN),
                 self.header_and_payload_slice.len() - LinuxSllHeader::LEN,
             )
         }
     }
-    
+
     /// Length of the header in bytes (equal to [`crate::LinuxSllHeader::LEN`])
     #[inline]
     pub const fn header_len(&self) -> usize {
@@ -136,7 +147,6 @@ mod test {
     use crate::test_gens::*;
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
-
 
     proptest! {
         #[test]

@@ -59,7 +59,9 @@ impl TestPacket {
         } else if let Some(link) = &mut self.link {
             match link {
                 LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = ether_type,
-                LinkHeader::LinuxSll(linux_sll) => linux_sll.protocol_type.change_value(ether_type.0),
+                LinkHeader::LinuxSll(linux_sll) => {
+                    linux_sll.protocol_type.change_value(ether_type.0)
+                }
             }
         }
     }

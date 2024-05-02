@@ -7,9 +7,9 @@ pub mod ip_auth;
 pub mod ip_exts;
 pub mod ipv4;
 pub mod ipv4_exts;
-pub mod linux_sll;
 pub mod ipv6;
 pub mod ipv6_exts;
+pub mod linux_sll;
 pub mod packet;
 pub mod tcp;
 

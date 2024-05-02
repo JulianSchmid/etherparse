@@ -53,7 +53,10 @@ fn main() {
                     println!("  EtherPayload (ether type {:?})", payload.ether_type)
                 }
                 Some(LinuxSllPayload(payload)) => {
-                    println!("  LinuxSllPayload (protocol type {:?})", payload.protocol_type)
+                    println!(
+                        "  LinuxSllPayload (protocol type {:?})",
+                        payload.protocol_type
+                    )
                 }
                 None => {}
             }

@@ -53,10 +53,7 @@ mod tests {
         HeadersSliceError::*,
         *,
     };
-    use crate::{
-        err::Layer,
-        LenSource,
-    };
+    use crate::{err::Layer, LenSource};
     use alloc::format;
     use std::{
         collections::hash_map::DefaultHasher,

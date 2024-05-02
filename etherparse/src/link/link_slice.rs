@@ -1,6 +1,6 @@
 use crate::*;
 
-/// A slice containing the link layer header (currently only Ethernet II and 
+/// A slice containing the link layer header (currently only Ethernet II and
 /// SLL are supported).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkSlice<'a> {
@@ -36,7 +36,7 @@ impl<'a> LinkSlice<'a> {
             Ethernet2(s) => Some(s.payload().clone()),
             LinuxSll(s) => Some(EtherPayloadSlice::try_from(s.payload()).ok()?.clone()),
             EtherPayload(p) => Some(p.clone()),
-            LinuxSllPayload(p) => Some(EtherPayloadSlice::try_from(p.clone()).ok()?)
+            LinuxSllPayload(p) => Some(EtherPayloadSlice::try_from(p.clone()).ok()?),
         }
     }
 
@@ -46,8 +46,8 @@ impl<'a> LinkSlice<'a> {
         match self {
             Ethernet2(s) => LinuxSllPayloadSlice::from(s.payload().clone()),
             LinuxSll(s) => s.payload().clone(),
-            EtherPayload(p) =>  LinuxSllPayloadSlice::from(p.clone()),
-            LinuxSllPayload(p) => p.clone()
+            EtherPayload(p) => LinuxSllPayloadSlice::from(p.clone()),
+            LinuxSllPayload(p) => p.clone(),
         }
     }
 }

@@ -4,14 +4,12 @@ use crate::ArpHardwareId;
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the "packet byte" field is not one of the known ones
-    UnsupportedPacketTypeField{
+    UnsupportedPacketTypeField {
         // The unexpected packet type number in the SLL header
-        packet_type: u16
+        packet_type: u16,
     },
     /// Error when the arp hardware type field is not one of the known ones
-    UnsupportedArpHardwareId{
-        arp_hardware_type: ArpHardwareId
-    },
+    UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId },
 }
 
 impl core::fmt::Display for HeaderError {
@@ -31,7 +29,9 @@ impl std::error::Error for HeaderError {
         use HeaderError::*;
         match self {
             UnsupportedPacketTypeField { packet_type: _ } => None,
-            UnsupportedArpHardwareId { arp_hardware_type: _ } => None,
+            UnsupportedArpHardwareId {
+                arp_hardware_type: _,
+            } => None,
         }
     }
 }
@@ -70,7 +70,7 @@ mod tests {
         };
         assert_eq!(hash_a, hash_b);
     }
-    
+
     #[test]
     fn fmt() {
         assert_eq!(
@@ -88,7 +88,9 @@ mod tests {
     fn source() {
         let values = [
             UnsupportedPacketTypeField { packet_type: 6 },
-            UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER },
+            UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            },
         ];
         for v in values {
             assert!(v.source().is_none());

@@ -8,7 +8,7 @@ pub enum LinkHeader {
 }
 
 impl LinkHeader {
-    /// Returns `Option::Some` containing the `Ethernet2Header` if self has the 
+    /// Returns `Option::Some` containing the `Ethernet2Header` if self has the
     /// value Ethernet2. Otherwise `Option::None` is returned.
     pub fn ethernet2(self) -> Option<Ethernet2Header> {
         use crate::LinkHeader::*;
@@ -17,10 +17,9 @@ impl LinkHeader {
         } else {
             None
         }
-
     }
 
-    /// Returns `Option::Some` containing the `Ethernet2Header` if self has the 
+    /// Returns `Option::Some` containing the `Ethernet2Header` if self has the
     /// value Ethernet2. Otherwise `Option::None` is returned.
     pub fn mut_ethernet2(&mut self) -> Option<&mut Ethernet2Header> {
         use crate::LinkHeader::*;
@@ -29,10 +28,9 @@ impl LinkHeader {
         } else {
             None
         }
-
     }
 
-    /// Returns `Option::Some` containing the `LinuxSllHeader` if self has the 
+    /// Returns `Option::Some` containing the `LinuxSllHeader` if self has the
     /// value LinuxSll. Otherwise `Option::None` is returned.
     pub fn linux_sll(self) -> Option<LinuxSllHeader> {
         use crate::LinkHeader::*;
@@ -43,7 +41,7 @@ impl LinkHeader {
         }
     }
 
-    /// Returns `Option::Some` containing the `LinuxSllHeader` if self has the 
+    /// Returns `Option::Some` containing the `LinuxSllHeader` if self has the
     /// value LinuxSll. Otherwise `Option::None` is returned.
     pub fn mut_linux_sll(&mut self) -> Option<&mut LinuxSllHeader> {
         use crate::LinkHeader::*;
@@ -75,14 +73,13 @@ impl LinkHeader {
     }
 }
 
-
 #[cfg(test)]
 mod test {
+    use super::*;
     use crate::{test_gens::*, *};
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
     use std::io::Cursor;
-    use super::*;
 
     proptest! {
         #[test]
@@ -177,7 +174,6 @@ mod test {
             );
         }
     }
-
 
     proptest! {
         #[test]

@@ -267,9 +267,9 @@
 //! * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 //! * [LINKTYPE_LINUX_SLL](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html) on tcpdump
 //! * LINUX_SLL [header definition](https://github.com/the-tcpdump-group/libpcap/blob/a932566fa1f6df16176ac702b1762ea1cd9ed9a3/pcap/sll.h) on libpcap
-//! * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel 
+//! * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
 //! * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
-//! * [Arp hardware identifiers definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel 
+//! * [Arp hardware identifiers definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
 
 // # Reason for 'bool_comparison' disable:
 //
@@ -315,8 +315,8 @@ pub use crate::link::ethernet2_slice::*;
 pub use crate::link::link_header::*;
 pub use crate::link::link_slice::*;
 pub use crate::link::linux_nonstandard_ether_type::*;
-pub use crate::link::linux_sll_header_slice::*;
 pub use crate::link::linux_sll_header::*;
+pub use crate::link::linux_sll_header_slice::*;
 pub use crate::link::linux_sll_packet_type::*;
 pub use crate::link::linux_sll_payload_slice::*;
 pub use crate::link::linux_sll_protocol_type::*;

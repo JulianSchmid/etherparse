@@ -461,11 +461,11 @@ impl From<tcp::HeaderSliceError> for ReadError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArpHardwareId, EtherType};
     use crate::{
         err::{ReadError::*, *},
         LenSource,
     };
+    use crate::{ArpHardwareId, EtherType};
     use std::error::Error;
     use std::format;
 
@@ -484,7 +484,9 @@ mod tests {
             ),
             (
                 "LinuxSll",
-                LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER })
+                LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                    arp_hardware_type: ArpHardwareId::ETHER,
+                }),
             ),
             (
                 "DoubleVlan",
@@ -547,7 +549,9 @@ mod tests {
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
-            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER }),
+            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
@@ -592,7 +596,8 @@ mod tests {
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
         let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
         let ipv6_exts_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
-        let linux_sll_error = || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
+        let linux_sll_error =
+            || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
         let tcp_error = || tcp::HeaderError::DataOffsetTooSmall { data_offset: 1 };
 
         // io
@@ -604,7 +609,10 @@ mod tests {
         assert_eq!(Ipv4(ipv4_error()).len(), None);
 
         // linux sll
-        assert_eq!(LinuxSll(linux_sll_error()).linux_sll(), Some(&linux_sll_error()));
+        assert_eq!(
+            LinuxSll(linux_sll_error()).linux_sll(),
+            Some(&linux_sll_error())
+        );
         assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
 
         // double_vlan
@@ -643,7 +651,7 @@ mod tests {
             Some(&linux_sll_error())
         );
         assert_eq!(IpAuth(ip_auth_error()).linux_sll(), None);
-        
+
         // tcp
         assert_eq!(Tcp(tcp_error()).tcp(), Some(&tcp_error()));
         assert_eq!(IpAuth(ip_auth_error()).tcp(), None);
@@ -669,8 +677,8 @@ mod tests {
 
         // linux sll
         {
-            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { 
-                arp_hardware_type: ArpHardwareId::ETHER 
+            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
             };
             assert_eq!(
                 &header_error(),
@@ -682,11 +690,9 @@ mod tests {
                     .linux_sll()
                     .unwrap()
             );
-            assert!(
-                ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
-                    .io()
-                    .is_some()
-            );
+            assert!(ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
             assert_eq!(
                 &header_error(),
                 ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
@@ -999,7 +1005,8 @@ mod tests {
 
         // linux_sll errors
         {
-            let header_error = || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
+            let header_error =
+                || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
             assert_eq!(
                 &header_error(),
                 ReadError::from(header_error()).linux_sll().unwrap()

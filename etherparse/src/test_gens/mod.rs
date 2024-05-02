@@ -125,7 +125,7 @@ prop_compose! {
         sender_address.resize(8, 0);
         let mut v: [u8; 8] = [0u8;8];
         v.copy_from_slice(&sender_address);
-        
+
         (size, v)
     }
 }

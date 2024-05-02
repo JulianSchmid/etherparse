@@ -91,7 +91,6 @@ impl ArpHardwareId {
     pub const VSOCKMON: ArpHardwareId = Self(826);
     pub const VOID: ArpHardwareId = Self(0xFFFF);
     pub const NONE: ArpHardwareId = Self(0xFFFE);
-    
 }
 
 impl From<u16> for ArpHardwareId {
@@ -288,7 +287,7 @@ mod test {
         assert_eq!(ArpHardwareId::from(24), ArpHardwareId::IEEE1394);
         assert_eq!(ArpHardwareId::from(27), ArpHardwareId::EUI64);
         assert_eq!(ArpHardwareId::from(32), ArpHardwareId::INFINIBAND);
-        
+
         assert_eq!(ArpHardwareId::from(256), ArpHardwareId::SLIP);
         assert_eq!(ArpHardwareId::from(257), ArpHardwareId::CSLIP);
         assert_eq!(ArpHardwareId::from(258), ArpHardwareId::SLIP6);
@@ -305,7 +304,7 @@ mod test {
         assert_eq!(ArpHardwareId::from(517), ArpHardwareId::DDCMP);
         assert_eq!(ArpHardwareId::from(518), ArpHardwareId::RAWHDLC);
         assert_eq!(ArpHardwareId::from(519), ArpHardwareId::RAWIP);
-        
+
         assert_eq!(ArpHardwareId::from(768), ArpHardwareId::TUNNEL);
         assert_eq!(ArpHardwareId::from(769), ArpHardwareId::TUNNEL6);
         assert_eq!(ArpHardwareId::from(770), ArpHardwareId::FRAD);
@@ -322,19 +321,19 @@ mod test {
         assert_eq!(ArpHardwareId::from(781), ArpHardwareId::ASH);
         assert_eq!(ArpHardwareId::from(782), ArpHardwareId::ECONET);
         assert_eq!(ArpHardwareId::from(783), ArpHardwareId::IRDA);
-        
+
         assert_eq!(ArpHardwareId::from(784), ArpHardwareId::FCPP);
         assert_eq!(ArpHardwareId::from(785), ArpHardwareId::FCAL);
         assert_eq!(ArpHardwareId::from(786), ArpHardwareId::FCPL);
         assert_eq!(ArpHardwareId::from(787), ArpHardwareId::FCFABRIC);
-        
+
         assert_eq!(ArpHardwareId::from(800), ArpHardwareId::IEEE802_TR);
         assert_eq!(ArpHardwareId::from(801), ArpHardwareId::IEEE80211);
         assert_eq!(ArpHardwareId::from(802), ArpHardwareId::IEEE80211_PRISM);
         assert_eq!(ArpHardwareId::from(803), ArpHardwareId::IEEE80211_RADIOTAP);
         assert_eq!(ArpHardwareId::from(804), ArpHardwareId::IEEE802154);
         assert_eq!(ArpHardwareId::from(805), ArpHardwareId::IEEE802154_MONITOR);
-        
+
         assert_eq!(ArpHardwareId::from(820), ArpHardwareId::PHONET);
         assert_eq!(ArpHardwareId::from(821), ArpHardwareId::PHONET_PIPE);
         assert_eq!(ArpHardwareId::from(822), ArpHardwareId::CAIF);
@@ -342,11 +341,10 @@ mod test {
         assert_eq!(ArpHardwareId::from(824), ArpHardwareId::NETLINK);
         assert_eq!(ArpHardwareId::from(825), ArpHardwareId::IPV6LOWPAN);
         assert_eq!(ArpHardwareId::from(826), ArpHardwareId::VSOCKMON);
-        
+
         assert_eq!(ArpHardwareId::from(0xFFFF), ArpHardwareId::VOID);
         assert_eq!(ArpHardwareId::from(0xFFFE), ArpHardwareId::NONE);
     }
-
 
     #[test]
     fn display_dbg() {
@@ -388,13 +386,19 @@ mod test {
             (ArpHardwareId::SKIP, "771 (SKIP vif)"),
             (ArpHardwareId::LOOPBACK, "772 (Loopback device)"),
             (ArpHardwareId::LOCALTLK, "773 (Localtalk device)"),
-            (ArpHardwareId::FDDI, "774 (Fiber Distributed Data Interface)"),
+            (
+                ArpHardwareId::FDDI,
+                "774 (Fiber Distributed Data Interface)",
+            ),
             (ArpHardwareId::BIF, "775 (AP1000 BIF)"),
             (ArpHardwareId::SIT, "776 (sit0 device - IPv6-in-IPv4)"),
             (ArpHardwareId::IPDDP, "777 (IP over DDP tunneller)"),
             (ArpHardwareId::IPGRE, "778 (GRE over IP)"),
             (ArpHardwareId::PIMREG, "779 (PIMSM register interface)"),
-            (ArpHardwareId::HIPPI, "780 (High Performance Parallel Interface)"),
+            (
+                ArpHardwareId::HIPPI,
+                "780 (High Performance Parallel Interface)",
+            ),
             (ArpHardwareId::ASH, "781 (Nexus 64Mbps Ash)"),
             (ArpHardwareId::ECONET, "782 (Acorn Econet)"),
             (ArpHardwareId::IRDA, "783 (Linux-IrDA)"),
@@ -404,10 +408,19 @@ mod test {
             (ArpHardwareId::FCFABRIC, "787 (Fibrechannel fabric)"),
             (ArpHardwareId::IEEE802_TR, "800 (Magic type ident for TR)"),
             (ArpHardwareId::IEEE80211, "801 (IEEE 802.11)"),
-            (ArpHardwareId::IEEE80211_PRISM, "802 (IEEE 802.11 + Prism2 header)"),
-            (ArpHardwareId::IEEE80211_RADIOTAP, "803 (IEEE 802.11 + radiotap header)"),
+            (
+                ArpHardwareId::IEEE80211_PRISM,
+                "802 (IEEE 802.11 + Prism2 header)",
+            ),
+            (
+                ArpHardwareId::IEEE80211_RADIOTAP,
+                "803 (IEEE 802.11 + radiotap header)",
+            ),
             (ArpHardwareId::IEEE802154, "804 (IEEE 802.15.4)"),
-            (ArpHardwareId::IEEE802154_MONITOR, "805 (IEEE 802.15.4 network monitor)"),
+            (
+                ArpHardwareId::IEEE802154_MONITOR,
+                "805 (IEEE 802.15.4 network monitor)",
+            ),
             (ArpHardwareId::PHONET, "820 (PhoNet media type)"),
             (ArpHardwareId::PHONET_PIPE, "821 (PhoNet pipe header)"),
             (ArpHardwareId::CAIF, "822 (CAIF media type)"),

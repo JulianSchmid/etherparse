@@ -96,7 +96,7 @@ impl core::fmt::Display for FromSliceError {
         use FromSliceError::*;
         match self {
             Len(err) => err.fmt(f),
-            LinuxSll(err) => err.fmt(f), 
+            LinuxSll(err) => err.fmt(f),
             DoubleVlan(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
@@ -151,7 +151,6 @@ impl From<linux_sll::HeaderSliceError> for FromSliceError {
         }
     }
 }
-
 
 // double vlan error conversions
 
@@ -434,7 +433,9 @@ mod tests {
                 layer: Layer::Icmpv4,
                 layer_start_offset: 0,
             }),
-            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER  }),
+            LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
@@ -463,7 +464,9 @@ mod tests {
             layer: Layer::Icmpv4,
             layer_start_offset: 0,
         };
-        let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER };
+        let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+            arp_hardware_type: ArpHardwareId::ETHER,
+        };
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
         };
@@ -479,8 +482,11 @@ mod tests {
         assert_eq!(Ipv4(ipv4_error()).len(), None);
 
         // linux_sll
-        assert_eq!(LinuxSll(linux_sll_error()).linux_sll(), Some(&linux_sll_error())); 
-        assert_eq!(Ipv4(ipv4_error()).linux_sll(), None); 
+        assert_eq!(
+            LinuxSll(linux_sll_error()).linux_sll(),
+            Some(&linux_sll_error())
+        );
+        assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
 
         // double_vlan
         assert_eq!(
@@ -537,7 +543,9 @@ mod tests {
 
         // linux sll
         {
-            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER };
+            let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            };
             assert_eq!(
                 &header_error(),
                 FromSliceError::from(header_error()).linux_sll().unwrap()

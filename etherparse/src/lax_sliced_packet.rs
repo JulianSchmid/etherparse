@@ -236,14 +236,20 @@ impl<'a> LaxSlicedPacket<'a> {
             match link {
                 LinkSlice::Ethernet2(e) => Some(e.payload()),
                 LinkSlice::LinuxSll(e) => match e.protocol_type() {
-                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.payload()).ok()?),
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
+                    }
+                    _ => None,
+                },
                 LinkSlice::EtherPayload(e) => Some(e.clone()),
                 LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
-                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.clone()).ok()?),
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.clone()).ok()?)
+                    }
+                    _ => None,
+                },
             }
         } else {
             None

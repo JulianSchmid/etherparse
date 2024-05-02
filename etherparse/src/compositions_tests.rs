@@ -142,14 +142,20 @@ impl ComponentTest {
 
             // PacketHeaders::from_ether_type
             ether_down.assert_headers(
-                PacketHeaders::from_ether_type(test.link.clone().unwrap().ethernet2().unwrap().ether_type, &buffer[..])
-                    .unwrap(),
+                PacketHeaders::from_ether_type(
+                    test.link.clone().unwrap().ethernet2().unwrap().ether_type,
+                    &buffer[..],
+                )
+                .unwrap(),
             );
 
             // SlicedPacket::from_ether_type
             ether_down.assert_sliced_packet(
-                SlicedPacket::from_ether_type(test.link.clone().unwrap().ethernet2().unwrap().ether_type, &buffer[..])
-                    .unwrap(),
+                SlicedPacket::from_ether_type(
+                    test.link.clone().unwrap().ethernet2().unwrap().ether_type,
+                    &buffer[..],
+                )
+                .unwrap(),
             );
 
             // create unexpected end of slice errors for the different headers

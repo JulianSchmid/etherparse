@@ -110,7 +110,9 @@ mod tests {
 
         // Linux SLL Header
         {
-            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ADAPT };
+            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ADAPT,
+            };
             assert_eq!(
                 format!("{}", err),
                 format!("{}", err::packet::SliceError::LinuxSll(err))
@@ -174,7 +176,9 @@ mod tests {
 
         // IpHeaders
         {
-            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId::ETHER };
+            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ETHER,
+            };
             assert!(LinuxSll(err).source().is_some());
         }
 

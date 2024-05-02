@@ -94,10 +94,10 @@ impl<'a> SlicedPacket<'a> {
         SlicedPacketCursor::new(data).slice_ethernet2()
     }
 
-    /// Separates a network packet slice into different slices containing the 
+    /// Separates a network packet slice into different slices containing the
     /// headers from the Linux Cooked Capture v1 (SLL) header downwards.
     ///
-    /// The result is returned as a [`SlicedPacket`] struct. This function 
+    /// The result is returned as a [`SlicedPacket`] struct. This function
     /// assumes the given data starts with a Linux Cooked Capture v1 (SLL)
     /// header.
     ///
@@ -271,18 +271,20 @@ impl<'a> SlicedPacket<'a> {
             match link {
                 Ethernet2(eth) => Some(eth.ether_type()),
                 LinkSlice::LinuxSll(e) => match e.protocol_type() {
-                    LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => {
-                        Some(EtherType(v))
-                    }
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(EtherType(v))
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(
+                        v,
+                    )) => Some(EtherType(v)),
+                    _ => None,
+                },
                 EtherPayload(e) => Some(e.ether_type),
                 LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
-                    LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => {
-                        Some(EtherType(v))
-                    }
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(EtherType(v))
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(
+                        v,
+                    )) => Some(EtherType(v)),
+                    _ => None,
+                },
             }
         } else {
             None
@@ -304,14 +306,20 @@ impl<'a> SlicedPacket<'a> {
             match link {
                 LinkSlice::Ethernet2(e) => Some(e.payload()),
                 LinkSlice::LinuxSll(e) => match e.protocol_type() {
-                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.payload()).ok()?),
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
+                    }
+                    _ => None,
+                },
                 LinkSlice::EtherPayload(e) => Some(e.clone()),
                 LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
-                    LinuxSllProtocolType::EtherType(_) | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => Some(EtherPayloadSlice::try_from(e.clone()).ok()?),
-                    _ => None
-                }
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.clone()).ok()?)
+                    }
+                    _ => None,
+                },
             }
         } else {
             None
@@ -444,7 +452,7 @@ mod test {
                     arp_hrd_type: ArpHardwareId::ETHER,
                     sender_address_valid_length: 6,
                     sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
-                    protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN)
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
                 }
                 .to_bytes(),
             );
@@ -659,7 +667,7 @@ mod test {
                 arp_hrd_type: ArpHardwareId::ETHER,
                 sender_address_valid_length: 6,
                 sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
-                protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN)
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
             };
             let test = TestPacket {
                 link: Some(LinkHeader::LinuxSll(linux_sll.clone())),
@@ -1453,8 +1461,13 @@ mod test {
         // from_ethernet_slice
         if let Some(ref header) = test.link {
             match header {
-                LinkHeader::Ethernet2(_) => assert_eq!(err.clone(), SlicedPacket::from_ethernet(&data).unwrap_err()),
-                LinkHeader::LinuxSll(_) => assert_eq!(err.clone(), SlicedPacket::from_linux_sll(&data).unwrap_err()),
+                LinkHeader::Ethernet2(_) => {
+                    assert_eq!(err.clone(), SlicedPacket::from_ethernet(&data).unwrap_err())
+                }
+                LinkHeader::LinuxSll(_) => assert_eq!(
+                    err.clone(),
+                    SlicedPacket::from_linux_sll(&data).unwrap_err()
+                ),
             }
         }
         // from_ether_type (vlan at start)

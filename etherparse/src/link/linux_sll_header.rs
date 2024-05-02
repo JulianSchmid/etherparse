@@ -9,9 +9,9 @@ pub struct LinuxSllHeader {
     pub arp_hrd_type: ArpHardwareId,
     /// The size of the adress that is valid
     pub sender_address_valid_length: u16,
-    /// The link-layer adress of the sender of the packet, with the meaningful 
-    /// bytes specified by `sender_address_valid_length`. If the original is 
-    /// larger, the value on the packet is truncated to the first 8 bytes. If 
+    /// The link-layer adress of the sender of the packet, with the meaningful
+    /// bytes specified by `sender_address_valid_length`. If the original is
+    /// larger, the value on the packet is truncated to the first 8 bytes. If
     /// the original is smaller, the remaining bytes will be filled with 0s.
     pub sender_address: [u8; 8],
     /// The protocol type of the encapsulated packet
@@ -24,7 +24,9 @@ impl LinuxSllHeader {
 
     /// Read an SLL header from a slice and return the header & unused parts of the slice.
     #[inline]
-    pub fn from_slice(slice: &[u8]) -> Result<(LinuxSllHeader, &[u8]), err::linux_sll::HeaderSliceError> {
+    pub fn from_slice(
+        slice: &[u8],
+    ) -> Result<(LinuxSllHeader, &[u8]), err::linux_sll::HeaderSliceError> {
         Ok((
             LinuxSllHeaderSlice::from_slice(slice)?.to_header(),
             &slice[LinuxSllHeader::LEN..],
@@ -37,8 +39,13 @@ impl LinuxSllHeader {
         let packet_type = LinuxSllPacketType::try_from(u16::from_be_bytes([bytes[0], bytes[1]]))?;
         let arp_hrd_type = ArpHardwareId::from(u16::from_be_bytes([bytes[2], bytes[3]]));
         let sender_address_valid_length = u16::from_be_bytes([bytes[4], bytes[5]]);
-        let sender_address = [bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13]];
-        let protocol_type = LinuxSllProtocolType::try_from((arp_hrd_type, u16::from_be_bytes([bytes[14], bytes[15]])))?;
+        let sender_address = [
+            bytes[6], bytes[7], bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13],
+        ];
+        let protocol_type = LinuxSllProtocolType::try_from((
+            arp_hrd_type,
+            u16::from_be_bytes([bytes[14], bytes[15]]),
+        ))?;
 
         Ok(LinuxSllHeader {
             packet_type,
@@ -130,7 +137,6 @@ impl LinuxSllHeader {
         ]
     }
 }
-
 
 #[cfg(test)]
 mod test {
@@ -276,7 +282,7 @@ mod test {
             let sender_address_valid_length_be = input.sender_address_valid_length.to_be_bytes();
             let sender_address_be = input.sender_address;
             let protocol_type_be = u16::from(input.protocol_type).to_be_bytes();
-    
+
             assert_eq!(
                 input.to_bytes(),
                 [

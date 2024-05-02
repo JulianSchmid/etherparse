@@ -1,6 +1,6 @@
 use super::HeaderError;
 
-/// Error when decoding Linux Cooked Capture v1 (SLL) headers via a 
+/// Error when decoding Linux Cooked Capture v1 (SLL) headers via a
 /// `std::io::Read` source.
 ///
 /// Requires crate feature `std`.
@@ -106,9 +106,11 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(Content(HeaderError::UnsupportedPacketTypeField { packet_type: 1 })
-        .source()
-        .is_some());
+        assert!(
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 1 })
+                .source()
+                .is_some()
+        );
     }
 
     #[test]
@@ -119,9 +121,11 @@ mod test {
         ))
         .io_error()
         .is_some());
-        assert!(Content(HeaderError::UnsupportedPacketTypeField { packet_type: 1 })
-        .io_error()
-        .is_none());
+        assert!(
+            Content(HeaderError::UnsupportedPacketTypeField { packet_type: 1 })
+                .io_error()
+                .is_none()
+        );
     }
 
     #[test]
