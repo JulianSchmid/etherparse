@@ -193,18 +193,18 @@ impl<'a> SlicedPacket<'a> {
         data: &'a [u8],
     ) -> Result<SlicedPacket, err::packet::SliceError> {
         use ether_type::*;
+        let mut cursor = SlicedPacketCursor::new(data);
+        cursor.result.link = Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+            ether_type,
+            payload: data,
+        }));
         match ether_type {
-            IPV4 => SlicedPacketCursor::new(data).slice_ipv4(),
-            IPV6 => SlicedPacketCursor::new(data).slice_ipv6(),
+            IPV4 => cursor.slice_ipv4(),
+            IPV6 => cursor.slice_ipv6(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                SlicedPacketCursor::new(data).slice_vlan()
+                cursor.slice_vlan()
             }
-            _ => Ok(SlicedPacket {
-                link: None,
-                vlan: None,
-                net: None,
-                transport: None,
-            }),
+            _ => Ok(cursor.result),
         }
     }
 
@@ -625,6 +625,21 @@ mod test {
             net: None,
             transport: None,
         });
+
+        // eth payload
+        {
+            let data = [1,2,3,4];
+            let result = SlicedPacket::from_ether_type(EtherType(0x8221), &data).unwrap();
+            assert_eq!(
+                result,
+                SlicedPacket{
+                    link: Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type: EtherType(0x8221), payload: &data })),
+                    vlan: None,
+                    net: None,
+                    transport: None
+                }
+            );
+        }
 
         // eth
         {
@@ -1431,20 +1446,19 @@ mod test {
         if test.link.is_none() && test.vlan.is_some() {
             for ether_type in VLAN_ETHER_TYPES {
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
+                assert_eq!(result.link, Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type, payload: &data })));
                 assert_test_result(&test, &payload, &result);
             }
         }
         // from_ether_type (ip at start)
         if test.link.is_none() && test.vlan.is_none() {
             if let Some(ip) = &test.net {
-                let result = SlicedPacket::from_ether_type(
-                    match ip {
-                        NetHeaders::Ipv4(_, _) => ether_type::IPV4,
-                        NetHeaders::Ipv6(_, _) => ether_type::IPV6,
-                    },
-                    &data,
-                )
-                .unwrap();
+                let ether_type = match ip {
+                    NetHeaders::Ipv4(_, _) => ether_type::IPV4,
+                    NetHeaders::Ipv6(_, _) => ether_type::IPV6,
+                };
+                let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
+                assert_eq!(result.link, Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type, payload: &data })));
                 assert_test_result(&test, &payload, &result);
             }
         }
