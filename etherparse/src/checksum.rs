@@ -901,6 +901,7 @@ pub mod u64_16bit_word {
 
         proptest! {
             #[test]
+            #[cfg_attr(miri, ignore)] // vec allocation reduces miri runspeed too much
             fn u32_u16_comparison(
                 data in proptest::collection::vec(any::<u8>(), 0..0xfffusize)
             ) {
