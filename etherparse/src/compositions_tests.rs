@@ -597,6 +597,7 @@ impl ComponentTest {
 proptest! {
     ///Test that all known packet compositions are parsed correctly.
     #[test]
+    #[cfg_attr(miri, ignore)] // vec allocation reduces miri runspeed too much
     fn test_compositions(ref eth in ethernet_2_unknown(),
                          ref vlan_outer in vlan_single_unknown(),
                          ref vlan_inner in vlan_single_unknown(),
