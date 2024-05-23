@@ -201,9 +201,7 @@ impl<'a> SlicedPacket<'a> {
         match ether_type {
             IPV4 => cursor.slice_ipv4(),
             IPV6 => cursor.slice_ipv6(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                cursor.slice_vlan()
-            }
+            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => cursor.slice_vlan(),
             _ => Ok(cursor.result),
         }
     }
@@ -628,12 +626,15 @@ mod test {
 
         // eth payload
         {
-            let data = [1,2,3,4];
+            let data = [1, 2, 3, 4];
             let result = SlicedPacket::from_ether_type(EtherType(0x8221), &data).unwrap();
             assert_eq!(
                 result,
-                SlicedPacket{
-                    link: Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type: EtherType(0x8221), payload: &data })),
+                SlicedPacket {
+                    link: Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+                        ether_type: EtherType(0x8221),
+                        payload: &data
+                    })),
                     vlan: None,
                     net: None,
                     transport: None
@@ -1446,7 +1447,13 @@ mod test {
         if test.link.is_none() && test.vlan.is_some() {
             for ether_type in VLAN_ETHER_TYPES {
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
-                assert_eq!(result.link, Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type, payload: &data })));
+                assert_eq!(
+                    result.link,
+                    Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+                        ether_type,
+                        payload: &data
+                    }))
+                );
                 assert_test_result(&test, &payload, &result);
             }
         }
@@ -1458,7 +1465,13 @@ mod test {
                     NetHeaders::Ipv6(_, _) => ether_type::IPV6,
                 };
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
-                assert_eq!(result.link, Some(LinkSlice::EtherPayload(EtherPayloadSlice { ether_type, payload: &data })));
+                assert_eq!(
+                    result.link,
+                    Some(LinkSlice::EtherPayload(EtherPayloadSlice {
+                        ether_type,
+                        payload: &data
+                    }))
+                );
                 assert_test_result(&test, &payload, &result);
             }
         }
