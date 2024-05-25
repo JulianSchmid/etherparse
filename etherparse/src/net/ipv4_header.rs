@@ -342,7 +342,7 @@ impl Ipv4Header {
     /// Returns the maximum payload size based on the current options size.
     #[inline]
     pub fn max_payload_len(&self) -> u16 {
-        core::u16::MAX - u16::from(self.options.len_u8()) - (Ipv4Header::MIN_LEN as u16)
+        u16::MAX - u16::from(self.options.len_u8()) - (Ipv4Header::MIN_LEN as u16)
     }
 
     /// Returns a slice to the options part of the header (empty if no options are present).

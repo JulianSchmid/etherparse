@@ -512,7 +512,7 @@ impl core::hash::Hash for TcpOptions {
 
 impl core::cmp::PartialOrd for TcpOptions {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        self.as_slice().partial_cmp(other.as_slice())
+        Some(self.as_slice().cmp(other.as_slice()))
     }
 }
 

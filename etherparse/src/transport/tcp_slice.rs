@@ -353,10 +353,10 @@ impl<'a> TcpSlice<'a> {
         destination_ip: [u8; 4],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        if usize::from(core::u16::MAX) < self.slice.len() {
+        if usize::from(u16::MAX) < self.slice.len() {
             return Err(ValueTooBigError {
                 actual: self.slice.len(),
-                max_allowed: usize::from(core::u16::MAX),
+                max_allowed: usize::from(u16::MAX),
                 value_type: ValueType::TcpPayloadLengthIpv4,
             });
         }
@@ -380,10 +380,10 @@ impl<'a> TcpSlice<'a> {
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
         #[cfg(not(any(target_pointer_width = "16", target_pointer_width = "32")))]
-        if (core::u32::MAX as usize) < self.slice.len() {
+        if (u32::MAX as usize) < self.slice.len() {
             return Err(ValueTooBigError {
                 actual: self.slice.len(),
-                max_allowed: (core::u32::MAX as usize),
+                max_allowed: (u32::MAX as usize),
                 value_type: ValueType::TcpPayloadLengthIpv6,
             });
         }

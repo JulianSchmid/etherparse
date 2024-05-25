@@ -394,7 +394,7 @@ impl Icmpv6Type {
         // their own length information (like ICMPv6), is "the Payload Length
         // from the IPv6 header, minus the length of any extension headers present
         // between the IPv6 header and the upper-layer header."
-        let max_payload_len: usize = (core::u32::MAX as usize) - self.header_len();
+        let max_payload_len: usize = (u32::MAX as usize) - self.header_len();
         if max_payload_len < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),

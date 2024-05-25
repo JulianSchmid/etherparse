@@ -460,7 +460,7 @@ impl TcpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the tcp length field
-        let max_payload = usize::from(core::u16::MAX) - self.header_len();
+        let max_payload = usize::from(u16::MAX) - self.header_len();
         if max_payload < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),
@@ -498,7 +498,7 @@ impl TcpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the tcp length field
-        let max_payload = (core::u32::MAX as usize) - self.header_len();
+        let max_payload = (u32::MAX as usize) - self.header_len();
         if max_payload < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),
