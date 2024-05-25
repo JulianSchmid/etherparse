@@ -1,5 +1,10 @@
 # Changelog:
 
+## 0.14.0
+
+* Added Linux SLL Support (thanks to @RabadanDotDev)
+* Corrected bug where `SlicedPacket::from_ether_type` would not set link field in result.
+
 ## 0.14.3
 
 * Resolved compile errors for 16 bit systems.
