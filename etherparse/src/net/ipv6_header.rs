@@ -317,7 +317,7 @@ impl Ipv6Header {
     pub fn set_payload_length(&mut self, size: usize) -> Result<(), ValueTooBigError<usize>> {
         use crate::err::ValueType;
         // check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = core::u16::MAX as usize;
+        const MAX_PAYLOAD_LENGTH: usize = u16::MAX as usize;
         if MAX_PAYLOAD_LENGTH < size {
             return Err(ValueTooBigError {
                 actual: size,

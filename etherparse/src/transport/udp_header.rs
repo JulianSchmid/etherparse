@@ -30,7 +30,7 @@ impl UdpHeader {
         payload_length: usize,
     ) -> Result<UdpHeader, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload_length {
             return Err(ValueTooBigError {
                 actual: payload_length,
@@ -55,7 +55,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),
@@ -92,7 +92,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),
@@ -130,7 +130,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<UdpHeader, ValueTooBigError<usize>> {
         // check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (core::u16::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (u16::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(ValueTooBigError {
                 actual: payload.len(),
@@ -167,7 +167,7 @@ impl UdpHeader {
         payload: &[u8],
     ) -> Result<u16, err::ValueTooBigError<usize>> {
         //check that the total length fits into the field
-        const MAX_PAYLOAD_LENGTH: usize = (core::u32::MAX as usize) - UdpHeader::LEN;
+        const MAX_PAYLOAD_LENGTH: usize = (u32::MAX as usize) - UdpHeader::LEN;
         if MAX_PAYLOAD_LENGTH < payload.len() {
             return Err(err::ValueTooBigError {
                 actual: payload.len(),
