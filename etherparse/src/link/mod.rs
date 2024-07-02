@@ -1,3 +1,5 @@
+pub mod arp_header;
+pub mod arp_payload;
 pub mod arp_hardware_id;
 pub mod double_vlan_header;
 pub mod double_vlan_header_slice;
