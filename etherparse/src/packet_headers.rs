@@ -16,6 +16,8 @@ use super::*;
 pub struct PacketHeaders<'a> {
     /// Ethernet II header if present.
     pub link: Option<LinkHeader>,
+    /// Address Resolution Protocol if present.
+    pub arp: Option<ArpHeader>,
     /// Single or double vlan headers if present.
     pub vlan: Option<VlanHeader>,
     /// IPv4 or IPv6 header and IP extension headers if present.
@@ -157,6 +159,7 @@ impl<'a> PacketHeaders<'a> {
 
         let mut result = PacketHeaders {
             link: None,
+            arp: None,
             vlan: None,
             net: None,
             transport: None,
@@ -166,10 +169,10 @@ impl<'a> PacketHeaders<'a> {
             }),
         };
 
-        //parse vlan header(s)
         use ether_type::*;
 
-        result.vlan = match ether_type {
+        // parse ip
+        match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
                 let (outer, outer_rest) = SingleVlanHeader::from_slice(rest).map_err(Len)?;
@@ -183,7 +186,7 @@ impl<'a> PacketHeaders<'a> {
                 });
 
                 //parse second vlan header if present
-                match ether_type {
+                result.vlan = match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
@@ -201,14 +204,8 @@ impl<'a> PacketHeaders<'a> {
                     }
                     //no second vlan header detected -> single vlan header
                     _ => Some(Single(outer)),
-                }
+                };
             }
-            //no vlan header
-            _ => None,
-        };
-
-        // parse ip
-        match ether_type {
             IPV4 => {
                 // read ipv4 header & extensions and payload slice
                 let (ip, ip_payload) = IpHeaders::from_ipv4_slice(rest).map_err(|err| {
@@ -264,6 +261,13 @@ impl<'a> PacketHeaders<'a> {
 
                 result.transport = transport;
                 result.payload = payload;
+            }
+            ARP => {
+                let (arp, rest) = ArpHeader::from_slice(rest).map_err(Len)?;
+
+                result.arp = Some(arp);
+
+                result.payload = PayloadSlice::Arp(ArpPayload::from_pkg(arp, rest).map_err(Len)?);
             }
             _ => {}
         };
@@ -328,6 +332,7 @@ impl<'a> PacketHeaders<'a> {
 
         let mut result = PacketHeaders {
             link: None,
+            arp: None,
             vlan: None,
             net: Some(ip_header.into()),
             transport: None,
@@ -435,6 +440,7 @@ mod test {
         use alloc::format;
         let header = PacketHeaders {
             link: None,
+            arp: None,
             vlan: None,
             net: None,
             transport: None,
@@ -460,6 +466,7 @@ mod test {
     fn clone_eq() {
         let header = PacketHeaders {
             link: None,
+            arp: None,
             vlan: None,
             net: None,
             transport: None,
