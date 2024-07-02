@@ -328,6 +328,8 @@ pub use crate::link::vlan_header::*;
 pub use crate::link::vlan_id::*;
 pub use crate::link::vlan_pcp::*;
 pub use crate::link::vlan_slice::*;
+pub use crate::link::arp_header::*;
+pub use crate::link::arp_payload::*;
 
 #[cfg(test)]
 pub(crate) mod test_gens;

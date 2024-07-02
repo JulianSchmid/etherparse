@@ -142,6 +142,7 @@ impl PacketBuilder {
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
+                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -193,6 +194,7 @@ impl PacketBuilder {
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
+                arp_header: None,
             },
             _marker: marker::PhantomData::<LinuxSllHeader> {},
         }
@@ -235,6 +237,7 @@ impl PacketBuilder {
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
+                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -282,6 +285,7 @@ impl PacketBuilder {
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
+                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -359,6 +363,7 @@ impl PacketBuilder {
                 vlan_header: None,
                 ip_header: None,
                 transport_header: None,
+                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -371,6 +376,7 @@ struct PacketImpl {
     ip_header: Option<IpHeaders>,
     vlan_header: Option<VlanHeader>,
     transport_header: Option<TransportHeader>,
+    arp_header: Option<ArpHeader>,
 }
 
 ///An unfinished packet that is build with the packet builder
@@ -685,6 +691,15 @@ impl PacketBuilderStep<Ethernet2Header> {
         PacketBuilderStep {
             state: self.state,
             _marker: marker::PhantomData::<VlanHeader> {},
+        }
+    }
+
+    pub fn arp(mut self, arp_header: ArpHeader) -> PacketBuilderStep<ArpHeader> {
+        self.state.arp_header = Some(arp_header);
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<ArpHeader> {},
         }
     }
 }
@@ -1751,6 +1766,28 @@ impl PacketBuilderStep<TcpHeader> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl PacketBuilderStep<ArpHeader> {
+    pub fn write<T: io::Write + Sized>(
+        self,
+        writer: &mut T,
+        payload: ArpPayload,
+    ) -> Result<(), BuildWriteError> {
+        use BuildWriteError::*;
+        if self.state.arp_header.unwrap().header_len() != payload.len() + 8 {
+            return Err(BuildWriteError::ArpHeaderNotMatch);
+        }
+
+        final_write(self, writer, &[])?;
+        payload.write(writer).map_err(Io)?;
+        Ok(())
+    }
+
+    pub fn size(&self) -> usize {
+        final_size(self, 0)
+    }
+}
+
 /// Write all the headers and the payload.
 fn final_write<T: io::Write + Sized, B>(
     builder: PacketBuilderStep<B>,
@@ -1764,7 +1801,10 @@ fn final_write<T: io::Write + Sized, B>(
         match builder.state.ip_header {
             Some(Ipv4(_, _)) => ether_type::IPV4,
             Some(Ipv6(_, _)) => ether_type::IPV6,
-            None => panic!("Missing ip header"),
+            None => match builder.state.arp_header {
+                Some(_) => ether_type::ARP,
+                None => unreachable!("no vaild header"),
+            },
         }
     };
 
@@ -1795,6 +1835,14 @@ fn final_write<T: io::Write + Sized, B>(
         }
     }
 
+    match builder.state.arp_header {
+        Some(arp) => {
+            arp.write(writer).map_err(Io)?;
+            return Ok(());
+        }
+        None => {}
+    }
+
     //write the vlan header if it exists
     use crate::VlanHeader::*;
     match builder.state.vlan_header {
@@ -1819,8 +1867,7 @@ fn final_write<T: io::Write + Sized, B>(
     let ip_header = builder.state.ip_header.unwrap();
 
     //transport header
-    let transport = builder.state.transport_header;
-    match transport {
+    match builder.state.transport_header {
         None => {
             // in case no transport header is present the protocol
             // number and next_header fields are set in the write call
@@ -1968,6 +2015,9 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Udp(_)) => UdpHeader::LEN,
         Some(Tcp(ref value)) => value.header_len(),
         None => 0,
+    } + match builder.state.arp_header {
+        Some(value) => value.header_len(),
+        None => 0,
     } + payload_size
 }
 
@@ -1986,7 +2036,8 @@ mod white_box_tests {
                     link_header: None,
                     ip_header: None,
                     vlan_header: None,
-                    transport_header: None
+                    transport_header: None,
+                    arp_header: None,
                 },
                 _marker: marker::PhantomData::<UdpHeader> {}
             }
@@ -2005,6 +2056,7 @@ mod white_box_tests {
                     ip_header: None,
                     vlan_header: None,
                     transport_header: None,
+                    arp_header: None,
                 },
                 _marker: marker::PhantomData::<UdpHeader> {},
             },
@@ -2021,7 +2073,53 @@ mod test {
     use crate::test_gens::*;
     use alloc::{vec, vec::Vec};
     use proptest::prelude::*;
+    use core::net::Ipv4Addr;
     use std::io::Read;
+
+    #[test]
+    fn eth_arp() {
+        let payload = [
+            20, 30, 40, 50, 60, 70, // src mac
+            10, 1, 1, 5, // src ip
+            0, 1, 2, 3, 4, 5, // dest mac
+            192, 168, 1, 2, // dest ip
+        ];
+
+        let expected_header = ArpHeader {
+            hw_addr_type: ArpHardwareId::ETHER,
+            proto_addr_type: EtherType::IPV4,
+            hw_addr_size: 6, // mac addr is 6 bytes
+            proto_addr_size: 4, // ipv4 addr is 4 bytes
+            operation: Operation::Request,
+        };
+
+        let expected_payload = ArpPayload {
+            buffer: payload.as_ref(),
+
+            src_hard_addr: HardwareAddr::Mac([20, 30, 40, 50, 60, 70]),
+            src_addr: ProtocolAddr::Ipv4(Ipv4Addr::new(10, 1, 1, 5)),
+
+            des_hard_addr: HardwareAddr::Mac([00, 01, 02, 03, 04, 05]),
+            des_addr: ProtocolAddr::Ipv4(Ipv4Addr::new(192, 168, 1, 2)),
+        };
+
+        let payload = ArpPayload::from_pkg(expected_header, &payload).unwrap();
+
+        debug_assert_eq!(payload, expected_payload);
+
+        let mut serialized = Vec::new();
+
+        let pkg = PacketBuilder::ethernet2(
+            [0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b],
+            [0xde, 0xad, 0xc0, 0x00, 0xff, 0xee],
+        )
+        .arp(expected_header);
+
+        let target_size = pkg.size();
+        pkg.write(&mut serialized, payload).unwrap();
+
+        assert_eq!(serialized.len(), target_size);
+    }
 
     #[test]
     fn eth_ipv4_udp() {

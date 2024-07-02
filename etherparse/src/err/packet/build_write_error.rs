@@ -25,6 +25,9 @@ pub enum BuildWriteError {
     /// Error if ICMPv6 is packaged in an IPv4 packet (it is undefined
     /// how to calculate the checksum).
     Icmpv6InIpv4,
+
+    /// address size defined in the ARP header does not match the actual size
+    ArpHeaderNotMatch, 
 }
 
 #[cfg(feature = "std")]
@@ -82,6 +85,7 @@ impl core::fmt::Display for BuildWriteError {
             PayloadLen(err) => err.fmt(f),
             Ipv4Exts(err) => err.fmt(f),
             Ipv6Exts(err) => err.fmt(f),
+            ArpHeaderNotMatch => write!(f, "address size defined in the ARP header does not match the actual size"),
             Icmpv6InIpv4 => write!(f, "Error: ICMPv6 can not be combined with an IPv4 headers (checksum can not be calculated)."),
         }
     }
@@ -98,6 +102,7 @@ impl std::error::Error for BuildWriteError {
             Ipv4Exts(err) => Some(err),
             Ipv6Exts(err) => Some(err),
             Icmpv6InIpv4 => None,
+            ArpHeaderNotMatch => None,
         }
     }
 }
