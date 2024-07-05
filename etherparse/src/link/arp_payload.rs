@@ -34,7 +34,6 @@ impl<'a> HardwareAddr<'a> {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ProtocolAddr<'a> {
     Ipv4(Ipv4Addr),
-    Ipv6(Ipv6Addr),
     Other(&'a [u8]),
 }
 
@@ -54,19 +53,6 @@ impl<'a> ProtocolAddr<'a> {
                 Ok(ProtocolAddr::Ipv4(Ipv4Addr::new(
                     data[0], data[1], data[2], data[3],
                 )))
-            }
-            EtherType::IPV6 => {
-                if data.len() != 16 {
-                    return Err(err::LenError {
-                        required_len: 16,
-                        len_source: LenSource::Slice,
-                        len: data.len(),
-                        layer: err::Layer::EtherPayload,
-                        layer_start_offset: start,
-                    });
-                }
-                let data: [u8; 16] = data.try_into().unwrap();
-                Ok(ProtocolAddr::Ipv6(Ipv6Addr::from(data)))
             }
             _ => Ok(ProtocolAddr::Other(data)),
         }
@@ -131,7 +117,6 @@ impl<'a> ArpPayload<'a> {
         }
         match self.src_addr {
             ProtocolAddr::Ipv4(addr) => writer.write_all(&addr.octets())?,
-            ProtocolAddr::Ipv6(addr) => writer.write_all(&addr.octets())?,
             ProtocolAddr::Other(addr) => writer.write_all(addr)?,
         }
         match self.des_hard_addr {
@@ -140,7 +125,6 @@ impl<'a> ArpPayload<'a> {
         }
         match self.des_addr {
             ProtocolAddr::Ipv4(addr) => writer.write_all(&addr.octets())?,
-            ProtocolAddr::Ipv6(addr) => writer.write_all(&addr.octets())?,
             ProtocolAddr::Other(addr) => writer.write_all(addr)?,
         }
         Ok(())
