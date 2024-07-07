@@ -121,13 +121,6 @@ impl<'a> ArpPayload<'a> {
         des_mac: [u8; 6],
         des_ip: Ipv4Addr,
     ) -> ArpPayload<'static> {
-        let buffer = &[
-            &src_mac[..],
-            &src_ip.octets(),
-            &des_mac[..],
-            &des_ip.octets(),
-        ]
-        .concat();
         ArpPayload {
             src_hard_addr: HardwareAddr::Mac(src_mac),
             src_addr: ProtocolAddr::Ipv4(src_ip),
