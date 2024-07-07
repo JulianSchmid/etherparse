@@ -171,8 +171,7 @@ impl<'a> PacketHeaders<'a> {
 
         use ether_type::*;
 
-        // parse ip
-        match ether_type {
+        result.vlan = match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 use crate::VlanHeader::*;
                 let (outer, outer_rest) = SingleVlanHeader::from_slice(rest).map_err(Len)?;
@@ -186,7 +185,7 @@ impl<'a> PacketHeaders<'a> {
                 });
 
                 //parse second vlan header if present
-                result.vlan = match ether_type {
+                match ether_type {
                     //second vlan tagging header
                     VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                         let (inner, inner_rest) = SingleVlanHeader::from_slice(rest)
@@ -204,8 +203,15 @@ impl<'a> PacketHeaders<'a> {
                     }
                     //no second vlan header detected -> single vlan header
                     _ => Some(Single(outer)),
-                };
+                }
             }
+            //no vlan header
+            _ => None,
+        };
+
+
+        // parse ip
+        match ether_type {
             IPV4 => {
                 // read ipv4 header & extensions and payload slice
                 let (ip, ip_payload) = IpHeaders::from_ipv4_slice(rest).map_err(|err| {
