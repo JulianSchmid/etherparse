@@ -135,8 +135,6 @@ mod tests {
         };
 
         let expected_payload = ArpPayload {
-            buffer: bytes[8..].as_ref(),
-
             src_hard_addr: HardwareAddr::Mac([0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b]),
             src_addr: ProtocolAddr::Ipv4(Ipv4Addr::new(10, 10, 1, 135)),
 
