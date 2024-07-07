@@ -209,7 +209,6 @@ impl<'a> PacketHeaders<'a> {
             _ => None,
         };
 
-
         // parse ip
         match ether_type {
             IPV4 => {
@@ -273,7 +272,8 @@ impl<'a> PacketHeaders<'a> {
 
                 result.arp = Some(arp);
 
-                result.payload = PayloadSlice::Arp(ArpPayload::from_pkg(arp, rest).map_err(Len)?);
+                result.payload =
+                    PayloadSlice::Arp((rest, ArpPayload::from_pkg(arp, rest).map_err(Len)?));
             }
             _ => {}
         };

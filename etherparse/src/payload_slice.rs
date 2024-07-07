@@ -7,7 +7,7 @@ pub enum PayloadSlice<'a> {
     /// (e.g. after an ethernet II or vlan header).
     Ether(EtherPayloadSlice<'a>),
     /// Address Resolution Protocol payload
-    Arp(ArpPayload<'a>),
+    Arp((&'a [u8], ArpPayload<'a>)),
     /// Payload with is's type identified by an ip number (e.g.
     /// after an IP header or after an)
     Ip(IpPayloadSlice<'a>),
@@ -27,7 +27,7 @@ impl<'a> PayloadSlice<'a> {
     pub fn slice(&self) -> &'a [u8] {
         match self {
             PayloadSlice::Ether(s) => s.payload,
-            PayloadSlice::Arp(s) => s.buffer,
+            PayloadSlice::Arp(s) => s.0,
             PayloadSlice::Ip(s) => s.payload,
             PayloadSlice::Udp(s) => s,
             PayloadSlice::Tcp(s) => s,
