@@ -27,6 +27,13 @@ impl<'a> HardwareAddr<'a> {
             _ => Ok(HardwareAddr::Other(data)),
         }
     }
+
+    pub fn len(&self) -> usize {
+        match self {
+            HardwareAddr::Mac(_) => 6,
+            HardwareAddr::Other(addr) => addr.len(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,12 +62,17 @@ impl<'a> ProtocolAddr<'a> {
             _ => Ok(ProtocolAddr::Other(data)),
         }
     }
+
+    pub fn len(&self) -> usize {
+        match self {
+            ProtocolAddr::Ipv4(_) => 4,
+            ProtocolAddr::Other(addr) => addr.len(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq, Hash)]
 pub struct ArpPayload<'a> {
-    pub buffer: &'a [u8],
-
     pub src_hard_addr: HardwareAddr<'a>,
     pub src_addr: ProtocolAddr<'a>,
 
@@ -96,7 +108,6 @@ impl<'a> ArpPayload<'a> {
         let des_addr = ProtocolAddr::new(header.proto_addr_type, des_proto, offset)?;
 
         Ok(ArpPayload {
-            buffer: input,
             src_hard_addr,
             src_addr,
             des_hard_addr,
@@ -104,8 +115,32 @@ impl<'a> ArpPayload<'a> {
         })
     }
 
+    pub fn from_mac_ipv4(
+        src_mac: [u8; 6],
+        src_ip: Ipv4Addr,
+        des_mac: [u8; 6],
+        des_ip: Ipv4Addr,
+    ) -> ArpPayload<'static> {
+        let buffer = &[
+            &src_mac[..],
+            &src_ip.octets(),
+            &des_mac[..],
+            &des_ip.octets(),
+        ]
+        .concat();
+        ArpPayload {
+            src_hard_addr: HardwareAddr::Mac(src_mac),
+            src_addr: ProtocolAddr::Ipv4(src_ip),
+            des_hard_addr: HardwareAddr::Mac(des_mac),
+            des_addr: ProtocolAddr::Ipv4(des_ip),
+        }
+    }
+
     pub fn len(&self) -> usize {
-        self.buffer.len()
+        self.src_hard_addr.len()
+            + self.src_addr.len()
+            + self.des_hard_addr.len()
+            + self.des_addr.len()
     }
 
     #[cfg(feature = "std")]
