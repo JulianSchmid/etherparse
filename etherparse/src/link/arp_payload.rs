@@ -1,7 +1,5 @@
-use std::{
-    fmt::Debug,
-    net::{Ipv4Addr, Ipv6Addr},
-};
+use crate::*;
+use core::net::Ipv4Addr;
 
 use crate::{err, ArpHardwareId, EtherType, LenSource};
 
@@ -110,6 +108,7 @@ impl<'a> ArpPayload<'a> {
         self.buffer.len()
     }
 
+    #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         match self.src_hard_addr {
             HardwareAddr::Mac(addr) => writer.write_all(&addr)?,
