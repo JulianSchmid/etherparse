@@ -458,8 +458,9 @@ mod test {
         assert_eq!(
             &format!("{:?}", header),
             &format!(
-                "PacketHeaders {{ link: {:?}, vlan: {:?}, net: {:?}, transport: {:?}, payload: {:?} }}",
+                "PacketHeaders {{ link: {:?}, arp: {:?}, vlan: {:?}, net: {:?}, transport: {:?}, payload: {:?} }}",
                 header.link,
+                header.arp,
                 header.vlan,
                 header.net,
                 header.transport,
