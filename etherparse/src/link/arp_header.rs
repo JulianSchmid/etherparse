@@ -1,6 +1,6 @@
 /// Address Resolution Protocol
 ///
-use std::fmt::Debug;
+use crate::*;
 
 use crate::{err, ArpHardwareId, EtherType, LenSource};
 
@@ -88,6 +88,7 @@ impl ArpHeader {
         8 + (self.hw_addr_size + self.proto_addr_size) as usize * 2
     }
 
+    #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         writer.write(&self.hw_addr_type.0.to_be_bytes())?;
         writer.write(&self.proto_addr_type.0.to_be_bytes())?;
@@ -100,7 +101,7 @@ impl ArpHeader {
 
 #[cfg(test)]
 mod tests {
-    use std::net::Ipv4Addr;
+    use core::net::Ipv4Addr;
 
     use crate::{
         link::{
