@@ -20,6 +20,8 @@ pub enum LaxNetSlice<'a> {
     Ipv4(LaxIpv4Slice<'a>),
     /// The ipv6 header & the decoded extension headers.
     Ipv6(LaxIpv6Slice<'a>),
+    /// The arp header & the decoded arp payload.
+    Arp(LaxArpSlice<'a>),
 }
 
 impl<'a> LaxNetSlice<'a> {
@@ -30,6 +32,7 @@ impl<'a> LaxNetSlice<'a> {
         match self {
             LaxNetSlice::Ipv4(s) => Some(&s.payload),
             LaxNetSlice::Ipv6(s) => Some(&s.payload),
+            LaxNetSlice::Arp(_) => None,
         }
     }
 }
