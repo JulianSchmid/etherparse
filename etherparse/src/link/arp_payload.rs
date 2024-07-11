@@ -82,6 +82,18 @@ pub struct ArpPayload<'a> {
 
 impl<'a> ArpPayload<'a> {
     pub fn from_pkg(header: ArpHeader, input: &[u8]) -> Result<ArpPayload, err::LenError> {
+        let required_size =
+            usize::from(header.hw_addr_size) * 2 + usize::from(header.proto_addr_size) * 2;
+        if input.len() < required_size {
+            return Err(err::LenError {
+                required_len: required_size,
+                len_source: LenSource::Slice,
+                len: input.len(),
+                layer: err::Layer::EtherPayload,
+                layer_start_offset: 8,
+            });
+        }
+
         let mut offset = 0;
 
         let src_hard_addr = HardwareAddr::new(
