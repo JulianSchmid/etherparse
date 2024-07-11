@@ -43,8 +43,10 @@ pub struct ArpHeader {
 }
 
 impl ArpHeader {
+    pub const LEN: usize = 8;
+
     pub fn from_slice(input: &[u8]) -> Result<(ArpHeader, &[u8]), err::LenError> {
-        if input.len() < 8 {
+        if input.len() < Self::LEN {
             return Err(err::LenError {
                 required_len: 8,
                 len_source: LenSource::Slice,
@@ -84,8 +86,12 @@ impl ArpHeader {
         ))
     }
 
+    pub fn payload_len(&self) -> usize {
+        (self.hw_addr_size + self.proto_addr_size) as usize * 2
+    }
+
     pub fn header_len(&self) -> usize {
-        8 + (self.hw_addr_size + self.proto_addr_size) as usize * 2
+        8 + self.payload_len()
     }
 
     #[cfg(feature = "std")]

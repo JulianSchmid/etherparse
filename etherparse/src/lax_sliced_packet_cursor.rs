@@ -61,11 +61,11 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         };
         use ether_type::*;
         match ether_type {
-            IPV4 => cursor.slice_ip(slice),
-            IPV6 => cursor.slice_ip(slice),
+            IPV4 | IPV6 => cursor.slice_ip(slice),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
                 cursor.slice_vlan(slice)
             }
+            ARP => cursor.slice_arp(slice),
             _ => cursor.result,
         }
     }
@@ -166,6 +166,26 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 _ => self.result,
             },
         }
+    }
+
+    pub fn slice_arp(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
+        let arp = match LaxArpSlice::from_slice(slice) {
+            Ok(arp) => arp,
+            Err(e) => {
+                use err::arp::LaxHeaderSliceError as A;
+                use err::packet::SliceError as O;
+                self.result.stop_err = Some(match e {
+                    A::Len(mut l) => {
+                        l.layer_start_offset += self.offset;
+                        (O::Len(l), Layer::ArpHeader)
+                    }
+                    A::Content(c) => (O::Arp(c), Layer::ArpHeader),
+                });
+                return self.result;
+            }
+        };
+        self.result.transport = Some(arp.0.clone().into());
+
     }
 
     pub fn slice_ip(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
