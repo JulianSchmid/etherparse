@@ -202,6 +202,7 @@ impl<'a> SlicedPacket<'a> {
             IPV4 => cursor.slice_ipv4(),
             IPV6 => cursor.slice_ipv6(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => cursor.slice_vlan(),
+            ARP => cursor.slice_arp(),
             _ => Ok(cursor.result),
         }
     }
@@ -332,6 +333,7 @@ impl<'a> SlicedPacket<'a> {
             match net {
                 Ipv4(v) => Some(v.payload()),
                 Ipv6(v) => Some(v.payload()),
+                Arp(_) => None,
             }
         } else {
             None
@@ -1401,6 +1403,7 @@ mod test {
                             .unwrap()
                             .0,
                         ),
+                        NetSlice::Arp(arp) => NetHeaders::Arp(arp.header().to_header().unwrap().0),
                     }
                 })
             );

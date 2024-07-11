@@ -321,6 +321,32 @@ impl<'a> LaxPacketHeaders<'a> {
                     return result;
                 }
             },
+            ARP => {
+                let (arp, slice) = match ArpHeader::from_slice(&rest[offset..]) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        result.stop_err = Some((Len(err), Layer::ArpHeader));
+                        return result;
+                    }
+                };
+
+                let payload = match ArpPayloadSlice::from_slice(&arp, slice) {
+                    Ok(value) => value,
+                    Err(err) => {
+                        result.net = Some(NetHeaders::Arp(arp));
+                        result.stop_err = Some((Len(err), Layer::ArpPayload));
+                        return result;
+                    }
+                };
+
+                result.net = Some(NetHeaders::Arp(arp));
+                result.payload = LaxPayloadSlice::Arp {
+                    payload: slice,
+                    parsed: payload,
+                };
+
+                return result;
+            }
             _ => {}
         };
 

@@ -102,3 +102,12 @@ pub use net_headers::*;
 
 mod net_slice;
 pub use net_slice::*;
+
+mod arp_slice;
+pub use arp_slice::*;
+
+mod arp_header_slice;
+pub use arp_header_slice::*;
+
+mod arp_payload_slice;
+pub use arp_payload_slice::*;
