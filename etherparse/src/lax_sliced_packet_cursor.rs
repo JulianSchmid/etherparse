@@ -172,20 +172,19 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         let arp = match LaxArpSlice::from_slice(slice) {
             Ok(arp) => arp,
             Err(e) => {
-                use err::arp::LaxHeaderSliceError as A;
-                use err::packet::SliceError as O;
                 self.result.stop_err = Some(match e {
-                    A::Len(mut l) => {
+                    err::ip::LaxHeaderSliceError::Len(mut l) => {
                         l.layer_start_offset += self.offset;
-                        (O::Len(l), Layer::ArpHeader)
+                        (err::packet::SliceError::Len(l), Layer::ArpHeader)
                     }
-                    A::Content(c) => (O::Arp(c), Layer::ArpHeader),
+                    err::ip::LaxHeaderSliceError::Content(_) => unreachable!(),
                 });
                 return self.result;
             }
         };
-        self.result.transport = Some(arp.0.clone().into());
+        self.result.net = Some(LaxNetSlice::Arp(arp));
 
+        self.result
     }
 
     pub fn slice_ip(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {

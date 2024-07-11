@@ -33,10 +33,10 @@ pub enum LaxPayloadSlice<'a> {
         incomplete: bool,
     },
     /// Arp Payload
-    Arp{
+    Arp {
         payload: &'a [u8],
         parsed: ArpPayloadSlice<'a>,
-    }
+    },
 }
 
 impl<'a> LaxPayloadSlice<'a> {
@@ -60,7 +60,7 @@ impl<'a> LaxPayloadSlice<'a> {
                 payload,
                 incomplete: _,
             } => payload,
-            LaxPayloadSlice::Arp{ payload, parsed: _ } => payload
+            LaxPayloadSlice::Arp { payload, parsed: _ } => payload,
         }
     }
 }

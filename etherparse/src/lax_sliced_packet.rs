@@ -264,6 +264,7 @@ impl<'a> LaxSlicedPacket<'a> {
             match net {
                 Ipv4(v) => Some(v.payload()),
                 Ipv6(v) => Some(v.payload()),
+                Arp(_) => None,
             }
         } else {
             None
@@ -1336,6 +1337,7 @@ mod test {
                             .unwrap()
                             .0,
                         ),
+                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.header.to_header().unwrap()),
                     }
                 })
             );
@@ -1347,7 +1349,7 @@ mod test {
                     match s {
                         NetHeaders::Ipv4(h, _) => NetHeaders::Ipv4(h.clone(), Default::default()),
                         NetHeaders::Ipv6(h, _) => NetHeaders::Ipv6(h.clone(), Default::default()),
-                        NetHeaders::Arp(h) => unreachable!(),
+                        NetHeaders::Arp(_) => unreachable!(),
                     }
                 }),
                 actual.net.as_ref().map(|s| -> NetHeaders {
@@ -1358,6 +1360,7 @@ mod test {
                         LaxNetSlice::Ipv6(ipv6) => {
                             NetHeaders::Ipv6(ipv6.header().to_header(), Default::default())
                         }
+                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.header.to_header().unwrap()),
                     }
                 })
             );

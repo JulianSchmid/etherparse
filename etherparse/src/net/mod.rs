@@ -111,3 +111,12 @@ pub use arp_header_slice::*;
 
 mod arp_payload_slice;
 pub use arp_payload_slice::*;
+
+mod lax_arp_slice;
+pub use lax_arp_slice::*;
+
+mod lax_arp_header_slice;
+pub use lax_arp_header_slice::*;
+
+mod lax_arp_payload_slice;
+pub use lax_arp_payload_slice::*;

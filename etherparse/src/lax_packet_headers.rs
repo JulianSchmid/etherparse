@@ -119,6 +119,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///                 }
     ///             }
+    ///             LaxPayloadSlice::Arp { payload, parsed } => {
+    ///                 println!("ARP payload: {:?}", parsed); 
+    ///            }
     ///         }
     ///     }
     /// }
@@ -229,6 +232,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         if incomplete {
     ///             println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///         }
+    ///     }
+    ///     LaxPayloadSlice::Arp{ payload, parsed } => {
+    ///         println!("ARP payload: {:?}", parsed);
     ///     }
     /// }
     /// ```
@@ -452,6 +458,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                 if incomplete {
     ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Arp{ payload, parsed } => {
+    ///                 println!("ARP payload: {:?}", parsed);    
     ///             }
     ///         }
     ///     }
