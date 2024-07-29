@@ -515,7 +515,7 @@ impl Ipv4Header {
     }
 
     /// Writes a given IPv4 header to the current position (this method just writes the specified
-    /// checksum and does note compute it).
+    /// checksum and does not compute it).
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write_raw<T: std::io::Write + Sized>(
