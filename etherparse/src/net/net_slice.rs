@@ -15,6 +15,8 @@ pub enum NetSlice<'a> {
     Ipv4(Ipv4Slice<'a>),
     /// The ipv6 header & the decoded extension headers.
     Ipv6(Ipv6Slice<'a>),
+    /// The arp header & the decoded extension headers.
+    Arp(ArpSlice<'a>),
 }
 
 impl<'a> NetSlice<'a> {
@@ -25,6 +27,7 @@ impl<'a> NetSlice<'a> {
         match self {
             NetSlice::Ipv4(s) => Some(&s.payload),
             NetSlice::Ipv6(s) => Some(&s.payload),
+            NetSlice::Arp(_) => None,
         }
     }
 }

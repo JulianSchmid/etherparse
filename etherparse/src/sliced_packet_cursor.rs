@@ -274,6 +274,20 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
+    pub fn slice_arp(mut self)-> Result<SlicedPacket<'a>,  err::packet::SliceError> {
+        let result = ArpSlice::from_slice(self.slice).map_err(|mut err| {
+            err.layer_start_offset += self.offset;
+
+            err::packet::SliceError::Len(err.into())
+        })?;
+
+        //set the new data
+        self.move_by(result.len());
+        self.result.net = Some(NetSlice::Arp(result.clone()));
+
+        Ok(self.result)
+    }
+
     pub fn slice_icmp4(mut self) -> Result<SlicedPacket<'a>, err::LenError> {
         use crate::TransportSlice::*;
 
@@ -351,4 +365,5 @@ impl<'a> SlicedPacketCursor<'a> {
         // done
         Ok(self.result)
     }
+
 }
