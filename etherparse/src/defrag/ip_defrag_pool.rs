@@ -35,7 +35,7 @@ where
     Timestamp: Sized + core::fmt::Debug + Clone,
     CustomChannelId: Sized + core::fmt::Debug + Clone + core::hash::Hash + Eq + PartialEq,
 {
-    pub fn new() -> IpDefragPool {
+    pub fn new() -> IpDefragPool<Timestamp, CustomChannelId> {
         IpDefragPool {
             active: HashMap::new(),
             finished_data_bufs: Vec::new(),
