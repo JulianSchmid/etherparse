@@ -1,4 +1,4 @@
-use crate::{*, defrag::*};
+use crate::{defrag::*, *};
 use std::collections::HashMap;
 use std::vec::Vec;
 
@@ -35,7 +35,6 @@ where
     Timestamp: Sized + core::fmt::Debug + Clone,
     CustomChannelId: Sized + core::fmt::Debug + Clone + core::hash::Hash + Eq + PartialEq,
 {
-
     pub fn new() -> IpDefragPool {
         IpDefragPool {
             active: HashMap::new(),
@@ -45,8 +44,12 @@ where
     }
 
     /// Add data from a sliced packet.
-    pub fn process_sliced_packet(&mut self, slice: &SlicedPacket, timestamp: Timestamp, channel_id: CustomChannelId) -> Result<Option<IpDefragPayloadVec>, IpDefragError> {
-
+    pub fn process_sliced_packet(
+        &mut self,
+        slice: &SlicedPacket,
+        timestamp: Timestamp,
+        channel_id: CustomChannelId,
+    ) -> Result<Option<IpDefragPayloadVec>, IpDefragError> {
         // extract the fragment related data and skip non-fragmented packets
         let (frag_id, offset, more_fragments, payload, is_ipv4) = match &slice.net {
             Some(NetSlice::Ipv4(ipv4)) => {
@@ -58,15 +61,18 @@ where
 
                 let (outer_vlan_id, inner_vlan_id) = match &slice.vlan {
                     Some(VlanSlice::SingleVlan(s)) => (Some(s.vlan_identifier()), None),
-                    Some(VlanSlice::DoubleVlan(d)) => (Some(d.outer().vlan_identifier()), Some(d.inner().vlan_identifier())),
-                    None => (None, None)
+                    Some(VlanSlice::DoubleVlan(d)) => (
+                        Some(d.outer().vlan_identifier()),
+                        Some(d.inner().vlan_identifier()),
+                    ),
+                    None => (None, None),
                 };
 
                 (
                     IpFragId {
                         outer_vlan_id,
                         inner_vlan_id,
-                        ip: IpFragVersionSpecId::Ipv4{
+                        ip: IpFragVersionSpecId::Ipv4 {
                             source: header.source(),
                             destination: header.destination(),
                             identification: header.identification(),
@@ -77,7 +83,7 @@ where
                     header.fragments_offset(),
                     header.more_fragments(),
                     ipv4.payload(),
-                    true
+                    true,
                 )
             }
             Some(NetSlice::Ipv6(ipv6)) => {
@@ -107,8 +113,11 @@ where
 
                 let (outer_vlan_id, inner_vlan_id) = match &slice.vlan {
                     Some(VlanSlice::SingleVlan(s)) => (Some(s.vlan_identifier()), None),
-                    Some(VlanSlice::DoubleVlan(d)) => (Some(d.outer().vlan_identifier()), Some(d.inner().vlan_identifier())),
-                    None => (None, None)
+                    Some(VlanSlice::DoubleVlan(d)) => (
+                        Some(d.outer().vlan_identifier()),
+                        Some(d.inner().vlan_identifier()),
+                    ),
+                    None => (None, None),
                 };
 
                 // calculate frag id
@@ -116,7 +125,7 @@ where
                     IpFragId {
                         outer_vlan_id,
                         inner_vlan_id,
-                        ip: IpFragVersionSpecId::Ipv6{
+                        ip: IpFragVersionSpecId::Ipv6 {
                             source: ipv6.header().source(),
                             destination: ipv6.header().destination(),
                             identification: frag.identification,
@@ -127,7 +136,7 @@ where
                     frag.fragment_offset,
                     frag.more_fragments,
                     ipv6.payload(),
-                    false
+                    false,
                 )
             }
             None => {
@@ -146,7 +155,7 @@ where
                 if buf.0.is_complete() {
                     let (defraged_payload, sections) = entry.remove().0.take_bufs();
                     self.finished_section_bufs.push(sections);
-                    Ok(Some(IpDefragPayloadVec{
+                    Ok(Some(IpDefragPayloadVec {
                         ip_number: payload.ip_number,
                         len_source: if is_ipv4 {
                             LenSource::Ipv4HeaderTotalLen
@@ -164,7 +173,7 @@ where
                     d.clear();
                     d
                 } else {
-                    Vec::with_capacity(payload.payload.len()*2)
+                    Vec::with_capacity(payload.payload.len() * 2)
                 };
                 let sections = if let Some(mut s) = self.finished_section_bufs.pop() {
                     s.clear();
@@ -179,7 +188,7 @@ where
                         if defrag_buf.is_complete() {
                             let (defraged_payload, sections) = defrag_buf.take_bufs();
                             self.finished_section_bufs.push(sections);
-                            Ok(Some(IpDefragPayloadVec{
+                            Ok(Some(IpDefragPayloadVec {
                                 ip_number: payload.ip_number,
                                 len_source: if is_ipv4 {
                                     LenSource::Ipv4HeaderTotalLen
@@ -192,24 +201,24 @@ where
                             entry.insert((defrag_buf, timestamp));
                             Ok(None)
                         }
-                    },
+                    }
                     Err(err) => {
                         // return the buffers
                         let (data_buf, sections) = defrag_buf.take_bufs();
                         self.finished_data_bufs.push(data_buf);
                         self.finished_section_bufs.push(sections);
                         Err(err)
-                    },
+                    }
                 }
             }
         }
     }
-}
 
+    /// Returns a buffer to the pool so it can be re-used.
+    pub fn return_buf(&mut self, buf: IpDefragPayloadVec) {
+        self.finished_data_bufs.push(buf.payload);
+    }
+}
 
 #[cfg(test)]
-mod test {
-
-
-
-}
+mod test {}

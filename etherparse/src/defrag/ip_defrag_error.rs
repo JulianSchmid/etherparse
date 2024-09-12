@@ -4,7 +4,10 @@ use crate::*;
 pub enum IpDefragError {
     /// Error if a payload lenght of a IP Fragment packet is not a multiple of 16
     /// and the "more fragments" flag is set.
-    UnalignedFragmentPayloadLen { offset: IpFragOffset, payload_len: usize },
+    UnalignedFragmentPayloadLen {
+        offset: IpFragOffset,
+        payload_len: usize,
+    },
 
     /// Error if a segment is bigger then the maximum allowed size.
     SegmentTooBig {
@@ -43,13 +46,16 @@ impl std::error::Error for IpDefragError {}
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::IpDefragError::*;
+    use super::*;
     use std::format;
 
     #[test]
     fn debug() {
-        let err = UnalignedFragmentPayloadLen { offset: IpFragOffset::try_new(0).unwrap(), payload_len: 16 };
+        let err = UnalignedFragmentPayloadLen {
+            offset: IpFragOffset::try_new(0).unwrap(),
+            payload_len: 16,
+        };
         let _ = format!("{err:?}");
     }
 
@@ -59,7 +65,10 @@ mod tests {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
-        let err = UnalignedFragmentPayloadLen { offset: IpFragOffset::try_new(0).unwrap(), payload_len: 16 };
+        let err = UnalignedFragmentPayloadLen {
+            offset: IpFragOffset::try_new(0).unwrap(),
+            payload_len: 16,
+        };
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -92,10 +101,11 @@ mod tests {
     #[test]
     fn source() {
         use std::error::Error;
-        assert!(
-            UnalignedFragmentPayloadLen { offset: IpFragOffset::try_new(0).unwrap(), payload_len: 16 }
-            .source()
-            .is_none()
-        );
+        assert!(UnalignedFragmentPayloadLen {
+            offset: IpFragOffset::try_new(0).unwrap(),
+            payload_len: 16
+        }
+        .source()
+        .is_none());
     }
 }

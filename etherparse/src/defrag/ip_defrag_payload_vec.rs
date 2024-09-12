@@ -30,9 +30,7 @@ mod test {
         assert_eq!(
             format!(
                 "IpDefragPayloadVec {{ ip_number: {:?}, len_source: {:?}, payload: {:?} }}",
-                s.ip_number,
-                s.len_source,
-                s.payload
+                s.ip_number, s.len_source, s.payload
             ),
             format!("{:?}", s)
         );
