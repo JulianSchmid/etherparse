@@ -1,4 +1,4 @@
-use crate::{*, defrag::*};
+use crate::{defrag::*, *};
 use std::vec::Vec;
 
 /// Buffer to reconstruct a single fragmented IP packet.
@@ -18,7 +18,11 @@ pub struct IpDefragBuf {
 }
 
 impl IpDefragBuf {
-    pub fn new(ip_number: IpNumber, mut data: Vec<u8>, mut sections: Vec<IpFragRange>) -> IpDefragBuf {
+    pub fn new(
+        ip_number: IpNumber,
+        mut data: Vec<u8>,
+        mut sections: Vec<IpFragRange>,
+    ) -> IpDefragBuf {
         IpDefragBuf {
             ip_number,
             data: {
@@ -57,16 +61,16 @@ impl IpDefragBuf {
         self.end
     }
 
-    /// Add a IPv4 slice 
+    /// Add a IPv4 slice
     #[cfg(any(target_pointer_width = "32", target_pointer_width = "64"))]
     pub fn add(
         &mut self,
         offset: IpFragOffset,
         more_fragments: bool,
-        payload: &[u8]
+        payload: &[u8],
     ) -> Result<(), IpDefragError> {
         use IpDefragError::*;
-        
+
         // validate lengths
         let Ok(len_u16) = u16::try_from(payload.len()) else {
             return Err(SegmentTooBig {
@@ -103,7 +107,7 @@ impl IpDefragBuf {
             }
         }
 
-        // get enough memory to store the de-fragmented 
+        // get enough memory to store the de-fragmented
         let required_len = usize::from(end);
         if self.data.len() < required_len {
             if self.data.capacity() < required_len
@@ -195,7 +199,11 @@ mod test {
 
     #[test]
     fn new() {
-        let actual = IpDefragBuf::new(IpNumber::UDP, vec![1], vec![IpFragRange{start: 0, end: 1}]);
+        let actual = IpDefragBuf::new(
+            IpNumber::UDP,
+            vec![1],
+            vec![IpFragRange { start: 0, end: 1 }],
+        );
         assert_eq!(actual.ip_number(), IpNumber::UDP);
         assert!(actual.data().is_empty());
         assert!(actual.sections().is_empty());

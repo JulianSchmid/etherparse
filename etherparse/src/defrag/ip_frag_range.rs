@@ -1,4 +1,3 @@
-
 /// Describing the range of reconstructed data.
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
 pub struct IpFragRange {
