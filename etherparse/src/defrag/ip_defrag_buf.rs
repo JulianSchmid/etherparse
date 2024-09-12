@@ -80,7 +80,7 @@ impl IpDefragBuf {
             });
         };
 
-        let Some(end) = offset.value().checked_add(len_u16) else {
+        let Some(end) = offset.byte_offset().checked_add(len_u16) else {
             return Err(SegmentTooBig {
                 offset,
                 payload_len: payload.len(),
@@ -88,8 +88,8 @@ impl IpDefragBuf {
             });
         };
 
-        // validate that the payload len is a multiple of 16 in case it is not the end
-        if more_fragments && 0 != payload.len() & 0b1111 {
+        // validate that the payload len is a multiple of 8 in case it is not the end
+        if more_fragments && 0 != payload.len() & 0b111 {
             return Err(UnalignedFragmentPayloadLen {
                 offset,
                 payload_len: payload.len(),
@@ -124,12 +124,12 @@ impl IpDefragBuf {
         }
 
         // insert new data
-        let data_offset = usize::from(offset.value());
+        let data_offset = usize::from(offset.byte_offset());
         self.data[data_offset..data_offset + payload.len()].copy_from_slice(payload);
 
         // update sections
         let mut new_section = IpFragRange {
-            start: offset.value(),
+            start: offset.byte_offset(),
             end,
         };
 
@@ -234,8 +234,9 @@ mod test {
                 (true, (48, false, &sequence(48,16))),
             ];
             for a in actions {
+                assert!(0 == (a.1.0 % 8));
                 buffer.add(
-                    IpFragOffset::try_new(a.1.0).unwrap(),
+                    IpFragOffset::try_new(a.1.0 / 8).unwrap(),
                     a.1.1,
                     a.1.2
                 ).unwrap();
@@ -259,8 +260,9 @@ mod test {
                 (true, (16, true, sequence(16,16))),
             ];
             for a in actions {
+                assert!(0 == (a.1.0 % 8));
                 buffer.add(
-                    IpFragOffset::try_new(a.1.0).unwrap(),
+                    IpFragOffset::try_new(a.1.0 / 8).unwrap(),
                     a.1.1,
                     &a.1.2
                 ).unwrap();
@@ -280,8 +282,9 @@ mod test {
                 (true, (0, true, &sequence(0,16))),
             ];
             for a in actions {
+                assert!(0 == (a.1.0 % 8));
                 buffer.add(
-                    IpFragOffset::try_new(a.1.0).unwrap(),
+                    IpFragOffset::try_new(a.1.0 / 8).unwrap(),
                     a.1.1,
                     &a.1.2
                 ).unwrap();
@@ -310,9 +313,9 @@ mod test {
             let mut buffer = IpDefragBuf::new(IpNumber::UDP, Vec::new(), Vec::new());
             let payload_len = usize::from(u16::MAX) - 32 - 16 + 1;
             assert_eq!(
-                SegmentTooBig { offset: IpFragOffset::try_new(32 + 16).unwrap(), payload_len, max: u16::MAX },
+                SegmentTooBig { offset: IpFragOffset::try_new((32 + 16)/8).unwrap(), payload_len, max: u16::MAX },
                 buffer.add(
-                    IpFragOffset::try_new(32 + 16).unwrap(),
+                    IpFragOffset::try_new((32 + 16)/8).unwrap(),
                     true,
                     &sequence(0,payload_len)
                 ).unwrap_err()
@@ -327,7 +330,7 @@ mod test {
             assert_eq!(
                 Ok(()),
                 buffer.add(
-                    IpFragOffset::try_new(16).unwrap(),
+                    IpFragOffset::try_new(16/8).unwrap(),
                     false,
                     &sequence(0, payload_len)
                 )
@@ -335,15 +338,15 @@ mod test {
         }
 
         // packets conflicting with previously seen end
-        for bad_offset in 1..16 {
+        for bad_offset in 1..8 {
             let mut buffer = IpDefragBuf::new(IpNumber::UDP, Vec::new(), Vec::new());
             assert_eq!(
                 UnalignedFragmentPayloadLen {
-                    offset: IpFragOffset::try_new(48).unwrap(),
+                    offset: IpFragOffset::try_new(48/8).unwrap(),
                     payload_len: bad_offset
                 },
                 buffer.add(
-                    IpFragOffset::try_new(48).unwrap(),
+                    IpFragOffset::try_new(48/8).unwrap(),
                     true,
                     &sequence(0, bad_offset)
                 ).unwrap_err()
@@ -356,7 +359,7 @@ mod test {
 
             // setup an end (aka no more segements)
             buffer.add(
-                IpFragOffset::try_new(32).unwrap(),
+                IpFragOffset::try_new(32/8).unwrap(),
                 false,
                 &sequence(32,16)
             ).unwrap();
@@ -365,7 +368,7 @@ mod test {
             assert_eq!(
                 ConflictingEnd { previous_end: 32 + 16, conflicting_end: 48 + 16 },
                 buffer.add(
-                    IpFragOffset::try_new(48).unwrap(),
+                    IpFragOffset::try_new(48/8).unwrap(),
                     true,
                     &sequence(48,16)
                 ).unwrap_err()
@@ -375,7 +378,7 @@ mod test {
             assert_eq!(
                 ConflictingEnd { previous_end: 32 + 16, conflicting_end: 16 + 16 },
                 buffer.add(
-                    IpFragOffset::try_new(16).unwrap(),
+                    IpFragOffset::try_new(16/8).unwrap(),
                     false,
                     &sequence(16,16)
                 ).unwrap_err()

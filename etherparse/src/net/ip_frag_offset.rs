@@ -120,6 +120,12 @@ impl IpFragOffset {
     pub const fn value(self) -> u16 {
         self.0
     }
+
+    /// Returns the offset in bytes (offset raw value multiplied by 8).
+    #[inline]
+    pub const fn byte_offset(self) -> u16 {
+        self.0 << 3
+    }
 }
 
 impl core::fmt::Display for IpFragOffset {
