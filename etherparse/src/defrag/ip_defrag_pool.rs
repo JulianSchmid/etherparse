@@ -189,22 +189,12 @@ where
                 let mut defrag_buf = IpDefragBuf::new(payload.ip_number, data_buf, sections);
                 match defrag_buf.add(offset, more_fragments, payload.payload) {
                     Ok(()) => {
-                        if defrag_buf.is_complete() {
-                            let (defraged_payload, sections) = defrag_buf.take_bufs();
-                            self.finished_section_bufs.push(sections);
-                            Ok(Some(IpDefragPayloadVec {
-                                ip_number: payload.ip_number,
-                                len_source: if is_ipv4 {
-                                    LenSource::Ipv4HeaderTotalLen
-                                } else {
-                                    LenSource::Ipv6HeaderPayloadLen
-                                },
-                                payload: defraged_payload,
-                            }))
-                        } else {
-                            entry.insert((defrag_buf, timestamp));
-                            Ok(None)
-                        }
+                        // no need to check if the defrag is done as the
+                        // packet can not be defragmented on initial add
+                        // otherwise `is_fragmenting_payload` would have
+                        // been false
+                        entry.insert((defrag_buf, timestamp));
+                        Ok(None)
                     }
                     Err(err) => {
                         // return the buffers
