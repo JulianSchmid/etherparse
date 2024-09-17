@@ -1,14 +1,18 @@
 use crate::*;
 
+/// Slice containing UDP, TCP, ICMP or ICMPv4 header & payload.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum TransportSlice<'a> {
     /// A slice containing an Icmp4 header & payload.
     Icmpv4(Icmpv4Slice<'a>),
+
     /// A slice containing an Icmp6 header & payload.
     Icmpv6(Icmpv6Slice<'a>),
+
     /// A slice containing an UDP header & payload.
     Udp(UdpSlice<'a>),
-    /// A slice containing a TCP header.
+
+    /// A slice containing a TCP header & payload.
     Tcp(TcpSlice<'a>),
 }
 
