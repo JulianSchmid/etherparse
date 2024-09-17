@@ -337,6 +337,16 @@ impl<'a> SlicedPacket<'a> {
             None
         }
     }
+
+    /// Returns true if `net` contains an fragmented IPv4 or IPv6 payload.
+    pub fn is_ip_payload_fragmented(&self) -> bool {
+        use NetSlice::*;
+        match &self.net {
+            Some(Ipv4(v)) => v.is_payload_fragmented(),
+            Some(Ipv6(v)) => v.is_payload_fragmented(),
+            None => false,
+        }
+    }
 }
 
 #[cfg(test)]

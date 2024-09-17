@@ -5,6 +5,11 @@ use std::vec::Vec;
 /// Pool of buffers to reconstruct multiple fragmented IP packets in
 /// parallel (re-uses buffers to minimize allocations).
 ///
+/// It differentiates the packets based on their inner & outer vlan as well as
+/// source and destination ip address and allows the user to add their own
+/// custom "channel id" type to further differentiate different streams.
+/// The custom channel id can be used to
+///
 /// # This implementation is NOT safe against "Out of Memory" attacks
 ///
 /// If you use the [`DefragPool`] in an untrusted environment an attacker could
@@ -87,12 +92,6 @@ where
                 )
             }
             Some(NetSlice::Ipv6(ipv6)) => {
-                // skip unfragmented packets
-                if false == ipv6.is_payload_fragmented() {
-                    // nothing to defragment here, skip packet
-                    return Ok(None);
-                }
-
                 // get fragmentation header
                 let frag = {
                     let mut f = None;
@@ -104,7 +103,12 @@ where
                         }
                     }
                     if let Some(f) = f {
-                        f.to_header()
+                        if f.is_fragmenting_payload() {
+                            f.to_header()
+                        } else {
+                            // nothing to defragment here, skip packet
+                            return Ok(None);
+                        }
                     } else {
                         // nothing to defragment here, skip packet
                         return Ok(None);
@@ -218,7 +222,438 @@ where
     pub fn return_buf(&mut self, buf: IpDefragPayloadVec) {
         self.finished_data_bufs.push(buf.payload);
     }
+
+    /// Retains only the elements specified by the predicate.
+    pub fn retain<F>(&mut self, f: F)
+    where
+        F: Fn(&Timestamp) -> bool,
+    {
+        if self.active.iter().any(|(_, (_, t))| false == f(t)) {
+            self.active = self
+                .active
+                .drain()
+                .filter_map(|(k, v)| {
+                    if f(&v.1) {
+                        Some((k, v))
+                    } else {
+                        let (data, sections) = v.0.take_bufs();
+                        self.finished_data_bufs.push(data);
+                        self.finished_section_bufs.push(sections);
+                        None
+                    }
+                })
+                .collect();
+        }
+    }
 }
 
 #[cfg(test)]
-mod test {}
+mod test {
+    use std::cmp::max;
+
+    use super::*;
+
+    #[test]
+    fn new() {
+        {
+            let pool = IpDefragPool::<(), ()>::new();
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+        {
+            let pool = IpDefragPool::<u32, (u32, u32)>::new();
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+    }
+
+    fn build_packet<CustomChannelId: core::hash::Hash + Eq + PartialEq + Clone + Sized>(
+        id: IpFragId<CustomChannelId>,
+        offset: u16,
+        more: bool,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(
+            Ethernet2Header::LEN
+                + SingleVlanHeader::LEN
+                + SingleVlanHeader::LEN
+                + max(
+                    Ipv4Header::MIN_LEN,
+                    Ipv6Header::LEN + Ipv6FragmentHeader::LEN,
+                )
+                + payload.len(),
+        );
+
+        let ip_ether_type = match id.ip {
+            IpFragVersionSpecId::Ipv4 {
+                source: _,
+                destination: _,
+                identification: _,
+            } => EtherType::IPV4,
+            IpFragVersionSpecId::Ipv6 {
+                source: _,
+                destination: _,
+                identification: _,
+            } => EtherType::IPV6,
+        };
+
+        buf.extend_from_slice(
+            &Ethernet2Header {
+                source: [0; 6],
+                destination: [0; 6],
+                ether_type: if id.outer_vlan_id.is_some() || id.inner_vlan_id.is_some() {
+                    EtherType::VLAN_TAGGED_FRAME
+                } else {
+                    ip_ether_type
+                },
+            }
+            .to_bytes(),
+        );
+
+        if let Some(vlan_id) = id.outer_vlan_id {
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::try_new(0).unwrap(),
+                    drop_eligible_indicator: false,
+                    vlan_id,
+                    ether_type: if id.inner_vlan_id.is_some() {
+                        EtherType::VLAN_TAGGED_FRAME
+                    } else {
+                        ip_ether_type
+                    },
+                }
+                .to_bytes(),
+            );
+        }
+
+        if let Some(vlan_id) = id.inner_vlan_id {
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::try_new(0).unwrap(),
+                    drop_eligible_indicator: false,
+                    vlan_id,
+                    ether_type: ip_ether_type,
+                }
+                .to_bytes(),
+            );
+        }
+
+        match id.ip {
+            IpFragVersionSpecId::Ipv4 {
+                source,
+                destination,
+                identification,
+            } => {
+                let mut header = Ipv4Header {
+                    identification,
+                    more_fragments: more,
+                    fragment_offset: IpFragOffset::try_new(offset).unwrap(),
+                    protocol: id.payload_ip_number,
+                    source,
+                    destination,
+                    total_len: (Ipv4Header::MIN_LEN + payload.len()) as u16,
+                    time_to_live: 2,
+                    ..Default::default()
+                };
+                header.header_checksum = header.calc_header_checksum();
+                buf.extend_from_slice(&header.to_bytes());
+            }
+            IpFragVersionSpecId::Ipv6 {
+                source,
+                destination,
+                identification,
+            } => {
+                buf.extend_from_slice(
+                    &Ipv6Header {
+                        traffic_class: 0,
+                        flow_label: Default::default(),
+                        payload_length: (payload.len() + Ipv6FragmentHeader::LEN) as u16,
+                        next_header: IpNumber::IPV6_FRAGMENTATION_HEADER,
+                        hop_limit: 2,
+                        source,
+                        destination,
+                    }
+                    .to_bytes(),
+                );
+                buf.extend_from_slice(
+                    &Ipv6FragmentHeader {
+                        next_header: id.payload_ip_number,
+                        fragment_offset: IpFragOffset::try_new(offset).unwrap(),
+                        more_fragments: more,
+                        identification,
+                    }
+                    .to_bytes(),
+                );
+            }
+        }
+        buf.extend_from_slice(payload);
+        buf
+    }
+
+    #[test]
+    fn process_sliced_packet() {
+        // v4 non fragmented
+        {
+            let mut pool = IpDefragPool::<(), ()>::new();
+            let pdata = build_packet(
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [0; 4],
+                        destination: [0; 4],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                0,
+                false,
+                &UdpHeader {
+                    source_port: 0,
+                    destination_port: 0,
+                    length: 0,
+                    checksum: 0,
+                }
+                .to_bytes(),
+            );
+            let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+            let v = pool.process_sliced_packet(&pslice, (), ());
+            assert_eq!(Ok(None), v);
+
+            // check the effect had no effect
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+
+        // v6 non fragmented
+        {
+            let mut pool = IpDefragPool::<(), ()>::new();
+            let pdata = build_packet(
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                0,
+                false,
+                &UdpHeader {
+                    source_port: 0,
+                    destination_port: 0,
+                    length: 0,
+                    checksum: 0,
+                }
+                .to_bytes(),
+            );
+            let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+            let v = pool.process_sliced_packet(&pslice, (), ());
+            assert_eq!(Ok(None), v);
+
+            // check the effect had no effect
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+
+        // v4 & v6 basic test
+        {
+            let frag_ids = [
+                // v4 (no vlan)
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [1, 2, 3, 4],
+                        destination: [5, 6, 7, 8],
+                        identification: 9,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v4 (single vlan)
+                IpFragId {
+                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [1, 2, 3, 4],
+                        destination: [5, 6, 7, 8],
+                        identification: 9,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v4 (double vlan)
+                IpFragId {
+                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
+                    inner_vlan_id: Some(VlanId::try_new(23).unwrap()),
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [1, 2, 3, 4],
+                        destination: [5, 6, 7, 8],
+                        identification: 9,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v6 (no vlan)
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v6 (single vlan)
+                IpFragId {
+                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v6 (double vlan)
+                IpFragId {
+                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
+                    inner_vlan_id: Some(VlanId::try_new(23).unwrap()),
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+            ];
+
+            let mut pool = IpDefragPool::<(), ()>::new();
+
+            for frag_id in frag_ids {
+                {
+                    let pdata = build_packet(frag_id.clone(), 0, true, &[1, 2, 3, 4, 5, 6, 7, 8]);
+                    let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                    let v = pool.process_sliced_packet(&pslice, (), ());
+                    assert_eq!(Ok(None), v);
+
+                    // check the frag id was correctly calculated
+                    assert_eq!(1, pool.active.len());
+                    assert_eq!(pool.active.iter().next().unwrap().0, &frag_id);
+                }
+
+                {
+                    let pdata = build_packet(frag_id.clone(), 1, false, &[9, 10]);
+                    let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                    let v = pool
+                        .process_sliced_packet(&pslice, (), ())
+                        .unwrap()
+                        .unwrap();
+                    assert_eq!(v.ip_number, IpNumber::UDP);
+                    assert_eq!(
+                        v.len_source,
+                        if matches!(
+                            frag_id.ip,
+                            IpFragVersionSpecId::Ipv4 {
+                                source: _,
+                                destination: _,
+                                identification: _
+                            }
+                        ) {
+                            LenSource::Ipv4HeaderTotalLen
+                        } else {
+                            LenSource::Ipv6HeaderPayloadLen
+                        }
+                    );
+                    assert_eq!(v.payload, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+                    // there should be nothing left
+                    assert_eq!(pool.active.len(), 0);
+                    assert_eq!(pool.finished_data_bufs.len(), 0);
+                    assert_eq!(pool.finished_section_bufs.len(), 1);
+
+                    // return buffer
+                    pool.return_buf(v);
+
+                    assert_eq!(pool.active.len(), 0);
+                    assert_eq!(pool.finished_data_bufs.len(), 1);
+                    assert_eq!(pool.finished_section_bufs.len(), 1);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn retain() {
+        let frag_id_0 = IpFragId {
+            outer_vlan_id: None,
+            inner_vlan_id: None,
+            ip: IpFragVersionSpecId::Ipv4 {
+                source: [1, 2, 3, 4],
+                destination: [5, 6, 7, 8],
+                identification: 0,
+            },
+            payload_ip_number: IpNumber::UDP,
+            channel_id: (),
+        };
+        let frag_id_1 = IpFragId {
+            outer_vlan_id: None,
+            inner_vlan_id: None,
+            ip: IpFragVersionSpecId::Ipv4 {
+                source: [1, 2, 3, 4],
+                destination: [5, 6, 7, 8],
+                identification: 1,
+            },
+            payload_ip_number: IpNumber::UDP,
+            channel_id: (),
+        };
+
+        let mut pool = IpDefragPool::<u32, ()>::new();
+
+        // packet timestamp 1
+        {
+            let pdata = build_packet(frag_id_0.clone(), 0, true, &[1, 2, 3, 4, 5, 6, 7, 8]);
+            let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+            let v = pool.process_sliced_packet(&pslice, 1, ());
+            assert_eq!(Ok(None), v);
+        }
+        // packet timestamp 2
+        {
+            let pdata = build_packet(frag_id_1.clone(), 0, true, &[1, 2, 3, 4, 5, 6, 7, 8]);
+            let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+            let v = pool.process_sliced_packet(&pslice, 2, ());
+            assert_eq!(Ok(None), v);
+        }
+
+        // check buffers are active
+        assert_eq!(pool.active.len(), 2);
+        assert_eq!(pool.finished_data_bufs.len(), 0);
+        assert_eq!(pool.finished_section_bufs.len(), 0);
+
+        // call retain without effect
+        pool.retain(|ts| *ts > 0);
+        assert_eq!(pool.active.len(), 2);
+        assert_eq!(pool.finished_data_bufs.len(), 0);
+        assert_eq!(pool.finished_section_bufs.len(), 0);
+
+        // call retain and delete timestamp 1
+        pool.retain(|ts| *ts > 1);
+        assert_eq!(pool.active.len(), 1);
+        assert_eq!(pool.finished_data_bufs.len(), 1);
+        assert_eq!(pool.finished_section_bufs.len(), 1);
+        assert_eq!(pool.active.iter().next().unwrap().0, &frag_id_1);
+    }
+}

@@ -6,7 +6,7 @@
 
 # etherparse
 
-A mostly zero allocation library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
+A zero allocation supporting library for parsing & writing a bunch of packet based protocols (EthernetII, IPv4, IPv6, UDP, TCP ...).
 
 Currently supported are:
 * Ethernet II
@@ -17,13 +17,15 @@ Currently supported are:
 * TCP
 * ICMP & ICMPv6 (not all message types are supported)
 
+Reconstruction of fragmented IP packets is also supported, but requires allocations.
+
 ## Usage
 
 Add the following to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-etherparse = "0.15"
+etherparse = "0.16"
 ```
 
 ## What is etherparse?
