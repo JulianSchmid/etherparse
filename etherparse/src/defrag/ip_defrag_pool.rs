@@ -247,6 +247,16 @@ where
     }
 }
 
+impl<Timestamp, CustomChannelId> Default for IpDefragPool<Timestamp, CustomChannelId>
+where
+    Timestamp: Sized + core::fmt::Debug + Clone,
+    CustomChannelId: Sized + core::fmt::Debug + Clone + core::hash::Hash + Eq + PartialEq,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use std::cmp::max;
@@ -263,6 +273,22 @@ mod test {
         }
         {
             let pool = IpDefragPool::<u32, (u32, u32)>::new();
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+    }
+
+    #[test]
+    fn default() {
+        {
+            let pool: IpDefragPool<(), ()> = Default::default();
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+        {
+            let pool: IpDefragPool<u32, (u32, u32)> = Default::default();
             assert_eq!(pool.active.len(), 0);
             assert_eq!(pool.finished_data_bufs.len(), 0);
             assert_eq!(pool.finished_section_bufs.len(), 0);

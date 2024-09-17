@@ -32,7 +32,8 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
     pub fn from_slice(
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv6ExtensionsSlice, IpNumber, &'a [u8]), err::ipv6_exts::HeaderSliceError> {
+    ) -> Result<(Ipv6ExtensionsSlice<'a>, IpNumber, &'a [u8]), err::ipv6_exts::HeaderSliceError>
+    {
         let mut rest = start_slice;
         let mut next_header = start_ip_number;
         let mut fragmented = false;
@@ -134,7 +135,7 @@ impl<'a> Ipv6ExtensionsSlice<'a> {
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
     ) -> (
-        Ipv6ExtensionsSlice,
+        Ipv6ExtensionsSlice<'a>,
         IpNumber,
         &'a [u8],
         Option<(err::ipv6_exts::HeaderSliceError, err::Layer)>,

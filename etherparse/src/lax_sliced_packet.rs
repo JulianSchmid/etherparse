@@ -83,7 +83,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// }
     ///
     /// ```
-    pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::LenError> {
+    pub fn from_ethernet(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::LenError> {
         LaxSlicedPacketCursor::parse_from_ethernet2(slice)
     }
 
@@ -143,7 +143,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// println!("transport: {:?}", packet.transport);
     ///
     /// ```
-    pub fn from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket {
+    pub fn from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
         LaxSlicedPacketCursor::parse_from_ether_type(ether_type, slice)
     }
 
@@ -217,7 +217,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ip(slice: &'a [u8]) -> Result<LaxSlicedPacket, err::ip::LaxHeaderSliceError> {
+    pub fn from_ip(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::ip::LaxHeaderSliceError> {
         LaxSlicedPacketCursor::parse_from_ip(slice)
     }
 

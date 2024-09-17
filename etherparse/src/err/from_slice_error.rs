@@ -1,7 +1,11 @@
 use super::*;
 
-/// Type aggregating errors that can be caused by decoding from a slice. This type can be used
-/// as a "catch all" type for errors caused by `from_slice` functions
+/// "Catch all" error for all `from_slice` errors (supports automatic conversion from all
+/// other slice errors).
+///
+/// This type aggregates all errors that can be caused by decoding from a slice.
+///
+/// This type can be used as a "catch all" type for errors caused by `from_slice` functions
 /// as all errors from these functions can be converted into this type.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum FromSliceError {

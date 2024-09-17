@@ -432,7 +432,7 @@ impl<'a> LaxPacketHeaders<'a> {
     /// }
     ///
     /// ```
-    pub fn from_ip(slice: &'a [u8]) -> Result<LaxPacketHeaders, err::ip::LaxHeaderSliceError> {
+    pub fn from_ip(slice: &'a [u8]) -> Result<LaxPacketHeaders<'a>, err::ip::LaxHeaderSliceError> {
         let mut result = Self {
             link: None,
             vlan: None,

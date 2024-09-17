@@ -852,7 +852,7 @@ impl IpHeaders {
     ///   parse packets returned via ICMP as these usually only contain the start.
     /// * Parsing packets where the `payload_length` (in the IPv6 header) has not
     ///   yet been set. This can be useful when parsing packets which have been
-    ///  recorded in a layer before the length field was set (e.g. before the operating
+    ///   recorded in a layer before the length field was set (e.g. before the operating
     ///   system set the length fields).
     ///
     /// # Differences to `from_slice`:
