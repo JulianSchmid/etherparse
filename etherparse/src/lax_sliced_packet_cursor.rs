@@ -213,7 +213,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         self.slice_transport(payload)
     }
 
-    fn slice_transport(mut self, slice: LaxIpPayloadSlice<'a>) -> LaxSlicedPacket {
+    fn slice_transport(mut self, slice: LaxIpPayloadSlice<'a>) -> LaxSlicedPacket<'a> {
         use err::packet::SliceError as O;
         if slice.fragmented || self.result.stop_err.is_some() {
             // if an error occured in an upper layer or the payload is fragmented

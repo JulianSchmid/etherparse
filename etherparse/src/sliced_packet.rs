@@ -90,7 +90,7 @@ impl<'a> SlicedPacket<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket, err::packet::SliceError> {
+    pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_ethernet2()
     }
 
@@ -132,7 +132,7 @@ impl<'a> SlicedPacket<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_linux_sll(data: &'a [u8]) -> Result<SlicedPacket, err::packet::SliceError> {
+    pub fn from_linux_sll(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_linux_sll()
     }
 
@@ -191,7 +191,7 @@ impl<'a> SlicedPacket<'a> {
     pub fn from_ether_type(
         ether_type: EtherType,
         data: &'a [u8],
-    ) -> Result<SlicedPacket, err::packet::SliceError> {
+    ) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         use ether_type::*;
         let mut cursor = SlicedPacketCursor::new(data);
         cursor.result.link = Some(LinkSlice::EtherPayload(EtherPayloadSlice {
@@ -242,7 +242,7 @@ impl<'a> SlicedPacket<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket, err::packet::SliceError> {
+    pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_ip()
     }
 

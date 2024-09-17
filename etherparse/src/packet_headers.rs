@@ -68,7 +68,9 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ethernet_slice(slice: &'a [u8]) -> Result<PacketHeaders, err::packet::SliceError> {
+    pub fn from_ethernet_slice(
+        slice: &'a [u8],
+    ) -> Result<PacketHeaders<'a>, err::packet::SliceError> {
         use err::packet::SliceError::Len;
 
         let (ethernet, rest) = Ethernet2Header::from_slice(slice).map_err(Len)?;
@@ -139,7 +141,7 @@ impl<'a> PacketHeaders<'a> {
     pub fn from_ether_type(
         mut ether_type: EtherType,
         slice: &'a [u8],
-    ) -> Result<PacketHeaders, err::packet::SliceError> {
+    ) -> Result<PacketHeaders<'a>, err::packet::SliceError> {
         use err::packet::SliceError::*;
 
         let mut rest = slice;

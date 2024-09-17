@@ -18,7 +18,7 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
     pub fn from_slice(
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
-    ) -> Result<(Ipv4ExtensionsSlice, IpNumber, &[u8]), err::ip_auth::HeaderSliceError> {
+    ) -> Result<(Ipv4ExtensionsSlice<'a>, IpNumber, &'a [u8]), err::ip_auth::HeaderSliceError> {
         use ip_number::*;
         if AUTH == start_ip_number {
             let header = IpAuthHeaderSlice::from_slice(start_slice)?;
@@ -116,9 +116,9 @@ impl<'a> Ipv4ExtensionsSlice<'a> {
         start_ip_number: IpNumber,
         start_slice: &'a [u8],
     ) -> (
-        Ipv4ExtensionsSlice,
+        Ipv4ExtensionsSlice<'a>,
         IpNumber,
-        &[u8],
+        &'a [u8],
         Option<err::ip_auth::HeaderSliceError>,
     ) {
         use ip_number::*;
