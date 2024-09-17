@@ -1,8 +1,13 @@
 use crate::err::*;
 
-/// Type aggregating errors that can be caused by reading. This type can be used
-/// as a "catch all" type for errors caused by `from_slice` or `read` functions
-/// as all errors from these functions can be converted into this type.
+/// "Catch all" error for all `from_slice` or `read` errors (supports automatic conversion from all
+/// other slice errors).
+///
+/// This type aggregates all errors that can be caused by decoding from a slice or reading
+/// from an io stream.
+///
+/// This type can be used as a "catch all" type for errors caused by `from_slice` or
+/// `read` functions as all errors from these functions can be converted into this type.
 #[derive(Debug)]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub enum ReadError {
