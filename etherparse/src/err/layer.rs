@@ -145,7 +145,9 @@ mod test {
     #[test]
     fn error_title() {
         let tests = [
+            (LinuxSllHeader, "Linux Cooked Capture v1 Error"),
             (Ethernet2Header, "Ethernet 2 Header Error"),
+            (EtherPayload, "Payload with Ether Type Error"),
             (VlanHeader, "VLAN Header Error"),
             (IpHeader, "IP Header Error"),
             (Ipv4Header, "IPv4 Header Error"),
@@ -177,7 +179,9 @@ mod test {
     #[test]
     fn fmt() {
         let tests = [
+            (LinuxSllHeader, "Linux Cooked Capture v1 header"),
             (Ethernet2Header, "Ethernet 2 header"),
+            (EtherPayload, "Ether type payload"),
             (VlanHeader, "VLAN header"),
             (IpHeader, "IP header"),
             (Ipv4Header, "IPv4 header"),
