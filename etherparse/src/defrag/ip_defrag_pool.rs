@@ -385,7 +385,7 @@ mod test {
                     &Ipv6Header {
                         traffic_class: 0,
                         flow_label: Default::default(),
-                        payload_length: (payload.len() + Ipv6FragmentHeader::LEN) as u16,
+                        payload_length: (payload.len() + Ipv6FragmentHeader::LEN + 8) as u16,
                         next_header: IpNumber::IPV6_FRAGMENTATION_HEADER,
                         hop_limit: 2,
                         source,
@@ -395,10 +395,18 @@ mod test {
                 );
                 buf.extend_from_slice(
                     &Ipv6FragmentHeader {
-                        next_header: id.payload_ip_number,
+                        next_header: IpNumber::IPV6_ROUTE_HEADER,
                         fragment_offset: IpFragOffset::try_new(offset).unwrap(),
                         more_fragments: more,
                         identification,
+                    }
+                    .to_bytes(),
+                );
+                buf.extend_from_slice(
+                    &{
+                        let mut h: Ipv6RawExtHeader = Default::default();
+                        h.next_header = id.payload_ip_number;
+                        h
                     }
                     .to_bytes(),
                 );
@@ -410,6 +418,22 @@ mod test {
 
     #[test]
     fn process_sliced_packet() {
+        // non ip packet
+        {
+            let mut pool = IpDefragPool::<(), ()>::new();
+            let pslice = SlicedPacket {
+                link: None,
+                vlan: None,
+                net: None,
+                transport: None,
+            };
+            let v = pool.process_sliced_packet(&pslice, (), ());
+            assert_eq!(Ok(None), v);
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+
         // v4 non fragmented
         {
             let mut pool = IpDefragPool::<(), ()>::new();
@@ -572,7 +596,25 @@ mod test {
                 }
 
                 {
-                    let pdata = build_packet(frag_id.clone(), 1, false, &[9, 10]);
+                    let pdata = build_packet(
+                        frag_id.clone(),
+                        1,
+                        true,
+                        &[
+                            9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
+                        ],
+                    );
+                    let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                    let v = pool.process_sliced_packet(&pslice, (), ());
+                    assert_eq!(Ok(None), v);
+
+                    // check the frag id was correctly calculated
+                    assert_eq!(1, pool.active.len());
+                    assert_eq!(pool.active.iter().next().unwrap().0, &frag_id);
+                }
+
+                {
+                    let pdata = build_packet(frag_id.clone(), 3, false, &[25, 26]);
                     let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
                     let v = pool
                         .process_sliced_packet(&pslice, (), ())
@@ -594,7 +636,13 @@ mod test {
                             LenSource::Ipv6HeaderPayloadLen
                         }
                     );
-                    assert_eq!(v.payload, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+                    assert_eq!(
+                        v.payload,
+                        &[
+                            1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                            21, 22, 23, 24, 25, 26
+                        ]
+                    );
 
                     // there should be nothing left
                     assert_eq!(pool.active.len(), 0);
@@ -607,6 +655,164 @@ mod test {
                     assert_eq!(pool.active.len(), 0);
                     assert_eq!(pool.finished_data_bufs.len(), 1);
                     assert_eq!(pool.finished_section_bufs.len(), 1);
+                }
+            }
+        }
+
+        // ipv6 no frag header
+        {
+            // build packet without ipv6
+            let pdata = {
+                let mut v = Vec::with_capacity(Ipv6Header::LEN + UdpHeader::LEN + 16);
+                v.extend_from_slice(
+                    &Ipv6Header {
+                        traffic_class: 0,
+                        flow_label: Ipv6FlowLabel::try_new(0).unwrap(),
+                        payload_length: UdpHeader::LEN_U16 + 16,
+                        next_header: IpNumber::UDP,
+                        hop_limit: 2,
+                        source: [0; 16],
+                        destination: [0; 16],
+                    }
+                    .to_bytes(),
+                );
+                v.extend_from_slice(
+                    &UdpHeader {
+                        source_port: 1234,
+                        destination_port: 2345,
+                        length: UdpHeader::LEN_U16 + 10,
+                        checksum: 0,
+                    }
+                    .to_bytes(),
+                );
+                v.extend_from_slice(&[0; 16]);
+                v
+            };
+            let slice = SlicedPacket::from_ip(&pdata).unwrap();
+
+            let mut pool = IpDefragPool::<(), ()>::new();
+            assert_eq!(Ok(None), pool.process_sliced_packet(&slice, (), ()));
+            assert_eq!(pool.active.len(), 0);
+            assert_eq!(pool.finished_data_bufs.len(), 0);
+            assert_eq!(pool.finished_section_bufs.len(), 0);
+        }
+
+        // error in initial packet
+        {
+            let frag_ids = [
+                // v4
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [1, 2, 3, 4],
+                        destination: [5, 6, 7, 8],
+                        identification: 9,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v6
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+            ];
+            let mut pool = IpDefragPool::<(), ()>::new();
+
+            for frag_id in frag_ids {
+                let pdata = build_packet(frag_id.clone(), 0, true, &[0; 7]);
+                let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                let v = pool.process_sliced_packet(&pslice, (), ());
+                assert_eq!(
+                    Err(IpDefragError::UnalignedFragmentPayloadLen {
+                        offset: IpFragOffset::try_new(0).unwrap(),
+                        payload_len: 7
+                    }),
+                    v
+                );
+                assert_eq!(0, pool.active.len());
+            }
+        }
+
+        // error in followup packet
+        {
+            let frag_ids = [
+                // v4
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv4 {
+                        source: [1, 2, 3, 4],
+                        destination: [5, 6, 7, 8],
+                        identification: 9,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+                // v6
+                IpFragId {
+                    outer_vlan_id: None,
+                    inner_vlan_id: None,
+                    ip: IpFragVersionSpecId::Ipv6 {
+                        source: [0; 16],
+                        destination: [0; 16],
+                        identification: 0,
+                    },
+                    payload_ip_number: IpNumber::UDP,
+                    channel_id: (),
+                },
+            ];
+
+            for frag_id in frag_ids {
+                let mut pool = IpDefragPool::<(), ()>::new();
+
+                // initial packet
+                {
+                    let pdata = build_packet(frag_id.clone(), 0, true, &[1, 2, 3, 4, 5, 6, 7, 8]);
+                    let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                    let v = pool.process_sliced_packet(&pslice, (), ());
+                    assert_eq!(Ok(None), v);
+
+                    // check the frag id was correctly calculated
+                    assert_eq!(1, pool.active.len());
+                    assert_eq!(pool.active.iter().next().unwrap().0, &frag_id);
+                }
+
+                // follow up packet error
+                {
+                    let pdata = build_packet(
+                        frag_id.clone(),
+                        1,
+                        true,
+                        &[9, 10, 11, 12, 13, 14, 15, 16, 17],
+                    );
+                    let pslice = SlicedPacket::from_ethernet(&pdata).unwrap();
+                    let v = pool.process_sliced_packet(&pslice, (), ());
+                    assert_eq!(
+                        Err(IpDefragError::UnalignedFragmentPayloadLen {
+                            offset: IpFragOffset::try_new(1).unwrap(),
+                            payload_len: 9
+                        }),
+                        v
+                    );
+
+                    // check the frag id was correctly calculated
+                    assert_eq!(1, pool.active.len());
+                    {
+                        let p = pool.active.iter().next().unwrap();
+                        assert_eq!(p.0, &frag_id);
+                        assert_eq!(p.1 .0.data(), &[1, 2, 3, 4, 5, 6, 7, 8]);
+                        assert_eq!(p.1 .0.sections()[0].start, 0);
+                        assert_eq!(p.1 .0.sections()[0].end, 8);
+                    }
                 }
             }
         }
