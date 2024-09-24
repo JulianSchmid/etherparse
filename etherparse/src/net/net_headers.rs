@@ -12,6 +12,8 @@ pub enum NetHeaders {
     Ipv4(Ipv4Header, Ipv4Extensions),
     /// IPv6 header & extension headers.
     Ipv6(Ipv6Header, Ipv6Extensions),
+    /// Address Resolution Protocol 
+    Arp(ArpHeader),
 }
 
 impl NetHeaders {
@@ -39,6 +41,7 @@ impl NetHeaders {
         match *self {
             Ipv4(ref header, ref extensions) => header.header_len() + extensions.header_len(),
             Ipv6(_, ref extensions) => Ipv6Header::LEN + extensions.header_len(),
+            Arp(header) => header.header_len(),
         }
     }
 }
@@ -50,6 +53,13 @@ impl From<IpHeaders> for NetHeaders {
             IpHeaders::Ipv4(h, e) => NetHeaders::Ipv4(h, e),
             IpHeaders::Ipv6(h, e) => NetHeaders::Ipv6(h, e),
         }
+    }
+}
+
+impl From<ArpHeader> for NetHeaders {
+    #[inline]
+    fn from(value: ArpHeader) -> Self {
+        NetHeaders::Arp(value)
     }
 }
 

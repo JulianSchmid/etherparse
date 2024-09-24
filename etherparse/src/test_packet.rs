@@ -36,6 +36,7 @@ impl TestPacket {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
                 }
+                NetHeaders::Arp(_) => todo!(),
             }
         }
         if let Some(transport) = &self.transport {
@@ -88,6 +89,7 @@ impl TestPacket {
                     )
                     .unwrap();
             }
+            Some(Arp(_)) => todo!(),
         }
 
         use TransportHeader::*;
@@ -118,6 +120,7 @@ impl TestPacket {
                     )
                     .unwrap();
             }
+            Arp(_) => todo!(),
         }
     }
 
@@ -125,6 +128,7 @@ impl TestPacket {
         self.net.as_ref().map_or(false, |net| match net {
             NetHeaders::Ipv4(h, _) => h.is_fragmenting_payload(),
             NetHeaders::Ipv6(_, e) => e.is_fragmenting_payload(),
+            NetHeaders::Arp(_) => todo!(),
         })
     }
 }

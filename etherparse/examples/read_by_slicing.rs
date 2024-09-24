@@ -92,6 +92,7 @@ fn main() {
                         println!("    {:?}", ipv6.extensions());
                     }
                 }
+                Some(Arp(value)) => println!("  Arp {:?}", value),
                 None => {}
             }
 

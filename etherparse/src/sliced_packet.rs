@@ -202,6 +202,7 @@ impl<'a> SlicedPacket<'a> {
             IPV4 => cursor.slice_ipv4(),
             IPV6 => cursor.slice_ipv6(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => cursor.slice_vlan(),
+            ARP => cursor.slice_arp(),
             _ => Ok(cursor.result),
         }
     }
@@ -332,6 +333,7 @@ impl<'a> SlicedPacket<'a> {
             match net {
                 Ipv4(v) => Some(v.payload()),
                 Ipv6(v) => Some(v.payload()),
+                Arp(_) => None,
             }
         } else {
             None
@@ -1165,6 +1167,7 @@ mod test {
                     let mut ip = match ip {
                         NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
                         NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                        NetHeaders::Arp(_) => unreachable!(),
                     };
                     ip.set_next_headers(ip_number::UDP);
                     ip.into()
@@ -1194,6 +1197,7 @@ mod test {
                             len_source: match test.net.as_ref().unwrap() {
                                 NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
                                 NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                NetHeaders::Arp(_) => unreachable!(),
                             },
                             layer: Layer::UdpHeader,
                             layer_start_offset: base_len,
@@ -1215,6 +1219,7 @@ mod test {
                     let mut ip = match ip {
                         NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
                         NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                        NetHeaders::Arp(_) => unreachable!(),
                     };
                     ip.set_next_headers(ip_number::TCP);
                     ip.into()
@@ -1243,6 +1248,7 @@ mod test {
                                 len_source: match test.net.as_ref().unwrap() {
                                     NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
                                     NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                    NetHeaders::Arp(_) => unreachable!(),
                                 },
                                 layer: Layer::TcpHeader,
                                 layer_start_offset: base_len,
@@ -1278,6 +1284,7 @@ mod test {
                     let mut ip = match ip {
                         NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
                         NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                        NetHeaders::Arp(_) => unreachable!(),
                     };
                     ip.set_next_headers(ip_number::ICMP);
                     ip.into()
@@ -1304,6 +1311,7 @@ mod test {
                             len_source: match test.net.as_ref().unwrap() {
                                 NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
                                 NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                NetHeaders::Arp(_) => unreachable!(),
                             },
                             layer: Layer::Icmpv4,
                             layer_start_offset: base_len,
@@ -1326,6 +1334,7 @@ mod test {
                     let mut ip = match ip {
                         NetHeaders::Ipv4(h, e) => IpHeaders::Ipv4(h.clone(), e.clone()),
                         NetHeaders::Ipv6(h, e) => IpHeaders::Ipv6(h.clone(), e.clone()),
+                        NetHeaders::Arp(_) => unreachable!(),
                     };
                     ip.set_next_headers(ip_number::IPV6_ICMP);
                     ip.into()
@@ -1352,6 +1361,7 @@ mod test {
                             len_source: match test.net.as_ref().unwrap() {
                                 NetHeaders::Ipv4(_, _) => LenSource::Ipv4HeaderTotalLen,
                                 NetHeaders::Ipv6(_, _) => LenSource::Ipv6HeaderPayloadLen,
+                                NetHeaders::Arp(_) => unreachable!(),
                             },
                             layer: Layer::Icmpv6,
                             layer_start_offset: base_len,
@@ -1403,6 +1413,7 @@ mod test {
                             .unwrap()
                             .0,
                         ),
+                        NetSlice::Arp(arp) => NetHeaders::Arp(arp.header().to_header().unwrap().0),
                     }
                 })
             );
@@ -1473,6 +1484,7 @@ mod test {
                 let ether_type = match ip {
                     NetHeaders::Ipv4(_, _) => ether_type::IPV4,
                     NetHeaders::Ipv6(_, _) => ether_type::IPV6,
+                    NetHeaders::Arp(_) => ether_type::ARP,
                 };
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
                 assert_eq!(
@@ -1523,6 +1535,7 @@ mod test {
                     match ip {
                         NetHeaders::Ipv4(_, _) => ether_type::IPV4,
                         NetHeaders::Ipv6(_, _) => ether_type::IPV6,
+                        NetHeaders::Arp(_) => ether_type::ARP,
                     },
                     &data,
                 )
