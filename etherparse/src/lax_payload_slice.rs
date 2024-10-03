@@ -32,6 +32,11 @@ pub enum LaxPayloadSlice<'a> {
         /// True if the payload has been cut off.
         incomplete: bool,
     },
+    /// Arp Payload
+    Arp {
+        payload: &'a [u8],
+        parsed: ArpPayloadSlice<'a>,
+    },
 }
 
 impl<'a> LaxPayloadSlice<'a> {
@@ -55,6 +60,7 @@ impl<'a> LaxPayloadSlice<'a> {
                 payload,
                 incomplete: _,
             } => payload,
+            LaxPayloadSlice::Arp { payload, parsed: _ } => payload,
         }
     }
 }
