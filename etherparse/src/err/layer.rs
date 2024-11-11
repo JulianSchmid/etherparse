@@ -45,10 +45,10 @@ pub enum Layer {
     Icmpv4TimestampReply,
     /// Error occurred while parsing an ICMPv6 packet.
     Icmpv6,
-    /// Error occurred while parsing an Address Resolution Protocol header 
+    /// Error occurred while parsing an Address Resolution Protocol header
     ArpHeader,
     /// Error occurred while parsing an Address Resolution Protocol payload
-    ArpPayload, 
+    ArpPayload,
 }
 
 impl Layer {

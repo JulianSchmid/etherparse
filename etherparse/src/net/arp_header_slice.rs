@@ -9,7 +9,7 @@ pub struct ArpHeaderSlice<'a> {
 }
 
 impl<'a> ArpHeaderSlice<'a> {
-    pub(crate) fn from_slice(slice: &'a [u8]) -> Result<(Self, &[u8]), err::LenError> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<(Self, &'a [u8]), err::LenError> {
         if slice.len() < ArpHeader::LEN {
             return Err(err::LenError {
                 required_len: ArpHeader::LEN,
@@ -27,11 +27,7 @@ impl<'a> ArpHeaderSlice<'a> {
         ))
     }
 
-    pub(crate) fn to_header(&self) -> Result<(ArpHeader, &[u8]), err::LenError> {
-        // SAFETY:
-        // This is safe as the slice length is checked to be
-        // at least ArpHeader::LEN
-        // at the start of the function.
+    pub fn to_header(&self) -> Result<(ArpHeader, &[u8]), err::LenError> {
         ArpHeader::from_slice(&self.slice)
     }
 }

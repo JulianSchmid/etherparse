@@ -39,7 +39,7 @@ impl LinuxSllProtocolType {
         ArpHardwareId::IPGRE,
         ArpHardwareId::IEEE80211_RADIOTAP,
         ArpHardwareId::FRAD,
-        ArpHardwareId::ETHER,
+        ArpHardwareId::ETHERNET,
     ];
 
     pub fn change_value(&mut self, value: u16) {
@@ -75,7 +75,7 @@ impl TryFrom<(ArpHardwareId, u16)> for LinuxSllProtocolType {
             }
             ArpHardwareId::IEEE80211_RADIOTAP => Ok(LinuxSllProtocolType::Ignored(protocol_type)),
             ArpHardwareId::FRAD => Ok(LinuxSllProtocolType::Ignored(protocol_type)),
-            ArpHardwareId::ETHER => match LinuxNonstandardEtherType::try_from(protocol_type) {
+            ArpHardwareId::ETHERNET => match LinuxNonstandardEtherType::try_from(protocol_type) {
                 Ok(v) => Ok(LinuxSllProtocolType::LinuxNonstandardEtherType(v)),
                 Err(_) => Ok(LinuxSllProtocolType::EtherType(EtherType(protocol_type))),
             },
@@ -122,7 +122,7 @@ mod test {
         );
         assert_eq!(
             LinuxSllProtocolType::try_from((
-                ArpHardwareId::ETHER,
+                ArpHardwareId::ETHERNET,
                 u16::from(LinuxNonstandardEtherType::N802_3)
             )),
             Ok(LinuxSllProtocolType::LinuxNonstandardEtherType(
@@ -130,7 +130,7 @@ mod test {
             ))
         );
         assert_eq!(
-            LinuxSllProtocolType::try_from((ArpHardwareId::ETHER, u16::from(EtherType::IPV4))),
+            LinuxSllProtocolType::try_from((ArpHardwareId::ETHERNET, u16::from(EtherType::IPV4))),
             Ok(LinuxSllProtocolType::EtherType(EtherType::IPV4))
         );
     }

@@ -27,7 +27,7 @@ pub enum BuildWriteError {
     Icmpv6InIpv4,
 
     /// address size defined in the ARP header does not match the actual size
-    ArpHeaderNotMatch, 
+    ArpHeaderNotMatch,
 }
 
 #[cfg(feature = "std")]

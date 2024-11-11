@@ -18,7 +18,6 @@
 /// assert_eq!(0x0001, num);
 /// ```
 ///
-
 #[derive(Clone, Copy, Eq, PartialEq, Default, Hash)]
 pub struct ArpHardwareId(pub u16);
 
@@ -26,7 +25,7 @@ impl ArpHardwareId {
     // Numbers sourced from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21
 
     pub const NETROM: ArpHardwareId = Self(0);
-    pub const ETHER: ArpHardwareId = Self(1);
+    pub const ETHERNET: ArpHardwareId = Self(1);
     pub const EETHER: ArpHardwareId = Self(2);
     pub const AX25: ArpHardwareId = Self(3);
     pub const PRONET: ArpHardwareId = Self(4);
@@ -113,7 +112,7 @@ impl core::fmt::Display for ArpHardwareId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
             Self::NETROM => write!(f, "{} (from KA9Q: NET/ROM pseudo)", self.0),
-            Self::ETHER => write!(f, "{} (Ethernet 10Mbps)", self.0),
+            Self::ETHERNET => write!(f, "{} (Ethernet 10Mbps)", self.0),
             Self::EETHER => write!(f, "{} (Experimental Ethernet)", self.0),
             Self::AX25 => write!(f, "{} (AX.25 Level 2)", self.0),
             Self::PRONET => write!(f, "{} (PROnet token ring)", self.0),
@@ -197,7 +196,7 @@ mod test {
     #[test]
     fn to_u16() {
         assert_eq!(0, u16::from(ArpHardwareId::NETROM));
-        assert_eq!(1, u16::from(ArpHardwareId::ETHER));
+        assert_eq!(1, u16::from(ArpHardwareId::ETHERNET));
         assert_eq!(2, u16::from(ArpHardwareId::EETHER));
         assert_eq!(3, u16::from(ArpHardwareId::AX25));
         assert_eq!(4, u16::from(ArpHardwareId::PRONET));
@@ -273,7 +272,7 @@ mod test {
     #[test]
     fn from_u16() {
         assert_eq!(ArpHardwareId::from(0), ArpHardwareId::NETROM);
-        assert_eq!(ArpHardwareId::from(1), ArpHardwareId::ETHER);
+        assert_eq!(ArpHardwareId::from(1), ArpHardwareId::ETHERNET);
         assert_eq!(ArpHardwareId::from(2), ArpHardwareId::EETHER);
         assert_eq!(ArpHardwareId::from(3), ArpHardwareId::AX25);
         assert_eq!(ArpHardwareId::from(4), ArpHardwareId::PRONET);
@@ -350,7 +349,7 @@ mod test {
     fn display_dbg() {
         let pairs = &[
             (ArpHardwareId::NETROM, "0 (from KA9Q: NET/ROM pseudo)"),
-            (ArpHardwareId::ETHER, "1 (Ethernet 10Mbps)"),
+            (ArpHardwareId::ETHERNET, "1 (Ethernet 10Mbps)"),
             (ArpHardwareId::EETHER, "2 (Experimental Ethernet)"),
             (ArpHardwareId::AX25, "3 (AX.25 Level 2)"),
             (ArpHardwareId::PRONET, "4 (PROnet token ring)"),
@@ -449,7 +448,7 @@ mod test {
     fn clone_eq() {
         let values = &[
             ArpHardwareId::NETROM,
-            ArpHardwareId::ETHER,
+            ArpHardwareId::ETHERNET,
             ArpHardwareId::EETHER,
             ArpHardwareId::AX25,
             ArpHardwareId::PRONET,

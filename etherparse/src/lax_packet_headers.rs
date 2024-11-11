@@ -120,7 +120,7 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                 }
     ///             }
     ///             LaxPayloadSlice::Arp { payload, parsed } => {
-    ///                 println!("ARP payload: {:?}", parsed); 
+    ///                 println!("ARP payload: {:?}", parsed);
     ///            }
     ///         }
     ///     }
@@ -311,7 +311,7 @@ impl<'a> LaxPacketHeaders<'a> {
             _ => None,
         };
 
-        // parse ip
+        // parse ip or arp
         match ether_type {
             IPV4 | IPV6 => match result.add_ip(offset, rest) {
                 Ok(_) => {}
@@ -709,7 +709,7 @@ mod test {
 
     fn from_x_slice_vlan_variants(base: &TestPacket) {
         // none
-        from_x_slice_ip_variants(base);
+        from_x_slice_net_variants(base);
 
         // single vlan header
         {
@@ -726,7 +726,7 @@ mod test {
                 test.vlan = Some(VlanHeader::Single(single.clone()));
 
                 // ok vlan header
-                from_x_slice_ip_variants(&test);
+                from_x_slice_net_variants(&test);
 
                 // len error
                 {
@@ -775,7 +775,7 @@ mod test {
                 test.vlan = Some(VlanHeader::Double(double.clone()));
 
                 // ok double vlan header
-                from_x_slice_ip_variants(&test);
+                from_x_slice_net_variants(&test);
 
                 // len error
                 {
@@ -803,9 +803,31 @@ mod test {
         }
     }
 
-    fn from_x_slice_ip_variants(base: &TestPacket) {
+    fn from_x_slice_net_variants(base: &TestPacket) {
         // none
         from_x_slice_transport_variants(base);
+
+        // arp
+        {
+            let mut test = base.clone();
+            test.net = Some(NetHeaders::Arp(ArpHeader {
+                hw_addr_type: ArpHardwareId::ETHERNET,
+                proto_addr_type: EtherType::IPV4,
+                hw_addr_size: 6,
+                proto_addr_size: 4,
+                operation: ArpOperation::REQUEST,
+            }));
+
+            let data = test.to_vec(&[]);
+
+            /*assert_test_result(
+                &test,
+                &[],
+                &data[..base_len + len],
+                Some(err::ip::LaxHeaderSliceError::Len(err.clone())),
+                Some((SliceError::Len(err.clone()), Layer::IpHeader)),
+            );*/
+        }
 
         // ipv4
         for fragmented in [false, true] {

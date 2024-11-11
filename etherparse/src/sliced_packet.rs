@@ -346,7 +346,7 @@ impl<'a> SlicedPacket<'a> {
         match &self.net {
             Some(Ipv4(v)) => v.is_payload_fragmented(),
             Some(Ipv6(v)) => v.is_payload_fragmented(),
-            None => false,
+            Some(Arp(_)) | None => false,
         }
     }
 }
@@ -459,7 +459,7 @@ mod test {
             buf.extend_from_slice(
                 &LinuxSllHeader {
                     packet_type: LinuxSllPacketType::HOST,
-                    arp_hrd_type: ArpHardwareId::ETHER,
+                    arp_hrd_type: ArpHardwareId::ETHERNET,
                     sender_address_valid_length: 6,
                     sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
                     protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
@@ -692,7 +692,7 @@ mod test {
         {
             let linux_sll = LinuxSllHeader {
                 packet_type: LinuxSllPacketType::HOST,
-                arp_hrd_type: ArpHardwareId::ETHER,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
                 sender_address_valid_length: 6,
                 sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
                 protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
