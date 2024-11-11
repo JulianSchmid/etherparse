@@ -79,7 +79,7 @@ mod tests {
         );
         assert_eq!(
             "Linux cooked capture v1 (SLL)  Header Error:  Encountered '1 (Ethernet 10Mbps)' as the ARP harware type, but its not supported.",
-            format!("{}", UnsupportedArpHardwareId{ arp_hardware_type: ArpHardwareId::ETHER })
+            format!("{}", UnsupportedArpHardwareId{ arp_hardware_type: ArpHardwareId::ETHERNET })
         );
     }
 
@@ -89,7 +89,7 @@ mod tests {
         let values = [
             UnsupportedPacketTypeField { packet_type: 6 },
             UnsupportedArpHardwareId {
-                arp_hardware_type: ArpHardwareId::ETHER,
+                arp_hardware_type: ArpHardwareId::ETHERNET,
             },
         ];
         for v in values {

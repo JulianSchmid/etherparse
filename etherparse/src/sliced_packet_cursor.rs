@@ -274,7 +274,7 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
-    pub fn slice_arp(mut self)-> Result<SlicedPacket<'a>,  err::packet::SliceError> {
+    pub fn slice_arp(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         let result = ArpSlice::from_slice(self.slice).map_err(|mut err| {
             err.layer_start_offset += self.offset;
 
@@ -365,5 +365,4 @@ impl<'a> SlicedPacketCursor<'a> {
         // done
         Ok(self.result)
     }
-
 }

@@ -14,7 +14,7 @@ pub enum HardwareAddr<'a> {
 impl<'a> HardwareAddr<'a> {
     fn new(typ: ArpHardwareId, data: &[u8]) -> Result<HardwareAddr, err::LenError> {
         match typ {
-            ArpHardwareId::ETHER => match data.try_into() {
+            ArpHardwareId::ETHERNET => match data.try_into() {
                 Ok(addr) => Ok(HardwareAddr::Mac(addr)),
                 Err(_) => Err(err::LenError {
                     required_len: 6,
@@ -75,7 +75,6 @@ impl<'a> ProtocolAddr<'a> {
 pub struct ArpPayload<'a> {
     pub src_hard_addr: HardwareAddr<'a>,
     pub src_addr: ProtocolAddr<'a>,
-
     pub des_hard_addr: HardwareAddr<'a>,
     pub des_addr: ProtocolAddr<'a>,
 }

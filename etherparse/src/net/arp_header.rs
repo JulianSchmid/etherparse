@@ -1,50 +1,31 @@
-/// Address Resolution Protocol
-///
 use crate::*;
 
 use crate::{err, ArpHardwareId, EtherType, LenSource};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Operation {
-    Request,
-    Reply,
-    Other(u16),
-}
-
-impl Operation {
-    fn value(&self) -> u16 {
-        match self {
-            Operation::Request => 1,
-            Operation::Reply => 2,
-            Operation::Other(o) => *o,
-        }
-    }
-}
-
-impl From<u16> for Operation {
-    fn from(raw: u16) -> Self {
-        match raw {
-            1 => Self::Request,
-            2 => Self::Reply,
-            other => Self::Other(other),
-        }
-    }
-}
-
+/// Static sized part of an ARP packet.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ArpHeader {
+    /// This field specifies the network link protocol type (e.g. `ArpHardwareId::ETHERNET`).
     pub hw_addr_type: ArpHardwareId,
+
+    /// This field specifies the  protocol for which the ARP request is intended (e.g. `EtherType::IPV4`).
     pub proto_addr_type: EtherType,
 
+    /// Length (in octets) of a hardware address (e.g. 6 for Ethernet).
     pub hw_addr_size: u8,
+
+    /// Length (in octets) of internetwork addresses (e.g. 4 for IPv4 or 16 for IPv6).
     pub proto_addr_size: u8,
 
-    pub operation: Operation,
+    /// Specifies the operation that the sender is performing
+    pub operation: ArpOperation,
 }
 
 impl ArpHeader {
+    /// Serialized size of an ADP header in bytes/octets.
     pub const LEN: usize = 8;
 
+    /// Reads a ARP header from a slice directly and returns a tuple containing the resulting header & unused part of the slice.
     pub fn from_slice(input: &[u8]) -> Result<(ArpHeader, &[u8]), err::LenError> {
         if input.len() < Self::LEN {
             return Err(err::LenError {
@@ -60,7 +41,7 @@ impl ArpHeader {
         let proto_addr_type: EtherType = u16::from_be_bytes(input[2..4].try_into().unwrap()).into();
         let hw_addr_size = input[4];
         let proto_addr_size = input[5];
-        let operation: Operation = u16::from_be_bytes(input[6..8].try_into().unwrap()).into();
+        let operation: ArpOperation = u16::from_be_bytes(input[6..8].try_into().unwrap()).into();
 
         let required = (8 + (hw_addr_size + proto_addr_size) * 2) as usize;
 
@@ -86,36 +67,42 @@ impl ArpHeader {
         ))
     }
 
-    pub fn payload_len(&self) -> usize {
+    /// Expected payload length based on the hardware address size & protocol address size.
+    #[inline]
+    pub fn expected_payload_len(&self) -> usize {
         (self.hw_addr_size + self.proto_addr_size) as usize * 2
     }
 
-    pub fn header_len(&self) -> usize {
-        8 + self.payload_len()
+    /// Returns the serialized header.
+    #[inline]
+    pub fn to_bytes(&self) -> [u8; Self::LEN] {
+        let hw_addr_type = self.hw_addr_type.0.to_be_bytes();
+        let proto_addr_type = self.proto_addr_type.0.to_be_bytes();
+        let operation = self.operation.0.to_be_bytes();
+        [
+            hw_addr_type[0],
+            hw_addr_type[1],
+            proto_addr_type[0],
+            proto_addr_type[1],
+            self.hw_addr_size,
+            self.proto_addr_size,
+            operation[0],
+            operation[1],
+        ]
     }
 
+    /// Writes the header to the given writer.
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
-        writer.write(&self.hw_addr_type.0.to_be_bytes())?;
-        writer.write(&self.proto_addr_type.0.to_be_bytes())?;
-        writer.write(&self.hw_addr_size.to_be_bytes())?;
-        writer.write(&self.proto_addr_size.to_be_bytes())?;
-        writer.write(&self.operation.value().to_be_bytes())?;
+        writer.write(&self.to_bytes())?;
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::*;
     use core::net::Ipv4Addr;
-
-    use crate::{
-        link::{
-            arp_header::{ArpHeader, Operation},
-            arp_payload::{ArpPayload, HardwareAddr, ProtocolAddr},
-        },
-        ArpHardwareId, EtherType,
-    };
 
     #[test]
     fn arp_packet_works() {
@@ -131,13 +118,11 @@ mod tests {
         ];
 
         let expected_header = ArpHeader {
-            hw_addr_type: ArpHardwareId::ETHER,
+            hw_addr_type: ArpHardwareId::ETHERNET,
             proto_addr_type: EtherType::IPV4,
-
             hw_addr_size: 6,
             proto_addr_size: 4,
-
-            operation: Operation::Request,
+            operation: ArpOperation::REQUEST,
         };
 
         let expected_payload = ArpPayload {

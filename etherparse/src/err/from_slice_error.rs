@@ -438,7 +438,7 @@ mod tests {
                 layer_start_offset: 0,
             }),
             LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
-                arp_hardware_type: ArpHardwareId::ETHER,
+                arp_hardware_type: ArpHardwareId::ETHERNET,
             }),
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
@@ -469,7 +469,7 @@ mod tests {
             layer_start_offset: 0,
         };
         let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
-            arp_hardware_type: ArpHardwareId::ETHER,
+            arp_hardware_type: ArpHardwareId::ETHERNET,
         };
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
@@ -548,7 +548,7 @@ mod tests {
         // linux sll
         {
             let header_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
-                arp_hardware_type: ArpHardwareId::ETHER,
+                arp_hardware_type: ArpHardwareId::ETHERNET,
             };
             assert_eq!(
                 &header_error(),
