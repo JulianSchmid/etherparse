@@ -186,7 +186,7 @@ impl PacketBuilder {
             state: PacketImpl {
                 link_header: Some(LinkHeader::LinuxSll(LinuxSllHeader {
                     packet_type,
-                    arp_hrd_type: ArpHardwareId::ETHER,
+                    arp_hrd_type: ArpHardwareId::ETHERNET,
                     sender_address_valid_length,
                     sender_address,
                     protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwitten when writing depending on the net layer
@@ -1774,7 +1774,7 @@ impl PacketBuilderStep<ArpHeader> {
         payload: ArpPayload,
     ) -> Result<(), BuildWriteError> {
         use BuildWriteError::*;
-        if self.state.arp_header.unwrap().header_len() != payload.len() + 8 {
+        if self.state.arp_header.unwrap().expected_payload_len() != payload.len() {
             return Err(BuildWriteError::ArpHeaderNotMatch);
         }
 
@@ -1784,7 +1784,7 @@ impl PacketBuilderStep<ArpHeader> {
     }
 
     pub fn size(&self) -> usize {
-        final_size(self, 0)
+        final_size(self, self.state.arp_header.unwrap().expected_payload_len())
     }
 }
 
@@ -1827,7 +1827,7 @@ fn final_write<T: io::Write + Sized, B>(
             LinkHeader::LinuxSll(mut linux_sll) => {
                 // Assumes that next layers are ether based. If more types of
                 // layers are supported, this should be updated
-                debug_assert_eq!(linux_sll.arp_hrd_type, ArpHardwareId::ETHER);
+                debug_assert_eq!(linux_sll.arp_hrd_type, ArpHardwareId::ETHERNET);
 
                 linux_sll.protocol_type.change_value(ip_ether_type.into());
                 linux_sll.write(writer).map_err(Io)?;
@@ -2016,7 +2016,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Tcp(ref value)) => value.header_len(),
         None => 0,
     } + match builder.state.arp_header {
-        Some(value) => value.header_len(),
+        Some(_) => ArpHeader::LEN,
         None => 0,
     } + payload_size
 }
@@ -2072,8 +2072,8 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use alloc::{vec, vec::Vec};
-    use proptest::prelude::*;
     use core::net::Ipv4Addr;
+    use proptest::prelude::*;
     use std::io::Read;
 
     #[test]
@@ -2086,11 +2086,11 @@ mod test {
         ];
 
         let expected_header = ArpHeader {
-            hw_addr_type: ArpHardwareId::ETHER,
+            hw_addr_type: ArpHardwareId::ETHERNET,
             proto_addr_type: EtherType::IPV4,
-            hw_addr_size: 6, // mac addr is 6 bytes
+            hw_addr_size: 6,    // mac addr is 6 bytes
             proto_addr_size: 4, // ipv4 addr is 4 bytes
-            operation: Operation::Request,
+            operation: ArpOperation::REQUEST,
         };
 
         let expected_payload = ArpPayload {
@@ -2205,7 +2205,7 @@ mod test {
             LinuxSllHeader::read(&mut cursor).unwrap(),
             LinuxSllHeader {
                 packet_type: LinuxSllPacketType::OUTGOING,
-                arp_hrd_type: ArpHardwareId::ETHER,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
                 sender_address_valid_length: 6,
                 sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
                 protocol_type: LinuxSllProtocolType::EtherType(EtherType::IPV4)
@@ -2671,7 +2671,7 @@ mod test {
             LinuxSllHeader::read(&mut cursor).unwrap(),
             LinuxSllHeader {
                 packet_type: LinuxSllPacketType::OUTGOING,
-                arp_hrd_type: ArpHardwareId::ETHER,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
                 sender_address_valid_length: 6,
                 sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
                 protocol_type: LinuxSllProtocolType::EtherType(EtherType::IPV6)
@@ -3000,7 +3000,7 @@ mod test {
             LinuxSllHeader::read(&mut cursor).unwrap(),
             LinuxSllHeader {
                 packet_type: LinuxSllPacketType::OUTGOING,
-                arp_hrd_type: ArpHardwareId::ETHER,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
                 sender_address_valid_length: 6,
                 sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
                 protocol_type: LinuxSllProtocolType::EtherType(EtherType::IPV6)

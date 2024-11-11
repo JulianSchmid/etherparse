@@ -1,4 +1,7 @@
-use crate::{err::{self, ip::LaxHeaderSliceError}, LaxArpHeaderSlice, LaxArpPayloadSlice};
+use crate::{
+    err::{self, ip::LaxHeaderSliceError},
+    LaxArpHeaderSlice, LaxArpPayloadSlice,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LaxArpSlice<'a> {

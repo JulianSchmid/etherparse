@@ -143,7 +143,7 @@ where
                     false,
                 )
             }
-            None => {
+            Some(NetSlice::Arp(_)) | None => {
                 // nothing to defragment here, skip packet
                 return Ok(None);
             }

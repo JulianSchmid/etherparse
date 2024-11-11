@@ -13,9 +13,9 @@ impl<'a> LaxArpPayloadSlice<'a> {
         head: &ArpHeader,
         slice: &'a [u8],
     ) -> Result<Self, err::ip::LaxHeaderSliceError> {
-        if slice.len() != head.payload_len() {
+        if slice.len() != head.expected_payload_len() {
             return Err(err::ip::LaxHeaderSliceError::Len(err::LenError {
-                required_len: head.payload_len(),
+                required_len: head.expected_payload_len(),
                 len: slice.len(),
                 len_source: LenSource::Slice,
                 layer: Layer::ArpPayload,

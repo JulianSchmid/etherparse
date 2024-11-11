@@ -310,33 +310,7 @@ pub mod err;
 pub mod defrag;
 
 mod link;
-pub use crate::link::arp_hardware_id::*;
-pub use crate::link::double_vlan_header::*;
-pub use crate::link::double_vlan_header_slice::*;
-pub use crate::link::double_vlan_slice::*;
-pub use crate::link::ether_payload_slice::*;
-pub use crate::link::ether_type_impl::*;
-pub use crate::link::ethernet2_header::*;
-pub use crate::link::ethernet2_header_slice::*;
-pub use crate::link::ethernet2_slice::*;
-pub use crate::link::link_header::*;
-pub use crate::link::link_slice::*;
-pub use crate::link::linux_nonstandard_ether_type::*;
-pub use crate::link::linux_sll_header::*;
-pub use crate::link::linux_sll_header_slice::*;
-pub use crate::link::linux_sll_packet_type::*;
-pub use crate::link::linux_sll_payload_slice::*;
-pub use crate::link::linux_sll_protocol_type::*;
-pub use crate::link::linux_sll_slice::*;
-pub use crate::link::single_vlan_header::*;
-pub use crate::link::single_vlan_header_slice::*;
-pub use crate::link::single_vlan_slice::*;
-pub use crate::link::vlan_header::*;
-pub use crate::link::vlan_id::*;
-pub use crate::link::vlan_pcp::*;
-pub use crate::link::vlan_slice::*;
-pub use crate::link::arp_header::*;
-pub use crate::link::arp_payload::*;
+pub use link::*;
 
 #[cfg(test)]
 pub(crate) mod test_gens;
@@ -349,29 +323,7 @@ pub use net::*;
 pub mod io;
 
 mod transport;
-pub use crate::transport::icmp_echo_header::*;
-pub use crate::transport::icmpv4;
-pub use crate::transport::icmpv4_header::*;
-pub use crate::transport::icmpv4_slice::*;
-pub use crate::transport::icmpv4_type::*;
-pub use crate::transport::icmpv6;
-pub use crate::transport::icmpv6_header::*;
-pub use crate::transport::icmpv6_slice::*;
-pub use crate::transport::icmpv6_type::*;
-pub use crate::transport::tcp_header::*;
-pub use crate::transport::tcp_header_slice::*;
-pub use crate::transport::tcp_option_element::*;
-pub use crate::transport::tcp_option_impl::*;
-pub use crate::transport::tcp_option_read_error::*;
-pub use crate::transport::tcp_option_write_error::*;
-pub use crate::transport::tcp_options::*;
-pub use crate::transport::tcp_options_iterator::*;
-pub use crate::transport::tcp_slice::*;
-pub use crate::transport::transport_header::*;
-pub use crate::transport::transport_slice::*;
-pub use crate::transport::udp_header::*;
-pub use crate::transport::udp_header_slice::*;
-pub use crate::transport::udp_slice::*;
+pub use transport::*;
 
 /// Helpers for calculating checksums.
 pub mod checksum;
