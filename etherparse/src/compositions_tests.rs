@@ -373,7 +373,7 @@ impl ComponentTest {
                         match ip {
                             NetSlice::Ipv4(s) => s.payload.payload,
                             NetSlice::Ipv6(s) => s.payload.payload,
-                            NetSlice::Arp(s) => s.payload.payload,
+                            NetSlice::Arp(_) => &[],
                         }
                     );
                 } else {

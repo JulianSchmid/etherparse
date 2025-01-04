@@ -45,10 +45,8 @@ pub enum Layer {
     Icmpv4TimestampReply,
     /// Error occurred while parsing an ICMPv6 packet.
     Icmpv6,
-    /// Error occurred while parsing an Address Resolution Protocol header
-    ArpHeader,
-    /// Error occurred while parsing an Address Resolution Protocol payload
-    ArpPayload,
+    /// Error occurred while parsing an Address Resolution Protocol packet.
+    Arp,
 }
 
 impl Layer {
@@ -78,8 +76,7 @@ impl Layer {
             Icmpv4Timestamp => "ICMP Timestamp Error",
             Icmpv4TimestampReply => "ICMP Timestamp Reply Error",
             Icmpv6 => "ICMPv6 Packet Error",
-            ArpHeader => "Address Resolution Protocol Header Error",
-            ArpPayload => "Address Resolution Protocol Payload Error",
+            Arp => "Address Resolution Protocol Packet Error",
         }
     }
 }
@@ -110,8 +107,7 @@ impl core::fmt::Display for Layer {
             Icmpv4Timestamp => write!(f, "ICMP timestamp message"),
             Icmpv4TimestampReply => write!(f, "ICMP timestamp reply message"),
             Icmpv6 => write!(f, "ICMPv6 packet"),
-            ArpHeader => write!(f, "Address Resolution Protocol Header"),
-            ArpPayload => write!(f, "Address Resolution Protocol payload"),
+            Arp => write!(f, "Address Resolution Protocol packet"),
         }
     }
 }

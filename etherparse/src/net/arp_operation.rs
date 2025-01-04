@@ -1,4 +1,5 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Operation field value in an ARP packet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct ArpOperation(pub u16);
 
 impl ArpOperation {

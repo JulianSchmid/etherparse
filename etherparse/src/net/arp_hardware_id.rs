@@ -6,15 +6,15 @@
 /// ```
 /// use etherparse::ArpHardwareId;
 ///
-/// assert_eq!(ArpHardwareId::ETHER.0, 0x0001);
-/// assert_eq!(ArpHardwareId::ETHER, ArpHardwareId(0x0001));
+/// assert_eq!(ArpHardwareId::ETHERNET.0, 0x0001);
+/// assert_eq!(ArpHardwareId::ETHERNET, ArpHardwareId(0x0001));
 ///
 /// // convert to ArpHardwareId using the from & into trait
 /// let arp_hrd_id: ArpHardwareId = 0x0001.into();
-/// assert_eq!(ArpHardwareId::ETHER, arp_hrd_id);
+/// assert_eq!(ArpHardwareId::ETHERNET, arp_hrd_id);
 ///
 /// // convert to u16 using the from & into trait
-/// let num: u16 = ArpHardwareId::ETHER.into();
+/// let num: u16 = ArpHardwareId::ETHERNET.into();
 /// assert_eq!(0x0001, num);
 /// ```
 ///

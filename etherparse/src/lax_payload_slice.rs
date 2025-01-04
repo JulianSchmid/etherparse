@@ -4,6 +4,8 @@ use crate::*;
 /// information if the payload is incomplete.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum LaxPayloadSlice<'a> {
+    /// No specific payload (e.g. ARP packet).
+    Empty,
     /// Payload with it's type identified by an ether type number
     /// (e.g. after an ethernet II or vlan header).
     Ether(EtherPayloadSlice<'a>),
@@ -32,16 +34,12 @@ pub enum LaxPayloadSlice<'a> {
         /// True if the payload has been cut off.
         incomplete: bool,
     },
-    /// Arp Payload
-    Arp {
-        payload: &'a [u8],
-        parsed: ArpPayloadSlice<'a>,
-    },
 }
 
 impl<'a> LaxPayloadSlice<'a> {
     pub fn slice(&self) -> &'a [u8] {
         match self {
+            LaxPayloadSlice::Empty => &[],
             LaxPayloadSlice::Ether(e) => e.payload,
             LaxPayloadSlice::Ip(i) => i.payload,
             LaxPayloadSlice::Udp {
@@ -60,7 +58,6 @@ impl<'a> LaxPayloadSlice<'a> {
                 payload,
                 incomplete: _,
             } => payload,
-            LaxPayloadSlice::Arp { payload, parsed: _ } => payload,
         }
     }
 }
