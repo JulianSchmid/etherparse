@@ -1096,16 +1096,16 @@ impl IpHeaders {
     ///
     /// The given number will be set as the last "next_header" or
     /// protocol number.
-    pub fn set_next_headers(&mut self, last_next_header: IpNumber) -> u16 {
+    pub fn set_next_headers(&mut self, last_next_header: IpNumber) -> EtherType {
         use IpHeaders::*;
         match self {
             Ipv4(ref mut header, ref mut extensions) => {
                 header.protocol = extensions.set_next_headers(last_next_header);
-                EtherType::IPV4.0
+                EtherType::IPV4
             }
             Ipv6(ref mut header, ref mut extensions) => {
                 header.next_header = extensions.set_next_headers(last_next_header);
-                EtherType::IPV4.0
+                EtherType::IPV4
             }
         }
     }

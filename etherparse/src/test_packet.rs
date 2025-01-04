@@ -36,7 +36,9 @@ impl TestPacket {
                     ipv6.write(&mut result).unwrap();
                     exts.write(&mut result, ipv6.next_header).unwrap();
                 }
-                NetHeaders::Arp(_) => todo!(),
+                NetHeaders::Arp(arp) => {
+                    arp.write(&mut result).unwrap();
+                }
             }
         }
         if let Some(transport) = &self.transport {
@@ -89,7 +91,7 @@ impl TestPacket {
                     )
                     .unwrap();
             }
-            Some(Arp(_)) => todo!(),
+            Some(Arp(_)) => {}
         }
 
         use TransportHeader::*;

@@ -16,12 +16,12 @@ use crate::*;
 ///   operating system set the length fields).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LaxNetSlice<'a> {
-    /// The ipv4 header & the decoded extension headers.
+    /// IPv4 header & the decoded extension headers.
     Ipv4(LaxIpv4Slice<'a>),
-    /// The ipv6 header & the decoded extension headers.
+    /// IPv6 header & the decoded extension headers.
     Ipv6(LaxIpv6Slice<'a>),
-    /// The arp header & the decoded arp payload.
-    Arp(LaxArpSlice<'a>),
+    /// "Address Resolution Protocol" Packet,
+    Arp(ArpPacketSlice<'a>),
 }
 
 impl<'a> LaxNetSlice<'a> {

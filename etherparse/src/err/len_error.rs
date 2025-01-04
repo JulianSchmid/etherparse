@@ -84,6 +84,9 @@ impl core::fmt::Display for LenError {
                 }
                 UdpHeaderLen => "length calculated from the UDP header 'length' field",
                 TcpHeaderLen => "length calculated from the TCP header 'length' field",
+                ArpAddrLengths => {
+                    "length calculated from the ARP 'hw_addr_size' & 'proto_addr_size' fields"
+                }
             }
         };
 

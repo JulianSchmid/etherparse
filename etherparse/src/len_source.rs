@@ -12,6 +12,8 @@ pub enum LenSource {
     UdpHeaderLen,
     /// Error occurred while decoding a TCP header.
     TcpHeaderLen,
+    /// Error occurred while decoding a ARP packet.
+    ArpAddrLengths,
 }
 
 #[cfg(test)]

@@ -328,29 +328,14 @@ impl<'a> LaxPacketHeaders<'a> {
                 }
             },
             ARP => {
-                let (arp, slice) = match ArpHeader::from_slice(&rest[offset..]) {
+                let arp = match ArpPacket::from_slice(rest) {
                     Ok(value) => value,
                     Err(err) => {
-                        result.stop_err = Some((Len(err), Layer::ArpHeader));
+                        result.stop_err = Some((Len(err), Layer::Arp));
                         return result;
                     }
                 };
-
-                let payload = match ArpPayloadSlice::from_slice(&arp, slice) {
-                    Ok(value) => value,
-                    Err(err) => {
-                        result.net = Some(NetHeaders::Arp(arp));
-                        result.stop_err = Some((Len(err), Layer::ArpPayload));
-                        return result;
-                    }
-                };
-
                 result.net = Some(NetHeaders::Arp(arp));
-                result.payload = LaxPayloadSlice::Arp {
-                    payload: slice,
-                    parsed: payload,
-                };
-
                 return result;
             }
             _ => {}
@@ -809,24 +794,48 @@ mod test {
 
         // arp
         {
+            let arp = ArpPacket::new(
+                ArpHardwareId::ETHERNET,
+                EtherType::IPV4,
+                ArpOperation::REQUEST,
+                &[1, 2, 3, 4, 5, 6],
+                &[7, 8, 9, 10],
+                &[11, 12, 13, 14, 15, 16],
+                &[17, 18, 19, 20],
+            )
+            .unwrap();
+
             let mut test = base.clone();
-            test.net = Some(NetHeaders::Arp(ArpHeader {
-                hw_addr_type: ArpHardwareId::ETHERNET,
-                proto_addr_type: EtherType::IPV4,
-                hw_addr_size: 6,
-                proto_addr_size: 4,
-                operation: ArpOperation::REQUEST,
-            }));
+            test.net = Some(NetHeaders::Arp(arp.clone()));
+            from_x_slice_assert_ok(&test);
 
-            let data = test.to_vec(&[]);
+            // arp len error
+            {
+                let data = test.to_vec(&[]);
+                for len in 0..arp.len() {
+                    let base_len = test.len(&[]) - arp.len();
 
-            /*assert_test_result(
-                &test,
-                &[],
-                &data[..base_len + len],
-                Some(err::ip::LaxHeaderSliceError::Len(err.clone())),
-                Some((SliceError::Len(err.clone()), Layer::IpHeader)),
-            );*/
+                    let err = LenError {
+                        required_len: if len < 8 { 8 } else { arp.len() },
+                        len,
+                        len_source: LenSource::Slice,
+                        layer: if len < 1 {
+                            Layer::IpHeader
+                        } else {
+                            Layer::Ipv4Header
+                        },
+                        layer_start_offset: base_len,
+                    };
+
+                    assert_test_result(
+                        &test,
+                        &[],
+                        &data[..base_len + len],
+                        Some(err::ip::LaxHeaderSliceError::Len(err.clone())),
+                        Some((SliceError::Len(err.clone()), Layer::Arp)),
+                    );
+                }
+            }
         }
 
         // ipv4
@@ -1475,7 +1484,7 @@ mod test {
             }
         }
 
-        fn compare_ip_header_only(test: &TestPacket, actual: &LaxPacketHeaders) {
+        fn compare_net_only(test: &TestPacket, actual: &LaxPacketHeaders) {
             assert_eq!(
                 test.net.as_ref().map(|s| -> NetHeaders {
                     match s {
@@ -1602,7 +1611,7 @@ mod test {
                     | Some(Layer::Ipv6FragHeader) => {
                         assert_eq!(test.link, actual.link);
                         compare_vlan(test, data, &actual);
-                        compare_ip_header_only(test, &actual);
+                        compare_net_only(test, &actual);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
@@ -1652,7 +1661,7 @@ mod test {
                     | Some(Layer::Ipv6DestOptionsHeader)
                     | Some(Layer::Ipv6RouteHeader)
                     | Some(Layer::Ipv6FragHeader) => {
-                        compare_ip_header_only(test, &actual);
+                        compare_net_only(test, &actual);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
@@ -1707,7 +1716,7 @@ mod test {
                     | Some(Layer::Ipv6DestOptionsHeader)
                     | Some(Layer::Ipv6RouteHeader)
                     | Some(Layer::Ipv6FragHeader) => {
-                        compare_ip_header_only(test, &actual);
+                        compare_net_only(test, &actual);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
@@ -1748,7 +1757,7 @@ mod test {
                     | Some(Layer::Ipv6DestOptionsHeader)
                     | Some(Layer::Ipv6RouteHeader)
                     | Some(Layer::Ipv6FragHeader) => {
-                        compare_ip_header_only(test, &actual);
+                        compare_net_only(test, &actual);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }

@@ -1337,7 +1337,7 @@ mod test {
                             .unwrap()
                             .0,
                         ),
-                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.header.to_header().unwrap()),
+                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.to_packet()),
                     }
                 })
             );
@@ -1360,7 +1360,7 @@ mod test {
                         LaxNetSlice::Ipv6(ipv6) => {
                             NetHeaders::Ipv6(ipv6.header().to_header(), Default::default())
                         }
-                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.header.to_header().unwrap()),
+                        LaxNetSlice::Arp(arp) => NetHeaders::Arp(arp.to_packet()),
                     }
                 })
             );
