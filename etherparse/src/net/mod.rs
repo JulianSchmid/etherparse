@@ -1,14 +1,11 @@
 mod arp_hardware_id;
 pub use arp_hardware_id::*;
 
-mod arp_header;
-pub use arp_header::*;
+mod arp_packet;
+pub use arp_packet::*;
 
 mod arp_operation;
 pub use arp_operation::*;
-
-mod arp_payload;
-pub use arp_payload::*;
 
 mod ip_auth_header;
 pub use ip_auth_header::*;
@@ -115,20 +112,5 @@ pub use net_headers::*;
 mod net_slice;
 pub use net_slice::*;
 
-mod arp_slice;
-pub use arp_slice::*;
-
-mod arp_header_slice;
-pub use arp_header_slice::*;
-
-mod arp_payload_slice;
-pub use arp_payload_slice::*;
-
-mod lax_arp_slice;
-pub use lax_arp_slice::*;
-
-mod lax_arp_header_slice;
-pub use lax_arp_header_slice::*;
-
-mod lax_arp_payload_slice;
-pub use lax_arp_payload_slice::*;
+mod arp_packet_slice;
+pub use arp_packet_slice::*;

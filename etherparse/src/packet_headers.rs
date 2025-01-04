@@ -265,13 +265,11 @@ impl<'a> PacketHeaders<'a> {
                 result.payload = payload;
             }
             ARP => {
-                let (arp, rest) =
-                    ArpHeader::from_slice(rest).map_err(|err| Len(add_offset(err, rest)))?;
+                result.net = Some(NetHeaders::Arp(
+                    ArpPacket::from_slice(rest).map_err(|err| Len(add_offset(err, rest)))?,
+                ));
 
-                result.net = Some(arp.into());
-
-                result.payload =
-                    PayloadSlice::Arp((rest, ArpPayload::from_pkg(arp, rest).map_err(Len)?));
+                result.payload = PayloadSlice::Empty;
             }
             _ => {}
         };

@@ -1413,7 +1413,7 @@ mod test {
                             .unwrap()
                             .0,
                         ),
-                        NetSlice::Arp(arp) => NetHeaders::Arp(arp.header().to_header().unwrap().0),
+                        NetSlice::Arp(arp) => NetHeaders::Arp(arp.to_packet()),
                     }
                 })
             );

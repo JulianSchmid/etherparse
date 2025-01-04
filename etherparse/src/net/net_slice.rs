@@ -16,7 +16,7 @@ pub enum NetSlice<'a> {
     /// The ipv6 header & the decoded extension headers.
     Ipv6(Ipv6Slice<'a>),
     /// The arp header & the decoded extension headers.
-    Arp(ArpSlice<'a>),
+    Arp(ArpPacketSlice<'a>),
 }
 
 impl<'a> NetSlice<'a> {

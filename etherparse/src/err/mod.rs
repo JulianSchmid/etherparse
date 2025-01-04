@@ -1,3 +1,4 @@
+pub mod arp;
 pub mod double_vlan;
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]

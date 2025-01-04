@@ -140,9 +140,8 @@ impl PacketBuilder {
                     ether_type: EtherType(0), //the type identifier
                 })),
                 vlan_header: None,
-                ip_header: None,
+                net_header: None,
                 transport_header: None,
-                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -192,9 +191,8 @@ impl PacketBuilder {
                     protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwitten when writing depending on the net layer
                 })),
                 vlan_header: None,
-                ip_header: None,
+                net_header: None,
                 transport_header: None,
-                arp_header: None,
             },
             _marker: marker::PhantomData::<LinuxSllHeader> {},
         }
@@ -235,9 +233,8 @@ impl PacketBuilder {
             state: PacketImpl {
                 link_header: None,
                 vlan_header: None,
-                ip_header: None,
+                net_header: None,
                 transport_header: None,
-                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -283,9 +280,8 @@ impl PacketBuilder {
             state: PacketImpl {
                 link_header: None,
                 vlan_header: None,
-                ip_header: None,
+                net_header: None,
                 transport_header: None,
-                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -361,9 +357,8 @@ impl PacketBuilder {
             state: PacketImpl {
                 link_header: None,
                 vlan_header: None,
-                ip_header: None,
+                net_header: None,
                 transport_header: None,
-                arp_header: None,
             },
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
@@ -373,10 +368,9 @@ impl PacketBuilder {
 
 struct PacketImpl {
     link_header: Option<LinkHeader>,
-    ip_header: Option<IpHeaders>,
+    net_header: Option<NetHeaders>,
     vlan_header: Option<VlanHeader>,
     transport_header: Option<TransportHeader>,
-    arp_header: Option<ArpHeader>,
 }
 
 ///An unfinished packet that is build with the packet builder
@@ -423,7 +417,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         time_to_live: u8,
     ) -> PacketBuilderStep<IpHeaders> {
         //add ip header
-        self.state.ip_header = Some(IpHeaders::Ipv4(
+        self.state.net_header = Some(NetHeaders::Ipv4(
             Ipv4Header {
                 source,
                 destination,
@@ -485,7 +479,10 @@ impl PacketBuilderStep<Ethernet2Header> {
     /// ```
     pub fn ip(mut self, ip_header: IpHeaders) -> PacketBuilderStep<IpHeaders> {
         //add ip header
-        self.state.ip_header = Some(ip_header);
+        self.state.net_header = Some(match ip_header {
+            IpHeaders::Ipv4(header, exts) => NetHeaders::Ipv4(header, exts),
+            IpHeaders::Ipv6(header, exts) => NetHeaders::Ipv6(header, exts),
+        });
         //return for next step
         PacketBuilderStep {
             state: self.state,
@@ -531,7 +528,7 @@ impl PacketBuilderStep<Ethernet2Header> {
         destination: [u8; 16],
         hop_limit: u8,
     ) -> PacketBuilderStep<IpHeaders> {
-        self.state.ip_header = Some(IpHeaders::Ipv6(
+        self.state.net_header = Some(NetHeaders::Ipv6(
             Ipv6Header {
                 traffic_class: 0,
                 flow_label: Ipv6FlowLabel::ZERO,
@@ -694,12 +691,12 @@ impl PacketBuilderStep<Ethernet2Header> {
         }
     }
 
-    pub fn arp(mut self, arp_header: ArpHeader) -> PacketBuilderStep<ArpHeader> {
-        self.state.arp_header = Some(arp_header);
+    pub fn arp(mut self, arp_packet: ArpPacket) -> PacketBuilderStep<ArpPacket> {
+        self.state.net_header = Some(NetHeaders::Arp(arp_packet));
         //return for next step
         PacketBuilderStep {
             state: self.state,
-            _marker: marker::PhantomData::<ArpHeader> {},
+            _marker: marker::PhantomData::<ArpPacket> {},
         }
     }
 }
@@ -1540,12 +1537,16 @@ impl PacketBuilderStep<IpHeaders> {
         last_next_header_ip_number: IpNumber,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        self.state
-            .ip_header
-            .as_mut()
-            .unwrap()
-            .set_next_headers(last_next_header_ip_number);
-        final_write(self, writer, payload)
+        match &mut (self.state.net_header) {
+            Some(NetHeaders::Ipv4(ref mut ip, ref mut exts)) => {
+                ip.protocol = exts.set_next_headers(last_next_header_ip_number);
+            }
+            Some(NetHeaders::Ipv6(ref mut ip, ref mut exts)) => {
+                ip.next_header = exts.set_next_headers(last_next_header_ip_number);
+            }
+            _ => {}
+        }
+        final_write_with_net(self, writer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1562,7 +1563,7 @@ impl PacketBuilderStep<Icmpv4Header> {
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write(self, writer, payload)
+        final_write_with_net(self, writer, payload)
     }
 
     /// Returns the size of the packet when it is serialized
@@ -1579,7 +1580,7 @@ impl PacketBuilderStep<Icmpv6Header> {
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write(self, writer, payload)
+        final_write_with_net(self, writer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1596,7 +1597,7 @@ impl PacketBuilderStep<UdpHeader> {
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write(self, writer, payload)
+        final_write_with_net(self, writer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1757,7 +1758,7 @@ impl PacketBuilderStep<TcpHeader> {
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write(self, writer, payload)
+        final_write_with_net(self, writer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1767,59 +1768,52 @@ impl PacketBuilderStep<TcpHeader> {
 }
 
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl PacketBuilderStep<ArpHeader> {
-    pub fn write<T: io::Write + Sized>(
-        self,
-        writer: &mut T,
-        payload: ArpPayload,
-    ) -> Result<(), BuildWriteError> {
-        use BuildWriteError::*;
-        if self.state.arp_header.unwrap().expected_payload_len() != payload.len() {
-            return Err(BuildWriteError::ArpHeaderNotMatch);
-        }
-
-        final_write(self, writer, &[])?;
-        payload.write(writer).map_err(Io)?;
+impl PacketBuilderStep<ArpPacket> {
+    pub fn write<T: io::Write + Sized>(self, writer: &mut T) -> Result<(), BuildWriteError> {
+        final_write_with_net(self, writer, &[])?;
         Ok(())
     }
 
     pub fn size(&self) -> usize {
-        final_size(self, self.state.arp_header.unwrap().expected_payload_len())
+        final_size(self, 0)
     }
 }
 
 /// Write all the headers and the payload.
-fn final_write<T: io::Write + Sized, B>(
+fn final_write_with_net<T: io::Write + Sized, B>(
     builder: PacketBuilderStep<B>,
     writer: &mut T,
     payload: &[u8],
 ) -> Result<(), BuildWriteError> {
     use BuildWriteError::*;
+    use NetHeaders::*;
 
-    let ip_ether_type = {
-        use crate::IpHeaders::*;
-        match builder.state.ip_header {
-            Some(Ipv4(_, _)) => ether_type::IPV4,
-            Some(Ipv6(_, _)) => ether_type::IPV6,
-            None => match builder.state.arp_header {
-                Some(_) => ether_type::ARP,
-                None => unreachable!("no vaild header"),
-            },
-        }
+    // unpack builder (makes things easier with the borrow checker)
+    let link = builder.state.link_header;
+    let vlan = builder.state.vlan_header;
+    let net = builder.state.net_header;
+    let mut transport = builder.state.transport_header;
+
+    // determine
+    let net_ether_type = match &net {
+        Some(Ipv4(_, _)) => ether_type::IPV4,
+        Some(Ipv6(_, _)) => ether_type::IPV6,
+        Some(Arp(_)) => ether_type::ARP,
+        None => unreachable!(),
     };
 
-    //link header
-    if let Some(link) = builder.state.link_header {
+    // link header
+    if let Some(link) = link {
         match link {
             LinkHeader::Ethernet2(mut eth) => {
                 eth.ether_type = {
                     use crate::VlanHeader::*;
                     //determine the ether type depending on if there is a vlan tagging header
-                    match builder.state.vlan_header {
+                    match &vlan {
                         Some(Single(_)) => ether_type::VLAN_TAGGED_FRAME,
                         Some(Double(_)) => ether_type::PROVIDER_BRIDGING,
                         //if no vlan header exists, the id is purely defined by the ip type
-                        None => ip_ether_type,
+                        None => net_ether_type,
                     }
                 };
                 eth.write(writer).map_err(Io)?;
@@ -1829,173 +1823,136 @@ fn final_write<T: io::Write + Sized, B>(
                 // layers are supported, this should be updated
                 debug_assert_eq!(linux_sll.arp_hrd_type, ArpHardwareId::ETHERNET);
 
-                linux_sll.protocol_type.change_value(ip_ether_type.into());
+                linux_sll.protocol_type.change_value(net_ether_type.into());
                 linux_sll.write(writer).map_err(Io)?;
             }
         }
     }
 
-    match builder.state.arp_header {
-        Some(arp) => {
-            arp.write(writer).map_err(Io)?;
-            return Ok(());
-        }
-        None => {}
-    }
-
-    //write the vlan header if it exists
+    // write the vlan header if it exists
     use crate::VlanHeader::*;
-    match builder.state.vlan_header {
+    match vlan {
         Some(Single(mut value)) => {
             //set ether types
-            value.ether_type = ip_ether_type;
+            value.ether_type = net_ether_type;
             //serialize
             value.write(writer).map_err(Io)?;
         }
         Some(Double(mut value)) => {
             //set ether types
             value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
-            value.inner.ether_type = ip_ether_type;
+            value.inner.ether_type = net_ether_type;
             //serialize
             value.write(writer).map_err(Io)?;
         }
         None => {}
     }
 
-    //ip header
-    use crate::IpHeaders::*;
-    let ip_header = builder.state.ip_header.unwrap();
-
-    //transport header
-    match builder.state.transport_header {
-        None => {
-            // in case no transport header is present the protocol
-            // number and next_header fields are set in the write call
-            // directly and don't need to be set here again.
-            match ip_header {
-                Ipv4(mut ip, ext) => {
-                    ip.set_payload_len(ext.header_len() + payload.len())
-                        .map_err(PayloadLen)?;
-                    ip.write(writer).map_err(Io)?;
-                    ext.write(writer, ip.protocol).map_err(|err| {
-                        use err::ipv4_exts::HeaderWriteError as I;
-                        match err {
-                            I::Io(err) => Io(err),
-                            I::Content(err) => Ipv4Exts(err),
-                        }
-                    })?;
-                }
-                Ipv6(mut ip, ext) => {
-                    ip.set_payload_length(ext.header_len() + payload.len())
-                        .map_err(PayloadLen)?;
-                    ip.write(writer).map_err(Io)?;
-                    ext.write(writer, ip.next_header).map_err(|err| {
-                        use err::ipv6_exts::HeaderWriteError as I;
-                        match err {
-                            I::Io(err) => Io(err),
-                            I::Content(err) => Ipv6Exts(err),
-                        }
-                    })?;
-                }
-            }
+    // set transport header length (needs to be done here
+    // so following steps can correctly calculate the checksum)
+    use TransportHeader::*;
+    match &mut transport {
+        Some(Udp(ref mut udp)) => {
+            udp.length = (UdpHeader::LEN_U16 + payload.len() as u16) as u16;
         }
-        Some(mut transport) => {
-            match ip_header {
-                Ipv4(mut ip, mut ext) => {
-                    //set total length & udp payload length (ip checks that the payload length is ok)
-                    let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_len(ext.header_len() + transport_size)
-                        .map_err(PayloadLen)?;
-                    use crate::TransportHeader::*;
-                    match transport {
-                        Icmpv4(_) => {}
-                        Icmpv6(_) => {}
-                        Udp(ref mut udp) => {
-                            udp.length = transport_size as u16;
-                        }
-                        Tcp(_) => {}
-                    }
-
-                    //ip protocol number & next header values of the extension header
-                    ip.protocol = ext.set_next_headers(match transport {
-                        Icmpv4(_) => ip_number::ICMP,
-                        Icmpv6(_) => ip_number::IPV6_ICMP,
-                        Udp(_) => ip_number::UDP,
-                        Tcp(_) => ip_number::TCP,
-                    });
-
-                    //calculate the udp checksum
-                    transport
-                        .update_checksum_ipv4(&ip, payload)
-                        .map_err(|err| {
-                            use err::packet::TransportChecksumError as I;
-                            match err {
-                                I::PayloadLen(err) => PayloadLen(err),
-                                I::Icmpv6InIpv4 => Icmpv6InIpv4,
-                            }
-                        })?;
-
-                    //write (will automatically calculate the checksum)
-                    ip.write(writer).map_err(Io)?;
-                    ext.write(writer, ip.protocol).map_err(|err| {
-                        use err::ipv4_exts::HeaderWriteError as I;
-                        match err {
-                            I::Io(err) => Io(err),
-                            I::Content(err) => Ipv4Exts(err),
-                        }
-                    })?;
-                }
-                Ipv6(mut ip, mut ext) => {
-                    //set total length
-                    let transport_size = transport.header_len() + payload.len();
-                    ip.set_payload_length(ext.header_len() + transport_size)
-                        .map_err(PayloadLen)?;
-                    use crate::TransportHeader::*;
-                    match transport {
-                        Icmpv4(_) => {}
-                        Icmpv6(_) => {}
-                        Udp(ref mut udp) => {
-                            udp.length = transport_size as u16;
-                        }
-                        Tcp(_) => {}
-                    }
-
-                    //set the protocol
-                    ip.next_header = ext.set_next_headers(match transport {
-                        Icmpv4(_) => ip_number::ICMP,
-                        Icmpv6(_) => ip_number::IPV6_ICMP,
-                        Udp(_) => ip_number::UDP,
-                        Tcp(_) => ip_number::TCP,
-                    });
-
-                    //calculate the udp checksum
-                    transport
-                        .update_checksum_ipv6(&ip, payload)
-                        .map_err(PayloadLen)?;
-
-                    //write (will automatically calculate the checksum)
-                    ip.write(writer).map_err(Io)?;
-                    ext.write(writer, ip.next_header).map_err(|err| {
-                        use err::ipv6_exts::HeaderWriteError as I;
-                        match err {
-                            I::Io(err) => Io(err),
-                            I::Content(err) => Ipv6Exts(err),
-                        }
-                    })?;
-                }
-            }
-
-            //finally write the udp header & payload
-            transport.write(writer).map_err(Io)?;
-        }
+        Some(Tcp(_)) => {}
+        Some(Icmpv4(_)) => {}
+        Some(Icmpv6(_)) => {}
+        None => {}
     }
+
+    // net header
+    match net {
+        Some(NetHeaders::Ipv4(mut ip, mut ip_exts)) => {
+            // set payload length & ip number
+            ip.set_payload_len(
+                ip_exts.header_len()
+                    + transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                    + payload.len(),
+            )
+            .map_err(PayloadLen)?;
+
+            ip.protocol = ip_exts.set_next_headers(match &transport {
+                Some(Icmpv4(_)) => ip_number::ICMP,
+                Some(Icmpv6(_)) => ip_number::IPV6_ICMP,
+                Some(Udp(_)) => ip_number::UDP,
+                Some(Tcp(_)) => ip_number::TCP,
+                None => unreachable!(),
+            });
+
+            // write ip header & extensions
+            ip.write(writer).map_err(Io)?;
+            ip_exts.write(writer, ip.protocol).map_err(|err| {
+                use err::ipv4_exts::HeaderWriteError as I;
+                match err {
+                    I::Io(err) => Io(err),
+                    I::Content(err) => Ipv4Exts(err),
+                }
+            })?;
+
+            // update the transport layer checksum
+            if let Some(t) = &mut transport {
+                t.update_checksum_ipv4(&ip, payload).map_err(|err| {
+                    use err::packet::TransportChecksumError as I;
+                    match err {
+                        I::PayloadLen(err) => PayloadLen(err),
+                        I::Icmpv6InIpv4 => Icmpv6InIpv4,
+                    }
+                })?;
+            }
+        }
+        Some(NetHeaders::Ipv6(mut ip, mut ip_exts)) => {
+            // set payload length & ip number
+            ip.set_payload_length(
+                ip_exts.header_len()
+                    + transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                    + payload.len(),
+            )
+            .map_err(PayloadLen)?;
+
+            ip.next_header = ip_exts.set_next_headers(match &transport {
+                Some(Icmpv4(_)) => ip_number::ICMP,
+                Some(Icmpv6(_)) => ip_number::IPV6_ICMP,
+                Some(Udp(_)) => ip_number::UDP,
+                Some(Tcp(_)) => ip_number::TCP,
+                None => unreachable!(),
+            });
+
+            // write ip header & extensions
+            ip.write(writer).map_err(Io)?;
+            ip_exts.write(writer, ip.next_header).map_err(|err| {
+                use err::ipv6_exts::HeaderWriteError as I;
+                match err {
+                    I::Io(err) => Io(err),
+                    I::Content(err) => Ipv6Exts(err),
+                }
+            })?;
+
+            // update the transport layer checksum
+            if let Some(t) = &mut transport {
+                t.update_checksum_ipv6(&ip, payload).map_err(PayloadLen)?;
+            }
+        }
+        Some(NetHeaders::Arp(arp)) => {
+            writer.write_all(&arp.to_bytes()).map_err(Io)?;
+        }
+        None => {}
+    }
+
+    // write transport header
+    if let Some(transport) = transport {
+        transport.write(writer).map_err(Io)?;
+    }
+
+    // and finally the payload
     writer.write_all(payload).map_err(Io)?;
+
     Ok(())
 }
 
 ///Returns the size of the packet when it is serialized
 fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
-    use crate::IpHeaders::*;
+    use crate::NetHeaders::*;
     use crate::TransportHeader::*;
     use crate::VlanHeader::*;
     (match builder.state.link_header {
@@ -2005,18 +1962,16 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         Some(Single(_)) => SingleVlanHeader::LEN,
         Some(Double(_)) => DoubleVlanHeader::LEN,
         None => 0,
-    } + match builder.state.ip_header {
+    } + match builder.state.net_header {
         Some(Ipv4(ref value, ref ext)) => value.header_len() + ext.header_len(),
         Some(Ipv6(_, ref ext)) => Ipv6Header::LEN + ext.header_len(),
+        Some(Arp(ref packet)) => packet.len(),
         None => 0,
     } + match builder.state.transport_header {
         Some(Icmpv4(ref value)) => value.header_len(),
         Some(Icmpv6(ref value)) => value.header_len(),
         Some(Udp(_)) => UdpHeader::LEN,
         Some(Tcp(ref value)) => value.header_len(),
-        None => 0,
-    } + match builder.state.arp_header {
-        Some(_) => ArpHeader::LEN,
         None => 0,
     } + payload_size
 }
@@ -2034,10 +1989,9 @@ mod white_box_tests {
             PacketBuilderStep::<UdpHeader> {
                 state: PacketImpl {
                     link_header: None,
-                    ip_header: None,
+                    net_header: None,
                     vlan_header: None,
                     transport_header: None,
-                    arp_header: None,
                 },
                 _marker: marker::PhantomData::<UdpHeader> {}
             }
@@ -2049,14 +2003,13 @@ mod white_box_tests {
     #[should_panic]
     fn final_write_panic_missing_ip() {
         let mut writer = Vec::new();
-        final_write(
+        final_write_with_net(
             PacketBuilderStep::<UdpHeader> {
                 state: PacketImpl {
                     link_header: None,
-                    ip_header: None,
+                    net_header: None,
                     vlan_header: None,
                     transport_header: None,
-                    arp_header: None,
                 },
                 _marker: marker::PhantomData::<UdpHeader> {},
             },
@@ -2072,38 +2025,21 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use alloc::{vec, vec::Vec};
-    use core::net::Ipv4Addr;
     use proptest::prelude::*;
     use std::io::Read;
 
     #[test]
     fn eth_arp() {
-        let payload = [
-            20, 30, 40, 50, 60, 70, // src mac
-            10, 1, 1, 5, // src ip
-            0, 1, 2, 3, 4, 5, // dest mac
-            192, 168, 1, 2, // dest ip
-        ];
-
-        let expected_header = ArpHeader {
-            hw_addr_type: ArpHardwareId::ETHERNET,
-            proto_addr_type: EtherType::IPV4,
-            hw_addr_size: 6,    // mac addr is 6 bytes
-            proto_addr_size: 4, // ipv4 addr is 4 bytes
-            operation: ArpOperation::REQUEST,
-        };
-
-        let expected_payload = ArpPayload {
-            src_hard_addr: HardwareAddr::Mac([20, 30, 40, 50, 60, 70]),
-            src_addr: ProtocolAddr::Ipv4(Ipv4Addr::new(10, 1, 1, 5)),
-
-            des_hard_addr: HardwareAddr::Mac([00, 01, 02, 03, 04, 05]),
-            des_addr: ProtocolAddr::Ipv4(Ipv4Addr::new(192, 168, 1, 2)),
-        };
-
-        let payload = ArpPayload::from_pkg(expected_header, &payload).unwrap();
-
-        debug_assert_eq!(payload, expected_payload);
+        let expected_header = ArpPacket::new(
+            ArpHardwareId::ETHERNET,
+            EtherType::IPV4,
+            ArpOperation::REQUEST,
+            &[20, 30, 40, 50, 60, 70],
+            &[10, 1, 1, 5],
+            &[00, 01, 02, 03, 04, 05],
+            &[192, 168, 1, 2],
+        )
+        .unwrap();
 
         let mut serialized = Vec::new();
 
@@ -2111,12 +2047,30 @@ mod test {
             [0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b],
             [0xde, 0xad, 0xc0, 0x00, 0xff, 0xee],
         )
-        .arp(expected_header);
+        .arp(expected_header.clone());
 
         let target_size = pkg.size();
-        pkg.write(&mut serialized, payload).unwrap();
+        pkg.write(&mut serialized).unwrap();
 
+        // validate that the predicted size was matching
         assert_eq!(serialized.len(), target_size);
+
+        // deserialize each part of the message and check it
+        use std::io::Cursor;
+        let mut cursor = Cursor::new(&serialized);
+
+        // ethernet 2 header
+        assert_eq!(
+            Ethernet2Header::read(&mut cursor).unwrap(),
+            Ethernet2Header {
+                source: [0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b],
+                destination: [0xde, 0xad, 0xc0, 0x00, 0xff, 0xee],
+                ether_type: ether_type::ARP
+            }
+        );
+
+        // arp packet
+        assert_eq!(ArpPacket::read(&mut cursor).unwrap(), expected_header);
     }
 
     #[test]
