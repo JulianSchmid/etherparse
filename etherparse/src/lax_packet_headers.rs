@@ -812,11 +812,11 @@ mod test {
             // arp len error
             {
                 let data = test.to_vec(&[]);
-                for len in 0..arp.len() {
-                    let base_len = test.len(&[]) - arp.len();
+                for len in 0..arp.packet_len() {
+                    let base_len = test.len(&[]) - arp.packet_len();
 
                     let err = LenError {
-                        required_len: if len < 8 { 8 } else { arp.len() },
+                        required_len: if len < 8 { 8 } else { arp.packet_len() },
                         len,
                         len_source: if len < 8 {
                             LenSource::Slice

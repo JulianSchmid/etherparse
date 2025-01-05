@@ -106,7 +106,7 @@ impl<'a> DoubleVlanSlice<'a> {
     }
 }
 
-impl<'a> core::fmt::Debug for DoubleVlanSlice<'a> {
+impl core::fmt::Debug for DoubleVlanSlice<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("DoubleVlanSlice")
             .field("outer", &self.outer().to_header())

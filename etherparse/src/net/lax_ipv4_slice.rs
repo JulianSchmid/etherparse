@@ -68,7 +68,6 @@ impl<'a> LaxIpv4Slice<'a> {
     /// if the `len_source` value in the returned [`LaxIpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
-
     pub fn from_slice(
         slice: &[u8],
     ) -> Result<(LaxIpv4Slice, Option<err::ip_auth::HeaderSliceError>), err::ipv4::HeaderSliceError>

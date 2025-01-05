@@ -275,7 +275,7 @@ impl ComponentTest {
                     }
                 }
                 Arp(arp) => {
-                    builder.add(arp.len());
+                    builder.add(arp.packet_len());
                 }
             }
         }

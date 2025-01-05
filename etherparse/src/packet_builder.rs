@@ -1853,7 +1853,7 @@ fn final_write_with_net<T: io::Write + Sized, B>(
     use TransportHeader::*;
     match &mut transport {
         Some(Udp(ref mut udp)) => {
-            udp.length = (UdpHeader::LEN_U16 + payload.len() as u16) as u16;
+            udp.length = (UdpHeader::LEN + payload.len()) as u16;
         }
         Some(Tcp(_)) => {}
         Some(Icmpv4(_)) => {}
@@ -1967,7 +1967,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     } + match builder.state.net_header {
         Some(Ipv4(ref value, ref ext)) => value.header_len() + ext.header_len(),
         Some(Ipv6(_, ref ext)) => Ipv6Header::LEN + ext.header_len(),
-        Some(Arp(ref packet)) => packet.len(),
+        Some(Arp(ref packet)) => packet.packet_len(),
         None => 0,
     } + match builder.state.transport_header {
         Some(Icmpv4(ref value)) => value.header_len(),
