@@ -52,7 +52,7 @@ mod tests {
     #[test]
     fn debug() {
         assert_eq!(
-            "HwAddrLenTooLong(300)",
+            "HwAddrLenTooBig(300)",
             format!("{:?}", HwAddrLenTooBig(300))
         );
     }

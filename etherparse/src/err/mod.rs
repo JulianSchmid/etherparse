@@ -11,6 +11,7 @@ pub mod ipv4_exts;
 pub mod ipv6;
 pub mod ipv6_exts;
 pub mod linux_sll;
+pub mod net;
 pub mod packet;
 pub mod tcp;
 

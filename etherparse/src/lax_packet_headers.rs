@@ -83,6 +83,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         // net (ip) & transport (udp or tcp)
     ///         println!("net: {:?}", value.net);
     ///         match value.payload {
+    ///             LaxPayloadSlice::Empty => {
+    ///                 // in case of ARP packet the payload is empty
+    ///             }
     ///             LaxPayloadSlice::Ether(e) => {
     ///                 println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
     ///             }
@@ -119,9 +122,6 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///                 }
     ///             }
-    ///             LaxPayloadSlice::Arp { payload, parsed } => {
-    ///                 println!("ARP payload: {:?}", parsed);
-    ///            }
     ///         }
     ///     }
     /// }
@@ -197,6 +197,9 @@ impl<'a> LaxPacketHeaders<'a> {
     /// // net (ip) & transport (udp or tcp)
     /// println!("net: {:?}", value.net);
     /// match value.payload {
+    ///     LaxPayloadSlice::Empty => {
+    ///         // Some packets don't have seperate payloads. For example ARP packets.
+    ///     }
     ///     LaxPayloadSlice::Ether(e) => {
     ///         println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
     ///     }
@@ -232,9 +235,6 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         if incomplete {
     ///             println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///         }
-    ///     }
-    ///     LaxPayloadSlice::Arp{ payload, parsed } => {
-    ///         println!("ARP payload: {:?}", parsed);
     ///     }
     /// }
     /// ```
@@ -330,7 +330,8 @@ impl<'a> LaxPacketHeaders<'a> {
             ARP => {
                 let arp = match ArpPacket::from_slice(rest) {
                     Ok(value) => value,
-                    Err(err) => {
+                    Err(mut err) => {
+                        err.layer_start_offset += offset;
                         result.stop_err = Some((Len(err), Layer::Arp));
                         return result;
                     }
@@ -409,8 +410,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         // net (ip) & transport (udp or tcp)
     ///         println!("net: {:?}", value.net);
     ///         match value.payload {
-    ///             // if you parse from IP down there will be no ether payload
-    ///             LaxPayloadSlice::Ether(e) => unreachable!(),
+    ///             // if you parse from IP down there will be no ether payload and the
+    ///             // empty payload does not appear (only present in ARP packets).
+    ///             LaxPayloadSlice::Ether(_) | LaxPayloadSlice::Empty => unreachable!(),
     ///             LaxPayloadSlice::Ip(ip) => {
     ///                 println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
     ///                 if ip.incomplete {
@@ -443,9 +445,6 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                 if incomplete {
     ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///                 }
-    ///             }
-    ///             LaxPayloadSlice::Arp{ payload, parsed } => {
-    ///                 println!("ARP payload: {:?}", parsed);    
     ///             }
     ///         }
     ///     }
@@ -806,6 +805,7 @@ mod test {
             .unwrap();
 
             let mut test = base.clone();
+            test.set_ether_type(ether_type::ARP);
             test.net = Some(NetHeaders::Arp(arp.clone()));
             from_x_slice_assert_ok(&test);
 
@@ -818,12 +818,12 @@ mod test {
                     let err = LenError {
                         required_len: if len < 8 { 8 } else { arp.len() },
                         len,
-                        len_source: LenSource::Slice,
-                        layer: if len < 1 {
-                            Layer::IpHeader
+                        len_source: if len < 8 {
+                            LenSource::Slice
                         } else {
-                            Layer::Ipv4Header
+                            LenSource::ArpAddrLengths
                         },
+                        layer: Layer::Arp,
                         layer_start_offset: base_len,
                     };
 
@@ -1596,7 +1596,10 @@ mod test {
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
                     }
-                    Some(Layer::Ipv6Header) | Some(Layer::Ipv4Header) | Some(Layer::IpHeader) => {
+                    Some(Layer::Ipv6Header)
+                    | Some(Layer::Ipv4Header)
+                    | Some(Layer::IpHeader)
+                    | Some(Layer::Arp) => {
                         assert_eq!(test.link, actual.link);
                         compare_vlan(test, data, &actual);
                         assert_eq!(None, actual.net);
@@ -1625,7 +1628,7 @@ mod test {
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
                     }
-                    _ => unreachable!("error in an unexpected layer"),
+                    layer => unreachable!("error in an unexpected layer {layer:?}"),
                 }
             }
         }
@@ -1650,7 +1653,10 @@ mod test {
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
                     }
-                    Some(Layer::Ipv6Header) | Some(Layer::Ipv4Header) | Some(Layer::IpHeader) => {
+                    Some(Layer::Ipv6Header)
+                    | Some(Layer::Ipv4Header)
+                    | Some(Layer::IpHeader)
+                    | Some(Layer::Arp) => {
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
@@ -1677,10 +1683,10 @@ mod test {
                 }
             }
         }
-        // from_ether_type (ip at start)
+        // from_ether_type (ip or arp at start)
         if test.link.is_none() && test.vlan.is_none() {
-            if let Some(ip) = &test.net {
-                let ether_type = match ip {
+            if let Some(net) = &test.net {
+                let ether_type = match net {
                     NetHeaders::Ipv4(_, _) => ether_type::IPV4,
                     NetHeaders::Ipv6(_, _) => ether_type::IPV6,
                     NetHeaders::Arp(_) => ether_type::ARP,
@@ -1688,7 +1694,7 @@ mod test {
                 let actual = LaxPacketHeaders::from_ether_type(ether_type, &data);
                 assert_eq!(actual.stop_err, expected_stop_err);
                 assert_eq!(None, actual.link);
-                assert_eq!(test.vlan, None);
+                assert_eq!(None, test.vlan);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {
                         assert_eq!(test.net, actual.net);
@@ -1699,7 +1705,10 @@ mod test {
                             &actual,
                         );
                     }
-                    Some(Layer::Ipv6Header) | Some(Layer::Ipv4Header) | Some(Layer::IpHeader) => {
+                    Some(Layer::Ipv6Header)
+                    | Some(Layer::Ipv4Header)
+                    | Some(Layer::IpHeader)
+                    | Some(Layer::Arp) => {
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                         assert_eq!(
@@ -1733,7 +1742,11 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
+        if test.link.is_none()
+            && test.vlan.is_none()
+            && test.net.is_some()
+            && !matches!(test.net, Some(NetHeaders::Arp(_)))
+        {
             if let Some(err) = expected_ip_err {
                 assert_eq!(err, LaxPacketHeaders::from_ip(&data).unwrap_err());
             } else {

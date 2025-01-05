@@ -18,27 +18,141 @@
 /// assert_eq!(0x0001, num);
 /// ```
 ///
-#[derive(Clone, Copy, Eq, PartialEq, Default, Hash)]
+#[derive(Clone, Copy, Eq, PartialEq, Default, Ord, PartialOrd, Hash)]
 pub struct ArpHardwareId(pub u16);
 
 impl ArpHardwareId {
-    // Numbers sourced from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21
+    // Numbers sourced from
+    // * https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml
+    // * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21
 
+    /// Reserved
     pub const NETROM: ArpHardwareId = Self(0);
+
+    /// Ethernet (10Mb)
     pub const ETHERNET: ArpHardwareId = Self(1);
+
+    /// Deprecated use [`ArpHardwareId::ETHERNET`] instead
+    #[deprecated(since = "0.17.0", note = "Use `ArpHardwareId::ETHERNET` instead")]
+    pub const ETHER: ArpHardwareId = Self(1);
+
+    /// Experimental Ethernet (3Mb)
     pub const EETHER: ArpHardwareId = Self(2);
+
+    /// Amateur Radio AX.25
     pub const AX25: ArpHardwareId = Self(3);
+
+    /// Proteon ProNET Token Ring
     pub const PRONET: ArpHardwareId = Self(4);
+
+    /// Chaos
     pub const CHAOS: ArpHardwareId = Self(5);
+
+    /// IEEE 802 Networks
     pub const IEEE802: ArpHardwareId = Self(6);
+
+    /// ARCNET
     pub const ARCNET: ArpHardwareId = Self(7);
+
+    /// Hyperchannel
+    pub const HYPERCHANNEL: ArpHardwareId = Self(8);
+
+    /// APPLEtalk
     pub const APPLETLK: ArpHardwareId = Self(8);
+
+    /// Lanstar
+    pub const LANSTAR: ArpHardwareId = Self(9);
+
+    /// Autonet Short Address
+    pub const AUTONET_SHORT_ADDRESS: ArpHardwareId = Self(10);
+
+    /// LocalTalk
+    pub const LOCAL_TALK: ArpHardwareId = Self(11);
+
+    /// LocalNet (IBM PCNet or SYTEK LocalNET)
+    pub const LOCAL_NET: ArpHardwareId = Self(12);
+
+    /// Ultra link
+    pub const ULTRA_LINK: ArpHardwareId = Self(13);
+
+    /// SMDS
+    pub const SMDS: ArpHardwareId = Self(14);
+
+    /// DLCI (alias for [`ArpHardwareId::FRAME_RELAY`])
     pub const DLCI: ArpHardwareId = Self(15);
+
+    /// Frame Relay (alias for [`ArpHardwareId::DLCI`])
+    pub const FRAME_RELAY: ArpHardwareId = Self(15);
+
+    /// Asynchronous Transmission Mode (ATM) [JXB2]
+    pub const ATM_JXB2: ArpHardwareId = Self(16);
+
+    /// HDLC
+    pub const HDLC: ArpHardwareId = Self(17);
+
+    /// Fibre Channel
+    pub const FIBRE_CHANNEL: ArpHardwareId = Self(18);
+
+    /// Asynchronous Transmission Mode (ATM) [RFC2225]
     pub const ATM: ArpHardwareId = Self(19);
+
+    /// Serial Line
+    pub const SERIAL_LINE: ArpHardwareId = Self(20);
+
+    /// Asynchronous Transmission Mode (ATM) [Mike_Burrows]
+    pub const ATM_21: ArpHardwareId = Self(21);
+
+    /// MIL-STD-188-220
+    pub const MIL_STD_188_220: ArpHardwareId = Self(22);
+
+    /// Metricom
     pub const METRICOM: ArpHardwareId = Self(23);
+
+    /// IEEE 1394.1995
     pub const IEEE1394: ArpHardwareId = Self(24);
+
+    /// MAPOS
+    pub const MAPOS: ArpHardwareId = Self(25);
+
+    /// Twinaxial
+    pub const TWINAXIAL: ArpHardwareId = Self(26);
+
+    /// EUI-64
     pub const EUI64: ArpHardwareId = Self(27);
+
+    /// HIPARP
+    pub const HIPARP: ArpHardwareId = Self(28);
+
+    /// IP and ARP over ISO 7816-3
+    pub const IP_AND_ARP_OVER_ISO_7816_3: ArpHardwareId = Self(29);
+
+    /// ARPSec
+    pub const ARPSEC: ArpHardwareId = Self(30);
+
+    /// IPsec tunnel
+    pub const IPSEC_TUNNEL: ArpHardwareId = Self(31);
+
+    /// InfiniBand
     pub const INFINIBAND: ArpHardwareId = Self(32);
+
+    /// TIA-102 Project 25 Common Air Interface (CAI)
+    pub const CAI: ArpHardwareId = Self(33);
+
+    /// Wiegand Interface
+    pub const WIEGAND_INTERFACE: ArpHardwareId = Self(34);
+
+    /// Pure IP
+    pub const PURE_IP: ArpHardwareId = Self(35);
+
+    /// HW_EXP1
+    pub const HW_EXP1: ArpHardwareId = Self(36);
+
+    /// HFI
+    pub const HFI: ArpHardwareId = Self(37);
+
+    /// Unified Bus (UB)
+    pub const UNIFIED_BUS: ArpHardwareId = Self(38);
+
     pub const SLIP: ArpHardwareId = Self(256);
     pub const CSLIP: ArpHardwareId = Self(257);
     pub const SLIP6: ArpHardwareId = Self(258);
@@ -119,13 +233,43 @@ impl core::fmt::Display for ArpHardwareId {
             Self::CHAOS => write!(f, "{} (Chaosnet)", self.0),
             Self::IEEE802 => write!(f, "{} (IEEE 802.2 Ethernet/TR/TB)", self.0),
             Self::ARCNET => write!(f, "{} (ARCnet)", self.0),
-            Self::APPLETLK => write!(f, "{} (APPLEtalk)", self.0),
+            Self::APPLETLK => write!(f, "{} (APPLEtalk or Hyperchannel)", self.0),
+            Self::LANSTAR => write!(f, "{} (Lanstar)", self.0),
+            Self::AUTONET_SHORT_ADDRESS => write!(f, "{} (Autonet Short Address)", self.0),
+            Self::LOCAL_TALK => write!(f, "{} (LocalTalk)", self.0),
+            Self::LOCAL_NET => write!(f, "{} (LocalNet)", self.0),
+            Self::ULTRA_LINK => write!(f, "{} (Ultra link)", self.0),
+            Self::SMDS => write!(f, "{} (SMDS)", self.0),
             Self::DLCI => write!(f, "{} (Frame Relay DLCI)", self.0),
+            Self::ATM_JXB2 => write!(f, "{} (Asynchronous Transmission Mode (ATM) JXB2)", self.0),
+            Self::HDLC => write!(f, "{} (HDLC)", self.0),
+            Self::FIBRE_CHANNEL => write!(f, "{} (Fibre Channel)", self.0),
             Self::ATM => write!(f, "{} (ATM)", self.0),
+            Self::SERIAL_LINE => write!(f, "{} (Serial Line)", self.0),
+            Self::ATM_21 => write!(f, "{} (Asynchronous Transmission Mode (ATM))", self.0),
+            Self::MIL_STD_188_220 => write!(f, "{} (MIL-STD-188-220)", self.0),
             Self::METRICOM => write!(f, "{} (Metricom STRIP (new IANA id))", self.0),
             Self::IEEE1394 => write!(f, "{} (IEEE 1394 IPv4 - RFC 2734)", self.0),
+            Self::MAPOS => write!(f, "{} (MAPOS)", self.0),
+            Self::TWINAXIAL => write!(f, "{} (Twinaxial)", self.0),
             Self::EUI64 => write!(f, "{} (EUI-64)", self.0),
+            Self::HIPARP => write!(f, "{} (HIPARP)", self.0),
+            Self::IP_AND_ARP_OVER_ISO_7816_3 => {
+                write!(f, "{} (IP and ARP over ISO 7816-3)", self.0)
+            }
+            Self::ARPSEC => write!(f, "{} (ARPSec)", self.0),
+            Self::IPSEC_TUNNEL => write!(f, "{} (IPsec tunnel)", self.0),
             Self::INFINIBAND => write!(f, "{} (InfiniBand)", self.0),
+            Self::CAI => write!(
+                f,
+                "{} (TIA-102 Project 25 Common Air Interface (CAI))",
+                self.0
+            ),
+            Self::WIEGAND_INTERFACE => write!(f, "{} (Wiegand Interface)", self.0),
+            Self::PURE_IP => write!(f, "{} (Pure IP)", self.0),
+            Self::HW_EXP1 => write!(f, "{} (HW_EXP1)", self.0),
+            Self::HFI => write!(f, "{} (HFI)", self.0),
+            Self::UNIFIED_BUS => write!(f, "{} (Unified Bus (UB))", self.0),
             Self::SLIP => write!(f, "{} (SLIP)", self.0),
             Self::CSLIP => write!(f, "{} (CSLIP)", self.0),
             Self::SLIP6 => write!(f, "{} (SLIP6)", self.0),
@@ -356,13 +500,52 @@ mod test {
             (ArpHardwareId::CHAOS, "5 (Chaosnet)"),
             (ArpHardwareId::IEEE802, "6 (IEEE 802.2 Ethernet/TR/TB)"),
             (ArpHardwareId::ARCNET, "7 (ARCnet)"),
-            (ArpHardwareId::APPLETLK, "8 (APPLEtalk)"),
+            (ArpHardwareId::APPLETLK, "8 (APPLEtalk or Hyperchannel)"),
+            (ArpHardwareId::LANSTAR, "9 (Lanstar)"),
+            (
+                ArpHardwareId::AUTONET_SHORT_ADDRESS,
+                "10 (Autonet Short Address)",
+            ),
+            (ArpHardwareId::LOCAL_TALK, "11 (LocalTalk)"),
+            (ArpHardwareId::LOCAL_NET, "12 (LocalNet)"),
+            (ArpHardwareId::ULTRA_LINK, "13 (Ultra link)"),
+            (ArpHardwareId::SMDS, "14 (SMDS)"),
             (ArpHardwareId::DLCI, "15 (Frame Relay DLCI)"),
+            (
+                ArpHardwareId::ATM_JXB2,
+                "16 (Asynchronous Transmission Mode (ATM) JXB2)",
+            ),
+            (ArpHardwareId::HDLC, "17 (HDLC)"),
+            (ArpHardwareId::FIBRE_CHANNEL, "18 (Fibre Channel)"),
             (ArpHardwareId::ATM, "19 (ATM)"),
+            (ArpHardwareId::SERIAL_LINE, "20 (Serial Line)"),
+            (
+                ArpHardwareId::ATM_21,
+                "21 (Asynchronous Transmission Mode (ATM))",
+            ),
+            (ArpHardwareId::MIL_STD_188_220, "22 (MIL-STD-188-220)"),
             (ArpHardwareId::METRICOM, "23 (Metricom STRIP (new IANA id))"),
             (ArpHardwareId::IEEE1394, "24 (IEEE 1394 IPv4 - RFC 2734)"),
+            (ArpHardwareId::MAPOS, "25 (MAPOS)"),
+            (ArpHardwareId::TWINAXIAL, "26 (Twinaxial)"),
             (ArpHardwareId::EUI64, "27 (EUI-64)"),
+            (ArpHardwareId::HIPARP, "28 (HIPARP)"),
+            (
+                ArpHardwareId::IP_AND_ARP_OVER_ISO_7816_3,
+                "29 (IP and ARP over ISO 7816-3)",
+            ),
+            (ArpHardwareId::ARPSEC, "30 (ARPSec)"),
+            (ArpHardwareId::IPSEC_TUNNEL, "31 (IPsec tunnel)"),
             (ArpHardwareId::INFINIBAND, "32 (InfiniBand)"),
+            (
+                ArpHardwareId::CAI,
+                "33 (TIA-102 Project 25 Common Air Interface (CAI))",
+            ),
+            (ArpHardwareId::WIEGAND_INTERFACE, "34 (Wiegand Interface)"),
+            (ArpHardwareId::PURE_IP, "35 (Pure IP)"),
+            (ArpHardwareId::HW_EXP1, "36 (HW_EXP1)"),
+            (ArpHardwareId::HFI, "37 (HFI)"),
+            (ArpHardwareId::UNIFIED_BUS, "38 (Unified Bus (UB))"),
             (ArpHardwareId::SLIP, "256 (SLIP)"),
             (ArpHardwareId::CSLIP, "257 (CSLIP)"),
             (ArpHardwareId::SLIP6, "258 (SLIP6)"),
