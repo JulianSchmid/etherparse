@@ -150,6 +150,7 @@ prop_compose! {
 }
 
 pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
+    ether_type::ARP,
     ether_type::IPV4,
     ether_type::IPV6,
     ether_type::VLAN_TAGGED_FRAME,

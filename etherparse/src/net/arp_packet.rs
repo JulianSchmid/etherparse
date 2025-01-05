@@ -366,7 +366,7 @@ impl ArpPacket {
             // SAFETY: Safe as the maximum u8 value is equal to the array size 255.
             let sender_hw_addr_slice = unsafe {
                 core::slice::from_raw_parts_mut(
-                    result.target_hw_addr_buf.as_mut_ptr() as *mut u8,
+                    result.sender_hw_addr_buf.as_mut_ptr() as *mut u8,
                     result.hw_addr_size as usize,
                 )
             };

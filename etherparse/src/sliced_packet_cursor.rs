@@ -48,6 +48,7 @@ impl<'a> SlicedPacketCursor<'a> {
 
         //continue parsing (if required)
         match ether_type {
+            ARP => self.slice_arp(),
             IPV4 => self.slice_ipv4(),
             IPV6 => self.slice_ipv6(),
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan(),
@@ -74,6 +75,7 @@ impl<'a> SlicedPacketCursor<'a> {
 
         //continue parsing (if required)
         match protocol_type {
+            LinuxSllProtocolType::EtherType(EtherType::ARP) => self.slice_arp(),
             LinuxSllProtocolType::EtherType(EtherType::IPV4) => self.slice_ipv4(),
             LinuxSllProtocolType::EtherType(EtherType::IPV6) => self.slice_ipv6(),
             _ => Ok(self.result),
@@ -107,11 +109,13 @@ impl<'a> SlicedPacketCursor<'a> {
                 }));
 
                 match inner_ether_type {
+                    ARP => self.slice_arp(),
                     IPV4 => self.slice_ipv4(),
                     IPV6 => self.slice_ipv6(),
                     _ => Ok(self.result),
                 }
             }
+            ARP => self.slice_arp(),
             IPV4 => self.slice_ipv4(),
             IPV6 => self.slice_ipv6(),
             _ => Ok(self.result),

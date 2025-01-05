@@ -20,6 +20,13 @@ pub enum NetSlice<'a> {
 }
 
 impl<'a> NetSlice<'a> {
+    /// Returns true if the NetSlice contains either IPv4 or IPv6.
+    #[inline]
+    pub fn is_ip(&self) -> bool {
+        use NetSlice::*;
+        matches!(self, Ipv4(_) | Ipv6(_))
+    }
+
     /// Returns a reference to ip payload if the net slice contains
     /// an ipv4 or ipv6 slice.
     #[inline]

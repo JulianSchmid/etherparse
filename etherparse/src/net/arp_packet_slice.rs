@@ -220,7 +220,7 @@ mod tests {
                     assert_eq!(err, LenError{
                         required_len: 8 + (packet.hw_addr_size() as usize)*2 + (packet.proto_addr_size() as usize)*2,
                         len,
-                        len_source: LenSource::Slice,
+                        len_source: LenSource::ArpAddrLengths,
                         layer: Layer::Arp,
                         layer_start_offset: 0,
                     });

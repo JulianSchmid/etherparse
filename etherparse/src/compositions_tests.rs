@@ -8,7 +8,7 @@ use proptest::prelude::*;
 struct ComponentTest {
     link: Option<LinkHeader>,
     vlan: Option<VlanHeader>,
-    ip: Option<IpHeaders>,
+    net: Option<NetHeaders>,
     transport: Option<TransportHeader>,
     payload: Vec<u8>,
 }
@@ -28,7 +28,7 @@ impl ComponentTest {
             } + match &self.vlan {
                 Some(header) => header.header_len(),
                 None => 0,
-            } + match &self.ip {
+            } + match &self.net {
                 Some(headers) => headers.header_len(),
                 None => 0,
             } + match &self.transport {
@@ -48,14 +48,17 @@ impl ComponentTest {
             Some(Double(header)) => header.write(&mut buffer).unwrap(),
             None => {}
         }
-        match &self.ip {
-            Some(IpHeaders::Ipv4(header, exts)) => {
+        match &self.net {
+            Some(NetHeaders::Ipv4(header, exts)) => {
                 header.write_raw(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.protocol).unwrap();
             }
-            Some(IpHeaders::Ipv6(header, exts)) => {
+            Some(NetHeaders::Ipv6(header, exts)) => {
                 header.write(&mut buffer).unwrap();
                 exts.write(&mut buffer, header.next_header).unwrap();
+            }
+            Some(NetHeaders::Arp(arp)) => {
+                arp.write(&mut buffer).unwrap();
             }
             None => {}
         }
@@ -84,9 +87,9 @@ impl ComponentTest {
         let mut test = self.clone();
 
         // set the payload length
-        if let Some(ip) = test.ip.as_mut() {
-            match ip {
-                IpHeaders::Ipv4(ipv4, exts) => {
+        if let Some(net) = test.net.as_mut() {
+            match net {
+                NetHeaders::Ipv4(ipv4, exts) => {
                     ipv4.set_payload_len(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -94,7 +97,7 @@ impl ComponentTest {
                     )
                     .unwrap();
                 }
-                IpHeaders::Ipv6(ipv6, exts) => {
+                NetHeaders::Ipv6(ipv6, exts) => {
                     ipv6.set_payload_length(
                         exts.header_len()
                             + self.transport.as_ref().map_or(0, |t| t.header_len())
@@ -102,6 +105,7 @@ impl ComponentTest {
                     )
                     .unwrap();
                 }
+                NetHeaders::Arp(_) => {}
             }
         }
         if let Some(TransportHeader::Udp(udp)) = test.transport.as_mut() {
@@ -176,7 +180,7 @@ impl ComponentTest {
         }
 
         // packet from the internet layer down (without ethernet2 & vlan headers)
-        if test.ip.is_some() {
+        if test.net.as_ref().map(|v| v.is_ip()).unwrap_or(false) {
             // serialize from the ip layer downwards
             let ip_down = {
                 let mut ip_down = test.clone();
@@ -240,9 +244,9 @@ impl ComponentTest {
                 }
             }
         }
-        if let Some(ip) = self.ip.as_ref() {
-            use IpHeaders::*;
-            match ip {
+        if let Some(net) = self.net.as_ref() {
+            use NetHeaders::*;
+            match net {
                 Ipv4(header, exts) => {
                     builder.add(header.header_len());
                     if let Some(auth) = exts.auth.as_ref() {
@@ -270,6 +274,9 @@ impl ComponentTest {
                         builder.add(e.header_len());
                     }
                 }
+                Arp(arp) => {
+                    builder.add(arp.len());
+                }
             }
         }
         if let Some(transport) = self.transport.as_ref() {
@@ -282,7 +289,7 @@ impl ComponentTest {
     fn assert_headers(&self, actual: PacketHeaders) {
         assert_eq!(self.link, actual.link);
         assert_eq!(self.vlan, actual.vlan);
-        assert_eq!(self.ip, self.ip);
+        assert_eq!(self.net, self.net);
         assert_eq!(self.transport, actual.transport);
         assert_eq!(self.payload[..], actual.payload.slice()[..]);
     }
@@ -307,16 +314,16 @@ impl ComponentTest {
         assert_eq!(self.vlan, result.vlan.as_ref().map(|ref x| x.to_header()));
 
         //ip
-        assert_eq!(self.ip, {
+        assert_eq!(self.net, {
             use crate::NetSlice::*;
             match result.net.as_ref() {
-                Some(Ipv4(actual)) => Some(IpHeaders::Ipv4(
+                Some(Ipv4(actual)) => Some(NetHeaders::Ipv4(
                     actual.header().to_header(),
                     Ipv4Extensions {
                         auth: actual.extensions().auth.map(|ref x| x.to_header()),
                     },
                 )),
-                Some(Ipv6(actual)) => Some(IpHeaders::Ipv6(
+                Some(Ipv6(actual)) => Some(NetHeaders::Ipv6(
                     actual.header().to_header(),
                     Ipv6Extensions::from_slice(
                         actual.header().next_header(),
@@ -325,7 +332,7 @@ impl ComponentTest {
                     .unwrap()
                     .0,
                 )),
-                Some(Arp(_)) => None,
+                Some(Arp(arp)) => Some(NetHeaders::Arp(arp.to_packet())),
                 None => None,
             }
         });
@@ -393,6 +400,7 @@ impl ComponentTest {
         &self,
         outer_vlan: &SingleVlanHeader,
         inner_vlan: &SingleVlanHeader,
+        arp: &ArpPacket,
         ipv4: &Ipv4Header,
         ipv4_ext: &Ipv4Extensions,
         ipv6: &Ipv6Header,
@@ -431,17 +439,26 @@ impl ComponentTest {
 
         //single
         setup_single(inner_vlan.ether_type).run();
+        setup_single(ether_type::ARP).run_arp(arp);
         setup_single(ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
         setup_single(ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
 
         //double
         for ether_type in VLAN_ETHER_TYPES {
             setup_double(*ether_type, inner_vlan.ether_type).run();
+            setup_double(*ether_type, ether_type::ARP).run_arp(arp);
             setup_double(*ether_type, ether_type::IPV4)
                 .run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
             setup_double(*ether_type, ether_type::IPV6)
                 .run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
         }
+    }
+
+    fn run_arp(&self, arp: &ArpPacket) {
+        let mut test = self.clone();
+        test.net = Some(NetHeaders::Arp(arp.clone()));
+        test.payload.clear();
+        test.run();
     }
 
     fn run_ipv4(
@@ -456,14 +473,14 @@ impl ComponentTest {
         // fragmenting
         {
             let mut test = self.clone();
-            test.ip = Some({
+            test.net = Some({
                 let mut frag = ip.clone();
                 if false == frag.is_fragmenting_payload() {
                     frag.more_fragments = true;
                 }
-                let mut header = IpHeaders::Ipv4(frag, ip_exts.clone());
-                header.set_next_headers(ip.protocol);
-                header
+                let mut ip_exts = ip_exts.clone();
+                frag.protocol = ip_exts.set_next_headers(ip.protocol);
+                NetHeaders::Ipv4(frag, ip_exts.clone())
             });
 
             // run without transport header
@@ -473,13 +490,13 @@ impl ComponentTest {
         // non fragmenting
         {
             let mut test = self.clone();
-            test.ip = Some({
+            test.net = Some({
                 let mut non_frag = ip.clone();
                 non_frag.more_fragments = false;
                 non_frag.fragment_offset = 0.try_into().unwrap();
-                let mut header = IpHeaders::Ipv4(non_frag, ip_exts.clone());
-                header.set_next_headers(ip.protocol);
-                header
+                let mut ip_exts = ip_exts.clone();
+                non_frag.protocol = ip_exts.set_next_headers(ip.protocol);
+                NetHeaders::Ipv4(non_frag, ip_exts)
             });
             test.run_transport(udp, tcp, icmpv4, icmpv6);
         }
@@ -497,7 +514,7 @@ impl ComponentTest {
         // fragmenting
         {
             let mut test = self.clone();
-            test.ip = Some({
+            test.net = Some({
                 let mut frag = ip_exts.clone();
                 if let Some(frag) = frag.fragment.as_mut() {
                     if false == frag.is_fragmenting_payload() {
@@ -511,9 +528,9 @@ impl ComponentTest {
                         0,
                     ));
                 }
-                let mut header = IpHeaders::Ipv6(ip.clone(), frag);
-                header.set_next_headers(ip.next_header);
-                header
+                let mut ip = ip.clone();
+                ip.next_header = frag.set_next_headers(ip.next_header);
+                NetHeaders::Ipv6(ip, frag)
             });
             test.run();
         }
@@ -521,12 +538,12 @@ impl ComponentTest {
         // non fragmenting
         {
             let mut test = self.clone();
-            test.ip = Some({
+            test.net = Some({
                 let mut non_frag = ip_exts.clone();
                 non_frag.fragment = None;
-                let mut header = IpHeaders::Ipv6(ip.clone(), non_frag);
-                header.set_next_headers(ip.next_header);
-                header
+                let mut ip = ip.clone();
+                ip.next_header = non_frag.set_next_headers(ip.next_header);
+                NetHeaders::Ipv6(ip, non_frag)
             });
             test.run_transport(udp, tcp, icmpv4, icmpv6);
         }
@@ -545,7 +562,11 @@ impl ComponentTest {
         // udp
         {
             let mut test = self.clone();
-            test.ip.as_mut().unwrap().set_next_headers(ip_number::UDP);
+            test.net
+                .as_mut()
+                .unwrap()
+                .try_set_next_headers(ip_number::UDP)
+                .unwrap();
             test.transport = Some(TransportHeader::Udp(udp.clone()));
             test.run()
         }
@@ -553,7 +574,11 @@ impl ComponentTest {
         // tcp
         {
             let mut test = self.clone();
-            test.ip.as_mut().unwrap().set_next_headers(ip_number::TCP);
+            test.net
+                .as_mut()
+                .unwrap()
+                .try_set_next_headers(ip_number::TCP)
+                .unwrap();
             test.transport = Some(TransportHeader::Tcp(tcp.clone()));
             test.run()
         }
@@ -561,14 +586,22 @@ impl ComponentTest {
         // icmpv4
         if let Some(payload_size) = icmpv4.fixed_payload_size() {
             let mut test = self.clone();
-            test.ip.as_mut().unwrap().set_next_headers(ip_number::ICMP);
+            test.net
+                .as_mut()
+                .unwrap()
+                .try_set_next_headers(ip_number::ICMP)
+                .unwrap();
             test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
             // resize the payload in case it does not have to be as big
             test.payload.resize(payload_size, 0);
             test.run()
         } else {
             let mut test = self.clone();
-            test.ip.as_mut().unwrap().set_next_headers(ip_number::ICMP);
+            test.net
+                .as_mut()
+                .unwrap()
+                .try_set_next_headers(ip_number::ICMP)
+                .unwrap();
             test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
             test.run()
         }
@@ -576,20 +609,22 @@ impl ComponentTest {
         // icmpv6
         if let Some(payload_size) = icmpv6.fixed_payload_size() {
             let mut test = self.clone();
-            test.ip
+            test.net
                 .as_mut()
                 .unwrap()
-                .set_next_headers(ip_number::IPV6_ICMP);
+                .try_set_next_headers(ip_number::IPV6_ICMP)
+                .unwrap();
             test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
             // resize the payload in case it does not have to be as big
             test.payload.resize(payload_size, 0);
             test.run()
         } else {
             let mut test = self.clone();
-            test.ip
+            test.net
                 .as_mut()
                 .unwrap()
-                .set_next_headers(ip_number::IPV6_ICMP);
+                .try_set_next_headers(ip_number::IPV6_ICMP)
+                .unwrap();
             test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
             test.run()
         }
@@ -607,6 +642,7 @@ proptest! {
                          ref ipv4_exts in ipv4_extensions_unknown(),
                          ref ipv6 in ipv6_unknown(),
                          ref ipv6_exts in ipv6_extensions_unknown(),
+                         ref arp in arp_packet_any(),
                          ref udp in udp_any(),
                          ref tcp in tcp_any(),
                          ref icmpv4 in icmpv4_header_any(),
@@ -622,19 +658,20 @@ proptest! {
                     LinkHeader::Ethernet2(result)
                 }),
                 vlan: None,
-                ip: None,
+                net: None,
                 transport: None
             }
         };
 
         //ethernet 2: standalone, ipv4, ipv6
         setup_eth(eth.ether_type).run();
+        setup_eth(ether_type::ARP).run_arp(arp);
         setup_eth(ether_type::IPV4).run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
         setup_eth(ether_type::IPV6).run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
 
         //vlans
         for ether_type in VLAN_ETHER_TYPES {
-            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
+            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, arp, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
         }
     }
 }
@@ -656,7 +693,7 @@ fn test_packet_slicing_panics() {
             ether_type: 0.into(),
         })),
         vlan: None,
-        ip: None,
+        net: None,
         transport: None,
         payload: vec![],
     }
