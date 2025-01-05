@@ -26,8 +26,8 @@ impl TestPacket {
         if let Some(vlan) = &self.vlan {
             vlan.write(&mut result).unwrap();
         }
-        if let Some(ip) = &self.net {
-            match ip {
+        if let Some(net) = &self.net {
+            match net {
                 NetHeaders::Ipv4(ipv4, exts) => {
                     ipv4.write_raw(&mut result).unwrap();
                     exts.write(&mut result, ipv4.protocol).unwrap();
@@ -122,7 +122,7 @@ impl TestPacket {
                     )
                     .unwrap();
             }
-            Arp(_) => todo!(),
+            Arp(_) => {}
         }
     }
 
@@ -130,7 +130,7 @@ impl TestPacket {
         self.net.as_ref().map_or(false, |net| match net {
             NetHeaders::Ipv4(h, _) => h.is_fragmenting_payload(),
             NetHeaders::Ipv6(_, e) => e.is_fragmenting_payload(),
-            NetHeaders::Arp(_) => todo!(),
+            NetHeaders::Arp(_) => false,
         })
     }
 }

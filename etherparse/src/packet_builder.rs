@@ -1872,13 +1872,14 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             )
             .map_err(PayloadLen)?;
 
-            ip.protocol = ip_exts.set_next_headers(match &transport {
-                Some(Icmpv4(_)) => ip_number::ICMP,
-                Some(Icmpv6(_)) => ip_number::IPV6_ICMP,
-                Some(Udp(_)) => ip_number::UDP,
-                Some(Tcp(_)) => ip_number::TCP,
-                None => unreachable!(),
-            });
+            if let Some(transport) = &transport {
+                ip.protocol = ip_exts.set_next_headers(match &transport {
+                    Icmpv4(_) => ip_number::ICMP,
+                    Icmpv6(_) => ip_number::IPV6_ICMP,
+                    Udp(_) => ip_number::UDP,
+                    Tcp(_) => ip_number::TCP,
+                });
+            }
 
             // write ip header & extensions
             ip.write(writer).map_err(Io)?;
@@ -1910,13 +1911,14 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             )
             .map_err(PayloadLen)?;
 
-            ip.next_header = ip_exts.set_next_headers(match &transport {
-                Some(Icmpv4(_)) => ip_number::ICMP,
-                Some(Icmpv6(_)) => ip_number::IPV6_ICMP,
-                Some(Udp(_)) => ip_number::UDP,
-                Some(Tcp(_)) => ip_number::TCP,
-                None => unreachable!(),
-            });
+            if let Some(transport) = &transport {
+                ip.next_header = ip_exts.set_next_headers(match &transport {
+                    Icmpv4(_) => ip_number::ICMP,
+                    Icmpv6(_) => ip_number::IPV6_ICMP,
+                    Udp(_) => ip_number::UDP,
+                    Tcp(_) => ip_number::TCP,
+                });
+            }
 
             // write ip header & extensions
             ip.write(writer).map_err(Io)?;
