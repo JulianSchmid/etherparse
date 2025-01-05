@@ -281,8 +281,7 @@ impl<'a> SlicedPacketCursor<'a> {
     pub fn slice_arp(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         let result = ArpPacketSlice::from_slice(self.slice).map_err(|mut err| {
             err.layer_start_offset += self.offset;
-
-            err::packet::SliceError::Len(err.into())
+            err::packet::SliceError::Len(err)
         })?;
 
         //set the new data

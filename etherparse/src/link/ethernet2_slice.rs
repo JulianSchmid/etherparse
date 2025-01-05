@@ -155,7 +155,7 @@ impl<'a> Ethernet2Slice<'a> {
     }
 }
 
-impl<'a> core::fmt::Debug for Ethernet2Slice<'a> {
+impl core::fmt::Debug for Ethernet2Slice<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("Ethernet2Slice")
             .field("header", &self.to_header())

@@ -71,7 +71,7 @@ impl NetHeaders {
         match *self {
             Ipv4(ref header, ref extensions) => header.header_len() + extensions.header_len(),
             Ipv6(_, ref extensions) => Ipv6Header::LEN + extensions.header_len(),
-            Arp(ref arp) => arp.len(),
+            Arp(ref arp) => arp.packet_len(),
         }
     }
 }

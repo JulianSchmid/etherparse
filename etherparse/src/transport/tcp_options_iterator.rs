@@ -18,7 +18,7 @@ impl<'a> TcpOptionsIterator<'a> {
     }
 }
 
-impl<'a> Iterator for TcpOptionsIterator<'a> {
+impl Iterator for TcpOptionsIterator<'_> {
     type Item = Result<TcpOptionElement, TcpOptionReadError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -181,7 +181,7 @@ impl<'a> Iterator for TcpOptionsIterator<'a> {
     }
 }
 
-impl<'a> core::fmt::Debug for TcpOptionsIterator<'a> {
+impl core::fmt::Debug for TcpOptionsIterator<'_> {
     fn fmt(&self, fmt: &mut core::fmt::Formatter) -> Result<(), core::fmt::Error> {
         let mut list = fmt.debug_list();
 

@@ -408,7 +408,7 @@ impl<'a> TcpSlice<'a> {
     }
 }
 
-impl<'a> core::fmt::Debug for TcpSlice<'a> {
+impl core::fmt::Debug for TcpSlice<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TcpSlice")
             .field("header", &self.to_header())
