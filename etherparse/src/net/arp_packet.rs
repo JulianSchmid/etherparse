@@ -89,7 +89,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_hw_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         sender_hw_addr.len(),
                     );
                 }
@@ -103,7 +103,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_protocol_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         sender_protocol_addr.len(),
                     );
                 }
@@ -117,7 +117,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_hw_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         target_hw_addr.len(),
                     );
                 }
@@ -131,7 +131,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_protocol_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         target_protocol_addr.len(),
                     );
                 }
@@ -189,7 +189,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_hw_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         sender_hw_addr.len(),
                     );
                 }
@@ -203,7 +203,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_protocol_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         sender_protocol_addr.len(),
                     );
                 }
@@ -217,7 +217,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_hw_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         target_hw_addr.len(),
                     );
                 }
@@ -231,7 +231,7 @@ impl ArpPacket {
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_protocol_addr.as_ptr(),
-                        std::mem::transmute(buf.as_mut_ptr()),
+                        buf.as_mut_ptr() as *mut u8,
                         target_protocol_addr.len(),
                     );
                 }
@@ -303,7 +303,7 @@ impl ArpPacket {
 
     /// Serialized length of this ARP packet.
     #[inline]
-    pub fn len(&self) -> usize {
+    pub fn packet_len(&self) -> usize {
         8 + usize::from(self.hw_addr_size) * 2 + usize::from(self.proto_addr_size) * 2
     }
 
@@ -338,7 +338,7 @@ impl ArpPacket {
     /// Writes the header to the given writer.
     #[cfg(feature = "std")]
     pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
-        writer.write(&self.to_bytes())?;
+        writer.write_all(&self.to_bytes())?;
         Ok(())
     }
 
