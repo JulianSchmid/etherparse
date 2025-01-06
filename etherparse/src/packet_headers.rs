@@ -92,6 +92,7 @@ impl<'a> PacketHeaders<'a> {
     /// The result is returned as a [`PacketHeaders`] struct. Currently supported
     /// ether type numbers are:
     ///
+    /// * `ether_type::ARP`
     /// * `ether_type::IPV4`
     /// * `ether_type::IPV6`
     /// * `ether_type::VLAN_TAGGED_FRAME`

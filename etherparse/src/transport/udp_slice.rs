@@ -456,4 +456,30 @@ mod test {
             }
         }
     }
+
+    proptest! {
+        #[test]
+        fn header_len(
+            udp in udp_any()
+        ) {
+            let mut udp = udp.clone();
+            udp.length = UdpHeader::LEN_U16;
+            let bytes = udp.to_bytes();
+            let slice = UdpSlice::from_slice(&bytes).unwrap();
+            assert_eq!(UdpHeader::LEN, slice.header_len());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len_u16(
+            udp in udp_any()
+        ) {
+            let mut udp = udp.clone();
+            udp.length = UdpHeader::LEN_U16;
+            let bytes = udp.to_bytes();
+            let slice = UdpSlice::from_slice(&bytes).unwrap();
+            assert_eq!(UdpHeader::LEN_U16, slice.header_len_u16());
+        }
+    }
 }

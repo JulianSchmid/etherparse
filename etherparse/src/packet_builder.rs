@@ -49,6 +49,7 @@ use std::{io, marker};
 ///     * [`PacketBuilder::ipv4`]
 ///     * [`PacketBuilder::ipv6`]
 /// * Options after an Ethernet2 header was added:
+///     * [`PacketBuilderStep<Ethernet2Header>::arp`]
 ///     * [`PacketBuilderStep<Ethernet2Header>::vlan`]
 ///     * [`PacketBuilderStep<Ethernet2Header>::single_vlan`]
 ///     * [`PacketBuilderStep<Ethernet2Header>::double_vlan`]
@@ -691,6 +692,34 @@ impl PacketBuilderStep<Ethernet2Header> {
         }
     }
 
+    /// Adds an ARP packet.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use etherparse::*;
+    ///
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],    // source mac
+    ///               [7,8,9,10,11,12]) // destination mac
+    ///     .arp(ArpPacket::new(
+    ///         ArpHardwareId::ETHERNET,
+    ///         EtherType::IPV4,
+    ///         ArpOperation::REQUEST,
+    ///         &[1,2,3,4,5,6], // sender_hw_addr
+    ///         &[7,6,8,9],     // sender_protocol_addr
+    ///         &[10,11,12,14,15,16], // target_hw_addr
+    ///         &[17,18,19,20]        // target_protocol_addr
+    ///     ).unwrap());
+    ///
+    /// // get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(builder.size());
+    ///
+    /// // serialize
+    /// builder.write(&mut result).unwrap();
+    /// ```
     pub fn arp(mut self, arp_packet: ArpPacket) -> PacketBuilderStep<ArpPacket> {
         self.state.net_header = Some(NetHeaders::Arp(arp_packet));
         //return for next step
@@ -845,6 +874,44 @@ impl PacketBuilderStep<LinuxSllHeader> {
         }
         .ipv4(source, destination, time_to_live)
     }
+
+    /// Adds an ARP packet.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use etherparse::*;
+    ///
+    /// let builder = PacketBuilder::
+    ///     linux_sll(LinuxSllPacketType::OTHERHOST, //packet type
+    ///               6, //sender address valid length
+    ///               [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///     .arp(ArpPacket::new(
+    ///         ArpHardwareId::ETHERNET,
+    ///         EtherType::IPV4,
+    ///         ArpOperation::REQUEST,
+    ///         &[1,2,3,4,5,6], // sender_hw_addr
+    ///         &[7,6,8,9],     // sender_protocol_addr
+    ///         &[10,11,12,14,15,16], // target_hw_addr
+    ///         &[17,18,19,20]        // target_protocol_addr
+    ///     ).unwrap());
+    ///
+    /// // get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(builder.size());
+    ///
+    /// // serialize
+    /// builder.write(&mut result).unwrap();
+    /// ```
+    pub fn arp(mut self, arp_packet: ArpPacket) -> PacketBuilderStep<ArpPacket> {
+        self.state.net_header = Some(NetHeaders::Arp(arp_packet));
+        // return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<ArpPacket> {},
+        }
+    }
 }
 
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
@@ -990,6 +1057,44 @@ impl PacketBuilderStep<VlanHeader> {
             _marker: marker::PhantomData::<Ethernet2Header> {},
         }
         .ipv4(source, destination, time_to_live)
+    }
+
+    /// Adds an ARP packet.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use etherparse::*;
+    ///
+    /// let builder = PacketBuilder::
+    ///     ethernet2([1,2,3,4,5,6],    // source mac
+    ///               [7,8,9,10,11,12]) // destination mac
+    ///     .single_vlan(0x123.try_into().unwrap()) // vlan identifier
+    ///     .arp(ArpPacket::new(
+    ///         ArpHardwareId::ETHERNET,
+    ///         EtherType::IPV4,
+    ///         ArpOperation::REQUEST,
+    ///         &[1,2,3,4,5,6], // sender_hw_addr
+    ///         &[7,6,8,9],     // sender_protocol_addr
+    ///         &[10,11,12,14,15,16], // target_hw_addr
+    ///         &[17,18,19,20]        // target_protocol_addr
+    ///     ).unwrap());
+    ///
+    /// // get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(builder.size());
+    ///
+    /// // serialize
+    /// builder.write(&mut result).unwrap();
+    /// ```
+    pub fn arp(mut self, arp_packet: ArpPacket) -> PacketBuilderStep<ArpPacket> {
+        self.state.net_header = Some(NetHeaders::Arp(arp_packet));
+        //return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<ArpPacket> {},
+        }
     }
 }
 
@@ -2076,6 +2181,63 @@ mod test {
     }
 
     #[test]
+    fn eth_vlan_arp() {
+        let expected_arp = ArpPacket::new(
+            ArpHardwareId::ETHERNET,
+            EtherType::IPV4,
+            ArpOperation::REQUEST,
+            &[20, 30, 40, 50, 60, 70],
+            &[10, 1, 1, 5],
+            &[00, 01, 02, 03, 04, 05],
+            &[192, 168, 1, 2],
+        )
+        .unwrap();
+        let vlan = SingleVlanHeader {
+            pcp: VlanPcp::ZERO,
+            drop_eligible_indicator: false,
+            vlan_id: VlanId::try_new(123).unwrap(),
+            ether_type: EtherType(0), // should get overwritten
+        };
+
+        let mut serialized = Vec::new();
+
+        let pkg = PacketBuilder::ethernet2(
+            [0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b],
+            [0xde, 0xad, 0xc0, 0x00, 0xff, 0xee],
+        )
+        .vlan(VlanHeader::Single(vlan.clone()))
+        .arp(expected_arp.clone());
+
+        let target_size = pkg.size();
+        pkg.write(&mut serialized).unwrap();
+
+        // validate that the predicted size was matching
+        assert_eq!(serialized.len(), target_size);
+
+        // deserialize each part of the message and check it
+        use std::io::Cursor;
+        let mut cursor = Cursor::new(&serialized);
+
+        // ethernet 2 header
+        assert_eq!(
+            Ethernet2Header::read(&mut cursor).unwrap(),
+            Ethernet2Header {
+                source: [0x00, 0x1b, 0x21, 0x0f, 0x91, 0x9b],
+                destination: [0xde, 0xad, 0xc0, 0x00, 0xff, 0xee],
+                ether_type: ether_type::VLAN_TAGGED_FRAME
+            }
+        );
+
+        // vlan header
+        let mut expected_vlan = vlan.clone();
+        expected_vlan.ether_type = EtherType::ARP;
+        assert_eq!(SingleVlanHeader::read(&mut cursor).unwrap(), expected_vlan);
+
+        // arp packet
+        assert_eq!(ArpPacket::read(&mut cursor).unwrap(), expected_arp);
+    }
+
+    #[test]
     fn eth_ipv4_udp() {
         //generate
         let in_payload = [24, 25, 26, 27];
@@ -2191,6 +2353,52 @@ mod test {
         let mut actual_payload: [u8; 4] = [0; 4];
         cursor.read_exact(&mut actual_payload).unwrap();
         assert_eq!(actual_payload, in_payload);
+    }
+
+    #[test]
+    fn linuxsll_arp() {
+        let expected_arp = ArpPacket::new(
+            ArpHardwareId::ETHERNET,
+            EtherType::IPV4,
+            ArpOperation::REQUEST,
+            &[20, 30, 40, 50, 60, 70],
+            &[10, 1, 1, 5],
+            &[00, 01, 02, 03, 04, 05],
+            &[192, 168, 1, 2],
+        )
+        .unwrap();
+
+        // build packet
+        let builder =
+            PacketBuilder::linux_sll(LinuxSllPacketType::OUTGOING, 6, [7, 8, 9, 10, 11, 12, 0, 0])
+                .arp(expected_arp.clone());
+
+        let predicted_size = builder.size();
+
+        let mut serialized = Vec::with_capacity(builder.size());
+        builder.write(&mut serialized).unwrap();
+
+        // validate predicted size
+        assert_eq!(predicted_size, serialized.len());
+
+        // deserialize each part of the message and check it
+        use std::io::Cursor;
+        let mut cursor = Cursor::new(&serialized);
+
+        // linux sll header
+        assert_eq!(
+            LinuxSllHeader::read(&mut cursor).unwrap(),
+            LinuxSllHeader {
+                packet_type: LinuxSllPacketType::OUTGOING,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                sender_address_valid_length: 6,
+                sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType::ARP)
+            }
+        );
+
+        // arp
+        assert_eq!(ArpPacket::read(&mut cursor).unwrap(), expected_arp);
     }
 
     #[test]
@@ -2522,7 +2730,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_eth_ipv6_udp() {
+    fn eth_ipv6_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2592,7 +2800,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_linuxsll_ipv6_udp() {
+    fn linuxsll_ipv6_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2664,7 +2872,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_eth_single_vlan_ipv4_udp() {
+    fn eth_single_vlan_ipv4_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2737,7 +2945,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_eth_double_vlan_ipv6_udp() {
+    fn eth_double_vlan_ipv6_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2835,7 +3043,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_eth_ip_udp() {
+    fn eth_ip_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2913,7 +3121,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_linuxsll_ip_udp() {
+    fn linuxsll_ip_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -2993,7 +3201,7 @@ mod test {
     }
 
     #[test]
-    fn udp_builder_eth_vlan_ip_udp() {
+    fn eth_vlan_ip_udp() {
         //generate
         let in_payload = [50, 51, 52, 53];
         let mut serialized = Vec::new();
@@ -3312,7 +3520,7 @@ mod test {
     }
 
     #[test]
-    fn tcp_options() {
+    fn eth_ipv4_tcp_options() {
         let mut serialized = Vec::new();
 
         use crate::TcpOptionElement::*;
@@ -3335,6 +3543,34 @@ mod test {
             .options_iterator()
             .collect();
         assert_eq!(&[Ok(MaximumSegmentSize(1234)), Ok(Noop)], &dec_options[..]);
+    }
+
+    #[test]
+    fn eth_ipv4_tcp_header() {
+        let mut serialized = Vec::new();
+
+        let tcp_header = TcpHeader {
+            source_port: 1234,
+            destination_port: 2345,
+            sequence_number: 3456,
+            acknowledgment_number: 4567,
+            ..Default::default()
+        };
+
+        PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
+            .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .tcp_header(tcp_header.clone())
+            .write(&mut serialized, &[])
+            .unwrap();
+
+        let decoded = PacketHeaders::from_ethernet_slice(&serialized[..]).unwrap();
+
+        let mut expected = tcp_header;
+        expected.checksum = expected
+            .calc_checksum_ipv4_raw([13, 14, 15, 16], [17, 18, 19, 20], &[])
+            .unwrap();
+
+        assert_eq!(decoded.transport, Some(TransportHeader::Tcp(expected)));
     }
 
     #[test]
