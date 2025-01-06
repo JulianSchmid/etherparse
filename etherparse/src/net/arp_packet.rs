@@ -455,9 +455,9 @@ impl core::hash::Hash for ArpPacket {
 
 #[cfg(test)]
 mod tests {
+    use crate::{test_gens::*, *};
     use err::arp::ArpNewError;
-
-    use crate::*;
+    use proptest::prelude::*;
 
     #[test]
     fn new() {
@@ -660,6 +660,67 @@ mod tests {
         }
     }
 
+    proptest! {
+        #[test]
+        fn debug(arp in arp_packet_any()) {
+            use std::format;
+            assert_eq!(
+                format!("{:?}", arp),
+                format!(
+                    "ArpPacket {{ hw_addr_type: {:?}, proto_addr_type: {:?}, hw_addr_size: {:?}, proto_addr_size: {:?}, operation: {:?}, sender_hw_addr: {:?}, sender_protocol_addr: {:?}, target_hw_addr: {:?}, target_protocol_addr: {:?} }}",
+                    arp.hw_addr_type,
+                    arp.proto_addr_type,
+                    arp.hw_addr_size(),
+                    arp.proto_addr_size(),
+                    arp.operation,
+                    arp.sender_hw_addr(),
+                    arp.sender_protocol_addr(),
+                    arp.target_hw_addr(),
+                    arp.target_protocol_addr()
+                )
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn clone_eq(arp in arp_packet_any()) {
+            assert_eq!(&arp.clone(), &arp);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn hash(arp in arp_packet_any()) {
+            use core::hash::{Hash, Hasher};
+            use std::collections::hash_map::DefaultHasher;
+
+            let expected_hash = {
+                let mut s = DefaultHasher::new();
+
+                arp.hw_addr_type.hash(&mut s);
+                arp.proto_addr_type.hash(&mut s);
+                arp.hw_addr_size().hash(&mut s);
+                arp.proto_addr_size().hash(&mut s);
+                arp.operation.hash(&mut s);
+                arp.sender_hw_addr().hash(&mut s);
+                arp.sender_protocol_addr().hash(&mut s);
+                arp.target_hw_addr().hash(&mut s);
+                arp.target_protocol_addr().hash(&mut s);
+
+                s.finish()
+            };
+
+            let actual_hash = {
+                let mut s = DefaultHasher::new();
+                arp.hash(&mut s);
+                s.finish()
+            };
+
+            assert_eq!(expected_hash, actual_hash);
+        }
+    }
+
     #[test]
     fn arp_packet_works() {
         let bytes = [
@@ -687,5 +748,51 @@ mod tests {
         let actual = ArpPacket::from_slice(&bytes).unwrap();
 
         assert_eq!(expected, actual);
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            arp in arp_packet_any()
+        ) {
+            use std::vec::Vec;
+            use std::io::Cursor;
+
+            // ok case
+            let mut buf = Vec::with_capacity(arp.packet_len());
+            arp.write(&mut buf).unwrap();
+            {
+                let mut cursor = Cursor::new(&buf);
+                let actual = ArpPacket::read(&mut cursor).unwrap();
+                assert_eq!(arp, actual);
+            }
+
+            // len io error
+            for len in 0..arp.packet_len() {
+                let mut cursor = Cursor::new(&buf[..len]);
+                let actual = ArpPacket::read(&mut cursor);
+                assert!(actual.is_err());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write_error(
+            arp in arp_packet_any()
+        ) {
+            use std::vec::Vec;
+            use std::io::Cursor;
+
+            let mut buf = Vec::with_capacity(arp.packet_len());
+            buf.resize(arp.packet_len(), 0u8);
+
+            // check that the write produces an error if not enough memory is present
+            for len in 0..arp.packet_len() {
+                let mut cursor = Cursor::new(&mut buf[..len]);
+                let actual = arp.write(&mut cursor);
+                assert!(actual.is_err());
+            }
+        }
     }
 }
