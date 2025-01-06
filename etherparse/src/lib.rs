@@ -3,6 +3,7 @@
 //! Currently supported are:
 //! * Ethernet II
 //! * IEEE 802.1Q VLAN Tagging Header
+//! * ARP
 //! * IPv4
 //! * IPv6 (supporting the most common extension headers, but not all)
 //! * UDP
@@ -57,7 +58,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("net: {:?}", value.net); // contains ip
+//!         println!("net: {:?}", value.net); // contains ip & arp
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }
@@ -101,7 +102,7 @@
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
 //!         println!("vlan: {:?}", value.vlan);
-//!         println!("net: {:?}", value.net); // contains ip
+//!         println!("net: {:?}", value.net); // contains ip & arp
 //!         println!("transport: {:?}", value.transport);
 //!     }
 //! }
@@ -149,6 +150,7 @@
 //! * [`LinuxSllHeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
 //! * [`DoubleVlanHeaderSlice::from_slice`]
+//! * [`ArpPacketSlice::from_slice`]
 //! * [`Ipv4HeaderSlice::from_slice`]
 //! * [`Ipv4ExtensionsSlice::from_slice`]
 //! * [`Ipv6HeaderSlice::from_slice`]
@@ -165,6 +167,7 @@
 //! * [`LinuxSllHeader::read`] & [`LinuxSllHeader::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
 //! * [`DoubleVlanHeader::read`] & [`DoubleVlanHeader::from_slice`]
+//! * [`ArpPacket::read`] & [`ArpPacket::from_slice`]
 //! * [`IpHeaders::read`] & [`IpHeaders::from_slice`]
 //! * [`Ipv4Header::read`] & [`Ipv4Header::from_slice`]
 //! * [`Ipv4Extensions::read`] & [`Ipv4Extensions::from_slice`]
@@ -229,6 +232,7 @@
 //! * [`LinuxSllHeader::to_bytes`] & [`LinuxSllHeader::write`]
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
 //! * [`DoubleVlanHeader::to_bytes`] & [`DoubleVlanHeader::write`]
+//! * [`ArpPacket::to_bytes`] & [`ArpPacket::write`]
 //! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]
 //! * [`Ipv4Extensions::write`]
 //! * [`Ipv6Header::to_bytes`] & [`Ipv6Header::write`]

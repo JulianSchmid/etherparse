@@ -12,7 +12,7 @@ use std::vec::Vec;
 ///
 /// # This implementation is NOT safe against "Out of Memory" attacks
 ///
-/// If you use the [`DefragPool`] in an untrusted environment an attacker could
+/// If you use the [`IpDefragPool`] in an untrusted environment an attacker could
 /// cause an "out of memory error" by opening up multiple parallel TP streams,
 /// never ending them and filling them up with as much data as possible.
 ///

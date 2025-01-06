@@ -99,7 +99,7 @@ impl<'a> LaxIpSlice<'a> {
     /// as far as possible without encountering an error and with less strict length checks.
     /// This function is usefull for cut off packet or for packets with unset length fields.
     ///
-    /// If you want to only receive correct IpPayloads use [`IpSlice::from_ip_slice`]
+    /// If you want to only receive correct IpPayloads use [`IpSlice::from_slice`]
     /// instead.
     ///
     /// The main usecases for this functions are:

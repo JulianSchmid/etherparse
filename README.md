@@ -11,6 +11,7 @@ A zero allocation supporting library for parsing & writing a bunch of packet bas
 Currently supported are:
 * Ethernet II
 * IEEE 802.1Q VLAN Tagging Header
+* ARP
 * IPv4
 * IPv6 (supporting the most common extension headers, but not all)
 * UDP
@@ -49,7 +50,7 @@ match SlicedPacket::from_ethernet(&packet) {
     Ok(value) => {
         println!("link: {:?}", value.link);
         println!("vlan: {:?}", value.vlan);
-        println!("net: {:?}", value.net); // contains ip
+        println!("net: {:?}", value.net); // contains ip & arp
         println!("transport: {:?}", value.transport);
     }
 }
@@ -77,7 +78,7 @@ match PacketHeaders::from_ethernet_slice(&packet) {
     Ok(value) => {
         println!("link: {:?}", value.link);
         println!("vlan: {:?}", value.vlan);
-        println!("net: {:?}", value.net); // contains ip
+        println!("net: {:?}", value.net); // contains ip & arp
         println!("transport: {:?}", value.transport);
     }
 }
@@ -103,6 +104,7 @@ It is also possible to only slice one packet layer:
 * [`Ethernet2Slice::from_slice_without_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_without_fcs) & [`Ethernet2Slice::from_slice_with_crc32_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_with_crc32_fcs)
 * [`LinuxSllSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllSlice.html#method.from_slice)
 * [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanSlice.html#method.from_slice) & [`DoubleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanSlice.html#method.from_slice)
+* [`ArpPacketSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacketSlice.html#method.from_slice)
 * [`IpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpSlice.html#method.from_slice) & [`LaxIpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.LaxIpSlice.html#method.from_slice)
 * [`Ipv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Slice.html#method.from_slice) & [`LaxIpv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv4Slice.html#method.from_slice)
 * [`Ipv6Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Slice.html#method.from_slice) & [`LaxIpv6Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv6Slice.html#method.from_slice)
@@ -141,6 +143,7 @@ And for deserialization into the corresponding header structs have a look at:
 * [`LinuxSllHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.read) & [`LinuxSllHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.from_slice)
 * [`SingleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
 * [`DoubleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
+* [`ArpPacket::read`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.read) & [`ArpPacket::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.from_slice)
 * [`IpHeaders::read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.read) & [`IpHeaders::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.from_slice)
 * [`Ipv4Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
 * [`Ipv4Extensions::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.read) & [`Ipv4Extensions::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.from_slice)
@@ -198,6 +201,7 @@ Read the documentations of the different methods for a more details:
 * [`LinuxSllHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.to_bytes) & [`LinuxSllHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.write)
 * [`SingleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.to_bytes) & [`SingleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.write)
 * [`DoubleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.to_bytes) & [`DoubleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.write)
+* [`ArpPacket::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.to_bytes) & [`ArpPacket::write`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.write)
 * [`Ipv4Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.to_bytes) & [`Ipv4Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write) & [`Ipv4Header::write_raw`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write_raw)
 * [`Ipv4Extensions::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.write)
 * [`Ipv6Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.to_bytes) & [`Ipv6Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.write)

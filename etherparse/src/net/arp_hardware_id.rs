@@ -84,7 +84,7 @@ impl ArpHardwareId {
     /// Frame Relay (alias for [`ArpHardwareId::DLCI`])
     pub const FRAME_RELAY: ArpHardwareId = Self(15);
 
-    /// Asynchronous Transmission Mode (ATM) [JXB2]
+    /// Asynchronous Transmission Mode (ATM) \[JXB2\]
     pub const ATM_JXB2: ArpHardwareId = Self(16);
 
     /// HDLC
@@ -93,13 +93,13 @@ impl ArpHardwareId {
     /// Fibre Channel
     pub const FIBRE_CHANNEL: ArpHardwareId = Self(18);
 
-    /// Asynchronous Transmission Mode (ATM) [RFC2225]
+    /// Asynchronous Transmission Mode (ATM) \[RFC2225\]
     pub const ATM: ArpHardwareId = Self(19);
 
     /// Serial Line
     pub const SERIAL_LINE: ArpHardwareId = Self(20);
 
-    /// Asynchronous Transmission Mode (ATM) [Mike_Burrows]
+    /// Asynchronous Transmission Mode (ATM) \[Mike_Burrows\]
     pub const ATM_21: ArpHardwareId = Self(21);
 
     /// MIL-STD-188-220
