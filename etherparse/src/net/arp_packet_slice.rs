@@ -153,7 +153,7 @@ impl<'a> ArpPacketSlice<'a> {
         }
     }
 
-    /// Decode fields and return results in an [`ArpHeader`].
+    /// Decode fields and return results in an [`ArpPacket`].
     #[inline]
     pub fn to_packet(&self) -> ArpPacket {
         // SAFETY: Safe as all preconditions of new unchecked
