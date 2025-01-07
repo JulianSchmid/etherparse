@@ -19,7 +19,7 @@ exclude = [
 ]
 
 [features]
-default = ["std"]
+default = ["std", "serde"]
 std = []
 serde = ["dep:serde", "dep:serde_arrays"]
 
