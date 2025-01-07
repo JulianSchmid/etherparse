@@ -36,3 +36,27 @@ impl<'a> From<PayloadSlice<'a>> for Payload {
         }
     }
 }
+
+impl Payload {
+    pub fn slice(&self) -> &[u8] {
+        match self {
+            Payload::Ether(s) => s.payload.as_slice(),
+            Payload::Ip(s) => s.payload.as_slice(),
+            Payload::Udp(s) => s,
+            Payload::Tcp(s) => s,
+            Payload::Icmpv4(s) => s,
+            Payload::Icmpv6(s) => s,
+        }
+    }
+
+    pub fn content(self) -> Vec<u8> {
+        match self {
+            Payload::Ether(s) => s.payload,
+            Payload::Ip(s) => s.payload,
+            Payload::Udp(s) => s,
+            Payload::Tcp(s) => s,
+            Payload::Icmpv4(s) => s,
+            Payload::Icmpv6(s) => s,
+        }
+    }
+}
