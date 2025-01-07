@@ -44,6 +44,7 @@ pub type IpTrafficClass = IpNumber;
 /// The list original values were copied from
 /// <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
 #[derive(PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IpNumber(pub u8);
 
 impl IpNumber {

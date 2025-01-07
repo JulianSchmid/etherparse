@@ -403,8 +403,18 @@ pub use crate::packet_builder::*;
 mod packet_headers;
 pub use crate::packet_headers::*;
 
+#[cfg(feature = "std")]
+mod packet;
+#[cfg(feature = "std")]
+pub use crate::packet::*;
+
 mod payload_slice;
 pub use crate::payload_slice::*;
+
+#[cfg(feature = "std")]
+mod payload;
+#[cfg(feature = "std")]
+pub use crate::payload::*;
 
 mod sliced_packet;
 pub use crate::sliced_packet::*;

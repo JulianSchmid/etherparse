@@ -7,6 +7,7 @@ use arrayvec::ArrayVec;
 /// and code. But usually the static sized elements are part
 /// of the header.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Icmpv4Header {
     /// Type & type specific values & code.
     pub icmp_type: Icmpv4Type,

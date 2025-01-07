@@ -2,6 +2,7 @@ use crate::*;
 
 /// Starting contents of an ICMPv4 packet without the checksum.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Icmpv4Type {
     /// In case of an unknown ICMP type and code combination is received the
     /// header elements are stored raw in this enum value. The `Unknown` value can

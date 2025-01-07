@@ -28,6 +28,7 @@
 /// ```
 ///
 #[derive(Default, PartialEq, Eq, Clone, Copy, Hash, Ord, PartialOrd)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EtherType(pub u16);
 
 impl EtherType {

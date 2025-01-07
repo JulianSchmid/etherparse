@@ -20,6 +20,7 @@ use crate::err::{self};
 /// assert_eq!(1, num);
 /// ```
 #[derive(Clone, Copy, Eq, PartialEq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LinuxSllPacketType(u16);
 
 impl LinuxSllPacketType {

@@ -2,6 +2,7 @@ use crate::{err, ArpHardwareId, LinuxSllHeaderSlice, LinuxSllPacketType, LinuxSl
 
 /// Linux Cooked Capture v1 (SLL) Header
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LinuxSllHeader {
     /// Type of the captured packet
     pub packet_type: LinuxSllPacketType,

@@ -33,6 +33,7 @@ use arrayvec::ArrayVec;
 /// assert_eq!(slice_rest, &[]);
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv4Header {
     /// Differentiated Services Code Point
     pub dscp: Ipv4Dscp,

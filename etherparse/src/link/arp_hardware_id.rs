@@ -20,6 +20,7 @@
 ///
 
 #[derive(Clone, Copy, Eq, PartialEq, Default, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ArpHardwareId(pub u16);
 
 impl ArpHardwareId {

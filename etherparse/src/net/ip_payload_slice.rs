@@ -2,6 +2,7 @@ use crate::*;
 
 /// Payload of an IP packet.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IpPayloadSlice<'a> {
     /// Identifying content of the payload.
     pub ip_number: IpNumber,

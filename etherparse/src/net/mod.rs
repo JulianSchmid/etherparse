@@ -16,6 +16,11 @@ pub use ip_number_impl::*;
 mod ip_payload_slice;
 pub use ip_payload_slice::*;
 
+#[cfg(feature = "std")]
+mod ip_payload;
+#[cfg(feature = "std")]
+pub use ip_payload::*;
+
 mod ip_slice;
 pub use ip_slice::*;
 

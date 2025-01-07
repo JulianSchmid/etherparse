@@ -2,6 +2,7 @@ use crate::*;
 
 /// IEEE 802.1Q double VLAN Tagging Header
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct DoubleVlanHeader {
     /// The outer vlan tagging header
     pub outer: SingleVlanHeader,

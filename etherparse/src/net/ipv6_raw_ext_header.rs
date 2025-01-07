@@ -25,6 +25,7 @@ pub type Ipv6RawExtensionHeader = Ipv6RawExtHeader;
 /// * Host Identity Protocol
 /// * Shim6 Protocol
 #[derive(Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6RawExtHeader {
     /// IP protocol number specifying the next header or transport layer protocol.
     ///
@@ -33,6 +34,7 @@ pub struct Ipv6RawExtHeader {
     /// Length of the extension header in 8 octets (minus the first 8 octets).
     header_length: u8,
     //// The data contained in the extension header (excluding next_header & hdr length).
+    #[cfg_attr(feature = "serde", serde(with = "serde_arrays"))]
     payload_buffer: [u8; 0xff * 8 + 6],
 }
 

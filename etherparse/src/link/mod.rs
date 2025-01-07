@@ -23,3 +23,6 @@ pub mod vlan_header;
 pub mod vlan_id;
 pub mod vlan_pcp;
 pub mod vlan_slice;
+
+#[cfg(feature = "std")]
+pub mod ether_payload;

@@ -3,6 +3,7 @@ use crate::err::ValueTooBigError;
 /// 2 bit unsigned integer containing the "Explicit Congestion
 /// Notification" (present in the [`crate::Ipv4Header`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv4Ecn(u8);
 
 impl Ipv4Ecn {

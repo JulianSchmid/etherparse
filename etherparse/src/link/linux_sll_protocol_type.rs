@@ -20,6 +20,7 @@ use crate::{err, ArpHardwareId, EtherType, LinuxNonstandardEtherType};
 /// assert_eq!(0x0001, num);
 /// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LinuxSllProtocolType {
     /// The protocol type should be ignored
     Ignored(u16),
