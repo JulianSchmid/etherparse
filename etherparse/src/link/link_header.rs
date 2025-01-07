@@ -2,6 +2,7 @@ use crate::{Ethernet2Header, LinuxSllHeader};
 
 /// The possible headers on the link layer
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LinkHeader {
     LinuxSll(LinuxSllHeader),
     Ethernet2(Ethernet2Header),

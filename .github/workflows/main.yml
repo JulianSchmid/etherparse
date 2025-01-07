@@ -114,6 +114,36 @@ jobs:
         use-cross: true
         command: test
         args: --target ${{ matrix.target }} --no-default-features
+    
+    - name: cargo build serde
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --features serde
+
+    - name: cross build serde
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: build
+        args: --target ${{ matrix.target }} --features serde
+
+    - name: cargo test serde
+      if: matrix.target == ''
+      uses: actions-rs/cargo@v1
+      with:
+        command: test
+        args: --features serde
+
+    - name: cross test serde
+      if: matrix.target != ''
+      uses: actions-rs/cargo@v1
+      with:
+        use-cross: true
+        command: test
+        args: --target ${{ matrix.target }} --features serde
 
   no_std_build:
     name: no_std build

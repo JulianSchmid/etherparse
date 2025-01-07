@@ -13,6 +13,8 @@ use super::*;
 /// depending on your starting header to parse the headers in a slice and get this
 /// struct as a result.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(bound(deserialize = "'de: 'a")))]
 pub struct PacketHeaders<'a> {
     /// Ethernet II header if present.
     pub link: Option<LinkHeader>,

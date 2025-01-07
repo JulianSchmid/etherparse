@@ -25,6 +25,7 @@
 /// Codes 0, 1, 4, and 5 may be received from a gateway.  Codes 2 and
 /// 3 may be received from a host.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DestUnreachableHeader {
     /// Network unreachable error.
     Network,

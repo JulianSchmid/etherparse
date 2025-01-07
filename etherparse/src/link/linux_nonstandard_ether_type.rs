@@ -16,6 +16,7 @@
 /// assert_eq!(0x0001, num);
 /// ```
 #[derive(Clone, Copy, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LinuxNonstandardEtherType(pub(crate) u16);
 
 impl LinuxNonstandardEtherType {

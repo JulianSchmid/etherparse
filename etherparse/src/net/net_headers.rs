@@ -7,6 +7,7 @@ pub type IpHeader = NetHeaders;
 /// Headers on the network layer (e.g. IP, ARP, ...).
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NetHeaders {
     /// IPv4 header & extension headers.
     Ipv4(Ipv4Header, Ipv4Extensions),

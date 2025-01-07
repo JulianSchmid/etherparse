@@ -2,6 +2,7 @@ use crate::*;
 
 /// Payload together with an identifier the type of content.
 #[derive(Debug, Clone, Eq, PartialEq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PayloadSlice<'a> {
     /// Payload with it's type identified by an ether type number
     /// (e.g. after an ethernet II or vlan header).

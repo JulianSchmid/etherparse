@@ -53,6 +53,7 @@ use crate::err::ValueTooBigError;
 /// }
 /// ```
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct IpFragOffset(u16);
 
 impl IpFragOffset {

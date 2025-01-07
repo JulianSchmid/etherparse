@@ -11,6 +11,7 @@ use super::*;
 /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
 /// packet is dropped due to congestion.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DestUnreachableCode {
     /// No route to destination
     NoRoute = 0,

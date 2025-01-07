@@ -3,6 +3,7 @@ use crate::err::ValueTooBigError;
 /// 12 bit unsigned integer containing the "VLAN identifier" (present
 /// in the [`crate::SingleVlanHeader`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VlanId(u16);
 
 impl VlanId {

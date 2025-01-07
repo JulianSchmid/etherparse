@@ -6,6 +6,7 @@ use crate::err::ValueTooBigError;
 /// Refers to the IEEE 802.1p class of service and maps to the
 /// frame priority level.
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct VlanPcp(u8);
 
 impl VlanPcp {

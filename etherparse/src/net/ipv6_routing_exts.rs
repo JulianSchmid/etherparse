@@ -3,6 +3,7 @@ use crate::*;
 /// In case a route header is present it is also possible
 /// to attach a "final destination" header.
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Ipv6RoutingExtensions {
     pub routing: Ipv6RawExtHeader,
     pub final_destination_options: Option<Ipv6RawExtHeader>,

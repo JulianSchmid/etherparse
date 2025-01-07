@@ -1,5 +1,6 @@
 /// Sources of length limiting values (e.g. "ipv6 payload length field").
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum LenSource {
     /// Limiting length was the slice length (we don't know what determined
     /// that one originally).
