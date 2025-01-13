@@ -187,4 +187,70 @@ mod test {
             }
         }
     }
+
+    proptest! {
+        #[test]
+        fn sll_payload(
+            ref eth in ethernet_2_unknown(),
+            ref linux_sll in linux_sll_any()
+        ) {
+            let p = [1,2,3,4];
+            {
+                let mut bytes = Vec::with_capacity(Ethernet2Header::LEN + p.len());
+                bytes.extend_from_slice(&eth.to_bytes());
+                bytes.extend_from_slice(&p);
+                let slice = LinkSlice::Ethernet2(
+                    Ethernet2Slice::from_slice_without_fcs(&bytes).unwrap()
+                );
+                assert_eq!(
+                    slice.sll_payload(),
+                    LinuxSllPayloadSlice{
+                        protocol_type: LinuxSllProtocolType::EtherType(eth.ether_type),
+                        payload: &p
+                    }
+                );
+            }
+            {
+                let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
+                    ether_type: eth.ether_type,
+                    payload: &p
+                });
+                assert_eq!(
+                    slice.sll_payload(),
+                    LinuxSllPayloadSlice{
+                        protocol_type: LinuxSllProtocolType::EtherType(eth.ether_type),
+                        payload: &p
+                    }
+                );
+            }
+            {
+                let mut bytes = Vec::with_capacity(LinuxSllHeader::LEN + p.len());
+                bytes.extend_from_slice(&linux_sll.to_bytes());
+                bytes.extend_from_slice(&p);
+                let slice = LinkSlice::LinuxSll(
+                    LinuxSllSlice::from_slice(&bytes).unwrap()
+                );
+                assert_eq!(
+                    slice.sll_payload(),
+                    LinuxSllPayloadSlice{
+                        protocol_type: linux_sll.protocol_type,
+                        payload: &p
+                    }
+                );
+            }
+            {
+                let slice = LinkSlice::LinuxSllPayload(LinuxSllPayloadSlice {
+                    protocol_type: linux_sll.protocol_type,
+                    payload: &p
+                });
+                assert_eq!(
+                    slice.sll_payload(),
+                    LinuxSllPayloadSlice{
+                        protocol_type: linux_sll.protocol_type,
+                        payload: &p
+                    }
+                );
+            }
+        }
+    }
 }

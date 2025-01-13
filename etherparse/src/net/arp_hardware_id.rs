@@ -220,13 +220,11 @@ impl From<ArpHardwareId> for u16 {
     }
 }
 
-impl core::fmt::Display for ArpHardwareId {
-    // Names sourced from https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21
-
+impl core::fmt::Debug for ArpHardwareId {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match *self {
             Self::NETROM => write!(f, "{} (from KA9Q: NET/ROM pseudo)", self.0),
-            Self::ETHERNET => write!(f, "{} (Ethernet 10Mbps)", self.0),
+            Self::ETHERNET => write!(f, "{} (Ethernet)", self.0),
             Self::EETHER => write!(f, "{} (Experimental Ethernet)", self.0),
             Self::AX25 => write!(f, "{} (AX.25 Level 2)", self.0),
             Self::PRONET => write!(f, "{} (PROnet token ring)", self.0),
@@ -323,12 +321,6 @@ impl core::fmt::Display for ArpHardwareId {
             Self::NONE => write!(f, "{:#06X} (zero header length)", self.0),
             _ => write!(f, "{:#06X}", self.0),
         }
-    }
-}
-
-impl core::fmt::Debug for ArpHardwareId {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        core::fmt::Display::fmt(&self, f)
     }
 }
 
@@ -493,7 +485,7 @@ mod test {
     fn display_dbg() {
         let pairs = &[
             (ArpHardwareId::NETROM, "0 (from KA9Q: NET/ROM pseudo)"),
-            (ArpHardwareId::ETHERNET, "1 (Ethernet 10Mbps)"),
+            (ArpHardwareId::ETHERNET, "1 (Ethernet)"),
             (ArpHardwareId::EETHER, "2 (Experimental Ethernet)"),
             (ArpHardwareId::AX25, "3 (AX.25 Level 2)"),
             (ArpHardwareId::PRONET, "4 (PROnet token ring)"),
@@ -615,9 +607,8 @@ mod test {
             (ArpHardwareId::from(0x1234), "0x1234"),
         ];
 
-        for (ether_type, str_value) in pairs {
-            assert_eq!(str_value, &format!("{}", ether_type));
-            assert_eq!(str_value, &format!("{:?}", ether_type));
+        for (arp_hw_id, str_value) in pairs {
+            assert_eq!(str_value, &format!("{:?}", arp_hw_id));
         }
     }
 
