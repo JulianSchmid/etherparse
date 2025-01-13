@@ -233,6 +233,7 @@
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
 //! * [`DoubleVlanHeader::to_bytes`] & [`DoubleVlanHeader::write`]
 //! * [`ArpPacket::to_bytes`] & [`ArpPacket::write`]
+//! * [`ArpEthIpv4Packet::to_bytes`]
 //! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]
 //! * [`Ipv4Extensions::write`]
 //! * [`Ipv6Header::to_bytes`] & [`Ipv6Header::write`]
