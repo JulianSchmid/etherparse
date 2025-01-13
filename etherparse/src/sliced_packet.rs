@@ -578,6 +578,33 @@ mod test {
             None
         );
 
+        // arp
+        {
+            let mut buf = Vec::with_capacity(Ethernet2Header::LEN + ArpEthIpv4Packet::LEN);
+            buf.extend_from_slice(
+                &Ethernet2Header {
+                    source: [0; 6],
+                    destination: [0; 6],
+                    ether_type: EtherType::ARP,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &ArpEthIpv4Packet {
+                    operation: ArpOperation::REPLY,
+                    sender_mac: [0; 6],
+                    sender_ipv4: [0; 4],
+                    target_mac: [0; 6],
+                    target_ipv4: [0; 4],
+                }
+                .to_bytes(),
+            );
+            assert_eq!(
+                SlicedPacket::from_ethernet(&buf).unwrap().ip_payload(),
+                None
+            );
+        }
+
         // ipv4
         {
             let payload = [1, 2, 3, 4];
@@ -624,6 +651,141 @@ mod test {
                     len_source: LenSource::Ipv6HeaderPayloadLen,
                 })
             );
+        }
+    }
+
+    #[test]
+    fn is_ip_payload_fragmented() {
+        use alloc::vec::*;
+
+        // no content
+        assert_eq!(
+            SlicedPacket {
+                link: None,
+                vlan: None,
+                net: None,
+                transport: None,
+            }
+            .is_ip_payload_fragmented(),
+            false
+        );
+
+        // arp
+        {
+            let mut buf = Vec::with_capacity(Ethernet2Header::LEN + ArpEthIpv4Packet::LEN);
+            buf.extend_from_slice(
+                &Ethernet2Header {
+                    source: [0; 6],
+                    destination: [0; 6],
+                    ether_type: EtherType::ARP,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &ArpEthIpv4Packet {
+                    operation: ArpOperation::REPLY,
+                    sender_mac: [0; 6],
+                    sender_ipv4: [0; 4],
+                    target_mac: [0; 6],
+                    target_ipv4: [0; 4],
+                }
+                .to_bytes(),
+            );
+            assert_eq!(
+                SlicedPacket::from_ethernet(&buf)
+                    .unwrap()
+                    .is_ip_payload_fragmented(),
+                false
+            );
+        }
+
+        // ipv4 (non fragmented)
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+            buf.extend_from_slice(
+                &Ipv4Header {
+                    protocol: IpNumber::ARIS,
+                    total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                SlicedPacket::from_ip(&buf)
+                    .unwrap()
+                    .is_ip_payload_fragmented(),
+                false
+            );
+        }
+
+        // ipv4 (fragmented)
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv4Header::MIN_LEN + 4);
+            buf.extend_from_slice(
+                &Ipv4Header {
+                    protocol: IpNumber::ARIS,
+                    total_len: Ipv4Header::MIN_LEN_U16 + 4,
+                    more_fragments: true,
+                    fragment_offset: IpFragOffset::ZERO,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert!(SlicedPacket::from_ip(&buf)
+                .unwrap()
+                .is_ip_payload_fragmented());
+        }
+
+        // ipv6 (non fragmented)
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv6Header::LEN + 4);
+            buf.extend_from_slice(
+                &Ipv6Header {
+                    payload_length: 4,
+                    next_header: IpNumber::ARGUS,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                SlicedPacket::from_ip(&buf)
+                    .unwrap()
+                    .is_ip_payload_fragmented(),
+                false
+            );
+        }
+
+        // ipv6 (fragmented)
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(Ipv6Header::LEN + 4);
+            buf.extend_from_slice(
+                &Ipv6Header {
+                    payload_length: Ipv6FragmentHeader::LEN as u16 + 4,
+                    next_header: IpNumber::IPV6_FRAGMENTATION_HEADER,
+                    ..Default::default()
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &Ipv6FragmentHeader {
+                    next_header: IpNumber::ARGUS,
+                    fragment_offset: IpFragOffset::ZERO,
+                    more_fragments: true,
+                    identification: 0,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert!(SlicedPacket::from_ip(&buf)
+                .unwrap()
+                .is_ip_payload_fragmented());
         }
     }
 

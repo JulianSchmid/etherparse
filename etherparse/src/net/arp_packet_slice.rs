@@ -194,7 +194,7 @@ mod tests {
                 assert_eq!(actual.hw_addr_type(), packet.hw_addr_type);
                 assert_eq!(actual.proto_addr_type(), packet.proto_addr_type);
                 assert_eq!(actual.hw_addr_size(), packet.hw_addr_size());
-                assert_eq!(actual.proto_addr_size(), packet.proto_addr_size());
+                assert_eq!(actual.proto_addr_size(), packet.protocol_addr_size());
                 assert_eq!(actual.operation(), packet.operation);
 
                 assert_eq!(actual.sender_hw_addr(), packet.sender_hw_addr());
@@ -206,7 +206,7 @@ mod tests {
             }
 
             // length error
-            for len in 0..(8 + (packet.hw_addr_size() as usize)*2 + (packet.proto_addr_size() as usize)*2) {
+            for len in 0..(8 + (packet.hw_addr_size() as usize)*2 + (packet.protocol_addr_size() as usize)*2) {
                 let err = ArpPacketSlice::from_slice(&data[..len]).unwrap_err();
                 if len < 8 {
                     assert_eq!(err, LenError{
@@ -218,7 +218,7 @@ mod tests {
                     });
                 } else {
                     assert_eq!(err, LenError{
-                        required_len: 8 + (packet.hw_addr_size() as usize)*2 + (packet.proto_addr_size() as usize)*2,
+                        required_len: 8 + (packet.hw_addr_size() as usize)*2 + (packet.protocol_addr_size() as usize)*2,
                         len,
                         len_source: LenSource::ArpAddrLengths,
                         layer: Layer::Arp,

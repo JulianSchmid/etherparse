@@ -255,6 +255,26 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn arp_eth_ipv4_packet_any()
+    (
+        operation in any::<u16>(),
+        sender_mac in prop::array::uniform6(any::<u8>()),
+        sender_ipv4 in prop::array::uniform4(any::<u8>()),
+        target_mac in prop::array::uniform6(any::<u8>()),
+        target_ipv4 in prop::array::uniform4(any::<u8>())
+    ) -> ArpEthIpv4Packet
+    {
+        ArpEthIpv4Packet {
+            operation: ArpOperation(operation),
+            sender_mac,
+            sender_ipv4,
+            target_mac,
+            target_ipv4,
+        }
+    }
+}
+
+prop_compose! {
     pub fn ipv4_options_any()
     (
         len_div_4 in 0u8..10,

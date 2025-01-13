@@ -8,7 +8,18 @@ impl ArpOperation {
 }
 
 impl From<u16> for ArpOperation {
+    #[inline]
     fn from(raw: u16) -> Self {
         ArpOperation(raw)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ArpOperation;
+
+    #[test]
+    pub fn from_u16() {
+        assert_eq!(ArpOperation::from(12), ArpOperation(12))
     }
 }
