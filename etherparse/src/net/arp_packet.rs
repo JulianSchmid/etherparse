@@ -1,5 +1,5 @@
 use arrayvec::ArrayVec;
-use err::arp::ArpNewError;
+use err::arp::{ArpHwAddrError, ArpNewError, ArpProtoAddrError};
 
 use crate::*;
 use core::mem::MaybeUninit;
@@ -54,24 +54,26 @@ impl ArpPacket {
         target_protocol_addr: &[u8],
     ) -> Result<ArpPacket, ArpNewError> {
         if sender_hw_addr.len() != target_hw_addr.len() {
-            return Err(ArpNewError::HwAddrLenInconsistent(
+            return Err(ArpNewError::HwAddr(ArpHwAddrError::LenNonMatching(
                 sender_hw_addr.len(),
                 target_hw_addr.len(),
-            ));
+            )));
         }
         if sender_protocol_addr.len() != target_protocol_addr.len() {
-            return Err(ArpNewError::ProtocolAddrLenInconsistent(
+            return Err(ArpNewError::ProtoAddr(ArpProtoAddrError::LenNonMatching(
                 sender_protocol_addr.len(),
                 target_protocol_addr.len(),
-            ));
+            )));
         }
         if sender_hw_addr.len() > 255 {
-            return Err(ArpNewError::HwAddrLenTooBig(sender_hw_addr.len()));
+            return Err(ArpNewError::HwAddr(ArpHwAddrError::LenTooBig(
+                sender_hw_addr.len(),
+            )));
         }
         if sender_protocol_addr.len() > 255 {
-            return Err(ArpNewError::ProtocolAddrLenTooBig(
+            return Err(ArpNewError::ProtoAddr(ArpProtoAddrError::LenTooBig(
                 sender_protocol_addr.len(),
-            ));
+            )));
         }
         Ok(ArpPacket {
             hw_addr_type,
@@ -253,7 +255,7 @@ impl ArpPacket {
 
     /// Length (in octets) of internetwork addresses (e.g. 4 for IPv4 or 16 for IPv6).
     #[inline]
-    pub const fn proto_addr_size(&self) -> u8 {
+    pub const fn protocol_addr_size(&self) -> u8 {
         self.proto_addr_size
     }
 
@@ -290,7 +292,7 @@ impl ArpPacket {
         }
     }
 
-    /// Buffer containing the target protocol address (e.g. IPv4 address)..
+    /// Target protocol address (e.g. IPv4 address).
     #[inline]
     pub const fn target_protocol_addr(&self) -> &[u8] {
         unsafe {
@@ -299,6 +301,94 @@ impl ArpPacket {
                 self.proto_addr_size as usize,
             )
         }
+    }
+
+    /// Set the sender & target hardware addresses (e.g. MAC address).
+    #[inline]
+    pub const fn set_hw_addrs(
+        &mut self,
+        sender_hw_addr: &[u8],
+        target_hw_addr: &[u8],
+    ) -> Result<(), ArpHwAddrError> {
+        if sender_hw_addr.len() != target_hw_addr.len() {
+            return Err(ArpHwAddrError::LenNonMatching(
+                sender_hw_addr.len(),
+                target_hw_addr.len(),
+            ));
+        }
+        if sender_hw_addr.len() > 255 {
+            return Err(ArpHwAddrError::LenTooBig(sender_hw_addr.len()));
+        }
+        {
+            // SAFETY: Safe as
+            // * the caller must gurantee that sender_hw_addr.len() is <= 255
+            // * memory areas guranteed to be non overlapping (buf created in this function).
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    sender_hw_addr.as_ptr(),
+                    self.sender_hw_addr_buf.as_mut_ptr() as *mut u8,
+                    sender_hw_addr.len(),
+                );
+            }
+        }
+        {
+            // SAFETY: Safe as
+            // * the caller must gurantee that target_hw_addr.len() is <= 255
+            // * memory areas guranteed to be non overlapping (buf created in this function).
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    target_hw_addr.as_ptr(),
+                    self.target_hw_addr_buf.as_mut_ptr() as *mut u8,
+                    target_hw_addr.len(),
+                );
+            }
+        }
+        self.hw_addr_size = sender_hw_addr.len() as u8;
+        Ok(())
+    }
+
+    /// Set the sender & target protocol addresses (e.g. IPv4 address).
+    #[inline]
+    pub const fn set_protocol_addrs(
+        &mut self,
+        sender_protocol_addr: &[u8],
+        target_protocol_addr: &[u8],
+    ) -> Result<(), ArpProtoAddrError> {
+        if sender_protocol_addr.len() != target_protocol_addr.len() {
+            return Err(ArpProtoAddrError::LenNonMatching(
+                sender_protocol_addr.len(),
+                target_protocol_addr.len(),
+            ));
+        }
+        if sender_protocol_addr.len() > 255 {
+            return Err(ArpProtoAddrError::LenTooBig(sender_protocol_addr.len()));
+        }
+        {
+            // SAFETY: Safe as
+            // * sender_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
+            // * memory areas guranteed to be non overlapping (buf created in this function).
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    sender_protocol_addr.as_ptr(),
+                    self.sender_protocol_addr_buf.as_mut_ptr() as *mut u8,
+                    sender_protocol_addr.len(),
+                );
+            }
+        }
+        {
+            // SAFETY: Safe as
+            // * target_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
+            // * memory areas guranteed to be non overlapping (buf created in this function).
+            unsafe {
+                core::ptr::copy_nonoverlapping(
+                    target_protocol_addr.as_ptr(),
+                    self.target_protocol_addr_buf.as_mut_ptr() as *mut u8,
+                    target_protocol_addr.len(),
+                );
+            }
+        }
+        self.proto_addr_size = sender_protocol_addr.len() as u8;
+        Ok(())
     }
 
     /// Serialized length of this ARP packet.
@@ -405,6 +495,67 @@ impl ArpPacket {
 
         Ok(result)
     }
+
+    /// Returns an [`ArpEthIpv4Packet`] if the current packet
+    /// is an ethernet & IPv4 ARP packet.
+    pub fn try_eth_ipv4(&self) -> Result<ArpEthIpv4Packet, err::arp::ArpEthIpv4FromError> {
+        use err::arp::ArpEthIpv4FromError::*;
+        if self.hw_addr_type != ArpHardwareId::ETHERNET {
+            return Err(NonMatchingHwType(self.hw_addr_type));
+        }
+        if self.proto_addr_type != EtherType::IPV4 {
+            return Err(NonMatchingProtocolType(self.proto_addr_type));
+        }
+        if self.hw_addr_size != 6 {
+            return Err(NonMatchingHwAddrSize(self.hw_addr_size));
+        }
+        if self.proto_addr_size != 4 {
+            return Err(NonMatchingProtoAddrSize(self.proto_addr_size));
+        }
+        Ok(ArpEthIpv4Packet {
+            operation: self.operation,
+            sender_mac: unsafe {
+                // SAFE as we check above that hw_addr_size is 6
+                [
+                    self.sender_hw_addr_buf[0].assume_init(),
+                    self.sender_hw_addr_buf[1].assume_init(),
+                    self.sender_hw_addr_buf[2].assume_init(),
+                    self.sender_hw_addr_buf[3].assume_init(),
+                    self.sender_hw_addr_buf[4].assume_init(),
+                    self.sender_hw_addr_buf[5].assume_init(),
+                ]
+            },
+            sender_ipv4: unsafe {
+                // SAFE as we check above that proto_addr_size is 6
+                [
+                    self.sender_protocol_addr_buf[0].assume_init(),
+                    self.sender_protocol_addr_buf[1].assume_init(),
+                    self.sender_protocol_addr_buf[2].assume_init(),
+                    self.sender_protocol_addr_buf[3].assume_init(),
+                ]
+            },
+            target_mac: unsafe {
+                // SAFE as we check above that hw_addr_size is 6
+                [
+                    self.target_hw_addr_buf[0].assume_init(),
+                    self.target_hw_addr_buf[1].assume_init(),
+                    self.target_hw_addr_buf[2].assume_init(),
+                    self.target_hw_addr_buf[3].assume_init(),
+                    self.target_hw_addr_buf[4].assume_init(),
+                    self.target_hw_addr_buf[5].assume_init(),
+                ]
+            },
+            target_ipv4: unsafe {
+                // SAFE as we check above that proto_addr_size is 6
+                [
+                    self.target_protocol_addr_buf[0].assume_init(),
+                    self.target_protocol_addr_buf[1].assume_init(),
+                    self.target_protocol_addr_buf[2].assume_init(),
+                    self.target_protocol_addr_buf[3].assume_init(),
+                ]
+            },
+        })
+    }
 }
 
 impl core::fmt::Debug for ArpPacket {
@@ -456,7 +607,7 @@ impl core::hash::Hash for ArpPacket {
 #[cfg(test)]
 mod tests {
     use crate::{test_gens::*, *};
-    use err::arp::ArpNewError;
+    use err::arp::{ArpHwAddrError, ArpNewError, ArpProtoAddrError};
     use proptest::prelude::*;
 
     #[test]
@@ -474,7 +625,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(3, actual.hw_addr_size());
-            assert_eq!(5, actual.proto_addr_size());
+            assert_eq!(5, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -497,7 +648,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(255, actual.hw_addr_size());
-            assert_eq!(5, actual.proto_addr_size());
+            assert_eq!(5, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -520,7 +671,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(3, actual.hw_addr_size());
-            assert_eq!(255, actual.proto_addr_size());
+            assert_eq!(255, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -541,7 +692,10 @@ mod tests {
                 &[4, 5, 6, 7],
                 &[],
             );
-            assert_eq!(Err(ArpNewError::HwAddrLenInconsistent(3, 4)), actual);
+            assert_eq!(
+                Err(ArpNewError::HwAddr(ArpHwAddrError::LenNonMatching(3, 4))),
+                actual
+            );
         }
         // protocol slice len differ error
         {
@@ -554,7 +708,12 @@ mod tests {
                 &[],
                 &[4, 5, 6, 7],
             );
-            assert_eq!(Err(ArpNewError::ProtocolAddrLenInconsistent(3, 4)), actual);
+            assert_eq!(
+                Err(ArpNewError::ProtoAddr(ArpProtoAddrError::LenNonMatching(
+                    3, 4
+                ))),
+                actual
+            );
         }
 
         // hardware length error
@@ -568,7 +727,10 @@ mod tests {
                 &[0; 256],
                 &[5, 6, 7, 8],
             );
-            assert_eq!(Err(ArpNewError::HwAddrLenTooBig(256)), actual);
+            assert_eq!(
+                Err(ArpNewError::HwAddr(ArpHwAddrError::LenTooBig(256))),
+                actual
+            );
         }
 
         // protocol length error
@@ -582,7 +744,10 @@ mod tests {
                 &[5, 6, 7, 8],
                 &[0; 256],
             );
-            assert_eq!(Err(ArpNewError::ProtocolAddrLenTooBig(256)), actual);
+            assert_eq!(
+                Err(ArpNewError::ProtoAddr(ArpProtoAddrError::LenTooBig(256))),
+                actual
+            );
         }
     }
 
@@ -602,7 +767,7 @@ mod tests {
                 )
             };
             assert_eq!(3, actual.hw_addr_size());
-            assert_eq!(5, actual.proto_addr_size());
+            assert_eq!(5, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -626,7 +791,7 @@ mod tests {
                 )
             };
             assert_eq!(255, actual.hw_addr_size());
-            assert_eq!(5, actual.proto_addr_size());
+            assert_eq!(5, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -649,7 +814,7 @@ mod tests {
             )
             .unwrap();
             assert_eq!(3, actual.hw_addr_size());
-            assert_eq!(255, actual.proto_addr_size());
+            assert_eq!(255, actual.protocol_addr_size());
             assert_eq!(ArpHardwareId::ASH, actual.hw_addr_type);
             assert_eq!(EtherType::PROVIDER_BRIDGING, actual.proto_addr_type);
             assert_eq!(ArpOperation::REQUEST, actual.operation);
@@ -671,7 +836,7 @@ mod tests {
                     arp.hw_addr_type,
                     arp.proto_addr_type,
                     arp.hw_addr_size(),
-                    arp.proto_addr_size(),
+                    arp.protocol_addr_size(),
                     arp.operation,
                     arp.sender_hw_addr(),
                     arp.sender_protocol_addr(),
@@ -701,7 +866,7 @@ mod tests {
                 arp.hw_addr_type.hash(&mut s);
                 arp.proto_addr_type.hash(&mut s);
                 arp.hw_addr_size().hash(&mut s);
-                arp.proto_addr_size().hash(&mut s);
+                arp.protocol_addr_size().hash(&mut s);
                 arp.operation.hash(&mut s);
                 arp.sender_hw_addr().hash(&mut s);
                 arp.sender_protocol_addr().hash(&mut s);
@@ -792,6 +957,143 @@ mod tests {
                 let mut cursor = Cursor::new(&mut buf[..len]);
                 let actual = arp.write(&mut cursor);
                 assert!(actual.is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn set_hw_addrs() {
+        let start = ArpPacket::new(
+            ArpHardwareId::ASH,
+            EtherType::PROVIDER_BRIDGING,
+            ArpOperation::REQUEST,
+            &[1, 2, 3],
+            &[4, 5, 6, 7, 8],
+            &[9, 10, 11],
+            &[12, 13, 14, 15, 16],
+        )
+        .unwrap();
+
+        // ok case
+        {
+            let mut arp = start.clone();
+            arp.set_hw_addrs(&[17, 18], &[19, 20]).unwrap();
+            assert_eq!(2, arp.hw_addr_size());
+            assert_eq!(&[17, 18], arp.sender_hw_addr());
+            assert_eq!(&[19, 20], arp.target_hw_addr());
+        }
+
+        // non matching error
+        {
+            let mut arp = start.clone();
+            assert_eq!(
+                arp.set_hw_addrs(&[17, 18], &[19]),
+                Err(ArpHwAddrError::LenNonMatching(2, 1))
+            );
+        }
+
+        // above 255 error
+        {
+            let mut arp = start.clone();
+            assert_eq!(
+                arp.set_hw_addrs(&[0; 260], &[0; 260]),
+                Err(ArpHwAddrError::LenTooBig(260))
+            );
+        }
+    }
+
+    #[test]
+    fn set_proto_addrs() {
+        let start = ArpPacket::new(
+            ArpHardwareId::ASH,
+            EtherType::PROVIDER_BRIDGING,
+            ArpOperation::REQUEST,
+            &[1, 2, 3],
+            &[4, 5, 6, 7, 8],
+            &[9, 10, 11],
+            &[12, 13, 14, 15, 16],
+        )
+        .unwrap();
+
+        // ok case
+        {
+            let mut arp = start.clone();
+            arp.set_protocol_addrs(&[17, 18], &[19, 20]).unwrap();
+            assert_eq!(2, arp.protocol_addr_size());
+            assert_eq!(&[17, 18], arp.sender_protocol_addr());
+            assert_eq!(&[19, 20], arp.target_protocol_addr());
+        }
+
+        // non matching error
+        {
+            let mut arp = start.clone();
+            assert_eq!(
+                arp.set_protocol_addrs(&[17, 18], &[19]),
+                Err(ArpProtoAddrError::LenNonMatching(2, 1))
+            );
+        }
+
+        // above 255 error
+        {
+            let mut arp = start.clone();
+            assert_eq!(
+                arp.set_protocol_addrs(&[0; 260], &[0; 260]),
+                Err(ArpProtoAddrError::LenTooBig(260))
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn try_eth_ipv4(
+            arp_eth_ipv4 in arp_eth_ipv4_packet_any()
+        ) {
+            use err::arp::ArpEthIpv4FromError::*;
+
+            // ok case
+            {
+                let arp: ArpPacket = arp_eth_ipv4.clone().into();
+                assert_eq!(arp.try_eth_ipv4(), Ok(arp_eth_ipv4.clone()));
+            }
+
+            // hw type error
+            {
+                let mut arp: ArpPacket = arp_eth_ipv4.clone().into();
+                arp.hw_addr_type = ArpHardwareId::AX25;
+                assert_eq!(
+                    arp.try_eth_ipv4(),
+                    Err(NonMatchingHwType(ArpHardwareId::AX25))
+                );
+            }
+
+            // proto type error
+            {
+                let mut arp: ArpPacket = arp_eth_ipv4.clone().into();
+                arp.proto_addr_type = EtherType::IPV6;
+                assert_eq!(
+                    arp.try_eth_ipv4(),
+                    Err(NonMatchingProtocolType(EtherType::IPV6))
+                );
+            }
+
+            // hw address size error
+            {
+                let mut arp: ArpPacket = arp_eth_ipv4.clone().into();
+                arp.set_hw_addrs(&[1], &[2]).unwrap();
+                assert_eq!(
+                    arp.try_eth_ipv4(),
+                    Err(NonMatchingHwAddrSize(1))
+                );
+            }
+
+            // protocol address size error
+            {
+                let mut arp: ArpPacket = arp_eth_ipv4.clone().into();
+                arp.set_protocol_addrs(&[1], &[2]).unwrap();
+                assert_eq!(
+                    arp.try_eth_ipv4(),
+                    Err(NonMatchingProtoAddrSize(1))
+                );
             }
         }
     }

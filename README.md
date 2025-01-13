@@ -202,6 +202,7 @@ Read the documentations of the different methods for a more details:
 * [`SingleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.to_bytes) & [`SingleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.write)
 * [`DoubleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.to_bytes) & [`DoubleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.write)
 * [`ArpPacket::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.to_bytes) & [`ArpPacket::write`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.write)
+* [`ArpEthIpv4Packet::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.ArpEthIpv4Packet.html#method.to_bytes)
 * [`Ipv4Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.to_bytes) & [`Ipv4Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write) & [`Ipv4Header::write_raw`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write_raw)
 * [`Ipv4Extensions::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Extensions.html#method.write)
 * [`Ipv6Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.to_bytes) & [`Ipv6Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6Header.html#method.write)
