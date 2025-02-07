@@ -16,7 +16,7 @@ impl Ipv4Ecn {
     pub const TWO: Ipv4Ecn = Ipv4Ecn(2);
 
     /// Ipv4Ecn with value 0.
-    pub const TRHEE: Ipv4Ecn = Ipv4Ecn(3);
+    pub const THREE: Ipv4Ecn = Ipv4Ecn(3);
 
     /// Maximum value of an IPv4 header ECN.
     pub const MAX_U8: u8 = 0b0000_0011;
