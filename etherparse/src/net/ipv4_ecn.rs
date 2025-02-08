@@ -18,6 +18,13 @@ impl Ipv4Ecn {
     /// Ipv4Ecn with value 0.
     pub const THREE: Ipv4Ecn = Ipv4Ecn(3);
 
+    #[deprecated(
+        since = "0.18.0",
+        note = "Please use the type Ipv4Ecn::THREE instead."
+    )]
+    /// Deprecated, use [`crate::Ipv4Ecn::THREE`] instead.
+    pub const TRHEE: Ipv4Ecn = Ipv4Ecn::THREE;
+
     /// Maximum value of an IPv4 header ECN.
     pub const MAX_U8: u8 = 0b0000_0011;
 
