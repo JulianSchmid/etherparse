@@ -20,7 +20,7 @@ impl Ipv4Ecn {
 
     #[deprecated(
         since = "0.18.0",
-        note = "Please use the type Ipv4Ecn::THREE instead."
+        note = "Please use Ipv4Ecn::THREE instead."
     )]
     /// Deprecated, use [`crate::Ipv4Ecn::THREE`] instead.
     pub const TRHEE: Ipv4Ecn = Ipv4Ecn::THREE;
