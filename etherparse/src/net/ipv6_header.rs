@@ -326,6 +326,43 @@ impl Ipv6Header {
         Ok(())
     }
 
+    /// Sets the ECN field in the `traffic_class` octet.
+    pub fn set_ecn(&mut self, ecn: Ecn) {
+        ecn.write(&mut self.traffic_class);
+    }
+
+    /// Return the ECN field from the `traffic_class` octet.
+    pub fn ecn(&self) -> Ecn {
+        Ecn::read(&self.traffic_class)
+    }
+
+    /// Set the DSCP field in the `traffic_class` octet.
+    pub fn set_dscp(&mut self, dscp: Dscp) {
+        dscp.write(&mut self.traffic_class);
+    }
+
+    /// Sets the DSCP field from a raw value.
+    ///
+    /// This method should only be used when using the experimental pool in the DSCP field.
+    ///
+    /// Errors - If the given raw value is larger than [`Dscp::MAX`].
+    pub fn set_dscp_raw(&mut self, value: u8) -> Result<(), DscpError> {
+        Dscp::write_raw(value, &mut self.traffic_class)
+    }
+
+    /// Return a standardized [`Dscp`] from its field in the `traffic_class` octet.
+    ///
+    /// Errors - If the value in the traffic class octet is not a DSCP value registered by the IANA
+    /// in the [DSCP registry]((https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml)).
+    pub fn dscp(&self) -> Result<Dscp, DscpError> {
+        Dscp::read(&self.traffic_class)
+    }
+
+    /// Returns the raw value in the DSCP field of the `traffic_class` octet.
+    pub fn dscp_raw(&self) -> u8 {
+        Dscp::read_raw(&self.traffic_class)
+    }
+
     /// Returns the serialized form of the header as a statically
     /// sized byte array.
     #[rustfmt::skip]
