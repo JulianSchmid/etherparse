@@ -10,6 +10,9 @@ pub use arp_packet::*;
 mod arp_operation;
 pub use arp_operation::*;
 
+mod ecn;
+pub use ecn::*;
+
 mod ip_auth_header;
 pub use ip_auth_header::*;
 
