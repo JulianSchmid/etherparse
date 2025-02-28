@@ -4,41 +4,43 @@ use strum_macros::VariantArray;
 /// [RFC-2472](https://datatracker.ietf.org/doc/html/rfc2474) and defined/maintained in the
 /// [IANA dscp-registry](https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml)
 #[repr(u8)]
+#[non_exhaustive]
 #[cfg_attr(test, derive(VariantArray))]
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy)]
 pub enum Dscp {
     /// Pool 1
     ///
     /// Class Selectors [RFC-2474](https://datatracker.ietf.org/doc/html/rfc2474)
-    ClassSelector0 = 0,
-    ClassSelector1 = 8,
-    ClassSelector2 = 16,
-    ClassSelector3 = 24,
-    ClassSelector4 = 32,
-    ClassSelector5 = 40,
-    ClassSelector6 = 48,
-    ClassSelector7 = 56,
+    // NOTE: Underscore in literals are indicative of their dscp pool.
+    ClassSelector0 = 0b_00000_0,
+    ClassSelector1 = 0b_00100_0,
+    ClassSelector2 = 0b_01000_0,
+    ClassSelector3 = 0b_01100_0,
+    ClassSelector4 = 0b_10000_0,
+    ClassSelector5 = 0b_10100_0,
+    ClassSelector6 = 0b_11000_0,
+    ClassSelector7 = 0b_11100_0,
     /// Assured Forwarding PHB Groups [RFC-2597](https://datatracker.ietf.org/doc/html/rfc2597)
-    AfGroup11 = 10,
-    AfGroup12 = 12,
-    AfGroup13 = 14,
-    AfGroup21 = 18,
-    AfGroup22 = 20,
-    AfGroup23 = 22,
-    AfGroup31 = 26,
-    AfGroup32 = 28,
-    AfGroup33 = 30,
-    AfGroup41 = 34,
-    AfGroup42 = 36,
-    AfGroup43 = 38,
+    AfGroup11 = 0b_00101_0,
+    AfGroup12 = 0b_00110_0,
+    AfGroup13 = 0b_00111_0,
+    AfGroup21 = 0b_01001_0,
+    AfGroup22 = 0b_01010_0,
+    AfGroup23 = 0b_01011_0,
+    AfGroup31 = 0b_01101_0,
+    AfGroup32 = 0b_01110_0,
+    AfGroup33 = 0b_01111_0,
+    AfGroup41 = 0b_10001_0,
+    AfGroup42 = 0b_10010_0,
+    AfGroup43 = 0b_10011_0,
     /// Expedited Forwarding [RFC-3246](https://datatracker.ietf.org/doc/html/rfc3246)
-    ExpeditedForwarding = 46,
+    ExpeditedForwarding = 0b_10111_0,
     /// Voice admit [RFC-5865](https://datatracker.ietf.org/doc/html/rfc5865)
-    VoiceAdmit = 44,
+    VoiceAdmit = 0b_10110_0,
     /// Pool 3
     ///
     /// Lower Effort PHB [RFC-8622](https://datatracker.ietf.org/doc/html/rfc8622)
-    LowerEffort = 1,
+    LowerEffort = 0b_0000_01,
     // NOTE: NQB was omitted here because it has an expiration in the IANA registry.
 }
 
@@ -48,7 +50,14 @@ impl Dscp {
 
     /// Write this DSCP to a given octet. This ensures the DSCP is located in the correct bit range
     /// of the octet.
-    pub const fn write(&self, byte: &mut u8) {
+    /// # Example
+    /// ```
+    /// # use etherparse::Dscp;
+    /// let mut byte = 0b11111_1_11;
+    /// Dscp::ClassSelector1.write(&mut byte);
+    /// assert_eq!(byte, 0b00100_0_11);
+    /// ```
+    pub fn write(&self, byte: &mut u8) {
         Self::write_inner(*self as u8, byte);
     }
 
@@ -57,7 +66,22 @@ impl Dscp {
     /// This method should be used when using the experimental pool in the DSCP field.
     ///
     /// Errors - When the given raw value is larger than [`Self::MAX`]
-    pub const fn write_raw(raw_value: u8, byte: &mut u8) -> Result<(), DscpError> {
+    /// # Example
+    /// ```
+    /// # use etherparse::Dscp;
+    /// let mut byte = 0b1111_01_11;
+    /// let to_write = 0b0101_11;
+    /// Dscp::write_raw(to_write, &mut byte).unwrap();
+    /// assert_eq!(byte, 0b0101_11_11);
+    /// ```
+    ///
+    /// ```
+    /// # use etherparse::Dscp;
+    /// let mut byte = 0b1111_01_11;
+    /// let too_big = Dscp::MAX + 1;
+    /// assert!(Dscp::write_raw(too_big, &mut byte).is_err());
+    /// ```
+    pub fn write_raw(raw_value: u8, byte: &mut u8) -> Result<(), DscpError> {
         if raw_value <= Self::MAX {
             Self::write_inner(raw_value, byte);
             Ok(())
@@ -69,49 +93,65 @@ impl Dscp {
     /// Extract the raw DSCP field from a given byte.
     ///
     /// This method should be used when using the experimental pool in the DSCP field.
+    /// # Example
+    /// ```
+    /// # use etherparse::Dscp;
+    /// let byte = 0b0101_01_11;
+    /// assert_eq!(Dscp::read_raw(&byte), 0b0101_01)
+    /// ```
     pub const fn read_raw(byte: &u8) -> u8 {
         *byte >> 2
     }
 
     /// Extract the DSCP variant from a given byte. This method will only return standardized
     /// variants from the IANA DSCP registry.
+    ///
+    /// # Example
+    /// ```
+    /// # use etherparse::Dscp;
+    /// let byte = 0b00100_0_11;
+    /// assert_eq!(Dscp::read(&byte), Ok(Dscp::ClassSelector1));
+    /// ```
     pub const fn read(byte: &u8) -> Result<Self, DscpError> {
         let dscp_field = Self::read_raw(byte);
+        // match here because `Option::ok_or()` is not `const`
         Self::from_u8(&dscp_field)
     }
 
-    const fn write_inner(value: u8, byte: &mut u8) {
+    fn write_inner(value: u8, byte: &mut u8) {
         // Erase current dscp field, bits 6-7 are for the ECN field.
         *byte &= 0b00000011;
         // Write new dscp field
         *byte |= (value) << 2;
     }
 
+    // Note: `strum` has a nice FromRepr trait that derives this conversion.
+    // But the resulting method is public and I don't want to confuse crate users with it.
     const fn from_u8(value: &u8) -> Result<Self, DscpError> {
         match *value {
-            0 => Ok(Self::ClassSelector0),
-            8 => Ok(Self::ClassSelector1),
-            16 => Ok(Self::ClassSelector2),
-            24 => Ok(Self::ClassSelector3),
-            32 => Ok(Self::ClassSelector4),
-            40 => Ok(Self::ClassSelector5),
-            48 => Ok(Self::ClassSelector6),
-            56 => Ok(Self::ClassSelector7),
-            10 => Ok(Self::AfGroup11),
-            12 => Ok(Self::AfGroup12),
-            14 => Ok(Self::AfGroup13),
-            18 => Ok(Self::AfGroup21),
-            20 => Ok(Self::AfGroup22),
-            22 => Ok(Self::AfGroup23),
-            26 => Ok(Self::AfGroup31),
-            28 => Ok(Self::AfGroup32),
-            30 => Ok(Self::AfGroup33),
-            34 => Ok(Self::AfGroup41),
-            36 => Ok(Self::AfGroup42),
-            38 => Ok(Self::AfGroup43),
-            46 => Ok(Self::ExpeditedForwarding),
-            44 => Ok(Self::VoiceAdmit),
-            1 => Ok(Self::LowerEffort),
+            0b_00000_0 => Ok(Self::ClassSelector0),
+            0b_00100_0 => Ok(Self::ClassSelector1),
+            0b_01000_0 => Ok(Self::ClassSelector2),
+            0b_01100_0 => Ok(Self::ClassSelector3),
+            0b_10000_0 => Ok(Self::ClassSelector4),
+            0b_10100_0 => Ok(Self::ClassSelector5),
+            0b_11000_0 => Ok(Self::ClassSelector6),
+            0b_11100_0 => Ok(Self::ClassSelector7),
+            0b_00101_0 => Ok(Self::AfGroup11),
+            0b_00110_0 => Ok(Self::AfGroup12),
+            0b_00111_0 => Ok(Self::AfGroup13),
+            0b_01001_0 => Ok(Self::AfGroup21),
+            0b_01010_0 => Ok(Self::AfGroup22),
+            0b_01011_0 => Ok(Self::AfGroup23),
+            0b_01101_0 => Ok(Self::AfGroup31),
+            0b_01110_0 => Ok(Self::AfGroup32),
+            0b_01111_0 => Ok(Self::AfGroup33),
+            0b_10001_0 => Ok(Self::AfGroup41),
+            0b_10010_0 => Ok(Self::AfGroup42),
+            0b_10011_0 => Ok(Self::AfGroup43),
+            0b_10111_0 => Ok(Self::ExpeditedForwarding),
+            0b_10110_0 => Ok(Self::VoiceAdmit),
+            0b_0000_01 => Ok(Self::LowerEffort),
 
             _ => Err(DscpError::NoStandardAction(*value)),
         }
@@ -172,19 +212,5 @@ mod test {
             let repr = *variant as u8;
             assert_eq!(*variant, Dscp::from_u8(&repr).unwrap())
         }
-    }
-
-    #[test]
-    fn writer_does_not_erase_ecn_fields() {
-        let mut start = 0b11111111;
-        Dscp::ClassSelector0.write(&mut start);
-        assert_eq!(start, 0b11);
-    }
-
-    #[test]
-    fn reader_fetches_correct_fields() {
-        let mut start = 48 << 2 | 0b11;
-        let parsed = Dscp::read(&mut start).unwrap();
-        assert_eq!(parsed, Dscp::ClassSelector6);
     }
 }

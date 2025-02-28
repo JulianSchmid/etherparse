@@ -15,13 +15,13 @@ use strum_macros::VariantArray;
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord, Copy)]
 pub enum Ecn {
     /// End node is not an ECN capable transport.
-    NotEct = 0,
+    NotEct = 0b00,
     /// End node is an ECN capable transport.
-    EctOne = 1,
+    EctOne = 0b01,
     /// End node is an ECN capable transport.
-    EctZero = 2,
+    EctZero = 0b10,
     /// Congestion is experienced by the router.
-    CongestionExperienced = 3,
+    CongestionExperienced = 0b11,
 }
 
 impl Ecn {
@@ -29,6 +29,13 @@ impl Ecn {
     pub const MAX: u8 = 0b11;
 
     /// Write the ECN field to the correct location in the given byte.
+    /// # Example
+    /// ```
+    /// # use etherparse::Ecn;
+    /// let mut byte = 0b01010_0_10;
+    /// Ecn::CongestionExperienced.write(&mut byte);
+    /// assert_eq!(byte, 0b01010_0_11);
+    /// ```
     pub const fn write(&self, byte: &mut u8) {
         // Erase the old value.
         *byte &= 0b11111100;
@@ -37,12 +44,18 @@ impl Ecn {
     }
 
     /// Read from the ECN field in the given byte.
+    /// # Example
+    /// ```
+    /// # use etherparse::Ecn;
+    /// let byte = 0b1010_1011;
+    /// assert_eq!(Ecn::read(&byte), Ecn::CongestionExperienced);
+    /// ```
     pub const fn read(byte: &u8) -> Self {
         match *byte & 0b11 {
-            0 => Self::NotEct,
-            1 => Self::EctOne,
-            2 => Self::EctZero,
-            3 => Self::CongestionExperienced,
+            0b00 => Self::NotEct,
+            0b01 => Self::EctOne,
+            0b10 => Self::EctZero,
+            0b11 => Self::CongestionExperienced,
             // This will not happen because the match statement is being bit masked.
             _ => panic!("ECN field is only 2 bits."),
         }
@@ -59,19 +72,5 @@ mod test {
             let repr = *variant as u8;
             assert_eq!(*variant, Ecn::read(&repr));
         }
-    }
-
-    #[test]
-    fn writer_does_not_erase_dscp_fields() {
-        let mut start = 0b11111111;
-        Ecn::NotEct.write(&mut start);
-        assert_eq!(start, 0b1111_1100);
-    }
-
-    #[test]
-    fn reader_fetches_correct_fields() {
-        let start = 0b1010_1011;
-        let parsed = Ecn::read(&start);
-        assert_eq!(parsed, Ecn::CongestionExperienced);
     }
 }
