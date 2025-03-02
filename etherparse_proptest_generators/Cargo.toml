@@ -17,6 +17,7 @@ exclude = [
     ".travis/*",
     "appveyor.yml"
 ]
+rust-version = "1.83.0"
 
 [dependencies]
 etherparse = { path = "../etherparse" }
