@@ -288,20 +288,16 @@ impl Ipv6Header {
         writer.write_all(&self.to_bytes())
     }
 
-    /// Return the ipv6 source address as an std::net::Ipv6Addr
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    /// Return the ipv6 source address as an core::net::Ipv6Addr
     #[inline]
-    pub fn source_addr(&self) -> std::net::Ipv6Addr {
-        std::net::Ipv6Addr::from(self.source)
+    pub fn source_addr(&self) -> core::net::Ipv6Addr {
+        core::net::Ipv6Addr::from(self.source)
     }
 
-    /// Return the ipv6 destination address as an std::net::Ipv6Addr
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    /// Return the ipv6 destination address as an core::net::Ipv6Addr
     #[inline]
-    pub fn destination_addr(&self) -> std::net::Ipv6Addr {
-        std::net::Ipv6Addr::from(self.destination)
+    pub fn destination_addr(&self) -> core::net::Ipv6Addr {
+        core::net::Ipv6Addr::from(self.destination)
     }
 
     /// Length of the serialized header in bytes.

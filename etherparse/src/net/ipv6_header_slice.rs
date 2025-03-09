@@ -147,12 +147,10 @@ impl<'a> Ipv6HeaderSlice<'a> {
         unsafe { get_unchecked_16_byte_array(self.slice.as_ptr().add(8)) }
     }
 
-    /// Return the ipv6 source address as an std::net::Ipv6Addr
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    /// Return the ipv6 source address as an core::net::Ipv6Addr
     #[inline]
-    pub fn source_addr(&self) -> std::net::Ipv6Addr {
-        std::net::Ipv6Addr::from(self.source())
+    pub fn source_addr(&self) -> core::net::Ipv6Addr {
+        core::net::Ipv6Addr::from(self.source())
     }
 
     /// Returns a slice containing the IPv6 destination address.
@@ -165,12 +163,10 @@ impl<'a> Ipv6HeaderSlice<'a> {
         unsafe { get_unchecked_16_byte_array(self.slice.as_ptr().add(24)) }
     }
 
-    /// Return the ipv6 destination address as an std::net::Ipv6Addr
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    /// Return the ipv6 destination address as an core::net::Ipv6Addr
     #[inline]
-    pub fn destination_addr(&self) -> std::net::Ipv6Addr {
-        std::net::Ipv6Addr::from(self.destination())
+    pub fn destination_addr(&self) -> core::net::Ipv6Addr {
+        core::net::Ipv6Addr::from(self.destination())
     }
 
     /// Decode all the fields and copy the results to a Ipv6Header struct
@@ -288,17 +284,8 @@ mod test {
             assert_eq!(actual.hop_limit(), header.hop_limit);
             assert_eq!(actual.source(), header.source);
             assert_eq!(actual.destination(), header.destination);
-        }
-    }
-
-    #[cfg(feature = "std")]
-    proptest! {
-        #[test]
-        fn getters_std(header in ipv6_any()) {
-            let bytes = header.to_bytes();
-            let actual = Ipv6HeaderSlice::from_slice(&bytes).unwrap();
-            assert_eq!(actual.source_addr(), std::net::Ipv6Addr::from(header.source));
-            assert_eq!(actual.destination_addr(), std::net::Ipv6Addr::from(header.destination));
+            assert_eq!(actual.source_addr(), core::net::Ipv6Addr::from(header.source));
+            assert_eq!(actual.destination_addr(), core::net::Ipv6Addr::from(header.destination));
         }
     }
 

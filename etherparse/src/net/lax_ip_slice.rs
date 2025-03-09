@@ -49,22 +49,16 @@ impl<'a> LaxIpSlice<'a> {
         }
     }
 
-    /// Return the source address as an std::net::Ipvddr (requires
-    /// crate feature `std`).
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    pub fn source_addr(&self) -> std::net::IpAddr {
+    /// Return the source address as an core::net::Ipvddr.
+    pub fn source_addr(&self) -> core::net::IpAddr {
         match self {
             LaxIpSlice::Ipv4(s) => s.header().source_addr().into(),
             LaxIpSlice::Ipv6(s) => s.header().source_addr().into(),
         }
     }
 
-    /// Return the destination address as an std::net::IpAddr (requires
-    /// crate feature `std`).
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    pub fn destination_addr(&self) -> std::net::IpAddr {
+    /// Return the destination address as an core::net::IpAddr.
+    pub fn destination_addr(&self) -> core::net::IpAddr {
         match self {
             LaxIpSlice::Ipv4(s) => s.header().destination_addr().into(),
             LaxIpSlice::Ipv6(s) => s.header().destination_addr().into(),
@@ -443,7 +437,7 @@ mod test {
     use crate::test_gens::*;
     use alloc::{format, vec::Vec};
     use proptest::prelude::*;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
     fn debug_clone_eq() {
@@ -531,7 +525,6 @@ mod test {
         }
     }
 
-    #[cfg(feature = "std")]
     #[test]
     fn source_addr() {
         // ipv4
@@ -565,7 +558,6 @@ mod test {
         }
     }
 
-    #[cfg(feature = "std")]
     #[test]
     fn destination_addr() {
         use crate::ip_number::UDP;
