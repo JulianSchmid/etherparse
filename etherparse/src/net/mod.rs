@@ -10,6 +10,9 @@ pub use arp_packet::*;
 mod arp_operation;
 pub use arp_operation::*;
 
+mod ecn;
+pub use ecn::*;
+
 mod ip_auth_header;
 pub use ip_auth_header::*;
 
@@ -54,6 +57,9 @@ pub use ipv4_options::*;
 
 mod ipv4_slice;
 pub use ipv4_slice::*;
+
+mod dscp;
+pub use dscp::*;
 
 mod ipv6_ext_slice;
 pub use ipv6_ext_slice::*;
