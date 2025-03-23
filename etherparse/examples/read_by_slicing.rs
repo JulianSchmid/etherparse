@@ -36,7 +36,7 @@ fn main() {
         Err(value) => println!("Err {:?}", value),
         Ok(value) => {
             println!("Ok");
-            use etherparse::{LinkSlice::*, NetSlice::*, TransportSlice::*, VlanSlice::*};
+            use etherparse::{LinkExtSlice::*, LinkSlice::*, NetSlice::*, TransportSlice::*};
 
             match value.link {
                 Some(Ethernet2(value)) => println!(
@@ -61,14 +61,10 @@ fn main() {
                 None => {}
             }
 
-            match value.vlan {
-                Some(SingleVlan(value)) => println!("  SingleVlan {:?}", value.vlan_identifier()),
-                Some(DoubleVlan(value)) => println!(
-                    "  DoubleVlan {:?}, {:?}",
-                    value.outer().vlan_identifier(),
-                    value.inner().vlan_identifier()
-                ),
-                None => {}
+            for link_ext in &value.link_exts {
+                match link_ext {
+                    Vlan(s) => println!("  Vlan {:?}", s.vlan_identifier()),
+                }
             }
 
             match value.net {

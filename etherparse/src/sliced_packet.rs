@@ -1,3 +1,5 @@
+use arrayvec::ArrayVec;
+
 use crate::*;
 
 /// Packet slice split into multiple slices containing the different headers & payload.
@@ -36,25 +38,31 @@ use crate::*;
 ///     Err(value) => println!("Err {:?}", value),
 ///     Ok(value) => {
 ///         println!("link: {:?}", value.link);
-///         println!("vlan: {:?}", value.vlan);
-///         println!("net: {:?}", value.net);
+///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+///         println!("net: {:?}", value.net); // ip & arp
 ///         println!("transport: {:?}", value.transport);
 ///     }
-/// }
+/// };
 /// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SlicedPacket<'a> {
     /// Ethernet II header if present.
     pub link: Option<LinkSlice<'a>>,
-    /// Single or double vlan headers if present.
-    pub vlan: Option<VlanSlice<'a>>,
+
+    /// Link extensions (VLAN & MAC Sec headers).
+    pub link_exts: ArrayVec<LinkExtSlice<'a>, { SlicedPacket::LINK_EXTS_CAP }>,
+
     /// IPv4 or IPv6 header, IP extension headers & payload if present.
     pub net: Option<NetSlice<'a>>,
+
     /// TCP or UDP header & payload if present.
     pub transport: Option<TransportSlice<'a>>,
 }
 
 impl<'a> SlicedPacket<'a> {
+    /// Maximum supported number of link extensions.
+    pub const LINK_EXTS_CAP: usize = 3;
+
     /// Separates a network packet slice into different slices containing the headers from the ethernet header downwards.
     ///
     /// The result is returned as a [`SlicedPacket`] struct. This function assumes the given data starts
@@ -84,11 +92,11 @@ impl<'a> SlicedPacket<'a> {
     ///     Err(value) => println!("Err {:?}", value),
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
-    ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("net: {:?}", value.net);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
     ///         println!("transport: {:?}", value.transport);
     ///     }
-    /// }
+    /// };
     /// ```
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_ethernet2()
@@ -126,11 +134,11 @@ impl<'a> SlicedPacket<'a> {
     ///     Err(value) => println!("Err {:?}", value),
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
-    ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("net: {:?}", value.net);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
     ///         println!("transport: {:?}", value.transport);
     ///     }
-    /// }
+    /// };
     /// ```
     pub fn from_linux_sll(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_linux_sll()
@@ -183,29 +191,22 @@ impl<'a> SlicedPacket<'a> {
     ///     Err(value) => println!("Err {:?}", value),
     ///     Ok(value) => {
     ///         println!("link: {:?}", value.link);
-    ///         println!("vlan: {:?}", value.vlan);
-    ///         println!("net: {:?}", value.net);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
     ///         println!("transport: {:?}", value.transport);
     ///     }
-    /// }
+    /// };
     /// ```
     pub fn from_ether_type(
         ether_type: EtherType,
         data: &'a [u8],
     ) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
-        use ether_type::*;
         let mut cursor = SlicedPacketCursor::new(data);
         cursor.result.link = Some(LinkSlice::EtherPayload(EtherPayloadSlice {
             ether_type,
             payload: data,
         }));
-        match ether_type {
-            IPV4 => cursor.slice_ipv4(),
-            IPV6 => cursor.slice_ipv6(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => cursor.slice_vlan(),
-            ARP => cursor.slice_arp(),
-            _ => Ok(cursor.result),
-        }
+        cursor.slice_ether_type(ether_type)
     }
 
     /// Separates a network packet slice into different slices containing the headers from the ip header downwards.
@@ -236,13 +237,13 @@ impl<'a> SlicedPacket<'a> {
     ///     Ok(value) => {
     ///         //link & vlan fields are empty when parsing from ip downwards
     ///         assert_eq!(None, value.link);
-    ///         assert_eq!(None, value.vlan);
+    ///         assert!(value.link_exts.is_empty());
     ///
     ///         //ip & transport (udp or tcp)
     ///         println!("net: {:?}", value.net);
     ///         println!("transport: {:?}", value.transport);
     ///     }
-    /// }
+    /// };
     /// ```
     pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         SlicedPacketCursor::new(data).slice_ip()
@@ -260,11 +261,10 @@ impl<'a> SlicedPacket<'a> {
     pub fn payload_ether_type(&self) -> Option<EtherType> {
         if self.net.is_some() || self.transport.is_some() {
             None
-        } else if let Some(vlan) = &self.vlan {
-            use VlanSlice::*;
-            match vlan {
-                SingleVlan(s) => Some(s.ether_type()),
-                DoubleVlan(d) => Some(d.inner().ether_type()),
+        } else if let Some(last_ext) = &self.link_exts.last() {
+            use LinkExtSlice::*;
+            match last_ext {
+                Vlan(single_vlan_slice) => Some(single_vlan_slice.ether_type()),
             }
         } else if let Some(link) = &self.link {
             use LinkSlice::*;
@@ -297,10 +297,9 @@ impl<'a> SlicedPacket<'a> {
     /// header is returned and if there is no VLAN header is present in the
     /// link field is returned.
     pub fn ether_payload(&self) -> Option<EtherPayloadSlice<'a>> {
-        if let Some(vlan) = self.vlan.as_ref() {
-            match vlan {
-                VlanSlice::SingleVlan(s) => Some(s.payload()),
-                VlanSlice::DoubleVlan(s) => Some(s.payload()),
+        if let Some(last_ext) = self.link_exts.last() {
+            match last_ext {
+                LinkExtSlice::Vlan(s) => Some(s.payload()),
             }
         } else if let Some(link) = self.link.as_ref() {
             match link {
@@ -350,6 +349,40 @@ impl<'a> SlicedPacket<'a> {
             Some(Arp(_)) | None => false,
         }
     }
+
+    /// Returns the vlan headers present in the sliced packet.
+    pub fn vlan(&self) -> Option<VlanSlice<'a>> {
+        let mut result = None;
+        for ext in &self.link_exts {
+            match ext {
+                LinkExtSlice::Vlan(vlan_slice) => {
+                    if let Some(outer) = result {
+                        return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                            outer,
+                            inner: vlan_slice.clone(),
+                        }));
+                    } else {
+                        result = Some(vlan_slice.clone());
+                    }
+                }
+            }
+        }
+        result.map(|v| VlanSlice::SingleVlan(v))
+    }
+
+    /// Returns the VLAN ids present in this packet.
+    pub fn vlan_ids(&self) -> ArrayVec<VlanId, { SlicedPacket::LINK_EXTS_CAP }> {
+        let mut result = ArrayVec::<VlanId, { SlicedPacket::LINK_EXTS_CAP }>::new_const();
+        for e in &self.link_exts {
+            match e {
+                // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
+                LinkExtSlice::Vlan(s) => unsafe {
+                    result.push_unchecked(s.vlan_identifier());
+                },
+            }
+        }
+        result
+    }
 }
 
 #[cfg(test)]
@@ -370,7 +403,7 @@ mod test {
     fn clone_eq() {
         let header = SlicedPacket {
             link: None,
-            vlan: None,
+            link_exts: ArrayVec::new_const(),
             net: None,
             transport: None,
         };
@@ -382,15 +415,15 @@ mod test {
         use alloc::format;
         let header = SlicedPacket {
             link: None,
-            vlan: None,
+            link_exts: ArrayVec::new_const(),
             net: None,
             transport: None,
         };
         assert_eq!(
             format!("{:?}", header),
             format!(
-                "SlicedPacket {{ link: {:?}, vlan: {:?}, net: {:?}, transport: {:?} }}",
-                header.link, header.vlan, header.net, header.transport,
+                "SlicedPacket {{ link: {:?}, link_exts: {:?}, net: {:?}, transport: {:?} }}",
+                header.link, header.link_exts, header.net, header.transport,
             )
         );
     }
@@ -403,7 +436,7 @@ mod test {
         assert_eq!(
             SlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             }
@@ -441,7 +474,7 @@ mod test {
                         ether_type: EtherType::WAKE_ON_LAN,
                         payload: &payload
                     })),
-                    vlan: None,
+                    link_exts: ArrayVec::new_const(),
                     net: None,
                     transport: None,
                 }
@@ -486,7 +519,7 @@ mod test {
                         protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
                         payload: &payload
                     })),
-                    vlan: None,
+                    link_exts: ArrayVec::new_const(),
                     net: None,
                     transport: None,
                 }
@@ -570,7 +603,7 @@ mod test {
         assert_eq!(
             SlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             }
@@ -662,7 +695,7 @@ mod test {
         assert_eq!(
             SlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             }
@@ -794,7 +827,7 @@ mod test {
         // no eth
         from_x_slice_vlan_variants(&TestPacket {
             link: None,
-            vlan: None,
+            link_exts: ArrayVec::new_const(),
             net: None,
             transport: None,
         });
@@ -810,7 +843,7 @@ mod test {
                         ether_type: EtherType(0x8221),
                         payload: &data
                     })),
-                    vlan: None,
+                    link_exts: ArrayVec::new_const(),
                     net: None,
                     transport: None
                 }
@@ -826,7 +859,7 @@ mod test {
             };
             let test = TestPacket {
                 link: Some(LinkHeader::Ethernet2(eth.clone())),
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             };
@@ -862,7 +895,7 @@ mod test {
             };
             let test = TestPacket {
                 link: Some(LinkHeader::LinuxSll(linux_sll.clone())),
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             };
@@ -901,7 +934,11 @@ mod test {
             for vlan_ether_type in VLAN_ETHER_TYPES {
                 let mut test = base.clone();
                 test.set_ether_type(vlan_ether_type);
-                test.vlan = Some(VlanHeader::Single(single.clone()));
+                test.link_exts = {
+                    let mut exts = ArrayVec::new();
+                    exts.push(LinkExtHeader::Vlan(single.clone()));
+                    exts
+                };
 
                 // ok vlan header
                 from_x_slice_ip_variants(&test);
@@ -948,7 +985,12 @@ mod test {
                 };
                 let mut test = base.clone();
                 test.set_ether_type(outer_vlan_ether_type);
-                test.vlan = Some(VlanHeader::Double(double.clone()));
+                test.link_exts = {
+                    let mut exts = ArrayVec::new();
+                    exts.push(LinkExtHeader::Vlan(double.outer.clone()));
+                    exts.push(LinkExtHeader::Vlan(double.inner.clone()));
+                    exts
+                };
 
                 // ok double vlan header
                 from_x_slice_ip_variants(&test);
@@ -1015,7 +1057,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            if test.link.is_some() || test.vlan.is_some() {
+                            if test.link.is_some() || !test.link_exts.is_empty() {
                                 SliceError::Len(err.clone())
                             } else {
                                 SliceError::Len({
@@ -1046,7 +1088,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        if test.link.is_some() || test.vlan.is_some() {
+                        if test.link.is_some() || !test.link_exts.is_empty() {
                             SliceError::Ipv4(
                                 err::ipv4::HeaderError::HeaderLengthSmallerThanHeader { ihl: 0 },
                             )
@@ -1072,7 +1114,12 @@ mod test {
                         layer: Layer::Ipv4Packet,
                         layer_start_offset: {
                             test.link.as_ref().map(|h| h.header_len()).unwrap_or(0)
-                                + test.vlan.as_ref().map(|h| h.header_len()).unwrap_or(0)
+                                + test
+                                    .link_exts
+                                    .as_ref()
+                                    .iter()
+                                    .map(|h| h.header_len())
+                                    .sum::<usize>()
                         },
                     };
 
@@ -1181,7 +1228,7 @@ mod test {
                         from_slice_assert_err(
                             &test,
                             &data[..base_len + len],
-                            if test.link.is_some() || test.vlan.is_some() {
+                            if test.link.is_some() || !test.link_exts.is_empty() {
                                 SliceError::Len(err.clone())
                             } else {
                                 SliceError::Len({
@@ -1212,7 +1259,7 @@ mod test {
                     from_slice_assert_err(
                         &test,
                         &data,
-                        if test.link.is_some() || test.vlan.is_some() {
+                        if test.link.is_some() || !test.link_exts.is_empty() {
                             SliceError::Ipv6(err::ipv6::HeaderError::UnexpectedVersion {
                                 version_number: 0,
                             })
@@ -1558,7 +1605,15 @@ mod test {
                     None => None,
                 }
             );
-            assert_eq!(test.vlan, result.vlan.as_ref().map(|e| e.to_header()));
+            assert_eq!(
+                test.link_exts,
+                result
+                    .link_exts
+                    .as_ref()
+                    .iter()
+                    .map(|e| e.to_header())
+                    .collect::<ArrayVec<LinkExtHeader, 3>>()
+            );
             assert_eq!(
                 test.net,
                 result.net.as_ref().map(|s: &NetSlice| -> NetHeaders {
@@ -1628,7 +1683,7 @@ mod test {
             assert_test_result(&test, &payload, &result);
         }
         // from_ether_type (vlan at start)
-        if test.link.is_none() && test.vlan.is_some() {
+        if test.link.is_none() && !test.link_exts.is_empty() {
             for ether_type in VLAN_ETHER_TYPES {
                 let result = SlicedPacket::from_ether_type(ether_type, &data).unwrap();
                 assert_eq!(
@@ -1642,7 +1697,7 @@ mod test {
             }
         }
         // from_ether_type (ip at start)
-        if test.link.is_none() && test.vlan.is_none() {
+        if test.link.is_none() && test.link_exts.is_empty() {
             if let Some(ip) = &test.net {
                 let ether_type = match ip {
                     NetHeaders::Ipv4(_, _) => ether_type::IPV4,
@@ -1661,7 +1716,7 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
+        if test.link.is_none() && test.link_exts.is_empty() && test.net.is_some() {
             let result = SlicedPacket::from_ip(&data).unwrap();
             assert_test_result(&test, &payload, &result);
         }
@@ -1683,7 +1738,7 @@ mod test {
             }
         }
         // from_ether_type (vlan at start)
-        if test.link.is_none() && test.vlan.is_some() {
+        if test.link.is_none() && !test.link_exts.is_empty() {
             for ether_type in VLAN_ETHER_TYPES {
                 assert_eq!(
                     err.clone(),
@@ -1692,7 +1747,7 @@ mod test {
             }
         }
         // from_ether_type (ip at start)
-        if test.link.is_none() && test.vlan.is_none() {
+        if test.link.is_none() && test.link_exts.is_empty() {
             if let Some(ip) = &test.net {
                 let err = SlicedPacket::from_ether_type(
                     match ip {
@@ -1707,7 +1762,7 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.vlan.is_none() && test.net.is_some() {
+        if test.link.is_none() && test.link_exts.is_empty() && test.net.is_some() {
             assert_eq!(err, SlicedPacket::from_ip(&data).unwrap_err());
         }
     }
@@ -1729,7 +1784,7 @@ mod test {
             {
                 let s = SlicedPacket{
                     link: None,
-                    vlan: None,
+                    link_exts: ArrayVec::new_const(),
                     net: None,
                     transport: None,
                 };
@@ -1749,7 +1804,7 @@ mod test {
                         ether_type,
                         s.payload_ether_type()
                     );
-                }
+                };
             }
 
             // only ethernet

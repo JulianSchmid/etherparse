@@ -2,6 +2,7 @@ use crate::{
     err::{packet::SliceError, Layer},
     *,
 };
+use arrayvec::ArrayVec;
 
 /// Helper class for laxly slicing packets.
 pub(crate) struct LaxSlicedPacketCursor<'a> {
@@ -11,14 +12,13 @@ pub(crate) struct LaxSlicedPacketCursor<'a> {
 
 impl<'a> LaxSlicedPacketCursor<'a> {
     pub fn parse_from_ethernet2(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::LenError> {
-        use ether_type::*;
         use LinkSlice::*;
 
         let mut cursor = LaxSlicedPacketCursor {
             offset: 0,
             result: LaxSlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
                 stop_err: None,
@@ -34,15 +34,8 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         cursor.offset += result.header_len();
         cursor.result.link = Some(Ethernet2(result));
 
-        // continue parsing (if required)
-        match payload.ether_type {
-            IPV4 => Ok(cursor.slice_ip(payload.payload)),
-            IPV6 => Ok(cursor.slice_ip(payload.payload)),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                Ok(cursor.slice_vlan(payload.payload))
-            }
-            _ => Ok(cursor.result),
-        }
+        // parse the rest
+        Ok(cursor.slice_ether_type(payload))
     }
 
     pub fn parse_from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
@@ -53,21 +46,16 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     ether_type,
                     payload: slice,
                 })),
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
                 stop_err: None,
             },
         };
-        use ether_type::*;
-        match ether_type {
-            IPV4 | IPV6 => cursor.slice_ip(slice),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                cursor.slice_vlan(slice)
-            }
-            ARP => cursor.slice_arp(slice),
-            _ => cursor.result,
-        }
+        cursor.slice_ether_type(EtherPayloadSlice {
+            ether_type,
+            payload: slice,
+        })
     }
 
     pub fn parse_from_ip(
@@ -84,7 +72,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             offset,
             result: LaxSlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: Some(ip.into()),
                 transport: None,
                 stop_err: stop_err.map(|(stop_err, stop_layer)| {
@@ -113,58 +101,38 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         .slice_transport(payload))
     }
 
-    pub fn slice_vlan(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
+    pub fn slice_ether_type(mut self, ether_payload: EtherPayloadSlice<'a>) -> LaxSlicedPacket<'a> {
         use ether_type::*;
-        use VlanSlice::*;
-
-        // cache the starting slice so the later combining
-        // of outer & inner vlan is defined behavior (for miri)
-        let outer_start_slice = slice;
-        let outer = match SingleVlanSlice::from_slice(slice) {
-            Ok(v) => v,
-            Err(err) => {
-                self.result.stop_err = Some((
-                    SliceError::Len(err.add_offset(self.offset)),
-                    Layer::VlanHeader,
-                ));
-                return self.result;
-            }
-        };
-        self.result.vlan = Some(VlanSlice::SingleVlan(outer.clone()));
-        self.offset += outer.header_len();
-
-        //check if it is a double vlan header
-        match outer.ether_type() {
-            //in case of a double vlan header continue with the inner
+        match ether_payload.ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                let inner = match SingleVlanSlice::from_slice(outer.payload_slice()) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        self.result.stop_err = Some((
-                            SliceError::Len(err.add_offset(self.offset)),
-                            Layer::VlanHeader,
-                        ));
-                        return self.result;
+                if self.result.link_exts.is_full() {
+                    self.result
+                } else {
+                    let vlan = match SingleVlanSlice::from_slice(ether_payload.payload) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            self.result.stop_err = Some((
+                                SliceError::Len(err.add_offset(self.offset)),
+                                Layer::VlanHeader,
+                            ));
+                            return self.result;
+                        }
+                    };
+                    let vlan_payload = vlan.payload();
+                    self.offset += vlan.header_len();
+                    // SAFETY: Safe, as the outer if verifies that there is still space in link_exts.
+                    unsafe {
+                        self.result
+                            .link_exts
+                            .push_unchecked(LinkExtSlice::Vlan(vlan));
                     }
-                };
-                self.offset += inner.header_len();
-
-                let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanSlice {
-                    slice: outer_start_slice,
-                }));
-
-                match inner_ether_type {
-                    IPV4 => self.slice_ip(inner.payload_slice()),
-                    IPV6 => self.slice_ip(inner.payload_slice()),
-                    _ => self.result,
+                    self.slice_ether_type(vlan_payload)
                 }
             }
-            value => match value {
-                IPV4 => self.slice_ip(outer.payload_slice()),
-                IPV6 => self.slice_ip(outer.payload_slice()),
-                _ => self.result,
-            },
+            ARP => self.slice_arp(ether_payload.payload),
+            IPV4 => self.slice_ip(ether_payload.payload),
+            IPV6 => self.slice_ip(ether_payload.payload),
+            _ => self.result,
         }
     }
 

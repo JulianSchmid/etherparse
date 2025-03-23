@@ -57,11 +57,11 @@
 //!     Err(value) => println!("Err {:?}", value),
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
-//!         println!("vlan: {:?}", value.vlan);
+//!         println!("link_exts: {:?}", value.link_exts); // contains vlan & macsec
 //!         println!("net: {:?}", value.net); // contains ip & arp
 //!         println!("transport: {:?}", value.transport);
 //!     }
-//! }
+//! };
 //! ```
 //! This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packages based on a subset of the headers and/or their fields.
 //!
@@ -101,11 +101,11 @@
 //!     Err(value) => println!("Err {:?}", value),
 //!     Ok(value) => {
 //!         println!("link: {:?}", value.link);
-//!         println!("vlan: {:?}", value.vlan);
+//!         println!("link_exts: {:?}", value.link_exts); // contains vlan & macsec
 //!         println!("net: {:?}", value.net); // contains ip & arp
 //!         println!("transport: {:?}", value.transport);
 //!     }
-//! }
+//! };
 //! ```
 //! This option is slower then slicing when only few fields are accessed. But it can be the faster option or useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
 //!
@@ -127,7 +127,7 @@
 //!
 //! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
 //! * [`LinuxSllSlice::from_slice`]
-//! * [`SingleVlanSlice::from_slice`] & [`DoubleVlanSlice::from_slice`]
+//! * [`SingleVlanSlice::from_slice`]
 //! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
 //! * [`Ipv4Slice::from_slice`] & [`LaxIpv4Slice::from_slice`]
 //! * [`Ipv6Slice::from_slice`] & [`LaxIpv6Slice::from_slice`]
@@ -149,7 +149,6 @@
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`LinuxSllHeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
-//! * [`DoubleVlanHeaderSlice::from_slice`]
 //! * [`ArpPacketSlice::from_slice`]
 //! * [`Ipv4HeaderSlice::from_slice`]
 //! * [`Ipv4ExtensionsSlice::from_slice`]
@@ -166,7 +165,6 @@
 //! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
 //! * [`LinuxSllHeader::read`] & [`LinuxSllHeader::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
-//! * [`DoubleVlanHeader::read`] & [`DoubleVlanHeader::from_slice`]
 //! * [`ArpPacket::read`] & [`ArpPacket::from_slice`]
 //! * [`IpHeaders::read`] & [`IpHeaders::from_slice`]
 //! * [`Ipv4Header::read`] & [`Ipv4Header::from_slice`]
@@ -231,7 +229,6 @@
 //! * [`Ethernet2Header::to_bytes`] & [`Ethernet2Header::write`]
 //! * [`LinuxSllHeader::to_bytes`] & [`LinuxSllHeader::write`]
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
-//! * [`DoubleVlanHeader::to_bytes`] & [`DoubleVlanHeader::write`]
 //! * [`ArpPacket::to_bytes`] & [`ArpPacket::write`]
 //! * [`ArpEthIpv4Packet::to_bytes`]
 //! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]

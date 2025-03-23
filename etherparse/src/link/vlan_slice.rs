@@ -31,7 +31,7 @@ impl<'a> VlanSlice<'a> {
 #[cfg(test)]
 mod test {
     use crate::{test_gens::*, *};
-    use alloc::format;
+    use alloc::{format, vec::Vec};
     use proptest::prelude::*;
 
     proptest! {
@@ -54,9 +54,17 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes();
+                let mut raw = Vec::with_capacity(
+                    SingleVlanHeader::LEN*2
+                );
+                raw.extend_from_slice(&double.outer.to_bytes());
+                raw.extend_from_slice(&double.inner.to_bytes());
+
                 let slice = VlanSlice::DoubleVlan(
-                    DoubleVlanSlice::from_slice(&raw).unwrap()
+                    DoubleVlanSlice{
+                        outer: SingleVlanSlice::from_slice(&raw[..]).unwrap(),
+                        inner: SingleVlanSlice::from_slice(&raw[SingleVlanHeader::LEN..]).unwrap(),
+                    }
                 );
                 assert_eq!(
                     slice.to_header(),
@@ -84,11 +92,20 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes();
-                let d = DoubleVlanSlice::from_slice(&raw).unwrap();
+                let mut raw = Vec::with_capacity(
+                    SingleVlanHeader::LEN*2
+                );
+                raw.extend_from_slice(&double.outer.to_bytes());
+                raw.extend_from_slice(&double.inner.to_bytes());
+
+                let inner = DoubleVlanSlice{
+                    outer: SingleVlanSlice::from_slice(&raw[..]).unwrap(),
+                    inner: SingleVlanSlice::from_slice(&raw[SingleVlanHeader::LEN..]).unwrap(),
+                };
+                let d = VlanSlice::DoubleVlan(inner.clone());
                 assert_eq!(
-                    format!("{:?}", VlanSlice::DoubleVlan(d.clone())),
-                    format!("DoubleVlan({:?})", d)
+                    format!("{:?}", d.clone()),
+                    format!("DoubleVlan({:?})", inner)
                 );
             }
         }
@@ -111,9 +128,17 @@ mod test {
 
             // double
             {
-                let raw = double.to_bytes();
+                let mut raw = Vec::with_capacity(
+                    SingleVlanHeader::LEN*2
+                );
+                raw.extend_from_slice(&double.outer.to_bytes());
+                raw.extend_from_slice(&double.inner.to_bytes());
+
                 let d = VlanSlice::DoubleVlan(
-                    DoubleVlanSlice::from_slice(&raw).unwrap()
+                    DoubleVlanSlice{
+                        outer: SingleVlanSlice::from_slice(&raw[..]).unwrap(),
+                        inner: SingleVlanSlice::from_slice(&raw[SingleVlanHeader::LEN..]).unwrap(),
+                    }
                 );
                 assert_eq!(d.clone(), d);
             }

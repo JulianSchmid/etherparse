@@ -1,4 +1,5 @@
 use crate::*;
+use arrayvec::ArrayVec;
 
 /// Helper class for slicing packets
 pub(crate) struct SlicedPacketCursor<'a> {
@@ -16,7 +17,7 @@ impl<'a> SlicedPacketCursor<'a> {
             len_source: LenSource::Slice,
             result: SlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             },
@@ -33,7 +34,6 @@ impl<'a> SlicedPacketCursor<'a> {
 
     pub fn slice_ethernet2(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         use err::packet::SliceError::*;
-        use ether_type::*;
         use LinkSlice::*;
 
         let result = Ethernet2Slice::from_slice_without_fcs(self.slice)
@@ -47,13 +47,7 @@ impl<'a> SlicedPacketCursor<'a> {
         self.result.link = Some(Ethernet2(result));
 
         //continue parsing (if required)
-        match ether_type {
-            ARP => self.slice_arp(),
-            IPV4 => self.slice_ipv4(),
-            IPV6 => self.slice_ipv6(),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => self.slice_vlan(),
-            _ => Ok(self.result),
-        }
+        self.slice_ether_type(ether_type)
     }
 
     pub fn slice_linux_sll(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
@@ -75,44 +69,36 @@ impl<'a> SlicedPacketCursor<'a> {
 
         //continue parsing (if required)
         match protocol_type {
-            LinuxSllProtocolType::EtherType(EtherType::ARP) => self.slice_arp(),
-            LinuxSllProtocolType::EtherType(EtherType::IPV4) => self.slice_ipv4(),
-            LinuxSllProtocolType::EtherType(EtherType::IPV6) => self.slice_ipv6(),
+            LinuxSllProtocolType::EtherType(next_ether_type) => {
+                self.slice_ether_type(next_ether_type)
+            }
             _ => Ok(self.result),
         }
     }
 
-    pub fn slice_vlan(mut self) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+    pub fn slice_ether_type(
+        mut self,
+        ether_type: EtherType,
+    ) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
         use err::packet::SliceError::*;
         use ether_type::*;
-        use VlanSlice::*;
 
-        // cache the starting slice so the later combining
-        // of outer & inner vlan is defined behavior (for miri)
-        let outer_start_slice = self.slice;
-        let outer = SingleVlanSlice::from_slice(self.slice)
-            .map_err(|err| Len(err.add_offset(self.offset)))?;
-        self.result.vlan = Some(SingleVlan(outer.clone()));
-        self.move_by(outer.header_len());
-
-        //check if it is a double vlan header
-        match outer.ether_type() {
-            //in case of a double vlan header continue with the inner
+        match ether_type {
             VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                let inner = SingleVlanSlice::from_slice(self.slice)
-                    .map_err(|err| Len(err.add_offset(self.offset)))?;
-                self.move_by(inner.header_len());
-
-                let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanSlice {
-                    slice: outer_start_slice,
-                }));
-
-                match inner_ether_type {
-                    ARP => self.slice_arp(),
-                    IPV4 => self.slice_ipv4(),
-                    IPV6 => self.slice_ipv6(),
-                    _ => Ok(self.result),
+                if self.result.link_exts.is_full() {
+                    Ok(self.result)
+                } else {
+                    let vlan = SingleVlanSlice::from_slice(self.slice)
+                        .map_err(|err| Len(err.add_offset(self.offset)))?;
+                    self.move_by(vlan.header_len());
+                    let next_ether_type = vlan.ether_type();
+                    // SAFETY: Safe, as the outer if verifies that there is still space in link_exts.
+                    unsafe {
+                        self.result
+                            .link_exts
+                            .push_unchecked(LinkExtSlice::Vlan(vlan));
+                    }
+                    self.slice_ether_type(next_ether_type)
                 }
             }
             ARP => self.slice_arp(),

@@ -1948,7 +1948,8 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
             value.inner.ether_type = net_ether_type;
             //serialize
-            value.write(writer).map_err(Io)?;
+            value.outer.write(writer).map_err(Io)?;
+            value.inner.write(writer).map_err(Io)?;
         }
         None => {}
     }
@@ -2067,7 +2068,7 @@ fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
         None => 0,
     }) + match builder.state.vlan_header {
         Some(Single(_)) => SingleVlanHeader::LEN,
-        Some(Double(_)) => DoubleVlanHeader::LEN,
+        Some(Double(_)) => SingleVlanHeader::LEN * 2,
         None => 0,
     } + match builder.state.net_header {
         Some(Ipv4(ref value, ref ext)) => value.header_len() + ext.header_len(),
@@ -2967,7 +2968,7 @@ mod test {
         //check the deserialized size
         assert_eq!(
             Ethernet2Header::LEN
-                + DoubleVlanHeader::LEN
+                + SingleVlanHeader::LEN * 2
                 + Ipv6Header::LEN
                 + UdpHeader::LEN
                 + in_payload.len(),
@@ -3635,7 +3636,11 @@ mod test {
 
         //ipv6 double vlan ethernet
         assert_eq!(
-            Ethernet2Header::LEN + DoubleVlanHeader::LEN + Ipv6Header::LEN + UdpHeader::LEN + 123,
+            Ethernet2Header::LEN
+                + SingleVlanHeader::LEN * 2
+                + Ipv6Header::LEN
+                + UdpHeader::LEN
+                + 123,
             PacketBuilder::ethernet2([1, 2, 3, 4, 5, 6], [7, 8, 9, 10, 11, 12])
                 .double_vlan(0x123.try_into().unwrap(), 0x234.try_into().unwrap())
                 .ipv6(

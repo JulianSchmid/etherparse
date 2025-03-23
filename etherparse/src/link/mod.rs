@@ -1,9 +1,6 @@
 mod double_vlan_header;
 pub use double_vlan_header::*;
 
-mod double_vlan_header_slice;
-pub use double_vlan_header_slice::*;
-
 mod double_vlan_slice;
 pub use double_vlan_slice::*;
 
@@ -21,6 +18,12 @@ pub use ethernet2_header_slice::*;
 
 mod ethernet2_slice;
 pub use ethernet2_slice::*;
+
+mod link_ext_header;
+pub use link_ext_header::*;
+
+mod link_ext_slice;
+pub use link_ext_slice::*;
 
 mod link_header;
 pub use link_header::*;

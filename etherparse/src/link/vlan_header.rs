@@ -17,18 +17,6 @@ impl VlanHeader {
         ether_type::VLAN_DOUBLE_TAGGED_FRAME,
     ];
 
-    /// Write the IEEE 802.1Q VLAN single or double tagging header
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    #[inline]
-    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
-        use VlanHeader::*;
-        match &self {
-            Single(header) => header.write(writer),
-            Double(header) => header.write(writer),
-        }
-    }
-
     /// Returns the ether type of the next header after the vlan header(s).
     #[inline]
     pub fn next_header(&self) -> EtherType {
@@ -37,23 +25,13 @@ impl VlanHeader {
             VlanHeader::Double(d) => d.inner.ether_type,
         }
     }
-
-    /// Length of the serialized header(s) in bytes.
-    #[inline]
-    pub fn header_len(&self) -> usize {
-        use VlanHeader::*;
-        match &self {
-            Single(_) => SingleVlanHeader::LEN,
-            Double(_) => DoubleVlanHeader::LEN,
-        }
-    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::test_gens::*;
-    use alloc::{format, vec::Vec};
+    use alloc::format;
     use proptest::prelude::*;
 
     #[test]
@@ -132,63 +110,6 @@ mod test {
             {
                 let value = VlanHeader::Double(double.clone());
                 assert_eq!(value.next_header(), double.inner.ether_type);
-            }
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn header_len(
-            single in vlan_single_any(),
-            double in vlan_double_any(),
-        ) {
-            // single
-            assert_eq!(
-                SingleVlanHeader::LEN,
-                VlanHeader::Single(single.clone()).header_len()
-            );
-            // double
-            assert_eq!(
-                DoubleVlanHeader::LEN,
-                VlanHeader::Double(double.clone()).header_len()
-            );
-        }
-    }
-
-    proptest! {
-        #[test]
-        fn write(
-            single in vlan_single_any(),
-            double in vlan_double_any(),
-        ) {
-            // single
-            {
-                let expected = {
-                    let mut buffer = Vec::with_capacity(single.header_len());
-                    single.write(&mut buffer).unwrap();
-                    buffer
-                };
-                let actual = {
-                    let mut buffer = Vec::with_capacity(single.header_len());
-                    VlanHeader::Single(single.clone()).write(&mut buffer).unwrap();
-                    buffer
-                };
-                assert_eq!(expected, actual);
-            }
-
-            // double
-            {
-                let expected = {
-                    let mut buffer = Vec::with_capacity(double.header_len());
-                    double.write(&mut buffer).unwrap();
-                    buffer
-                };
-                let actual = {
-                    let mut buffer = Vec::with_capacity(double.header_len());
-                    VlanHeader::Double(double.clone()).write(&mut buffer).unwrap();
-                    buffer
-                };
-                assert_eq!(expected, actual);
             }
         }
     }

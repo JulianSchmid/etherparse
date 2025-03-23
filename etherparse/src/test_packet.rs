@@ -1,10 +1,11 @@
 use crate::*;
 use alloc::vec::Vec;
+use arrayvec::ArrayVec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {
     pub link: Option<LinkHeader>,
-    pub vlan: Option<VlanHeader>,
+    pub link_exts: ArrayVec<LinkExtHeader, 3>,
     pub net: Option<NetHeaders>,
     pub transport: Option<TransportHeader>,
 }
@@ -12,7 +13,12 @@ pub(crate) struct TestPacket {
 impl TestPacket {
     pub fn len(&self, payload: &[u8]) -> usize {
         self.link.as_ref().map_or(0, |x| x.header_len())
-            + self.vlan.as_ref().map_or(0, |x| x.header_len())
+            + self
+                .link_exts
+                .as_ref()
+                .iter()
+                .map(|x| x.header_len())
+                .sum::<usize>()
             + self.net.as_ref().map_or(0, |x| x.header_len())
             + self.transport.as_ref().map_or(0, |x| x.header_len())
             + payload.len()
@@ -23,8 +29,10 @@ impl TestPacket {
         if let Some(link) = &self.link {
             link.write(&mut result).unwrap();
         }
-        if let Some(vlan) = &self.vlan {
-            vlan.write(&mut result).unwrap();
+        for e in &self.link_exts {
+            match e {
+                LinkExtHeader::Vlan(s) => s.write(&mut result).unwrap(),
+            }
         }
         if let Some(net) = &self.net {
             match net {
@@ -49,22 +57,23 @@ impl TestPacket {
     }
 
     pub fn set_ether_type(&mut self, ether_type: EtherType) {
-        if let Some(vlan) = &mut self.vlan {
-            use VlanHeader::*;
-            match vlan {
-                Single(single) => {
-                    single.ether_type = ether_type;
-                }
-                Double(double) => {
-                    double.inner.ether_type = ether_type;
+        let mut next = ether_type;
+        for e in self.link_exts.iter_mut().rev() {
+            match e {
+                LinkExtHeader::Vlan(s) => {
+                    s.ether_type = next;
+                    if next == ether_type::VLAN_TAGGED_FRAME {
+                        next = ether_type::VLAN_DOUBLE_TAGGED_FRAME;
+                    } else {
+                        next = ether_type::VLAN_TAGGED_FRAME;
+                    }
                 }
             }
-        } else if let Some(link) = &mut self.link {
+        }
+        if let Some(link) = &mut self.link {
             match link {
-                LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = ether_type,
-                LinkHeader::LinuxSll(linux_sll) => {
-                    linux_sll.protocol_type.change_value(ether_type.0)
-                }
+                LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = next,
+                LinkHeader::LinuxSll(linux_sll) => linux_sll.protocol_type.change_value(next.0),
             }
         }
     }

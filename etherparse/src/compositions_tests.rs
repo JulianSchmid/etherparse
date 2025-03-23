@@ -2,12 +2,13 @@ use super::*;
 
 use crate::test_gens::*;
 use alloc::{vec, vec::Vec};
+use arrayvec::ArrayVec;
 use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ComponentTest {
     link: Option<LinkHeader>,
-    vlan: Option<VlanHeader>,
+    link_exts: ArrayVec<LinkExtHeader, 3>,
     net: Option<NetHeaders>,
     transport: Option<TransportHeader>,
     payload: Vec<u8>,
@@ -25,16 +26,21 @@ impl ComponentTest {
             match &self.link {
                 Some(header) => header.header_len(),
                 None => 0,
-            } + match &self.vlan {
-                Some(header) => header.header_len(),
-                None => 0,
-            } + match &self.net {
-                Some(headers) => headers.header_len(),
-                None => 0,
-            } + match &self.transport {
-                Some(header) => header.header_len(),
-                None => 0,
-            } + self.payload.len(),
+            } + self
+                .link_exts
+                .as_ref()
+                .iter()
+                .map(|v| v.header_len())
+                .sum::<usize>()
+                + match &self.net {
+                    Some(headers) => headers.header_len(),
+                    None => 0,
+                }
+                + match &self.transport {
+                    Some(header) => header.header_len(),
+                    None => 0,
+                }
+                + self.payload.len(),
         );
 
         //fill all the elements
@@ -42,11 +48,10 @@ impl ComponentTest {
             Some(header) => header.write(&mut buffer).unwrap(),
             None => {}
         }
-        use crate::VlanHeader::*;
-        match &self.vlan {
-            Some(Single(header)) => header.write(&mut buffer).unwrap(),
-            Some(Double(header)) => header.write(&mut buffer).unwrap(),
-            None => {}
+        for e in &self.link_exts {
+            match e {
+                LinkExtHeader::Vlan(s) => s.write(&mut buffer).unwrap(),
+            }
         }
         match &self.net {
             Some(NetHeaders::Ipv4(header, exts)) => {
@@ -185,7 +190,7 @@ impl ComponentTest {
             let ip_down = {
                 let mut ip_down = test.clone();
                 ip_down.link = None;
-                ip_down.vlan = None;
+                ip_down.link_exts.clear();
                 ip_down
             };
 
@@ -234,13 +239,10 @@ impl ComponentTest {
         if let Some(link) = self.link.as_ref() {
             builder.add(link.header_len());
         }
-        if let Some(vlan) = self.vlan.as_ref() {
-            use VlanHeader::*;
-            match vlan {
-                Single(single) => builder.add(single.header_len()),
-                Double(double) => {
-                    builder.add(double.outer.header_len());
-                    builder.add(double.inner.header_len());
+        for e in &self.link_exts {
+            match e {
+                LinkExtHeader::Vlan(s) => {
+                    builder.add(s.header_len());
                 }
             }
         }
@@ -288,7 +290,7 @@ impl ComponentTest {
 
     fn assert_headers(&self, actual: PacketHeaders) {
         assert_eq!(self.link, actual.link);
-        assert_eq!(self.vlan, actual.vlan);
+        assert_eq!(self.link_exts, actual.link_exts);
         assert_eq!(self.net, self.net);
         assert_eq!(self.transport, actual.transport);
         assert_eq!(self.payload[..], actual.payload.slice()[..]);
@@ -298,7 +300,7 @@ impl ComponentTest {
         //assert identity to touch the derives (code coverage hack)
         assert_eq!(result, result);
 
-        //ethernet & vlan
+        //ethernet & link extensions
         assert_eq!(
             self.link,
             match result.link.as_ref() {
@@ -310,8 +312,16 @@ impl ComponentTest {
                 },
                 None => None,
             }
-        ); //.unwrap_or(None).map(|ref x| x.to_header()));
-        assert_eq!(self.vlan, result.vlan.as_ref().map(|ref x| x.to_header()));
+        );
+        assert_eq!(
+            self.link_exts,
+            result
+                .link_exts
+                .as_ref()
+                .iter()
+                .map(|x| x.to_header())
+                .collect::<ArrayVec<LinkExtHeader, 3>>()
+        );
 
         //ip
         assert_eq!(self.net, {
@@ -384,7 +394,7 @@ impl ComponentTest {
                         }
                     );
                 } else {
-                    if let Some(vlan) = result.vlan.as_ref() {
+                    if let Some(vlan) = result.link_exts.last() {
                         assert_eq!(&self.payload[..], vlan.payload().payload);
                     } else {
                         if let Some(LinkSlice::Ethernet2(eth)) = result.link.as_ref() {
@@ -412,28 +422,34 @@ impl ComponentTest {
     ) {
         let setup_single = |ether_type: EtherType| -> ComponentTest {
             let mut result = self.clone();
-            result.vlan = Some(VlanHeader::Single({
-                let mut v = inner_vlan.clone();
-                v.ether_type = ether_type;
-                v
-            }));
+            result.link_exts = {
+                let mut exts = ArrayVec::new();
+                exts.push(LinkExtHeader::Vlan({
+                    let mut v = inner_vlan.clone();
+                    v.ether_type = ether_type;
+                    v
+                }));
+                exts
+            };
             result
         };
         let setup_double =
             |outer_ether_type: EtherType, inner_ether_type: EtherType| -> ComponentTest {
                 let mut result = self.clone();
-                result.vlan = Some(VlanHeader::Double(DoubleVlanHeader {
-                    outer: {
+                result.link_exts = {
+                    let mut exts = ArrayVec::new();
+                    exts.push(LinkExtHeader::Vlan({
                         let mut v = outer_vlan.clone();
                         v.ether_type = outer_ether_type;
                         v
-                    },
-                    inner: {
+                    }));
+                    exts.push(LinkExtHeader::Vlan({
                         let mut v = inner_vlan.clone();
                         v.ether_type = inner_ether_type;
                         v
-                    },
-                }));
+                    }));
+                    exts
+                };
                 result
             };
 
@@ -657,7 +673,7 @@ proptest! {
                     result.ether_type = ether_type;
                     LinkHeader::Ethernet2(result)
                 }),
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None
             }
@@ -682,7 +698,7 @@ proptest! {
 fn test_packet_slicing_panics() {
     let s = SlicedPacket {
         link: None,
-        vlan: None,
+        link_exts: ArrayVec::new_const(),
         net: None,
         transport: None,
     };
@@ -692,7 +708,7 @@ fn test_packet_slicing_panics() {
             destination: [0; 6],
             ether_type: 0.into(),
         })),
-        vlan: None,
+        link_exts: ArrayVec::new_const(),
         net: None,
         transport: None,
         payload: vec![],
