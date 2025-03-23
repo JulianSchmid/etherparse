@@ -76,6 +76,52 @@ mod test {
 
     proptest! {
         #[test]
+        fn payload(
+            outer in vlan_single_any(),
+            inner in vlan_single_any()
+        ) {
+            let payload = [1,2,3,4];
+
+            // single
+            {
+                let mut bytes = Vec::with_capacity(SingleVlanHeader::LEN + 4);
+                bytes.extend_from_slice(&outer.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let slice = VlanSlice::SingleVlan(
+                    SingleVlanSlice::from_slice(&bytes).unwrap()
+                );
+                assert_eq!(
+                    slice.payload(),
+                    EtherPayloadSlice{
+                        ether_type: outer.ether_type,
+                        payload: &payload,
+                    }
+                );
+            }
+
+            // double
+            {
+                let mut bytes = Vec::with_capacity(SingleVlanHeader::LEN + 4);
+                bytes.extend_from_slice(&outer.to_bytes());
+                bytes.extend_from_slice(&inner.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let slice = VlanSlice::DoubleVlan(DoubleVlanSlice{
+                    outer: SingleVlanSlice::from_slice(&bytes).unwrap(),
+                    inner: SingleVlanSlice::from_slice(&bytes[SingleVlanHeader::LEN..]).unwrap()
+                });
+                assert_eq!(
+                    slice.payload(),
+                    EtherPayloadSlice{
+                        ether_type: inner.ether_type,
+                        payload: &payload,
+                    }
+                );
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
         fn debug(
             single in vlan_single_any(),
             double in vlan_double_any(),
