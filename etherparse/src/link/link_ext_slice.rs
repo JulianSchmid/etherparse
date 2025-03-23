@@ -30,3 +30,70 @@ impl<'a> LinkExtSlice<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_gens::*;
+    use alloc::{format, vec::Vec};
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn debug_clone_eq(ref vlan in vlan_single_any()) {
+            let bytes = vlan.to_bytes();
+            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+            let slice = LinkExtSlice::Vlan(
+                e.clone()
+            );
+
+            // clone & eq
+            assert_eq!(slice.clone(), slice);
+
+            // debug
+            assert_eq!(
+                format!("{:?}", slice),
+                format!("Vlan({:?})", e),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(ref vlan in vlan_single_any()) {
+            let bytes = vlan.to_bytes();
+            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+            let slice = LinkExtSlice::Vlan(
+                e.clone()
+            );
+            assert_eq!(slice.header_len(), e.header_len());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn to_header(ref vlan in vlan_single_any()) {
+            let bytes = vlan.to_bytes();
+            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+            let slice = LinkExtSlice::Vlan(
+                e.clone()
+            );
+            assert_eq!(slice.to_header(), LinkExtHeader::Vlan(e.to_header()));
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn payload(ref vlan in vlan_single_any()) {
+            let payload = [1,2,3,4];
+            let mut bytes = Vec::with_capacity(SingleVlanHeader::LEN + 4);
+            bytes.extend_from_slice(&vlan.to_bytes());
+            bytes.extend_from_slice(&payload);
+            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+            let slice = LinkExtSlice::Vlan(
+                e.clone()
+            );
+            assert_eq!(slice.payload(), EtherPayloadSlice{ ether_type: vlan.ether_type, payload: &payload });
+        }
+    }
+}

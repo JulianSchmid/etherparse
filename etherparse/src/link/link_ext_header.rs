@@ -15,3 +15,35 @@ impl LinkExtHeader {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_gens::*;
+    use alloc::format;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn debug_clone_eq(ref vlan in vlan_single_any()) {
+            let header = LinkExtHeader::Vlan(vlan.clone());
+
+            // clone & eq
+            assert_eq!(header.clone(), header);
+
+            // debug
+            assert_eq!(
+                format!("{:?}", header),
+                format!("Vlan({:?})", vlan),
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(ref vlan in vlan_single_any()) {
+            let header = LinkExtHeader::Vlan(vlan.clone());
+            assert_eq!(header.header_len(), vlan.header_len());
+        }
+    }
+}
