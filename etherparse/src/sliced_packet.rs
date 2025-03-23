@@ -387,6 +387,8 @@ impl<'a> SlicedPacket<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::vec::Vec;
+
     use super::*;
     use crate::err::{packet::SliceError, Layer, LenError};
     use crate::test_gens::*;
@@ -819,6 +821,157 @@ mod test {
             assert!(SlicedPacket::from_ip(&buf)
                 .unwrap()
                 .is_ip_payload_fragmented());
+        }
+    }
+
+    #[test]
+    fn vlan_vlan_ids() {
+        // no content
+        assert_eq!(
+            SlicedPacket {
+                link: None,
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            }
+            .vlan(),
+            None
+        );
+        assert_eq!(
+            SlicedPacket {
+                link: None,
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            }
+            .vlan_ids(),
+            ArrayVec::<VlanId, 3>::new_const()
+        );
+
+        // single vlan header
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(SingleVlanHeader::LEN + 4);
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(1).unwrap(),
+                    ether_type: EtherType::WAKE_ON_LAN,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+
+            let slice = SlicedPacket::from_ether_type(ether_type::VLAN_TAGGED_FRAME, &buf).unwrap();
+
+            assert_eq!(
+                slice.vlan(),
+                Some(VlanSlice::SingleVlan(SingleVlanSlice { slice: &buf[..] }))
+            );
+            assert_eq!(slice.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids
+            });
+        }
+
+        // two vlan header
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(SingleVlanHeader::LEN * 2 + 4);
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(1).unwrap(),
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(2).unwrap(),
+                    ether_type: EtherType::WAKE_ON_LAN,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+
+            let slice =
+                SlicedPacket::from_ether_type(ether_type::VLAN_DOUBLE_TAGGED_FRAME, &buf).unwrap();
+
+            assert_eq!(
+                slice.vlan(),
+                Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                    outer: SingleVlanSlice { slice: &buf },
+                    inner: SingleVlanSlice {
+                        slice: &buf[SingleVlanHeader::LEN..]
+                    },
+                }))
+            );
+            assert_eq!(slice.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids
+            });
+        }
+
+        // three vlan header
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(SingleVlanHeader::LEN * 3 + 4);
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(1).unwrap(),
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(2).unwrap(),
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(3).unwrap(),
+                    ether_type: EtherType::WAKE_ON_LAN,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+
+            let slice =
+                SlicedPacket::from_ether_type(ether_type::VLAN_DOUBLE_TAGGED_FRAME, &buf).unwrap();
+
+            assert_eq!(
+                slice.vlan(),
+                Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                    outer: SingleVlanSlice { slice: &buf },
+                    inner: SingleVlanSlice {
+                        slice: &buf[SingleVlanHeader::LEN..]
+                    },
+                }))
+            );
+            assert_eq!(slice.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids.push(VlanId::try_new(3).unwrap());
+                ids
+            });
         }
     }
 

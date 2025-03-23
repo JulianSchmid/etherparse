@@ -361,6 +361,26 @@ impl<'a> PacketHeaders<'a> {
         Ok(result)
     }
 
+    /// Returns the first two VLAN headers.
+    pub fn vlan(&self) -> Option<VlanHeader> {
+        let mut result = None;
+        for ext in &self.link_exts {
+            match ext {
+                LinkExtHeader::Vlan(s) => {
+                    if let Some(outer) = result {
+                        return Some(VlanHeader::Double(DoubleVlanHeader {
+                            outer,
+                            inner: s.clone(),
+                        }));
+                    } else {
+                        result = Some(s.clone());
+                    }
+                }
+            }
+        }
+        result.map(VlanHeader::Single)
+    }
+
     /// Returns the VLAN ids present in this packet.
     pub fn vlan_ids(&self) -> ArrayVec<VlanId, { PacketHeaders::LINK_EXTS_CAP }> {
         let mut result = ArrayVec::<VlanId, { PacketHeaders::LINK_EXTS_CAP }>::new_const();
@@ -485,6 +505,142 @@ mod test {
             }),
         };
         assert_eq!(header.clone(), header);
+    }
+
+    #[test]
+    fn vlan_vlan_ids() {
+        // no content
+        {
+            let headers = PacketHeaders {
+                link: None,
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+                payload: PayloadSlice::Empty,
+            };
+            assert_eq!(headers.vlan(), None);
+            assert_eq!(headers.vlan_ids(), ArrayVec::<VlanId, 3>::new_const());
+        }
+
+        // single vlan header
+        {
+            let outer = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(1).unwrap(),
+                ether_type: EtherType::WAKE_ON_LAN,
+            };
+            let headers = PacketHeaders {
+                link: None,
+                link_exts: {
+                    let mut exts = ArrayVec::new_const();
+                    exts.push(LinkExtHeader::Vlan(outer.clone()));
+                    exts
+                },
+                net: None,
+                transport: None,
+                payload: PayloadSlice::Empty,
+            };
+
+            assert_eq!(headers.vlan(), Some(VlanHeader::Single(outer.clone())));
+            assert_eq!(headers.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids
+            });
+        }
+
+        // two vlan header
+        {
+            let outer = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(1).unwrap(),
+                ether_type: EtherType::VLAN_TAGGED_FRAME,
+            };
+            let inner = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(2).unwrap(),
+                ether_type: EtherType::WAKE_ON_LAN,
+            };
+            let headers = PacketHeaders {
+                link: None,
+                link_exts: {
+                    let mut exts = ArrayVec::new_const();
+                    exts.push(LinkExtHeader::Vlan(outer.clone()));
+                    exts.push(LinkExtHeader::Vlan(inner.clone()));
+                    exts
+                },
+                net: None,
+                transport: None,
+                payload: PayloadSlice::Empty,
+            };
+
+            assert_eq!(
+                headers.vlan(),
+                Some(VlanHeader::Double(DoubleVlanHeader {
+                    outer: outer.clone(),
+                    inner: inner.clone(),
+                }))
+            );
+            assert_eq!(headers.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids
+            });
+        }
+
+        // three vlan header
+        {
+            let vlan1 = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(1).unwrap(),
+                ether_type: EtherType::VLAN_TAGGED_FRAME,
+            };
+            let vlan2 = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(2).unwrap(),
+                ether_type: EtherType::WAKE_ON_LAN,
+            };
+            let vlan3 = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(3).unwrap(),
+                ether_type: EtherType::WAKE_ON_LAN,
+            };
+            let headers = PacketHeaders {
+                link: None,
+                link_exts: {
+                    let mut exts = ArrayVec::new_const();
+                    exts.push(LinkExtHeader::Vlan(vlan1.clone()));
+                    exts.push(LinkExtHeader::Vlan(vlan2.clone()));
+                    exts.push(LinkExtHeader::Vlan(vlan3.clone()));
+                    exts
+                },
+                net: None,
+                transport: None,
+                payload: PayloadSlice::Empty,
+            };
+
+            assert_eq!(
+                headers.vlan(),
+                Some(VlanHeader::Double(DoubleVlanHeader {
+                    outer: vlan1.clone(),
+                    inner: vlan2.clone(),
+                }))
+            );
+            assert_eq!(headers.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids.push(VlanId::try_new(3).unwrap());
+                ids
+            });
+        }
     }
 
     #[test]
