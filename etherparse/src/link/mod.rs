@@ -52,6 +52,24 @@ pub use linux_sll_protocol_type::*;
 mod linux_sll_slice;
 pub use linux_sll_slice::*;
 
+mod mac_sec_an;
+pub use mac_sec_an::*;
+
+mod mac_sec_header_slice;
+pub use mac_sec_header_slice::*;
+
+mod mac_sec_header;
+pub use mac_sec_header::*;
+
+mod mac_sec_payload_slice;
+pub use mac_sec_payload_slice::*;
+
+mod mac_sec_sl;
+pub use mac_sec_sl::*;
+
+mod mac_sec_slice;
+pub use mac_sec_slice::*;
+
 mod single_vlan_header;
 pub use single_vlan_header::*;
 
