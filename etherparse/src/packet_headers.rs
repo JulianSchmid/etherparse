@@ -196,6 +196,36 @@ impl<'a> PacketHeaders<'a> {
                         result.link_exts.push_unchecked(LinkExtHeader::Vlan(vlan));
                     }
                 }
+                MACSEC => {
+                    use err::macsec::HeaderSliceError as I;
+                    let macsec = match MacsecSlice::from_slice(rest) {
+                        Ok(v) => v,
+                        Err(I::Len(err)) => {
+                            return Err(Len(err.add_offset(slice.len() - rest.len())));
+                        }
+                        Err(I::Content(err)) => {
+                            return Err(Macsec(err));
+                        }
+                    };
+
+                    // SAFETY: Safe as the while loop condition verfies that there is space left.
+                    unsafe {
+                        result.link_exts.push_unchecked(LinkExtHeader::Macsec(macsec.header.to_header()));
+                    }
+
+                    use MacsecPayloadSlice::*;
+                    match macsec.payload {
+                        Unmodified(e) => {
+                            rest = e.payload;
+                            ether_type = e.ether_type;
+                            result.payload = PayloadSlice::Ether(e);
+                        },
+                        Modified(m) => {
+                            result.payload = PayloadSlice::MacsecMod(m);
+                            return Ok(result);
+                        },
+                    }
+                }
                 _ => {
                     break;
                 }

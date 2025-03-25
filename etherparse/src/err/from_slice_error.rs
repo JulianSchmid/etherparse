@@ -19,6 +19,9 @@ pub enum FromSliceError {
     /// Error while parsing a double vlan header.
     DoubleVlan(double_vlan::HeaderError),
 
+    /// Error when decoding MACsec header.
+    MacSec(macsec::HeaderError),
+
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
 
@@ -102,6 +105,7 @@ impl core::fmt::Display for FromSliceError {
             Len(err) => err.fmt(f),
             LinuxSll(err) => err.fmt(f),
             DoubleVlan(err) => err.fmt(f),
+            MacSec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
             Ipv4(err) => err.fmt(f),
@@ -116,16 +120,18 @@ impl core::fmt::Display for FromSliceError {
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for FromSliceError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use FromSliceError::*;
         match self {
-            FromSliceError::Len(err) => Some(err),
-            FromSliceError::LinuxSll(err) => Some(err),
-            FromSliceError::DoubleVlan(err) => Some(err),
-            FromSliceError::Ip(err) => Some(err),
-            FromSliceError::IpAuth(err) => Some(err),
-            FromSliceError::Ipv4(err) => Some(err),
-            FromSliceError::Ipv6(err) => Some(err),
-            FromSliceError::Ipv6Exts(err) => Some(err),
-            FromSliceError::Tcp(err) => Some(err),
+            Len(err) => Some(err),
+            LinuxSll(err) => Some(err),
+            DoubleVlan(err) => Some(err),
+            MacSec(err) => Some(err),
+            Ip(err) => Some(err),
+            IpAuth(err) => Some(err),
+            Ipv4(err) => Some(err),
+            Ipv6(err) => Some(err),
+            Ipv6Exts(err) => Some(err),
+            Tcp(err) => Some(err),
         }
     }
 }
@@ -314,6 +320,7 @@ impl From<packet::SliceError> for FromSliceError {
         match value {
             Len(err) => FromSliceError::Len(err),
             LinuxSll(err) => FromSliceError::LinuxSll(err),
+            Macsec(err) => FromSliceError::MacSec(err),
             Ip(err) => FromSliceError::Ip(err),
             Ipv4(err) => FromSliceError::Ipv4(err),
             Ipv6(err) => FromSliceError::Ipv6(err),

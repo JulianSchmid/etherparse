@@ -21,6 +21,9 @@ pub enum ReadError {
     /// Error while parsing a double vlan header.
     DoubleVlan(double_vlan::HeaderError),
 
+    /// Error when decoding MACsec header.
+    Macsec(macsec::HeaderError),
+
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
 
@@ -114,6 +117,7 @@ impl core::fmt::Display for ReadError {
             Io(err) => err.fmt(f),
             Len(err) => err.fmt(f),
             DoubleVlan(err) => err.fmt(f),
+            Macsec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
             Ipv4(err) => err.fmt(f),
@@ -129,17 +133,19 @@ impl core::fmt::Display for ReadError {
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use ReadError::*;
         match self {
-            ReadError::Io(err) => Some(err),
-            ReadError::Len(err) => Some(err),
-            ReadError::DoubleVlan(err) => Some(err),
-            ReadError::Ip(err) => Some(err),
-            ReadError::IpAuth(err) => Some(err),
-            ReadError::Ipv4(err) => Some(err),
-            ReadError::Ipv6(err) => Some(err),
-            ReadError::Ipv6Exts(err) => Some(err),
-            ReadError::LinuxSll(err) => Some(err),
-            ReadError::Tcp(err) => Some(err),
+            Io(err) => Some(err),
+            Len(err) => Some(err),
+            DoubleVlan(err) => Some(err),
+            Macsec(err) => Some(err),
+            Ip(err) => Some(err),
+            IpAuth(err) => Some(err),
+            Ipv4(err) => Some(err),
+            Ipv6(err) => Some(err),
+            Ipv6Exts(err) => Some(err),
+            LinuxSll(err) => Some(err),
+            Tcp(err) => Some(err),
         }
     }
 }
@@ -424,6 +430,7 @@ impl From<packet::SliceError> for ReadError {
         match value {
             Len(err) => ReadError::Len(err),
             LinuxSll(err) => ReadError::LinuxSll(err),
+            Macsec(err) => ReadError::Macsec(err),
             Ip(err) => ReadError::Ip(err),
             Ipv4(err) => ReadError::Ipv4(err),
             Ipv6(err) => ReadError::Ipv6(err),

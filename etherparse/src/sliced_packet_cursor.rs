@@ -101,6 +101,38 @@ impl<'a> SlicedPacketCursor<'a> {
                     self.slice_ether_type(next_ether_type)
                 }
             }
+            MACSEC => {
+                if self.result.link_exts.is_full() {
+                    Ok(self.result)
+                } else {
+                    let macsec = MacsecSlice::from_slice(self.slice)
+                        .map_err(|err| {
+                            use err::macsec::HeaderSliceError as I;
+                            use err::packet::SliceError as O;
+                            match err {
+                                I::Len(l) => O::Len(l.add_offset(self.offset)),
+                                I::Content(h) => O::Macsec(h),
+                            }
+                        })?;
+                    self.move_by(macsec.header.header_len());
+
+                    let next_ether_type = macsec.next_ether_type();
+
+                    // SAFETY: Safe, as the outer if verifies that there is still space in link_exts.
+                    unsafe {
+                        self.result
+                            .link_exts
+                            .push_unchecked(LinkExtSlice::Macsec(macsec));
+                    }
+
+                    // only continue if the payload is unencrypted
+                    if let Some(next_ether_type) = next_ether_type {
+                        self.slice_ether_type(next_ether_type)
+                    } else {
+                        Ok(self.result)
+                    }
+                }
+            }
             ARP => self.slice_arp(),
             IPV4 => self.slice_ipv4(),
             IPV6 => self.slice_ipv6(),
