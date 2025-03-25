@@ -230,16 +230,14 @@ impl<'a> LaxSlicedPacket<'a> {
     pub fn vlan(&self) -> Option<VlanSlice<'a>> {
         let mut result = None;
         for ext in &self.link_exts {
-            match ext {
-                LinkExtSlice::Vlan(s) => {
-                    if let Some(outer) = result {
-                        return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
-                            outer,
-                            inner: s.clone(),
-                        }));
-                    } else {
-                        result = Some(s.clone());
-                    }
+            if let LinkExtSlice::Vlan(s) = ext {
+                if let Some(outer) = result {
+                    return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                        outer,
+                        inner: s.clone(),
+                    }));
+                } else {
+                    result = Some(s.clone());
                 }
             }
         }
@@ -250,11 +248,11 @@ impl<'a> LaxSlicedPacket<'a> {
     pub fn vlan_ids(&self) -> ArrayVec<VlanId, { SlicedPacket::LINK_EXTS_CAP }> {
         let mut result = ArrayVec::<VlanId, { SlicedPacket::LINK_EXTS_CAP }>::new_const();
         for e in &self.link_exts {
-            match e {
+            if let LinkExtSlice::Vlan(s) = e {
                 // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
-                LinkExtSlice::Vlan(s) => unsafe {
+                unsafe {
                     result.push_unchecked(s.vlan_identifier());
-                },
+                }
             }
         }
         result
@@ -269,6 +267,7 @@ impl<'a> LaxSlicedPacket<'a> {
         if let Some(link_ext) = self.link_exts.last() {
             match link_ext {
                 LinkExtSlice::Vlan(vlan_slice) => Some(vlan_slice.payload()),
+                LinkExtSlice::Macsec(macsec_slice) => macsec_slice.ether_payload(),
             }
         } else if let Some(link) = self.link.as_ref() {
             match link {
@@ -1486,7 +1485,7 @@ mod test {
         expected_ip_err: Option<err::ip::LaxHeaderSliceError>,
         expected_stop_err: Option<(SliceError, Layer)>,
     ) {
-        fn compare_vlan(test: &TestPacket, data: &[u8], actual: &LaxSlicedPacket) {
+        fn compare_link_exts(test: &TestPacket, data: &[u8], actual: &LaxSlicedPacket) {
             let mut next_offset = if let Some(e) = test.link.as_ref() {
                 e.header_len()
             } else {
@@ -1499,6 +1498,14 @@ mod test {
                         if data.len() >= next_offset + s.header_len() {
                             expected.push(e.clone());
                             next_offset += s.header_len();
+                        } else {
+                            break;
+                        }
+                    }
+                    LinkExtHeader::Macsec(m) => {
+                        if data.len() >= next_offset + m.header_len() {
+                            expected.push(e.clone());
+                            next_offset += m.header_len();
                         } else {
                             break;
                         }
@@ -1618,7 +1625,7 @@ mod test {
                             test.link,
                             actual.link.as_ref().map(|v| v.to_header()).flatten()
                         );
-                        compare_vlan(test, data, &actual);
+                        compare_link_exts(test, data, &actual);
                         compare_ip(test, &actual);
                         compare_transport(
                             test,
@@ -1632,7 +1639,7 @@ mod test {
                             test.link,
                             actual.link.as_ref().map(|v| v.to_header()).flatten()
                         );
-                        compare_vlan(test, data, &actual);
+                        compare_link_exts(test, data, &actual);
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                     }
@@ -1641,7 +1648,7 @@ mod test {
                             test.link,
                             actual.link.as_ref().map(|v| v.to_header()).flatten()
                         );
-                        compare_vlan(test, data, &actual);
+                        compare_link_exts(test, data, &actual);
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                     }
@@ -1655,7 +1662,7 @@ mod test {
                             test.link,
                             actual.link.as_ref().map(|v| v.to_header()).flatten()
                         );
-                        compare_vlan(test, data, &actual);
+                        compare_link_exts(test, data, &actual);
                         compare_ip_header_only(test, &actual);
                         assert_eq!(None, actual.transport);
                     }
@@ -1667,7 +1674,7 @@ mod test {
                             test.link,
                             actual.link.as_ref().map(|v| v.to_header()).flatten()
                         );
-                        compare_vlan(test, data, &actual);
+                        compare_link_exts(test, data, &actual);
                         compare_ip(test, &actual);
                         assert_eq!(None, actual.transport);
                     }
@@ -1687,7 +1694,7 @@ mod test {
                     })),
                     actual.link
                 );
-                compare_vlan(test, data, &actual);
+                compare_link_exts(test, data, &actual);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {
                         compare_ip(test, &actual);

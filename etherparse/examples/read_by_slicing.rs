@@ -64,6 +64,7 @@ fn main() {
             for link_ext in &value.link_exts {
                 match link_ext {
                     Vlan(s) => println!("  Vlan {:?}", s.vlan_identifier()),
+                    Macsec(m) => println!("  Macsec {:?}", m.header.ptype()),
                 }
             }
 

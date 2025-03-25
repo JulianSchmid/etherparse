@@ -265,6 +265,7 @@ impl<'a> SlicedPacket<'a> {
             use LinkExtSlice::*;
             match last_ext {
                 Vlan(single_vlan_slice) => Some(single_vlan_slice.ether_type()),
+                Macsec(macsec_slice) => macsec_slice.next_ether_type(),
             }
         } else if let Some(link) = &self.link {
             use LinkSlice::*;
@@ -300,6 +301,7 @@ impl<'a> SlicedPacket<'a> {
         if let Some(last_ext) = self.link_exts.last() {
             match last_ext {
                 LinkExtSlice::Vlan(s) => Some(s.payload()),
+                LinkExtSlice::Macsec(s) => s.ether_payload(),
             }
         } else if let Some(link) = self.link.as_ref() {
             match link {
@@ -354,16 +356,14 @@ impl<'a> SlicedPacket<'a> {
     pub fn vlan(&self) -> Option<VlanSlice<'a>> {
         let mut result = None;
         for ext in &self.link_exts {
-            match ext {
-                LinkExtSlice::Vlan(vlan_slice) => {
-                    if let Some(outer) = result {
-                        return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
-                            outer,
-                            inner: vlan_slice.clone(),
-                        }));
-                    } else {
-                        result = Some(vlan_slice.clone());
-                    }
+            if let LinkExtSlice::Vlan(vlan_slice) = ext {
+                if let Some(outer) = result {
+                    return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                        outer,
+                        inner: vlan_slice.clone(),
+                    }));
+                } else {
+                    result = Some(vlan_slice.clone());
                 }
             }
         }
@@ -374,11 +374,11 @@ impl<'a> SlicedPacket<'a> {
     pub fn vlan_ids(&self) -> ArrayVec<VlanId, { SlicedPacket::LINK_EXTS_CAP }> {
         let mut result = ArrayVec::<VlanId, { SlicedPacket::LINK_EXTS_CAP }>::new_const();
         for e in &self.link_exts {
-            match e {
-                // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
-                LinkExtSlice::Vlan(s) => unsafe {
+            // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
+            if let LinkExtSlice::Vlan(s) = e {
+                unsafe {
                     result.push_unchecked(s.vlan_identifier());
-                },
+                }
             }
         }
         result

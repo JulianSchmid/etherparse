@@ -5,16 +5,16 @@ use crate::{
 
 /// Slice containing a MACsec header & next ether type (if possible).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct MacSecHeaderSlice<'a> {
+pub struct MacsecHeaderSlice<'a> {
     slice: &'a [u8],
 }
 
-impl<'a> MacSecHeaderSlice<'a> {
+impl<'a> MacsecHeaderSlice<'a> {
     /// Try creating a [`MacSecHeaderSlice`] from a slice containing the
     /// MACsec header & next ether type.
     pub fn from_slice(
         slice: &'a [u8],
-    ) -> Result<MacSecHeaderSlice<'a>, err::macsec::HeaderSliceError> {
+    ) -> Result<MacsecHeaderSlice<'a>, err::macsec::HeaderSliceError> {
         use err::macsec::{HeaderError::*, HeaderSliceError::*};
 
         if slice.len() < 6 {
@@ -50,7 +50,7 @@ impl<'a> MacSecHeaderSlice<'a> {
             }));
         }
 
-        Ok(MacSecHeaderSlice {
+        Ok(MacsecHeaderSlice {
             // SAFETY: Safe as the length was previously verfied to be at least required_len.
             slice: unsafe { core::slice::from_raw_parts(slice.as_ptr(), required_len) },
         })
@@ -100,28 +100,36 @@ impl<'a> MacSecHeaderSlice<'a> {
         0 != (self.tci_an_raw() & 0b100)
     }
 
+    /// True if the payload was neither flagged as modified or encrypted.
+    #[inline]
+    pub fn is_unmodified(&self) -> bool {
+        // SAFETY: Slice access safe as length of the slice was
+        //         verified in the constructor to be at least 6.
+        0 == (self.tci_an_raw() & 0b1100)
+    }
+
     /// Payload type (contains encryption, modifidcation flag as
     /// well as the next ether type if available)
     #[inline]
-    pub fn ptype(&self) -> MacSecPType {
+    pub fn ptype(&self) -> MacsecPType {
         let e = self.encrypted();
         let c = self.userdata_changed();
         if e {
             if c {
-                MacSecPType::Encrypted
+                MacsecPType::Encrypted
             } else {
-                MacSecPType::EncryptedUnmodified
+                MacsecPType::EncryptedUnmodified
             }
         } else {
             if c {
-                MacSecPType::Modified
+                MacsecPType::Modified
             } else {
                 if 0 != (self.tci_an_raw() & 0b10_0000) {
                     // SAFETY: Slice access safe as length of the slice was
                     //         verified in the constructor to be at least 16
                     //         if 0b10_0000 is set and and 'c' and 'e' are not
                     //         set in the tci_an_raw.
-                    MacSecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                    MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
                         [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
                     })))
                 } else {
@@ -129,7 +137,7 @@ impl<'a> MacSecHeaderSlice<'a> {
                     //         verified in the constructor to be at least 8
                     //         if 0b10_0000 is not set and 'c' and 'e' are not
                     //         set in the tci_an_raw.
-                    MacSecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                    MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
                         [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
                     })))
                 }
@@ -139,20 +147,20 @@ impl<'a> MacSecHeaderSlice<'a> {
 
     /// Association number (identifes SAs).
     #[inline]
-    pub fn an(&self) -> MacSecAn {
+    pub fn an(&self) -> MacsecAn {
         // SAFETY: MacSecAn conversion safe as bitmasked to only
         //         contain 2 bits.
-        unsafe { MacSecAn::new_unchecked(self.tci_an_raw() & 0b11) }
+        unsafe { MacsecAn::new_unchecked(self.tci_an_raw() & 0b11) }
     }
 
     /// Short length with reserved bits.
     #[inline]
-    pub fn short_length(&self) -> MacSecShortLen {
+    pub fn short_length(&self) -> MacsecShortLen {
         // SAFETY: Slice access safe as length of the slice was
         //         verified in the constructor to be at least 6.
         //         MacSecSl conversion safe as bitmasked to contain
         //         only 6 bits.
-        unsafe { MacSecShortLen::new_unchecked(self.slice.get_unchecked(1) & 0b0011_1111) }
+        unsafe { MacsecShortLen::new_unchecked(self.slice.get_unchecked(1) & 0b0011_1111) }
     }
 
     /// Packet number.
@@ -171,10 +179,16 @@ impl<'a> MacSecHeaderSlice<'a> {
         })
     }
 
+    /// True if the SCI bit is set in the TCI part of the SecTag header.
+    #[inline]
+    pub fn sci_present(&self) -> bool {
+        0 != (self.tci_an_raw() & 0b10_0000)
+    }
+
     /// Secure channel identifier.
     #[inline]
     pub fn sci(&self) -> Option<u64> {
-        if 0 != (self.tci_an_raw() & 0b10_0000) {
+        if self.sci_present() {
             // SAFETY: Slice access safe as length of the slice was
             //         verified in the constructor to be at least 14
             //         if 0b10_0000 is set in the tci_an_raw.
@@ -203,7 +217,7 @@ impl<'a> MacSecHeaderSlice<'a> {
         if 0 != self.tci_an_raw() & 0b1100 {
             None
         } else {
-            if 0 != (self.tci_an_raw() & 0b10_0000) {
+            if self.sci_present() {
                 // SAFETY: Slice access safe as length of the slice was
                 //         verified in the constructor to be at least 16
                 //         if 0b10_0000 is set and 0b1100 is not set in
@@ -223,11 +237,17 @@ impl<'a> MacSecHeaderSlice<'a> {
         }
     }
 
+    /// Length of the MACsec header (SecTag + next ether type if available).
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        6 + if self.sci_present() { 8 } else { 0 } + if self.is_unmodified() { 2 } else { 0 }
+    }
+
     /// Decodes all MacSecHeader values and returns them as a
     /// [`crate::MacSecHeader`].
     #[inline]
-    pub fn to_header(&self) -> MacSecHeader {
-        MacSecHeader {
+    pub fn to_header(&self) -> MacsecHeader {
+        MacsecHeader {
             ptype: self.ptype(),
             endstation_id: self.endstation_id(),
             scb: self.tci_scb(),

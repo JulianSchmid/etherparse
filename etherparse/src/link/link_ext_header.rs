@@ -1,10 +1,13 @@
-use super::SingleVlanHeader;
+use super::*;
 
 /// The possible headers on the link layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkExtHeader {
     /// VLAN header.
     Vlan(SingleVlanHeader),
+
+    /// MACsec header (SecTag + next ether type if available).
+    Macsec(MacsecHeader),
 }
 
 impl LinkExtHeader {
@@ -12,6 +15,7 @@ impl LinkExtHeader {
     pub fn header_len(&self) -> usize {
         match self {
             LinkExtHeader::Vlan(s) => s.header_len(),
+            LinkExtHeader::Macsec(m) => m.header_len(),
         }
     }
 }

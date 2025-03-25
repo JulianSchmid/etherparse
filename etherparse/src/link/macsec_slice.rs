@@ -3,18 +3,18 @@ use crate::{
     *,
 };
 
-///
+/// MACsec packet (SecTag header & payload).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MacSecSlice<'a> {
-    pub header: MacSecHeaderSlice<'a>,
-    pub payload: MacSecPayloadSlice<'a>,
+pub struct MacsecSlice<'a> {
+    pub header: MacsecHeaderSlice<'a>,
+    pub payload: MacsecPayloadSlice<'a>,
 }
 
-impl<'a> MacSecSlice<'a> {
-    pub fn from_slice(slice: &'a [u8]) -> Result<MacSecSlice<'a>, macsec::HeaderSliceError> {
+impl<'a> MacsecSlice<'a> {
+    pub fn from_slice(slice: &'a [u8]) -> Result<MacsecSlice<'a>, macsec::HeaderSliceError> {
         use macsec::HeaderSliceError::Len;
 
-        let header = MacSecHeaderSlice::from_slice(slice)?;
+        let header = MacsecHeaderSlice::from_slice(slice)?;
 
         // validate the length of the slice if the short length is set
         let payload_slice = if header.short_length().value() > 0 {
@@ -23,7 +23,7 @@ impl<'a> MacSecSlice<'a> {
                 return Err(Len(LenError {
                     required_len,
                     len: slice.len(),
-                    len_source: LenSource::MacSecShortLength,
+                    len_source: LenSource::MacsecShortLength,
                     layer: Layer::MacSecPacket,
                     layer_start_offset: 0,
                 }));
@@ -41,14 +41,28 @@ impl<'a> MacSecSlice<'a> {
         };
 
         let payload = if let Some(ether_type) = header.next_ether_type() {
-            MacSecPayloadSlice::Unmodified(EtherPayloadSlice {
+            MacsecPayloadSlice::Unmodified(EtherPayloadSlice {
                 ether_type,
                 payload: payload_slice,
             })
         } else {
-            MacSecPayloadSlice::Modified(payload_slice)
+            MacsecPayloadSlice::Modified(payload_slice)
         };
 
-        Ok(MacSecSlice { header, payload })
+        Ok(MacsecSlice { header, payload })
+    }
+
+    /// Get the ether payload if the macsec packet is unencrypted & unmodified.
+    pub fn ether_payload(&self) -> Option<EtherPayloadSlice<'a>> {
+        if let MacsecPayloadSlice::Unmodified(e) = &self.payload {
+            Some(e.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Get the ether type of the payload if the macsec packet is unencrypted & unmodified.
+    pub fn next_ether_type(&self) -> Option<EtherType> {
+        self.header.next_ether_type()
     }
 }

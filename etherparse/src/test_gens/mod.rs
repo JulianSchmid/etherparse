@@ -229,18 +229,18 @@ prop_compose! {
 prop_compose! {
     pub fn mac_sec_an_any()(
         an in 0u8..=0b11,
-    ) -> MacSecAn
+    ) -> MacsecAn
     {
-        MacSecAn::try_from(an).unwrap()
+        MacsecAn::try_from(an).unwrap()
     }
 }
 
 prop_compose! {
     pub fn mac_sec_short_len_any()(
         sl in 0u8..=0b0011_1111,
-    ) -> MacSecShortLen
+    ) -> MacsecShortLen
     {
-        MacSecShortLen::try_from(sl).unwrap()
+        MacsecShortLen::try_from(sl).unwrap()
     }
 }
 
@@ -256,20 +256,20 @@ prop_compose! {
         sci_present in any::<bool>(),
         sci in any::<u64>(),
         next_ether_type in ether_type_any()
-    ) -> MacSecHeader
+    ) -> MacsecHeader
     {
-        MacSecHeader {
+        MacsecHeader {
             ptype: if encrypted {
                 if userdata_changed {
-                    MacSecPType::Encrypted
+                    MacsecPType::Encrypted
                 } else {
-                    MacSecPType::EncryptedUnmodified
+                    MacsecPType::EncryptedUnmodified
                 }
             } else {
                 if userdata_changed {
-                    MacSecPType::Modified
+                    MacsecPType::Modified
                 } else {
-                    MacSecPType::Unmodified(next_ether_type)
+                    MacsecPType::Unmodified(next_ether_type)
                 }
             },
             endstation_id,

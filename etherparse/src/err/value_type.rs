@@ -7,9 +7,9 @@ pub enum ValueType {
     /// VLAN PCP (Priority Code Point) field in a [`crate::SingleVlanHeader`].
     VlanPcp,
     /// MACsec association number (present in the [`crate::MacSecHeader`]).
-    MacSecAn,
+    MacsecAn,
     /// MACsec short length (present in the [`crate::MacSecHeader`]).
-    MacSecSl,
+    MacsecShortLen,
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.
     IpFragmentOffset,
@@ -51,8 +51,8 @@ impl core::fmt::Display for ValueType {
         match self {
             VlanId => write!(f, "VLAN ID"),
             VlanPcp => write!(f, "VLAN PCP (Priority Code Point)"),
-            MacSecAn => write!(f, "MACsec AN (Association Number)"),
-            MacSecSl => write!(f, "MACsec SL (Short Length)"),
+            MacsecAn => write!(f, "MACsec AN (Association Number)"),
+            MacsecShortLen => write!(f, "MACsec SL (Short Length)"),
             IpFragmentOffset => write!(f, "IP Fragment Offset"),
             Ipv4Dscp => write!(f, "IPv4 DSCP (Differentiated Services Code Point)"),
             Ipv4Ecn => write!(f, "IPv4 ECN (Explicit Congestion Notification)"),
@@ -97,8 +97,8 @@ mod test {
 
         assert_eq!("VLAN ID", &format!("{}", VlanId));
         assert_eq!("VLAN PCP (Priority Code Point)", &format!("{}", VlanPcp));
-        assert_eq!("MACsec AN (Association Number)", &format!("{}", MacSecAn));
-        assert_eq!("MACsec SL (Short Length)", &format!("{}", MacSecSl));
+        assert_eq!("MACsec AN (Association Number)", &format!("{}", MacsecAn));
+        assert_eq!("MACsec SL (Short Length)", &format!("{}", MacsecShortLen));
         assert_eq!("IP Fragment Offset", &format!("{}", IpFragmentOffset));
         assert_eq!(
             "IPv4 DSCP (Differentiated Services Code Point)",

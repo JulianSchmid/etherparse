@@ -32,6 +32,7 @@ impl TestPacket {
         for e in &self.link_exts {
             match e {
                 LinkExtHeader::Vlan(s) => s.write(&mut result).unwrap(),
+                LinkExtHeader::Macsec(m) => m.write(&mut result).unwrap(),
             }
         }
         if let Some(net) = &self.net {
@@ -67,6 +68,10 @@ impl TestPacket {
                     } else {
                         next = ether_type::VLAN_TAGGED_FRAME;
                     }
+                }
+                LinkExtHeader::Macsec(m) => {
+                    m.ptype = MacsecPType::Unmodified(next);
+                    next = ether_type::MACSEC;
                 }
             }
         }

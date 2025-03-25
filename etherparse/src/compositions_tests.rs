@@ -51,6 +51,7 @@ impl ComponentTest {
         for e in &self.link_exts {
             match e {
                 LinkExtHeader::Vlan(s) => s.write(&mut buffer).unwrap(),
+                LinkExtHeader::Macsec(m) => m.write(&mut buffer).unwrap(),
             }
         }
         match &self.net {
@@ -244,6 +245,9 @@ impl ComponentTest {
                 LinkExtHeader::Vlan(s) => {
                     builder.add(s.header_len());
                 }
+                LinkExtHeader::Macsec(m) => {
+                    builder.add(m.header_len());
+                }
             }
         }
         if let Some(net) = self.net.as_ref() {
@@ -394,8 +398,10 @@ impl ComponentTest {
                         }
                     );
                 } else {
-                    if let Some(vlan) = result.link_exts.last() {
-                        assert_eq!(&self.payload[..], vlan.payload().payload);
+                    if let Some(ext) = result.link_exts.last() {
+                        if let Some(p) = ext.payload() {
+                            assert_eq!(&self.payload[..], p.payload);
+                        }
                     } else {
                         if let Some(LinkSlice::Ethernet2(eth)) = result.link.as_ref() {
                             assert_eq!(&self.payload[..], eth.payload().payload);

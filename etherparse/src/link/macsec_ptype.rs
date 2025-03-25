@@ -4,7 +4,7 @@ use super::EtherType;
 /// of a mac sec packet including the next ether type if
 /// the payload is unencrypted & unmodified.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub enum MacSecPType {
+pub enum MacsecPType {
     /// Unencrypted & unmodified (`!tci.c && !tci.e`) containing
     /// the ether type of the after the mac sec.
     Unmodified(EtherType),

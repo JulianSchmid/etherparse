@@ -6,6 +6,9 @@ use crate::*;
 pub enum LinkExtSlice<'a> {
     /// Slice containing a VLAN header & payload.
     Vlan(SingleVlanSlice<'a>),
+
+    /// Slice containing MACsec heaer & payload.
+    Macsec(MacsecSlice<'a>),
 }
 
 impl<'a> LinkExtSlice<'a> {
@@ -13,6 +16,7 @@ impl<'a> LinkExtSlice<'a> {
     pub fn header_len(&self) -> usize {
         match self {
             LinkExtSlice::Vlan(s) => s.header_len(),
+            LinkExtSlice::Macsec(m) => m.header.header_len(),
         }
     }
 
@@ -20,13 +24,21 @@ impl<'a> LinkExtSlice<'a> {
     pub fn to_header(&self) -> LinkExtHeader {
         match self {
             LinkExtSlice::Vlan(s) => LinkExtHeader::Vlan(s.to_header()),
+            LinkExtSlice::Macsec(m) => LinkExtHeader::Macsec(m.header.to_header()),
         }
     }
 
     /// Return the payload of the link extensions.
-    pub fn payload(&self) -> EtherPayloadSlice<'a> {
+    pub fn payload(&self) -> Option<EtherPayloadSlice<'a>> {
         match self {
-            LinkExtSlice::Vlan(s) => s.payload(),
+            LinkExtSlice::Vlan(s) => Some(s.payload()),
+            LinkExtSlice::Macsec(m) => {
+                if let MacsecPayloadSlice::Unmodified(p) = &m.payload {
+                    Some(p.clone())
+                } else {
+                    None
+                }
+            }
         }
     }
 }
@@ -93,7 +105,7 @@ mod tests {
             let slice = LinkExtSlice::Vlan(
                 e.clone()
             );
-            assert_eq!(slice.payload(), EtherPayloadSlice{ ether_type: vlan.ether_type, payload: &payload });
+            assert_eq!(slice.payload(), Some(EtherPayloadSlice{ ether_type: vlan.ether_type, payload: &payload }));
         }
     }
 }

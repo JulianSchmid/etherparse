@@ -78,7 +78,7 @@ impl core::fmt::Display for LenError {
             use LenSource::*;
             match self.len_source {
                 Slice => "slice length",
-                MacSecShortLength => {
+                MacsecShortLength => {
                     "length calculated from the MACsec header 'short length' field"
                 }
                 Ipv4HeaderTotalLen => "length calculated from the IPv4 header 'total length' field",

@@ -4,10 +4,10 @@ use arrayvec::ArrayVec;
 /// MACsec SecTag header (present at the start of a
 /// packet capsuled with MACsec).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MacSecHeader {
+pub struct MacsecHeader {
     /// Payload type (contains encryption, modifidcation flag as
     /// well as the next ether type if available)
-    pub ptype: MacSecPType,
+    pub ptype: MacsecPType,
 
     /// End station identifier (TCI.ES flag).
     pub endstation_id: bool,
@@ -16,10 +16,10 @@ pub struct MacSecHeader {
     pub scb: bool,
 
     /// Association number (identifes SAs).
-    pub an: MacSecAn,
+    pub an: MacsecAn,
 
     /// Short length with reserved bits.
-    pub short_len: MacSecShortLen,
+    pub short_len: MacsecShortLen,
 
     /// Packet number.
     pub packet_nr: u32,
@@ -28,7 +28,7 @@ pub struct MacSecHeader {
     pub sci: Option<u64>,
 }
 
-impl MacSecHeader {
+impl MacsecHeader {
     /// Minimum length of an MacSec header in bytes/octets.
     pub const MIN_LEN: usize = 6;
 
@@ -39,19 +39,19 @@ impl MacSecHeader {
     /// encryped (true = encrypted, TCI.E flag).
     #[inline]
     pub fn encrypted(&self) -> bool {
-        use MacSecPType::*;
+        use MacsecPType::*;
         matches!(self.ptype, Encrypted | EncryptedUnmodified)
     }
 
     /// Flag for change text, set if the user data is modified.
     pub fn userdata_changed(&self) -> bool {
-        use MacSecPType::*;
+        use MacsecPType::*;
         matches!(self.ptype, Encrypted | Modified)
     }
 
     /// Ether type of the data following the mac sec tag.
     pub fn next_ether_type(&self) -> Option<EtherType> {
-        if let MacSecPType::Unmodified(re) = self.ptype {
+        if let MacsecPType::Unmodified(re) = self.ptype {
             Some(re)
         } else {
             None
@@ -60,12 +60,12 @@ impl MacSecHeader {
 
     /// Try creating a [`MacSecHeaderSlice`] from a slice containing the
     /// MACsec header & next ether type.
-    pub fn from_slice(slice: &[u8]) -> Result<MacSecHeader, err::macsec::HeaderSliceError> {
-        MacSecHeaderSlice::from_slice(slice).map(|v| v.to_header())
+    pub fn from_slice(slice: &[u8]) -> Result<MacsecHeader, err::macsec::HeaderSliceError> {
+        MacsecHeaderSlice::from_slice(slice).map(|v| v.to_header())
     }
 
     /// Serialize the mac sec header.
-    pub fn to_bytes(&self) -> ArrayVec<u8, { MacSecHeader::MAX_LEN }> {
+    pub fn to_bytes(&self) -> ArrayVec<u8, { MacsecHeader::MAX_LEN }> {
         // tci-an is composed of:
         //       ---------------------------------------
         //       | v | es | sc | scp | e | c | an | an |
@@ -87,13 +87,13 @@ impl MacSecHeader {
             | if self.endstation_id { 0b100_0000 } else { 0 };
         let pn_be = self.packet_nr.to_be_bytes();
         let sci_be = self.sci.unwrap_or(0).to_be_bytes();
-        let et_be = if let MacSecPType::Unmodified(e) = self.ptype {
+        let et_be = if let MacsecPType::Unmodified(e) = self.ptype {
             e.0
         } else {
             0
         }
         .to_be_bytes();
-        let mut result: ArrayVec<u8, { MacSecHeader::MAX_LEN }> = if self.sci.is_some() {
+        let mut result: ArrayVec<u8, { MacsecHeader::MAX_LEN }> = if self.sci.is_some() {
             [
                 tci_an,
                 self.short_len.value() & 0b0011_1111,
@@ -137,7 +137,7 @@ impl MacSecHeader {
         unsafe {
             result.set_len(
                 6 + if self.sci.is_some() { 8 } else { 0 }
-                    + if matches!(self.ptype, MacSecPType::Unmodified(_)) {
+                    + if matches!(self.ptype, MacsecPType::Unmodified(_)) {
                         2
                     } else {
                         0
@@ -145,6 +145,25 @@ impl MacSecHeader {
             );
         }
         result
+    }
+
+    /// Writes a given MACsec header to the current position (SecTag & next
+    /// ether type if available).
+    #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
+        writer.write_all(&self.to_bytes())
+    }
+
+    /// Length of the MACsec header (SecTag + next ether type if available).
+    #[inline]
+    pub fn header_len(&self) -> usize {
+        6 + if self.sci.is_some() { 8 } else { 0 }
+            + if matches!(self.ptype, MacsecPType::Unmodified(_)) {
+                2
+            } else {
+                0
+            }
     }
 }
 
@@ -160,7 +179,7 @@ mod test {
             header in mac_sec_any()
         ) {
             let bytes = header.to_bytes();
-            let actual = MacSecHeader::from_slice(&bytes);
+            let actual = MacsecHeader::from_slice(&bytes);
             assert_eq!(actual, Ok(header.clone()));
         }
     }

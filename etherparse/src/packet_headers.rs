@@ -365,16 +365,14 @@ impl<'a> PacketHeaders<'a> {
     pub fn vlan(&self) -> Option<VlanHeader> {
         let mut result = None;
         for ext in &self.link_exts {
-            match ext {
-                LinkExtHeader::Vlan(s) => {
-                    if let Some(outer) = result {
-                        return Some(VlanHeader::Double(DoubleVlanHeader {
-                            outer,
-                            inner: s.clone(),
-                        }));
-                    } else {
-                        result = Some(s.clone());
-                    }
+            if let LinkExtHeader::Vlan(s) = ext {
+                if let Some(outer) = result {
+                    return Some(VlanHeader::Double(DoubleVlanHeader {
+                        outer,
+                        inner: s.clone(),
+                    }));
+                } else {
+                    result = Some(s.clone());
                 }
             }
         }
@@ -385,11 +383,11 @@ impl<'a> PacketHeaders<'a> {
     pub fn vlan_ids(&self) -> ArrayVec<VlanId, { PacketHeaders::LINK_EXTS_CAP }> {
         let mut result = ArrayVec::<VlanId, { PacketHeaders::LINK_EXTS_CAP }>::new_const();
         for e in &self.link_exts {
-            match e {
+            if let LinkExtHeader::Vlan(s) = e {
                 // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
-                LinkExtHeader::Vlan(s) => unsafe {
+                unsafe {
                     result.push_unchecked(s.vlan_id);
-                },
+                }
             }
         }
         result

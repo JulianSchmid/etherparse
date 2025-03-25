@@ -5,7 +5,7 @@ pub enum LenSource {
     /// that one originally).
     Slice,
     /// Short length field in the MACsec header.
-    MacSecShortLength,
+    MacsecShortLength,
     /// Length
     Ipv4HeaderTotalLen,
     /// Error occurred in the IPv6 layer.
