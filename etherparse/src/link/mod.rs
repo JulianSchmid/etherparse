@@ -64,11 +64,14 @@ pub use mac_sec_header::*;
 mod mac_sec_payload_slice;
 pub use mac_sec_payload_slice::*;
 
-mod mac_sec_sl;
-pub use mac_sec_sl::*;
+mod mac_sec_short_len;
+pub use mac_sec_short_len::*;
 
 mod mac_sec_slice;
 pub use mac_sec_slice::*;
+
+mod mac_sec_ptype;
+pub use mac_sec_ptype::*;
 
 mod single_vlan_header;
 pub use single_vlan_header::*;

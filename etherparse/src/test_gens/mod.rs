@@ -227,6 +227,66 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn mac_sec_an_any()(
+        an in 0u8..=0b11,
+    ) -> MacSecAn
+    {
+        MacSecAn::try_from(an).unwrap()
+    }
+}
+
+prop_compose! {
+    pub fn mac_sec_short_len_any()(
+        sl in 0u8..=0b0011_1111,
+    ) -> MacSecShortLen
+    {
+        MacSecShortLen::try_from(sl).unwrap()
+    }
+}
+
+prop_compose! {
+    pub fn mac_sec_any()(
+        endstation_id in any::<bool>(),
+        scb in any::<bool>(),
+        encrypted in any::<bool>(),
+        userdata_changed in any::<bool>(),
+        an in mac_sec_an_any(),
+        short_len in mac_sec_short_len_any(),
+        packet_nr in any::<u32>(),
+        sci_present in any::<bool>(),
+        sci in any::<u64>(),
+        next_ether_type in ether_type_any()
+    ) -> MacSecHeader
+    {
+        MacSecHeader {
+            ptype: if encrypted {
+                if userdata_changed {
+                    MacSecPType::Encrypted
+                } else {
+                    MacSecPType::EncryptedUnmodified
+                }
+            } else {
+                if userdata_changed {
+                    MacSecPType::Modified
+                } else {
+                    MacSecPType::Unmodified(next_ether_type)
+                }
+            },
+            endstation_id,
+            scb,
+            an,
+            short_len,
+            packet_nr,
+            sci: if sci_present {
+                Some(sci)
+            } else {
+                None
+            },
+        }
+    }
+}
+
+prop_compose! {
     pub fn arp_packet_any()
     (
         hw_addr_size in any::<u8>(),

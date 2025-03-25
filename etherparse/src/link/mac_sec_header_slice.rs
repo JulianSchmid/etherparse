@@ -100,6 +100,43 @@ impl<'a> MacSecHeaderSlice<'a> {
         0 != (self.tci_an_raw() & 0b100)
     }
 
+    /// Payload type (contains encryption, modifidcation flag as
+    /// well as the next ether type if available)
+    #[inline]
+    pub fn ptype(&self) -> MacSecPType {
+        let e = self.encrypted();
+        let c = self.userdata_changed();
+        if e {
+            if c {
+                MacSecPType::Encrypted
+            } else {
+                MacSecPType::EncryptedUnmodified
+            }
+        } else {
+            if c {
+                MacSecPType::Modified
+            } else {
+                if 0 != (self.tci_an_raw() & 0b10_0000) {
+                    // SAFETY: Slice access safe as length of the slice was
+                    //         verified in the constructor to be at least 16
+                    //         if 0b10_0000 is set and and 'c' and 'e' are not
+                    //         set in the tci_an_raw.
+                    MacSecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                        [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
+                    })))
+                } else {
+                    // SAFETY: Slice access safe as length of the slice was
+                    //         verified in the constructor to be at least 8
+                    //         if 0b10_0000 is not set and 'c' and 'e' are not
+                    //         set in the tci_an_raw.
+                    MacSecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                        [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
+                    })))
+                }
+            }
+        }
+    }
+
     /// Association number (identifes SAs).
     #[inline]
     pub fn an(&self) -> MacSecAn {
@@ -110,15 +147,16 @@ impl<'a> MacSecHeaderSlice<'a> {
 
     /// Short length with reserved bits.
     #[inline]
-    pub fn short_length(&self) -> MacSecSl {
+    pub fn short_length(&self) -> MacSecShortLen {
         // SAFETY: Slice access safe as length of the slice was
         //         verified in the constructor to be at least 6.
         //         MacSecSl conversion safe as bitmasked to contain
         //         only 6 bits.
-        unsafe { MacSecSl::new_unchecked(self.slice.get_unchecked(1) & 0b0011_1111) }
+        unsafe { MacSecShortLen::new_unchecked(self.slice.get_unchecked(1) & 0b0011_1111) }
     }
 
     /// Packet number.
+    #[inline]
     pub fn packet_nr(&self) -> u32 {
         // SAFETY: Slice access safe as length of the slice was
         //         verified in the constructor to be at least 6.
@@ -134,6 +172,7 @@ impl<'a> MacSecHeaderSlice<'a> {
     }
 
     /// Secure channel identifier.
+    #[inline]
     pub fn sci(&self) -> Option<u64> {
         if 0 != (self.tci_an_raw() & 0b10_0000) {
             // SAFETY: Slice access safe as length of the slice was
@@ -159,6 +198,7 @@ impl<'a> MacSecHeaderSlice<'a> {
     /// Ether type of the data following the sec tag (only
     /// available if not encrypted and userdata is not flagged
     /// as modified).
+    #[inline]
     pub fn next_ether_type(&self) -> Option<EtherType> {
         if 0 != self.tci_an_raw() & 0b1100 {
             None
@@ -188,15 +228,13 @@ impl<'a> MacSecHeaderSlice<'a> {
     #[inline]
     pub fn to_header(&self) -> MacSecHeader {
         MacSecHeader {
+            ptype: self.ptype(),
             endstation_id: self.endstation_id(),
-            tci_scb: self.tci_scb(),
-            encrypted: self.encrypted(),
-            userdata_changed: self.userdata_changed(),
+            scb: self.tci_scb(),
             an: self.an(),
-            short_length: self.short_length(),
+            short_len: self.short_length(),
             packet_nr: self.packet_nr(),
             sci: self.sci(),
-            next_ether_type: self.next_ether_type(),
         }
     }
 }
