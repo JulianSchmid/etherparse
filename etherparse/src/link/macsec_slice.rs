@@ -24,7 +24,7 @@ impl<'a> MacsecSlice<'a> {
                     required_len,
                     len: slice.len(),
                     len_source: LenSource::MacsecShortLength,
-                    layer: Layer::MacSecPacket,
+                    layer: Layer::MacsecPacket,
                     layer_start_offset: 0,
                 }));
             }

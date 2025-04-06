@@ -10,10 +10,10 @@ pub enum Layer {
     /// Error occurred in the vlan header.
     VlanHeader,
     /// Error occured in the MACsec header (also known as Sectag).
-    MacSecHeader,
+    MacsecHeader,
     /// Error occured while verifying the total MACsec packet length is long enough
     /// for the "short length".
-    MacSecPacket,
+    MacsecPacket,
     /// Error occurred when decoding an IP header (v4 or v6).
     IpHeader,
     /// Error occurred in the IPv4 layer.
@@ -63,8 +63,8 @@ impl Layer {
             Ethernet2Header => "Ethernet 2 Header Error",
             EtherPayload => "Payload with Ether Type Error",
             VlanHeader => "VLAN Header Error",
-            MacSecHeader => "MACsec Header Error",
-            MacSecPacket => "MACsec Packet Error",
+            MacsecHeader => "MACsec Header Error",
+            MacsecPacket => "MACsec Packet Error",
             IpHeader => "IP Header Error",
             Ipv4Header => "IPv4 Header Error",
             Ipv4Packet => "IPv4 Packet Error",
@@ -96,8 +96,8 @@ impl core::fmt::Display for Layer {
             Ethernet2Header => write!(f, "Ethernet 2 header"),
             EtherPayload => write!(f, "Ether type payload"),
             VlanHeader => write!(f, "VLAN header"),
-            MacSecHeader => write!(f, "MACsec header"),
-            MacSecPacket => write!(f, "MACsec packet"),
+            MacsecHeader => write!(f, "MACsec header"),
+            MacsecPacket => write!(f, "MACsec packet"),
             IpHeader => write!(f, "IP header"),
             Ipv4Header => write!(f, "IPv4 header"),
             Ipv4Packet => write!(f, "IPv4 packet"),

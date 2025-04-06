@@ -90,6 +90,12 @@ impl<'a> LaxPacketHeaders<'a> {
     ///             LaxPayloadSlice::Empty => {
     ///                 // in case of ARP packet the payload is empty
     ///             }
+    ///             LaxPayloadSlice::MacsecModified { payload, incomplete } => {
+    ///                 println!("MACsec modified payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  MACsec payload incomplete (length in MACsec header indicated more data should be present)");
+    ///                 }
+    ///             }
     ///             LaxPayloadSlice::Ether(e) => {
     ///                 println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
     ///             }
@@ -206,6 +212,15 @@ impl<'a> LaxPacketHeaders<'a> {
     ///     }
     ///     LaxPayloadSlice::Ether(e) => {
     ///         println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
+    ///         if e.incomplete {
+    ///             println!("ether payload incomplete (MACsec short length indicates more data should be present)");
+    ///         }
+    ///     }
+    ///     LaxPayloadSlice::MacsecModified{ payload, incomplete } => {
+    ///         println!("MACsec modfied payload: {:?}", payload);
+    ///         if incomplete {
+    ///             println!("MACsec payload (MACsec short length indicates more data should be present)");
+    ///         }
     ///     }
     ///     LaxPayloadSlice::Ip(ip) => {
     ///         println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
@@ -252,7 +267,8 @@ impl<'a> LaxPacketHeaders<'a> {
             link_exts: ArrayVec::new_const(),
             net: None,
             transport: None,
-            payload: LaxPayloadSlice::Ether(EtherPayloadSlice {
+            payload: LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
+                incomplete: false,
                 ether_type,
                 payload: rest,
             }),
@@ -261,9 +277,12 @@ impl<'a> LaxPacketHeaders<'a> {
 
         // parse vlan header(s)
         use ether_type::*;
-        while !result.link_exts.is_full() {
+        loop {
             match ether_type {
                 VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                    if result.link_exts.is_full() {
+                        break;
+                    }
                     let (vlan, vlan_rest) = match SingleVlanHeader::from_slice(rest) {
                         Ok(value) => value,
                         Err(err) => {
@@ -279,7 +298,8 @@ impl<'a> LaxPacketHeaders<'a> {
                     rest = vlan_rest;
                     offset += SingleVlanHeader::LEN;
                     ether_type = vlan.ether_type;
-                    result.payload = LaxPayloadSlice::Ether(EtherPayloadSlice {
+                    result.payload = LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
+                        incomplete: false,
                         ether_type,
                         payload: rest,
                     });
@@ -287,6 +307,53 @@ impl<'a> LaxPacketHeaders<'a> {
                     // SAFETY: Safe as the while loop verified that there is still space left
                     unsafe {
                         result.link_exts.push_unchecked(LinkExtHeader::Vlan(vlan));
+                    }
+                }
+                MACSEC => {
+                    use err::macsec::HeaderSliceError as H;
+
+                    if result.link_exts.is_full() {
+                        break;
+                    }
+
+                    let macsec = match LaxMacsecSlice::from_slice(rest) {
+                        Ok(m) => m,
+                        Err(err) => {
+                            result.stop_err = Some(match err {
+                                H::Content(c) => (Macsec(c), Layer::MacsecHeader),
+                                H::Len(l) => (
+                                    Len(l.add_offset(slice.len() - rest.len())),
+                                    Layer::MacsecHeader,
+                                ),
+                            });
+                            return result;
+                        }
+                    };
+
+                    // SAFETY: Safe as the while loop verified that there is still space left
+                    unsafe {
+                        result
+                            .link_exts
+                            .push_unchecked(LinkExtHeader::Macsec(macsec.header.to_header()));
+                    }
+
+                    match macsec.payload {
+                        LaxMacsecPayloadSlice::Unmodified(l) => {
+                            rest = l.payload;
+                            offset += macsec.header.header_len();
+                            ether_type = l.ether_type;
+                            result.payload = LaxPayloadSlice::Ether(l);
+                        }
+                        LaxMacsecPayloadSlice::Modified {
+                            incomplete,
+                            payload,
+                        } => {
+                            result.payload = LaxPayloadSlice::MacsecModified {
+                                incomplete,
+                                payload,
+                            };
+                            return result;
+                        }
                     }
                 }
                 // stop looping as soon as a non link extension ether type is encountered
@@ -395,7 +462,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         match value.payload {
     ///             // if you parse from IP down there will be no ether payload and the
     ///             // empty payload does not appear (only present in ARP packets).
-    ///             LaxPayloadSlice::Ether(_) | LaxPayloadSlice::Empty => unreachable!(),
+    ///             LaxPayloadSlice::Ether(_) |
+    ///                 LaxPayloadSlice::MacsecModified{ payload: _, incomplete: _} |
+    ///                 LaxPayloadSlice::Empty => unreachable!(),
     ///             LaxPayloadSlice::Ip(ip) => {
     ///                 println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
     ///                 if ip.incomplete {
@@ -837,7 +906,8 @@ mod test {
             assert_eq!(None, actual.transport);
             assert_eq!(
                 actual.payload,
-                LaxPayloadSlice::Ether(EtherPayloadSlice {
+                LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
+                    incomplete: false,
                     ether_type: 0.into(),
                     payload: &payload
                 })
@@ -1880,7 +1950,8 @@ mod test {
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                         assert_eq!(
-                            LaxPayloadSlice::Ether(EtherPayloadSlice {
+                            LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
+                                incomplete: false,
                                 ether_type,
                                 payload: data
                             }),

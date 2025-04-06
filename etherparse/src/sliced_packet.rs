@@ -99,7 +99,7 @@ impl<'a> SlicedPacket<'a> {
     /// };
     /// ```
     pub fn from_ethernet(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
-        SlicedPacketCursor::new(data).slice_ethernet2()
+        SlicedPacketCursor::new().slice_ethernet2(data)
     }
 
     /// Separates a network packet slice into different slices containing the
@@ -141,7 +141,7 @@ impl<'a> SlicedPacket<'a> {
     /// };
     /// ```
     pub fn from_linux_sll(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
-        SlicedPacketCursor::new(data).slice_linux_sll()
+        SlicedPacketCursor::new().slice_linux_sll(data)
     }
 
     /// Separates a network packet slice into different slices containing the headers using
@@ -201,12 +201,15 @@ impl<'a> SlicedPacket<'a> {
         ether_type: EtherType,
         data: &'a [u8],
     ) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
-        let mut cursor = SlicedPacketCursor::new(data);
+        let mut cursor = SlicedPacketCursor::new();
         cursor.result.link = Some(LinkSlice::EtherPayload(EtherPayloadSlice {
             ether_type,
             payload: data,
         }));
-        cursor.slice_ether_type(ether_type)
+        cursor.slice_ether_type(EtherPayloadSlice {
+            ether_type,
+            payload: data,
+        })
     }
 
     /// Separates a network packet slice into different slices containing the headers from the ip header downwards.
@@ -246,7 +249,7 @@ impl<'a> SlicedPacket<'a> {
     /// };
     /// ```
     pub fn from_ip(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
-        SlicedPacketCursor::new(data).slice_ip()
+        SlicedPacketCursor::new().slice_ip(data)
     }
 
     /// If the slice in the `payload` field contains an ethernet payload

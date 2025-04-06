@@ -10,7 +10,7 @@ pub struct LaxSlicedPacket<'a> {
     pub link: Option<LinkSlice<'a>>,
 
     /// Link extensions (VLAN & MAC Sec headers).
-    pub link_exts: ArrayVec<LinkExtSlice<'a>, { LaxSlicedPacket::LINK_EXTS_CAP }>,
+    pub link_exts: ArrayVec<LaxLinkExtSlice<'a>, { LaxSlicedPacket::LINK_EXTS_CAP }>,
 
     /// IPv4 or IPv6 header, IP extension headers & payload if present.
     pub net: Option<LaxNetSlice<'a>>,
@@ -230,7 +230,7 @@ impl<'a> LaxSlicedPacket<'a> {
     pub fn vlan(&self) -> Option<VlanSlice<'a>> {
         let mut result = None;
         for ext in &self.link_exts {
-            if let LinkExtSlice::Vlan(s) = ext {
+            if let LaxLinkExtSlice::Vlan(s) = ext {
                 if let Some(outer) = result {
                     return Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
                         outer,
@@ -248,7 +248,7 @@ impl<'a> LaxSlicedPacket<'a> {
     pub fn vlan_ids(&self) -> ArrayVec<VlanId, { SlicedPacket::LINK_EXTS_CAP }> {
         let mut result = ArrayVec::<VlanId, { SlicedPacket::LINK_EXTS_CAP }>::new_const();
         for e in &self.link_exts {
-            if let LinkExtSlice::Vlan(s) = e {
+            if let LaxLinkExtSlice::Vlan(s) = e {
                 // SAFETY: Safe as the vlan ids array has the same size as slice.link_exts.
                 unsafe {
                     result.push_unchecked(s.vlan_identifier());
@@ -263,27 +263,52 @@ impl<'a> LaxSlicedPacket<'a> {
     /// If VLAN header is present the payload after the most inner VLAN
     /// header is returned and if there is no VLAN header is present in the
     /// link field is returned.
-    pub fn ether_payload(&self) -> Option<EtherPayloadSlice<'a>> {
+    pub fn ether_payload(&self) -> Option<LaxEtherPayloadSlice<'a>> {
         if let Some(link_ext) = self.link_exts.last() {
             match link_ext {
-                LinkExtSlice::Vlan(vlan_slice) => Some(vlan_slice.payload()),
-                LinkExtSlice::Macsec(macsec_slice) => macsec_slice.ether_payload(),
+                LaxLinkExtSlice::Vlan(vlan_slice) => Some(LaxEtherPayloadSlice {
+                    incomplete: false,
+                    ether_type: vlan_slice.ether_type(),
+                    payload: vlan_slice.payload_slice(),
+                }),
+                LaxLinkExtSlice::Macsec(macsec_slice) => macsec_slice.ether_payload(),
             }
         } else if let Some(link) = self.link.as_ref() {
             match link {
-                LinkSlice::Ethernet2(e) => Some(e.payload()),
+                LinkSlice::Ethernet2(e) => {
+                    let p = e.payload();
+                    Some(LaxEtherPayloadSlice {
+                        incomplete: false,
+                        ether_type: p.ether_type,
+                        payload: p.payload,
+                    })
+                }
                 LinkSlice::LinuxSll(e) => match e.protocol_type() {
                     LinuxSllProtocolType::EtherType(_)
                     | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
-                        Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
+                        let p = EtherPayloadSlice::try_from(e.payload()).ok()?;
+                        Some(LaxEtherPayloadSlice {
+                            incomplete: false,
+                            ether_type: p.ether_type,
+                            payload: p.payload,
+                        })
                     }
                     _ => None,
                 },
-                LinkSlice::EtherPayload(e) => Some(e.clone()),
+                LinkSlice::EtherPayload(p) => Some(LaxEtherPayloadSlice {
+                    incomplete: false,
+                    ether_type: p.ether_type,
+                    payload: p.payload,
+                }),
                 LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
                     LinuxSllProtocolType::EtherType(_)
                     | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
-                        Some(EtherPayloadSlice::try_from(e.clone()).ok()?)
+                        let p = EtherPayloadSlice::try_from(e.clone()).ok()?;
+                        Some(LaxEtherPayloadSlice {
+                            incomplete: false,
+                            ether_type: p.ether_type,
+                            payload: p.payload,
+                        })
                     }
                     _ => None,
                 },
@@ -540,7 +565,8 @@ mod test {
                 LaxSlicedPacket::from_ethernet(&buf)
                     .unwrap()
                     .ether_payload(),
-                Some(EtherPayloadSlice {
+                Some(LaxEtherPayloadSlice {
+                    incomplete: false,
                     ether_type: EtherType::WAKE_ON_LAN,
                     payload: &payload
                 })
@@ -562,7 +588,8 @@ mod test {
                     stop_err: None,
                 }
                 .ether_payload(),
-                Some(EtherPayloadSlice {
+                Some(LaxEtherPayloadSlice {
+                    incomplete: false,
                     ether_type: EtherType::WAKE_ON_LAN,
                     payload: &payload
                 })
@@ -592,7 +619,8 @@ mod test {
                 LaxSlicedPacket::from_ethernet(&buf)
                     .unwrap()
                     .ether_payload(),
-                Some(EtherPayloadSlice {
+                Some(LaxEtherPayloadSlice {
+                    incomplete: false,
                     ether_type: EtherType::WAKE_ON_LAN,
                     payload: &payload
                 })
@@ -629,7 +657,8 @@ mod test {
                 LaxSlicedPacket::from_ethernet(&buf)
                     .unwrap()
                     .ether_payload(),
-                Some(EtherPayloadSlice {
+                Some(LaxEtherPayloadSlice {
+                    incomplete: false,
                     ether_type: EtherType::WAKE_ON_LAN,
                     payload: &payload
                 })

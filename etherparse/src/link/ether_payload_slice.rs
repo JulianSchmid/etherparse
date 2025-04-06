@@ -1,6 +1,6 @@
 use crate::*;
 
-/// Payload of an IP packet.
+/// Payload of an link layer packet.
 #[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct EtherPayloadSlice<'a> {
     /// Identifying content of the payload.

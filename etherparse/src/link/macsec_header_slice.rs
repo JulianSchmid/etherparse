@@ -22,7 +22,7 @@ impl<'a> MacsecHeaderSlice<'a> {
                 required_len: 6,
                 len: slice.len(),
                 len_source: LenSource::Slice,
-                layer: Layer::MacSecHeader,
+                layer: Layer::MacsecHeader,
                 layer_start_offset: 0,
             }));
         }
@@ -45,7 +45,7 @@ impl<'a> MacsecHeaderSlice<'a> {
                 required_len,
                 len: slice.len(),
                 len_source: LenSource::Slice,
-                layer: Layer::MacSecHeader,
+                layer: Layer::MacsecHeader,
                 layer_start_offset: 0,
             }));
         }

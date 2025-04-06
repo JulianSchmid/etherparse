@@ -175,9 +175,12 @@ impl<'a> PacketHeaders<'a> {
         };
 
         use ether_type::*;
-        while !result.link_exts.is_full() {
+        loop {
             match ether_type {
                 VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                    if result.link_exts.is_full() {
+                        break;
+                    }
                     let (vlan, vlan_rest) = match SingleVlanHeader::from_slice(rest) {
                         Ok(v) => v,
                         Err(err) => {
@@ -198,6 +201,9 @@ impl<'a> PacketHeaders<'a> {
                 }
                 MACSEC => {
                     use err::macsec::HeaderSliceError as I;
+                    if result.link_exts.is_full() {
+                        break;
+                    }
                     let macsec = match MacsecSlice::from_slice(rest) {
                         Ok(v) => v,
                         Err(I::Len(err)) => {
@@ -210,7 +216,9 @@ impl<'a> PacketHeaders<'a> {
 
                     // SAFETY: Safe as the while loop condition verfies that there is space left.
                     unsafe {
-                        result.link_exts.push_unchecked(LinkExtHeader::Macsec(macsec.header.to_header()));
+                        result
+                            .link_exts
+                            .push_unchecked(LinkExtHeader::Macsec(macsec.header.to_header()));
                     }
 
                     use MacsecPayloadSlice::*;
@@ -219,11 +227,11 @@ impl<'a> PacketHeaders<'a> {
                             rest = e.payload;
                             ether_type = e.ether_type;
                             result.payload = PayloadSlice::Ether(e);
-                        },
+                        }
                         Modified(m) => {
                             result.payload = PayloadSlice::MacsecMod(m);
                             return Ok(result);
-                        },
+                        }
                     }
                 }
                 _ => {

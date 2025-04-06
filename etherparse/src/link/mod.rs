@@ -19,6 +19,18 @@ pub use ethernet2_header_slice::*;
 mod ethernet2_slice;
 pub use ethernet2_slice::*;
 
+mod lax_ether_payload_slice;
+pub use lax_ether_payload_slice::*;
+
+mod lax_link_ext_slice;
+pub use lax_link_ext_slice::*;
+
+mod lax_macsec_payload_slice;
+pub use lax_macsec_payload_slice::*;
+
+mod lax_macsec_slice;
+pub use lax_macsec_slice::*;
+
 mod link_ext_header;
 pub use link_ext_header::*;
 
