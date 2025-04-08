@@ -3,6 +3,10 @@
 pub enum HeaderError {
     /// Error when the MACsec header version field is not equal 0.
     UnexpectedVersion,
+
+    /// Error if the short len is 1 when it should be at least 2
+    /// (for the next ether type).
+    InvalidUnmodifiedShortLen,
 }
 
 impl core::fmt::Display for HeaderError {
@@ -10,6 +14,7 @@ impl core::fmt::Display for HeaderError {
         use HeaderError::*;
         match self {
             UnexpectedVersion => write!(f, "MACsec Header Error: Encountered '1' as MACsec version in the MACsec SecTag header (must be '0')."),
+            InvalidUnmodifiedShortLen => write!(f, "MACsec Header Error: Encountered '1' as MACsec short len in an unmodified packet (must be '0' or '2' or greater)."),
         }
     }
 }
@@ -60,12 +65,16 @@ mod tests {
             "MACsec Header Error: Encountered '1' as MACsec version in the MACsec SecTag header (must be '0').",
             format!("{}", UnexpectedVersion)
         );
+        assert_eq!(
+            "MACsec Header Error: Encountered '1' as MACsec short len in an unmodified packet (must be '0' or '2' or greater).",
+            format!("{}", InvalidUnmodifiedShortLen)
+        );
     }
 
     #[cfg(feature = "std")]
     #[test]
     fn source() {
-        let values = [UnexpectedVersion];
+        let values = [UnexpectedVersion, InvalidUnmodifiedShortLen];
         for v in values {
             assert!(v.source().is_none());
         }

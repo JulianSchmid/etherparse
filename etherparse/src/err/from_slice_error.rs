@@ -20,7 +20,7 @@ pub enum FromSliceError {
     DoubleVlan(double_vlan::HeaderError),
 
     /// Error when decoding MACsec header.
-    MacSec(macsec::HeaderError),
+    Macsec(macsec::HeaderError),
 
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
@@ -57,6 +57,12 @@ impl FromSliceError {
     pub fn double_vlan(&self) -> Option<&double_vlan::HeaderError> {
         match self {
             FromSliceError::DoubleVlan(err) => Some(err),
+            _ => None,
+        }
+    }
+    pub fn macsec(&self) -> Option<&macsec::HeaderError> {
+        match self {
+            FromSliceError::Macsec(err) => Some(err),
             _ => None,
         }
     }
@@ -105,7 +111,7 @@ impl core::fmt::Display for FromSliceError {
             Len(err) => err.fmt(f),
             LinuxSll(err) => err.fmt(f),
             DoubleVlan(err) => err.fmt(f),
-            MacSec(err) => err.fmt(f),
+            Macsec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
             Ipv4(err) => err.fmt(f),
@@ -125,7 +131,7 @@ impl std::error::Error for FromSliceError {
             Len(err) => Some(err),
             LinuxSll(err) => Some(err),
             DoubleVlan(err) => Some(err),
-            MacSec(err) => Some(err),
+            Macsec(err) => Some(err),
             Ip(err) => Some(err),
             IpAuth(err) => Some(err),
             Ipv4(err) => Some(err),
@@ -320,7 +326,7 @@ impl From<packet::SliceError> for FromSliceError {
         match value {
             Len(err) => FromSliceError::Len(err),
             LinuxSll(err) => FromSliceError::LinuxSll(err),
-            Macsec(err) => FromSliceError::MacSec(err),
+            Macsec(err) => FromSliceError::Macsec(err),
             Ip(err) => FromSliceError::Ip(err),
             Ipv4(err) => FromSliceError::Ipv4(err),
             Ipv6(err) => FromSliceError::Ipv6(err),
@@ -384,7 +390,7 @@ mod tests {
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, FromSliceError); 8] = [
+        let test_values: [(&str, FromSliceError); 10] = [
             (
                 "Len",
                 Len(LenError {
@@ -396,11 +402,18 @@ mod tests {
                 }),
             ),
             (
+                "LinuxSll",
+                LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
+                    arp_hardware_type: ArpHardwareId(0),
+                }),
+            ),
+            (
                 "DoubleVlan",
                 DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                     unexpected_ether_type: EtherType(123),
                 }),
             ),
+            ("Macsec", Macsec(macsec::HeaderError::UnexpectedVersion)),
             (
                 "Ip",
                 Ip(ip::HeaderError::UnsupportedIpVersion {
@@ -436,7 +449,7 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [FromSliceError; 9] = [
+        let test_values: [FromSliceError; 10] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
@@ -450,6 +463,7 @@ mod tests {
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
+            Macsec(macsec::HeaderError::UnexpectedVersion),
             Ip(ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             }),
@@ -481,6 +495,7 @@ mod tests {
         let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
             unexpected_ether_type: EtherType(1),
         };
+        let macsec_error = || macsec::HeaderError::UnexpectedVersion;
         let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -505,6 +520,10 @@ mod tests {
             Some(&double_vlan_error())
         );
         assert_eq!(Ipv4(ipv4_error()).double_vlan(), None);
+
+        // macsec
+        assert_eq!(Macsec(macsec_error()).macsec(), Some(&macsec_error()));
+        assert_eq!(Ipv4(ipv4_error()).macsec(), None);
 
         // ip
         assert_eq!(Ip(ip_error()).ip(), Some(&ip_error()));
@@ -615,6 +634,10 @@ mod tests {
             let header_error = || ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             };
+
+            let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
+            let ipv6_ext_header_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+
             assert_eq!(
                 &header_error(),
                 FromSliceError::from(header_error()).ip().unwrap()
@@ -625,6 +648,22 @@ mod tests {
                     header_error()
                 )))
                 .ip()
+                .unwrap()
+            );
+            assert_eq!(
+                &ip_auth_error(),
+                FromSliceError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ipv4Ext(
+                    ip_auth_error()
+                )))
+                .ip_auth()
+                .unwrap()
+            );
+            assert_eq!(
+                &ipv6_ext_header_error(),
+                FromSliceError::from(ip::HeadersSliceError::Content(ip::HeadersError::Ipv6Ext(
+                    ipv6_ext_header_error()
+                )))
+                .ipv6_exts()
                 .unwrap()
             );
             assert_eq!(

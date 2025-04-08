@@ -79,40 +79,139 @@ mod tests {
 
     proptest! {
         #[test]
-        fn header_len(ref vlan in vlan_single_any()) {
-            let bytes = vlan.to_bytes();
-            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
-            let slice = LaxLinkExtSlice::Vlan(
-                e.clone()
-            );
-            assert_eq!(slice.header_len(), e.header_len());
+        fn header_len(
+            vlan in vlan_single_any(),
+            macsec in macsec_any(),
+        ) {
+            // vlan
+            {
+                let bytes = vlan.to_bytes();
+                let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Vlan(
+                    e.clone()
+                );
+                assert_eq!(slice.header_len(), e.header_len());
+            }
+            // macsec
+            {
+                let mut macsec = macsec.clone();
+                macsec.short_len = MacsecShortLen::ZERO;
+                let bytes = macsec.to_bytes();
+                let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Macsec(m.clone());
+                assert_eq!(slice.header_len(), macsec.header_len());
+            }
         }
     }
 
     proptest! {
         #[test]
-        fn to_header(ref vlan in vlan_single_any()) {
-            let bytes = vlan.to_bytes();
-            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
-            let slice = LaxLinkExtSlice::Vlan(
-                e.clone()
-            );
-            assert_eq!(slice.to_header(), LinkExtHeader::Vlan(e.to_header()));
+        fn to_header(
+            vlan in vlan_single_any(),
+            macsec in macsec_any(),
+        ) {
+            // vlan
+            {
+                let bytes = vlan.to_bytes();
+                let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Vlan(
+                    e.clone()
+                );
+                assert_eq!(slice.to_header(), LinkExtHeader::Vlan(e.to_header()));
+            }
+            // macsec
+            {
+                let mut macsec = macsec.clone();
+                macsec.short_len = MacsecShortLen::ZERO;
+                let bytes = macsec.to_bytes();
+                let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Macsec(m.clone());
+                assert_eq!(slice.to_header(), LinkExtHeader::Macsec(macsec.clone()));
+            }
         }
     }
 
     proptest! {
         #[test]
-        fn payload(ref vlan in vlan_single_any()) {
-            let payload = [1,2,3,4];
-            let mut bytes = Vec::with_capacity(SingleVlanHeader::LEN + 4);
-            bytes.extend_from_slice(&vlan.to_bytes());
-            bytes.extend_from_slice(&payload);
-            let e = SingleVlanSlice::from_slice(&bytes).unwrap();
-            let slice = LaxLinkExtSlice::Vlan(
-                e.clone()
-            );
-            assert_eq!(slice.payload(), Some(LaxEtherPayloadSlice{ incomplete: false, ether_type: vlan.ether_type, payload: &payload }));
+        fn payload(
+            vlan in vlan_single_any(),
+            macsec in macsec_any(),
+            ethertype in ether_type_any(),
+        ) {
+            // vlan
+            {
+                let payload = [1,2,3,4];
+                let mut bytes = Vec::with_capacity(SingleVlanHeader::LEN + 4);
+                bytes.extend_from_slice(&vlan.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let e = SingleVlanSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Vlan(
+                    e.clone()
+                );
+                assert_eq!(slice.payload(), Some(LaxEtherPayloadSlice{ incomplete: false, ether_type: vlan.ether_type, payload: &payload }));
+            }
+            // macsec (unmodified, complete)
+            {
+                let mut macsec = macsec.clone();
+                macsec.ptype = MacsecPType::Unmodified(ethertype);
+                macsec.short_len = MacsecShortLen::try_from(8 + 2).unwrap();
+                let payload = [1,2,3,4,5,6,7,8];
+                let mut bytes = Vec::with_capacity(macsec.header_len() + 8);
+                bytes.extend_from_slice(&macsec.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Macsec(
+                    m.clone()
+                );
+                prop_assert_eq!(
+                    slice.payload(),
+                    Some(LaxEtherPayloadSlice{
+                        incomplete: false,
+                        ether_type: ethertype,
+                        payload: &payload
+                    })
+                );
+            }
+            // macsec (unmodified, incomplete)
+            {
+                let mut macsec = macsec.clone();
+                macsec.ptype = MacsecPType::Unmodified(ethertype);
+                macsec.short_len = MacsecShortLen::try_from(8 + 2).unwrap();
+                let payload = [1,2,3,4,5,6,7];
+                let mut bytes = Vec::with_capacity(macsec.header_len() + 8);
+                bytes.extend_from_slice(&macsec.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Macsec(
+                    m.clone()
+                );
+                prop_assert_eq!(
+                    slice.payload(),
+                    Some(LaxEtherPayloadSlice{
+                        incomplete: true,
+                        ether_type: ethertype,
+                        payload: &payload
+                    })
+                );
+            }
+            // macsec (modified)
+            {
+                let mut macsec = macsec.clone();
+                macsec.ptype = MacsecPType::Modified;
+                macsec.short_len = MacsecShortLen::try_from(1).unwrap();
+                let payload = [1,2,3,4,5,6,7,8];
+                let mut bytes = Vec::with_capacity(macsec.header_len() + 8);
+                bytes.extend_from_slice(&macsec.to_bytes());
+                bytes.extend_from_slice(&payload);
+                let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
+                let slice = LaxLinkExtSlice::Macsec(
+                    m.clone()
+                );
+                prop_assert_eq!(
+                    slice.payload(),
+                    None
+                );
+            }
         }
     }
 }

@@ -156,6 +156,7 @@ pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
     ether_type::VLAN_TAGGED_FRAME,
     ether_type::PROVIDER_BRIDGING,
     ether_type::VLAN_DOUBLE_TAGGED_FRAME,
+    ether_type::MACSEC,
 ];
 
 prop_compose! {
@@ -227,7 +228,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn mac_sec_an_any()(
+    pub fn macsec_an_any()(
         an in 0u8..=0b11,
     ) -> MacsecAn
     {
@@ -236,7 +237,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn mac_sec_short_len_any()(
+    pub fn macsec_short_len_any()(
         sl in 0u8..=0b0011_1111,
     ) -> MacsecShortLen
     {
@@ -245,18 +246,61 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn mac_sec_any()(
+    pub fn macsec_any()(
         endstation_id in any::<bool>(),
         scb in any::<bool>(),
         encrypted in any::<bool>(),
         userdata_changed in any::<bool>(),
-        an in mac_sec_an_any(),
-        short_len in mac_sec_short_len_any(),
+        an in macsec_an_any(),
+        short_len in macsec_short_len_any(),
         packet_nr in any::<u32>(),
         sci_present in any::<bool>(),
         sci in any::<u64>(),
         next_ether_type in ether_type_any()
     ) -> MacsecHeader
+    {
+        MacsecHeader {
+            ptype: if encrypted {
+                if userdata_changed {
+                    MacsecPType::Encrypted
+                } else {
+                    MacsecPType::EncryptedUnmodified
+                }
+            } else {
+                if userdata_changed {
+                    MacsecPType::Modified
+                } else {
+                    MacsecPType::Unmodified(next_ether_type)
+                }
+            },
+            endstation_id,
+            scb,
+            an,
+            short_len,
+            packet_nr,
+            sci: if sci_present {
+                Some(sci)
+            } else {
+                None
+            },
+        }
+    }
+}
+
+prop_compose! {
+    pub fn macsec_unknown()(
+        endstation_id in any::<bool>(),
+        scb in any::<bool>(),
+        encrypted in any::<bool>(),
+        userdata_changed in any::<bool>(),
+        an in macsec_an_any(),
+        short_len in macsec_short_len_any(),
+        packet_nr in any::<u32>(),
+        sci_present in any::<bool>(),
+        sci in any::<u64>(),
+        next_ether_type in ether_type_any().prop_filter("ether_type must be unknown",
+            |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+        -> MacsecHeader
     {
         MacsecHeader {
             ptype: if encrypted {

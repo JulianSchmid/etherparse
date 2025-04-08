@@ -9,8 +9,11 @@ impl MacsecShortLen {
     /// MacsecShortLen with value 0.
     pub const ZERO: MacsecShortLen = MacsecShortLen(0);
 
-    /// Maximum value of a "MACsec short length".
+    /// Maximum value of a "MACsec short length" as a [`u8`].
     pub const MAX_U8: u8 = 0b0011_1111;
+
+    /// Maximum value of a "MACsec short length" as a [`usize`].
+    pub const MAX_USIZE: usize = 0b0011_1111;
 
     /// Tries to create an [`MacsecShortLen`] and checks that the passed value
     /// is smaller or equal than [`MacsecShortLen::MAX_U8`] (6 bit unsigned integer).
@@ -21,14 +24,14 @@ impl MacsecShortLen {
     /// ```
     /// use etherparse::MacsecShortLen;
     ///
-    /// let an = MacsecShortLen::try_new(2).unwrap();
+    /// let an = MacsecShortLen::try_from_u8(2).unwrap();
     /// assert_eq!(an.value(), 2);
     ///
     /// // if a number that can not be represented in an 2 bit integer
     /// // gets passed in an error is returned
     /// use etherparse::err::{ValueTooBigError, ValueType};
     /// assert_eq!(
-    ///     MacsecShortLen::try_new(MacsecShortLen::MAX_U8 + 1),
+    ///     MacsecShortLen::try_from_u8(MacsecShortLen::MAX_U8 + 1),
     ///     Err(ValueTooBigError{
     ///         actual: MacsecShortLen::MAX_U8 + 1,
     ///         max_allowed: MacsecShortLen::MAX_U8,
@@ -37,7 +40,7 @@ impl MacsecShortLen {
     /// );
     /// ```
     #[inline]
-    pub const fn try_new(value: u8) -> Result<MacsecShortLen, ValueTooBigError<u8>> {
+    pub const fn try_from_u8(value: u8) -> Result<MacsecShortLen, ValueTooBigError<u8>> {
         use crate::err::ValueType;
         if value <= MacsecShortLen::MAX_U8 {
             Ok(MacsecShortLen(value))
@@ -60,9 +63,35 @@ impl MacsecShortLen {
     /// otherwise the behavior of functions or data structures relying
     /// on this pre-requirement is undefined.
     #[inline]
-    pub const unsafe fn new_unchecked(value: u8) -> MacsecShortLen {
+    pub const unsafe fn from_u8_unchecked(value: u8) -> MacsecShortLen {
         debug_assert!(value <= MacsecShortLen::MAX_U8);
         MacsecShortLen(value)
+    }
+
+    /// Creates an [`MacsecShortLen`] from a length and automatically
+    /// defaults to zero if too big. This mirrors the expected behavior
+    /// of the `short_len` field in the [`MacsecHeader`].
+    ///
+    /// # Example
+    /// ```
+    /// use etherparse::MacsecShortLen;
+    ///
+    /// // if the length is smaller than 64.
+    /// let a = MacsecShortLen::from_len(34);
+    /// assert_eq!(34, a.value());
+    ///
+    /// // if the length is greater than 64 [`MacsecShortLen::MAX_U8`]
+    /// // zero is returned
+    /// let b = MacsecShortLen::from_len(65);
+    /// assert_eq!(0, b.value());
+    /// ```
+    #[inline]
+    pub fn from_len(len: usize) -> MacsecShortLen {
+        if len > 0b0011_1111 {
+            MacsecShortLen::ZERO
+        } else {
+            MacsecShortLen(len as u8)
+        }
     }
 
     /// Returns the underlying unsigned 6 bit value as an `u8` value.
@@ -161,17 +190,17 @@ mod test {
 
     proptest! {
         #[test]
-        fn try_new(
+        fn try_from_u8(
             valid_value in 0..=0b0011_1111u8,
             invalid_value in 0b0100_0000u8..=u8::MAX
         ) {
             use crate::err::{ValueType, ValueTooBigError};
             assert_eq!(
                 valid_value,
-                MacsecShortLen::try_new(valid_value).unwrap().value()
+                MacsecShortLen::try_from_u8(valid_value).unwrap().value()
             );
             assert_eq!(
-                MacsecShortLen::try_new(invalid_value).unwrap_err(),
+                MacsecShortLen::try_from_u8(invalid_value).unwrap_err(),
                 ValueTooBigError{
                     actual: invalid_value,
                     max_allowed: 0b0011_1111,
@@ -224,12 +253,29 @@ mod test {
 
     proptest! {
         #[test]
-        fn new_unchecked(valid_value in 0..=0b0011_1111u8) {
+        fn from_u8_unchecked(valid_value in 0..=0b0011_1111u8) {
             assert_eq!(
                 valid_value,
                 unsafe {
-                    MacsecShortLen::new_unchecked(valid_value).value()
+                    MacsecShortLen::from_u8_unchecked(valid_value).value()
                 }
+            );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn from_len(
+            valid_value in 0..=0b0011_1111usize,
+            zero_values in 0b0100_0000usize..=usize::MAX,
+        ) {
+            assert_eq!(
+                valid_value as u8,
+                MacsecShortLen::from_len(valid_value).value()
+            );
+            assert_eq!(
+                0,
+                MacsecShortLen::from_len(zero_values).value()
             );
         }
     }
@@ -244,7 +290,7 @@ mod test {
     proptest! {
         #[test]
         fn from(valid_value in 0..=0b0011_1111u8,) {
-            let pcp = MacsecShortLen::try_new(valid_value).unwrap();
+            let pcp = MacsecShortLen::try_from_u8(valid_value).unwrap();
             let actual: u8 = pcp.into();
             assert_eq!(actual, valid_value);
         }

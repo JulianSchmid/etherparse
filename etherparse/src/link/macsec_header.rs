@@ -165,6 +165,55 @@ impl MacsecHeader {
                 0
             }
     }
+
+    /// Returns the required length of the payload (data after header +
+    /// next_ether_type if present) if possible.
+    ///
+    /// If the length cannot be determined (`short_len` is zero or less then
+    /// `2` when `ptype` `Unmodified`) `None` is returned.
+    #[inline]
+    pub fn expected_payload_len(&self) -> Option<usize> {
+        let sl = self.short_len.value() as usize;
+        if sl > 0 {
+            if matches!(self.ptype, MacsecPType::Unmodified(_)) {
+                if sl < 2 {
+                    None
+                } else {
+                    Some(sl - 2)
+                }
+            } else {
+                // no ether type (encrypted and/or modified payload)
+                Some(sl)
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Set the `short_len` field based on the given payload byte len
+    /// (payload len excluding the ether_type if `ptype` `Unmodified`)
+    /// based on the current `ptype`.
+    #[inline]
+    pub fn set_payload_len(&mut self, payload_len: usize) {
+        if matches!(self.ptype, MacsecPType::Unmodified(_)) {
+            if payload_len > MacsecShortLen::MAX_USIZE - 2 {
+                self.short_len = MacsecShortLen::ZERO;
+            } else {
+                // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
+                //         is guranteed after the if above.
+                self.short_len =
+                    unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8 + 2) };
+            }
+        } else {
+            if payload_len > MacsecShortLen::MAX_USIZE {
+                self.short_len = MacsecShortLen::ZERO;
+            } else {
+                // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
+                //         is guranteed after the if above.
+                self.short_len = unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8) };
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -172,15 +221,195 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use proptest::prelude::*;
+    use std::io::Cursor;
 
     proptest! {
         #[test]
         fn from_slice_to_bytes(
-            header in mac_sec_any()
+            header in macsec_any()
         ) {
+            let mut header = header.clone();
+            if matches!(header.ptype, MacsecPType::Unmodified(_)) && header.short_len.value() == 1 {
+                header.short_len = MacsecShortLen::ZERO;
+            }
             let bytes = header.to_bytes();
             let actual = MacsecHeader::from_slice(&bytes);
             assert_eq!(actual, Ok(header.clone()));
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn getter(
+            macsec in macsec_any(),
+            ethertype in ether_type_any(),
+        ) {
+
+            let tests = [
+                // ptype, encrypted, userdata_changed, next_ether_type
+                (MacsecPType::Unmodified(ethertype), false, false, Some(ethertype)),
+                (MacsecPType::Modified, false, true, None),
+                (MacsecPType::Encrypted, true, true, None),
+                (MacsecPType::EncryptedUnmodified, true, false, None),
+            ];
+
+            for test in tests {
+                let mut macsec = macsec.clone();
+                macsec.ptype = test.0;
+
+                assert_eq!(test.1, macsec.encrypted());
+                assert_eq!(test.2, macsec.userdata_changed());
+                assert_eq!(test.3, macsec.next_ether_type());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_len(
+            macsec in macsec_any(),
+            ethertype in ether_type_any(),
+            sci in any::<u64>(),
+        ) {
+            // no ethertype
+            for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {
+                // no sci
+                {
+                    let mut macsec = macsec.clone();
+                    macsec.ptype = ptype;
+                    macsec.sci = None;
+                    assert_eq!(6, macsec.header_len());
+                }
+                // with sci
+                {
+                    let mut macsec = macsec.clone();
+                    macsec.ptype = ptype;
+                    macsec.sci = Some(sci);
+                    assert_eq!(14, macsec.header_len());
+                }
+            }
+
+            // with ethertype
+            // no sci
+            {
+                let mut macsec = macsec.clone();
+                macsec.ptype = MacsecPType::Unmodified(ethertype);
+                macsec.sci = None;
+                assert_eq!(8, macsec.header_len());
+            }
+            // with sci
+            {
+                let mut macsec = macsec.clone();
+                macsec.ptype = MacsecPType::Unmodified(ethertype);
+                macsec.sci = Some(sci);
+                assert_eq!(16, macsec.header_len());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn write(
+            header in macsec_any()
+        ) {
+            // ok case
+            {
+                let mut buffer = ArrayVec::<u8, {MacsecHeader::MAX_LEN}>::new();
+                header.write(&mut buffer).unwrap();
+                assert_eq!(&buffer, &header.to_bytes());
+            }
+            // not enough memory
+            {
+                let mut buffer = [0u8;MacsecHeader::MAX_LEN];
+                let mut cursor = Cursor::new(&mut buffer[..header.header_len() - 1]);
+                header.write(&mut cursor).unwrap_err();
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn expected_payload_len(
+            header in macsec_any(),
+            ether_type in ether_type_any(),
+            valid_unmodified_len in 2u8..=MacsecShortLen::MAX_U8,
+            valid_modified_len in 1u8..=MacsecShortLen::MAX_U8
+        ) {
+            // unmodified, payload len (non zero or one)
+            {
+                let mut header = header.clone();
+                header.ptype = MacsecPType::Unmodified(ether_type);
+                header.short_len = MacsecShortLen::try_from_u8(valid_unmodified_len).unwrap();
+                assert_eq!(Some(valid_unmodified_len as usize - 2), header.expected_payload_len());
+            }
+
+            // unmodified, unknown len
+            for short_len in 0..2u8 {
+                let mut header = header.clone();
+                header.ptype = MacsecPType::Unmodified(ether_type);
+                header.short_len = MacsecShortLen::try_from_u8(short_len).unwrap();
+                assert_eq!(None, header.expected_payload_len());
+            }
+
+            // modified, valid payload len (non zero)
+            for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {
+                let mut header = header.clone();
+                header.ptype = ptype;
+                header.short_len = MacsecShortLen::try_from_u8(valid_modified_len).unwrap();
+                assert_eq!(Some(valid_modified_len as usize), header.expected_payload_len());
+            }
+
+            // modified, unknown len
+            for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {
+                let mut header = header.clone();
+                header.ptype = ptype;
+                header.short_len = MacsecShortLen::ZERO;
+                assert_eq!(None, header.expected_payload_len());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn set_payload_len(
+            header in macsec_any(),
+            ether_type in ether_type_any(),
+            valid_unmodified_len in 0..=(MacsecShortLen::MAX_USIZE - 2),
+            invalid_unmodified_len in (MacsecShortLen::MAX_USIZE - 1)..=usize::MAX,
+            valid_modified_len in 1..=MacsecShortLen::MAX_USIZE,
+            invalid_modified_len in (MacsecShortLen::MAX_USIZE + 1)..=usize::MAX
+        ) {
+            // unmodified, payload len (non zero or one)
+            {
+                let mut header = header.clone();
+                header.ptype = MacsecPType::Unmodified(ether_type);
+                header.set_payload_len(valid_unmodified_len);
+                assert_eq!(header.short_len.value() as usize, valid_unmodified_len + 2);
+            }
+
+            // unmodified, invalid len
+            {
+                let mut header = header.clone();
+                header.ptype = MacsecPType::Unmodified(ether_type);
+                header.set_payload_len(invalid_unmodified_len);
+                assert_eq!(0, header.short_len.value());
+            }
+
+            // modified, valid payload len (non zero)
+            for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {
+                let mut header = header.clone();
+                header.ptype = ptype;
+                header.set_payload_len(valid_modified_len);
+                assert_eq!(valid_modified_len, header.short_len.value() as usize);
+            }
+
+            // modified, unknown len
+            for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {
+                let mut header = header.clone();
+                header.ptype = ptype;
+                header.set_payload_len(invalid_modified_len);
+                assert_eq!(0, header.short_len.value());
+            }
         }
     }
 }

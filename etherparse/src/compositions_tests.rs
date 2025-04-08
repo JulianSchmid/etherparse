@@ -1,17 +1,17 @@
 use super::*;
 
 use crate::test_gens::*;
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 use arrayvec::ArrayVec;
 use proptest::prelude::*;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct ComponentTest {
+struct ComponentTest<'a> {
     link: Option<LinkHeader>,
     link_exts: ArrayVec<LinkExtHeader, 3>,
     net: Option<NetHeaders>,
     transport: Option<TransportHeader>,
-    payload: Vec<u8>,
+    payload: &'a [u8],
 }
 
 static VLAN_ETHER_TYPES: &'static [EtherType] = &[
@@ -20,7 +20,7 @@ static VLAN_ETHER_TYPES: &'static [EtherType] = &[
     EtherType::VLAN_DOUBLE_TAGGED_FRAME,
 ];
 
-impl ComponentTest {
+impl<'a> ComponentTest<'a> {
     fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::<u8>::with_capacity(
             match &self.link {
@@ -92,7 +92,57 @@ impl ComponentTest {
         // clone the test so the length fields can be adapted
         let mut test = self.clone();
 
-        // set the payload length
+        // set ether types & macsec length
+        {
+            let mut next_ether_type = test.net.as_ref().map(|net| match net {
+                NetHeaders::Ipv4(_, _) => EtherType::IPV4,
+                NetHeaders::Ipv6(_, _) => EtherType::IPV6,
+                NetHeaders::Arp(_) => EtherType::ARP,
+            });
+            let mut next_payload_len = test.net.as_ref().map(|net| net.header_len()).unwrap_or(0)
+                + test.transport.as_ref().map(|t| t.header_len()).unwrap_or(0)
+                + test.payload.len();
+
+            for ext in test.link_exts.iter_mut().rev() {
+                if let Some(e) = next_ether_type {
+                    match ext {
+                        LinkExtHeader::Vlan(vlan) => {
+                            vlan.ether_type = e;
+                        }
+                        LinkExtHeader::Macsec(macsec) => {
+                            macsec.ptype = MacsecPType::Unmodified(e);
+                            macsec.set_payload_len(next_payload_len);
+                        }
+                    }
+                } else {
+                    match ext {
+                        LinkExtHeader::Vlan(_) => {}
+                        LinkExtHeader::Macsec(macsec) => {
+                            macsec.set_payload_len(next_payload_len);
+                        }
+                    }
+                }
+                next_ether_type = match ext {
+                    LinkExtHeader::Vlan(_) => Some(EtherType::VLAN_TAGGED_FRAME),
+                    LinkExtHeader::Macsec(_) => Some(EtherType::MACSEC),
+                };
+                next_payload_len += ext.header_len();
+            }
+            if let Some(link) = test.link.as_mut() {
+                if let Some(e) = next_ether_type {
+                    match link {
+                        LinkHeader::LinuxSll(sll) => {
+                            sll.protocol_type = LinuxSllProtocolType::EtherType(e);
+                        }
+                        LinkHeader::Ethernet2(eth) => {
+                            eth.ether_type = e;
+                        }
+                    }
+                }
+            }
+        }
+
+        // set IP & ARP the payload length & last ether type
         if let Some(net) = test.net.as_mut() {
             match net {
                 NetHeaders::Ipv4(ipv4, exts) => {
@@ -114,6 +164,8 @@ impl ComponentTest {
                 NetHeaders::Arp(_) => {}
             }
         }
+
+        // set transport length
         if let Some(TransportHeader::Udp(udp)) = test.transport.as_mut() {
             udp.length = udp.header_len_u16() + self.payload.len() as u16;
         }
@@ -399,7 +451,7 @@ impl ComponentTest {
                     );
                 } else {
                     if let Some(ext) = result.link_exts.last() {
-                        if let Some(p) = ext.payload() {
+                        if let Some(p) = ext.ether_payload() {
                             assert_eq!(&self.payload[..], p.payload);
                         }
                     } else {
@@ -412,10 +464,10 @@ impl ComponentTest {
         }
     }
 
-    fn run_vlan(
+    fn run_link_exts(
         &self,
-        outer_vlan: &SingleVlanHeader,
-        inner_vlan: &SingleVlanHeader,
+        vlans: &[SingleVlanHeader],
+        macsecs: &[MacsecHeader],
         arp: &ArpPacket,
         ipv4: &Ipv4Header,
         ipv4_ext: &Ipv4Extensions,
@@ -426,60 +478,59 @@ impl ComponentTest {
         icmpv4: &Icmpv4Header,
         icmpv6: &Icmpv6Header,
     ) {
-        let setup_single = |ether_type: EtherType| -> ComponentTest {
-            let mut result = self.clone();
-            result.link_exts = {
-                let mut exts = ArrayVec::new();
-                exts.push(LinkExtHeader::Vlan({
-                    let mut v = inner_vlan.clone();
-                    v.ether_type = ether_type;
-                    v
-                }));
-                exts
+        // add vlan
+        {
+            // build test
+            let test = {
+                let mut test = self.clone();
+                test.link_exts
+                    .try_push(LinkExtHeader::Vlan(vlans[0].clone()))
+                    .unwrap();
+                test
             };
-            result
-        };
-        let setup_double =
-            |outer_ether_type: EtherType, inner_ether_type: EtherType| -> ComponentTest {
-                let mut result = self.clone();
-                result.link_exts = {
-                    let mut exts = ArrayVec::new();
-                    exts.push(LinkExtHeader::Vlan({
-                        let mut v = outer_vlan.clone();
-                        v.ether_type = outer_ether_type;
-                        v
-                    }));
-                    exts.push(LinkExtHeader::Vlan({
-                        let mut v = inner_vlan.clone();
-                        v.ether_type = inner_ether_type;
-                        v
-                    }));
-                    exts
-                };
-                result
+            let vlans = &vlans[1..];
+
+            // run next steps
+            test.run();
+            if !test.link_exts.is_full() {
+                test.run_link_exts(
+                    vlans, macsecs, arp, ipv4, ipv4_ext, ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6,
+                );
+            }
+            test.run_arp(arp);
+            test.run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
+            test.run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
+        }
+
+        // add macsec
+        {
+            // build test
+            let test = {
+                let mut test = self.clone();
+                test.link_exts
+                    .try_push(LinkExtHeader::Macsec(macsecs[0].clone()))
+                    .unwrap();
+                test
             };
+            let macsecs = &macsecs[1..];
 
-        //single
-        setup_single(inner_vlan.ether_type).run();
-        setup_single(ether_type::ARP).run_arp(arp);
-        setup_single(ether_type::IPV4).run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
-        setup_single(ether_type::IPV6).run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
-
-        //double
-        for ether_type in VLAN_ETHER_TYPES {
-            setup_double(*ether_type, inner_vlan.ether_type).run();
-            setup_double(*ether_type, ether_type::ARP).run_arp(arp);
-            setup_double(*ether_type, ether_type::IPV4)
-                .run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
-            setup_double(*ether_type, ether_type::IPV6)
-                .run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
+            // run next steps
+            test.run();
+            if !test.link_exts.is_full() {
+                test.run_link_exts(
+                    vlans, macsecs, arp, ipv4, ipv4_ext, ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6,
+                );
+            }
+            test.run_arp(arp);
+            test.run_ipv4(ipv4, ipv4_ext, udp, tcp, icmpv4, icmpv6);
+            test.run_ipv6(ipv6, ipv6_ext, udp, tcp, icmpv4, icmpv6);
         }
     }
 
     fn run_arp(&self, arp: &ArpPacket) {
         let mut test = self.clone();
         test.net = Some(NetHeaders::Arp(arp.clone()));
-        test.payload.clear();
+        test.payload = &[];
         test.run();
     }
 
@@ -615,7 +666,13 @@ impl ComponentTest {
                 .unwrap();
             test.transport = Some(TransportHeader::Icmpv4(icmpv4.clone()));
             // resize the payload in case it does not have to be as big
-            test.payload.resize(payload_size, 0);
+            let mut v = Vec::new();
+            if payload_size <= test.payload.len() {
+                test.payload = &test.payload[..payload_size];
+            } else {
+                v.resize(payload_size, 0);
+                test.payload = &v;
+            }
             test.run()
         } else {
             let mut test = self.clone();
@@ -638,7 +695,13 @@ impl ComponentTest {
                 .unwrap();
             test.transport = Some(TransportHeader::Icmpv6(icmpv6.clone()));
             // resize the payload in case it does not have to be as big
-            test.payload.resize(payload_size, 0);
+            let mut v = Vec::new();
+            if payload_size <= test.payload.len() {
+                test.payload = &test.payload[..payload_size];
+            } else {
+                v.resize(payload_size, 0);
+                test.payload = &v;
+            }
             test.run()
         } else {
             let mut test = self.clone();
@@ -658,8 +721,12 @@ proptest! {
     #[test]
     #[cfg_attr(miri, ignore)] // vec allocation reduces miri runspeed too much
     fn test_compositions(ref eth in ethernet_2_unknown(),
-                         ref vlan_outer in vlan_single_unknown(),
-                         ref vlan_inner in vlan_single_unknown(),
+                         ref vlan0 in vlan_single_unknown(),
+                         ref vlan1 in vlan_single_unknown(),
+                         ref vlan2 in vlan_single_unknown(),
+                         ref macsec0 in macsec_unknown(),
+                         ref macsec1 in macsec_unknown(),
+                         ref macsec2 in macsec_unknown(),
                          ref ipv4 in ipv4_unknown(),
                          ref ipv4_exts in ipv4_extensions_unknown(),
                          ref ipv6 in ipv6_unknown(),
@@ -671,29 +738,27 @@ proptest! {
                          ref icmpv6 in icmpv6_header_any(),
                          ref payload in proptest::collection::vec(any::<u8>(), 0..1024))
     {
-        let setup_eth = | ether_type: EtherType | -> ComponentTest {
+        let setup_eth = || -> ComponentTest {
             ComponentTest {
-                payload: payload.clone(),
-                link: Some({
-                    let mut result = eth.clone();
-                    result.ether_type = ether_type;
-                    LinkHeader::Ethernet2(result)
-                }),
+                payload: &payload,
+                link: Some(LinkHeader::Ethernet2(eth.clone())),
                 link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None
             }
         };
 
-        //ethernet 2: standalone, ipv4, ipv6
-        setup_eth(eth.ether_type).run();
-        setup_eth(ether_type::ARP).run_arp(arp);
-        setup_eth(ether_type::IPV4).run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
-        setup_eth(ether_type::IPV6).run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
+        // ethernet 2: standalone, ipv4, ipv6
+        setup_eth().run();
+        setup_eth().run_arp(arp);
+        setup_eth().run_ipv4(ipv4, ipv4_exts, udp, tcp, icmpv4, icmpv6);
+        setup_eth().run_ipv6(ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
 
-        //vlans
-        for ether_type in VLAN_ETHER_TYPES {
-            setup_eth(*ether_type).run_vlan(vlan_outer, vlan_inner, arp, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
+        // link exts
+        {
+            let vlans = [vlan0.clone(), vlan1.clone(), vlan2.clone()];
+            let macsecs = [macsec0.clone(), macsec1.clone(), macsec2.clone()];
+            setup_eth().run_link_exts(&vlans[..], &macsecs[..], arp, ipv4, ipv4_exts, ipv6, ipv6_exts, udp, tcp, icmpv4, icmpv6);
         }
     }
 }
@@ -717,7 +782,7 @@ fn test_packet_slicing_panics() {
         link_exts: ArrayVec::new_const(),
         net: None,
         transport: None,
-        payload: vec![],
+        payload: &[],
     }
     .assert_sliced_packet(s);
 }

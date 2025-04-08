@@ -156,7 +156,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                         }
                     };
                     self.offset += macsec.header.header_len();
-                    if macsec.header.short_length().value() > 0 {
+                    if macsec.header.short_len().value() > 0 {
                         self.len_source = LenSource::MacsecShortLength;
                     }
 

@@ -45,9 +45,21 @@ mod tests {
 
     proptest! {
         #[test]
-        fn header_len(ref vlan in vlan_single_any()) {
-            let header = LinkExtHeader::Vlan(vlan.clone());
-            assert_eq!(header.header_len(), vlan.header_len());
+        fn header_len(
+            vlan in vlan_single_any(),
+            macsec in macsec_any()
+        ) {
+            // vlan
+            {
+                let header = LinkExtHeader::Vlan(vlan.clone());
+                assert_eq!(header.header_len(), vlan.header_len());
+            }
+
+            // macsec
+            {
+                let header = LinkExtHeader::Macsec(macsec.clone());
+                assert_eq!(header.header_len(), macsec.header_len());
+            }
         }
     }
 }
