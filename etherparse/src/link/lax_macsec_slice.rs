@@ -11,7 +11,7 @@ impl<'a> LaxMacsecSlice<'a> {
     pub fn from_slice(slice: &'a [u8]) -> Result<LaxMacsecSlice<'a>, macsec::HeaderSliceError> {
         let header = MacsecHeaderSlice::from_slice(slice)?;
         // validate the length of the slice if the short length is set
-        let (incomplete, payload_slice) =
+        let (incomplete, payload_slice, len_source) =
             if let Some(req_payload_len) = header.expected_payload_len() {
                 let required_len = header.header_len() + req_payload_len;
                 if slice.len() < required_len {
@@ -24,6 +24,7 @@ impl<'a> LaxMacsecSlice<'a> {
                                 slice.len() - header.slice().len(),
                             )
                         },
+                        LenSource::Slice,
                     )
                 } else {
                     (
@@ -36,6 +37,7 @@ impl<'a> LaxMacsecSlice<'a> {
                                 req_payload_len,
                             )
                         },
+                        LenSource::MacsecShortLength,
                     )
                 }
             } else {
@@ -48,6 +50,7 @@ impl<'a> LaxMacsecSlice<'a> {
                             slice.len() - header.slice().len(),
                         )
                     },
+                    LenSource::Slice,
                 )
             };
 
@@ -55,6 +58,7 @@ impl<'a> LaxMacsecSlice<'a> {
             LaxMacsecPayloadSlice::Unmodified(LaxEtherPayloadSlice {
                 incomplete,
                 ether_type,
+                len_source,
                 payload: payload_slice,
             })
         } else {
@@ -117,6 +121,7 @@ mod test {
                     LaxMacsecPayloadSlice::Unmodified(LaxEtherPayloadSlice{
                         incomplete: false,
                         ether_type: ethertype,
+                        len_source: LenSource::MacsecShortLength,
                         payload: &payload
                     })
                 );
@@ -125,6 +130,7 @@ mod test {
                     Some(LaxEtherPayloadSlice{
                         incomplete: false,
                         ether_type: ethertype,
+                        len_source: LenSource::MacsecShortLength,
                         payload: &payload
                     })
                 );
@@ -150,6 +156,7 @@ mod test {
                     LaxMacsecPayloadSlice::Unmodified(LaxEtherPayloadSlice{
                         incomplete: true,
                         ether_type: ethertype,
+                        len_source: LenSource::Slice,
                         payload: &payload
                     })
                 );
@@ -158,6 +165,7 @@ mod test {
                     Some(LaxEtherPayloadSlice{
                         incomplete: true,
                         ether_type: ethertype,
+                        len_source: LenSource::Slice,
                         payload: &payload
                     })
                 );
@@ -183,6 +191,7 @@ mod test {
                     LaxMacsecPayloadSlice::Unmodified(LaxEtherPayloadSlice{
                         incomplete: false,
                         ether_type: ethertype,
+                        len_source: LenSource::Slice,
                         payload: &payload
                     })
                 );
@@ -191,6 +200,7 @@ mod test {
                     Some(LaxEtherPayloadSlice{
                         incomplete: false,
                         ether_type: ethertype,
+                        len_source: LenSource::Slice,
                         payload: &payload
                     })
                 );

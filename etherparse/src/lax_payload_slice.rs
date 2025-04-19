@@ -137,9 +137,10 @@ mod test {
         use LaxPayloadSlice::*;
         assert_eq!(
             Ether(LaxEtherPayloadSlice {
+                incomplete: false,
                 ether_type: EtherType::IPV4,
+                len_source: LenSource::Slice,
                 payload: &payload,
-                incomplete: false
             })
             .slice(),
             &payload

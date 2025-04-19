@@ -107,6 +107,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn payload(&self) -> EtherPayloadSlice<'a> {
         EtherPayloadSlice {
             ether_type: self.ether_type(),
+            len_source: LenSource::Slice,
             payload: self.payload_slice(),
         }
     }
@@ -201,6 +202,7 @@ mod test {
             assert_eq!(
                 EtherPayloadSlice {
                     ether_type: vlan.ether_type,
+                    len_source: LenSource::Slice,
                     payload: &data[SingleVlanHeader::LEN..],
                 },
                 slice.payload()

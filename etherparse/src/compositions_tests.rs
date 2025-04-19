@@ -14,12 +14,6 @@ struct ComponentTest<'a> {
     payload: &'a [u8],
 }
 
-static VLAN_ETHER_TYPES: &'static [EtherType] = &[
-    EtherType::VLAN_TAGGED_FRAME,
-    EtherType::PROVIDER_BRIDGING,
-    EtherType::VLAN_DOUBLE_TAGGED_FRAME,
-];
-
 impl<'a> ComponentTest<'a> {
     fn serialize(&self) -> Vec<u8> {
         let mut buffer = Vec::<u8>::with_capacity(
@@ -719,7 +713,7 @@ impl<'a> ComponentTest<'a> {
 proptest! {
     ///Test that all known packet compositions are parsed correctly.
     #[test]
-    #[cfg_attr(miri, ignore)] // vec allocation reduces miri runspeed too much
+    // #[cfg_attr(miri, ignore)] // vec allocation reduces miri runspeed too much
     fn test_compositions(ref eth in ethernet_2_unknown(),
                          ref vlan0 in vlan_single_unknown(),
                          ref vlan1 in vlan_single_unknown(),

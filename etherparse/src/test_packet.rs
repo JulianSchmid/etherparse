@@ -84,6 +84,25 @@ impl TestPacket {
     }
 
     pub fn set_payload_len(&mut self, payload_len: usize) {
+        // link extensions
+        {
+            let mut last_len = self.net.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                + self.transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                + payload_len;
+            for ext in self.link_exts.iter_mut().rev() {
+                match ext {
+                    LinkExtHeader::Vlan(h) => {
+                        last_len += h.header_len();
+                    }
+                    LinkExtHeader::Macsec(h) => {
+                        h.set_payload_len(last_len);
+                        last_len += h.header_len();
+                    }
+                }
+            }
+        }
+
+        // net layer
         use NetHeaders::*;
         match &mut self.net {
             None => {}
@@ -108,6 +127,7 @@ impl TestPacket {
             Some(Arp(_)) => {}
         }
 
+        // transport layer
         use TransportHeader::*;
         match &mut self.transport {
             None => {}
@@ -121,7 +141,7 @@ impl TestPacket {
     }
 
     /// Set the length relative to the end of the ip headers.
-    pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
+    pub fn set_payload_len_ip(&mut self, payload_len_from_ip_on: isize) {
         use NetHeaders::*;
         match self.net.as_mut().unwrap() {
             Ipv4(ref mut header, ref mut exts) => {
@@ -137,6 +157,22 @@ impl TestPacket {
                     .unwrap();
             }
             Arp(_) => {}
+        }
+    }
+
+    /// Set the length relative to the end of the link extensions.
+    pub fn set_payload_len_link_ext(&mut self, payload_len_from_ext_on: usize) {
+        let mut payload_len = payload_len_from_ext_on;
+        for ext in self.link_exts.iter_mut().rev() {
+            match ext {
+                LinkExtHeader::Vlan(v) => {
+                    payload_len += v.header_len();
+                }
+                LinkExtHeader::Macsec(h) => {
+                    h.set_payload_len(payload_len);
+                    payload_len += h.header_len();
+                }
+            }
         }
     }
 

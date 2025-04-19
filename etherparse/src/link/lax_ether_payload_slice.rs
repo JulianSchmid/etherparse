@@ -13,6 +13,10 @@ pub struct LaxEtherPayloadSlice<'a> {
     /// Identifying content of the payload.
     pub ether_type: EtherType,
 
+    /// Length field that was used to determine the length
+    /// of the payload (e.g. MACsec "short length" field).
+    pub len_source: LenSource,
+
     /// Payload
     pub payload: &'a [u8],
 }

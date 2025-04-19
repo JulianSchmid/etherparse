@@ -129,6 +129,7 @@ impl<'a> Ethernet2Slice<'a> {
     pub fn payload(&self) -> EtherPayloadSlice<'a> {
         EtherPayloadSlice {
             ether_type: self.ether_type(),
+            len_source: LenSource::Slice,
             payload: self.payload_slice(),
         }
     }
@@ -228,6 +229,7 @@ mod test {
                 assert_eq!(
                     EtherPayloadSlice{
                         payload: &payload,
+                        len_source: LenSource::Slice,
                         ether_type: eth.ether_type,
                     },
                     slice.payload()
@@ -246,8 +248,9 @@ mod test {
                 assert_eq!(&payload[..payload.len() - 4], slice.payload_slice());
                 assert_eq!(
                     EtherPayloadSlice{
-                        payload: &payload[..payload.len() - 4],
                         ether_type: eth.ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &payload[..payload.len() - 4],
                     },
                     slice.payload()
                 );

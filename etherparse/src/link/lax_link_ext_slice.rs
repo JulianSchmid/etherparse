@@ -36,6 +36,7 @@ impl<'a> LaxLinkExtSlice<'a> {
                 Some(LaxEtherPayloadSlice {
                     incomplete: false,
                     ether_type: p.ether_type,
+                    len_source: p.len_source,
                     payload: p.payload,
                 })
             }
@@ -148,7 +149,15 @@ mod tests {
                 let slice = LaxLinkExtSlice::Vlan(
                     e.clone()
                 );
-                assert_eq!(slice.payload(), Some(LaxEtherPayloadSlice{ incomplete: false, ether_type: vlan.ether_type, payload: &payload }));
+                assert_eq!(
+                    slice.payload(),
+                    Some(LaxEtherPayloadSlice{
+                        incomplete: false,
+                        ether_type: vlan.ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &payload
+                    })
+                );
             }
             // macsec (unmodified, complete)
             {
@@ -168,17 +177,18 @@ mod tests {
                     Some(LaxEtherPayloadSlice{
                         incomplete: false,
                         ether_type: ethertype,
+                        len_source: LenSource::MacsecShortLength,
                         payload: &payload
                     })
                 );
             }
             // macsec (unmodified, incomplete)
             {
+                let payload = [1,2,3,4,5,6,7];
                 let mut macsec = macsec.clone();
                 macsec.ptype = MacsecPType::Unmodified(ethertype);
-                macsec.short_len = MacsecShortLen::try_from(8 + 2).unwrap();
-                let payload = [1,2,3,4,5,6,7];
-                let mut bytes = Vec::with_capacity(macsec.header_len() + 8);
+                macsec.set_payload_len(payload.len() + 1);
+                let mut bytes = Vec::with_capacity(macsec.header_len() + payload.len());
                 bytes.extend_from_slice(&macsec.to_bytes());
                 bytes.extend_from_slice(&payload);
                 let m = LaxMacsecSlice::from_slice(&bytes).unwrap();
@@ -190,6 +200,7 @@ mod tests {
                     Some(LaxEtherPayloadSlice{
                         incomplete: true,
                         ether_type: ethertype,
+                        len_source: LenSource::Slice,
                         payload: &payload
                     })
                 );

@@ -170,11 +170,13 @@ impl<'a> PacketHeaders<'a> {
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type,
+                len_source: LenSource::Slice,
                 payload: rest,
             }),
         };
 
         use ether_type::*;
+        let mut len_source = LenSource::Slice;
         loop {
             match ether_type {
                 VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
@@ -192,6 +194,7 @@ impl<'a> PacketHeaders<'a> {
                     ether_type = vlan.ether_type;
                     result.payload = PayloadSlice::Ether(EtherPayloadSlice {
                         ether_type,
+                        len_source,
                         payload: rest,
                     });
                     // SAFETY: Safe as the while loop condition verfies that there is space left.
@@ -226,7 +229,14 @@ impl<'a> PacketHeaders<'a> {
                         Unmodified(e) => {
                             rest = e.payload;
                             ether_type = e.ether_type;
-                            result.payload = PayloadSlice::Ether(e);
+                            if e.len_source != LenSource::Slice {
+                                len_source = e.len_source;
+                            }
+                            result.payload = PayloadSlice::Ether(EtherPayloadSlice {
+                                ether_type: e.ether_type,
+                                len_source: len_source,
+                                payload: e.payload,
+                            });
                         }
                         Modified(m) => {
                             result.payload = PayloadSlice::MacsecMod(m);
@@ -512,6 +522,7 @@ mod test {
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type: EtherType(0),
+                len_source: LenSource::Slice,
                 payload: &[],
             }),
         };
@@ -537,6 +548,7 @@ mod test {
             transport: None,
             payload: PayloadSlice::Ether(EtherPayloadSlice {
                 ether_type: EtherType(0),
+                len_source: LenSource::Slice,
                 payload: &[],
             }),
         };
@@ -929,9 +941,7 @@ mod test {
                 for len in 0..auth.header_len() {
                     // set payload length
                     let mut test = test.clone();
-                    test.set_payload_le_from_ip_on(
-                        -1 * (auth.header_len() as isize) + (len as isize),
-                    );
+                    test.set_payload_len_ip(-1 * (auth.header_len() as isize) + (len as isize));
 
                     let data = test.to_vec(&[]);
                     let base_len = test.len(&[]) - auth.header_len();
@@ -1080,9 +1090,7 @@ mod test {
                 for len in 0..auth.header_len() {
                     // set payload length
                     let mut test = test.clone();
-                    test.set_payload_le_from_ip_on(
-                        -1 * (auth.header_len() as isize) + (len as isize),
-                    );
+                    test.set_payload_len_ip(-1 * (auth.header_len() as isize) + (len as isize));
 
                     let data = test.to_vec(&[]);
                     let base_len = test.len(&[]) - auth.header_len();
@@ -1171,7 +1179,7 @@ mod test {
                         let mut test = test.clone();
 
                         // set payload length
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         // generate data
                         let data = test.to_vec(&[]);
@@ -1222,7 +1230,7 @@ mod test {
                     for len in 0..(tcp.header_len() as usize) {
                         // set payload length
                         let mut test = test.clone();
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - (tcp.header_len() as usize);
@@ -1283,7 +1291,7 @@ mod test {
                     for len in 0..icmpv4.header_len() {
                         // set payload length
                         let mut test = test.clone();
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv4.header_len();
@@ -1332,7 +1340,7 @@ mod test {
                     for len in 0..icmpv6.header_len() {
                         // set payload length
                         let mut test = test.clone();
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv6.header_len();

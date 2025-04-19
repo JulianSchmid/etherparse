@@ -20,6 +20,16 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn ether_type_unknown()
+        (ether_type in ether_type_any().prop_filter("ether_type must be unknown",
+        |v| !ETHERNET_KNOWN_ETHER_TYPES.iter().any(|&x| v == &x)))
+        -> EtherType
+    {
+        ether_type
+    }
+}
+
+prop_compose! {
     pub fn vlan_id_any()
         (value in 0..=0b0000_1111_1111_1111u16)
         -> VlanId

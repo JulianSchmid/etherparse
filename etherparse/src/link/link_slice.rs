@@ -108,6 +108,7 @@ mod test {
             {
                 let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
                     ether_type: ether_type::IPV4,
+                    len_source: LenSource::Slice,
                     payload: &[]
                 });
                 assert_eq!(
@@ -144,17 +145,26 @@ mod test {
                 );
                 assert_eq!(
                     slice.ether_payload().unwrap(),
-                    EtherPayloadSlice{ ether_type: eth.ether_type, payload: &p }
+                    EtherPayloadSlice{
+                        ether_type: eth.ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &p
+                    }
                 );
             }
             {
                 let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
                     ether_type: eth.ether_type,
+                    len_source: LenSource::Slice,
                     payload: &p
                 });
                 assert_eq!(
                     slice.ether_payload().unwrap(),
-                    EtherPayloadSlice{ ether_type: eth.ether_type, payload: &p }
+                    EtherPayloadSlice{
+                        ether_type: eth.ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &p
+                    }
                 );
             }
             {
@@ -167,7 +177,11 @@ mod test {
                 match linux_sll.protocol_type {
                     LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => { assert_eq!(
                             slice.ether_payload().unwrap(),
-                            EtherPayloadSlice{ ether_type: EtherType(v), payload: &p }
+                            EtherPayloadSlice{
+                                ether_type: EtherType(v),
+                                len_source: LenSource::Slice,
+                                payload: &p,
+                            }
                     );}
                     _ => { assert!(slice.ether_payload().is_none());}
                 }
@@ -180,7 +194,11 @@ mod test {
                 match linux_sll.protocol_type {
                     LinuxSllProtocolType::EtherType(EtherType(v)) | LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType(v)) => { assert_eq!(
                         slice.ether_payload().unwrap(),
-                            EtherPayloadSlice{ ether_type: EtherType(v), payload: &p }
+                            EtherPayloadSlice{
+                                ether_type: EtherType(v),
+                                len_source: LenSource::Slice,
+                                payload: &p,
+                            }
                     );}
                     _ => { assert!(slice.ether_payload().is_none());}
                 }
@@ -213,6 +231,7 @@ mod test {
             {
                 let slice = LinkSlice::EtherPayload(EtherPayloadSlice {
                     ether_type: eth.ether_type,
+                    len_source: LenSource::Slice,
                     payload: &p
                 });
                 assert_eq!(

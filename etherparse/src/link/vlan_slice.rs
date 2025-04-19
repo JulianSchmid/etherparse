@@ -94,6 +94,7 @@ mod test {
                     slice.payload(),
                     EtherPayloadSlice{
                         ether_type: outer.ether_type,
+                        len_source: LenSource::Slice,
                         payload: &payload,
                     }
                 );
@@ -113,6 +114,7 @@ mod test {
                     slice.payload(),
                     EtherPayloadSlice{
                         ether_type: inner.ether_type,
+                        len_source: LenSource::Slice,
                         payload: &payload,
                     }
                 );

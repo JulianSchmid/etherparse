@@ -117,7 +117,8 @@ mod test {
             assert_eq!(
                 EtherPayloadSlice{
                     ether_type: vlan.inner.ether_type,
-                    payload: &payload
+                    len_source: LenSource::Slice,
+                    payload: &payload,
                 },
                 slice.payload()
             );

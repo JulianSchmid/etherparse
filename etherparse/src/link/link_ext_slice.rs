@@ -148,7 +148,14 @@ mod tests {
                 let slice = LinkExtSlice::Vlan(
                     e.clone()
                 );
-                assert_eq!(slice.ether_payload(), Some(EtherPayloadSlice{ ether_type: vlan.ether_type, payload: &payload }));
+                assert_eq!(
+                    slice.ether_payload(),
+                    Some(EtherPayloadSlice{
+                        ether_type: vlan.ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &payload
+                    })
+                );
             }
             // macsec (unmodified)
             {
@@ -163,7 +170,14 @@ mod tests {
                 let slice = LinkExtSlice::Macsec(
                     e.clone()
                 );
-                assert_eq!(slice.ether_payload(), Some(EtherPayloadSlice{ ether_type, payload: &payload }));
+                assert_eq!(
+                    slice.ether_payload(),
+                    Some(EtherPayloadSlice{
+                        ether_type,
+                        len_source: LenSource::Slice,
+                        payload: &payload,
+                    })
+                );
             }
             // macsec (modified)
             for ptype in [MacsecPType::Modified, MacsecPType::Encrypted, MacsecPType::EncryptedUnmodified] {

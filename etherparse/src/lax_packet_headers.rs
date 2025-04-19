@@ -270,12 +270,14 @@ impl<'a> LaxPacketHeaders<'a> {
             payload: LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
                 incomplete: false,
                 ether_type,
+                len_source: LenSource::Slice,
                 payload: rest,
             }),
             stop_err: None,
         };
 
         // parse vlan header(s)
+        let mut len_source = LenSource::Slice;
         use ether_type::*;
         loop {
             match ether_type {
@@ -301,6 +303,7 @@ impl<'a> LaxPacketHeaders<'a> {
                     result.payload = LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
                         incomplete: false,
                         ether_type,
+                        len_source,
                         payload: rest,
                     });
 
@@ -342,7 +345,15 @@ impl<'a> LaxPacketHeaders<'a> {
                             rest = l.payload;
                             offset += macsec.header.header_len();
                             ether_type = l.ether_type;
-                            result.payload = LaxPayloadSlice::Ether(l);
+                            if l.len_source != LenSource::Slice {
+                                len_source = l.len_source;
+                            }
+                            result.payload = LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
+                                incomplete: l.incomplete,
+                                ether_type,
+                                len_source,
+                                payload: l.payload,
+                            });
                         }
                         LaxMacsecPayloadSlice::Modified {
                             incomplete,
@@ -680,6 +691,8 @@ mod test {
         ether_type::VLAN_DOUBLE_TAGGED_FRAME,
     ];
 
+    const MACSEC_ETHER_TYPES: [EtherType; 1] = [ether_type::MACSEC];
+
     #[test]
     fn clone_eq() {
         let header = LaxPacketHeaders {
@@ -863,7 +876,7 @@ mod test {
     #[test]
     fn from_x_slice() {
         // no eth
-        from_x_slice_vlan_variants(&TestPacket {
+        from_x_slice_link_exts_variants(&TestPacket {
             link: None,
             link_exts: ArrayVec::new_const(),
             net: None,
@@ -885,7 +898,7 @@ mod test {
             };
 
             // ok ethernet header (with unknown next)
-            from_x_slice_vlan_variants(&test);
+            from_x_slice_link_exts_variants(&test);
 
             // eth len error
             {
@@ -909,6 +922,7 @@ mod test {
                 LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
                     incomplete: false,
                     ether_type: 0.into(),
+                    len_source: LenSource::Slice,
                     payload: &payload
                 })
             );
@@ -916,106 +930,150 @@ mod test {
         }
     }
 
-    fn from_x_slice_vlan_variants(base: &TestPacket) {
-        // none
-        from_x_slice_net_variants(base);
+    fn from_x_slice_link_exts_variants(base: &TestPacket) {
+        #[derive(Copy, Clone, Eq, PartialEq)]
+        enum Ext {
+            Macsec,
+            VlanTaggedFrame,
+            VlaneDoubleTaggedFrame,
+            ProviderBridging,
+        }
 
-        // single vlan header
-        {
-            let single = SingleVlanHeader {
-                pcp: 1.try_into().unwrap(),
-                drop_eligible_indicator: false,
-                vlan_id: 2.try_into().unwrap(),
-                ether_type: 3.into(),
-            };
-
-            for vlan_ether_type in VLAN_ETHER_TYPES {
-                let mut test = base.clone();
-                test.set_ether_type(vlan_ether_type);
-                test.link_exts = {
-                    let mut exts = ArrayVec::new_const();
-                    exts.push(LinkExtHeader::Vlan(single.clone()));
-                    exts
-                };
-
-                // ok vlan header
-                from_x_slice_net_variants(&test);
-
-                // len error
-                {
-                    let data = test.to_vec(&[]);
-                    for len in 0..single.header_len() {
-                        let base_len = test.len(&[]) - single.header_len();
-
-                        let err = LenError {
-                            required_len: single.header_len(),
-                            len,
-                            len_source: LenSource::Slice,
-                            layer: Layer::VlanHeader,
-                            layer_start_offset: base_len,
-                        };
-                        assert_test_result(
-                            &test,
-                            &[],
-                            &data[..base_len + len],
-                            None,
-                            Some((SliceError::Len(err.clone()), Layer::VlanHeader)),
-                        );
-                    }
+        impl Ext {
+            pub fn ether_type(&self) -> EtherType {
+                match self {
+                    Ext::Macsec => EtherType::MACSEC,
+                    Ext::VlanTaggedFrame => EtherType::VLAN_TAGGED_FRAME,
+                    Ext::VlaneDoubleTaggedFrame => EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                    Ext::ProviderBridging => EtherType::PROVIDER_BRIDGING,
                 }
+            }
+
+            pub fn add(&self, base: &TestPacket) -> TestPacket {
+                let mut test = base.clone();
+                test.set_ether_type(self.ether_type());
+                test.link_exts
+                    .try_push(match self {
+                        Ext::Macsec => LinkExtHeader::Macsec(MacsecHeader {
+                            ptype: MacsecPType::Unmodified(EtherType(3)),
+                            endstation_id: false,
+                            scb: false,
+                            an: MacsecAn::ZERO,
+                            short_len: MacsecShortLen::ZERO,
+                            packet_nr: 0,
+                            sci: None,
+                        }),
+                        Ext::VlanTaggedFrame
+                        | Ext::VlaneDoubleTaggedFrame
+                        | Ext::ProviderBridging => LinkExtHeader::Vlan(SingleVlanHeader {
+                            pcp: VlanPcp::ZERO,
+                            drop_eligible_indicator: false,
+                            vlan_id: VlanId::try_new(1).unwrap(),
+                            ether_type: 3.into(),
+                        }),
+                    })
+                    .unwrap();
+                test
             }
         }
 
-        // double vlan header
-        for outer_vlan_ether_type in VLAN_ETHER_TYPES {
-            for inner_vlan_ether_type in VLAN_ETHER_TYPES {
-                let double = DoubleVlanHeader {
-                    outer: SingleVlanHeader {
-                        pcp: 1.try_into().unwrap(),
-                        drop_eligible_indicator: false,
-                        vlan_id: 2.try_into().unwrap(),
-                        ether_type: inner_vlan_ether_type,
-                    },
-                    inner: SingleVlanHeader {
-                        pcp: 1.try_into().unwrap(),
-                        drop_eligible_indicator: false,
-                        vlan_id: 2.try_into().unwrap(),
-                        ether_type: 3.into(),
-                    },
-                };
-                let mut test = base.clone();
-                test.set_ether_type(outer_vlan_ether_type);
-                test.link_exts = {
-                    let mut exts = ArrayVec::new_const();
-                    exts.push(LinkExtHeader::Vlan(double.outer.clone()));
-                    exts.push(LinkExtHeader::Vlan(double.inner.clone()));
-                    exts
-                };
+        let len_errors = |test: &TestPacket| {
+            let data = test.to_vec(&[]);
+            let req_len = test.link_exts.last().unwrap().header_len();
+            for len in 0..req_len {
+                let base_len = test.len(&[]) - req_len;
 
-                // ok double vlan header
-                from_x_slice_net_variants(&test);
-
-                // len error
-                {
-                    let data = test.to_vec(&[]);
-                    for len in 0..SingleVlanHeader::LEN {
-                        let base_len = test.len(&[]) - SingleVlanHeader::LEN;
-
-                        let err = LenError {
-                            required_len: SingleVlanHeader::LEN,
-                            len,
-                            len_source: LenSource::Slice,
-                            layer: Layer::VlanHeader,
-                            layer_start_offset: base_len,
-                        };
-                        assert_test_result(
-                            &test,
-                            &[],
-                            &data[..base_len + len],
-                            None,
-                            Some((SliceError::Len(err.clone()), Layer::VlanHeader)),
-                        );
+                let (err_req_len, err_layer) = match test.link_exts.last().unwrap() {
+                    LinkExtHeader::Vlan(h) => (h.header_len(), Layer::VlanHeader),
+                    LinkExtHeader::Macsec(_) => {
+                        if len < 6 {
+                            (6, Layer::MacsecHeader)
+                        } else {
+                            (req_len, Layer::MacsecHeader)
+                        }
                     }
+                };
+
+                let mut len_source = LenSource::Slice;
+                for prev_exts in test.link_exts.iter().rev().skip(1) {
+                    if let LinkExtHeader::Macsec(m) = prev_exts {
+                        if m.short_len != MacsecShortLen::ZERO {
+                            len_source = LenSource::MacsecShortLength;
+                        }
+                    }
+                }
+
+                let err = LenError {
+                    required_len: err_req_len,
+                    len,
+                    len_source,
+                    layer: err_layer,
+                    layer_start_offset: base_len,
+                };
+                assert_test_result(
+                    &test,
+                    &[],
+                    &data[..base_len + len],
+                    None,
+                    Some((SliceError::Len(err.clone()), err_layer)),
+                );
+            }
+        };
+
+        let content_errors = |test: &TestPacket| {
+            if let Some(LinkExtHeader::Macsec(last)) = test.link_exts.last() {
+                let mut data = test.to_vec(&[]);
+
+                // inject bad version id
+                let macsec_offset = data.len() - last.header_len();
+                data[macsec_offset] = data[macsec_offset] | 0b1000_0000;
+
+                assert_test_result(
+                    &{
+                        let mut expected = test.clone();
+                        expected.link_exts.pop();
+                        expected
+                    },
+                    &[],
+                    &data,
+                    None,
+                    Some((
+                        SliceError::Macsec(err::macsec::HeaderError::UnexpectedVersion),
+                        Layer::MacsecHeader,
+                    )),
+                );
+            }
+        };
+
+        // extensions
+        let extensions = [
+            Ext::Macsec,
+            Ext::VlanTaggedFrame,
+            Ext::VlaneDoubleTaggedFrame,
+            Ext::ProviderBridging,
+        ];
+
+        // none
+        from_x_slice_net_variants(base);
+
+        // add up to three layers of extensions
+        for ext0 in extensions {
+            let test0 = ext0.add(base);
+            from_x_slice_net_variants(&test0);
+            len_errors(&test0);
+            content_errors(&test0);
+
+            for ext1 in extensions {
+                let test1 = ext1.add(&test0);
+                from_x_slice_net_variants(&test1);
+                len_errors(&test1);
+                content_errors(&test1);
+
+                for ext2 in extensions {
+                    let test2 = ext2.add(&test1);
+                    from_x_slice_net_variants(&test2);
+                    len_errors(&test2);
+                    content_errors(&test2);
                 }
             }
         }
@@ -1188,9 +1246,7 @@ mod test {
                 for len in 0..auth.header_len() {
                     // set payload length
                     let mut test = test.clone();
-                    test.set_payload_le_from_ip_on(
-                        -1 * (auth.header_len() as isize) + (len as isize),
-                    );
+                    test.set_payload_len_ip(-1 * (auth.header_len() as isize) + (len as isize));
 
                     let data = test.to_vec(&[]);
                     let base_len = test.len(&[]) - auth.header_len();
@@ -1354,9 +1410,7 @@ mod test {
                 for len in 0..auth.header_len() {
                     // set payload length
                     let mut test = test.clone();
-                    test.set_payload_le_from_ip_on(
-                        -1 * (auth.header_len() as isize) + (len as isize),
-                    );
+                    test.set_payload_len_ip(-1 * (auth.header_len() as isize) + (len as isize));
 
                     let data = test.to_vec(&[]);
                     let base_len = test.len(&[]) - auth.header_len();
@@ -1458,7 +1512,7 @@ mod test {
                         let mut test = test.clone();
 
                         // set payload length
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         // generate data
                         let data = test.to_vec(&[]);
@@ -1512,7 +1566,7 @@ mod test {
                         for len in 0..(tcp.header_len() as usize) {
                             // set payload length
                             let mut test = test.clone();
-                            test.set_payload_le_from_ip_on(len as isize);
+                            test.set_payload_len_ip(len as isize);
 
                             let data = test.to_vec(&[]);
                             let base_len = test.len(&[]) - (tcp.header_len() as usize);
@@ -1583,7 +1637,7 @@ mod test {
                     for len in 0..icmpv4.header_len() {
                         // set payload length
                         let mut test = test.clone();
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv4.header_len();
@@ -1635,7 +1689,7 @@ mod test {
                     for len in 0..icmpv6.header_len() {
                         // set payload length
                         let mut test = test.clone();
-                        test.set_payload_le_from_ip_on(len as isize);
+                        test.set_payload_len_ip(len as isize);
 
                         let data = test.to_vec(&[]);
                         let base_len = test.len(&[]) - icmpv6.header_len();
@@ -1834,6 +1888,13 @@ mod test {
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
                     }
+                    Some(Layer::MacsecHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
                     Some(Layer::Ipv6Header)
                     | Some(Layer::Ipv4Header)
                     | Some(Layer::IpHeader)
@@ -1872,8 +1933,12 @@ mod test {
         }
         // from_ether_type (vlan at start)
         if test.link.is_none() && !test.link_exts.is_empty() {
-            for ether_type in VLAN_ETHER_TYPES {
-                let actual = LaxPacketHeaders::from_ether_type(ether_type, data);
+            let ether_types: &[EtherType] = match test.link_exts.first().unwrap() {
+                LinkExtHeader::Vlan(_) => &VLAN_ETHER_TYPES,
+                LinkExtHeader::Macsec(_) => &MACSEC_ETHER_TYPES,
+            };
+            for ether_type in ether_types {
+                let actual = LaxPacketHeaders::from_ether_type(*ether_type, data);
                 assert_eq!(actual.stop_err, expected_stop_err);
                 compare_exts(test, data, &actual);
                 match expected_stop_err.as_ref().map(|v| v.1) {
@@ -1887,6 +1952,11 @@ mod test {
                         );
                     }
                     Some(Layer::VlanHeader) => {
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::MacsecHeader) => {
                         assert_eq!(None, actual.net);
                         assert_eq!(None, actual.transport);
                         assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
@@ -1953,6 +2023,7 @@ mod test {
                             LaxPayloadSlice::Ether(LaxEtherPayloadSlice {
                                 incomplete: false,
                                 ether_type,
+                                len_source: LenSource::Slice,
                                 payload: data
                             }),
                             actual.payload

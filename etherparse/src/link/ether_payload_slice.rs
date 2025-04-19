@@ -6,6 +6,10 @@ pub struct EtherPayloadSlice<'a> {
     /// Identifying content of the payload.
     pub ether_type: EtherType,
 
+    /// Length field that was used to determine the length
+    /// of the payload (e.g. MACsec "short length" field).
+    pub len_source: LenSource,
+
     /// Payload
     pub payload: &'a [u8],
 }
@@ -20,11 +24,12 @@ mod test {
         let s = EtherPayloadSlice {
             ether_type: EtherType::IPV4,
             payload: &[],
+            len_source: LenSource::MacsecShortLength,
         };
         assert_eq!(
             format!(
-                "EtherPayloadSlice {{ ether_type: {:?}, payload: {:?} }}",
-                s.ether_type, s.payload
+                "EtherPayloadSlice {{ ether_type: {:?}, len_source: {:?}, payload: {:?} }}",
+                s.ether_type, s.len_source, s.payload
             ),
             format!("{:?}", s)
         );
@@ -35,6 +40,7 @@ mod test {
         let s = EtherPayloadSlice {
             ether_type: EtherType::IPV4,
             payload: &[],
+            len_source: LenSource::MacsecShortLength,
         };
         assert_eq!(s.clone(), s);
 

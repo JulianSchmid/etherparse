@@ -93,6 +93,7 @@ mod test {
         assert_eq!(
             Ether(EtherPayloadSlice {
                 ether_type: EtherType::IPV4,
+                len_source: LenSource::Slice,
                 payload: &payload
             })
             .slice(),

@@ -68,6 +68,7 @@ impl<'a> SlicedPacketCursor<'a> {
             LinuxSllProtocolType::EtherType(next_ether_type) => {
                 self.slice_ether_type(EtherPayloadSlice {
                     ether_type: next_ether_type,
+                    len_source: LenSource::Slice,
                     payload: payload.payload,
                 })
             }

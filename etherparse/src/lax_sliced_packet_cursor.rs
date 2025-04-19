@@ -47,6 +47,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             result: LaxSlicedPacket {
                 link: Some(LinkSlice::EtherPayload(EtherPayloadSlice {
                     ether_type,
+                    len_source: LenSource::Slice,
                     payload: slice,
                 })),
                 link_exts: ArrayVec::new_const(),
@@ -57,6 +58,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         };
         cursor.slice_ether_type(EtherPayloadSlice {
             ether_type,
+            len_source: LenSource::Slice,
             payload: slice,
         })
     }
@@ -127,7 +129,12 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                         }
                     };
                     self.offset += vlan.header_len();
-                    ether_payload = vlan.payload();
+                    let vlan_payload = vlan.payload();
+                    ether_payload = EtherPayloadSlice {
+                        ether_type: vlan_payload.ether_type,
+                        len_source: self.len_source,
+                        payload: vlan_payload.payload,
+                    };
                     // SAFETY: Safe, as the if at the startt verifies that there is still
                     //         space in link_exts.
                     unsafe {
@@ -155,11 +162,8 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                             return self.result;
                         }
                     };
-                    self.offset += macsec.header.header_len();
-                    if macsec.header.short_len().value() > 0 {
-                        self.len_source = LenSource::MacsecShortLength;
-                    }
 
+                    self.offset += macsec.header.header_len();
                     let macsec_payload = macsec.payload.clone();
                     // SAFETY: Safe, as the if at the startt verifies that there is still
                     //         space in link_exts.
@@ -170,8 +174,12 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                     }
 
                     if let LaxMacsecPayloadSlice::Unmodified(e) = macsec_payload {
+                        if e.len_source != LenSource::Slice {
+                            self.len_source = e.len_source;
+                        }
                         ether_payload = EtherPayloadSlice {
                             payload: e.payload,
+                            len_source: self.len_source,
                             ether_type: e.ether_type,
                         };
                     } else {
