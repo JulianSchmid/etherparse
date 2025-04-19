@@ -338,6 +338,7 @@ mod test {
                         payload: &payload
                     }
                 );
+                assert_eq!(actual.payload_ip_number(), header.next_header().unwrap());
             }
 
             // error len smaller then min header len

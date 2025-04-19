@@ -92,7 +92,7 @@ mod tests {
     }
 
     #[test]
-    fn ip_payload_ref() {
+    fn ip_payload_ref_and_is_ip() {
         // ipv4
         {
             let payload = [1, 2, 3, 4];
@@ -119,6 +119,7 @@ mod tests {
                     payload: &payload
                 })
             );
+            assert!(s.is_ip());
         }
         // ipv6
         {
@@ -146,6 +147,24 @@ mod tests {
                     payload: &payload
                 })
             );
+            assert!(s.is_ip());
+        }
+        // arp
+        {
+            let arp = ArpPacket::new(
+                ArpHardwareId::ETHERNET,
+                EtherType::IPV4,
+                ArpOperation::REPLY,
+                &[0; 6],
+                &[0; 4],
+                &[0; 6],
+                &[0; 4],
+            )
+            .unwrap();
+            let bytes = arp.to_bytes();
+            let s = NetSlice::Arp(ArpPacketSlice::from_slice(&bytes).unwrap());
+            assert_eq!(None, s.ip_payload_ref());
+            assert_eq!(false, s.is_ip());
         }
     }
 

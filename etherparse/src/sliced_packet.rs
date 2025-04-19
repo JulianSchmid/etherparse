@@ -1290,6 +1290,22 @@ mod test {
             }
         }
 
+        let test_macsec_mod = |test: &TestPacket| {
+            for ptype in [
+                MacsecPType::Modified,
+                MacsecPType::Encrypted,
+                MacsecPType::EncryptedUnmodified,
+            ] {
+                let mut test = test.clone();
+                if let Some(LinkExtHeader::Macsec(m)) = test.link_exts.last_mut() {
+                    m.ptype = ptype;
+                }
+                if matches!(test.link_exts.last(), Some(LinkExtHeader::Macsec(_))) {
+                    from_x_slice_assert_ok(&test);
+                }
+            }
+        };
+
         let len_errors = |test: &TestPacket| {
             let data = test.to_vec(&[]);
             let req_len = test.link_exts.last().unwrap().header_len();
@@ -1358,18 +1374,21 @@ mod test {
         for ext0 in extensions {
             let test0 = ext0.add(base);
             from_x_slice_net_variants(&test0);
+            test_macsec_mod(&test0);
             len_errors(&test0);
             content_errors(&test0);
 
             for ext1 in extensions {
                 let test1 = ext1.add(&test0);
                 from_x_slice_net_variants(&test1);
+                test_macsec_mod(&test1);
                 len_errors(&test1);
                 content_errors(&test1);
 
                 for ext2 in extensions {
                     let test2 = ext2.add(&test1);
                     from_x_slice_net_variants(&test2);
+                    test_macsec_mod(&test2);
                     len_errors(&test2);
                     content_errors(&test2);
 
