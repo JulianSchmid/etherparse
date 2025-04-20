@@ -147,6 +147,13 @@ impl MacsecHeader {
         result
     }
 
+    /// Try reading a MACsec header from the position of the reader.
+    #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    pub fn read<T: std::io::Read + Sized>(&self, reader: &mut T) -> Result<(), std::io::Error> {
+        todo!()
+    }
+
     /// Writes a given MACsec header to the current position (SecTag & next
     /// ether type if available).
     #[cfg(feature = "std")]

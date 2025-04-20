@@ -176,9 +176,12 @@ mod test {
             dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
         ) {
             // serialize
-            let mut buffer: Vec<u8> = Vec::with_capacity(LinuxSllHeader::LEN + dummy_data.len());
-            input.write(&mut buffer).unwrap();
-            buffer.extend(&dummy_data[..]);
+            let buffer = {
+                let mut buffer: Vec<u8> = Vec::with_capacity(LinuxSllHeader::LEN + dummy_data.len());
+                input.write(&mut buffer).unwrap();
+                buffer.extend(&dummy_data[..]);
+                buffer
+            };
 
             // calls with a valid result
             {
@@ -199,6 +202,22 @@ mod test {
                     }))
                 );
             }
+
+            // packet_type_val error
+            {
+                let mut modbuf = buffer.clone();
+                for packet_type in LinuxSllPacketType::MAX_VAL + 1..=u16::MAX {
+                    let p_be = packet_type.to_be_bytes();
+                    modbuf[0] = p_be[0];
+                    modbuf[1] = p_be[1];
+                    assert_eq!(
+                        LinuxSllHeaderSlice::from_slice(&modbuf),
+                        Err(err::linux_sll::HeaderSliceError::Content(
+                            err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type }
+                        ))
+                    );
+                }
+            }
         }
     }
 
@@ -211,6 +230,7 @@ mod test {
             assert_eq!(input.arp_hrd_type, slice.arp_hardware_type());
             assert_eq!(input.sender_address_valid_length, slice.sender_address_valid_length());
             assert_eq!(input.sender_address, slice.sender_address_full());
+            assert_eq!(&input.sender_address[..usize::from(input.sender_address_valid_length)], slice.sender_address());
             assert_eq!(input.protocol_type, slice.protocol_type());
         }
     }

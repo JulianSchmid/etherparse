@@ -1,6 +1,6 @@
 use crate::{err, ArpHardwareId, EtherType, LinuxNonstandardEtherType};
 
-/// Represents the "protcol type" field in a Linux Cooked Capture v1 packet. It
+/// Represents the "protocol type" field in a Linux Cooked Capture v1 packet. It
 /// is represented as an enum due to the meaning of the inner value depending
 /// on the associated arp_hardware_id field.
 ///

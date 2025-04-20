@@ -3,6 +3,7 @@
 //! Currently supported are:
 //! * Ethernet II
 //! * IEEE 802.1Q VLAN Tagging Header
+//! * MACsec (IEEE 802.1AE)
 //! * ARP
 //! * IPv4
 //! * IPv6 (supporting the most common extension headers, but not all)
@@ -128,6 +129,7 @@
 //! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
 //! * [`LinuxSllSlice::from_slice`]
 //! * [`SingleVlanSlice::from_slice`]
+//! * [`MacsecSlice::from_slice`]
 //! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
 //! * [`Ipv4Slice::from_slice`] & [`LaxIpv4Slice::from_slice`]
 //! * [`Ipv6Slice::from_slice`] & [`LaxIpv6Slice::from_slice`]
@@ -149,6 +151,7 @@
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`LinuxSllHeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
+//! * [`MacsecHeaderSlice::from_slice`]
 //! * [`ArpPacketSlice::from_slice`]
 //! * [`Ipv4HeaderSlice::from_slice`]
 //! * [`Ipv4ExtensionsSlice::from_slice`]
@@ -165,6 +168,7 @@
 //! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
 //! * [`LinuxSllHeader::read`] & [`LinuxSllHeader::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
+//! * [`MacsecHeader::read`] & [`MacsecHeader::from_slice`]
 //! * [`ArpPacket::read`] & [`ArpPacket::from_slice`]
 //! * [`IpHeaders::read`] & [`IpHeaders::from_slice`]
 //! * [`Ipv4Header::read`] & [`Ipv4Header::from_slice`]
@@ -229,6 +233,7 @@
 //! * [`Ethernet2Header::to_bytes`] & [`Ethernet2Header::write`]
 //! * [`LinuxSllHeader::to_bytes`] & [`LinuxSllHeader::write`]
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
+//! * [`MacsecHeader::to_bytes`] & [`MacsecHeader::write`]
 //! * [`ArpPacket::to_bytes`] & [`ArpPacket::write`]
 //! * [`ArpEthIpv4Packet::to_bytes`]
 //! * [`Ipv4Header::to_bytes`] & [`Ipv4Header::write`] & [`Ipv4Header::write_raw`]
@@ -274,6 +279,8 @@
 //! * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
 //! * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
 //! * [Arp hardware identifiers definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
+//! * ["IEEE Standard for Local and metropolitan area networks-Media Access Control (MAC) Security," in IEEE Std 802.1AE-2018 (Revision of IEEE Std 802.1AE-2006) , vol., no., pp.1-239, 26 Dec. 2018, doi: 10.1109/IEEESTD.2018.8585421.](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8585421&isnumber=8585420)
+//! * ["IEEE Standard for Local and metropolitan area networks--Media Access Control (MAC) Security Corrigendum 1: Tag Control Information Figure," in IEEE Std 802.1AE-2018/Cor 1-2020 (Corrigendum to IEEE Std 802.1AE-2018) , vol., no., pp.1-14, 21 July 2020, doi: 10.1109/IEEESTD.2020.9144679.](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9144679&isnumber=9144678)
 
 // # Reason for 'bool_comparison' disable:
 //
