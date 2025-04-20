@@ -193,6 +193,7 @@ mod test {
             assert_eq!(linux_sll.arp_hrd_type, slice.arp_hardware_type());
             assert_eq!(linux_sll.sender_address_valid_length, slice.sender_address_valid_length());
             assert_eq!(linux_sll.sender_address, slice.sender_address_full());
+            assert_eq!(&linux_sll.sender_address[..usize::from(linux_sll.sender_address_valid_length)], slice.sender_address());
             assert_eq!(linux_sll.protocol_type, slice.protocol_type());
             assert_eq!(&payload, slice.payload_slice());
             assert_eq!(
