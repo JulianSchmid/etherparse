@@ -148,7 +148,7 @@ impl PacketBuilder {
         }
     }
 
-    /// Start an packet with an Linux Cooked Catpure (v1) header.
+    /// Start an packet with an Linux Cooked Capture (v1) header.
     ///
     /// # Example
     ///
