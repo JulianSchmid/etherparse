@@ -7,7 +7,7 @@ pub enum LaxLinkExtSlice<'a> {
     /// Slice containing a VLAN header & payload.
     Vlan(SingleVlanSlice<'a>),
 
-    /// Slice containing MACsec heaer & payload.
+    /// Slice containing MACsec header & payload.
     Macsec(LaxMacsecSlice<'a>),
 }
 

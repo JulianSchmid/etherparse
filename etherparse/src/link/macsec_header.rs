@@ -5,7 +5,7 @@ use arrayvec::ArrayVec;
 /// packet capsuled with MACsec).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MacsecHeader {
-    /// Payload type (contains encryption, modifidcation flag as
+    /// Payload type (contains encryption, modification flag as
     /// well as the next ether type if available)
     pub ptype: MacsecPType,
 
@@ -15,7 +15,7 @@ pub struct MacsecHeader {
     /// Ethernet passive optical network broadcast flag.
     pub scb: bool,
 
-    /// Association number (identifes SAs).
+    /// Association number (identifies SAs).
     pub an: MacsecAn,
 
     /// Short length with reserved bits.
@@ -36,7 +36,7 @@ impl MacsecHeader {
     pub const MAX_LEN: usize = 16;
 
     /// Encryption flag, which indicates whether the user data is
-    /// encryped (true = encrypted, TCI.E flag).
+    /// encrypted (true = encrypted, TCI.E flag).
     #[inline]
     pub fn encrypted(&self) -> bool {
         use MacsecPType::*;
@@ -200,7 +200,7 @@ impl MacsecHeader {
                 self.short_len = MacsecShortLen::ZERO;
             } else {
                 // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
-                //         is guranteed after the if above.
+                //         is guaranteed after the if above.
                 self.short_len =
                     unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8 + 2) };
             }
@@ -209,7 +209,7 @@ impl MacsecHeader {
                 self.short_len = MacsecShortLen::ZERO;
             } else {
                 // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
-                //         is guranteed after the if above.
+                //         is guaranteed after the if above.
                 self.short_len = unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8) };
             }
         }

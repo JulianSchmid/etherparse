@@ -87,7 +87,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn packet_type(&self) -> LinuxSllPacketType {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let packet_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr()) };
 
@@ -100,7 +100,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn arp_hardware_type(&self) -> ArpHardwareId {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let arp_hardware_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) };
 
@@ -111,7 +111,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn sender_address_valid_length(&self) -> u16 {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
@@ -121,7 +121,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn sender_address_full(&self) -> [u8; 8] {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         unsafe { get_unchecked_8_byte_array(self.slice.as_ptr().add(6)) }
     }
@@ -138,12 +138,12 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     pub fn protocol_type(&self) -> LinuxSllProtocolType {
         let arp_harware_type = self.arp_hardware_type();
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let protocol_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(14)) };
 
         // SAFETY:
-        // Safe as the constructor checks that the arphwd + protocol are supported
+        // Safe as the constructor checks that the arphw + protocol are supported
         unsafe {
             LinuxSllProtocolType::try_from((arp_harware_type, protocol_type_raw)).unwrap_unchecked()
         }

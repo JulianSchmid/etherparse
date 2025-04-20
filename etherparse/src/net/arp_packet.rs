@@ -78,16 +78,16 @@ impl ArpPacket {
         Ok(ArpPacket {
             hw_addr_type,
             proto_addr_type,
-            // cast ok as we verfied the len to be less equal then 255.
+            // cast ok as we verified the len to be less equal then 255.
             hw_addr_size: sender_hw_addr.len() as u8,
-            // cast ok as we verfied the len to be less equal then 255.
+            // cast ok as we verified the len to be less equal then 255.
             proto_addr_size: sender_protocol_addr.len() as u8,
             operation,
             sender_hw_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * sender_hw_addr.len() is guranteed to be <= 255 (checked in if above)
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * sender_hw_addr.len() is guaranteed to be <= 255 (checked in if above)
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_hw_addr.as_ptr(),
@@ -100,8 +100,8 @@ impl ArpPacket {
             sender_protocol_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * sender_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * sender_protocol_addr.len() is guaranteed to be <= 255 (checked in if above)
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_protocol_addr.as_ptr(),
@@ -114,8 +114,8 @@ impl ArpPacket {
             target_hw_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * target_hw_addr.len() is guranteed to be <= 255 (checked in if above)
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * target_hw_addr.len() is guaranteed to be <= 255 (checked in if above)
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_hw_addr.as_ptr(),
@@ -128,8 +128,8 @@ impl ArpPacket {
             target_protocol_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * target_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * target_protocol_addr.len() is guaranteed to be <= 255 (checked in if above)
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_protocol_addr.as_ptr(),
@@ -147,12 +147,12 @@ impl ArpPacket {
     ///
     /// # Safety
     ///
-    /// The caller must gurantee that
+    /// The caller must guarantee that
     ///
     /// * `sender_hw_addr` & `target_hw_addr` have the same length and the length must be smaller or equal than 255.
     /// * `sender_protocol_addr` & `target_protocol_addr` have the same length and the length must be smaller or equal than 255.
     ///
-    /// The gurantees the caller must fullfill are equal to the following
+    /// The guarantees the caller must fulfill are equal to the following
     /// preconditions:
     ///
     /// * `sender_hw_addr.len() == target_hw_addr.len()`
@@ -178,16 +178,16 @@ impl ArpPacket {
         ArpPacket {
             hw_addr_type,
             proto_addr_type,
-            // cast ok as we verfied the len to be less equal then 255.
+            // cast ok as we verified the len to be less equal then 255.
             hw_addr_size: sender_hw_addr.len() as u8,
-            // cast ok as we verfied the len to be less equal then 255.
+            // cast ok as we verified the len to be less equal then 255.
             proto_addr_size: sender_protocol_addr.len() as u8,
             operation,
             sender_hw_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * the caller must gurantee that sender_hw_addr.len() is <= 255
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * the caller must guarantee that sender_hw_addr.len() is <= 255
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_hw_addr.as_ptr(),
@@ -200,8 +200,8 @@ impl ArpPacket {
             sender_protocol_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * the caller must gurantee that sender_protocol_addr.len() is <= 255
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * the caller must guarantee that sender_protocol_addr.len() is <= 255
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         sender_protocol_addr.as_ptr(),
@@ -214,8 +214,8 @@ impl ArpPacket {
             target_hw_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * the caller must gurantee that target_hw_addr.len() is <= 255
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * the caller must guarantee that target_hw_addr.len() is <= 255
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_hw_addr.as_ptr(),
@@ -228,8 +228,8 @@ impl ArpPacket {
             target_protocol_addr_buf: {
                 let mut buf: [MaybeUninit<u8>; 255] = [const { MaybeUninit::uninit() }; 255];
                 // SAFETY: Safe as
-                // * the caller must gurantee that target_protocol_addr.len() is <= 255
-                // * memory areas guranteed to be non overlapping (buf created in this function).
+                // * the caller must guarantee that target_protocol_addr.len() is <= 255
+                // * memory areas guaranteed to be non overlapping (buf created in this function).
                 unsafe {
                     core::ptr::copy_nonoverlapping(
                         target_protocol_addr.as_ptr(),
@@ -321,8 +321,8 @@ impl ArpPacket {
         }
         {
             // SAFETY: Safe as
-            // * the caller must gurantee that sender_hw_addr.len() is <= 255
-            // * memory areas guranteed to be non overlapping (buf created in this function).
+            // * the caller must guarantee that sender_hw_addr.len() is <= 255
+            // * memory areas guaranteed to be non overlapping (buf created in this function).
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     sender_hw_addr.as_ptr(),
@@ -333,8 +333,8 @@ impl ArpPacket {
         }
         {
             // SAFETY: Safe as
-            // * the caller must gurantee that target_hw_addr.len() is <= 255
-            // * memory areas guranteed to be non overlapping (buf created in this function).
+            // * the caller must guarantee that target_hw_addr.len() is <= 255
+            // * memory areas guaranteed to be non overlapping (buf created in this function).
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     target_hw_addr.as_ptr(),
@@ -365,8 +365,8 @@ impl ArpPacket {
         }
         {
             // SAFETY: Safe as
-            // * sender_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
-            // * memory areas guranteed to be non overlapping (buf created in this function).
+            // * sender_protocol_addr.len() is guaranteed to be <= 255 (checked in if above)
+            // * memory areas guaranteed to be non overlapping (buf created in this function).
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     sender_protocol_addr.as_ptr(),
@@ -377,8 +377,8 @@ impl ArpPacket {
         }
         {
             // SAFETY: Safe as
-            // * target_protocol_addr.len() is guranteed to be <= 255 (checked in if above)
-            // * memory areas guranteed to be non overlapping (buf created in this function).
+            // * target_protocol_addr.len() is guaranteed to be <= 255 (checked in if above)
+            // * memory areas guaranteed to be non overlapping (buf created in this function).
             unsafe {
                 core::ptr::copy_nonoverlapping(
                     target_protocol_addr.as_ptr(),

@@ -61,7 +61,7 @@ impl<'a> MacsecHeaderSlice<'a> {
         }
 
         Ok(MacsecHeaderSlice {
-            // SAFETY: Safe as the length was previously verfied to be at least required_len.
+            // SAFETY: Safe as the length was previously verified to be at least required_len.
             slice: unsafe { core::slice::from_raw_parts(slice.as_ptr(), required_len) },
         })
     }
@@ -94,7 +94,7 @@ impl<'a> MacsecHeaderSlice<'a> {
     }
 
     /// Encryption flag, which indicates whether the user data is
-    /// encryped (true = encrypted, TCI.E flag).
+    /// encrypted (true = encrypted, TCI.E flag).
     #[inline]
     pub fn encrypted(&self) -> bool {
         // SAFETY: Slice access safe as length of the slice was
@@ -118,7 +118,7 @@ impl<'a> MacsecHeaderSlice<'a> {
         0 == (self.tci_an_raw() & 0b1100)
     }
 
-    /// Payload type (contains encryption, modifidcation flag as
+    /// Payload type (contains encryption, modification flag as
     /// well as the next ether type if available)
     #[inline]
     pub fn ptype(&self) -> MacsecPType {
@@ -158,7 +158,7 @@ impl<'a> MacsecHeaderSlice<'a> {
     /// Association number (identifes SAs).
     #[inline]
     pub fn an(&self) -> MacsecAn {
-        // SAFETY: MacSecAn conversion safe as bitmasked to only
+        // SAFETY: MacSecAn conversion safe as bit-masked to only
         //         contain 2 bits.
         unsafe { MacsecAn::new_unchecked(self.tci_an_raw() & 0b11) }
     }
@@ -168,7 +168,7 @@ impl<'a> MacsecHeaderSlice<'a> {
     pub fn short_len(&self) -> MacsecShortLen {
         // SAFETY: Slice access safe as length of the slice was
         //         verified in the constructor to be at least 6.
-        //         MacsecSl conversion safe as bitmasked to contain
+        //         MacsecSl conversion safe as bit-masked to contain
         //         only 6 bits.
         unsafe { MacsecShortLen::from_u8_unchecked(self.slice.get_unchecked(1) & 0b0011_1111) }
     }
@@ -178,7 +178,7 @@ impl<'a> MacsecHeaderSlice<'a> {
     pub fn packet_nr(&self) -> u32 {
         // SAFETY: Slice access safe as length of the slice was
         //         verified in the constructor to be at least 6.
-        //         MacsecSl conversion safe as bitmasked.
+        //         MacsecSl conversion safe as bit-masked.
         u32::from_be_bytes(unsafe {
             [
                 *self.slice.get_unchecked(2),
@@ -304,14 +304,14 @@ mod test {
         #[test]
         fn from_slice(
             macsec in macsec_any(),
-            ethertype in ether_type_any(),
+            ether_type in ether_type_any(),
             sci in any::<u64>()
         ) {
             use MacsecPType::*;
             use err::macsec::*;
 
             // variants
-            for ptype in [Unmodified(ethertype), Modified, Encrypted, EncryptedUnmodified] {
+            for ptype in [Unmodified(ether_type), Modified, Encrypted, EncryptedUnmodified] {
                 for has_sci in [false, true] {
                     let mut macsec = macsec.clone();
                     macsec.ptype = ptype;

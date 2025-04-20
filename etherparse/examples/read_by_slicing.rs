@@ -18,7 +18,7 @@ fn main() {
     )
     .udp(
         21,   //source port
-        1234, //desitnation port
+        1234, //destination port
     );
 
     //payload of the udp packet
@@ -31,7 +31,7 @@ fn main() {
     //slice the packet into the different header components
     let sliced_packet = SlicedPacket::from_ethernet(&serialized);
 
-    //print some informations about the sliced packet
+    //print some information about the sliced packet
     match sliced_packet {
         Err(value) => println!("Err {:?}", value),
         Ok(value) => {

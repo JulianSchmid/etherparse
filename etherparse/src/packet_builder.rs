@@ -189,7 +189,7 @@ impl PacketBuilder {
                     arp_hrd_type: ArpHardwareId::ETHERNET,
                     sender_address_valid_length,
                     sender_address,
-                    protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwitten when writing depending on the net layer
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwritten when writing depending on the net layer
                 })),
                 vlan_header: None,
                 net_header: None,

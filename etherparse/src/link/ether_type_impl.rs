@@ -1,4 +1,4 @@
-/// Represents an "Ethertype" present in a Ethernet II header.
+/// Represents an "ether type" present in a Ethernet II header.
 ///
 /// You can access the underlying `u16` value by using `.0` and any `u16`
 /// can be converted to an `EtherType`:

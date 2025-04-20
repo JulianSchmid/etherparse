@@ -27,6 +27,57 @@ impl<'a> NetSlice<'a> {
         matches!(self, Ipv4(_) | Ipv6(_))
     }
 
+    /// Returns true if the NetSlice contains IPv4.
+    #[inline]
+    pub fn is_ipv4(&self) -> bool {
+        use NetSlice::*;
+        matches!(self, Ipv4(_))
+    }
+
+    /// Returns true if the NetSlice contains IPv6.
+    #[inline]
+    pub fn is_ipv6(&self) -> bool {
+        use NetSlice::*;
+        matches!(self, Ipv6(_))
+    }
+
+    /// Returns true if the NetSlice contains ARP.
+    #[inline]
+    pub fn is_arp(&self) -> bool {
+        use NetSlice::*;
+        matches!(self, Arp(_))
+    }
+
+    /// Returns references to the IPv4 slice if the slice contains an IPv4 values.
+    #[inline]
+    pub fn ipv4_ref(&self) -> Option<&Ipv4Slice<'a>> {
+        if let NetSlice::Ipv4(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    /// Returns references to the IPv6 slice if the slice contains an IPv6 values.
+    #[inline]
+    pub fn ipv6_ref(&self) -> Option<&Ipv6Slice<'a>> {
+        if let NetSlice::Ipv6(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
+    /// Returns references to the ARP packet slice if the slice contains an ARP values.
+    #[inline]
+    pub fn arp_ref(&self) -> Option<&ArpPacketSlice> {
+        if let NetSlice::Arp(arp) = self {
+            Some(arp)
+        } else {
+            None
+        }
+    }
+
     /// Returns a reference to ip payload if the net slice contains
     /// an ipv4 or ipv6 slice.
     #[inline]
@@ -109,7 +160,8 @@ mod tests {
                 bytes.extend_from_slice(&payload);
                 bytes
             };
-            let s = NetSlice::Ipv4(Ipv4Slice::from_slice(&bytes).unwrap());
+            let p = Ipv4Slice::from_slice(&bytes).unwrap();
+            let s = NetSlice::Ipv4(p.clone());
             assert_eq!(
                 s.ip_payload_ref(),
                 Some(&IpPayloadSlice {
@@ -120,6 +172,12 @@ mod tests {
                 })
             );
             assert!(s.is_ip());
+            assert!(s.is_ipv4());
+            assert_eq!(false, s.is_ipv6());
+            assert_eq!(false, s.is_arp());
+            assert_eq!(Some(&p), s.ipv4_ref());
+            assert_eq!(None, s.ipv6_ref());
+            assert_eq!(None, s.arp_ref());
         }
         // ipv6
         {
@@ -137,7 +195,8 @@ mod tests {
                 bytes.extend_from_slice(&payload);
                 bytes
             };
-            let s = NetSlice::Ipv6(Ipv6Slice::from_slice(&bytes).unwrap());
+            let p = Ipv6Slice::from_slice(&bytes).unwrap();
+            let s = NetSlice::Ipv6(p.clone());
             assert_eq!(
                 s.ip_payload_ref(),
                 Some(&IpPayloadSlice {
@@ -148,6 +207,12 @@ mod tests {
                 })
             );
             assert!(s.is_ip());
+            assert_eq!(false, s.is_ipv4());
+            assert!(s.is_ipv6());
+            assert_eq!(false, s.is_arp());
+            assert_eq!(None, s.ipv4_ref());
+            assert_eq!(Some(&p), s.ipv6_ref());
+            assert_eq!(None, s.arp_ref());
         }
         // arp
         {
@@ -162,9 +227,16 @@ mod tests {
             )
             .unwrap();
             let bytes = arp.to_bytes();
-            let s = NetSlice::Arp(ArpPacketSlice::from_slice(&bytes).unwrap());
+            let p = ArpPacketSlice::from_slice(&bytes).unwrap();
+            let s = NetSlice::Arp(p.clone());
             assert_eq!(None, s.ip_payload_ref());
             assert_eq!(false, s.is_ip());
+            assert_eq!(false, s.is_ipv4());
+            assert_eq!(false, s.is_ipv6());
+            assert!(s.is_arp());
+            assert_eq!(None, s.ipv4_ref());
+            assert_eq!(None, s.ipv6_ref());
+            assert_eq!(Some(&p), s.arp_ref());
         }
     }
 

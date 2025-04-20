@@ -9,9 +9,9 @@ pub enum Layer {
     EtherPayload,
     /// Error occurred in the vlan header.
     VlanHeader,
-    /// Error occured in the MACsec header (also known as Sectag).
+    /// Error occurred in the MACsec header (also known as Sectag).
     MacsecHeader,
-    /// Error occured while verifying the total MACsec packet length is long enough
+    /// Error occurred while verifying the total MACsec packet length is long enough
     /// for the "short length".
     MacsecPacket,
     /// Error occurred when decoding an IP header (v4 or v6).

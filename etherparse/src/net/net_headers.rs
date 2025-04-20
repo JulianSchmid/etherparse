@@ -18,12 +18,35 @@ pub enum NetHeaders {
 
 impl NetHeaders {
     /// Returns true if the NetHeaders contains either IPv4 or IPv6.
+    #[inline]
     pub fn is_ip(&self) -> bool {
         use NetHeaders::*;
         matches!(self, Ipv4(_, _) | Ipv6(_, _))
     }
 
+    /// Returns true if the NetHeaders contains IPv4.
+    #[inline]
+    pub fn is_ipv4(&self) -> bool {
+        use NetHeaders::*;
+        matches!(self, Ipv4(_, _))
+    }
+
+    /// Returns true if the NetHeaders contains IPv6.
+    #[inline]
+    pub fn is_ipv6(&self) -> bool {
+        use NetHeaders::*;
+        matches!(self, Ipv6(_, _))
+    }
+
+    /// Returns true if the NetHeaders contains ARP.
+    #[inline]
+    pub fn is_arp(&self) -> bool {
+        use NetHeaders::*;
+        matches!(self, Arp(_))
+    }
+
     /// Returns references to the IPv4 header & extensions if the header contains IPv4 values.
+    #[inline]
     pub fn ipv4_ref(&self) -> Option<(&Ipv4Header, &Ipv4Extensions)> {
         if let NetHeaders::Ipv4(header, exts) = self {
             Some((header, exts))
@@ -33,6 +56,7 @@ impl NetHeaders {
     }
 
     /// Returns references to the IPv6 header & extensions if the header contains IPv6 values.
+    #[inline]
     pub fn ipv6_ref(&self) -> Option<(&Ipv6Header, &Ipv6Extensions)> {
         if let NetHeaders::Ipv6(header, exts) = self {
             Some((header, exts))
@@ -42,6 +66,7 @@ impl NetHeaders {
     }
 
     /// Returns references to the ARP packet if the header contains ARP values.
+    #[inline]
     pub fn arp_ref(&self) -> Option<&ArpPacket> {
         if let NetHeaders::Arp(arp) = self {
             Some(arp)
@@ -126,7 +151,7 @@ mod tests {
     }
 
     #[test]
-    fn ipv4_ipv6_arp_refs() {
+    fn ipv4_ipv6_arp_refs_and_is() {
         // ipv4
         {
             let h: Ipv4Header = Default::default();
@@ -135,6 +160,10 @@ mod tests {
             assert_eq!(s.ipv4_ref(), Some((&h, &e)));
             assert_eq!(s.ipv6_ref(), None);
             assert_eq!(s.arp_ref(), None);
+            assert!(s.is_ip());
+            assert!(s.is_ipv4());
+            assert_eq!(false, s.is_ipv6());
+            assert_eq!(false, s.is_arp());
         }
         // ipv6
         {
@@ -144,6 +173,10 @@ mod tests {
             assert_eq!(s.ipv4_ref(), None);
             assert_eq!(s.ipv6_ref(), Some((&h, &e)));
             assert_eq!(s.arp_ref(), None);
+            assert!(s.is_ip());
+            assert_eq!(false, s.is_ipv4());
+            assert!(s.is_ipv6());
+            assert_eq!(false, s.is_arp());
         }
         // arp
         {
@@ -161,6 +194,10 @@ mod tests {
             assert_eq!(s.ipv4_ref(), None);
             assert_eq!(s.ipv6_ref(), None);
             assert_eq!(s.arp_ref(), Some(&h));
+            assert_eq!(false, s.is_ip());
+            assert_eq!(false, s.is_ipv4());
+            assert_eq!(false, s.is_ipv6());
+            assert!(s.is_arp());
         }
     }
 

@@ -379,11 +379,11 @@ impl Ipv4Header {
     /// Read an Ipv4Header from a slice and return the header & unused parts
     /// of the slice.
     ///
-    /// Note that this function DOES NOT seperate the payload based on the
+    /// Note that this function DOES NOT separate the payload based on the
     /// `total_length` field present in the IPv4 header. It just returns the
     /// left over slice after the header.
     ///
-    /// If you want to have correctly seperated payload including the IP extension
+    /// If you want to have correctly separated payload including the IP extension
     /// headers use
     ///
     /// * [`IpHeaders::from_ipv4_slice`] (decodes all the fields of the IP headers)
@@ -586,7 +586,7 @@ impl Ipv4Header {
         header_raw
     }
 
-    /// Write the given header with the  checksum and header length specified in the seperate arguments
+    /// Write the given header with the  checksum and header length specified in the separate arguments
     #[cfg(feature = "std")]
     fn write_ipv4_header_internal<T: std::io::Write>(
         &self,

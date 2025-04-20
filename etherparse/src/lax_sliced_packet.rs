@@ -38,12 +38,12 @@ impl<'a> LaxSlicedPacket<'a> {
     /// # use etherparse::{Ethernet2Header, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
-    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #               [7,8,9,10,11,12]) //destination mac
     /// #    .ipv4([192,168,1,1], //source ip
     /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); //destination port
     /// # // payload of the udp packet
     /// # let payload = [1,2,3,4,5,6,7,8];
     /// # // get some memory to store the serialized data
@@ -78,7 +78,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///             if ip_payload.len_source == LenSource::Slice {
     ///                 println!("  Used slice length as fallback to identify the IP payload");
     ///             } else {
-    ///                 println!("  IP payload could correctly be identfied via the length field in the header");
+    ///                 println!("  IP payload could correctly be identified via the length field in the header");
     ///             }
     ///         }
     ///
@@ -116,12 +116,12 @@ impl<'a> LaxSlicedPacket<'a> {
     /// # use etherparse::{Ethernet2Header, PacketBuilder};
     /// # let builder = PacketBuilder::
     /// #    ethernet2([1,2,3,4,5,6],     //source mac
-    /// #               [7,8,9,10,11,12]) //destionation mac
+    /// #               [7,8,9,10,11,12]) //destination mac
     /// #    .ipv4([192,168,1,1], //source ip
     /// #          [192,168,1,2], //destination ip
     /// #          20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); //destination port
     /// # // payload of the udp packet
     /// # let payload = [1,2,3,4,5,6,7,8];
     /// # // get some memory to store the serialized data
@@ -182,7 +182,7 @@ impl<'a> LaxSlicedPacket<'a> {
     /// #         [192,168,1,2], //destination ip
     /// #         20)            //time to life
     /// #    .udp(21,    //source port
-    /// #         1234); //desitnation port
+    /// #         1234); //destination port
     /// #    //payload of the udp packet
     /// #    let payload = [1,2,3,4,5,6,7,8];
     /// #    //get some memory to store the serialized data
@@ -215,7 +215,7 @@ impl<'a> LaxSlicedPacket<'a> {
     ///             if ip_payload.len_source == LenSource::Slice {
     ///                 println!("  Used slice length as fallback to identify the IP payload");
     ///             } else {
-    ///                 println!("  IP payload could correctly be identfied via the length field in the header");
+    ///                 println!("  IP payload could correctly be identified via the length field in the header");
     ///             }
     ///         }
     ///         println!("transport: {:?}", value.transport);
@@ -1340,7 +1340,7 @@ mod test {
             test.net = Some(NetHeaders::Arp(arp.clone()));
             test.set_payload_len(0);
 
-            // ok ipv6
+            // ok arp
             from_x_slice_assert_ok(&test);
 
             // len error
@@ -1912,7 +1912,7 @@ mod test {
                 }
             }
         }
-        // from_ether_type (ip at start)
+        // from_ether_type (net at start)
         if test.link.is_none() && test.link_exts.is_empty() {
             if let Some(ip) = &test.net {
                 let ether_type = match ip {

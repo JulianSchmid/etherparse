@@ -3,7 +3,7 @@ use crate::*;
 /// Two IEEE 802.1Q VLAN Tagging headers & payload slices (helper
 /// struct to check vlan tagging values in a [crate::`SlicedPacket`]).
 ///
-/// Note that it is NOT guranteed that the two VLAN headers directly
+/// Note that it is NOT guaranteed that the two VLAN headers directly
 /// followed each other in the original packet. In the original packet
 /// there could be another LinkExt header present in between them (e.g.
 /// a MacSec Security Tag).

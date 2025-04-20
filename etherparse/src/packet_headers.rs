@@ -1217,6 +1217,65 @@ mod test {
                 }
             }
         }
+
+        // arp
+        {
+            let arp = ArpPacket::new(
+                ArpHardwareId::ETHERNET,
+                EtherType::IPV4,
+                ArpOperation::REPLY,
+                &[0u8; 6],
+                &[0u8; 4],
+                &[0u8; 6],
+                &[0u8; 4],
+            )
+            .unwrap();
+
+            let mut test = base.clone();
+            test.set_ether_type(ether_type::ARP);
+            test.net = Some(NetHeaders::Arp(arp.clone()));
+            test.set_payload_len(0);
+
+            // ok arp
+            from_x_slice_assert_ok(&test);
+
+            // len error
+            {
+                for len in 0..arp.packet_len() {
+                    let mut test = test.clone();
+                    test.set_payload_len_link_ext(len);
+                    let base_len = test.len(&[]) - arp.packet_len();
+                    let data = test.to_vec(&[]);
+
+                    let err = err::LenError {
+                        required_len: if len < 8 { 8 } else { arp.packet_len() },
+                        len,
+                        len_source: if len < 8 {
+                            LenSource::Slice
+                        } else {
+                            LenSource::ArpAddrLengths
+                        },
+                        layer: Layer::Arp,
+                        layer_start_offset: base_len,
+                    };
+
+                    from_slice_assert_err(
+                        &test,
+                        &data[..base_len + len],
+                        SliceError::Len({
+                            if len < 8 {
+                                let mut err = err.clone();
+                                err.required_len = 8;
+                                err.layer = Layer::Arp;
+                                err
+                            } else {
+                                err.clone()
+                            }
+                        }),
+                    );
+                }
+            }
+        }
     }
 
     fn from_x_slice_transport_variants(base: &TestPacket) {
@@ -1482,7 +1541,11 @@ mod test {
                 assert_eq!(result.transport, None);
             } else {
                 assert_eq!(result.transport, test.transport);
-                assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                if test.has_arp() {
+                    assert_eq!(result.payload.slice(), &[]);
+                } else {
+                    assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                }
             }
         }
         // from_ether_type (vlan at start)
@@ -1500,11 +1563,15 @@ mod test {
                     assert_eq!(result.transport, None);
                 } else {
                     assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                    if test.has_arp() {
+                        assert_eq!(result.payload.slice(), &[]);
+                    } else {
+                        assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                    }
                 }
             }
         }
-        // from_ether_type (ip at start)
+        // from_ether_type (net at start)
         if test.link.is_none() && test.link_exts.is_empty() {
             if let Some(ip) = &test.net {
                 let result = PacketHeaders::from_ether_type(
@@ -1523,12 +1590,19 @@ mod test {
                     assert_eq!(result.transport, None);
                 } else {
                     assert_eq!(result.transport, test.transport);
-                    assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                    if test.has_arp() {
+                        assert_eq!(result.payload.slice(), &[]);
+                    } else {
+                        assert_eq!(result.payload.slice(), &[1, 2, 3, 4]);
+                    }
                 }
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.link_exts.is_empty() && test.net.is_some() {
+        if test.link.is_none()
+            && test.link_exts.is_empty()
+            && test.net.as_ref().map(|v| v.is_ip()).unwrap_or(false)
+        {
             let result = PacketHeaders::from_ip_slice(&data).unwrap();
             assert_eq!(result.link, test.link);
             assert_eq!(result.link_exts, test.link_exts);
@@ -1581,7 +1655,10 @@ mod test {
             }
         }
         // from_ip_slice
-        if test.link.is_none() && test.link_exts.is_empty() && test.net.is_some() {
+        if test.link.is_none()
+            && test.link_exts.is_empty()
+            && test.net.as_ref().map(|v| v.is_ip()).unwrap_or(false)
+        {
             assert_eq!(err, PacketHeaders::from_ip_slice(&data).unwrap_err());
         }
     }

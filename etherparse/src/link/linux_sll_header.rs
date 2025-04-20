@@ -7,9 +7,9 @@ pub struct LinuxSllHeader {
     pub packet_type: LinuxSllPacketType,
     /// ARPHRD_ value for the link-layer device type
     pub arp_hrd_type: ArpHardwareId,
-    /// The size of the adress that is valid
+    /// The size of the address that is valid
     pub sender_address_valid_length: u16,
-    /// The link-layer adress of the sender of the packet, with the meaningful
+    /// The link-layer address of the sender of the packet, with the meaningful
     /// bytes specified by `sender_address_valid_length`. If the original is
     /// larger, the value on the packet is truncated to the first 8 bytes. If
     /// the original is smaller, the remaining bytes will be filled with 0s.

@@ -60,7 +60,7 @@ impl<'a> Ethernet2Slice<'a> {
     #[inline]
     pub fn destination(&self) -> [u8; 6] {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of Ethernet2Header::LEN (14).
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr()) }
     }
@@ -69,7 +69,7 @@ impl<'a> Ethernet2Slice<'a> {
     #[inline]
     pub fn source(&self) -> [u8; 6] {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of Ethernet2Header::LEN (14).
         unsafe { get_unchecked_6_byte_array(self.slice.as_ptr().add(6)) }
     }
@@ -79,7 +79,7 @@ impl<'a> Ethernet2Slice<'a> {
     #[inline]
     pub fn ether_type(&self) -> EtherType {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of Ethernet2Header::LEN (14).
         EtherType(unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(12)) })
     }
@@ -117,7 +117,7 @@ impl<'a> Ethernet2Slice<'a> {
     pub fn header_slice(&self) -> &[u8] {
         unsafe {
             // SAFETY:
-            // Safe as the contructor checks that the slice has
+            // Safe as the constructor checks that the slice has
             // at least the length of Ethernet2Header::LEN (14).
             core::slice::from_raw_parts(self.slice.as_ptr(), Ethernet2Header::LEN)
         }

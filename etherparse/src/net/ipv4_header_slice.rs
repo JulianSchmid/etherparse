@@ -13,7 +13,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
     /// Creates a slice containing an ipv4 header (including header options).
     ///
     /// If you also want to have the payload & ip extension headers correctly
-    /// seperated you can use
+    /// separated you can use
     ///
     /// * [`crate::Ipv4Slice::from_slice`] (just identifies slice ranges)
     /// * [`crate::IpHeaders::from_ipv4_slice`] (unpacks all fields)
@@ -134,7 +134,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         // SAFETY:
         // get_unchecked: Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
-        // new_unchecked: Safe as value has been bitmasked to two bits.
+        // new_unchecked: Safe as value has been bit-masked to two bits.
         unsafe { Ipv4Ecn::new_unchecked(*self.slice.get_unchecked(1) & 0b0000_0011) }
     }
 
@@ -217,7 +217,7 @@ impl<'a> Ipv4HeaderSlice<'a> {
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
 
-    /// Read the "dont fragment" flag from the slice.
+    /// Read the "don't fragment" flag from the slice.
     #[inline]
     pub fn dont_fragment(&self) -> bool {
         // SAFETY:

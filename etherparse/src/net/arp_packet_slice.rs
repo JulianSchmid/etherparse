@@ -11,7 +11,7 @@ pub struct ArpPacketSlice<'a> {
 }
 
 impl<'a> ArpPacketSlice<'a> {
-    /// Creates an `ArpPacketSlice` from a slice and verfies that the
+    /// Creates an `ArpPacketSlice` from a slice and verifies that the
     /// given slice has enough data to contain an complete ARP packet.
     pub fn from_slice(slice: &'a [u8]) -> Result<ArpPacketSlice<'a>, LenError> {
         if slice.len() < 8 {
@@ -82,7 +82,7 @@ impl<'a> ArpPacketSlice<'a> {
         unsafe { *self.slice.as_ptr().add(4) }
     }
 
-    /// Length (in octets) of internetwork addresses (e.g. 4 for IPv4 or 16 for IPv6).
+    /// Length (in octets) of network addresses (e.g. 4 for IPv4 or 16 for IPv6).
     #[inline]
     pub const fn proto_addr_size(&self) -> u8 {
         // SAFE: As the constructor verified the length
@@ -103,7 +103,7 @@ impl<'a> ArpPacketSlice<'a> {
     /// Sender hardware address (e.g. MAC address).
     #[inline]
     pub const fn sender_hw_addr(&self) -> &[u8] {
-        // SAFETY: Safe as the constructor verfies the
+        // SAFETY: Safe as the constructor verifies the
         //         the slice to be at least 8 + hw_addr_size*2 + protocol_addr_size*2
         unsafe {
             core::slice::from_raw_parts(self.slice.as_ptr().add(8), self.hw_addr_size() as usize)
@@ -113,7 +113,7 @@ impl<'a> ArpPacketSlice<'a> {
     /// Sender protocol address (e.g. IPv4 address).
     #[inline]
     pub const fn sender_protocol_addr(&self) -> &[u8] {
-        // SAFETY: Safe as the constructor verfies the
+        // SAFETY: Safe as the constructor verifies the
         //         the slice to be at least 8 + hw_addr_size*2 + protocol_addr_size*2
         unsafe {
             core::slice::from_raw_parts(
@@ -126,7 +126,7 @@ impl<'a> ArpPacketSlice<'a> {
     /// Target hardware address (e.g. MAC address).
     #[inline]
     pub const fn target_hw_addr(&self) -> &[u8] {
-        // SAFETY: Safe as the constructor verfies the
+        // SAFETY: Safe as the constructor verifies the
         //         the slice to be at least 8 + hw_addr_size*2 + protocol_addr_size*2
         unsafe {
             core::slice::from_raw_parts(
@@ -141,7 +141,7 @@ impl<'a> ArpPacketSlice<'a> {
     /// Buffer containing the target protocol address (e.g. IPv4 address)..
     #[inline]
     pub const fn target_protocol_addr(&self) -> &[u8] {
-        // SAFETY: Safe as the constructor verfies the
+        // SAFETY: Safe as the constructor verifies the
         //         the slice to be at least 8 + hw_addr_size*2 + protocol_addr_size*2
         unsafe {
             core::slice::from_raw_parts(
@@ -157,8 +157,8 @@ impl<'a> ArpPacketSlice<'a> {
     #[inline]
     pub fn to_packet(&self) -> ArpPacket {
         // SAFETY: Safe as all preconditions of new unchecked
-        // are fullfilled by the fact that the on the wire packets already
-        // fullfill them.
+        // are fulfilled by the fact that the on the wire packets already
+        // fulfill them.
         unsafe {
             ArpPacket::new_unchecked(
                 self.hw_addr_type(),

@@ -11,6 +11,10 @@ pub(crate) struct TestPacket {
 }
 
 impl TestPacket {
+    pub fn has_arp(&self) -> bool {
+        self.net.as_ref().map(|v| v.is_arp()).unwrap_or(false)
+    }
+
     pub fn len(&self, payload: &[u8]) -> usize {
         self.link.as_ref().map_or(0, |x| x.header_len())
             + self
