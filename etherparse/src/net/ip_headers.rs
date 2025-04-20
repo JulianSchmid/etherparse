@@ -3,6 +3,36 @@ use crate::err::ip::HeadersWriteError;
 use crate::err::{Layer, LenError, ValueTooBigError};
 use crate::*;
 
+/// Result type of [`crate::IpHeaders::from_slice_lax`].
+///
+/// The result consists of
+///
+/// * `.0` the successfully parsed IP headers and extensions.
+/// * `.1` the partial or complete payload after the last successfully
+///   parsed ip header or ip extensions.
+/// * `.2` error why the parsing had to be stopped (filled if there was
+///   an error, otherwise `None`).
+pub type IpHeadersLaxFromSliceResult<'a> = (
+    IpHeaders,
+    LaxIpPayloadSlice<'a>,
+    Option<(err::ip_exts::HeadersSliceError, Layer)>,
+);
+
+/// Result type of [`crate::IpHeaders::from_ipv6_slice_lax`].
+///
+/// The result consists of
+///
+/// * `.0` the successfully parsed IP headers and extensions.
+/// * `.1` the partial or complete payload after the last successfully
+///   parsed ip header or ip extensions.
+/// * `.2` error why the parsing had to be stopped (filled if there was
+///   an error, otherwise `None`).
+pub type IpHeadersIpv6LaxFromSliceResult<'a> = (
+    IpHeaders,
+    LaxIpPayloadSlice<'a>,
+    Option<(err::ipv6_exts::HeaderSliceError, Layer)>,
+);
+
 /// Internet protocol headers version 4 & 6.
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[allow(clippy::large_enum_variant)]
@@ -317,14 +347,7 @@ impl IpHeaders {
     /// * The value `0`.
     pub fn from_slice_lax(
         slice: &[u8],
-    ) -> Result<
-        (
-            IpHeaders,
-            LaxIpPayloadSlice<'_>,
-            Option<(err::ip_exts::HeadersSliceError, Layer)>,
-        ),
-        err::ip::LaxHeaderSliceError,
-    > {
+    ) -> Result<IpHeadersLaxFromSliceResult<'_>, err::ip::LaxHeaderSliceError> {
         use err::ip::{HeaderError::*, LaxHeaderSliceError::*};
 
         if slice.is_empty() {
@@ -882,14 +905,7 @@ impl IpHeaders {
     /// * The value `0`.
     pub fn from_ipv6_slice_lax(
         slice: &[u8],
-    ) -> Result<
-        (
-            IpHeaders,
-            LaxIpPayloadSlice<'_>,
-            Option<(err::ipv6_exts::HeaderSliceError, Layer)>,
-        ),
-        err::ipv6::HeaderSliceError,
-    > {
+    ) -> Result<IpHeadersIpv6LaxFromSliceResult<'_>, err::ipv6::HeaderSliceError> {
         // read ipv6 header
         let (header, header_rest) = Ipv6Header::from_slice(slice)?;
 

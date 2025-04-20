@@ -136,7 +136,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     /// Read the protocol type field
     #[inline]
     pub fn protocol_type(&self) -> LinuxSllProtocolType {
-        let arp_harware_type = self.arp_hardware_type();
+        let arp_hardware_type = self.arp_hardware_type();
         // SAFETY:
         // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
@@ -145,7 +145,8 @@ impl<'a> LinuxSllHeaderSlice<'a> {
         // SAFETY:
         // Safe as the constructor checks that the arphw + protocol are supported
         unsafe {
-            LinuxSllProtocolType::try_from((arp_harware_type, protocol_type_raw)).unwrap_unchecked()
+            LinuxSllProtocolType::try_from((arp_hardware_type, protocol_type_raw))
+                .unwrap_unchecked()
         }
     }
 

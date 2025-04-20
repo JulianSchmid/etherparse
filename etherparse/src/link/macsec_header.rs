@@ -204,14 +204,12 @@ impl MacsecHeader {
                 self.short_len =
                     unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8 + 2) };
             }
+        } else if payload_len > MacsecShortLen::MAX_USIZE {
+            self.short_len = MacsecShortLen::ZERO;
         } else {
-            if payload_len > MacsecShortLen::MAX_USIZE {
-                self.short_len = MacsecShortLen::ZERO;
-            } else {
-                // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
-                //         is guaranteed after the if above.
-                self.short_len = unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8) };
-            }
+            // SAFETY: Safe as payload_len + 2 <= MacsecShortLen::MAX_USIZE
+            //         is guaranteed after the if above.
+            self.short_len = unsafe { MacsecShortLen::from_u8_unchecked(payload_len as u8) };
         }
     }
 }

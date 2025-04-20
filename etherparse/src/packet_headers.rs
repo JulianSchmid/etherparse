@@ -197,7 +197,7 @@ impl<'a> PacketHeaders<'a> {
                         len_source,
                         payload: rest,
                     });
-                    // SAFETY: Safe as the while loop condition verfies that there is space left.
+                    // SAFETY: Safe as the while loop condition verifies that there is space left.
                     unsafe {
                         result.link_exts.push_unchecked(LinkExtHeader::Vlan(vlan));
                     }
@@ -217,7 +217,7 @@ impl<'a> PacketHeaders<'a> {
                         }
                     };
 
-                    // SAFETY: Safe as the while loop condition verfies that there is space left.
+                    // SAFETY: Safe as the while loop condition verifies that there is space left.
                     unsafe {
                         result
                             .link_exts
@@ -234,7 +234,7 @@ impl<'a> PacketHeaders<'a> {
                             }
                             result.payload = PayloadSlice::Ether(EtherPayloadSlice {
                                 ether_type: e.ether_type,
-                                len_source: len_source,
+                                len_source,
                                 payload: e.payload,
                             });
                         }
@@ -743,7 +743,7 @@ mod test {
         enum Ext {
             Macsec,
             VlanTaggedFrame,
-            VlaneDoubleTaggedFrame,
+            VlanDoubleTaggedFrame,
             ProviderBridging,
         }
 
@@ -752,7 +752,7 @@ mod test {
                 match self {
                     Ext::Macsec => EtherType::MACSEC,
                     Ext::VlanTaggedFrame => EtherType::VLAN_TAGGED_FRAME,
-                    Ext::VlaneDoubleTaggedFrame => EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                    Ext::VlanDoubleTaggedFrame => EtherType::VLAN_DOUBLE_TAGGED_FRAME,
                     Ext::ProviderBridging => EtherType::PROVIDER_BRIDGING,
                 }
             }
@@ -772,7 +772,7 @@ mod test {
                             sci: None,
                         }),
                         Ext::VlanTaggedFrame
-                        | Ext::VlaneDoubleTaggedFrame
+                        | Ext::VlanDoubleTaggedFrame
                         | Ext::ProviderBridging => LinkExtHeader::Vlan(SingleVlanHeader {
                             pcp: VlanPcp::ZERO,
                             drop_eligible_indicator: false,
@@ -858,7 +858,7 @@ mod test {
         let extensions = [
             Ext::Macsec,
             Ext::VlanTaggedFrame,
-            Ext::VlaneDoubleTaggedFrame,
+            Ext::VlanDoubleTaggedFrame,
             Ext::ProviderBridging,
         ];
 

@@ -36,7 +36,7 @@ impl<'a> DoubleVlanSlice<'a> {
     /// Returns the slice containing the payload after both
     /// VLAN headers.
     pub fn payload_slice(&self) -> &'a [u8] {
-        &self.inner.payload_slice()
+        self.inner.payload_slice()
     }
 }
 

@@ -386,7 +386,7 @@ impl<'a> SlicedPacket<'a> {
                 }
             }
         }
-        result.map(|v| VlanSlice::SingleVlan(v))
+        result.map(VlanSlice::SingleVlan)
     }
 
     /// Returns the VLAN ids present in this packet.
@@ -1248,7 +1248,7 @@ mod test {
         enum Ext {
             Macsec,
             VlanTaggedFrame,
-            VlaneDoubleTaggedFrame,
+            VlanDoubleTaggedFrame,
             ProviderBridging,
         }
 
@@ -1257,7 +1257,7 @@ mod test {
                 match self {
                     Ext::Macsec => EtherType::MACSEC,
                     Ext::VlanTaggedFrame => EtherType::VLAN_TAGGED_FRAME,
-                    Ext::VlaneDoubleTaggedFrame => EtherType::VLAN_DOUBLE_TAGGED_FRAME,
+                    Ext::VlanDoubleTaggedFrame => EtherType::VLAN_DOUBLE_TAGGED_FRAME,
                     Ext::ProviderBridging => EtherType::PROVIDER_BRIDGING,
                 }
             }
@@ -1277,7 +1277,7 @@ mod test {
                             sci: None,
                         }),
                         Ext::VlanTaggedFrame
-                        | Ext::VlaneDoubleTaggedFrame
+                        | Ext::VlanDoubleTaggedFrame
                         | Ext::ProviderBridging => LinkExtHeader::Vlan(SingleVlanHeader {
                             pcp: VlanPcp::ZERO,
                             drop_eligible_indicator: false,
@@ -1363,7 +1363,7 @@ mod test {
         let extensions = [
             Ext::Macsec,
             Ext::VlanTaggedFrame,
-            Ext::VlaneDoubleTaggedFrame,
+            Ext::VlanDoubleTaggedFrame,
             Ext::ProviderBridging,
         ];
 

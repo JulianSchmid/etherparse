@@ -130,32 +130,28 @@ impl<'a> MacsecHeaderSlice<'a> {
             } else {
                 MacsecPType::EncryptedUnmodified
             }
+        } else if c {
+            MacsecPType::Modified
+        } else if 0 != (self.tci_an_raw() & 0b10_0000) {
+            // SAFETY: Slice access safe as length of the slice was
+            //         verified in the constructor to be at least 16
+            //         if 0b10_0000 is set and and 'c' and 'e' are not
+            //         set in the tci_an_raw.
+            MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
+            })))
         } else {
-            if c {
-                MacsecPType::Modified
-            } else {
-                if 0 != (self.tci_an_raw() & 0b10_0000) {
-                    // SAFETY: Slice access safe as length of the slice was
-                    //         verified in the constructor to be at least 16
-                    //         if 0b10_0000 is set and and 'c' and 'e' are not
-                    //         set in the tci_an_raw.
-                    MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
-                        [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
-                    })))
-                } else {
-                    // SAFETY: Slice access safe as length of the slice was
-                    //         verified in the constructor to be at least 8
-                    //         if 0b10_0000 is not set and 'c' and 'e' are not
-                    //         set in the tci_an_raw.
-                    MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
-                        [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
-                    })))
-                }
-            }
+            // SAFETY: Slice access safe as length of the slice was
+            //         verified in the constructor to be at least 8
+            //         if 0b10_0000 is not set and 'c' and 'e' are not
+            //         set in the tci_an_raw.
+            MacsecPType::Unmodified(EtherType(u16::from_be_bytes(unsafe {
+                [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
+            })))
         }
     }
 
-    /// Association number (identifes SAs).
+    /// Association number (identifies SAs).
     #[inline]
     pub fn an(&self) -> MacsecAn {
         // SAFETY: MacSecAn conversion safe as bit-masked to only
@@ -226,24 +222,22 @@ impl<'a> MacsecHeaderSlice<'a> {
     pub fn next_ether_type(&self) -> Option<EtherType> {
         if 0 != self.tci_an_raw() & 0b1100 {
             None
+        } else if self.sci_present() {
+            // SAFETY: Slice access safe as length of the slice was
+            //         verified in the constructor to be at least 16
+            //         if 0b10_0000 is set and 0b1100 is not set in
+            //         the tci_an_raw.
+            Some(EtherType(u16::from_be_bytes(unsafe {
+                [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
+            })))
         } else {
-            if self.sci_present() {
-                // SAFETY: Slice access safe as length of the slice was
-                //         verified in the constructor to be at least 16
-                //         if 0b10_0000 is set and 0b1100 is not set in
-                //         the tci_an_raw.
-                Some(EtherType(u16::from_be_bytes(unsafe {
-                    [*self.slice.get_unchecked(14), *self.slice.get_unchecked(15)]
-                })))
-            } else {
-                // SAFETY: Slice access safe as length of the slice was
-                //         verified in the constructor to be at least 8
-                //         if 0b10_0000 is not set and 0b1100 is not set in
-                //         the tci_an_raw.
-                Some(EtherType(u16::from_be_bytes(unsafe {
-                    [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
-                })))
-            }
+            // SAFETY: Slice access safe as length of the slice was
+            //         verified in the constructor to be at least 8
+            //         if 0b10_0000 is not set and 0b1100 is not set in
+            //         the tci_an_raw.
+            Some(EtherType(u16::from_be_bytes(unsafe {
+                [*self.slice.get_unchecked(6), *self.slice.get_unchecked(7)]
+            })))
         }
     }
 
@@ -265,12 +259,10 @@ impl<'a> MacsecHeaderSlice<'a> {
             if 0 != self.tci_an_raw() & 0b1100 {
                 // no ether type (encrypted and/or modified payload)
                 Some(sl)
+            } else if sl < 2 {
+                None
             } else {
-                if sl < 2 {
-                    None
-                } else {
-                    Some(sl - 2)
-                }
+                Some(sl - 2)
             }
         } else {
             None
