@@ -763,6 +763,10 @@ mod tests {
 
         // packet error
         {
+            let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId(0),
+            };
+            let macsec_error = || macsec::HeaderError::UnexpectedVersion;
             let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
             let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -775,6 +779,18 @@ mod tests {
                 &len_error(),
                 FromSliceError::from(packet::SliceError::Len(len_error()))
                     .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &linux_sll_error(),
+                FromSliceError::from(packet::SliceError::LinuxSll(linux_sll_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &macsec_error(),
+                FromSliceError::from(packet::SliceError::Macsec(macsec_error()))
+                    .macsec()
                     .unwrap()
             );
             assert_eq!(
