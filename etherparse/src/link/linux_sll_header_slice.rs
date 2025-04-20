@@ -173,7 +173,18 @@ mod test {
         #[test]
         fn from_slice(
             input in linux_sll_any(),
-            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            bad_packet_type in LinuxSllPacketType::MAX_VAL + 1..=u16::MAX,
+            bad_hw_type in any::<u16>().prop_filter(
+                "hw id must be unknown",
+                |v| ![
+                    ArpHardwareId::NETLINK,
+                    ArpHardwareId::IPGRE,
+                    ArpHardwareId::IEEE80211_RADIOTAP,
+                    ArpHardwareId::FRAD,
+                    ArpHardwareId::ETHERNET,
+                ].iter().any(|&x| *v == x.0)
+            )
         ) {
             // serialize
             let buffer = {
@@ -206,17 +217,29 @@ mod test {
             // packet_type_val error
             {
                 let mut modbuf = buffer.clone();
-                for packet_type in LinuxSllPacketType::MAX_VAL + 1..=u16::MAX {
-                    let p_be = packet_type.to_be_bytes();
-                    modbuf[0] = p_be[0];
-                    modbuf[1] = p_be[1];
-                    assert_eq!(
-                        LinuxSllHeaderSlice::from_slice(&modbuf),
-                        Err(err::linux_sll::HeaderSliceError::Content(
-                            err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type }
-                        ))
-                    );
-                }
+                let p_be = bad_packet_type.to_be_bytes();
+                modbuf[0] = p_be[0];
+                modbuf[1] = p_be[1];
+                assert_eq!(
+                    LinuxSllHeaderSlice::from_slice(&modbuf),
+                    Err(err::linux_sll::HeaderSliceError::Content(
+                        err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: bad_packet_type }
+                    ))
+                );
+            }
+
+            // hardware_id error
+            {
+                let mut modbuf = buffer.clone();
+                let p_be = bad_hw_type.to_be_bytes();
+                modbuf[2] = p_be[0];
+                modbuf[3] = p_be[1];
+                assert_eq!(
+                    LinuxSllHeaderSlice::from_slice(&modbuf),
+                    Err(err::linux_sll::HeaderSliceError::Content(
+                        err::linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId(bad_hw_type) }
+                    ))
+                );
             }
         }
     }
