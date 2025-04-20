@@ -823,6 +823,15 @@ mod test {
 
         // two vlan header & macsec header
         {
+            let macsec = MacsecHeader {
+                ptype: MacsecPType::Unmodified(EtherType::VLAN_DOUBLE_TAGGED_FRAME),
+                endstation_id: false,
+                scb: false,
+                an: MacsecAn::ZERO,
+                short_len: MacsecShortLen::ZERO,
+                packet_nr: 0,
+                sci: None,
+            };
             let outer = SingleVlanHeader {
                 pcp: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
@@ -833,24 +842,16 @@ mod test {
                 pcp: VlanPcp::ZERO,
                 drop_eligible_indicator: false,
                 vlan_id: VlanId::try_new(2).unwrap(),
-                ether_type: EtherType::MACSEC,
+                ether_type: EtherType::WAKE_ON_LAN,
             };
-            let macsec = MacsecHeader {
-                ptype: MacsecPType::Unmodified(EtherType::WAKE_ON_LAN),
-                endstation_id: false,
-                scb: false,
-                an: MacsecAn::ZERO,
-                short_len: MacsecShortLen::ZERO,
-                packet_nr: 0,
-                sci: None,
-            };
+            
             let headers = LaxPacketHeaders {
                 link: None,
                 link_exts: {
                     let mut exts = ArrayVec::new_const();
+                    exts.push(LinkExtHeader::Macsec(macsec.clone()));
                     exts.push(LinkExtHeader::Vlan(outer.clone()));
                     exts.push(LinkExtHeader::Vlan(inner.clone()));
-                    exts.push(LinkExtHeader::Macsec(macsec.clone()));
                     exts
                 },
                 net: None,
