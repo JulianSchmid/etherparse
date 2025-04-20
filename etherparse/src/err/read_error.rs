@@ -786,6 +786,9 @@ mod tests {
             let header_error = || ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             };
+            let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
+            let ipv6_ext_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+
             assert_eq!(
                 &header_error(),
                 ReadError::from(header_error()).ip().unwrap()
@@ -796,6 +799,22 @@ mod tests {
                     header_error()
                 )))
                 .ip()
+                .unwrap()
+            );
+            assert_eq!(
+                &ip_auth_error(),
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ipv4Ext(
+                    ip_auth_error()
+                )))
+                .ip_auth()
+                .unwrap()
+            );
+            assert_eq!(
+                &ipv6_ext_error(),
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ipv6Ext(
+                    ipv6_ext_error()
+                )))
+                .ipv6_exts()
                 .unwrap()
             );
             assert_eq!(
@@ -1033,6 +1052,10 @@ mod tests {
 
         // packet error
         {
+            let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId(0),
+            };
+            let macsec_error = || macsec::HeaderError::UnexpectedVersion;
             let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
             let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -1045,6 +1068,18 @@ mod tests {
                 &len_error(),
                 ReadError::from(packet::SliceError::Len(len_error()))
                     .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &linux_sll_error(),
+                ReadError::from(packet::SliceError::LinuxSll(linux_sll_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &macsec_error(),
+                ReadError::from(packet::SliceError::Macsec(macsec_error()))
+                    .macsec()
                     .unwrap()
             );
             assert_eq!(
