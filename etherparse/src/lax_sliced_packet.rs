@@ -493,6 +493,61 @@ mod test {
             });
         }
 
+        // two vlan header with macsec
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(SingleVlanHeader::LEN * 2 + 4);
+            buf.extend_from_slice(
+                &MacsecHeader {
+                    ptype: MacsecPType::Unmodified(EtherType::VLAN_DOUBLE_TAGGED_FRAME),
+                    endstation_id: false,
+                    scb: false,
+                    an: MacsecAn::ZERO,
+                    short_len: MacsecShortLen::ZERO,
+                    packet_nr: 0,
+                    sci: None,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(1).unwrap(),
+                    ether_type: EtherType::VLAN_TAGGED_FRAME,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(
+                &SingleVlanHeader {
+                    pcp: VlanPcp::ZERO,
+                    drop_eligible_indicator: false,
+                    vlan_id: VlanId::try_new(2).unwrap(),
+                    ether_type: EtherType::WAKE_ON_LAN,
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+
+            let slice = LaxSlicedPacket::from_ether_type(ether_type::MACSEC, &buf);
+
+            assert_eq!(
+                slice.vlan(),
+                Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
+                    outer: SingleVlanSlice { slice: &buf },
+                    inner: SingleVlanSlice {
+                        slice: &buf[SingleVlanHeader::LEN..]
+                    },
+                }))
+            );
+            assert_eq!(slice.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids
+            });
+        }
+
         // three vlan header
         {
             let payload = [1, 2, 3, 4];

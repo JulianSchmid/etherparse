@@ -844,7 +844,7 @@ mod test {
                 vlan_id: VlanId::try_new(2).unwrap(),
                 ether_type: EtherType::WAKE_ON_LAN,
             };
-            
+
             let headers = LaxPacketHeaders {
                 link: None,
                 link_exts: {
