@@ -150,8 +150,45 @@ impl MacsecHeader {
     /// Try reading a MACsec header from the position of the reader.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    pub fn read<T: std::io::Read + Sized>(&self, reader: &mut T) -> Result<(), std::io::Error> {
-        todo!()
+    pub fn read<T: std::io::Read + Sized>(
+        reader: &mut T,
+    ) -> Result<MacsecHeader, err::macsec::HeaderReadError> {
+        use err::macsec::HeaderError::*;
+        use err::macsec::HeaderReadError::*;
+
+        let mut bytes = [0; MacsecHeader::MAX_LEN];
+        reader.read_exact(&mut bytes[..6]).map_err(Io)?;
+
+        // check version bit
+        let tci_an = bytes[0];
+        if 0 != tci_an & 0b1000_0000 {
+            return Err(Content(UnexpectedVersion));
+        }
+
+        // validate short_len is not 1 in the unmodified case
+        let unmodified = 0 == tci_an & 0b1100;
+        if unmodified {
+            // SAFETY: Safe as the length was verified to be at least 6.
+            let short_len = bytes[1] & 0b0011_1111;
+            // short len must be zero (unknown) or at least 2 in case of an
+            // unmodified payload
+            if short_len == 1 {
+                return Err(Content(InvalidUnmodifiedShortLen));
+            }
+        }
+
+        // get the encrypted, changed flag (check if ether_type can be parsed)
+        let required_len =
+            6 + if unmodified { 2 } else { 0 } + if 0 != tci_an & 0b10_0000 { 8 } else { 0 };
+
+        if required_len > 6 {
+            reader.read_exact(&mut bytes[6..required_len]).map_err(Io)?;
+        }
+
+        Ok(MacsecHeaderSlice {
+            slice: &bytes[..required_len],
+        }
+        .to_header())
     }
 
     /// Writes a given MACsec header to the current position (SecTag & next
@@ -308,6 +345,80 @@ mod test {
                 macsec.ptype = MacsecPType::Unmodified(ethertype);
                 macsec.sci = Some(sci);
                 assert_eq!(16, macsec.header_len());
+            }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn read(
+            macsec in macsec_any(),
+            ether_type in ether_type_any(),
+            sci in any::<u64>()
+        ) {
+            use MacsecPType::*;
+            use err::macsec::*;
+
+            // variants
+            for ptype in [Unmodified(ether_type), Modified, Encrypted, EncryptedUnmodified] {
+                for has_sci in [false, true] {
+                    let mut macsec = macsec.clone();
+                    macsec.ptype = ptype;
+                    macsec.sci = if has_sci {
+                        Some(sci)
+                    } else {
+                        None
+                    };
+                    if matches!(ptype, MacsecPType::Unmodified(_)) && macsec.short_len.value() == 1 {
+                        macsec.short_len = MacsecShortLen::ZERO;
+                    }
+
+                    // ok case
+                    {
+                        let mut bytes = ArrayVec::<u8, { MacsecHeader::MAX_LEN + 1 }>::new();
+                        bytes.try_extend_from_slice(&macsec.to_bytes()).unwrap();
+                        let mut cursor = Cursor::new(&bytes);
+                        let m = MacsecHeader::read(&mut cursor).unwrap();
+                        assert_eq!(m, macsec);
+                        assert_eq!(macsec.header_len() as u64, cursor.position());
+                    }
+
+                    // version error
+                    {
+                        let mut bytes = ArrayVec::<u8, { MacsecHeader::MAX_LEN + 1 }>::new();
+                        bytes.try_extend_from_slice(&macsec.to_bytes()).unwrap();
+                        bytes.try_extend_from_slice(&[1]).unwrap();
+
+                        // version bit
+                        bytes[0] = bytes[0] | 0b1000_0000;
+
+                        let mut cursor = Cursor::new(&bytes);
+                        let m = MacsecHeader::read(&mut cursor).unwrap_err();
+                        assert_eq!(m.content_error(), Some(HeaderError::UnexpectedVersion));
+                    }
+
+                    // short len error
+                    if matches!(ptype, MacsecPType::Unmodified(_)) {
+                        let mut macsec = macsec.clone();
+                        macsec.short_len = MacsecShortLen::try_from_u8(1).unwrap();
+                        let mut bytes = ArrayVec::<u8, { MacsecHeader::MAX_LEN + 1 }>::new();
+                        bytes.try_extend_from_slice(&macsec.to_bytes()).unwrap();
+
+                        let mut cursor = Cursor::new(&bytes);
+                        let m = MacsecHeader::read(&mut cursor).unwrap_err();
+                        assert_eq!(m.content_error(), Some(HeaderError::InvalidUnmodifiedShortLen));
+                    }
+
+                    // len error
+                    for len in 0..macsec.header_len() {
+                        let mut bytes = ArrayVec::<u8, { MacsecHeader::MAX_LEN + 1 }>::new();
+                        bytes.try_extend_from_slice(&macsec.to_bytes()).unwrap();
+
+                        let mut cursor = Cursor::new(&bytes[..len]);
+                        let m = MacsecHeader::read(&mut cursor);
+                        assert!(m.unwrap_err().io_error().is_some());
+                    }
+                }
             }
         }
     }

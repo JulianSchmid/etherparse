@@ -1,5 +1,5 @@
-use core::slice::from_raw_parts;
 use core::net::Ipv4Addr;
+use core::slice::from_raw_parts;
 
 use crate::*;
 

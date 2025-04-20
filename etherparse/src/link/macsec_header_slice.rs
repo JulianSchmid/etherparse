@@ -6,7 +6,7 @@ use crate::{
 /// Slice containing a MACsec header & next ether type (if possible).
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct MacsecHeaderSlice<'a> {
-    slice: &'a [u8],
+    pub(crate) slice: &'a [u8],
 }
 
 impl<'a> MacsecHeaderSlice<'a> {

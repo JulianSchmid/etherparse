@@ -436,8 +436,8 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use alloc::{format, vec::Vec};
-    use proptest::prelude::*;
     use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use proptest::prelude::*;
 
     #[test]
     fn debug_clone_eq() {
