@@ -66,6 +66,12 @@ impl ReadError {
             _ => None,
         }
     }
+    pub fn macsec(&self) -> Option<&macsec::HeaderError> {
+        match self {
+            ReadError::Macsec(err) => Some(err),
+            _ => None,
+        }
+    }
     pub fn ip(&self) -> Option<&ip::HeaderError> {
         match self {
             ReadError::Ip(err) => Some(err),
@@ -422,6 +428,36 @@ impl From<linux_sll::HeaderSliceError> for ReadError {
     }
 }
 
+// macsec error conversions
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderError> for ReadError {
+    fn from(value: macsec::HeaderError) -> Self {
+        ReadError::Macsec(value)
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderReadError> for ReadError {
+    fn from(value: macsec::HeaderReadError) -> Self {
+        use macsec::HeaderReadError::*;
+        match value {
+            Io(err) => ReadError::Io(err),
+            Content(err) => ReadError::Macsec(err),
+        }
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderSliceError> for ReadError {
+    fn from(value: macsec::HeaderSliceError) -> Self {
+        use macsec::HeaderSliceError::*;
+        match value {
+            Len(err) => ReadError::Len(err),
+            Content(err) => ReadError::Macsec(err),
+        }
+    }
+}
+
 // packet error conversions
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<packet::SliceError> for ReadError {
@@ -483,7 +519,7 @@ mod tests {
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, ReadError); 10] = [
+        let test_values: [(&str, ReadError); 11] = [
             (
                 "Len",
                 Len(LenError {
@@ -500,6 +536,7 @@ mod tests {
                     arp_hardware_type: ArpHardwareId::ETHERNET,
                 }),
             ),
+            ("Macsec", Macsec(macsec::HeaderError::UnexpectedVersion)),
             (
                 "DoubleVlan",
                 DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
@@ -553,7 +590,7 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [ReadError; 10] = [
+        let test_values: [ReadError; 11] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
@@ -567,6 +604,7 @@ mod tests {
             DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
                 unexpected_ether_type: EtherType(123),
             }),
+            Macsec(macsec::HeaderError::UnexpectedVersion),
             Ip(ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             }),
@@ -1048,6 +1086,42 @@ mod tests {
                 &header_error(),
                 ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
                     .linux_sll()
+                    .unwrap()
+            );
+        }
+
+        // macsec errors
+        {
+            let header_error = || macsec::HeaderError::UnexpectedVersion;
+            assert_eq!(
+                &header_error(),
+                ReadError::from(header_error()).macsec().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderReadError::Content(header_error()))
+                    .macsec()
+                    .unwrap()
+            );
+            assert!(ReadError::from(macsec::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderSliceError::Content(header_error()))
+                    .macsec()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(macsec::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderSliceError::Content(header_error()))
+                    .macsec()
                     .unwrap()
             );
         }

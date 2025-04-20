@@ -123,6 +123,15 @@ mod tests {
             );
         }
 
+        // Macsec Header
+        {
+            let err = err::macsec::HeaderError::UnexpectedVersion;
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", err::packet::SliceError::Macsec(err))
+            );
+        }
+
         // IpHeader
         {
             let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
@@ -176,6 +185,22 @@ mod tests {
                 layer_start_offset: 3,
             };
             assert!(Len(err).source().is_some());
+        }
+
+        // Linux SLL Header
+        {
+            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ADAPT,
+            };
+            assert!(err::packet::SliceError::LinuxSll(err.clone())
+                .source()
+                .is_some());
+        }
+
+        // Macsec Header
+        {
+            let err = err::macsec::HeaderError::UnexpectedVersion;
+            assert!(err::packet::SliceError::Macsec(err).source().is_some());
         }
 
         // IpHeaders

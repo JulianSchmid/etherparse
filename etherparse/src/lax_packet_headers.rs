@@ -821,6 +821,59 @@ mod test {
             });
         }
 
+        // two vlan header & macsec header
+        {
+            let outer = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(1).unwrap(),
+                ether_type: EtherType::VLAN_TAGGED_FRAME,
+            };
+            let inner = SingleVlanHeader {
+                pcp: VlanPcp::ZERO,
+                drop_eligible_indicator: false,
+                vlan_id: VlanId::try_new(2).unwrap(),
+                ether_type: EtherType::MACSEC,
+            };
+            let macsec = MacsecHeader {
+                ptype: MacsecPType::Unmodified(EtherType::WAKE_ON_LAN),
+                endstation_id: false,
+                scb: false,
+                an: MacsecAn::ZERO,
+                short_len: MacsecShortLen::ZERO,
+                packet_nr: 0,
+                sci: None,
+            };
+            let headers = LaxPacketHeaders {
+                link: None,
+                link_exts: {
+                    let mut exts = ArrayVec::new_const();
+                    exts.push(LinkExtHeader::Vlan(outer.clone()));
+                    exts.push(LinkExtHeader::Vlan(inner.clone()));
+                    exts.push(LinkExtHeader::Macsec(macsec.clone()));
+                    exts
+                },
+                net: None,
+                transport: None,
+                payload: LaxPayloadSlice::Empty,
+                stop_err: None,
+            };
+
+            assert_eq!(
+                headers.vlan(),
+                Some(VlanHeader::Double(DoubleVlanHeader {
+                    outer: outer.clone(),
+                    inner: inner.clone(),
+                }))
+            );
+            assert_eq!(headers.vlan_ids(), {
+                let mut ids = ArrayVec::<VlanId, 3>::new_const();
+                ids.push(VlanId::try_new(1).unwrap());
+                ids.push(VlanId::try_new(2).unwrap());
+                ids
+            });
+        }
+
         // three vlan header
         {
             let vlan1 = SingleVlanHeader {
