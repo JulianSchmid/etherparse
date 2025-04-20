@@ -496,19 +496,17 @@ mod test {
         // two vlan header with macsec
         {
             let payload = [1, 2, 3, 4];
-            let mut buf = Vec::with_capacity(SingleVlanHeader::LEN * 2 + 4);
-            buf.extend_from_slice(
-                &MacsecHeader {
-                    ptype: MacsecPType::Unmodified(EtherType::VLAN_DOUBLE_TAGGED_FRAME),
-                    endstation_id: false,
-                    scb: false,
-                    an: MacsecAn::ZERO,
-                    short_len: MacsecShortLen::ZERO,
-                    packet_nr: 0,
-                    sci: None,
-                }
-                .to_bytes(),
-            );
+            let macsec = MacsecHeader {
+                ptype: MacsecPType::Unmodified(EtherType::VLAN_DOUBLE_TAGGED_FRAME),
+                endstation_id: false,
+                scb: false,
+                an: MacsecAn::ZERO,
+                short_len: MacsecShortLen::ZERO,
+                packet_nr: 0,
+                sci: None,
+            };
+            let mut buf = Vec::with_capacity(macsec.header_len() + SingleVlanHeader::LEN * 2 + 4);
+            buf.extend_from_slice(&macsec.to_bytes());
             buf.extend_from_slice(
                 &SingleVlanHeader {
                     pcp: VlanPcp::ZERO,
@@ -531,12 +529,15 @@ mod test {
 
             let slice = LaxSlicedPacket::from_ether_type(ether_type::MACSEC, &buf);
 
+            let vlan_start = macsec.header_len();
             assert_eq!(
                 slice.vlan(),
                 Some(VlanSlice::DoubleVlan(DoubleVlanSlice {
-                    outer: SingleVlanSlice { slice: &buf },
+                    outer: SingleVlanSlice {
+                        slice: &buf[vlan_start..]
+                    },
                     inner: SingleVlanSlice {
-                        slice: &buf[SingleVlanHeader::LEN..]
+                        slice: &buf[vlan_start + SingleVlanHeader::LEN..]
                     },
                 }))
             );
