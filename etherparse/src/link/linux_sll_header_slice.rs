@@ -87,7 +87,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn packet_type(&self) -> LinuxSllPacketType {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let packet_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr()) };
 
@@ -100,7 +100,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn arp_hardware_type(&self) -> ArpHardwareId {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let arp_hardware_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(2)) };
 
@@ -111,7 +111,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn sender_address_valid_length(&self) -> u16 {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(4)) }
     }
@@ -121,7 +121,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     #[inline]
     pub fn sender_address_full(&self) -> [u8; 8] {
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         unsafe { get_unchecked_8_byte_array(self.slice.as_ptr().add(6)) }
     }
@@ -136,16 +136,17 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     /// Read the protocol type field
     #[inline]
     pub fn protocol_type(&self) -> LinuxSllProtocolType {
-        let arp_harware_type = self.arp_hardware_type();
+        let arp_hardware_type = self.arp_hardware_type();
         // SAFETY:
-        // Safe as the contructor checks that the slice has
+        // Safe as the constructor checks that the slice has
         // at least the length of LinuxSllHeader::LEN (16).
         let protocol_type_raw = unsafe { get_unchecked_be_u16(self.slice.as_ptr().add(14)) };
 
         // SAFETY:
-        // Safe as the constructor checks that the arphwd + protocol are supported
+        // Safe as the constructor checks that the arphw + protocol are supported
         unsafe {
-            LinuxSllProtocolType::try_from((arp_harware_type, protocol_type_raw)).unwrap_unchecked()
+            LinuxSllProtocolType::try_from((arp_hardware_type, protocol_type_raw))
+                .unwrap_unchecked()
         }
     }
 
@@ -172,12 +173,26 @@ mod test {
         #[test]
         fn from_slice(
             input in linux_sll_any(),
-            dummy_data in proptest::collection::vec(any::<u8>(), 0..20)
+            dummy_data in proptest::collection::vec(any::<u8>(), 0..20),
+            bad_packet_type in LinuxSllPacketType::MAX_VAL + 1..=u16::MAX,
+            bad_hw_type in any::<u16>().prop_filter(
+                "hw id must be unknown",
+                |v| ![
+                    ArpHardwareId::NETLINK,
+                    ArpHardwareId::IPGRE,
+                    ArpHardwareId::IEEE80211_RADIOTAP,
+                    ArpHardwareId::FRAD,
+                    ArpHardwareId::ETHERNET,
+                ].iter().any(|&x| *v == x.0)
+            )
         ) {
             // serialize
-            let mut buffer: Vec<u8> = Vec::with_capacity(LinuxSllHeader::LEN + dummy_data.len());
-            input.write(&mut buffer).unwrap();
-            buffer.extend(&dummy_data[..]);
+            let buffer = {
+                let mut buffer: Vec<u8> = Vec::with_capacity(LinuxSllHeader::LEN + dummy_data.len());
+                input.write(&mut buffer).unwrap();
+                buffer.extend(&dummy_data[..]);
+                buffer
+            };
 
             // calls with a valid result
             {
@@ -198,6 +213,34 @@ mod test {
                     }))
                 );
             }
+
+            // packet_type_val error
+            {
+                let mut modbuf = buffer.clone();
+                let p_be = bad_packet_type.to_be_bytes();
+                modbuf[0] = p_be[0];
+                modbuf[1] = p_be[1];
+                assert_eq!(
+                    LinuxSllHeaderSlice::from_slice(&modbuf),
+                    Err(err::linux_sll::HeaderSliceError::Content(
+                        err::linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: bad_packet_type }
+                    ))
+                );
+            }
+
+            // hardware_id error
+            {
+                let mut modbuf = buffer.clone();
+                let p_be = bad_hw_type.to_be_bytes();
+                modbuf[2] = p_be[0];
+                modbuf[3] = p_be[1];
+                assert_eq!(
+                    LinuxSllHeaderSlice::from_slice(&modbuf),
+                    Err(err::linux_sll::HeaderSliceError::Content(
+                        err::linux_sll::HeaderError::UnsupportedArpHardwareId { arp_hardware_type: ArpHardwareId(bad_hw_type) }
+                    ))
+                );
+            }
         }
     }
 
@@ -210,6 +253,7 @@ mod test {
             assert_eq!(input.arp_hrd_type, slice.arp_hardware_type());
             assert_eq!(input.sender_address_valid_length, slice.sender_address_valid_length());
             assert_eq!(input.sender_address, slice.sender_address_full());
+            assert_eq!(&input.sender_address[..usize::from(input.sender_address_valid_length)], slice.sender_address());
             assert_eq!(input.protocol_type, slice.protocol_type());
         }
     }

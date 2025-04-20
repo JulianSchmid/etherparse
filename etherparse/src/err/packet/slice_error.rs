@@ -8,6 +8,8 @@ pub enum SliceError {
     Len(err::LenError),
     /// Error when decoding an Linux SLL header.
     LinuxSll(err::linux_sll::HeaderError),
+    /// Error when decoding MACsec header.
+    Macsec(err::macsec::HeaderError),
     /// Error when decoding starting at an IP header (v4 or v6).
     Ip(err::ip::HeaderError),
     /// Error when decoding an IPv4 header.
@@ -29,6 +31,7 @@ impl core::fmt::Display for SliceError {
         match self {
             Len(err) => err.fmt(f),
             LinuxSll(err) => err.fmt(f),
+            Macsec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             Ipv4(err) => err.fmt(f),
             Ipv6(err) => err.fmt(f),
@@ -47,6 +50,7 @@ impl std::error::Error for SliceError {
         match self {
             Len(err) => Some(err),
             LinuxSll(err) => Some(err),
+            Macsec(err) => Some(err),
             Ip(err) => Some(err),
             Ipv4(err) => Some(err),
             Ipv6(err) => Some(err),
@@ -119,6 +123,15 @@ mod tests {
             );
         }
 
+        // Macsec Header
+        {
+            let err = err::macsec::HeaderError::UnexpectedVersion;
+            assert_eq!(
+                format!("{}", err),
+                format!("{}", err::packet::SliceError::Macsec(err))
+            );
+        }
+
         // IpHeader
         {
             let err = err::ip::HeaderError::UnsupportedIpVersion { version_number: 1 };
@@ -172,6 +185,22 @@ mod tests {
                 layer_start_offset: 3,
             };
             assert!(Len(err).source().is_some());
+        }
+
+        // Linux SLL Header
+        {
+            let err = err::linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId::ADAPT,
+            };
+            assert!(err::packet::SliceError::LinuxSll(err.clone())
+                .source()
+                .is_some());
+        }
+
+        // Macsec Header
+        {
+            let err = err::macsec::HeaderError::UnexpectedVersion;
+            assert!(err::packet::SliceError::Macsec(err).source().is_some());
         }
 
         // IpHeaders

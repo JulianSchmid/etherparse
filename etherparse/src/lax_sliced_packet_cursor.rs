@@ -2,23 +2,25 @@ use crate::{
     err::{packet::SliceError, Layer},
     *,
 };
+use arrayvec::ArrayVec;
 
 /// Helper class for laxly slicing packets.
 pub(crate) struct LaxSlicedPacketCursor<'a> {
     pub offset: usize,
+    pub len_source: LenSource,
     pub result: LaxSlicedPacket<'a>,
 }
 
 impl<'a> LaxSlicedPacketCursor<'a> {
     pub fn parse_from_ethernet2(slice: &'a [u8]) -> Result<LaxSlicedPacket<'a>, err::LenError> {
-        use ether_type::*;
         use LinkSlice::*;
 
         let mut cursor = LaxSlicedPacketCursor {
             offset: 0,
+            len_source: LenSource::Slice,
             result: LaxSlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
                 stop_err: None,
@@ -34,40 +36,31 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         cursor.offset += result.header_len();
         cursor.result.link = Some(Ethernet2(result));
 
-        // continue parsing (if required)
-        match payload.ether_type {
-            IPV4 => Ok(cursor.slice_ip(payload.payload)),
-            IPV6 => Ok(cursor.slice_ip(payload.payload)),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                Ok(cursor.slice_vlan(payload.payload))
-            }
-            _ => Ok(cursor.result),
-        }
+        // parse the rest
+        Ok(cursor.slice_ether_type(payload))
     }
 
     pub fn parse_from_ether_type(ether_type: EtherType, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
         let cursor = LaxSlicedPacketCursor {
             offset: 0,
+            len_source: LenSource::Slice,
             result: LaxSlicedPacket {
                 link: Some(LinkSlice::EtherPayload(EtherPayloadSlice {
                     ether_type,
+                    len_source: LenSource::Slice,
                     payload: slice,
                 })),
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
                 stop_err: None,
             },
         };
-        use ether_type::*;
-        match ether_type {
-            IPV4 | IPV6 => cursor.slice_ip(slice),
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                cursor.slice_vlan(slice)
-            }
-            ARP => cursor.slice_arp(slice),
-            _ => cursor.result,
-        }
+        cursor.slice_ether_type(EtherPayloadSlice {
+            ether_type,
+            len_source: LenSource::Slice,
+            payload: slice,
+        })
     }
 
     pub fn parse_from_ip(
@@ -82,9 +75,10 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         let offset = (payload.payload.as_ptr() as usize) - (slice.as_ptr() as usize);
         Ok(LaxSlicedPacketCursor {
             offset,
+            len_source: LenSource::Slice,
             result: LaxSlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: Some(ip.into()),
                 transport: None,
                 stop_err: stop_err.map(|(stop_err, stop_layer)| {
@@ -113,58 +107,96 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         .slice_transport(payload))
     }
 
-    pub fn slice_vlan(mut self, slice: &'a [u8]) -> LaxSlicedPacket<'a> {
+    pub fn slice_ether_type(
+        mut self,
+        mut ether_payload: EtherPayloadSlice<'a>,
+    ) -> LaxSlicedPacket<'a> {
         use ether_type::*;
-        use VlanSlice::*;
-
-        // cache the starting slice so the later combining
-        // of outer & inner vlan is defined behavior (for miri)
-        let outer_start_slice = slice;
-        let outer = match SingleVlanSlice::from_slice(slice) {
-            Ok(v) => v,
-            Err(err) => {
-                self.result.stop_err = Some((
-                    SliceError::Len(err.add_offset(self.offset)),
-                    Layer::VlanHeader,
-                ));
-                return self.result;
-            }
-        };
-        self.result.vlan = Some(VlanSlice::SingleVlan(outer.clone()));
-        self.offset += outer.header_len();
-
-        //check if it is a double vlan header
-        match outer.ether_type() {
-            //in case of a double vlan header continue with the inner
-            VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
-                let inner = match SingleVlanSlice::from_slice(outer.payload_slice()) {
-                    Ok(v) => v,
-                    Err(err) => {
-                        self.result.stop_err = Some((
-                            SliceError::Len(err.add_offset(self.offset)),
-                            Layer::VlanHeader,
-                        ));
+        loop {
+            match ether_payload.ether_type {
+                VLAN_TAGGED_FRAME | PROVIDER_BRIDGING | VLAN_DOUBLE_TAGGED_FRAME => {
+                    if self.result.link_exts.is_full() {
                         return self.result;
                     }
-                };
-                self.offset += inner.header_len();
+                    let vlan = match SingleVlanSlice::from_slice(ether_payload.payload) {
+                        Ok(v) => v,
+                        Err(err) => {
+                            self.result.stop_err = Some((
+                                SliceError::Len(err.add_offset(self.offset)),
+                                Layer::VlanHeader,
+                            ));
+                            return self.result;
+                        }
+                    };
+                    self.offset += vlan.header_len();
+                    let vlan_payload = vlan.payload();
+                    ether_payload = EtherPayloadSlice {
+                        ether_type: vlan_payload.ether_type,
+                        len_source: self.len_source,
+                        payload: vlan_payload.payload,
+                    };
+                    // SAFETY: Safe, as the if at the startt verifies that there is still
+                    //         space in link_exts.
+                    unsafe {
+                        self.result
+                            .link_exts
+                            .push_unchecked(LaxLinkExtSlice::Vlan(vlan));
+                    }
+                }
+                MACSEC => {
+                    use err::macsec::HeaderSliceError as I;
+                    if self.result.link_exts.is_full() {
+                        return self.result;
+                    }
+                    let macsec = match LaxMacsecSlice::from_slice(ether_payload.payload) {
+                        Ok(v) => v,
+                        Err(I::Len(err)) => {
+                            let layer = err.layer;
+                            self.result.stop_err =
+                                Some((SliceError::Len(err.add_offset(self.offset)), layer));
+                            return self.result;
+                        }
+                        Err(I::Content(err)) => {
+                            self.result.stop_err =
+                                Some((SliceError::Macsec(err), Layer::MacsecHeader));
+                            return self.result;
+                        }
+                    };
 
-                let inner_ether_type = inner.ether_type();
-                self.result.vlan = Some(DoubleVlan(DoubleVlanSlice {
-                    slice: outer_start_slice,
-                }));
+                    self.offset += macsec.header.header_len();
+                    let macsec_payload = macsec.payload.clone();
+                    // SAFETY: Safe, as the if at the startt verifies that there is still
+                    //         space in link_exts.
+                    unsafe {
+                        self.result
+                            .link_exts
+                            .push_unchecked(LaxLinkExtSlice::Macsec(macsec));
+                    }
 
-                match inner_ether_type {
-                    IPV4 => self.slice_ip(inner.payload_slice()),
-                    IPV6 => self.slice_ip(inner.payload_slice()),
-                    _ => self.result,
+                    if let LaxMacsecPayloadSlice::Unmodified(e) = macsec_payload {
+                        if e.len_source != LenSource::Slice {
+                            self.len_source = e.len_source;
+                        }
+                        ether_payload = EtherPayloadSlice {
+                            payload: e.payload,
+                            len_source: self.len_source,
+                            ether_type: e.ether_type,
+                        };
+                    } else {
+                        return self.result;
+                    }
+                }
+                ARP => {
+                    return self.slice_arp(ether_payload.payload);
+                }
+                IPV4 => return self.slice_ip(ether_payload.payload),
+                IPV6 => {
+                    return self.slice_ip(ether_payload.payload);
+                }
+                _ => {
+                    return self.result;
                 }
             }
-            value => match value {
-                IPV4 => self.slice_ip(outer.payload_slice()),
-                IPV6 => self.slice_ip(outer.payload_slice()),
-                _ => self.result,
-            },
         }
     }
 
@@ -173,6 +205,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             Ok(arp) => arp,
             Err(mut e) => {
                 e.layer_start_offset += self.offset;
+                if LenSource::Slice == e.len_source {
+                    e.len_source = self.len_source;
+                }
                 self.result.stop_err = Some((err::packet::SliceError::Len(e), Layer::Arp));
                 return self.result;
             }
@@ -191,6 +226,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 self.result.stop_err = Some(match e {
                     I::Len(mut l) => {
                         l.layer_start_offset += self.offset;
+                        if LenSource::Slice == l.len_source {
+                            l.len_source = self.len_source;
+                        }
                         (O::Len(l), Layer::IpHeader)
                     }
                     I::Content(c) => (O::Ip(c), Layer::IpHeader),
@@ -207,7 +245,13 @@ impl<'a> LaxSlicedPacketCursor<'a> {
             use err::packet::SliceError as O;
             self.result.stop_err = Some((
                 match stop_err {
-                    I::Len(l) => O::Len(l.add_offset(self.offset)),
+                    I::Len(mut l) => O::Len({
+                        l.layer_start_offset += self.offset;
+                        if LenSource::Slice == l.len_source {
+                            l.len_source = self.len_source;
+                        }
+                        l
+                    }),
                     I::Content(c) => match c {
                         E::HopByHopNotAtStart => O::Ipv6Exts(E::HopByHopNotAtStart),
                         E::IpAuth(auth) => match &ip.0 {
@@ -223,13 +267,16 @@ impl<'a> LaxSlicedPacketCursor<'a> {
         // move offset for the transport layers
         let payload = ip.0.payload().clone();
         self.offset += (payload.payload.as_ptr() as usize) - (slice.as_ptr() as usize);
+        if LenSource::Slice != payload.len_source {
+            self.len_source = payload.len_source;
+        }
         self.slice_transport(payload)
     }
 
     fn slice_transport(mut self, slice: LaxIpPayloadSlice<'a>) -> LaxSlicedPacket<'a> {
         use err::packet::SliceError as O;
         if slice.fragmented || self.result.stop_err.is_some() {
-            // if an error occured in an upper layer or the payload is fragmented
+            // if an error occurred in an upper layer or the payload is fragmented
             // stop here
             return self.result;
         }
@@ -241,7 +288,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 }
                 Err(mut err) => {
                     err.layer_start_offset += self.offset;
-                    err.len_source = slice.len_source;
+                    if LenSource::Slice == err.len_source {
+                        err.len_source = slice.len_source;
+                    }
                     self.result.stop_err = Some((O::Len(err), Layer::Icmpv4));
                 }
             },
@@ -252,7 +301,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 }
                 Err(mut err) => {
                     err.layer_start_offset += self.offset;
-                    err.len_source = slice.len_source;
+                    if LenSource::Slice == err.len_source {
+                        err.len_source = slice.len_source;
+                    }
                     self.result.stop_err = Some((O::Len(err), Layer::UdpHeader));
                 }
             },
@@ -267,7 +318,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                         match err {
                             I::Len(mut l) => {
                                 l.layer_start_offset += self.offset;
-                                l.len_source = slice.len_source;
+                                if LenSource::Slice == l.len_source {
+                                    l.len_source = slice.len_source;
+                                }
                                 O::Len(l)
                             }
                             I::Content(c) => O::Tcp(c),
@@ -283,7 +336,9 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                 }
                 Err(mut err) => {
                     err.layer_start_offset += self.offset;
-                    err.len_source = slice.len_source;
+                    if LenSource::Slice == err.len_source {
+                        err.len_source = slice.len_source;
+                    }
                     self.result.stop_err = Some((O::Len(err), Layer::Icmpv6));
                 }
             },

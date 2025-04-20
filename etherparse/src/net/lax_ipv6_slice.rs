@@ -9,7 +9,7 @@ use crate::{
 /// payload to incomplete/cut off and errors to be present in
 /// the IpPayload.
 ///
-/// The main usecases for "laxly" parsed slices are are:
+/// The main use cases for "laxly" parsed slices are are:
 ///
 /// * Parsing packets that have been cut off. This is, for example, useful to
 ///   parse packets returned via ICMP as these usually only contain the start.
@@ -25,14 +25,14 @@ pub struct LaxIpv6Slice<'a> {
 }
 
 impl<'a> LaxIpv6Slice<'a> {
-    /// Seperate an IPv6 header (+ extensions) & the payload from the given slice with
+    /// separate an IPv6 header (+ extensions) & the payload from the given slice with
     /// less strict length checks (useful for cut off packet or for packets with
     /// unset length fields).
     ///
     /// If you want to only receive correct IpPayloads use [`crate::Ipv4Slice::from_slice`]
     /// instead.
     ///
-    /// The main usecases for this functions are:
+    /// The main use cases for this functions are:
     ///
     /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
@@ -49,22 +49,22 @@ impl<'a> LaxIpv6Slice<'a> {
     ///   with the successfully parsed parts and the error as optional. Only if an
     ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
     ///   In the normal `Ipv4Slice::from_slice` function an `Err` is returned if an error is
-    ///   encountered in an exteions header.
+    ///   encountered in an extension header.
     /// * `LaxIpv4Slice::from_slice` ignores inconsistent `payload_length` values. When the
-    ///   `payload_length` value in the IPv6 header is inconsistant the length of
+    ///   `payload_length` value in the IPv6 header is inconsistent the length of
     ///   the given slice is used as a substitute.
     ///
-    /// You can check if the slice length was used as a substitude by checking
+    /// You can check if the slice length was used as a substitute by checking
     /// if the `len_source` value in the returned [`IpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv6HeaderPayloadLen`].
     ///
     /// # When is the slice length used as a fallback?
     ///
-    /// The slice length is used as a fallback/substitude if the `payload_length`
+    /// The slice length is used as a fallback/substitute if the `payload_length`
     /// field in the IPv6 header is
     ///
-    /// * Bigger then the given slice (payload cannot fully be seperated).
+    /// * Bigger then the given slice (payload cannot fully be separated).
     /// * The value `0`.
     pub fn from_slice(
         slice: &'a [u8],

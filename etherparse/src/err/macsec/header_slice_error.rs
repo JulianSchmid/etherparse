@@ -1,7 +1,7 @@
 use super::HeaderError;
 use crate::err::LenError;
 
-/// Error when decoding a double VLAN header from a slice.
+/// Error when decoding a MACsec header from a slice.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderSliceError {
     /// Error when an length error is encountered (e.g. unexpected
@@ -29,7 +29,7 @@ impl core::fmt::Display for HeaderSliceError {
         use HeaderSliceError::*;
         match self {
             Len(err) => err.fmt(f),
-            Content(err) => err.fmt(f),
+            Content(value) => value.fmt(f),
         }
     }
 }
@@ -59,6 +59,7 @@ mod tests {
 
     #[test]
     fn add_slice_offset() {
+        use HeaderSliceError::*;
         assert_eq!(
             Len(LenError {
                 required_len: 1,
@@ -77,21 +78,14 @@ mod tests {
             })
         );
         assert_eq!(
-            Content(HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1.into()
-            })
-            .add_slice_offset(200),
-            Content(HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1.into()
-            })
+            Content(HeaderError::UnexpectedVersion).add_slice_offset(200),
+            Content(HeaderError::UnexpectedVersion)
         );
     }
 
     #[test]
     fn debug() {
-        let err = HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into(),
-        };
+        let err = HeaderError::UnexpectedVersion;
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -100,9 +94,7 @@ mod tests {
 
     #[test]
     fn clone_eq_hash() {
-        let err = Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into(),
-        });
+        let err = Content(HeaderError::UnexpectedVersion);
         assert_eq!(err, err.clone());
         let hash_a = {
             let mut hasher = DefaultHasher::new();
@@ -130,9 +122,7 @@ mod tests {
             assert_eq!(format!("{}", &err), format!("{}", Len(err)));
         }
         {
-            let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1.into(),
-            };
+            let err = HeaderError::UnexpectedVersion;
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -149,10 +139,6 @@ mod tests {
         })
         .source()
         .is_some());
-        assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into()
-        })
-        .source()
-        .is_some());
+        assert!(Content(HeaderError::UnexpectedVersion).source().is_some());
     }
 }

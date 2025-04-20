@@ -6,7 +6,7 @@ use crate::{err::*, *};
 /// payload to be incomplete/cut off and errors to be present in
 /// the IpPayload.
 ///
-/// The main usecases for "laxly" parsed slices are are:
+/// The main use cases for "laxly" parsed slices are are:
 ///
 /// * Parsing packets that have been cut off. This is, for example, useful to
 ///   parse packets returned via ICMP as these usually only contain the start.
@@ -91,12 +91,12 @@ impl<'a> LaxIpSlice<'a> {
 
     /// Separates IP headers (include extension headers) & the IP payload from the given slice
     /// as far as possible without encountering an error and with less strict length checks.
-    /// This function is usefull for cut off packet or for packets with unset length fields.
+    /// This function is useful for cut off packet or for packets with unset length fields.
     ///
     /// If you want to only receive correct IpPayloads use [`IpSlice::from_slice`]
     /// instead.
     ///
-    /// The main usecases for this functions are:
+    /// The main use cases for this functions are:
     ///
     /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
@@ -113,29 +113,29 @@ impl<'a> LaxIpSlice<'a> {
     ///   with the successfully parsed parts and the error as optional. Only if an
     ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
     ///   In the normal `from_slice` function an `Err` is returned if an error is
-    ///   encountered in an exteions header.
+    ///   encountered in an extension header.
     /// * `from_slice_lax` ignores inconsistent `total_len` (in IPv4 headers) and
     ///   inconsistent `payload_length` (in IPv6 headers) values. When these length
-    ///   values in the IP header are inconsistant the length of the given slice is
+    ///   values in the IP header are inconsistent the length of the given slice is
     ///   used as a substitute.
     ///
-    /// You can check if the slice length was used as a substitude by checking
+    /// You can check if the slice length was used as a substitute by checking
     /// if `result.payload().len_source` is set to [`LenSource::Slice`].
     /// If a substitution was not needed `len_source` is set to
     /// [`LenSource::Ipv4HeaderTotalLen`] or [`LenSource::Ipv6HeaderPayloadLen`].
     ///
     /// # When is the slice length used as a fallback?
     ///
-    /// For IPv4 packets the slice length is used as a fallback/substitude
+    /// For IPv4 packets the slice length is used as a fallback/substitute
     /// if the `total_length` field in the IPv4 header is:
     ///
-    ///  * Bigger then the given slice (payload cannot fully be seperated).
+    ///  * Bigger then the given slice (payload cannot fully be separated).
     ///  * Too small to contain at least the IPv4 header.
     ///
-    /// For IPv6 packet the slice length is used as a fallback/substitude
+    /// For IPv6 packet the slice length is used as a fallback/substitute
     /// if the `payload_length` is
     ///
-    /// * Bigger then the given slice (payload cannot fully be seperated).
+    /// * Bigger then the given slice (payload cannot fully be separated).
     /// * The value `0`.
     pub fn from_slice(
         slice: &[u8],
@@ -237,7 +237,7 @@ impl<'a> LaxIpSlice<'a> {
                                     // SAFETY: Safe as slice.len() >= header_len was validated
                                     // in a if statement above.
                                     slice.as_ptr().add(header_len),
-                                    // SAFETY: Safe as total_length >= header_len was verfied in an
+                                    // SAFETY: Safe as total_length >= header_len was verified in an
                                     // if statement above as well as that slice.len() >= total_length_usize.
                                     total_len - header_len,
                                 )
@@ -349,7 +349,7 @@ impl<'a> LaxIpSlice<'a> {
                     let payload_len = usize::from(header.payload_length());
                     let (header_payload, len_source, incomplete) =
                         if 0 == payload_len && slice.len() > Ipv6Header::LEN {
-                            // zero set as payload len, assume jumbograms or unitialized
+                            // zero set as payload len, assume jumbograms or uninitialized
                             // length and use the slice length as a fallback value
                             // TODO: Add payload length parsing from the jumbogram for the zero case
                             (
@@ -436,8 +436,8 @@ mod test {
     use super::*;
     use crate::test_gens::*;
     use alloc::{format, vec::Vec};
-    use proptest::prelude::*;
     use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    use proptest::prelude::*;
 
     #[test]
     fn debug_clone_eq() {
@@ -1089,7 +1089,7 @@ mod test {
                         ipv6_exts.hop_by_hop_options.as_ref().map(|h| h.header_len()).unwrap_or(0) +
                         ipv6_exts.destination_options.as_ref().map(|h| h.header_len()).unwrap_or(0) +
                         ipv6_exts.routing.as_ref().map(|h| h.routing.header_len()).unwrap_or(0) +
-                        // routing.final_destination_options skiped, as after auth
+                        // routing.final_destination_options skipped, as after auth
                         ipv6_exts.fragment.as_ref().map(|h| h.header_len()).unwrap_or(0);
 
                     // inject length zero into auth header (not valid, will

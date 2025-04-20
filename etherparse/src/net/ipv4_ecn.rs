@@ -18,10 +18,7 @@ impl Ipv4Ecn {
     /// Ipv4Ecn with value 0.
     pub const THREE: Ipv4Ecn = Ipv4Ecn(3);
 
-    #[deprecated(
-        since = "0.18.0",
-        note = "Please use Ipv4Ecn::THREE instead."
-    )]
+    #[deprecated(since = "0.18.0", note = "Please use Ipv4Ecn::THREE instead.")]
     /// Deprecated, use [`crate::Ipv4Ecn::THREE`] instead.
     pub const TRHEE: Ipv4Ecn = Ipv4Ecn::THREE;
 

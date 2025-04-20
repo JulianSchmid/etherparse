@@ -1,4 +1,4 @@
-/// Represents an "Ethertype" present in a Ethernet II header.
+/// Represents an "ether type" present in a Ethernet II header.
 ///
 /// You can access the underlying `u16` value by using `.0` and any `u16`
 /// can be converted to an `EtherType`:
@@ -37,6 +37,9 @@ impl EtherType {
     pub const WAKE_ON_LAN: EtherType = Self(0x0842);
     pub const VLAN_TAGGED_FRAME: EtherType = Self(0x8100);
     pub const PROVIDER_BRIDGING: EtherType = Self(0x88A8);
+
+    /// IEEE Std 802.1AE - Media Access Control Security
+    pub const MACSEC: EtherType = Self(0x88E5);
     pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = Self(0x9100);
 }
 
@@ -69,6 +72,11 @@ impl core::fmt::Debug for EtherType {
             Self::PROVIDER_BRIDGING => write!(
                 f,
                 "{:#06X} (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))",
+                self.0
+            ),
+            Self::MACSEC => write!(
+                f,
+                "{:#06X} (IEEE Std 802.1AE - Media Access Control Security)",
                 self.0
             ),
             Self::VLAN_DOUBLE_TAGGED_FRAME => {
@@ -105,6 +113,9 @@ pub mod ether_type {
     pub const WAKE_ON_LAN: EtherType = EtherType::WAKE_ON_LAN;
     pub const VLAN_TAGGED_FRAME: EtherType = EtherType::VLAN_TAGGED_FRAME;
     pub const PROVIDER_BRIDGING: EtherType = EtherType::PROVIDER_BRIDGING;
+
+    /// IEEE Std 802.1AE - Media Access Control Security
+    pub const MACSEC: EtherType = EtherType::MACSEC;
     pub const VLAN_DOUBLE_TAGGED_FRAME: EtherType = EtherType::VLAN_DOUBLE_TAGGED_FRAME;
 }
 
@@ -145,6 +156,7 @@ mod test {
             (EtherType::ARP, ARP),
             (EtherType::WAKE_ON_LAN, WAKE_ON_LAN),
             (EtherType::VLAN_TAGGED_FRAME, VLAN_TAGGED_FRAME),
+            (EtherType::MACSEC, MACSEC),
             (EtherType::PROVIDER_BRIDGING, PROVIDER_BRIDGING),
             (
                 EtherType::VLAN_DOUBLE_TAGGED_FRAME,
@@ -177,6 +189,10 @@ mod test {
             (
                 EtherType::PROVIDER_BRIDGING,
                 "0x88A8 (IEEE Std 802.1Q - Service VLAN tag identifier (S-Tag))",
+            ),
+            (
+                EtherType::MACSEC,
+                "0x88E5 (IEEE Std 802.1AE - Media Access Control Security)",
             ),
             (
                 EtherType::VLAN_DOUBLE_TAGGED_FRAME,

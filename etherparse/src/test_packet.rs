@@ -1,18 +1,28 @@
 use crate::*;
 use alloc::vec::Vec;
+use arrayvec::ArrayVec;
 
 #[derive(Clone)]
 pub(crate) struct TestPacket {
     pub link: Option<LinkHeader>,
-    pub vlan: Option<VlanHeader>,
+    pub link_exts: ArrayVec<LinkExtHeader, 3>,
     pub net: Option<NetHeaders>,
     pub transport: Option<TransportHeader>,
 }
 
 impl TestPacket {
+    pub fn has_arp(&self) -> bool {
+        self.net.as_ref().map(|v| v.is_arp()).unwrap_or(false)
+    }
+
     pub fn len(&self, payload: &[u8]) -> usize {
         self.link.as_ref().map_or(0, |x| x.header_len())
-            + self.vlan.as_ref().map_or(0, |x| x.header_len())
+            + self
+                .link_exts
+                .as_ref()
+                .iter()
+                .map(|x| x.header_len())
+                .sum::<usize>()
             + self.net.as_ref().map_or(0, |x| x.header_len())
             + self.transport.as_ref().map_or(0, |x| x.header_len())
             + payload.len()
@@ -23,8 +33,11 @@ impl TestPacket {
         if let Some(link) = &self.link {
             link.write(&mut result).unwrap();
         }
-        if let Some(vlan) = &self.vlan {
-            vlan.write(&mut result).unwrap();
+        for e in &self.link_exts {
+            match e {
+                LinkExtHeader::Vlan(s) => s.write(&mut result).unwrap(),
+                LinkExtHeader::Macsec(m) => m.write(&mut result).unwrap(),
+            }
         }
         if let Some(net) = &self.net {
             match net {
@@ -49,27 +62,51 @@ impl TestPacket {
     }
 
     pub fn set_ether_type(&mut self, ether_type: EtherType) {
-        if let Some(vlan) = &mut self.vlan {
-            use VlanHeader::*;
-            match vlan {
-                Single(single) => {
-                    single.ether_type = ether_type;
+        let mut next = ether_type;
+        for e in self.link_exts.iter_mut().rev() {
+            match e {
+                LinkExtHeader::Vlan(s) => {
+                    s.ether_type = next;
+                    if next == ether_type::VLAN_TAGGED_FRAME {
+                        next = ether_type::VLAN_DOUBLE_TAGGED_FRAME;
+                    } else {
+                        next = ether_type::VLAN_TAGGED_FRAME;
+                    }
                 }
-                Double(double) => {
-                    double.inner.ether_type = ether_type;
+                LinkExtHeader::Macsec(m) => {
+                    m.ptype = MacsecPType::Unmodified(next);
+                    next = ether_type::MACSEC;
                 }
             }
-        } else if let Some(link) = &mut self.link {
+        }
+        if let Some(link) = &mut self.link {
             match link {
-                LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = ether_type,
-                LinkHeader::LinuxSll(linux_sll) => {
-                    linux_sll.protocol_type.change_value(ether_type.0)
-                }
+                LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = next,
+                LinkHeader::LinuxSll(linux_sll) => linux_sll.protocol_type.change_value(next.0),
             }
         }
     }
 
     pub fn set_payload_len(&mut self, payload_len: usize) {
+        // link extensions
+        {
+            let mut last_len = self.net.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                + self.transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
+                + payload_len;
+            for ext in self.link_exts.iter_mut().rev() {
+                match ext {
+                    LinkExtHeader::Vlan(h) => {
+                        last_len += h.header_len();
+                    }
+                    LinkExtHeader::Macsec(h) => {
+                        h.set_payload_len(last_len);
+                        last_len += h.header_len();
+                    }
+                }
+            }
+        }
+
+        // net layer
         use NetHeaders::*;
         match &mut self.net {
             None => {}
@@ -94,6 +131,7 @@ impl TestPacket {
             Some(Arp(_)) => {}
         }
 
+        // transport layer
         use TransportHeader::*;
         match &mut self.transport {
             None => {}
@@ -107,7 +145,7 @@ impl TestPacket {
     }
 
     /// Set the length relative to the end of the ip headers.
-    pub fn set_payload_le_from_ip_on(&mut self, payload_len_from_ip_on: isize) {
+    pub fn set_payload_len_ip(&mut self, payload_len_from_ip_on: isize) {
         use NetHeaders::*;
         match self.net.as_mut().unwrap() {
             Ipv4(ref mut header, ref mut exts) => {
@@ -123,6 +161,22 @@ impl TestPacket {
                     .unwrap();
             }
             Arp(_) => {}
+        }
+    }
+
+    /// Set the length relative to the end of the link extensions.
+    pub fn set_payload_len_link_ext(&mut self, payload_len_from_ext_on: usize) {
+        let mut payload_len = payload_len_from_ext_on;
+        for ext in self.link_exts.iter_mut().rev() {
+            match ext {
+                LinkExtHeader::Vlan(v) => {
+                    payload_len += v.header_len();
+                }
+                LinkExtHeader::Macsec(h) => {
+                    h.set_payload_len(payload_len);
+                    payload_len += h.header_len();
+                }
+            }
         }
     }
 

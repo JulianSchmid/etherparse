@@ -6,20 +6,36 @@ use crate::*;
 pub enum LaxPayloadSlice<'a> {
     /// No specific payload (e.g. ARP packet).
     Empty,
+
     /// Payload with it's type identified by an ether type number
     /// (e.g. after an ethernet II or vlan header).
-    Ether(EtherPayloadSlice<'a>),
+    Ether(LaxEtherPayloadSlice<'a>),
+
+    /// MACsec modified payload (either by encryption or other algorithm).
+    MacsecModified {
+        payload: &'a [u8],
+        /// True if the payload has been cut off.
+        incomplete: bool,
+    },
+
     /// Payload with is's type identified by an ip number (e.g.
     /// after an IP header or after an)
     Ip(LaxIpPayloadSlice<'a>),
+
     /// UDP payload.
-    Udp { payload: &'a [u8], incomplete: bool },
+    Udp {
+        payload: &'a [u8],
+        /// True if the payload has been cut off.
+        incomplete: bool,
+    },
+
     /// TCP payload.
     Tcp {
         payload: &'a [u8],
         /// True if the payload has been cut off.
         incomplete: bool,
     },
+
     /// Payload part of an ICMP V4 message. Check [`crate::Icmpv4Type`]
     /// for a description what will be part of the payload.
     Icmpv4 {
@@ -27,6 +43,7 @@ pub enum LaxPayloadSlice<'a> {
         /// True if the payload has been cut off.
         incomplete: bool,
     },
+
     /// Payload part of an ICMP V4 message. Check [`crate::Icmpv6Type`]
     /// for a description what will be part of the payload.
     Icmpv6 {
@@ -41,6 +58,10 @@ impl<'a> LaxPayloadSlice<'a> {
         match self {
             LaxPayloadSlice::Empty => &[],
             LaxPayloadSlice::Ether(e) => e.payload,
+            LaxPayloadSlice::MacsecModified {
+                payload,
+                incomplete: _,
+            } => payload,
             LaxPayloadSlice::Ip(i) => i.payload,
             LaxPayloadSlice::Udp {
                 payload,
@@ -115,10 +136,20 @@ mod test {
 
         use LaxPayloadSlice::*;
         assert_eq!(
-            Ether(EtherPayloadSlice {
+            Ether(LaxEtherPayloadSlice {
+                incomplete: false,
                 ether_type: EtherType::IPV4,
-                payload: &payload
+                len_source: LenSource::Slice,
+                payload: &payload,
             })
+            .slice(),
+            &payload
+        );
+        assert_eq!(
+            MacsecModified {
+                payload: &payload,
+                incomplete: false,
+            }
             .slice(),
             &payload
         );

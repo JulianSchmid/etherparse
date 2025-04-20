@@ -64,19 +64,9 @@ where
                     return Ok(None);
                 }
 
-                let (outer_vlan_id, inner_vlan_id) = match &slice.vlan {
-                    Some(VlanSlice::SingleVlan(s)) => (Some(s.vlan_identifier()), None),
-                    Some(VlanSlice::DoubleVlan(d)) => (
-                        Some(d.outer().vlan_identifier()),
-                        Some(d.inner().vlan_identifier()),
-                    ),
-                    None => (None, None),
-                };
-
                 (
                     IpFragId {
-                        outer_vlan_id,
-                        inner_vlan_id,
+                        vlan_ids: slice.vlan_ids(),
                         ip: IpFragVersionSpecId::Ipv4 {
                             source: header.source(),
                             destination: header.destination(),
@@ -115,20 +105,10 @@ where
                     }
                 };
 
-                let (outer_vlan_id, inner_vlan_id) = match &slice.vlan {
-                    Some(VlanSlice::SingleVlan(s)) => (Some(s.vlan_identifier()), None),
-                    Some(VlanSlice::DoubleVlan(d)) => (
-                        Some(d.outer().vlan_identifier()),
-                        Some(d.inner().vlan_identifier()),
-                    ),
-                    None => (None, None),
-                };
-
                 // calculate frag id
                 (
                     IpFragId {
-                        outer_vlan_id,
-                        inner_vlan_id,
+                        vlan_ids: slice.vlan_ids(),
                         ip: IpFragVersionSpecId::Ipv6 {
                             source: ipv6.header().source(),
                             destination: ipv6.header().destination(),
@@ -251,6 +231,8 @@ where
 mod test {
     use std::cmp::max;
 
+    use arrayvec::ArrayVec;
+
     use super::*;
 
     #[test]
@@ -319,38 +301,26 @@ mod test {
             &Ethernet2Header {
                 source: [0; 6],
                 destination: [0; 6],
-                ether_type: if id.outer_vlan_id.is_some() || id.inner_vlan_id.is_some() {
-                    EtherType::VLAN_TAGGED_FRAME
-                } else {
+                ether_type: if id.vlan_ids.is_empty() {
                     ip_ether_type
+                } else {
+                    EtherType::VLAN_TAGGED_FRAME
                 },
             }
             .to_bytes(),
         );
 
-        if let Some(vlan_id) = id.outer_vlan_id {
+        for (index, vlan_id) in id.vlan_ids.iter().enumerate() {
             buf.extend_from_slice(
                 &SingleVlanHeader {
                     pcp: VlanPcp::try_new(0).unwrap(),
                     drop_eligible_indicator: false,
-                    vlan_id,
-                    ether_type: if id.inner_vlan_id.is_some() {
+                    vlan_id: *vlan_id,
+                    ether_type: if index < id.vlan_ids.len() - 1 {
                         EtherType::VLAN_TAGGED_FRAME
                     } else {
                         ip_ether_type
                     },
-                }
-                .to_bytes(),
-            );
-        }
-
-        if let Some(vlan_id) = id.inner_vlan_id {
-            buf.extend_from_slice(
-                &SingleVlanHeader {
-                    pcp: VlanPcp::try_new(0).unwrap(),
-                    drop_eligible_indicator: false,
-                    vlan_id,
-                    ether_type: ip_ether_type,
                 }
                 .to_bytes(),
             );
@@ -423,7 +393,7 @@ mod test {
             let mut pool = IpDefragPool::<(), ()>::new();
             let pslice = SlicedPacket {
                 link: None,
-                vlan: None,
+                link_exts: ArrayVec::new_const(),
                 net: None,
                 transport: None,
             };
@@ -439,8 +409,7 @@ mod test {
             let mut pool = IpDefragPool::<(), ()>::new();
             let pdata = build_packet(
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [0; 4],
                         destination: [0; 4],
@@ -474,8 +443,7 @@ mod test {
             let mut pool = IpDefragPool::<(), ()>::new();
             let pdata = build_packet(
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -509,8 +477,7 @@ mod test {
             let frag_ids = [
                 // v4 (no vlan)
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [1, 2, 3, 4],
                         destination: [5, 6, 7, 8],
@@ -521,8 +488,11 @@ mod test {
                 },
                 // v4 (single vlan)
                 IpFragId {
-                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
-                    inner_vlan_id: None,
+                    vlan_ids: {
+                        let mut vlan_ids = ArrayVec::new_const();
+                        vlan_ids.push(VlanId::try_new(12).unwrap());
+                        vlan_ids
+                    },
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [1, 2, 3, 4],
                         destination: [5, 6, 7, 8],
@@ -533,8 +503,12 @@ mod test {
                 },
                 // v4 (double vlan)
                 IpFragId {
-                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
-                    inner_vlan_id: Some(VlanId::try_new(23).unwrap()),
+                    vlan_ids: {
+                        let mut vlan_ids = ArrayVec::new_const();
+                        vlan_ids.push(VlanId::try_new(12).unwrap());
+                        vlan_ids.push(VlanId::try_new(13).unwrap());
+                        vlan_ids
+                    },
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [1, 2, 3, 4],
                         destination: [5, 6, 7, 8],
@@ -545,8 +519,7 @@ mod test {
                 },
                 // v6 (no vlan)
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -557,8 +530,11 @@ mod test {
                 },
                 // v6 (single vlan)
                 IpFragId {
-                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
-                    inner_vlan_id: None,
+                    vlan_ids: {
+                        let mut vlan_ids = ArrayVec::new_const();
+                        vlan_ids.push(VlanId::try_new(12).unwrap());
+                        vlan_ids
+                    },
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -569,8 +545,12 @@ mod test {
                 },
                 // v6 (double vlan)
                 IpFragId {
-                    outer_vlan_id: Some(VlanId::try_new(12).unwrap()),
-                    inner_vlan_id: Some(VlanId::try_new(23).unwrap()),
+                    vlan_ids: {
+                        let mut vlan_ids = ArrayVec::new_const();
+                        vlan_ids.push(VlanId::try_new(12).unwrap());
+                        vlan_ids.push(VlanId::try_new(13).unwrap());
+                        vlan_ids
+                    },
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -702,8 +682,7 @@ mod test {
             let frag_ids = [
                 // v4
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [1, 2, 3, 4],
                         destination: [5, 6, 7, 8],
@@ -714,8 +693,7 @@ mod test {
                 },
                 // v6
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -747,8 +725,7 @@ mod test {
             let frag_ids = [
                 // v4
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv4 {
                         source: [1, 2, 3, 4],
                         destination: [5, 6, 7, 8],
@@ -759,8 +736,7 @@ mod test {
                 },
                 // v6
                 IpFragId {
-                    outer_vlan_id: None,
-                    inner_vlan_id: None,
+                    vlan_ids: Default::default(),
                     ip: IpFragVersionSpecId::Ipv6 {
                         source: [0; 16],
                         destination: [0; 16],
@@ -821,8 +797,7 @@ mod test {
     #[test]
     fn retain() {
         let frag_id_0 = IpFragId {
-            outer_vlan_id: None,
-            inner_vlan_id: None,
+            vlan_ids: Default::default(),
             ip: IpFragVersionSpecId::Ipv4 {
                 source: [1, 2, 3, 4],
                 destination: [5, 6, 7, 8],
@@ -832,8 +807,7 @@ mod test {
             channel_id: (),
         };
         let frag_id_1 = IpFragId {
-            outer_vlan_id: None,
-            inner_vlan_id: None,
+            vlan_ids: Default::default(),
             ip: IpFragVersionSpecId::Ipv4 {
                 source: [1, 2, 3, 4],
                 destination: [5, 6, 7, 8],

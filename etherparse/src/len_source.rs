@@ -4,6 +4,8 @@ pub enum LenSource {
     /// Limiting length was the slice length (we don't know what determined
     /// that one originally).
     Slice,
+    /// Short length field in the MACsec header.
+    MacsecShortLength,
     /// Length
     Ipv4HeaderTotalLen,
     /// Error occurred in the IPv6 layer.

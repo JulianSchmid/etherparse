@@ -11,6 +11,7 @@ A zero allocation supporting library for parsing & writing a bunch of packet bas
 Currently supported are:
 * Ethernet II
 * IEEE 802.1Q VLAN Tagging Header
+* MACsec (IEEE 802.1AE)
 * ARP
 * IPv4
 * IPv6 (supporting the most common extension headers, but not all)
@@ -49,11 +50,11 @@ match SlicedPacket::from_ethernet(&packet) {
     Err(value) => println!("Err {:?}", value),
     Ok(value) => {
         println!("link: {:?}", value.link);
-        println!("vlan: {:?}", value.vlan);
+        println!("link_exts: {:?}", value.link_exts); // contains vlan & macsec
         println!("net: {:?}", value.net); // contains ip & arp
         println!("transport: {:?}", value.transport);
     }
-}
+};
 ```
 This is the faster option if your code is not interested in all fields of all the headers. It is a good choice if you just want filter or find packets based on a subset of the headers and/or their fields.
 
@@ -77,11 +78,11 @@ match PacketHeaders::from_ethernet_slice(&packet) {
     Err(value) => println!("Err {:?}", value),
     Ok(value) => {
         println!("link: {:?}", value.link);
-        println!("vlan: {:?}", value.vlan);
+        println!("link_exts: {:?}", value.link_exts); // contains vlan & macsec
         println!("net: {:?}", value.net); // contains ip & arp
         println!("transport: {:?}", value.transport);
     }
-}
+};
 ```
 This option is slower then slicing when only few fields are accessed. But it can be the faster option or useful if you are interested in most fields anyways or if you want to re-serialize the headers with modified values.
 
@@ -103,7 +104,8 @@ It is also possible to only slice one packet layer:
 
 * [`Ethernet2Slice::from_slice_without_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_without_fcs) & [`Ethernet2Slice::from_slice_with_crc32_fcs`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Slice.html#method.from_slice_with_crc32_fcs)
 * [`LinuxSllSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllSlice.html#method.from_slice)
-* [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanSlice.html#method.from_slice) & [`DoubleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanSlice.html#method.from_slice)
+* [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanSlice.html#method.from_slice)
+* [`MacsecSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecSlice.html#method.from_slice)
 * [`ArpPacketSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacketSlice.html#method.from_slice)
 * [`IpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpSlice.html#method.from_slice) & [`LaxIpSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.LaxIpSlice.html#method.from_slice)
 * [`Ipv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Slice.html#method.from_slice) & [`LaxIpv4Slice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LaxIpv4Slice.html#method.from_slice)
@@ -126,7 +128,7 @@ following \[NAME\]HeaderSlice.from_slice methods, if you want to just slice the 
 * [`Ethernet2HeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2HeaderSlice.html#method.from_slice)
 * [`LinuxSllHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeaderSlice.html#method.from_slice)
 * [`SingleVlanHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeaderSlice.html#method.from_slice)
-* [`DoubleVlanHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeaderSlice.html#method.from_slice)
+* [`MacsecHeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecHeaderSlice.html#method.from_slice)
 * [`Ipv4HeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4HeaderSlice.html#method.from_slice)
 * [`Ipv4ExtensionsSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4ExtensionsSlice.html#method.from_slice)
 * [`Ipv6HeaderSlice::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv6HeaderSlice.html#method.from_slice)
@@ -142,7 +144,7 @@ And for deserialization into the corresponding header structs have a look at:
 * [`Ethernet2Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.from_slice)
 * [`LinuxSllHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.read) & [`LinuxSllHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.from_slice)
 * [`SingleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
-* [`DoubleVlanHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.read) & [`DoubleVlanHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.from_slice)
+* [`MacsecHeader::read`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecHeader.html#method.read) & [`MacsecHeader::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecHeader.html#method.from_slice)
 * [`ArpPacket::read`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.read) & [`ArpPacket::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.from_slice)
 * [`IpHeaders::read`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.read) & [`IpHeaders::from_slice`](https://docs.rs/etherparse/~0/etherparse/enum.IpHeaders.html#method.from_slice)
 * [`Ipv4Header::read`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.read) & [`Ipv4Header::from_slice`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.from_slice)
@@ -200,7 +202,7 @@ Read the documentations of the different methods for a more details:
 * [`Ethernet2Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.to_bytes) & [`Ethernet2Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ethernet2Header.html#method.write)
 * [`LinuxSllHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.to_bytes) & [`LinuxSllHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.LinuxSllHeader.html#method.write)
 * [`SingleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.to_bytes) & [`SingleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.SingleVlanHeader.html#method.write)
-* [`DoubleVlanHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.to_bytes) & [`DoubleVlanHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.DoubleVlanHeader.html#method.write)
+* [`MacsecHeader::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecHeader.html#method.to_bytes) & [`MacsecHeader::write`](https://docs.rs/etherparse/~0/etherparse/struct.MacsecHeader.html#method.write)
 * [`ArpPacket::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.to_bytes) & [`ArpPacket::write`](https://docs.rs/etherparse/~0/etherparse/struct.ArpPacket.html#method.write)
 * [`ArpEthIpv4Packet::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.ArpEthIpv4Packet.html#method.to_bytes)
 * [`Ipv4Header::to_bytes`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.to_bytes) & [`Ipv4Header::write`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write) & [`Ipv4Header::write_raw`](https://docs.rs/etherparse/~0/etherparse/struct.Ipv4Header.html#method.write_raw)
@@ -245,6 +247,8 @@ Read the documentations of the different methods for a more details:
 * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel 
 * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
 * [Arp hardware identifiers definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_arp.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel 
+* ["IEEE Standard for Local and metropolitan area networks-Media Access Control (MAC) Security," in IEEE Std 802.1AE-2018 (Revision of IEEE Std 802.1AE-2006) , vol., no., pp.1-239, 26 Dec. 2018, doi: 10.1109/IEEESTD.2018.8585421.](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8585421&isnumber=8585420)
+* ["IEEE Standard for Local and metropolitan area networks--Media Access Control (MAC) Security Corrigendum 1: Tag Control Information Figure," in IEEE Std 802.1AE-2018/Cor 1-2020 (Corrigendum to IEEE Std 802.1AE-2018) , vol., no., pp.1-14, 21 July 2020, doi: 10.1109/IEEESTD.2020.9144679.](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9144679&isnumber=9144678)
 
 ## License
 Licensed under either of Apache License, Version 2.0 or MIT license at your option. The corresponding license texts can be found in the LICENSE-APACHE file and the LICENSE-MIT file.

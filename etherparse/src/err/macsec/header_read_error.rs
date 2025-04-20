@@ -1,8 +1,6 @@
 use super::HeaderError;
 
-/// Error when decoding two VLAN headers via a `std::io::Read` source.
-///
-/// Requires crate feature `std`.
+/// Error when decoding an MACsec header via a `std::io::Read` source.
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 #[derive(Debug)]
@@ -28,7 +26,7 @@ impl HeaderReadError {
         }
     }
 
-    /// Returns the `err::double_vlan::HeaderError` value if the `HeaderReadError` is `Content`.
+    /// Returns the `err::ipv4::HeaderError` value if the `HeaderReadError` is `Content`.
     /// Otherwise `None` is returned.
     #[inline]
     pub fn content_error(self) -> Option<HeaderError> {
@@ -46,7 +44,7 @@ impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
         match self {
-            Io(err) => write!(f, "Double VLAN Header IO Error: {}", err),
+            Io(err) => write!(f, "IPv4 Header IO Error: {}", err),
             Content(value) => value.fmt(f),
         }
     }
@@ -71,9 +69,7 @@ mod test {
 
     #[test]
     fn debug() {
-        let err = HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into(),
-        };
+        let err = HeaderError::UnexpectedVersion;
         assert_eq!(
             format!("Content({:?})", err.clone()),
             format!("{:?}", Content(err))
@@ -88,14 +84,12 @@ mod test {
                 "failed to fill whole buffer",
             );
             assert_eq!(
-                format!("Double VLAN Header IO Error: {}", err),
+                format!("IPv4 Header IO Error: {}", err),
                 format!("{}", Io(err))
             );
         }
         {
-            let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1.into(),
-            };
+            let err = HeaderError::UnexpectedVersion;
             assert_eq!(format!("{}", &err), format!("{}", Content(err.clone())));
         }
     }
@@ -109,11 +103,7 @@ mod test {
         ))
         .source()
         .is_some());
-        assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into()
-        })
-        .source()
-        .is_some());
+        assert!(Content(HeaderError::UnexpectedVersion).source().is_some());
     }
 
     #[test]
@@ -124,11 +114,7 @@ mod test {
         ))
         .io_error()
         .is_some());
-        assert!(Content(HeaderError::NonVlanEtherType {
-            unexpected_ether_type: 1.into()
-        })
-        .io_error()
-        .is_none());
+        assert!(Content(HeaderError::UnexpectedVersion).io_error().is_none());
     }
 
     #[test]
@@ -142,9 +128,7 @@ mod test {
             .content_error()
         );
         {
-            let err = HeaderError::NonVlanEtherType {
-                unexpected_ether_type: 1.into(),
-            };
+            let err = HeaderError::UnexpectedVersion;
             assert_eq!(Some(err.clone()), Content(err.clone()).content_error());
         }
     }

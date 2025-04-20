@@ -38,7 +38,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn priority_code_point(&self) -> VlanPcp {
         unsafe {
             // SAFETY: Safe as slice len checked in constructor to be at least 4 &
-            // the bitmask guarantees values does not exceed 0b0000_0111.
+            // the bit mask guarantees values does not exceed 0b0000_0111.
             VlanPcp::new_unchecked((*self.slice.get_unchecked(0) >> 5) & 0b0000_0111)
         }
     }
@@ -54,14 +54,14 @@ impl<'a> SingleVlanSlice<'a> {
         unsafe { 0 != (*self.slice.get_unchecked(0) & 0x10) }
     }
 
-    /// Reads the 12 bits "vland identifier" field from the VLAN header.
+    /// Reads the 12 bits "vlan identifier" field from the VLAN header.
     #[inline]
     pub fn vlan_identifier(&self) -> VlanId {
         // SAFETY:
         // Slice len checked in constructor to be at least 4 &
-        // value and the value is guranteed not to exceed
+        // value and the value is guaranteed not to exceed
         // 0b0000_1111_1111_1111 as the upper bits have been
-        // bitmasked out.
+        // bit-masked out.
         unsafe {
             VlanId::new_unchecked(u16::from_be_bytes([
                 *self.slice.get_unchecked(0) & 0b0000_1111,
@@ -95,7 +95,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn header_slice(&self) -> &[u8] {
         unsafe {
             // SAFETY:
-            // Safe as the contructor checks that the slice has
+            // Safe as the constructor checks that the slice has
             // at least the length of SingleVlanHeader::LEN (4).
             core::slice::from_raw_parts(self.slice.as_ptr(), SingleVlanHeader::LEN)
         }
@@ -107,6 +107,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn payload(&self) -> EtherPayloadSlice<'a> {
         EtherPayloadSlice {
             ether_type: self.ether_type(),
+            len_source: LenSource::Slice,
             payload: self.payload_slice(),
         }
     }
@@ -116,7 +117,7 @@ impl<'a> SingleVlanSlice<'a> {
     pub fn payload_slice(&self) -> &'a [u8] {
         unsafe {
             // SAFETY:
-            // Safe as the contructor checks that the slice has
+            // Safe as the constructor checks that the slice has
             // at least the length of SingleVlanHeader::LEN (4).
             core::slice::from_raw_parts(
                 self.slice.as_ptr().add(SingleVlanHeader::LEN),
@@ -201,6 +202,7 @@ mod test {
             assert_eq!(
                 EtherPayloadSlice {
                     ether_type: vlan.ether_type,
+                    len_source: LenSource::Slice,
                     payload: &data[SingleVlanHeader::LEN..],
                 },
                 slice.payload()

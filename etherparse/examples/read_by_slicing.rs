@@ -18,7 +18,7 @@ fn main() {
     )
     .udp(
         21,   //source port
-        1234, //desitnation port
+        1234, //destination port
     );
 
     //payload of the udp packet
@@ -31,12 +31,12 @@ fn main() {
     //slice the packet into the different header components
     let sliced_packet = SlicedPacket::from_ethernet(&serialized);
 
-    //print some informations about the sliced packet
+    //print some information about the sliced packet
     match sliced_packet {
         Err(value) => println!("Err {:?}", value),
         Ok(value) => {
             println!("Ok");
-            use etherparse::{LinkSlice::*, NetSlice::*, TransportSlice::*, VlanSlice::*};
+            use etherparse::{LinkExtSlice::*, LinkSlice::*, NetSlice::*, TransportSlice::*};
 
             match value.link {
                 Some(Ethernet2(value)) => println!(
@@ -61,14 +61,11 @@ fn main() {
                 None => {}
             }
 
-            match value.vlan {
-                Some(SingleVlan(value)) => println!("  SingleVlan {:?}", value.vlan_identifier()),
-                Some(DoubleVlan(value)) => println!(
-                    "  DoubleVlan {:?}, {:?}",
-                    value.outer().vlan_identifier(),
-                    value.inner().vlan_identifier()
-                ),
-                None => {}
+            for link_ext in &value.link_exts {
+                match link_ext {
+                    Vlan(s) => println!("  Vlan {:?}", s.vlan_identifier()),
+                    Macsec(m) => println!("  Macsec {:?}", m.header.ptype()),
+                }
             }
 
             match value.net {

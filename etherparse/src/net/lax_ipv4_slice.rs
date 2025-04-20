@@ -6,7 +6,7 @@ use crate::*;
 /// payload to be incomplete/cut off and errors to be present in
 /// the IpPayload.
 ///
-/// The main usecases for "laxly" parsed slices are are:
+/// The main use cases for "laxly" parsed slices are are:
 ///
 /// * Parsing packets that have been cut off. This is, for example, useful to
 ///   parse packets returned via ICMP as these usually only contain the start.
@@ -29,7 +29,7 @@ impl<'a> LaxIpv4Slice<'a> {
     /// If you want to only receive correct IpPayloads use [`Ipv4Slice::from_slice`]
     /// instead.
     ///
-    /// The main usecases for this functions are:
+    /// The main use cases for this functions are:
     ///
     /// * Parsing packets that have been cut off. This is, for example, useful to
     ///   parse packets returned via ICMP as these usually only contain the start.
@@ -46,9 +46,9 @@ impl<'a> LaxIpv4Slice<'a> {
     ///   with the successfully parsed parts and the error as optional. Only if an
     ///   unrecoverable error is encountered in the IP header itself an `Err` is returned.
     ///   In the normal `Ipv4Slice::from_slice` function an `Err` is returned if an error is
-    ///   encountered in an exteions header.
+    ///   encountered in an extension header.
     /// * `LaxIpv4Slice::from_slice` ignores inconsistent `total_len` values. When the `total_len`
-    ///   value in the IPv4 header are inconsistant the length of the given slice is
+    ///   value in the IPv4 header are inconsistent the length of the given slice is
     ///   used as a substitute.
     ///
     /// ## What happens in the `total_len` value is inconsistent?
@@ -57,14 +57,14 @@ impl<'a> LaxIpv4Slice<'a> {
     /// length of the given slice is used as a substitute. This can happen
     /// if the `total_length` field in the IPv4 header is:
     ///
-    ///  * Bigger then the given slice (payload cannot fully be seperated).
+    ///  * Bigger then the given slice (payload cannot fully be separated).
     ///  * Too small to contain at least the IPv4 header.
     ///
     /// Additionally you can check if more data was expected based on the
     /// `total_len` but the given slice was too small by checking if `incomplete`
     /// is set to `true` in the returned [`LaxIpPayloadSlice`].
     ///
-    /// You can check if the slice length was used as a substitude by checking
+    /// You can check if the slice length was used as a substitute by checking
     /// if the `len_source` value in the returned [`LaxIpPayloadSlice`] is set to
     /// [`LenSource::Slice`]. If a substitution was not needed `len_source`
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
@@ -338,6 +338,7 @@ mod test {
                         payload: &payload
                     }
                 );
+                assert_eq!(actual.payload_ip_number(), header.next_header().unwrap());
             }
 
             // error len smaller then min header len

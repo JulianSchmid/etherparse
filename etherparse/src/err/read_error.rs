@@ -18,8 +18,8 @@ pub enum ReadError {
     /// not enough data being available).
     Len(LenError),
 
-    /// Error while parsing a double vlan header.
-    DoubleVlan(double_vlan::HeaderError),
+    /// Error when decoding MACsec header.
+    Macsec(macsec::HeaderError),
 
     /// Error while parsing a IP header.
     Ip(ip::HeaderError),
@@ -57,9 +57,9 @@ impl ReadError {
             _ => None,
         }
     }
-    pub fn double_vlan(&self) -> Option<&double_vlan::HeaderError> {
+    pub fn macsec(&self) -> Option<&macsec::HeaderError> {
         match self {
-            ReadError::DoubleVlan(err) => Some(err),
+            ReadError::Macsec(err) => Some(err),
             _ => None,
         }
     }
@@ -113,7 +113,7 @@ impl core::fmt::Display for ReadError {
         match self {
             Io(err) => err.fmt(f),
             Len(err) => err.fmt(f),
-            DoubleVlan(err) => err.fmt(f),
+            Macsec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
             Ipv4(err) => err.fmt(f),
@@ -129,17 +129,18 @@ impl core::fmt::Display for ReadError {
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl std::error::Error for ReadError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        use ReadError::*;
         match self {
-            ReadError::Io(err) => Some(err),
-            ReadError::Len(err) => Some(err),
-            ReadError::DoubleVlan(err) => Some(err),
-            ReadError::Ip(err) => Some(err),
-            ReadError::IpAuth(err) => Some(err),
-            ReadError::Ipv4(err) => Some(err),
-            ReadError::Ipv6(err) => Some(err),
-            ReadError::Ipv6Exts(err) => Some(err),
-            ReadError::LinuxSll(err) => Some(err),
-            ReadError::Tcp(err) => Some(err),
+            Io(err) => Some(err),
+            Len(err) => Some(err),
+            Macsec(err) => Some(err),
+            Ip(err) => Some(err),
+            IpAuth(err) => Some(err),
+            Ipv4(err) => Some(err),
+            Ipv6(err) => Some(err),
+            Ipv6Exts(err) => Some(err),
+            LinuxSll(err) => Some(err),
+            Tcp(err) => Some(err),
         }
     }
 }
@@ -156,36 +157,6 @@ impl From<std::io::Error> for ReadError {
 impl From<LenError> for ReadError {
     fn from(value: LenError) -> Self {
         ReadError::Len(value)
-    }
-}
-
-// double vlan error conversions
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl From<double_vlan::HeaderError> for ReadError {
-    fn from(value: double_vlan::HeaderError) -> Self {
-        ReadError::DoubleVlan(value)
-    }
-}
-
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl From<double_vlan::HeaderReadError> for ReadError {
-    fn from(value: double_vlan::HeaderReadError) -> Self {
-        use double_vlan::HeaderReadError::*;
-        match value {
-            Io(err) => ReadError::Io(err),
-            Content(err) => ReadError::DoubleVlan(err),
-        }
-    }
-}
-
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl From<double_vlan::HeaderSliceError> for ReadError {
-    fn from(value: double_vlan::HeaderSliceError) -> Self {
-        use double_vlan::HeaderSliceError::*;
-        match value {
-            Len(err) => ReadError::Len(err),
-            Content(err) => ReadError::DoubleVlan(err),
-        }
     }
 }
 
@@ -416,6 +387,36 @@ impl From<linux_sll::HeaderSliceError> for ReadError {
     }
 }
 
+// macsec error conversions
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderError> for ReadError {
+    fn from(value: macsec::HeaderError) -> Self {
+        ReadError::Macsec(value)
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderReadError> for ReadError {
+    fn from(value: macsec::HeaderReadError) -> Self {
+        use macsec::HeaderReadError::*;
+        match value {
+            Io(err) => ReadError::Io(err),
+            Content(err) => ReadError::Macsec(err),
+        }
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+impl From<macsec::HeaderSliceError> for ReadError {
+    fn from(value: macsec::HeaderSliceError) -> Self {
+        use macsec::HeaderSliceError::*;
+        match value {
+            Len(err) => ReadError::Len(err),
+            Content(err) => ReadError::Macsec(err),
+        }
+    }
+}
+
 // packet error conversions
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl From<packet::SliceError> for ReadError {
@@ -424,6 +425,7 @@ impl From<packet::SliceError> for ReadError {
         match value {
             Len(err) => ReadError::Len(err),
             LinuxSll(err) => ReadError::LinuxSll(err),
+            Macsec(err) => ReadError::Macsec(err),
             Ip(err) => ReadError::Ip(err),
             Ipv4(err) => ReadError::Ipv4(err),
             Ipv6(err) => ReadError::Ipv6(err),
@@ -466,11 +468,11 @@ impl From<tcp::HeaderSliceError> for ReadError {
 
 #[cfg(test)]
 mod tests {
+    use crate::ArpHardwareId;
     use crate::{
         err::{ReadError::*, *},
         LenSource,
     };
-    use crate::{ArpHardwareId, EtherType};
     use std::error::Error;
     use std::format;
 
@@ -493,12 +495,7 @@ mod tests {
                     arp_hardware_type: ArpHardwareId::ETHERNET,
                 }),
             ),
-            (
-                "DoubleVlan",
-                DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                    unexpected_ether_type: EtherType(123),
-                }),
-            ),
+            ("Macsec", Macsec(macsec::HeaderError::UnexpectedVersion)),
             (
                 "Ip",
                 Ip(ip::HeaderError::UnsupportedIpVersion {
@@ -557,9 +554,7 @@ mod tests {
             LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
                 arp_hardware_type: ArpHardwareId::ETHERNET,
             }),
-            DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: EtherType(123),
-            }),
+            Macsec(macsec::HeaderError::UnexpectedVersion),
             Ip(ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             }),
@@ -593,9 +588,7 @@ mod tests {
             layer: Layer::Icmpv4,
             layer_start_offset: 0,
         };
-        let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
-            unexpected_ether_type: EtherType(1),
-        };
+        let macsec_error = || macsec::HeaderError::UnexpectedVersion;
         let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
         let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -620,12 +613,9 @@ mod tests {
         );
         assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
 
-        // double_vlan
-        assert_eq!(
-            DoubleVlan(double_vlan_error()).double_vlan(),
-            Some(&double_vlan_error())
-        );
-        assert_eq!(Ipv4(ipv4_error()).double_vlan(), None);
+        // macsec
+        assert_eq!(Macsec(macsec_error()).macsec(), Some(&macsec_error()));
+        assert_eq!(Ipv4(ipv4_error()).macsec(), None);
 
         // ip
         assert_eq!(Ip(ip_error()).ip(), Some(&ip_error()));
@@ -718,42 +708,75 @@ mod tests {
             );
         }
 
-        // double vlan errors
+        // linux_sll errors
         {
-            let header_error = || double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: EtherType(123),
-            };
+            let header_error =
+                || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
             assert_eq!(
                 &header_error(),
-                ReadError::from(header_error()).double_vlan().unwrap()
+                ReadError::from(header_error()).linux_sll().unwrap()
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(double_vlan::HeaderReadError::Content(header_error()))
-                    .double_vlan()
+                ReadError::from(linux_sll::HeaderReadError::Content(header_error()))
+                    .linux_sll()
                     .unwrap()
             );
-            assert!(
-                ReadError::from(double_vlan::HeaderReadError::Io(io_error()))
-                    .io()
-                    .is_some()
-            );
+            assert!(ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
             assert_eq!(
                 &header_error(),
-                ReadError::from(double_vlan::HeaderSliceError::Content(header_error()))
-                    .double_vlan()
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
                     .unwrap()
             );
             assert_eq!(
                 &len_error(),
-                ReadError::from(double_vlan::HeaderSliceError::Len(len_error()))
+                ReadError::from(linux_sll::HeaderSliceError::Len(len_error()))
                     .len()
                     .unwrap()
             );
             assert_eq!(
                 &header_error(),
-                ReadError::from(double_vlan::HeaderSliceError::Content(header_error()))
-                    .double_vlan()
+                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+        }
+
+        // macsec errors
+        {
+            let header_error = || macsec::HeaderError::UnexpectedVersion;
+            assert_eq!(
+                &header_error(),
+                ReadError::from(header_error()).macsec().unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderReadError::Content(header_error()))
+                    .macsec()
+                    .unwrap()
+            );
+            assert!(ReadError::from(macsec::HeaderReadError::Io(io_error()))
+                .io()
+                .is_some());
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderSliceError::Content(header_error()))
+                    .macsec()
+                    .unwrap()
+            );
+            assert_eq!(
+                &len_error(),
+                ReadError::from(macsec::HeaderSliceError::Len(len_error()))
+                    .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &header_error(),
+                ReadError::from(macsec::HeaderSliceError::Content(header_error()))
+                    .macsec()
                     .unwrap()
             );
         }
@@ -763,6 +786,9 @@ mod tests {
             let header_error = || ip::HeaderError::UnsupportedIpVersion {
                 version_number: 123,
             };
+            let ip_auth_error = || ip_auth::HeaderError::ZeroPayloadLen;
+            let ipv6_ext_error = || ipv6_exts::HeaderError::HopByHopNotAtStart;
+
             assert_eq!(
                 &header_error(),
                 ReadError::from(header_error()).ip().unwrap()
@@ -773,6 +799,22 @@ mod tests {
                     header_error()
                 )))
                 .ip()
+                .unwrap()
+            );
+            assert_eq!(
+                &ip_auth_error(),
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ipv4Ext(
+                    ip_auth_error()
+                )))
+                .ip_auth()
+                .unwrap()
+            );
+            assert_eq!(
+                &ipv6_ext_error(),
+                ReadError::from(ip::HeaderReadError::Content(ip::HeadersError::Ipv6Ext(
+                    ipv6_ext_error()
+                )))
+                .ipv6_exts()
                 .unwrap()
             );
             assert_eq!(
@@ -1008,45 +1050,12 @@ mod tests {
             );
         }
 
-        // linux_sll errors
-        {
-            let header_error =
-                || linux_sll::HeaderError::UnsupportedPacketTypeField { packet_type: 123 };
-            assert_eq!(
-                &header_error(),
-                ReadError::from(header_error()).linux_sll().unwrap()
-            );
-            assert_eq!(
-                &header_error(),
-                ReadError::from(linux_sll::HeaderReadError::Content(header_error()))
-                    .linux_sll()
-                    .unwrap()
-            );
-            assert!(ReadError::from(linux_sll::HeaderReadError::Io(io_error()))
-                .io()
-                .is_some());
-            assert_eq!(
-                &header_error(),
-                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
-                    .linux_sll()
-                    .unwrap()
-            );
-            assert_eq!(
-                &len_error(),
-                ReadError::from(linux_sll::HeaderSliceError::Len(len_error()))
-                    .len()
-                    .unwrap()
-            );
-            assert_eq!(
-                &header_error(),
-                ReadError::from(linux_sll::HeaderSliceError::Content(header_error()))
-                    .linux_sll()
-                    .unwrap()
-            );
-        }
-
         // packet error
         {
+            let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
+                arp_hardware_type: ArpHardwareId(0),
+            };
+            let macsec_error = || macsec::HeaderError::UnexpectedVersion;
             let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
             let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
             let ipv6_error = || ipv6::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -1059,6 +1068,18 @@ mod tests {
                 &len_error(),
                 ReadError::from(packet::SliceError::Len(len_error()))
                     .len()
+                    .unwrap()
+            );
+            assert_eq!(
+                &linux_sll_error(),
+                ReadError::from(packet::SliceError::LinuxSll(linux_sll_error()))
+                    .linux_sll()
+                    .unwrap()
+            );
+            assert_eq!(
+                &macsec_error(),
+                ReadError::from(packet::SliceError::Macsec(macsec_error()))
+                    .macsec()
                     .unwrap()
             );
             assert_eq!(

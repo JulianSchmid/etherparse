@@ -1,4 +1,5 @@
 use crate::{defrag::*, *};
+use arrayvec::ArrayVec;
 
 /// Values identifying a fragmented packet.
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
@@ -6,11 +7,8 @@ pub struct IpFragId<CustomChannelId = ()>
 where
     CustomChannelId: core::hash::Hash + Eq + PartialEq + Clone + Sized,
 {
-    /// First VLAN id of the fragmented packets.
-    pub outer_vlan_id: Option<VlanId>,
-
-    /// Second VLAN id of the fragmented packets.
-    pub inner_vlan_id: Option<VlanId>,
+    /// VLAN id's of the original packets.
+    pub vlan_ids: ArrayVec<VlanId, 3>,
 
     /// IP source & destination address & identifaction field.
     pub ip: IpFragVersionSpecId,
