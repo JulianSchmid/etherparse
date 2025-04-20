@@ -16,9 +16,6 @@ pub enum FromSliceError {
     /// Error when decoding an Linux SLL header.
     LinuxSll(linux_sll::HeaderError),
 
-    /// Error while parsing a double vlan header.
-    DoubleVlan(double_vlan::HeaderError),
-
     /// Error when decoding MACsec header.
     Macsec(macsec::HeaderError),
 
@@ -51,12 +48,6 @@ impl FromSliceError {
     pub fn linux_sll(&self) -> Option<&linux_sll::HeaderError> {
         match self {
             FromSliceError::LinuxSll(err) => Some(err),
-            _ => None,
-        }
-    }
-    pub fn double_vlan(&self) -> Option<&double_vlan::HeaderError> {
-        match self {
-            FromSliceError::DoubleVlan(err) => Some(err),
             _ => None,
         }
     }
@@ -110,7 +101,6 @@ impl core::fmt::Display for FromSliceError {
         match self {
             Len(err) => err.fmt(f),
             LinuxSll(err) => err.fmt(f),
-            DoubleVlan(err) => err.fmt(f),
             Macsec(err) => err.fmt(f),
             Ip(err) => err.fmt(f),
             IpAuth(err) => err.fmt(f),
@@ -130,7 +120,6 @@ impl std::error::Error for FromSliceError {
         match self {
             Len(err) => Some(err),
             LinuxSll(err) => Some(err),
-            DoubleVlan(err) => Some(err),
             Macsec(err) => Some(err),
             Ip(err) => Some(err),
             IpAuth(err) => Some(err),
@@ -164,24 +153,6 @@ impl From<linux_sll::HeaderSliceError> for FromSliceError {
         match value {
             Len(err) => FromSliceError::Len(err),
             Content(err) => FromSliceError::LinuxSll(err),
-        }
-    }
-}
-
-// double vlan error conversions
-
-impl From<double_vlan::HeaderError> for FromSliceError {
-    fn from(value: double_vlan::HeaderError) -> Self {
-        FromSliceError::DoubleVlan(value)
-    }
-}
-
-impl From<double_vlan::HeaderSliceError> for FromSliceError {
-    fn from(value: double_vlan::HeaderSliceError) -> Self {
-        use double_vlan::HeaderSliceError::*;
-        match value {
-            Len(err) => FromSliceError::Len(err),
-            Content(err) => FromSliceError::DoubleVlan(err),
         }
     }
 }
@@ -357,7 +328,7 @@ impl From<tcp::HeaderSliceError> for FromSliceError {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ArpHardwareId, EtherType, LenSource};
+    use crate::{ArpHardwareId, LenSource};
 
     use super::{FromSliceError::*, *};
     use core::hash::{Hash, Hasher};
@@ -390,7 +361,7 @@ mod tests {
 
     #[test]
     fn debug_source() {
-        let test_values: [(&str, FromSliceError); 10] = [
+        let test_values: [(&str, FromSliceError); 9] = [
             (
                 "Len",
                 Len(LenError {
@@ -405,12 +376,6 @@ mod tests {
                 "LinuxSll",
                 LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
                     arp_hardware_type: ArpHardwareId(0),
-                }),
-            ),
-            (
-                "DoubleVlan",
-                DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                    unexpected_ether_type: EtherType(123),
                 }),
             ),
             ("Macsec", Macsec(macsec::HeaderError::UnexpectedVersion)),
@@ -449,7 +414,7 @@ mod tests {
 
     #[test]
     fn display_source() {
-        let test_values: [FromSliceError; 10] = [
+        let test_values: [FromSliceError; 9] = [
             Len(LenError {
                 required_len: 0,
                 len: 0,
@@ -459,9 +424,6 @@ mod tests {
             }),
             LinuxSll(linux_sll::HeaderError::UnsupportedArpHardwareId {
                 arp_hardware_type: ArpHardwareId::ETHERNET,
-            }),
-            DoubleVlan(double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: EtherType(123),
             }),
             Macsec(macsec::HeaderError::UnexpectedVersion),
             Ip(ip::HeaderError::UnsupportedIpVersion {
@@ -492,9 +454,6 @@ mod tests {
         let linux_sll_error = || linux_sll::HeaderError::UnsupportedArpHardwareId {
             arp_hardware_type: ArpHardwareId::ETHERNET,
         };
-        let double_vlan_error = || double_vlan::HeaderError::NonVlanEtherType {
-            unexpected_ether_type: EtherType(1),
-        };
         let macsec_error = || macsec::HeaderError::UnexpectedVersion;
         let ip_error = || ip::HeaderError::UnsupportedIpVersion { version_number: 0 };
         let ipv4_error = || ipv4::HeaderError::UnexpectedVersion { version_number: 1 };
@@ -513,13 +472,6 @@ mod tests {
             Some(&linux_sll_error())
         );
         assert_eq!(Ipv4(ipv4_error()).linux_sll(), None);
-
-        // double_vlan
-        assert_eq!(
-            DoubleVlan(double_vlan_error()).double_vlan(),
-            Some(&double_vlan_error())
-        );
-        assert_eq!(Ipv4(ipv4_error()).double_vlan(), None);
 
         // macsec
         assert_eq!(Macsec(macsec_error()).macsec(), Some(&macsec_error()));
@@ -596,35 +548,6 @@ mod tests {
                 &header_error(),
                 FromSliceError::from(linux_sll::HeaderSliceError::Content(header_error()))
                     .linux_sll()
-                    .unwrap()
-            );
-        }
-
-        // double vlan errors
-        {
-            let header_error = || double_vlan::HeaderError::NonVlanEtherType {
-                unexpected_ether_type: EtherType(123),
-            };
-            assert_eq!(
-                &header_error(),
-                FromSliceError::from(header_error()).double_vlan().unwrap()
-            );
-            assert_eq!(
-                &header_error(),
-                FromSliceError::from(double_vlan::HeaderSliceError::Content(header_error()))
-                    .double_vlan()
-                    .unwrap()
-            );
-            assert_eq!(
-                &len_error(),
-                FromSliceError::from(double_vlan::HeaderSliceError::Len(len_error()))
-                    .len()
-                    .unwrap()
-            );
-            assert_eq!(
-                &header_error(),
-                FromSliceError::from(double_vlan::HeaderSliceError::Content(header_error()))
-                    .double_vlan()
                     .unwrap()
             );
         }
