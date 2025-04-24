@@ -66,6 +66,24 @@ prop_compose! {
 }
 
 prop_compose! {
+    pub fn ip_ecn_any()
+        (value in 0u8..=0b0000_0011)
+        -> IpEcn
+    {
+        IpEcn::try_new(value).unwrap()
+    }
+}
+
+prop_compose! {
+    pub fn ip_dscp_any()
+        (value in 0u8..=0b0011_1111)
+        -> IpDscp
+    {
+        IpDscp::try_new(value).unwrap()
+    }
+}
+
+prop_compose! {
     pub fn ipv6_flow_label_any()
         (value in 0u32..=0b1111_11111111_11111111u32)
         -> Ipv6FlowLabel
@@ -118,7 +136,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn linux_sll_arphrd()
+    pub fn linux_sll_arp_hrd_type_any()
         (index in 0..=(LinuxSllProtocolType::SUPPORTED_ARPHWD.len()-1))
         -> ArpHardwareId
     {
@@ -127,7 +145,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    pub fn linux_sll_sender_adress_any()
+    pub fn linux_sll_sender_address_any()
         (mut sender_address in prop::collection::vec(any::<u8>(), 0..8))
         -> (u16, [u8; 8])
     {
@@ -143,8 +161,8 @@ prop_compose! {
 prop_compose! {
     pub fn linux_sll_any()
         (packet_type in linux_sll_packet_type_any(),
-        arp_hrd_type in linux_sll_arphrd(),
-        (sender_address_valid_length, sender_address) in linux_sll_sender_adress_any(),
+        arp_hrd_type in linux_sll_arp_hrd_type_any(),
+        (sender_address_valid_length, sender_address) in linux_sll_sender_address_any(),
         protocol_num in any::<u16>()
     )
         -> LinuxSllHeader

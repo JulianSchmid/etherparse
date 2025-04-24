@@ -6,8 +6,8 @@ pub fn err_field_any() -> impl Strategy<Value = err::ValueType> {
     use err::ValueType::*;
     prop_oneof![
         Just(Ipv4PayloadLength),
-        Just(Ipv4Dscp),
-        Just(Ipv4Ecn),
+        Just(IpDscp),
+        Just(IpEcn),
         Just(IpFragmentOffset),
         Just(Ipv6FlowLabel),
     ]

@@ -8,7 +8,7 @@ pub struct IpPayloadSlice<'a> {
 
     /// True if the payload is not complete and has been fragmented.
     ///
-    /// This can occur if the IPv4 incdicates that the payload
+    /// This can occur if the IPv4 indicates that the payload
     /// has been fragmented or if there is an IPv6 fragmentation
     /// header indicating that the payload has been fragmented.
     pub fragmented: bool,

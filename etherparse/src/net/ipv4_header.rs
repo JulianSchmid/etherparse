@@ -20,7 +20,7 @@ use arrayvec::ArrayVec;
 ///     ..Default::default()
 /// };
 ///
-/// // depending on your usecase you might want to set the correct checksum
+/// // depending on your use case you might want to set the correct checksum
 /// header.header_checksum = header.calc_header_checksum();
 ///
 /// // header can be serialized into the "on the wire" format
@@ -35,9 +35,9 @@ use arrayvec::ArrayVec;
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct Ipv4Header {
     /// Differentiated Services Code Point
-    pub dscp: Ipv4Dscp,
+    pub dscp: IpDscp,
     /// Explicit Congestion Notification
-    pub ecn: Ipv4Ecn,
+    pub ecn: IpEcn,
     /// Total length of the IPv4 header (including extension headers) and the payload after it.
     pub total_len: u16,
     /// Number used to identify packets that contain an originally fragmented packet.
@@ -463,12 +463,12 @@ impl Ipv4Header {
             dscp: unsafe {
                 // Safe as only 6 bits were used to decode the
                 // dscp value
-                Ipv4Dscp::new_unchecked(dscp)
+                IpDscp::new_unchecked(dscp)
             },
             ecn: unsafe {
                 // Safe as only 2 bits were used to decode the
                 // ecn value
-                Ipv4Ecn::new_unchecked(ecn)
+                IpEcn::new_unchecked(ecn)
             },
             total_len,
             identification,

@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 6 bit unsigned integer containing the "MACsec short length".
-/// (present in the [`crate::MacSecHeader`]).
+/// (present in the [`crate::MacsecHeader`]).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct MacsecShortLen(u8);
 
@@ -70,7 +70,7 @@ impl MacsecShortLen {
 
     /// Creates an [`MacsecShortLen`] from a length and automatically
     /// defaults to zero if too big. This mirrors the expected behavior
-    /// of the `short_len` field in the [`MacsecHeader`].
+    /// of the `short_len` field in the [`crate::MacsecHeader`].
     ///
     /// # Example
     /// ```

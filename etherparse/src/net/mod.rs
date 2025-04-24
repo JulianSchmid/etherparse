@@ -16,6 +16,15 @@ pub use ip_auth_header::*;
 mod ip_auth_header_slice;
 pub use ip_auth_header_slice::*;
 
+mod ip_dscp;
+pub use ip_dscp::*;
+
+mod ip_dscp_known;
+pub use ip_dscp_known::*;
+
+mod ip_ecn;
+pub use ip_ecn::*;
+
 mod ip_frag_offset;
 pub use ip_frag_offset::*;
 
@@ -30,12 +39,6 @@ pub use ip_payload_slice::*;
 
 mod ip_slice;
 pub use ip_slice::*;
-
-mod ipv4_dscp;
-pub use ipv4_dscp::*;
-
-mod ipv4_ecn;
-pub use ipv4_ecn::*;
 
 mod ipv4_exts;
 pub use ipv4_exts::*;

@@ -6,19 +6,19 @@ pub enum ValueType {
     VlanId,
     /// VLAN PCP (Priority Code Point) field in a [`crate::SingleVlanHeader`].
     VlanPcp,
-    /// MACsec association number (present in the [`crate::MacSecHeader`]).
+    /// MACsec association number (present in the [`crate::MacsecHeader`]).
     MacsecAn,
-    /// MACsec short length (present in the [`crate::MacSecHeader`]).
+    /// MACsec short length (present in the [`crate::MacsecHeader`]).
     MacsecShortLen,
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.
     IpFragmentOffset,
-    /// IPv4 Header DSCP (Differentiated Services Code Point) field
-    /// present in an [`crate::Ipv4Header`].
-    Ipv4Dscp,
-    /// IPv4 Header ECN (Explicit Congestion Notification) field
-    /// present in an [`crate::Ipv4Header`].
-    Ipv4Ecn,
+    /// IPv4 & IPv6 Header DSCP (Differentiated Services Code Point) field
+    /// present in an [`crate::Ipv4Header`] or [`crate::Ipv6Header`].
+    IpDscp,
+    /// IPv6 & IPv6 Header ECN (Explicit Congestion Notification) field
+    /// present in an [`crate::Ipv4Header`] or [`crate::Ipv6Header`].
+    IpEcn,
     /// IPv6 Header Flow Label field present in [`crate::Ipv6Header`].
     Ipv6FlowLabel,
     /// IPv4 Header "total length" field based on the payload
@@ -54,8 +54,8 @@ impl core::fmt::Display for ValueType {
             MacsecAn => write!(f, "MACsec AN (Association Number)"),
             MacsecShortLen => write!(f, "MACsec SL (Short Length)"),
             IpFragmentOffset => write!(f, "IP Fragment Offset"),
-            Ipv4Dscp => write!(f, "IPv4 DSCP (Differentiated Services Code Point)"),
-            Ipv4Ecn => write!(f, "IPv4 ECN (Explicit Congestion Notification)"),
+            IpDscp => write!(f, "IPv4 DSCP (Differentiated Services Code Point)"),
+            IpEcn => write!(f, "IPv4 ECN (Explicit Congestion Notification)"),
             Ipv6FlowLabel => write!(f, "IPv6 Flow Label"),
             Ipv4PayloadLength => write!(f, "IPv4 Header 'Payload Length' (sets 'Total Length')"),
             Ipv6PayloadLength => write!(f, "IPv6 Header 'Payload Length'"),
@@ -102,11 +102,11 @@ mod test {
         assert_eq!("IP Fragment Offset", &format!("{}", IpFragmentOffset));
         assert_eq!(
             "IPv4 DSCP (Differentiated Services Code Point)",
-            &format!("{}", Ipv4Dscp)
+            &format!("{}", IpDscp)
         );
         assert_eq!(
             "IPv4 ECN (Explicit Congestion Notification)",
-            &format!("{}", Ipv4Ecn)
+            &format!("{}", IpEcn)
         );
         assert_eq!("IPv6 Flow Label", &format!("{}", Ipv6FlowLabel));
         assert_eq!(
