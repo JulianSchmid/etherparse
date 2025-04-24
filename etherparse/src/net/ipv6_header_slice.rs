@@ -86,6 +86,21 @@ impl<'a> Ipv6HeaderSlice<'a> {
         unsafe { (self.slice.get_unchecked(0) << 4) | (self.slice.get_unchecked(1) >> 4) }
     }
 
+    /// Returns the [`IpEcn`] decoded from the `traffic_class` octet.
+    #[inline]
+    pub fn ecn(&self) -> IpEcn {
+        // SAFETY: Safe as value can only be at most 0b11 as it is bit-and-ed with 0b11.
+        unsafe { IpEcn::new_unchecked(self.traffic_class() & 0b0000_0011) }
+    }
+
+    /// Returns the [`IpDscp`] decoded from the `traffic_class` octet.
+    #[inline]
+    pub fn dscp(&self) -> IpDscp {
+        // SAFETY: Safe as value can not be bigger than IpDscp::MAX_U8 as it
+        //         is bit masked with IpDscp::MAX_U8 (0b0011_1111).
+        unsafe { IpDscp::new_unchecked((self.traffic_class() >> 2) & 0b0011_1111) }
+    }
+
     /// Read the "flow label" field from the slice.
     #[inline]
     pub fn flow_label(&self) -> Ipv6FlowLabel {
@@ -278,6 +293,8 @@ mod test {
             assert_eq!(actual.slice(), &bytes[..]);
             assert_eq!(actual.version(), 6);
             assert_eq!(actual.traffic_class(), header.traffic_class);
+            assert_eq!(actual.ecn(), header.ecn());
+            assert_eq!(actual.dscp(), header.dscp());
             assert_eq!(actual.flow_label(), header.flow_label);
             assert_eq!(actual.payload_length(), header.payload_length);
             assert_eq!(actual.next_header(), header.next_header);
