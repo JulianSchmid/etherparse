@@ -119,23 +119,23 @@ impl<'a> Ipv4HeaderSlice<'a> {
 
     /// Read the "differentiated_services_code_point" from the slice.
     #[inline]
-    pub fn dcp(&self) -> Ipv4Dscp {
+    pub fn dcp(&self) -> IpDscp {
         // SAFETY:
         // get_unchecked: Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
         // new_unchecked: Safe as the bit-shift by 2 guarantees that the passed
         // value is not bigger then 6 bits.
-        unsafe { Ipv4Dscp::new_unchecked(*self.slice.get_unchecked(1) >> 2) }
+        unsafe { IpDscp::new_unchecked(*self.slice.get_unchecked(1) >> 2) }
     }
 
     /// Read the "explicit_congestion_notification" from the slice.
     #[inline]
-    pub fn ecn(&self) -> Ipv4Ecn {
+    pub fn ecn(&self) -> IpEcn {
         // SAFETY:
         // get_unchecked: Safe as the slice length is checked to be at least
         // Ipv4Header::MIN_LEN (20) in the constructor.
         // new_unchecked: Safe as value has been bit-masked to two bits.
-        unsafe { Ipv4Ecn::new_unchecked(*self.slice.get_unchecked(1) & 0b0000_0011) }
+        unsafe { IpEcn::new_unchecked(*self.slice.get_unchecked(1) & 0b0000_0011) }
     }
 
     /// Read the "total length" from the slice (total length of ip header + payload).

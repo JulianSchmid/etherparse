@@ -135,7 +135,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
                         len_source: self.len_source,
                         payload: vlan_payload.payload,
                     };
-                    // SAFETY: Safe, as the if at the startt verifies that there is still
+                    // SAFETY: Safe, as the if at the start verifies that there is still
                     //         space in link_exts.
                     unsafe {
                         self.result
@@ -165,7 +165,7 @@ impl<'a> LaxSlicedPacketCursor<'a> {
 
                     self.offset += macsec.header.header_len();
                     let macsec_payload = macsec.payload.clone();
-                    // SAFETY: Safe, as the if at the startt verifies that there is still
+                    // SAFETY: Safe, as the if at the start verifies that there is still
                     //         space in link_exts.
                     unsafe {
                         self.result

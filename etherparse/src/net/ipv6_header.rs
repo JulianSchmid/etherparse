@@ -38,11 +38,11 @@ impl Ipv6Header {
 
     /// Read an Ipv6Header from a slice and return the header & unused parts of the slice.
     ///
-    /// Note that this function DOES NOT seperate the payload based on the length
+    /// Note that this function DOES NOT separate the payload based on the length
     /// payload_length present in the IPv6 header. It just returns the left over slice
     /// after the header.
     ///
-    /// If you want to have correctly seperated payload including the IP extension
+    /// If you want to have correctly separated payload including the IP extension
     /// headers use
     ///
     /// * [`crate::IpHeaders::from_ipv6_slice`] (decodes all the fields of the IP headers)
@@ -327,40 +327,30 @@ impl Ipv6Header {
     }
 
     /// Sets the ECN field in the `traffic_class` octet.
-    pub fn set_ecn(&mut self, ecn: Ecn) {
-        ecn.write(&mut self.traffic_class);
+    pub fn set_ecn(&mut self, ecn: IpEcn) {
+        self.traffic_class = (self.traffic_class & 0b1111_1100) | (ecn.value() & 0b11);
     }
 
     /// Return the ECN field from the `traffic_class` octet.
-    pub fn ecn(&self) -> Ecn {
-        Ecn::read(&self.traffic_class)
+    pub fn ecn(&self) -> IpEcn {
+        // SAFETY: Safe as value can only be at most 0b11 as it is bit-and-ed with 0b11.
+        unsafe { IpEcn::new_unchecked(self.traffic_class & 0b0000_0011) }
     }
 
     /// Set the DSCP field in the `traffic_class` octet.
-    pub fn set_dscp(&mut self, dscp: Dscp) {
-        dscp.write(&mut self.traffic_class);
-    }
-
-    /// Sets the DSCP field from a raw value.
-    ///
-    /// This method should only be used when using the experimental pool in the DSCP field.
-    ///
-    /// Errors - If the given raw value is larger than [`Dscp::MAX`].
-    pub fn set_dscp_raw(&mut self, value: u8) -> Result<(), DscpError> {
-        Dscp::write_raw(value, &mut self.traffic_class)
+    pub fn set_dscp(&mut self, dscp: IpDscp) {
+        self.traffic_class =
+            (self.traffic_class & 0b0000_0011) | ((dscp.value() << 2) & 0b1111_1100);
     }
 
     /// Return a standardized [`Dscp`] from its field in the `traffic_class` octet.
     ///
     /// Errors - If the value in the traffic class octet is not a DSCP value registered by the IANA
     /// in the [DSCP registry]((https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml)).
-    pub fn dscp(&self) -> Result<Dscp, DscpError> {
-        Dscp::read(&self.traffic_class)
-    }
-
-    /// Returns the raw value in the DSCP field of the `traffic_class` octet.
-    pub fn dscp_raw(&self) -> u8 {
-        Dscp::read_raw(&self.traffic_class)
+    pub fn dscp(&self) -> IpDscp {
+        // SAFETY: Safe as value can not be bigger than IpDscp::MAX_U8 as it
+        //         is bit masked with IpDscp::MAX_U8 (0b0011_1111).
+        unsafe { IpDscp::new_unchecked((self.traffic_class >> 2) & 0b0011_1111) }
     }
 
     /// Returns the serialized form of the header as a statically
@@ -483,6 +473,34 @@ mod test {
                     );
                 }
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn set_dscp(
+            header in ipv6_any(),
+            dscp in ip_dscp_any()
+        ) {
+            let mut header = header;
+            assert_eq!(header.dscp(), IpDscp::try_new(header.traffic_class >> 2).unwrap());
+            header.set_dscp(dscp);
+            assert_eq!(dscp, IpDscp::try_new(header.traffic_class >> 2).unwrap());
+            assert_eq!(header.dscp(), dscp);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn set_ecn(
+            header in ipv6_any(),
+            ecn in ip_ecn_any()
+        ) {
+            let mut header = header;
+            assert_eq!(header.ecn(), IpEcn::try_new(header.traffic_class & 0b11).unwrap());
+            header.set_ecn(ecn);
+            assert_eq!(ecn, IpEcn::try_new(header.traffic_class & 0b11).unwrap());
+            assert_eq!(header.ecn(), ecn);
         }
     }
 
