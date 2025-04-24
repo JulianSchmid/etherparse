@@ -6,9 +6,9 @@ pub enum ValueType {
     VlanId,
     /// VLAN PCP (Priority Code Point) field in a [`crate::SingleVlanHeader`].
     VlanPcp,
-    /// MACsec association number (present in the [`crate::MacSecHeader`]).
+    /// MACsec association number (present in the [`crate::MacsecHeader`]).
     MacsecAn,
-    /// MACsec short length (present in the [`crate::MacSecHeader`]).
+    /// MACsec short length (present in the [`crate::MacsecHeader`]).
     MacsecShortLen,
     /// IP Fragment offset present in the IPv4 header and
     /// IPv6 fragmentation header.

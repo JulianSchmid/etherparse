@@ -331,7 +331,7 @@ impl Ipv6Header {
         self.traffic_class = (self.traffic_class & 0b1111_1100) | (ecn.value() & 0b11);
     }
 
-    /// Return the ECN field from the `traffic_class` octet.
+    /// Returns the [`IpEcn`] decoded from the `traffic_class` octet.
     pub fn ecn(&self) -> IpEcn {
         // SAFETY: Safe as value can only be at most 0b11 as it is bit-and-ed with 0b11.
         unsafe { IpEcn::new_unchecked(self.traffic_class & 0b0000_0011) }
@@ -343,10 +343,7 @@ impl Ipv6Header {
             (self.traffic_class & 0b0000_0011) | ((dscp.value() << 2) & 0b1111_1100);
     }
 
-    /// Return a standardized [`Dscp`] from its field in the `traffic_class` octet.
-    ///
-    /// Errors - If the value in the traffic class octet is not a DSCP value registered by the IANA
-    /// in the [DSCP registry]((https://www.iana.org/assignments/dscp-registry/dscp-registry.xhtml)).
+    /// Returns the [`IpDscp`] decoded from the `traffic_class` octet.
     pub fn dscp(&self) -> IpDscp {
         // SAFETY: Safe as value can not be bigger than IpDscp::MAX_U8 as it
         //         is bit masked with IpDscp::MAX_U8 (0b0011_1111).

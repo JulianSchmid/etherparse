@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 2 bit unsigned integer containing the "MACsec association number".
-/// (present in the [`crate::MacSecHeader`]).
+/// (present in the [`crate::MacsecHeader`]).
 ///
 /// Identifies up to four SAs within the context of an SC.
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]

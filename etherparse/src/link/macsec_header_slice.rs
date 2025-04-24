@@ -10,7 +10,7 @@ pub struct MacsecHeaderSlice<'a> {
 }
 
 impl<'a> MacsecHeaderSlice<'a> {
-    /// Try creating a [`MacSecHeaderSlice`] from a slice containing the
+    /// Try creating a [`MacsecHeaderSlice`] from a slice containing the
     /// MACsec header & next ether type.
     pub fn from_slice(
         slice: &'a [u8],
@@ -270,7 +270,7 @@ impl<'a> MacsecHeaderSlice<'a> {
     }
 
     /// Decodes all MacSecHeader values and returns them as a
-    /// [`crate::MacSecHeader`].
+    /// [`crate::MacsecHeader`].
     #[inline]
     pub fn to_header(&self) -> MacsecHeader {
         MacsecHeader {

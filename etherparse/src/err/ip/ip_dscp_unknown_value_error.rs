@@ -1,6 +1,6 @@
 use core::{cmp::Eq, cmp::PartialEq, fmt::Debug, hash::Hash};
 
-/// Error if an unknown value is passed to [`crate::IpDscpKnown::from`].
+/// Error if an unknown value is passed to [`crate::IpDscpKnown::try_from_ip_dscp`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct IpDscpUnknownValueError {
     /// Unknown DSCP value that caused the error.

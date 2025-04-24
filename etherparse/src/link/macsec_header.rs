@@ -58,7 +58,7 @@ impl MacsecHeader {
         }
     }
 
-    /// Try creating a [`MacSecHeaderSlice`] from a slice containing the
+    /// Try creating a [`MacsecHeaderSlice`] from a slice containing the
     /// MACsec header & next ether type.
     pub fn from_slice(slice: &[u8]) -> Result<MacsecHeader, err::macsec::HeaderSliceError> {
         MacsecHeaderSlice::from_slice(slice).map(|v| v.to_header())
