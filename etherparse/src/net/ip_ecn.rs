@@ -95,7 +95,7 @@ impl IpEcn {
     #[inline]
     pub const unsafe fn new_unchecked(value: u8) -> IpEcn {
         debug_assert!(value <= IpEcn::MAX_U8);
-        std::mem::transmute::<u8, IpEcn>(value)
+        core::mem::transmute::<u8, IpEcn>(value)
     }
 
     /// Returns the underlying unsigned 2 bit value as an `u8` value.

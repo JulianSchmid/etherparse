@@ -19,6 +19,9 @@ pub use ip_auth_header_slice::*;
 mod ip_dscp;
 pub use ip_dscp::*;
 
+mod ip_dscp_known;
+pub use ip_dscp_known::*;
+
 mod ip_ecn;
 pub use ip_ecn::*;
 
