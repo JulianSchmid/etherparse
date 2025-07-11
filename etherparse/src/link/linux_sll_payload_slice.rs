@@ -1,7 +1,7 @@
 use crate::{EtherPayloadSlice, EtherType, LenSource, LinuxSllProtocolType};
 
 /// Payload of Linux Cooked Capture v1 (SLL) packet
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct LinuxSllPayloadSlice<'a> {
     /// Identifying content of the payload.
     pub protocol_type: LinuxSllProtocolType,

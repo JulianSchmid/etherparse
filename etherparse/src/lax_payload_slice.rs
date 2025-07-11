@@ -51,6 +51,9 @@ pub enum LaxPayloadSlice<'a> {
         /// True if the payload has been cut off.
         incomplete: bool,
     },
+
+    /// Linux SLL payload.
+    LinuxSll(LinuxSllPayloadSlice<'a>),
 }
 
 impl<'a> LaxPayloadSlice<'a> {
@@ -79,6 +82,7 @@ impl<'a> LaxPayloadSlice<'a> {
                 payload,
                 incomplete: _,
             } => payload,
+            LaxPayloadSlice::LinuxSll(linux_sll) => linux_sll.payload,
         }
     }
 }
@@ -193,6 +197,14 @@ mod test {
                 payload: &payload,
                 incomplete: false
             }
+            .slice(),
+            &payload
+        );
+        assert_eq!(
+            LinuxSll(LinuxSllPayloadSlice {
+                protocol_type: LinuxSllProtocolType::Ignored(0),
+                payload: &payload,
+            })
             .slice(),
             &payload
         );
