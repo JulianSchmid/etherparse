@@ -540,7 +540,7 @@ impl<'a> LaxPacketHeaders<'a> {
 
     /// Separates a network packet into different headers from the Linux Cooked Capture (SLL)
     /// header downwards with lax length checks and non-terminating errors.
-    /// 
+    ///
     /// # Example
     ///
     /// Basic usage:
@@ -640,11 +640,16 @@ impl<'a> LaxPacketHeaders<'a> {
     /// }
     ///
     /// ```
-    pub fn from_linux_sll(slice: &'a [u8]) -> Result<LaxPacketHeaders<'a>, err::linux_sll::HeaderSliceError> {
+    pub fn from_linux_sll(
+        slice: &'a [u8],
+    ) -> Result<LaxPacketHeaders<'a>, err::linux_sll::HeaderSliceError> {
         let (linux_sll, payload) = LinuxSllHeader::from_slice(slice)?;
         match linux_sll.protocol_type {
             LinuxSllProtocolType::EtherType(ether_type) => {
                 let mut result = Self::from_ether_type(ether_type, payload);
+                if let Some((SliceError::Len(l), _)) = result.stop_err.as_mut() {
+                    l.layer_start_offset += linux_sll.header_len();
+                }
                 result.link = Some(LinkHeader::LinuxSll(linux_sll));
                 Ok(result)
             }
@@ -1098,7 +1103,35 @@ mod test {
             }
         }
 
-        // unknown ether_type
+        // linux ssl
+        {
+            let linux_sll = LinuxSllHeader {
+                packet_type: LinuxSllPacketType::HOST,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                sender_address_valid_length: 0,
+                sender_address: [0; 8],
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)),
+            };
+            let test = TestPacket {
+                link: Some(LinkHeader::LinuxSll(linux_sll.clone())),
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            };
+
+            // ok ethernet header (with unknown next)
+            from_x_slice_link_exts_variants(&test);
+
+            // eth len error
+            {
+                let data = test.to_vec(&[]);
+                for len in 0..data.len() {
+                    assert_test_result(&test, &[], &data[..len], None, None);
+                }
+            }
+        }
+
+        // from_ether_type unknown ether_type
         {
             let payload = [1, 2, 3, 4];
             let actual = LaxPacketHeaders::from_ether_type(0.into(), &payload);
@@ -2077,7 +2110,7 @@ mod test {
         }
 
         // from_ethernet_slice
-        if test.link.is_some() {
+        if matches!(test.link, Some(LinkHeader::Ethernet2(_))) {
             if data.len() < Ethernet2Header::LEN {
                 assert_eq!(
                     LenError {
@@ -2091,6 +2124,84 @@ mod test {
                 );
             } else {
                 let actual = LaxPacketHeaders::from_ethernet(&data).unwrap();
+                assert_eq!(actual.stop_err, expected_stop_err);
+                match expected_stop_err.as_ref().map(|v| v.1) {
+                    None => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(test.net, actual.net);
+                        compare_transport(
+                            test,
+                            test.is_ip_payload_fragmented(),
+                            expected_payload,
+                            &actual,
+                        );
+                    }
+                    Some(Layer::VlanHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::MacsecHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::Ipv6Header)
+                    | Some(Layer::Ipv4Header)
+                    | Some(Layer::IpHeader)
+                    | Some(Layer::Arp) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::IpAuthHeader)
+                    | Some(Layer::Ipv6ExtHeader)
+                    | Some(Layer::Ipv6HopByHopHeader)
+                    | Some(Layer::Ipv6DestOptionsHeader)
+                    | Some(Layer::Ipv6RouteHeader)
+                    | Some(Layer::Ipv6FragHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        compare_net_only(test, &actual);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
+                    }
+                    Some(Layer::TcpHeader)
+                    | Some(Layer::UdpHeader)
+                    | Some(Layer::Icmpv4)
+                    | Some(Layer::Icmpv6) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(test.net, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
+                    }
+                    layer => unreachable!("error in an unexpected layer {layer:?}"),
+                }
+            }
+        }
+        // from_linux_sll
+        if matches!(test.link, Some(LinkHeader::LinuxSll(_))) {
+            if data.len() < LinuxSllHeader::LEN {
+                assert_eq!(
+                    err::linux_sll::HeaderSliceError::Len(LenError {
+                        required_len: LinuxSllHeader::LEN,
+                        len: data.len(),
+                        len_source: LenSource::Slice,
+                        layer: Layer::LinuxSllHeader,
+                        layer_start_offset: 0
+                    }),
+                    LaxPacketHeaders::from_linux_sll(&data).unwrap_err()
+                );
+            } else {
+                let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
                 assert_eq!(actual.stop_err, expected_stop_err);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {
