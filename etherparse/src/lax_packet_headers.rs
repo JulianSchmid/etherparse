@@ -822,6 +822,8 @@ impl<'a> LaxPacketHeaders<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::vec::Vec;
+
     use super::*;
     use crate::test_packet::TestPacket;
 
@@ -1128,6 +1130,37 @@ mod test {
                 for len in 0..data.len() {
                     assert_test_result(&test, &[], &data[..len], None, None);
                 }
+            }
+
+            // non ethernet linux sll
+            {
+                let header = LinuxSllHeader {
+                    packet_type: LinuxSllPacketType::HOST,
+                    arp_hrd_type: ArpHardwareId::NETLINK,
+                    sender_address_valid_length: 0,
+                    sender_address: [0; 8],
+                    protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                };
+                let payload = [1, 2, 3, 4];
+                let data = {
+                    let mut data = Vec::with_capacity(header.header_len() + payload.len());
+                    data.extend_from_slice(&header.to_bytes());
+                    data.extend_from_slice(&payload);
+                    data
+                };
+                let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
+                let expected = LaxPacketHeaders {
+                    link: Some(LinkHeader::LinuxSll(header.clone())),
+                    link_exts: Default::default(),
+                    net: None,
+                    transport: None,
+                    payload: LaxPayloadSlice::LinuxSll(LinuxSllPayloadSlice {
+                        protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                        payload: &payload,
+                    }),
+                    stop_err: None,
+                };
+                assert_eq!(expected, actual);
             }
         }
 
