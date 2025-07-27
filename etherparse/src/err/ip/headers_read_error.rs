@@ -61,7 +61,7 @@ impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
         match self {
-            Io(err) => write!(f, "IP Header IO Error: {}", err),
+            Io(err) => write!(f, "IP Header IO Error: {err}"),
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
         }

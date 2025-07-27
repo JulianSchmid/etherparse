@@ -21,11 +21,11 @@ impl core::fmt::Display for ExtPayloadLenError {
         use ExtPayloadLenError::*;
         match self {
             TooSmall(size) =>
-                write!(f, "IPv6 extensions header payload length is too small. The payload size ({} bytes) is less then 6 octets which is the minimum IPv6 extension header payload size.", size),
+                write!(f, "IPv6 extensions header payload length is too small. The payload size ({size} bytes) is less then 6 octets which is the minimum IPv6 extension header payload size."),
             TooBig(size) =>
-                write!(f, "IPv6 extensions header payload length is too large. The payload size ({} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header.", size),
+                write!(f, "IPv6 extensions header payload length is too large. The payload size ({size} bytes) is larger then what can be be represented by the 'extended header size' field in an IPv6 extension header."),
             Unaligned(size) =>
-                write!(f, "IPv6 extensions header 'payload length ({} bytes) + 2' is not multiple of 8 (+ 2 for the `next_header` and `header_length` fields). This is required as the header length field can only express lengths in multiple of 8 bytes.", size),
+                write!(f, "IPv6 extensions header 'payload length ({size} bytes) + 2' is not multiple of 8 (+ 2 for the `next_header` and `header_length` fields). This is required as the header length field can only express lengths in multiple of 8 bytes."),
         }
     }
 }

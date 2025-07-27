@@ -19,7 +19,7 @@ use crate::{err, ArpHardwareId, EtherType, LinuxNonstandardEtherType};
 /// let num: u16 = LinuxNonstandardEtherType::N802_3.try_into().unwrap();
 /// assert_eq!(0x0001, num);
 /// ```
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub enum LinuxSllProtocolType {
     /// The protocol type should be ignored
     Ignored(u16),

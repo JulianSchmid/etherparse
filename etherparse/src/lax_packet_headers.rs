@@ -132,6 +132,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///                 }
     ///             }
+    ///             LaxPayloadSlice::LinuxSll(linux_sll) => {
+    ///                 println!("Linux SLL payload (protocol type {:?}): {:?}", linux_sll.protocol_type, linux_sll.payload);
+    ///             }
     ///         }
     ///     }
     /// }
@@ -254,6 +257,9 @@ impl<'a> LaxPacketHeaders<'a> {
     ///         if incomplete {
     ///             println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
     ///         }
+    ///     }
+    ///     LaxPayloadSlice::LinuxSll(linux_sll) => {
+    ///         println!("Linux SLL payload (protocol type {:?}): {:?}", linux_sll.protocol_type, linux_sll.payload);
     ///     }
     /// }
     /// ```
@@ -475,7 +481,8 @@ impl<'a> LaxPacketHeaders<'a> {
     ///             // empty payload does not appear (only present in ARP packets).
     ///             LaxPayloadSlice::Ether(_) |
     ///                 LaxPayloadSlice::MacsecModified{ payload: _, incomplete: _} |
-    ///                 LaxPayloadSlice::Empty => unreachable!(),
+    ///                 LaxPayloadSlice::Empty |
+    ///                 LaxPayloadSlice::LinuxSll(_) => unreachable!(),
     ///             LaxPayloadSlice::Ip(ip) => {
     ///                 println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
     ///                 if ip.incomplete {
@@ -529,6 +536,139 @@ impl<'a> LaxPacketHeaders<'a> {
         };
         result.add_ip(0, slice)?;
         Ok(result)
+    }
+
+    /// Separates a network packet into different headers from the Linux Cooked Capture (SLL)
+    /// header downwards with lax length checks and non-terminating errors.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{LinuxSllPacketType, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    linux_sll(LinuxSllPacketType::OTHERHOST, //packet type
+    /// #              6,                             //sender address valid length
+    /// #              [1,2,3,4,5,6,0,0])             //sender address with padding
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //destination ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //destination port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut packet, &payload).unwrap();
+    /// #
+    /// use etherparse::{ether_type, LaxPacketHeaders, LenSource, LaxPayloadSlice};
+    ///
+    /// match LaxPacketHeaders::from_linux_sll(&packet) {
+    ///     Err(value) => {
+    ///         // An error is returned in case the ethernet II header could
+    ///         // not be parsed (other errors are stored in the "stop_err" field)
+    ///         println!("Err {:?}", value)
+    ///     },
+    ///     Ok(value) => {
+    ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///             // error was encountered after parsing the ethernet 2 header
+    ///             println!("Error on layer {}: {:?}", error_layer, stop_err);
+    ///         }
+    ///
+    ///         // parts that could be parsed without error
+    ///         println!("link: {:?}", value.link);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
+    ///         println!("transport: {:?}", value.transport);
+    ///
+    ///         // net (ip) & transport (udp or tcp)
+    ///         println!("net: {:?}", value.net);
+    ///         match value.payload {
+    ///             LaxPayloadSlice::Empty => {
+    ///                 // in case of ARP packet the payload is empty
+    ///             }
+    ///             LaxPayloadSlice::MacsecModified { payload, incomplete } => {
+    ///                 println!("MACsec modified payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  MACsec payload incomplete (length in MACsec header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Ether(e) => {
+    ///                 println!("ether payload (ether type {:?}): {:?}", e.ether_type, e.payload);
+    ///             }
+    ///             LaxPayloadSlice::Ip(ip) => {
+    ///                 println!("IP payload (IP number {:?}): {:?}", ip.ip_number, ip.payload);
+    ///                 if ip.incomplete {
+    ///                     println!("  IP payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///                 if ip.fragmented {
+    ///                     println!("  IP payload fragmented");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Udp{ payload, incomplete } => {
+    ///                 println!("UDP payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  UDP payload incomplete (length in UDP or IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Tcp{ payload, incomplete } => {
+    ///                 println!("TCP payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  TCP payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Icmpv4{ payload, incomplete } => {
+    ///                 println!("Icmpv4 payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  Icmpv4 payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::Icmpv6{ payload, incomplete } => {
+    ///                 println!("Icmpv6 payload: {:?}", payload);
+    ///                 if incomplete {
+    ///                     println!("  Icmpv6 payload incomplete (length in IP header indicated more data should be present)");
+    ///                 }
+    ///             }
+    ///             LaxPayloadSlice::LinuxSll(linux_sll) => {
+    ///                 println!("Linux SLL payload (protocol type {:?}): {:?}", linux_sll.protocol_type, linux_sll.payload);
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// ```
+    pub fn from_linux_sll(
+        slice: &'a [u8],
+    ) -> Result<LaxPacketHeaders<'a>, err::linux_sll::HeaderSliceError> {
+        let (linux_sll, payload) = LinuxSllHeader::from_slice(slice)?;
+        match linux_sll.protocol_type {
+            LinuxSllProtocolType::EtherType(ether_type) => {
+                let mut result = Self::from_ether_type(ether_type, payload);
+                if let Some((SliceError::Len(l), _)) = result.stop_err.as_mut() {
+                    l.layer_start_offset += linux_sll.header_len();
+                }
+                result.link = Some(LinkHeader::LinuxSll(linux_sll));
+                Ok(result)
+            }
+            _ => {
+                let mut result = LaxPacketHeaders {
+                    link: None,
+                    link_exts: ArrayVec::new_const(),
+                    net: None,
+                    transport: None,
+                    payload: LaxPayloadSlice::LinuxSll(LinuxSllPayloadSlice {
+                        protocol_type: linux_sll.protocol_type,
+                        payload,
+                    }),
+                    stop_err: None,
+                };
+                result.link = Some(LinkHeader::LinuxSll(linux_sll));
+                Ok(result)
+            }
+        }
     }
 
     /// Returns the first two VLAN headers.
@@ -682,6 +822,8 @@ impl<'a> LaxPacketHeaders<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::vec::Vec;
+
     use super::*;
     use crate::test_packet::TestPacket;
 
@@ -963,7 +1105,66 @@ mod test {
             }
         }
 
-        // unknown ether_type
+        // linux ssl
+        {
+            let linux_sll = LinuxSllHeader {
+                packet_type: LinuxSllPacketType::HOST,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                sender_address_valid_length: 0,
+                sender_address: [0; 8],
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)),
+            };
+            let test = TestPacket {
+                link: Some(LinkHeader::LinuxSll(linux_sll.clone())),
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            };
+
+            // ok ethernet header (with unknown next)
+            from_x_slice_link_exts_variants(&test);
+
+            // eth len error
+            {
+                let data = test.to_vec(&[]);
+                for len in 0..data.len() {
+                    assert_test_result(&test, &[], &data[..len], None, None);
+                }
+            }
+
+            // non ethernet linux sll
+            {
+                let header = LinuxSllHeader {
+                    packet_type: LinuxSllPacketType::HOST,
+                    arp_hrd_type: ArpHardwareId::NETLINK,
+                    sender_address_valid_length: 0,
+                    sender_address: [0; 8],
+                    protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                };
+                let payload = [1, 2, 3, 4];
+                let data = {
+                    let mut data = Vec::with_capacity(header.header_len() + payload.len());
+                    data.extend_from_slice(&header.to_bytes());
+                    data.extend_from_slice(&payload);
+                    data
+                };
+                let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
+                let expected = LaxPacketHeaders {
+                    link: Some(LinkHeader::LinuxSll(header.clone())),
+                    link_exts: Default::default(),
+                    net: None,
+                    transport: None,
+                    payload: LaxPayloadSlice::LinuxSll(LinuxSllPayloadSlice {
+                        protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                        payload: &payload,
+                    }),
+                    stop_err: None,
+                };
+                assert_eq!(expected, actual);
+            }
+        }
+
+        // from_ether_type unknown ether_type
         {
             let payload = [1, 2, 3, 4];
             let actual = LaxPacketHeaders::from_ether_type(0.into(), &payload);
@@ -1942,7 +2143,7 @@ mod test {
         }
 
         // from_ethernet_slice
-        if test.link.is_some() {
+        if matches!(test.link, Some(LinkHeader::Ethernet2(_))) {
             if data.len() < Ethernet2Header::LEN {
                 assert_eq!(
                     LenError {
@@ -1956,6 +2157,84 @@ mod test {
                 );
             } else {
                 let actual = LaxPacketHeaders::from_ethernet(&data).unwrap();
+                assert_eq!(actual.stop_err, expected_stop_err);
+                match expected_stop_err.as_ref().map(|v| v.1) {
+                    None => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(test.net, actual.net);
+                        compare_transport(
+                            test,
+                            test.is_ip_payload_fragmented(),
+                            expected_payload,
+                            &actual,
+                        );
+                    }
+                    Some(Layer::VlanHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::MacsecHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::Ipv6Header)
+                    | Some(Layer::Ipv4Header)
+                    | Some(Layer::IpHeader)
+                    | Some(Layer::Arp) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(None, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ether(_)));
+                    }
+                    Some(Layer::IpAuthHeader)
+                    | Some(Layer::Ipv6ExtHeader)
+                    | Some(Layer::Ipv6HopByHopHeader)
+                    | Some(Layer::Ipv6DestOptionsHeader)
+                    | Some(Layer::Ipv6RouteHeader)
+                    | Some(Layer::Ipv6FragHeader) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        compare_net_only(test, &actual);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
+                    }
+                    Some(Layer::TcpHeader)
+                    | Some(Layer::UdpHeader)
+                    | Some(Layer::Icmpv4)
+                    | Some(Layer::Icmpv6) => {
+                        assert_eq!(test.link, actual.link);
+                        compare_exts(test, data, &actual);
+                        assert_eq!(test.net, actual.net);
+                        assert_eq!(None, actual.transport);
+                        assert!(matches!(actual.payload, LaxPayloadSlice::Ip(_)));
+                    }
+                    layer => unreachable!("error in an unexpected layer {layer:?}"),
+                }
+            }
+        }
+        // from_linux_sll
+        if matches!(test.link, Some(LinkHeader::LinuxSll(_))) {
+            if data.len() < LinuxSllHeader::LEN {
+                assert_eq!(
+                    err::linux_sll::HeaderSliceError::Len(LenError {
+                        required_len: LinuxSllHeader::LEN,
+                        len: data.len(),
+                        len_source: LenSource::Slice,
+                        layer: Layer::LinuxSllHeader,
+                        layer_start_offset: 0
+                    }),
+                    LaxPacketHeaders::from_linux_sll(&data).unwrap_err()
+                );
+            } else {
+                let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
                 assert_eq!(actual.stop_err, expected_stop_err);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {

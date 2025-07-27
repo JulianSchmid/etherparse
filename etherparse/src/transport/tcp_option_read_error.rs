@@ -34,17 +34,13 @@ impl core::fmt::Display for TcpOptionReadError {
                 expected_len,
                 actual_len,
             } => {
-                write!(f, "TcpOptionReadError: Not enough memory left in slice to read option of kind {} (expected at least {} bytes, only {} bytes available).", option_id, expected_len, actual_len)
+                write!(f, "TcpOptionReadError: Not enough memory left in slice to read option of kind {option_id} (expected at least {expected_len} bytes, only {actual_len} bytes available).")
             }
             UnexpectedSize { option_id, size } => {
-                write!(f, "TcpOptionReadError: Length value of the option of kind {} had unexpected value {}.", option_id, size)
+                write!(f, "TcpOptionReadError: Length value of the option of kind {option_id} had unexpected value {size}.")
             }
             UnknownId(id) => {
-                write!(
-                    f,
-                    "TcpOptionReadError: Unknown tcp option kind value {}.",
-                    id
-                )
+                write!(f, "TcpOptionReadError: Unknown tcp option kind value {id}.")
             }
         }
     }

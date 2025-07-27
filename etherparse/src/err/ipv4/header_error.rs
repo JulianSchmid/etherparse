@@ -18,8 +18,8 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            UnexpectedVersion { version_number } => write!(f, "IPv4 Header Error: Encountered '{}' as IP version number in the IPv4 header (must be '4' in an IPv4 header).", version_number),
-            HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'.", ihl),
+            UnexpectedVersion { version_number } => write!(f, "IPv4 Header Error: Encountered '{version_number}' as IP version number in the IPv4 header (must be '4' in an IPv4 header)."),
+            HeaderLengthSmallerThanHeader { ihl } => write!(f, "IPv4 Header Error: The 'internet header length' value '{ihl}' present in the IPv4 header is smaller than the minimum size of an IPv4 header. The minimum allowed value is '5'."),
         }
     }
 }

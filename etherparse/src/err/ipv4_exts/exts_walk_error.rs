@@ -21,8 +21,7 @@ impl core::fmt::Display for ExtsWalkError {
         match self {
             ExtNotReferenced{ missing_ext } => write!(
                 f,
-                "IPv4 extensions '{:?}' is defined but is not referenced by the 'protocol' the IPv4 header.",
-                missing_ext
+                "IPv4 extensions '{missing_ext:?}' is defined but is not referenced by the 'protocol' the IPv4 header."
             ),
         }
     }

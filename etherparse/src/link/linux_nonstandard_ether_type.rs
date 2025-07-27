@@ -15,7 +15,7 @@
 /// let num: u16 = LinuxNonstandardEtherType::N802_3.try_into().unwrap();
 /// assert_eq!(0x0001, num);
 /// ```
-#[derive(Clone, Copy, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct LinuxNonstandardEtherType(pub(crate) u16);
 
 impl LinuxNonstandardEtherType {

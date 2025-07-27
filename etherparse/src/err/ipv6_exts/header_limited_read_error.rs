@@ -61,7 +61,7 @@ impl core::fmt::Display for HeaderLimitedReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderLimitedReadError::*;
         match self {
-            Io(err) => write!(f, "IPv6 Extension Header IO Error: {}", err),
+            Io(err) => write!(f, "IPv6 Extension Header IO Error: {err}"),
             Len(err) => err.fmt(f),
             Content(err) => err.fmt(f),
         }

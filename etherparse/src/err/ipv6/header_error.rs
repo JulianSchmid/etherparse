@@ -12,7 +12,7 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            UnexpectedVersion { version_number } => write!(f, "IPv6 Header Error: Encountered '{}' as IP version number in the IPv6 header (must be '6' in an IPv6 header).", version_number),
+            UnexpectedVersion { version_number } => write!(f, "IPv6 Header Error: Encountered '{version_number}' as IP version number in the IPv6 header (must be '6' in an IPv6 header)."),
         }
     }
 }
