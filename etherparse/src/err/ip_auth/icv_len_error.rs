@@ -18,9 +18,9 @@ impl core::fmt::Display for IcvLenError {
         use IcvLenError::*;
         match self {
             TooBig(size) =>
-                write!(f, "Error the IP authentication header ICV length is too large. The ICV size ({} bytes) is larger then what can be be represented by the 'payload len' field in an IP authentication header.", size),
+                write!(f, "Error the IP authentication header ICV length is too large. The ICV size ({size} bytes) is larger then what can be be represented by the 'payload len' field in an IP authentication header."),
             Unaligned(size) =>
-                write!(f, "Error the IP authentication header ICV length of {} bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes.", size),
+                write!(f, "Error the IP authentication header ICV length of {size} bytes is not a multiple of 4. This is required as the payload length field can only express lengths in multiple of 4 bytes."),
         }
     }
 }

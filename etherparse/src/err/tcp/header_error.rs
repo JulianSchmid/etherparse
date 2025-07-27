@@ -12,8 +12,7 @@ impl core::fmt::Display for HeaderError {
         match self {
             DataOffsetTooSmall{ data_offset } => write!(
                 f,
-                "TCP Header Error: 'data offset' too small ({}). The 'data offset' must be at least 5 so the data is not overlapping with the TCP header itself.",
-                data_offset
+                "TCP Header Error: 'data offset' too small ({data_offset}). The 'data offset' must be at least 5 so the data is not overlapping with the TCP header itself."
             ),
         }
     }

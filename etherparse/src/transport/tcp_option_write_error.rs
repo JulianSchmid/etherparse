@@ -22,7 +22,7 @@ impl core::fmt::Display for TcpOptionWriteError {
         use TcpOptionWriteError::*;
         match self {
             NotEnoughSpace(size) => {
-                write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {} bytes).", size)
+                write!(f, "TcpOptionWriteError: Not enough memory to store all options in the options section of a tcp header (maximum 40 bytes can be stored, the options would have needed {size} bytes).")
             }
         }
     }

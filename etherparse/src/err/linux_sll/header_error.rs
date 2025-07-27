@@ -16,8 +16,8 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            UnsupportedPacketTypeField { packet_type } => write!(f, "Linux cooked capture v1 (SLL) Header Error: Encountered '{}' as the packet type, but its not supported.", packet_type),
-            UnsupportedArpHardwareId { arp_hardware_type } => write!(f, "Linux cooked capture v1 (SLL)  Header Error:  Encountered '{:?}' as the ARP harware type, but its not supported.", arp_hardware_type),
+            UnsupportedPacketTypeField { packet_type } => write!(f, "Linux cooked capture v1 (SLL) Header Error: Encountered '{packet_type}' as the packet type, but its not supported."),
+            UnsupportedArpHardwareId { arp_hardware_type } => write!(f, "Linux cooked capture v1 (SLL)  Header Error:  Encountered '{arp_hardware_type:?}' as the ARP harware type, but its not supported."),
         }
     }
 }
