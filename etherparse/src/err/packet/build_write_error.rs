@@ -91,10 +91,8 @@ impl core::fmt::Display for BuildWriteError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for BuildWriteError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for BuildWriteError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use BuildWriteError::*;
         match self {
             Io(ref err) => Some(err),
@@ -112,7 +110,7 @@ mod tests {
     use super::{BuildWriteError::*, *};
     use crate::{err::ValueType, *};
     use alloc::format;
-    use std::error::Error;
+    use core::error::Error;
 
     #[test]
     fn io() {

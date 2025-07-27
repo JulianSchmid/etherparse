@@ -50,10 +50,8 @@ impl core::fmt::Display for HeaderReadError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for HeaderReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for HeaderReadError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use HeaderReadError::*;
         match self {
             Io(err) => Some(err),
@@ -96,7 +94,7 @@ mod test {
 
     #[test]
     fn source() {
-        use std::error::Error;
+        use core::error::Error;
         assert!(Io(std::io::Error::new(
             std::io::ErrorKind::UnexpectedEof,
             "failed to fill whole buffer",

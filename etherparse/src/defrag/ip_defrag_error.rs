@@ -42,7 +42,7 @@ impl core::fmt::Display for IpDefragError {
     }
 }
 
-impl std::error::Error for IpDefragError {}
+impl core::error::Error for IpDefragError {}
 
 #[cfg(test)]
 mod tests {
@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn source() {
-        use std::error::Error;
+        use core::error::Error;
         assert!(UnalignedFragmentPayloadLen {
             offset: IpFragOffset::try_new(0).unwrap(),
             payload_len: 16
