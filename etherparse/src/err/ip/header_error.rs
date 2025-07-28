@@ -1,6 +1,3 @@
-#[cfg(feature = "std")]
-use crate::*;
-
 /// Error when decoding the IP header part of a message.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
