@@ -17,10 +17,8 @@ pub enum TcpOptionReadError {
     UnknownId(u8),
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for TcpOptionReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for TcpOptionReadError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         None
     }
 }
@@ -87,7 +85,7 @@ mod test {
             arg_u8_1 in any::<u8>(),
             arg_usize in any::<usize>()
         ) {
-            use std::error::Error;
+            use core::error::Error;
             use crate::TcpOptionReadError::*;
 
             assert!(UnexpectedEndOfSlice{ option_id: arg_u8_0, expected_len: arg_u8_1, actual_len: arg_usize}.source().is_none());

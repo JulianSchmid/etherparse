@@ -20,10 +20,8 @@ impl core::fmt::Display for SliceError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for SliceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for SliceError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use SliceError::*;
         match self {
             Len(err) => Some(err),

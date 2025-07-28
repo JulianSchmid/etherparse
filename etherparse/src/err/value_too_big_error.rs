@@ -27,13 +27,11 @@ where
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl<T> std::error::Error for ValueTooBigError<T>
+impl<T> core::error::Error for ValueTooBigError<T>
 where
     T: Sized + Clone + Display + Debug + Eq + PartialEq + Hash,
 {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         None
     }
 }

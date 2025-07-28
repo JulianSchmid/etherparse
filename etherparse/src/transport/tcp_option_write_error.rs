@@ -9,10 +9,8 @@ pub enum TcpOptionWriteError {
     NotEnoughSpace(usize),
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for TcpOptionWriteError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for TcpOptionWriteError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         None
     }
 }
@@ -51,7 +49,7 @@ mod test {
     proptest! {
         #[test]
         fn source(arg_usize in any::<usize>()) {
-            use std::error::Error;
+            use core::error::Error;
             use crate::TcpOptionWriteError::*;
 
             assert!(NotEnoughSpace(arg_usize).source().is_none());

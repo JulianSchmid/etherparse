@@ -44,10 +44,8 @@ impl core::fmt::Display for HeaderWriteError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for HeaderWriteError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for HeaderWriteError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use HeaderWriteError::*;
         match self {
             Io(ref err) => Some(err),
@@ -61,7 +59,7 @@ mod tests {
     use super::{ExtsWalkError::*, HeaderWriteError::*};
     use crate::*;
     use alloc::format;
-    use std::error::Error;
+    use core::error::Error;
 
     #[test]
     fn io() {

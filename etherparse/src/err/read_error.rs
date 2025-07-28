@@ -125,10 +125,8 @@ impl core::fmt::Display for ReadError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for ReadError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for ReadError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use ReadError::*;
         match self {
             Io(err) => Some(err),
@@ -473,7 +471,7 @@ mod tests {
         err::{ReadError::*, *},
         LenSource,
     };
-    use std::error::Error;
+    use core::error::Error;
     use std::format;
 
     #[test]

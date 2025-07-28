@@ -34,10 +34,8 @@ impl core::fmt::Display for HeaderSliceError {
     }
 }
 
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-impl std::error::Error for HeaderSliceError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for HeaderSliceError {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         use HeaderSliceError::*;
         match self {
             Len(err) => Some(err),
