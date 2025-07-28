@@ -329,9 +329,9 @@ mod tests {
     use crate::{ArpHardwareId, LenSource};
 
     use super::{FromSliceError::*, *};
+    use core::error::Error;
     use core::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
-    use core::error::Error;
     use std::format;
 
     #[test]
