@@ -99,6 +99,18 @@ impl<'a> Icmpv6Slice<'a> {
                     return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
                 }
             }
+            TYPE_NEIGHBOR_SOLICITATION => {
+                if 0 == self.code_u8() {
+                    return NeighbourSoliciation;
+                }
+            }
+            TYPE_NEIGHBOR_ADVERTISEMENT => {
+                if 0 == self.code_u8() {
+                    return NeighbourAdvertisement(NeighbourAdverisementHeader::from_bytes(
+                        self.bytes5to8(),
+                    ));
+                }
+            }
             _ => {}
         }
         Unknown {
