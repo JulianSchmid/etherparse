@@ -10,8 +10,8 @@ pub use parameter_problem_header::*;
 mod time_exceeded_code;
 pub use time_exceeded_code::*;
 
-mod neighbour_discovery;
-pub use neighbour_discovery::*;
+mod neighbor_advertisement_header;
+pub use neighbor_advertisement_header::*;
 
 /// The maximum number of bytes/octets the ICMPv6 part of a packet can contain.
 ///
