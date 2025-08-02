@@ -456,6 +456,9 @@ mod test {
             checksum in any::<u16>(),
             rand_u32 in any::<u32>(),
             rand_4bytes in any::<[u8;4]>(),
+            rand_bool0 in any::<bool>(),
+            rand_bool1 in any::<bool>(),
+            rand_bool2 in any::<bool>(),
         ) {
             use Icmpv6Type::*;
 
@@ -541,6 +544,44 @@ mod test {
                     checksum
                 }.to_bytes(),
                 with_5to8_bytes(TYPE_ECHO_REPLY, 0, rand_4bytes)
+            );
+
+            // neighbor solicitation
+            assert_eq!(
+                Icmpv6Header{
+                    icmp_type: NeighborSolicitation,
+                    checksum
+                }.to_bytes(),
+                with_5to8_bytes(TYPE_NEIGHBOR_SOLICITATION, 0, [0;4])
+            );
+
+            // neighbor advertisement
+            assert_eq!(
+                Icmpv6Header{
+                    icmp_type: NeighborAdvertisement(
+                        NeighborAdvertisementHeader {
+                            router: rand_bool0,
+                            solicited: rand_bool1,
+                            r#override: rand_bool2,
+                        }
+                    ),
+                    checksum
+                }.to_bytes(),
+                with_5to8_bytes(TYPE_NEIGHBOR_ADVERTISEMENT, 0, [
+                    if rand_bool0 {
+                        NeighborAdvertisementHeader::ROUTER_MASK
+                    } else {
+                        0
+                    } | if rand_bool1 {
+                        NeighborAdvertisementHeader::SOLICITED_MASK
+                    } else {
+                        0
+                    } | if rand_bool2 {
+                        NeighborAdvertisementHeader::OVERRIDE_MASK
+                    } else {
+                        0
+                    }, 0, 0, 0
+                ])
             );
 
             // unknown

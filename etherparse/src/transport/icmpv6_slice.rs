@@ -403,6 +403,34 @@ mod test {
                     assert_unknown(TYPE_ECHO_REPLY, code_u8);
                 }
             }
+
+            // neighbor solicitation
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_NEIGHBOR_SOLICITATION, 0)).unwrap().icmp_type(),
+                    NeighborSolicitation
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_NEIGHBOR_SOLICITATION, code_u8);
+                }
+            }
+
+            // neighbor advertisement
+            {
+                // known code
+                assert_eq!(
+                    Icmpv6Slice::from_slice(&gen_bytes(TYPE_NEIGHBOR_ADVERTISEMENT, 0)).unwrap().icmp_type(),
+                    NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8))
+                );
+
+                // unknown codes
+                for code_u8 in 1..=u8::MAX {
+                    assert_unknown(TYPE_NEIGHBOR_ADVERTISEMENT, code_u8);
+                }
+            }
         }
     }
 
