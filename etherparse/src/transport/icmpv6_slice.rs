@@ -101,12 +101,12 @@ impl<'a> Icmpv6Slice<'a> {
             }
             TYPE_NEIGHBOR_SOLICITATION => {
                 if 0 == self.code_u8() {
-                    return NeighbourSoliciation;
+                    return NeighborSolicitation;
                 }
             }
             TYPE_NEIGHBOR_ADVERTISEMENT => {
                 if 0 == self.code_u8() {
-                    return NeighbourAdvertisement(NeighbourAdverisementHeader::from_bytes(
+                    return NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(
                         self.bytes5to8(),
                     ));
                 }

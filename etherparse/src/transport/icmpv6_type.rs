@@ -40,8 +40,8 @@ use crate::{
 ///             ParameterProblem(header) => println!("{:?}", header),
 ///             EchoRequest(header) => println!("{:?}", header),
 ///             EchoReply(header) => println!("{:?}", header),
-///             NeighbourSoliciation => println!("NeighbourSoliciation"),
-///             NeighbourAdvertisement(header) => println!("{:?}", header),
+///             NeighborSolicitation => println!("NeighborSolicitation"),
+///             NeighborAdvertisement(header) => println!("{:?}", header),
 ///         }
 ///     },
 ///     _ => {},
@@ -334,9 +334,9 @@ pub enum Icmpv6Type {
 
     /// Requesting the link-layer address of a target node.
     ///
-    /// # What is part of the header for `Icmpv6Type::NeighbourSoliciation`?
+    /// # What is part of the header for `Icmpv6Type::NeighborSolicitation`?
     ///
-    /// For the [`Icmpv6Type::NeighbourSoliciation`] type the first 8 bytes/octets
+    /// For the [`Icmpv6Type::NeighborSolicitation`] type the first 8 bytes/octets
     /// of the ICMPv6 packet are part of the header.
     ///
     /// The data part of the ICMP Neighbor Advertisement packet is part of the payload
@@ -364,13 +364,13 @@ pub enum Icmpv6Type {
     /// the target.  Neighbor Solicitations are multicast when the node needs
     /// to resolve an address and unicast when the node seeks to verify the
     /// reachability of a neighbor.
-    NeighbourSoliciation,
+    NeighborSolicitation,
 
-    /// Response to a `NeighbourSoliciation` message (or sent proactively).
+    /// Response to a `NeighborSolicitation` message (or sent proactively).
     ///
-    /// # What is part of the header for `Icmpv6Type::NeighbourAdvertisement`?
+    /// # What is part of the header for `Icmpv6Type::NeighborAdvertisement`?
     ///
-    /// For the [`Icmpv6Type::NeighbourAdvertisement`] type the first 8 bytes/octets
+    /// For the [`Icmpv6Type::NeighborAdvertisement`] type the first 8 bytes/octets
     /// of the ICMPv6 packet are part of the header. This includes 3 bits for
     /// - router
     /// - solicited
@@ -425,7 +425,7 @@ pub enum Icmpv6Type {
     ///            addresses and in solicited proxy advertisements.
     ///            It SHOULD be set in other solicited advertisements
     ///            and in unsolicited advertisements.
-    NeighbourAdvertisement(icmpv6::NeighbourAdverisementHeader),
+    NeighborAdvertisement(icmpv6::NeighborAdvertisementHeader),
 }
 
 impl Icmpv6Type {
@@ -445,8 +445,8 @@ impl Icmpv6Type {
             ParameterProblem(_) => TYPE_PARAMETER_PROBLEM,
             EchoRequest(_) => TYPE_ECHO_REQUEST,
             EchoReply(_) => TYPE_ECHO_REPLY,
-            NeighbourSoliciation => TYPE_NEIGHBOR_SOLICITATION,
-            NeighbourAdvertisement { .. } => TYPE_NEIGHBOR_ADVERTISEMENT,
+            NeighborSolicitation => TYPE_NEIGHBOR_SOLICITATION,
+            NeighborAdvertisement { .. } => TYPE_NEIGHBOR_ADVERTISEMENT,
         }
     }
 
@@ -466,8 +466,8 @@ impl Icmpv6Type {
             ParameterProblem(header) => header.code.code_u8(),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
-            NeighbourSoliciation => 0,
-            NeighbourAdvertisement { .. } => 0,
+            NeighborSolicitation => 0,
+            NeighborAdvertisement { .. } => 0,
         }
     }
 
@@ -540,10 +540,10 @@ impl Icmpv6Type {
             EchoReply(echo) => pseudo_sum
                 .add_2bytes([TYPE_ECHO_REPLY, 0])
                 .add_4bytes(echo.to_bytes()),
-            NeighbourSoliciation => pseudo_sum
+            NeighborSolicitation => pseudo_sum
                 .add_2bytes([TYPE_NEIGHBOR_SOLICITATION, 0])
                 .add_4bytes([0; 4]),
-            NeighbourAdvertisement(header) => pseudo_sum
+            NeighborAdvertisement(header) => pseudo_sum
                 .add_2bytes([TYPE_NEIGHBOR_ADVERTISEMENT, 0])
                 .add_4bytes(header.to_bytes()),
         }
@@ -583,8 +583,8 @@ impl Icmpv6Type {
             | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_)
-            | NeighbourSoliciation
-            | NeighbourAdvertisement { .. } => 8,
+            | NeighborSolicitation
+            | NeighborAdvertisement { .. } => 8,
         }
     }
 
@@ -605,8 +605,8 @@ impl Icmpv6Type {
             | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_)
-            | NeighbourSoliciation
-            | NeighbourAdvertisement { .. } => None,
+            | NeighborSolicitation
+            | NeighborAdvertisement { .. } => None,
         }
     }
 }
@@ -637,6 +637,8 @@ mod test {
                     (TYPE_PARAMETER_PROBLEM, ParameterProblem(ParameterProblemHeader{ code: ParameterProblemCode::UnrecognizedNextHeader, pointer: u32::from_be_bytes(bytes5to8)})),
                     (TYPE_ECHO_REQUEST, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (TYPE_ECHO_REPLY, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
+                    (TYPE_NEIGHBOR_SOLICITATION, NeighborSolicitation),
+                    (TYPE_NEIGHBOR_ADVERTISEMENT, NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8))),
                 ];
                 for test in type_u8_type_pair {
                     assert_eq!(test.0, test.1.type_u8());
@@ -884,6 +886,8 @@ mod test {
                 }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+                NeighborSolicitation,
+                NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8)),
             ];
 
             for hdr in len_8_hdrs {
@@ -919,6 +923,8 @@ mod test {
                 }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+                NeighborSolicitation,
+                NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8)),
             ];
 
             for hdr in variable_payload_headers {
