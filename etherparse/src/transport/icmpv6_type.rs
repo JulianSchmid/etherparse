@@ -40,6 +40,8 @@ use crate::{
 ///             ParameterProblem(header) => println!("{:?}", header),
 ///             EchoRequest(header) => println!("{:?}", header),
 ///             EchoReply(header) => println!("{:?}", header),
+///             NeighbourSoliciation => println!("NeighbourSoliciation"),
+///             NeighbourAdvertisement(header) => println!("{:?}", header),
 ///         }
 ///     },
 ///     _ => {},
@@ -329,6 +331,101 @@ pub enum Icmpv6Type {
     /// The data received in the ICMPv6 Echo Request message MUST be returned
     /// entirely and unmodified in the ICMPv6 Echo Reply message.
     EchoReply(IcmpEchoHeader),
+
+    /// Requesting the link-layer address of a target node.
+    ///
+    /// # What is part of the header for `Icmpv6Type::NeighbourSoliciation`?
+    ///
+    /// For the [`Icmpv6Type::NeighbourSoliciation`] type the first 8 bytes/octets
+    /// of the ICMPv6 packet are part of the header.
+    ///
+    /// The data part of the ICMP Neighbor Advertisement packet is part of the payload
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv6Header`].
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      135      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                       Target Address                          | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |   Options ...
+    /// +-----------------
+    /// ```
+    ///
+    /// # RFC 4861 Description
+    ///
+    /// Nodes send Neighbor Solicitations to request the link-layer address
+    /// of a target node while also providing their own link-layer address to
+    /// the target.  Neighbor Solicitations are multicast when the node needs
+    /// to resolve an address and unicast when the node seeks to verify the
+    /// reachability of a neighbor.
+    NeighbourSoliciation,
+
+    /// Response to a `NeighbourSoliciation` message (or sent proactively).
+    ///
+    /// # What is part of the header for `Icmpv6Type::NeighbourAdvertisement`?
+    ///
+    /// For the [`Icmpv6Type::NeighbourAdvertisement`] type the first 8 bytes/octets
+    /// of the ICMPv6 packet are part of the header. This includes 3 bits for
+    /// - router
+    /// - solicited
+    /// - override
+    ///
+    /// The data part of the ICMP Neighbor Advertisement packet is part of the payload
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv6Header`].
+    ///
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      136      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |R|S|O|                    <unused>                             |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                       Target Address                          | part of payload
+    /// |                                                               |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |   Options ...
+    /// +-----------------
+    /// ```
+    ///
+    /// # RFC 4861 Description
+    ///
+    /// A node sends Neighbor Advertisements in response to Neighbor
+    /// Solicitations and sends unsolicited Neighbor Advertisements in order
+    /// to (unreliably) propagate new information quickly.
+    ///
+    /// R          Router flag. When set, the R-bit indicates that
+    ///            the sender is a router. The R-bit is used by
+    ///            Neighbor Unreachability Detection to detect a
+    ///            router that changes to a host.
+    ///
+    /// S          Solicited flag. When set, the S-bit indicates that
+    ///            the advertisement was sent in response to a
+    ///            Neighbor Solicitation from the Destination address.
+    ///            The S-bit is used as a reachability confirmation
+    ///            for Neighbor Unreachability Detection.  It MUST NOT
+    ///            be set in multicast advertisements or in
+    ///            unsolicited unicast advertisements.
+    ///
+    /// O          Override flag. When set, the O-bit indicates that
+    ///            the advertisement should override an existing cache
+    ///            entry and update the cached link-layer address.
+    ///            When it is not set the advertisement will not
+    ///            update a cached link-layer address though it will
+    ///            update an existing Neighbor Cache entry for which
+    ///            no link-layer address is known.  It SHOULD NOT be
+    ///            set in solicited advertisements for anycast
+    ///            addresses and in solicited proxy advertisements.
+    ///            It SHOULD be set in other solicited advertisements
+    ///            and in unsolicited advertisements.
+    NeighbourAdvertisement(icmpv6::NeighbourAdverisementHeader),
 }
 
 impl Icmpv6Type {
@@ -348,6 +445,8 @@ impl Icmpv6Type {
             ParameterProblem(_) => TYPE_PARAMETER_PROBLEM,
             EchoRequest(_) => TYPE_ECHO_REQUEST,
             EchoReply(_) => TYPE_ECHO_REPLY,
+            NeighbourSoliciation => TYPE_NEIGHBOR_SOLICITATION,
+            NeighbourAdvertisement { .. } => TYPE_NEIGHBOR_ADVERTISEMENT,
         }
     }
 
@@ -367,6 +466,8 @@ impl Icmpv6Type {
             ParameterProblem(header) => header.code.code_u8(),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
+            NeighbourSoliciation => 0,
+            NeighbourAdvertisement { .. } => 0,
         }
     }
 
@@ -439,6 +540,12 @@ impl Icmpv6Type {
             EchoReply(echo) => pseudo_sum
                 .add_2bytes([TYPE_ECHO_REPLY, 0])
                 .add_4bytes(echo.to_bytes()),
+            NeighbourSoliciation => pseudo_sum
+                .add_2bytes([TYPE_NEIGHBOR_SOLICITATION, 0])
+                .add_4bytes([0; 4]),
+            NeighbourAdvertisement(header) => pseudo_sum
+                .add_2bytes([TYPE_NEIGHBOR_ADVERTISEMENT, 0])
+                .add_4bytes(header.to_bytes()),
         }
         .add_slice(payload)
         .ones_complement()
@@ -475,7 +582,9 @@ impl Icmpv6Type {
             | TimeExceeded(_)
             | ParameterProblem(_)
             | EchoRequest(_)
-            | EchoReply(_) => 8,
+            | EchoReply(_)
+            | NeighbourSoliciation
+            | NeighbourAdvertisement { .. } => 8,
         }
     }
 
@@ -495,7 +604,9 @@ impl Icmpv6Type {
             | TimeExceeded(_)
             | ParameterProblem(_)
             | EchoRequest(_)
-            | EchoReply(_) => None,
+            | EchoReply(_)
+            | NeighbourSoliciation
+            | NeighbourAdvertisement { .. } => None,
         }
     }
 }
