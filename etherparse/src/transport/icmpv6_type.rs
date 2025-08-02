@@ -670,6 +670,8 @@ mod test {
                     (0, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (0, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (0, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
+                    (0, NeighborSolicitation),
+                    (0, NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8))),
                 ];
                 for test in code_type_pair {
                     assert_eq!(test.0, test.1.code_u8());
@@ -821,6 +823,14 @@ mod test {
                 // echo reply
                 test_checksum_calc(EchoReply(
                     IcmpEchoHeader::from_bytes(bytes5to8)
+                ));
+
+                // neighbor solicitation
+                test_checksum_calc(NeighborSolicitation);
+
+                // neighbor advertisement
+                test_checksum_calc(NeighborAdvertisement(
+                    NeighborAdvertisementHeader::from_bytes(bytes5to8)
                 ));
             }
         }
