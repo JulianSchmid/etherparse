@@ -1,7 +1,7 @@
 use super::*;
 
 /// Code values for ICMPv6 time exceeded message.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum TimeExceededCode {
     /// "hop limit exceeded in transit"
     HopLimitExceeded = 0,

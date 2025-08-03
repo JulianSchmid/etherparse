@@ -7,7 +7,7 @@
 /// node SHOULD also implement an application-layer interface for
 /// originating Echo Requests and receiving Echo Replies, for diagnostic
 /// purposes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct IcmpEchoHeader {
     /// An identifier to aid in matching Echo Replies to Echo Requests. May be zero.
     pub id: u16,

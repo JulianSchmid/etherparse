@@ -1,5 +1,6 @@
 use crate::{
     err::{ValueTooBigError, ValueType},
+    icmpv6::RouterAdvertisementHeader,
     *,
 };
 
@@ -40,8 +41,11 @@ use crate::{
 ///             ParameterProblem(header) => println!("{:?}", header),
 ///             EchoRequest(header) => println!("{:?}", header),
 ///             EchoReply(header) => println!("{:?}", header),
-///             NeighbourSoliciation => println!("NeighbourSoliciation"),
-///             NeighbourAdvertisement(header) => println!("{:?}", header),
+///             RouterSolicitation => println!("RouterSolicitation"),
+///             RouterAdvertisement(header) => println!("{:?}", header),
+///             NeighborSolicitation => println!("NeighborSolicitation"),
+///             NeighborAdvertisement(header) => println!("{:?}", header),
+///             Redirect => println!("Redirect"),
 ///         }
 ///     },
 ///     _ => {},
@@ -86,7 +90,7 @@ use crate::{
 /// #   );
 /// # }
 /// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum Icmpv6Type {
     /// In case of an unknown icmp type is received the header elements of
     /// the first 8 bytes/octets are stored raw in this enum value.
@@ -332,16 +336,78 @@ pub enum Icmpv6Type {
     /// entirely and unmodified in the ICMPv6 Echo Reply message.
     EchoReply(IcmpEchoHeader),
 
-    /// Requesting the link-layer address of a target node.
+    /// Router Solicitation message header (part of "Neighbor Discovery Protocol"
+    /// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
     ///
-    /// # What is part of the header for `Icmpv6Type::NeighbourSoliciation`?
+    /// # What is part of the header for `Icmpv6Type::RouterSolicitation`?
     ///
-    /// For the [`Icmpv6Type::NeighbourSoliciation`] type the first 8 bytes/octets
+    /// For the [`Icmpv6Type::RouterSolicitation`] type the first 8 bytes/octets
     /// of the ICMPv6 packet are part of the header.
     ///
-    /// The data part of the ICMP Neighbor Advertisement packet is part of the payload
+    /// The options part of the ICMP Router Solicitation packet is part of the payload
     /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
     /// [`Icmpv6Header`].
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      133      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |   Options ...                                                 |  | part of payload
+    /// |                                                               |  ↓
+    /// +-----------------                                                 -
+    /// ```
+    ///
+    /// # RFC 4861 Description
+    ///
+    /// Hosts send Router Solicitations in order to prompt routers to
+    /// generate Router Advertisements quickly.
+    RouterSolicitation,
+
+    /// Router Advertisement message header (part of "Neighbor Discovery Protocol"
+    /// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
+    ///
+    /// # What is part of the header for `Icmpv6Type::RouterAdvertisement`?
+    ///
+    /// For the [`Icmpv6Type::RouterAdvertisement`] type the first 8 bytes/octets
+    /// of the ICMPv6 packet are part of the header.
+    ///
+    /// The options part of the ICMP Router Advertisement packet is part of the payload
+    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
+    /// [`Icmpv6Header`].
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      134      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// | Cur Hop Limit |M|O|  Reserved |     Router Lifetime           |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                        Reachable Time                         |  |
+    /// +---------------------------------------------------------------+  |
+    /// |                         Retrans Timer                         |  | part of payload
+    /// +---------------------------------------------------------------+  |
+    /// |   Options ...                                                 |  ↓
+    /// +-----------------                                                 -
+    /// ```
+    ///
+    /// # RFC 4861 Description
+    ///
+    /// Routers send out Router Advertisement messages periodically, or in
+    /// response to Router Solicitations.
+    RouterAdvertisement(RouterAdvertisementHeader),
+
+    /// Requesting the link-layer address of a target node (part of "Neighbor Discovery Protocol"
+    /// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
+    ///
+    /// # What is part of the header for `Icmpv6Type::NeighborSolicitation`?
+    ///
+    /// For the [`Icmpv6Type::NeighborSolicitation`] type the first 8 bytes/octets
+    /// of the ICMPv6 packet are part of the header.
+    ///
+    /// The target address & options of the ICMP Neighbor Solicitation packet is part
+    /// of the payload ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not
+    /// part of the [`Icmpv6Header`].
     /// ```text
     /// 0               1               2               3               4
     /// +---------------------------------------------------------------+  -
@@ -350,11 +416,11 @@ pub enum Icmpv6Type {
     /// |                           <unused>                            |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |                       Target Address                          | part of payload
-    /// |                                                               |  ↓
-    /// +---------------------------------------------------------------+  -
-    /// |   Options ...
-    /// +-----------------
+    /// |                       Target Address                          |  |
+    /// |                                                               |  | part of payload
+    /// +---------------------------------------------------------------+  |
+    /// |   Options ...                                                    ↓
+    /// +-----------------                                                 -
     /// ```
     ///
     /// # RFC 4861 Description
@@ -364,21 +430,22 @@ pub enum Icmpv6Type {
     /// the target.  Neighbor Solicitations are multicast when the node needs
     /// to resolve an address and unicast when the node seeks to verify the
     /// reachability of a neighbor.
-    NeighbourSoliciation,
+    NeighborSolicitation,
 
-    /// Response to a `NeighbourSoliciation` message (or sent proactively).
+    /// Header of "Neighbor Advertisement" message (part of "Neighbor Discovery Protocol"
+    /// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
     ///
-    /// # What is part of the header for `Icmpv6Type::NeighbourAdvertisement`?
+    /// # What is part of the header for `Icmpv6Type::NeighborAdvertisement`?
     ///
-    /// For the [`Icmpv6Type::NeighbourAdvertisement`] type the first 8 bytes/octets
+    /// For the [`Icmpv6Type::NeighborAdvertisement`] type the first 8 bytes/octets
     /// of the ICMPv6 packet are part of the header. This includes 3 bits for
     /// - router
     /// - solicited
     /// - override
     ///
-    /// The data part of the ICMP Neighbor Advertisement packet is part of the payload
-    /// ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not part of the
-    /// [`Icmpv6Header`].
+    /// The target address & options of the ICMP Neighbor Advertisement packet is part
+    /// of the payload ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`]) and not
+    /// part of the [`Icmpv6Header`].
     ///
     /// ```text
     /// 0               1               2               3               4
@@ -388,11 +455,11 @@ pub enum Icmpv6Type {
     /// |R|S|O|                    <unused>                             |  ↓
     /// +---------------------------------------------------------------+  -
     /// |                                                               |  |
-    /// |                       Target Address                          | part of payload
-    /// |                                                               |  ↓
-    /// +---------------------------------------------------------------+  -
-    /// |   Options ...
-    /// +-----------------
+    /// |                       Target Address                          |  |
+    /// |                                                               |  | part of payload
+    /// +---------------------------------------------------------------+  |
+    /// |   Options ...                                                    ↓
+    /// +-----------------                                                 -
     /// ```
     ///
     /// # RFC 4861 Description
@@ -425,7 +492,47 @@ pub enum Icmpv6Type {
     ///            addresses and in solicited proxy advertisements.
     ///            It SHOULD be set in other solicited advertisements
     ///            and in unsolicited advertisements.
-    NeighbourAdvertisement(icmpv6::NeighbourAdverisementHeader),
+    NeighborAdvertisement(icmpv6::NeighborAdvertisementHeader),
+
+    /// Header of "Redirect" message (part of "Neighbor Discovery Protocol"
+    /// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
+    ///
+    /// # What is part of the header for `Icmpv6Type::Redirect`?
+    ///
+    /// For the [`Icmpv6Type::Redirect`] type the first 8 bytes/octets
+    /// of the ICMPv6 packet are part of the header.
+    ///
+    /// The "target address", "destination address" & options part of the ICMP Redirect
+    /// packet is part of the payload ([`Icmpv6Slice::payload`] & [`PacketHeaders::payload`])
+    /// and not part of the [`Icmpv6Header`].
+    /// ```text
+    /// 0               1               2               3               4
+    /// +---------------------------------------------------------------+  -
+    /// |      137      |       0       |  checksum (in Icmpv6Header)   |  |
+    /// +---------------------------------------------------------------+  | part of header & type
+    /// |                           <unused>                            |  ↓
+    /// +---------------------------------------------------------------+  -
+    /// |                                                               |  |
+    /// |                       Target Address                          |  |
+    /// |                                                               |  |
+    /// +---------------------------------------------------------------+  |
+    /// |                                                               |  | part of payload
+    /// |                    Destination Address                        |  |
+    /// |                                                               |  |
+    /// +---------------------------------------------------------------+  |
+    /// |   Options ...                                                    ↓
+    /// +-----------------                                                 -                                             -
+    /// ```
+    ///
+    /// # RFC 4861 Description
+    ///
+    /// Routers send Redirect packets to inform a host of a better first-hop
+    /// node on the path to a destination.  Hosts can be redirected to a
+    /// better first-hop router but can also be informed by a redirect that
+    /// the destination is in fact a neighbor.  The latter is accomplished by
+    /// setting the ICMP Target Address equal to the ICMP Destination
+    /// Address.
+    Redirect,
 }
 
 impl Icmpv6Type {
@@ -445,8 +552,11 @@ impl Icmpv6Type {
             ParameterProblem(_) => TYPE_PARAMETER_PROBLEM,
             EchoRequest(_) => TYPE_ECHO_REQUEST,
             EchoReply(_) => TYPE_ECHO_REPLY,
-            NeighbourSoliciation => TYPE_NEIGHBOR_SOLICITATION,
-            NeighbourAdvertisement { .. } => TYPE_NEIGHBOR_ADVERTISEMENT,
+            RouterSolicitation => TYPE_ROUTER_SOLICITATION,
+            RouterAdvertisement(_) => TYPE_ROUTER_ADVERTISEMENT,
+            NeighborSolicitation => TYPE_NEIGHBOR_SOLICITATION,
+            NeighborAdvertisement(_) => TYPE_NEIGHBOR_ADVERTISEMENT,
+            Redirect => TYPE_REDIRECT_MESSAGE,
         }
     }
 
@@ -466,8 +576,11 @@ impl Icmpv6Type {
             ParameterProblem(header) => header.code.code_u8(),
             EchoRequest(_) => 0,
             EchoReply(_) => 0,
-            NeighbourSoliciation => 0,
-            NeighbourAdvertisement { .. } => 0,
+            RouterSolicitation => 0,
+            RouterAdvertisement(_) => 0,
+            NeighborSolicitation => 0,
+            NeighborAdvertisement(_) => 0,
+            Redirect => 0,
         }
     }
 
@@ -540,12 +653,21 @@ impl Icmpv6Type {
             EchoReply(echo) => pseudo_sum
                 .add_2bytes([TYPE_ECHO_REPLY, 0])
                 .add_4bytes(echo.to_bytes()),
-            NeighbourSoliciation => pseudo_sum
+            RouterSolicitation => pseudo_sum
+                .add_2bytes([TYPE_ROUTER_SOLICITATION, 0])
+                .add_4bytes([0; 4]),
+            RouterAdvertisement(header) => pseudo_sum
+                .add_2bytes([TYPE_ROUTER_ADVERTISEMENT, 0])
+                .add_4bytes(header.to_bytes()),
+            NeighborSolicitation => pseudo_sum
                 .add_2bytes([TYPE_NEIGHBOR_SOLICITATION, 0])
                 .add_4bytes([0; 4]),
-            NeighbourAdvertisement(header) => pseudo_sum
+            NeighborAdvertisement(header) => pseudo_sum
                 .add_2bytes([TYPE_NEIGHBOR_ADVERTISEMENT, 0])
                 .add_4bytes(header.to_bytes()),
+            Redirect => pseudo_sum
+                .add_2bytes([TYPE_REDIRECT_MESSAGE, 0])
+                .add_4bytes([0; 4]),
         }
         .add_slice(payload)
         .ones_complement()
@@ -583,8 +705,11 @@ impl Icmpv6Type {
             | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_)
-            | NeighbourSoliciation
-            | NeighbourAdvertisement { .. } => 8,
+            | RouterSolicitation
+            | RouterAdvertisement(_)
+            | NeighborSolicitation
+            | NeighborAdvertisement(_)
+            | Redirect => 8,
         }
     }
 
@@ -605,8 +730,11 @@ impl Icmpv6Type {
             | ParameterProblem(_)
             | EchoRequest(_)
             | EchoReply(_)
-            | NeighbourSoliciation
-            | NeighbourAdvertisement { .. } => None,
+            | RouterSolicitation
+            | RouterAdvertisement(_)
+            | NeighborSolicitation
+            | NeighborAdvertisement(_)
+            | Redirect => None,
         }
     }
 }
@@ -637,6 +765,11 @@ mod test {
                     (TYPE_PARAMETER_PROBLEM, ParameterProblem(ParameterProblemHeader{ code: ParameterProblemCode::UnrecognizedNextHeader, pointer: u32::from_be_bytes(bytes5to8)})),
                     (TYPE_ECHO_REQUEST, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (TYPE_ECHO_REPLY, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
+                    (TYPE_ROUTER_SOLICITATION, RouterSolicitation),
+                    (TYPE_ROUTER_ADVERTISEMENT, RouterAdvertisement(RouterAdvertisementHeader::from_bytes(bytes5to8))),
+                    (TYPE_NEIGHBOR_SOLICITATION, NeighborSolicitation),
+                    (TYPE_NEIGHBOR_ADVERTISEMENT, NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8))),
+                    (TYPE_REDIRECT_MESSAGE, Redirect),
                 ];
                 for test in type_u8_type_pair {
                     assert_eq!(test.0, test.1.type_u8());
@@ -668,6 +801,11 @@ mod test {
                     (0, PacketTooBig{ mtu: u32::from_be_bytes(bytes5to8), }),
                     (0, EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8))),
                     (0, EchoReply(IcmpEchoHeader::from_bytes(bytes5to8))),
+                    (0, RouterSolicitation),
+                    (0, RouterAdvertisement(RouterAdvertisementHeader::from_bytes(bytes5to8))),
+                    (0, NeighborSolicitation),
+                    (0, NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8))),
+                    (0, Redirect),
                 ];
                 for test in code_type_pair {
                     assert_eq!(test.0, test.1.code_u8());
@@ -820,6 +958,25 @@ mod test {
                 test_checksum_calc(EchoReply(
                     IcmpEchoHeader::from_bytes(bytes5to8)
                 ));
+
+                // router solicitation
+                test_checksum_calc(RouterSolicitation);
+
+                // router advertisement
+                test_checksum_calc(RouterAdvertisement(
+                    RouterAdvertisementHeader::from_bytes(bytes5to8)
+                ));
+
+                // neighbor solicitation
+                test_checksum_calc(NeighborSolicitation);
+
+                // neighbor advertisement
+                test_checksum_calc(NeighborAdvertisement(
+                    NeighborAdvertisementHeader::from_bytes(bytes5to8)
+                ));
+
+                // redirect
+                test_checksum_calc(Redirect);
             }
         }
     }
@@ -884,6 +1041,11 @@ mod test {
                 }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+                RouterSolicitation,
+                RouterAdvertisement(RouterAdvertisementHeader::from_bytes(bytes5to8)),
+                NeighborSolicitation,
+                NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8)),
+                Redirect,
             ];
 
             for hdr in len_8_hdrs {
@@ -919,6 +1081,11 @@ mod test {
                 }),
                 EchoRequest(IcmpEchoHeader::from_bytes(bytes5to8)),
                 EchoReply(IcmpEchoHeader::from_bytes(bytes5to8)),
+                RouterSolicitation,
+                RouterAdvertisement(RouterAdvertisementHeader::from_bytes(bytes5to8)),
+                NeighborSolicitation,
+                NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(bytes5to8)),
+                Redirect,
             ];
 
             for hdr in variable_payload_headers {
