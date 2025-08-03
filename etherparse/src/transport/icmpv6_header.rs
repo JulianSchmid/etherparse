@@ -184,10 +184,15 @@ impl Icmpv6Header {
             ),
             EchoRequest(echo) => return_4u8(TYPE_ECHO_REQUEST, 0, echo.to_bytes()),
             EchoReply(echo) => return_4u8(TYPE_ECHO_REPLY, 0, echo.to_bytes()),
-            NeighborSolicitation => return_4u8(TYPE_NEIGHBOR_SOLICITATION, 0, [0; 4]),
+            RouterSolicitation => return_trivial(TYPE_ROUTER_SOLICITATION, 0),
+            RouterAdvertisement(header) => {
+                return_4u8(TYPE_ROUTER_ADVERTISEMENT, 0, header.to_bytes())
+            }
+            NeighborSolicitation => return_trivial(TYPE_NEIGHBOR_SOLICITATION, 0),
             NeighborAdvertisement(header) => {
                 return_4u8(TYPE_NEIGHBOR_ADVERTISEMENT, 0, header.to_bytes())
             }
+            Redirect => return_trivial(TYPE_REDIRECT_MESSAGE, 0),
         }
     }
 }

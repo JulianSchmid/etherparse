@@ -3,7 +3,7 @@ use super::*;
 /// Code values for ICMPv6 parameter problem messages.
 ///
 /// Source: <https://www.iana.org/assignments/icmpv6-parameters/icmpv6-parameters.xhtml#icmpv6-parameters-codes-5>
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum ParameterProblemCode {
     /// Erroneous header field encountered (from [RFC 4443](https://tools.ietf.org/html/rfc4443))
     ErroneousHeaderField = 0,

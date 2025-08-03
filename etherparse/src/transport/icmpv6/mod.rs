@@ -13,6 +13,9 @@ pub use time_exceeded_code::*;
 mod neighbor_advertisement_header;
 pub use neighbor_advertisement_header::*;
 
+mod router_advertisement_header;
+pub use router_advertisement_header::*;
+
 /// The maximum number of bytes/octets the ICMPv6 part of a packet can contain.
 ///
 /// The value is determined by the maximum value of the "Upper-Layer Packet Length"

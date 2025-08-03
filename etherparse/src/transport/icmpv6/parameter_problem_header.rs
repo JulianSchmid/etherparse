@@ -1,7 +1,7 @@
 use super::*;
 
 /// ICMPv6 parameter problem header.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct ParameterProblemHeader {
     /// The code can offer additional informations about what kind of parameter
     /// problem caused the error.

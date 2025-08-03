@@ -1,5 +1,6 @@
-/// ICMPv6 neigh
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// ICMPv6 neighbor advertisement header (part of "Neighbor Discovery Protocol"
+/// [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub struct NeighborAdvertisementHeader {
     pub router: bool,
     pub solicited: bool,
@@ -16,6 +17,7 @@ impl NeighborAdvertisementHeader {
     /// Mask to read out the "override" flag out of the 5th byte of the ICMPv6 header.
     pub const OVERRIDE_MASK: u8 = 0b00100000;
 
+    /// Decodes the header from the on the wire bytes.
     pub fn from_bytes(bytes: [u8; 4]) -> Self {
         let first_byte = bytes[0];
 
@@ -26,6 +28,7 @@ impl NeighborAdvertisementHeader {
         }
     }
 
+    /// Converts the header to the on the wire bytes.
     pub fn to_bytes(&self) -> [u8; 4] {
         let mut first_byte = 0u8;
 

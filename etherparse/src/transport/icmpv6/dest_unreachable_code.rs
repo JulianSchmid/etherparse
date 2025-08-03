@@ -10,7 +10,7 @@ use super::*;
 /// that cannot be delivered to its destination address for reasons other
 /// than congestion.  (An ICMPv6 message MUST NOT be generated if a
 /// packet is dropped due to congestion.)
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd, Hash)]
 pub enum DestUnreachableCode {
     /// No route to destination
     NoRoute = 0,
