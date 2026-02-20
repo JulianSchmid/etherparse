@@ -1,8 +1,58 @@
+use crate::err::packet::BuildSliceWriteError;
+#[cfg(feature = "alloc")]
+use crate::err::packet::BuildVecWriteError;
+#[cfg(feature = "std")]
 use crate::err::packet::BuildWriteError;
 
 use super::*;
 
-use std::{io, marker};
+use core::marker;
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
+impl From<SliceCoreWriteError> for BuildSliceWriteError {
+    fn from(value: SliceCoreWriteError) -> Self {
+        BuildSliceWriteError::Space(value.required_len)
+    }
+}
+
+impl From<crate::WriteError<SliceCoreWriteError, err::ipv4_exts::ExtsWalkError>>
+    for BuildSliceWriteError
+{
+    fn from(value: crate::WriteError<SliceCoreWriteError, err::ipv4_exts::ExtsWalkError>) -> Self {
+        match value {
+            crate::WriteError::Io(err) => err.into(),
+            crate::WriteError::Content(err) => BuildSliceWriteError::Ipv4Exts(err),
+        }
+    }
+}
+
+impl From<crate::WriteError<SliceCoreWriteError, err::ipv6_exts::ExtsWalkError>>
+    for BuildSliceWriteError
+{
+    fn from(value: crate::WriteError<SliceCoreWriteError, err::ipv6_exts::ExtsWalkError>) -> Self {
+        match value {
+            crate::WriteError::Io(err) => err.into(),
+            crate::WriteError::Content(err) => BuildSliceWriteError::Ipv6Exts(err),
+        }
+    }
+}
+
+fn final_write_to_slice<B>(
+    builder: PacketBuilderStep<B>,
+    buffer: &mut [u8],
+    payload: &[u8],
+) -> Result<usize, BuildSliceWriteError> {
+    let required = final_size(&builder, payload.len());
+    let slice = buffer
+        .get_mut(..required)
+        .ok_or(BuildSliceWriteError::Space(required))?;
+
+    let mut writer = SliceCoreWrite::new(slice);
+    final_write_with_net::<_, _, BuildSliceWriteError>(builder, &mut writer, payload)?;
+    Ok(required)
+}
 
 /// Helper for building packets.
 ///
@@ -100,7 +150,6 @@ use std::{io, marker};
 ///     * [`PacketBuilderStep<Icmpv6Header>::write`]
 ///     * [`PacketBuilderStep<Icmpv6Header>::size`]
 ///
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub struct PacketBuilder {}
 
 impl PacketBuilder {
@@ -375,13 +424,11 @@ struct PacketImpl {
 }
 
 ///An unfinished packet that is build with the packet builder
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub struct PacketBuilderStep<LastStep> {
     state: PacketImpl,
     _marker: marker::PhantomData<LastStep>,
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Ethernet2Header> {
     /// Add an IPv4 header
     ///
@@ -730,7 +777,6 @@ impl PacketBuilderStep<Ethernet2Header> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<LinuxSllHeader> {
     /// Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
@@ -914,7 +960,6 @@ impl PacketBuilderStep<LinuxSllHeader> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<VlanHeader> {
     ///Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
     ///
@@ -1098,7 +1143,6 @@ impl PacketBuilderStep<VlanHeader> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<IpHeaders> {
     /// Adds an ICMPv4 header of the given [`Icmpv4Type`] to the packet.
     ///
@@ -1636,7 +1680,8 @@ impl PacketBuilderStep<IpHeaders> {
     /// `last_next_header_ip_number` will be set in the last extension header
     /// or if no extension header exists the ip header as the "next header" or
     /// "protocol number".
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         mut self,
         writer: &mut T,
         last_next_header_ip_number: IpNumber,
@@ -1651,7 +1696,50 @@ impl PacketBuilderStep<IpHeaders> {
             }
             _ => {}
         }
-        final_write_with_net(self, writer, payload)
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), payload)
+    }
+
+    /// Write all the headers and the payload to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(
+        mut self,
+        buffer: &mut Vec<u8>,
+        last_next_header_ip_number: IpNumber,
+        payload: &[u8],
+    ) -> Result<(), BuildVecWriteError> {
+        match &mut (self.state.net_header) {
+            Some(NetHeaders::Ipv4(ref mut ip, ref mut exts)) => {
+                ip.protocol = exts.set_next_headers(last_next_header_ip_number);
+            }
+            Some(NetHeaders::Ipv6(ref mut ip, ref mut exts)) => {
+                ip.next_header = exts.set_next_headers(last_next_header_ip_number);
+            }
+            _ => {}
+        }
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), payload)
+    }
+
+    /// Write all the headers and the payload to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(
+        mut self,
+        buffer: &mut [u8],
+        last_next_header_ip_number: IpNumber,
+        payload: &[u8],
+    ) -> Result<usize, BuildSliceWriteError> {
+        match &mut (self.state.net_header) {
+            Some(NetHeaders::Ipv4(ref mut ip, ref mut exts)) => {
+                ip.protocol = exts.set_next_headers(last_next_header_ip_number);
+            }
+            Some(NetHeaders::Ipv6(ref mut ip, ref mut exts)) => {
+                ip.next_header = exts.set_next_headers(last_next_header_ip_number);
+            }
+            _ => {}
+        }
+
+        final_write_to_slice(self, buffer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1660,15 +1748,37 @@ impl PacketBuilderStep<IpHeaders> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Icmpv4Header> {
     /// Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         self,
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write_with_net(self, writer, payload)
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), payload)
+    }
+
+    /// Write all the headers and the payload to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(
+        self,
+        buffer: &mut Vec<u8>,
+        payload: &[u8],
+    ) -> Result<(), BuildVecWriteError> {
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), payload)
+    }
+
+    /// Write all the headers and the payload to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(
+        self,
+        buffer: &mut [u8],
+        payload: &[u8],
+    ) -> Result<usize, BuildSliceWriteError> {
+        final_write_to_slice(self, buffer, payload)
     }
 
     /// Returns the size of the packet when it is serialized
@@ -1677,15 +1787,37 @@ impl PacketBuilderStep<Icmpv4Header> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<Icmpv6Header> {
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         self,
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write_with_net(self, writer, payload)
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), payload)
+    }
+
+    /// Write all the headers and the payload to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(
+        self,
+        buffer: &mut Vec<u8>,
+        payload: &[u8],
+    ) -> Result<(), BuildVecWriteError> {
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), payload)
+    }
+
+    /// Write all the headers and the payload to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(
+        self,
+        buffer: &mut [u8],
+        payload: &[u8],
+    ) -> Result<usize, BuildSliceWriteError> {
+        final_write_to_slice(self, buffer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1694,15 +1826,37 @@ impl PacketBuilderStep<Icmpv6Header> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<UdpHeader> {
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         self,
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write_with_net(self, writer, payload)
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), payload)
+    }
+
+    /// Write all the headers and the payload to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(
+        self,
+        buffer: &mut Vec<u8>,
+        payload: &[u8],
+    ) -> Result<(), BuildVecWriteError> {
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), payload)
+    }
+
+    /// Write all the headers and the payload to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(
+        self,
+        buffer: &mut [u8],
+        payload: &[u8],
+    ) -> Result<usize, BuildSliceWriteError> {
+        final_write_to_slice(self, buffer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1711,7 +1865,6 @@ impl PacketBuilderStep<UdpHeader> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<TcpHeader> {
     ///Set ns flag (ECN-nonce - concealment protection; experimental: see RFC 3540)
     pub fn ns(mut self) -> PacketBuilderStep<TcpHeader> {
@@ -1858,12 +2011,35 @@ impl PacketBuilderStep<TcpHeader> {
     }
 
     ///Write all the headers and the payload.
-    pub fn write<T: io::Write + Sized>(
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(
         self,
         writer: &mut T,
         payload: &[u8],
     ) -> Result<(), BuildWriteError> {
-        final_write_with_net(self, writer, payload)
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), payload)
+    }
+
+    /// Write all the headers and the payload to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(
+        self,
+        buffer: &mut Vec<u8>,
+        payload: &[u8],
+    ) -> Result<(), BuildVecWriteError> {
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), payload)
+    }
+
+    /// Write all the headers and the payload to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(
+        self,
+        buffer: &mut [u8],
+        payload: &[u8],
+    ) -> Result<usize, BuildSliceWriteError> {
+        final_write_to_slice(self, buffer, payload)
     }
 
     ///Returns the size of the packet when it is serialized
@@ -1872,11 +2048,26 @@ impl PacketBuilderStep<TcpHeader> {
     }
 }
 
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl PacketBuilderStep<ArpPacket> {
-    pub fn write<T: io::Write + Sized>(self, writer: &mut T) -> Result<(), BuildWriteError> {
-        final_write_with_net(self, writer, &[])?;
+    #[cfg(feature = "std")]
+    pub fn write<T: std::io::Write + Sized>(self, writer: &mut T) -> Result<(), BuildWriteError> {
+        final_write_with_net::<_, _, BuildWriteError>(self, &mut IoWriter(writer), &[])?;
         Ok(())
+    }
+
+    /// Write all the headers to a [`Vec<u8>`].
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn write_to_vec(self, buffer: &mut Vec<u8>) -> Result<(), BuildVecWriteError> {
+        final_write_with_net::<_, _, BuildVecWriteError>(self, &mut VecWriter(buffer), &[])?;
+        Ok(())
+    }
+
+    /// Write all the headers to a byte slice.
+    ///
+    /// Returns the number of bytes written.
+    pub fn write_to_slice(self, buffer: &mut [u8]) -> Result<usize, BuildSliceWriteError> {
+        final_write_to_slice(self, buffer, &[])
     }
 
     pub fn size(&self) -> usize {
@@ -1885,12 +2076,19 @@ impl PacketBuilderStep<ArpPacket> {
 }
 
 /// Write all the headers and the payload.
-fn final_write_with_net<T: io::Write + Sized, B>(
+fn final_write_with_net<W, B, E>(
     builder: PacketBuilderStep<B>,
-    writer: &mut T,
+    writer: &mut W,
     payload: &[u8],
-) -> Result<(), BuildWriteError> {
-    use BuildWriteError::*;
+) -> Result<(), E>
+where
+    W: CoreWrite + Sized,
+    E: From<W::Error>
+        + From<crate::WriteError<W::Error, err::ipv4_exts::ExtsWalkError>>
+        + From<crate::WriteError<W::Error, err::ipv6_exts::ExtsWalkError>>
+        + From<err::ValueTooBigError<usize>>
+        + From<err::packet::TransportChecksumError>,
+{
     use NetHeaders::*;
 
     // unpack builder (makes things easier with the borrow checker)
@@ -1921,7 +2119,7 @@ fn final_write_with_net<T: io::Write + Sized, B>(
                         None => net_ether_type,
                     }
                 };
-                eth.write(writer).map_err(Io)?;
+                writer.write_all(&eth.to_bytes()).map_err(E::from)?;
             }
             LinkHeader::LinuxSll(mut linux_sll) => {
                 // Assumes that next layers are ether based. If more types of
@@ -1929,7 +2127,7 @@ fn final_write_with_net<T: io::Write + Sized, B>(
                 debug_assert_eq!(linux_sll.arp_hrd_type, ArpHardwareId::ETHERNET);
 
                 linux_sll.protocol_type.change_value(net_ether_type.into());
-                linux_sll.write(writer).map_err(Io)?;
+                writer.write_all(&linux_sll.to_bytes()).map_err(E::from)?;
             }
         }
     }
@@ -1941,15 +2139,15 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             //set ether types
             value.ether_type = net_ether_type;
             //serialize
-            value.write(writer).map_err(Io)?;
+            writer.write_all(&value.to_bytes()).map_err(E::from)?;
         }
         Some(Double(mut value)) => {
             //set ether types
             value.outer.ether_type = ether_type::VLAN_TAGGED_FRAME;
             value.inner.ether_type = net_ether_type;
             //serialize
-            value.outer.write(writer).map_err(Io)?;
-            value.inner.write(writer).map_err(Io)?;
+            writer.write_all(&value.outer.to_bytes()).map_err(E::from)?;
+            writer.write_all(&value.inner.to_bytes()).map_err(E::from)?;
         }
         None => {}
     }
@@ -1976,7 +2174,7 @@ fn final_write_with_net<T: io::Write + Sized, B>(
                     + transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
                     + payload.len(),
             )
-            .map_err(PayloadLen)?;
+            .map_err(E::from)?;
 
             if let Some(transport) = &transport {
                 ip.protocol = ip_exts.set_next_headers(match &transport {
@@ -1988,24 +2186,15 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             }
 
             // write ip header & extensions
-            ip.write(writer).map_err(Io)?;
-            ip_exts.write(writer, ip.protocol).map_err(|err| {
-                use err::ipv4_exts::HeaderWriteError as I;
-                match err {
-                    I::Io(err) => Io(err),
-                    I::Content(err) => Ipv4Exts(err),
-                }
-            })?;
+            ip.header_checksum = ip.calc_header_checksum();
+            writer.write_all(&ip.to_bytes()).map_err(E::from)?;
+            ip_exts
+                .write_internal(writer, ip.protocol)
+                .map_err(E::from)?;
 
             // update the transport layer checksum
             if let Some(t) = &mut transport {
-                t.update_checksum_ipv4(&ip, payload).map_err(|err| {
-                    use err::packet::TransportChecksumError as I;
-                    match err {
-                        I::PayloadLen(err) => PayloadLen(err),
-                        I::Icmpv6InIpv4 => Icmpv6InIpv4,
-                    }
-                })?;
+                t.update_checksum_ipv4(&ip, payload).map_err(E::from)?;
             }
         }
         Some(NetHeaders::Ipv6(mut ip, mut ip_exts)) => {
@@ -2015,7 +2204,7 @@ fn final_write_with_net<T: io::Write + Sized, B>(
                     + transport.as_ref().map(|v| v.header_len()).unwrap_or(0)
                     + payload.len(),
             )
-            .map_err(PayloadLen)?;
+            .map_err(E::from)?;
 
             if let Some(transport) = &transport {
                 ip.next_header = ip_exts.set_next_headers(match &transport {
@@ -2027,37 +2216,41 @@ fn final_write_with_net<T: io::Write + Sized, B>(
             }
 
             // write ip header & extensions
-            ip.write(writer).map_err(Io)?;
-            ip_exts.write(writer, ip.next_header).map_err(|err| {
-                use err::ipv6_exts::HeaderWriteError as I;
-                match err {
-                    I::Io(err) => Io(err),
-                    I::Content(err) => Ipv6Exts(err),
-                }
-            })?;
+            writer.write_all(&ip.to_bytes()).map_err(E::from)?;
+            ip_exts
+                .write_internal(writer, ip.next_header)
+                .map_err(E::from)?;
 
             // update the transport layer checksum
             if let Some(t) = &mut transport {
-                t.update_checksum_ipv6(&ip, payload).map_err(PayloadLen)?;
+                t.update_checksum_ipv6(&ip, payload).map_err(E::from)?;
             }
         }
         Some(NetHeaders::Arp(arp)) => {
-            writer.write_all(&arp.to_bytes()).map_err(Io)?;
+            writer.write_all(&arp.to_bytes()).map_err(E::from)?;
         }
         None => {}
     }
 
     // write transport header
     if let Some(transport) = transport {
-        transport.write(writer).map_err(Io)?;
+        match transport {
+            TransportHeader::Icmpv4(value) => {
+                writer.write_all(&value.to_bytes()).map_err(E::from)?
+            }
+            TransportHeader::Icmpv6(value) => {
+                writer.write_all(&value.to_bytes()).map_err(E::from)?
+            }
+            TransportHeader::Udp(value) => writer.write_all(&value.to_bytes()).map_err(E::from)?,
+            TransportHeader::Tcp(value) => writer.write_all(&value.to_bytes()).map_err(E::from)?,
+        }
     }
 
     // and finally the payload
-    writer.write_all(payload).map_err(Io)?;
+    writer.write_all(payload).map_err(E::from)?;
 
     Ok(())
 }
-
 ///Returns the size of the packet when it is serialized
 fn final_size<B>(builder: &PacketBuilderStep<B>, payload_size: usize) -> usize {
     use crate::NetHeaders::*;
@@ -2111,7 +2304,7 @@ mod white_box_tests {
     #[should_panic]
     fn final_write_panic_missing_ip() {
         let mut writer = Vec::new();
-        final_write_with_net(
+        final_write_with_net::<_, _, BuildVecWriteError>(
             PacketBuilderStep::<UdpHeader> {
                 state: PacketImpl {
                     link_header: None,
@@ -2121,7 +2314,7 @@ mod white_box_tests {
                 },
                 _marker: marker::PhantomData::<UdpHeader> {},
             },
-            &mut writer,
+            &mut VecWriter(&mut writer),
             &[],
         )
         .unwrap();
@@ -2294,6 +2487,82 @@ mod test {
         let mut actual_payload: [u8; 4] = [0; 4];
         cursor.read_exact(&mut actual_payload).unwrap();
         assert_eq!(actual_payload, in_payload);
+    }
+
+    #[test]
+    #[cfg(feature = "alloc")]
+    fn write_to_vec_empty() {
+        let payload = [1, 2, 3, 4];
+        let mut written = Vec::new();
+        let builder = PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21).udp(22, 23);
+        let expected_len = builder.size(payload.len());
+
+        builder.write_to_vec(&mut written, &payload).unwrap();
+
+        assert_eq!(written.len(), expected_len);
+
+        let mut expected = Vec::new();
+        PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .write(&mut expected, &payload)
+            .unwrap();
+        assert_eq!(written, expected);
+    }
+
+    #[test]
+    #[cfg(feature = "alloc")]
+    fn write_to_vec_with_existing_content() {
+        let payload = [1, 2, 3, 4];
+        let prefix = vec![0xaa, 0xbb, 0xcc];
+        let mut written = prefix.clone();
+
+        PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .write_to_vec(&mut written, &payload)
+            .unwrap();
+
+        assert_eq!(&written[..prefix.len()], prefix.as_slice());
+
+        let mut expected_packet = Vec::new();
+        PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .write(&mut expected_packet, &payload)
+            .unwrap();
+        assert_eq!(&written[prefix.len()..], expected_packet.as_slice());
+    }
+
+    #[test]
+    fn write_to_slice_success() {
+        let payload = [1, 2, 3, 4];
+
+        let mut expected = Vec::new();
+        PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .write(&mut expected, &payload)
+            .unwrap();
+        let required = expected.len();
+
+        let mut buffer = vec![0x55; required + 4];
+        let written = PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .write_to_slice(&mut buffer, &payload)
+            .unwrap();
+
+        assert_eq!(written, required);
+        assert_eq!(&buffer[..written], expected.as_slice());
+        assert_eq!(&buffer[written..], &[0x55, 0x55, 0x55, 0x55]);
+    }
+
+    #[test]
+    fn write_to_slice_too_small() {
+        let payload = [1, 2, 3, 4];
+        let builder = PacketBuilder::ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21).udp(22, 23);
+        let required = builder.size(payload.len());
+        let mut buffer = vec![0u8; required - 1];
+
+        let actual = builder.write_to_slice(&mut buffer, &payload).unwrap_err();
+        let expected = BuildSliceWriteError::Space(required);
+        assert_eq!(actual, expected);
     }
 
     #[test]

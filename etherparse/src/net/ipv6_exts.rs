@@ -639,17 +639,13 @@ impl Ipv6Extensions {
     ///
     /// It is required that all next header are correctly set in the headers
     /// and no other ipv6 header extensions follow this header. If this is not
-    /// the case an [`err::ipv6_exts::HeaderWriteError::Content`] error is
-    /// returned.
-    #[cfg(feature = "std")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    pub fn write<T: std::io::Write + Sized>(
+    /// the case a [`err::ipv6_exts::ExtsWalkError`] is returned.
+    pub(crate) fn write_internal<T: CoreWrite + ?Sized>(
         &self,
         writer: &mut T,
         first_header: IpNumber,
-    ) -> Result<(), err::ipv6_exts::HeaderWriteError> {
+    ) -> Result<(), WriteError<T::Error, err::ipv6_exts::ExtsWalkError>> {
         use err::ipv6_exts::ExtsWalkError::*;
-        use err::ipv6_exts::HeaderWriteError::*;
         use ip_number::*;
 
         /// Struct flagging if a header needs to be written.
@@ -681,7 +677,9 @@ impl Ipv6Extensions {
         // check if hop by hop header should be written first
         if IPV6_HOP_BY_HOP == next_header {
             let header = &self.hop_by_hop_options.as_ref().unwrap();
-            header.write(writer).map_err(Io)?;
+            writer
+                .write_all(&header.to_bytes())
+                .map_err(WriteError::Io)?;
             next_header = header.next_header;
             needs_write.hop_by_hop_options = false;
         }
@@ -698,7 +696,7 @@ impl Ipv6Extensions {
                     // by hop if it is not part of this extensions struct.
                     if needs_write.hop_by_hop_options {
                         // the hop by hop header is only allowed at the start
-                        return Err(Content(HopByHopNotAtStart));
+                        return Err(WriteError::Content(HopByHopNotAtStart));
                     } else {
                         break;
                     }
@@ -715,7 +713,9 @@ impl Ipv6Extensions {
                                 .final_destination_options
                                 .as_ref()
                                 .unwrap();
-                            header.write(writer).map_err(Io)?;
+                            writer
+                                .write_all(&header.to_bytes())
+                                .map_err(WriteError::Io)?;
                             next_header = header.next_header;
                             needs_write.final_destination_options = false;
                         } else {
@@ -723,7 +723,9 @@ impl Ipv6Extensions {
                         }
                     } else if needs_write.destination_options {
                         let header = &self.destination_options.as_ref().unwrap();
-                        header.write(writer).map_err(Io)?;
+                        writer
+                            .write_all(&header.to_bytes())
+                            .map_err(WriteError::Io)?;
                         next_header = header.next_header;
                         needs_write.destination_options = false;
                     } else {
@@ -733,7 +735,9 @@ impl Ipv6Extensions {
                 IPV6_ROUTE => {
                     if needs_write.routing {
                         let header = &self.routing.as_ref().unwrap().routing;
-                        header.write(writer).map_err(Io)?;
+                        writer
+                            .write_all(&header.to_bytes())
+                            .map_err(WriteError::Io)?;
                         next_header = header.next_header;
                         needs_write.routing = false;
                         // for destination options
@@ -745,7 +749,9 @@ impl Ipv6Extensions {
                 IPV6_FRAG => {
                     if needs_write.fragment {
                         let header = &self.fragment.as_ref().unwrap();
-                        header.write(writer).map_err(Io)?;
+                        writer
+                            .write_all(&header.to_bytes())
+                            .map_err(WriteError::Io)?;
                         next_header = header.next_header;
                         needs_write.fragment = false;
                     } else {
@@ -755,7 +761,9 @@ impl Ipv6Extensions {
                 AUTH => {
                     if needs_write.auth {
                         let header = &self.auth.as_ref().unwrap();
-                        header.write(writer).map_err(Io)?;
+                        writer
+                            .write_all(&header.to_bytes())
+                            .map_err(WriteError::Io)?;
                         next_header = header.next_header;
                         needs_write.auth = false;
                     } else {
@@ -771,32 +779,54 @@ impl Ipv6Extensions {
 
         // check that all header have been written
         if needs_write.hop_by_hop_options {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::IPV6_HEADER_HOP_BY_HOP,
             }))
         } else if needs_write.destination_options {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::IPV6_DESTINATION_OPTIONS,
             }))
         } else if needs_write.routing {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::IPV6_ROUTE_HEADER,
             }))
         } else if needs_write.fragment {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::IPV6_FRAGMENTATION_HEADER,
             }))
         } else if needs_write.auth {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::AUTHENTICATION_HEADER,
             }))
         } else if needs_write.final_destination_options {
-            Err(Content(ExtNotReferenced {
+            Err(WriteError::Content(ExtNotReferenced {
                 missing_ext: IpNumber::IPV6_DESTINATION_OPTIONS,
             }))
         } else {
             Ok(())
         }
+    }
+
+    /// Writes the given headers to a writer based on the order defined in
+    /// the next_header fields of the headers and the first header_id
+    /// passed to this function.
+    ///
+    /// It is required that all next header are correctly set in the headers
+    /// and no other ipv6 header extensions follow this header. If this is not
+    /// the case an [`err::ipv6_exts::HeaderWriteError::Content`] error is
+    /// returned.
+    #[cfg(feature = "std")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+    pub fn write<T: std::io::Write + Sized>(
+        &self,
+        writer: &mut T,
+        first_header: IpNumber,
+    ) -> Result<(), err::ipv6_exts::HeaderWriteError> {
+        self.write_internal(&mut IoWriter(writer), first_header)
+            .map_err(|err| match err {
+                WriteError::Io(err) => err::ipv6_exts::HeaderWriteError::Io(err),
+                WriteError::Content(err) => err::ipv6_exts::HeaderWriteError::Content(err),
+            })
     }
 
     /// Length of the all present headers in bytes.
