@@ -105,6 +105,50 @@ impl core::error::Error for BuildWriteError {
     }
 }
 
+#[cfg(feature = "std")]
+impl From<std::io::Error> for BuildWriteError {
+    fn from(value: std::io::Error) -> Self {
+        BuildWriteError::Io(value)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<ValueTooBigError<usize>> for BuildWriteError {
+    fn from(value: ValueTooBigError<usize>) -> Self {
+        BuildWriteError::PayloadLen(value)
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<super::TransportChecksumError> for BuildWriteError {
+    fn from(value: super::TransportChecksumError) -> Self {
+        match value {
+            super::TransportChecksumError::PayloadLen(err) => BuildWriteError::PayloadLen(err),
+            super::TransportChecksumError::Icmpv6InIpv4 => BuildWriteError::Icmpv6InIpv4,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<crate::WriteError<std::io::Error, ipv4_exts::ExtsWalkError>> for BuildWriteError {
+    fn from(value: crate::WriteError<std::io::Error, ipv4_exts::ExtsWalkError>) -> Self {
+        match value {
+            crate::WriteError::Io(err) => BuildWriteError::Io(err),
+            crate::WriteError::Content(err) => BuildWriteError::Ipv4Exts(err),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<crate::WriteError<std::io::Error, ipv6_exts::ExtsWalkError>> for BuildWriteError {
+    fn from(value: crate::WriteError<std::io::Error, ipv6_exts::ExtsWalkError>) -> Self {
+        match value {
+            crate::WriteError::Io(err) => BuildWriteError::Io(err),
+            crate::WriteError::Content(err) => BuildWriteError::Ipv6Exts(err),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BuildWriteError::*, *};

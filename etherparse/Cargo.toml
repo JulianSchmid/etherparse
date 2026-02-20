@@ -21,7 +21,8 @@ rust-version = "1.83.0"
 
 [features]
 default = ["std"]
-std = ["arrayvec/std"]
+alloc = []
+std = ["alloc", "arrayvec/std"]
 
 [dependencies]
 arrayvec = { version = "0.7.2", default-features = false }
