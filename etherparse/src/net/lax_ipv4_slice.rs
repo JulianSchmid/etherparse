@@ -70,8 +70,10 @@ impl<'a> LaxIpv4Slice<'a> {
     /// is set to [`LenSource::Ipv4HeaderTotalLen`].
     pub fn from_slice(
         slice: &[u8],
-    ) -> Result<(LaxIpv4Slice, Option<err::ip_auth::HeaderSliceError>), err::ipv4::HeaderSliceError>
-    {
+    ) -> Result<
+        (LaxIpv4Slice<'_>, Option<err::ip_auth::HeaderSliceError>),
+        err::ipv4::HeaderSliceError,
+    > {
         use crate::ip_number::AUTH;
 
         // decode the header
@@ -197,13 +199,13 @@ impl<'a> LaxIpv4Slice<'a> {
 
     /// Returns a slice containing the IPv4 header.
     #[inline]
-    pub fn header(&self) -> Ipv4HeaderSlice {
+    pub fn header(&self) -> Ipv4HeaderSlice<'_> {
         self.header
     }
 
     /// Returns a slice containing the IPv4 extension headers.
     #[inline]
-    pub fn extensions(&self) -> Ipv4ExtensionsSlice {
+    pub fn extensions(&self) -> Ipv4ExtensionsSlice<'_> {
         self.exts
     }
 

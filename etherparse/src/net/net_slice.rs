@@ -70,7 +70,7 @@ impl<'a> NetSlice<'a> {
 
     /// Returns references to the ARP packet slice if the slice contains an ARP values.
     #[inline]
-    pub fn arp_ref(&self) -> Option<&ArpPacketSlice> {
+    pub fn arp_ref(&self) -> Option<&ArpPacketSlice<'_>> {
         if let NetSlice::Arp(arp) = self {
             Some(arp)
         } else {

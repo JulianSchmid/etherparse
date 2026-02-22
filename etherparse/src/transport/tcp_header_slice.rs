@@ -281,7 +281,7 @@ impl<'a> TcpHeaderSlice<'a> {
 
     /// Returns an iterator that allows to iterate through all known TCP header options.
     #[inline]
-    pub fn options_iterator(&self) -> TcpOptionsIterator {
+    pub fn options_iterator(&self) -> TcpOptionsIterator<'_> {
         TcpOptionsIterator::from_slice(self.options())
     }
 

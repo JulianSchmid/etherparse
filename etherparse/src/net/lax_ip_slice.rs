@@ -24,7 +24,7 @@ pub enum LaxIpSlice<'a> {
 
 impl<'a> LaxIpSlice<'a> {
     /// Returns a reference to the `Ipv4Slice` if `self` is a `IpSlice::Ipv4`.
-    pub fn ipv4(&self) -> Option<&LaxIpv4Slice> {
+    pub fn ipv4(&self) -> Option<&LaxIpv4Slice<'_>> {
         use LaxIpSlice::*;
         match self {
             Ipv4(slice) => Some(slice),
@@ -33,7 +33,7 @@ impl<'a> LaxIpSlice<'a> {
     }
 
     /// Returns a reference to the `Ipv6Slice` if `self` is a `IpSlice::Ipv6`.
-    pub fn ipv6(&self) -> Option<&LaxIpv6Slice> {
+    pub fn ipv6(&self) -> Option<&LaxIpv6Slice<'_>> {
         use LaxIpSlice::*;
         match self {
             Ipv4(_) => None,
@@ -141,7 +141,7 @@ impl<'a> LaxIpSlice<'a> {
         slice: &[u8],
     ) -> Result<
         (
-            LaxIpSlice,
+            LaxIpSlice<'_>,
             Option<(err::ipv6_exts::HeaderSliceError, err::Layer)>,
         ),
         err::ip::LaxHeaderSliceError,
