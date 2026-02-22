@@ -32,6 +32,30 @@ impl<'a> IpSlice<'a> {
         }
     }
 
+    /// Returns the base IPv4 or IPv6 header slice.
+    pub fn header(&self) -> IpHeadersSlice<'_> {
+        match self {
+            IpSlice::Ipv4(s) => IpHeadersSlice::Ipv4(s.header(), s.extensions()),
+            IpSlice::Ipv6(s) => IpHeadersSlice::Ipv6(s.header(), s.extensions().clone()),
+        }
+    }
+
+    /// Converts the parsed headers into [`IpHeaders`].
+    ///
+    /// This is infallible, as `IpSlice` is only constructible from already
+    /// validated IP data.
+    pub fn to_header(&self) -> IpHeaders {
+        match self {
+            IpSlice::Ipv4(s) => IpHeaders::Ipv4(s.header().to_header(), s.extensions().to_header()),
+            IpSlice::Ipv6(s) => {
+                let (exts, _, _) =
+                    Ipv6Extensions::from_slice(s.header().next_header(), s.extensions().slice())
+                        .expect("Ipv6Slice contains validated extension headers");
+                IpHeaders::Ipv6(s.header().to_header(), exts)
+            }
+        }
+    }
+
     /// Returns true if the payload is fragmented.
     pub fn is_fragmenting_payload(&self) -> bool {
         match self {
@@ -483,6 +507,245 @@ mod test {
     }
 
     #[test]
+    fn header() {
+        // ipv4
+        {
+            let data = Ipv4Header::new(0, 1, ip_number::UDP, [3, 4, 5, 6], [7, 8, 9, 10])
+                .unwrap()
+                .to_bytes();
+
+            assert_eq!(
+                IpSlice::Ipv4(Ipv4Slice::from_slice(&data[..]).unwrap()).header(),
+                IpHeadersSlice::Ipv4(
+                    Ipv4HeaderSlice::from_slice(&data).unwrap(),
+                    Ipv4ExtensionsSlice::default(),
+                )
+            );
+        }
+
+        // ipv6
+        {
+            let data = Ipv6Header {
+                traffic_class: 0,
+                flow_label: 1.try_into().unwrap(),
+                payload_length: 0,
+                next_header: ip_number::IGMP,
+                hop_limit: 4,
+                source: [1; 16],
+                destination: [2; 16],
+            }
+            .to_bytes();
+
+            assert_eq!(
+                IpSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).header(),
+                IpHeadersSlice::Ipv6(
+                    Ipv6HeaderSlice::from_slice(&data).unwrap(),
+                    Ipv6ExtensionsSlice::default(),
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn header_to_header_round_trip_preserves_extensions_and_base_header() {
+        // ipv4 with auth extension present
+        {
+            let payload = [1, 2, 3, 4];
+            let auth = IpAuthHeader::new(ip_number::UDP, 7, 9, &[5, 6, 7, 8]).unwrap();
+            let ipv4 = Ipv4Header::new(
+                (auth.header_len() + payload.len()) as u16,
+                64,
+                ip_number::AUTH,
+                [1, 2, 3, 4],
+                [5, 6, 7, 8],
+            )
+            .unwrap();
+
+            let mut data =
+                Vec::with_capacity(ipv4.header_len() + auth.header_len() + payload.len());
+            data.extend_from_slice(&ipv4.to_bytes());
+            data.extend_from_slice(&auth.to_bytes());
+            data.extend_from_slice(&payload);
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let expected = IpHeaders::Ipv4(ipv4, Ipv4Extensions { auth: Some(auth) });
+
+            assert_eq!(ip.to_header(), expected);
+            assert_eq!(ip.header().try_to_header().unwrap(), expected);
+        }
+
+        // ipv6 with fragment extension present
+        {
+            let payload = [4, 3, 2, 1];
+            let mut exts = Ipv6Extensions {
+                fragment: Some(Ipv6FragmentHeader::new(
+                    ip_number::UDP,
+                    1.try_into().unwrap(),
+                    true,
+                    1234,
+                )),
+                ..Default::default()
+            };
+            let next_header = exts.set_next_headers(ip_number::UDP);
+            let ipv6 = Ipv6Header {
+                traffic_class: 0x12,
+                flow_label: 0x12345.try_into().unwrap(),
+                payload_length: (exts.header_len() + payload.len()) as u16,
+                next_header,
+                hop_limit: 64,
+                source: [1; 16],
+                destination: [2; 16],
+            };
+
+            let mut data =
+                Vec::with_capacity(ipv6.header_len() + exts.header_len() + payload.len());
+            ipv6.write(&mut data).unwrap();
+            exts.write(&mut data, ipv6.next_header).unwrap();
+            data.extend_from_slice(&payload);
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let expected = IpHeaders::Ipv6(ipv6, exts);
+
+            assert_eq!(ip.to_header(), expected);
+            assert_eq!(ip.header().try_to_header().unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn header_to_header_matches_manual_construction() {
+        // ipv4
+        {
+            let expected_header =
+                Ipv4Header::new(0, 32, ip_number::UDP, [10, 0, 0, 1], [10, 0, 0, 2]).unwrap();
+            let data = expected_header.to_bytes();
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let expected = IpHeaders::Ipv4(expected_header, Default::default());
+            assert_eq!(ip.to_header(), expected);
+            assert_eq!(ip.header().try_to_header().unwrap(), expected);
+        }
+
+        // ipv6
+        {
+            let expected_header = Ipv6Header {
+                traffic_class: 0,
+                flow_label: 1.try_into().unwrap(),
+                payload_length: 0,
+                next_header: ip_number::UDP,
+                hop_limit: 40,
+                source: [1; 16],
+                destination: [2; 16],
+            };
+            let data = expected_header.to_bytes();
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let expected = IpHeaders::Ipv6(expected_header, Default::default());
+            assert_eq!(ip.to_header(), expected);
+            assert_eq!(ip.header().try_to_header().unwrap(), expected);
+        }
+    }
+
+    #[test]
+    fn header_into_ip_headers_is_coherent() {
+        // ipv4
+        {
+            let data = Ipv4Header::new(0, 20, ip_number::UDP, [1, 1, 1, 1], [2, 2, 2, 2])
+                .unwrap()
+                .to_bytes();
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            assert_eq!(ip.to_header(), header.try_to_header().unwrap());
+        }
+
+        // ipv6
+        {
+            let data = Ipv6Header {
+                next_header: ip_number::TCP,
+                ..Default::default()
+            }
+            .to_bytes();
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            assert_eq!(ip.to_header(), header.try_to_header().unwrap());
+        }
+    }
+
+    #[test]
+    fn header_accessors_match_underlying_header_slice() {
+        // ipv4 (with options)
+        {
+            let mut ipv4 =
+                Ipv4Header::new(0, 20, ip_number::UDP, [3, 4, 5, 6], [7, 8, 9, 10]).unwrap();
+            ipv4.options = (&[11, 12, 13, 14][..]).try_into().unwrap();
+            ipv4.total_len = ipv4.header_len() as u16;
+            ipv4.header_checksum = ipv4.calc_header_checksum();
+            let data = ipv4.to_bytes();
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            let v4 = ip.ipv4().unwrap().header();
+
+            assert!(header.is_ipv4());
+            assert_eq!(false, header.is_ipv6());
+            assert_eq!(header.ipv4(), Some(v4));
+            assert_eq!(header.ipv6(), None);
+            assert_eq!(header.ipv4_exts(), Some(ip.ipv4().unwrap().extensions()));
+            assert_eq!(header.ipv6_exts(), None);
+            assert_eq!(header.version(), v4.version());
+            assert_eq!(
+                header.header_len(),
+                v4.slice().len() + ip.ipv4().unwrap().extensions().to_header().header_len()
+            );
+            assert_eq!(header.next_header(), v4.protocol());
+            assert_eq!(header.payload_ip_number(), ip.payload_ip_number());
+            assert_eq!(header.source_addr(), IpAddr::from(v4.source_addr()));
+            assert_eq!(
+                header.destination_addr(),
+                IpAddr::from(v4.destination_addr())
+            );
+            assert_eq!(header.slice(), v4.slice());
+            assert_eq!(header.ipv4_exts(), Some(ip.ipv4().unwrap().extensions()));
+        }
+
+        // ipv6
+        {
+            let ipv6 = Ipv6Header {
+                traffic_class: 1,
+                flow_label: 2.try_into().unwrap(),
+                payload_length: 0,
+                next_header: ip_number::IGMP,
+                hop_limit: 3,
+                source: [1; 16],
+                destination: [2; 16],
+            };
+            let data = ipv6.to_bytes();
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            let v6 = ip.ipv6().unwrap().header();
+
+            assert_eq!(false, header.is_ipv4());
+            assert!(header.is_ipv6());
+            assert_eq!(header.ipv4(), None);
+            assert_eq!(header.ipv6(), Some(v6));
+            assert_eq!(header.ipv4_exts(), None);
+            assert_eq!(header.ipv6_exts(), Some(ip.ipv6().unwrap().extensions()));
+            assert_eq!(header.version(), v6.version());
+            assert_eq!(
+                header.header_len(),
+                v6.slice().len() + ip.ipv6().unwrap().extensions().slice().len()
+            );
+            assert_eq!(header.next_header(), v6.next_header());
+            assert_eq!(header.payload_ip_number(), ip.payload_ip_number());
+            assert_eq!(header.source_addr(), IpAddr::from(v6.source_addr()));
+            assert_eq!(
+                header.destination_addr(),
+                IpAddr::from(v6.destination_addr())
+            );
+            assert_eq!(header.slice(), v6.slice());
+            assert_eq!(header.ipv6_exts(), Some(ip.ipv6().unwrap().extensions()));
+        }
+    }
+
+    #[test]
     fn payload() {
         let payload: [u8; 4] = [1, 2, 3, 4];
         // ipv4
@@ -567,6 +830,77 @@ mod test {
                 IGMP,
                 IpSlice::Ipv6(Ipv6Slice::from_slice(&data).unwrap()).payload_ip_number()
             );
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_round_trip_ipv4_proptest(
+            mut ipv4_header in ipv4_unknown(),
+            payload in proptest::collection::vec(any::<u8>(), 0..32)
+        ) {
+            ipv4_header.total_len = (ipv4_header.header_len() + payload.len()) as u16;
+            ipv4_header.header_checksum = ipv4_header.calc_header_checksum();
+
+            let mut data = Vec::with_capacity(ipv4_header.header_len() + payload.len());
+            data.extend_from_slice(&ipv4_header.to_bytes());
+            data.extend_from_slice(&payload);
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            let v4 = ip.ipv4().unwrap().header();
+            let expected = IpHeaders::Ipv4(ipv4_header.clone(), Default::default());
+
+            prop_assert!(header.is_ipv4());
+            prop_assert_eq!(false, header.is_ipv6());
+            prop_assert_eq!(header.ipv4(), Some(v4));
+            prop_assert_eq!(header.ipv6(), None);
+            prop_assert_eq!(header.version(), 4);
+            prop_assert_eq!(header.header_len(), ipv4_header.header_len());
+            prop_assert_eq!(header.next_header(), ipv4_header.protocol);
+            prop_assert_eq!(header.source_addr(), IpAddr::from(ipv4_header.source));
+            prop_assert_eq!(
+                header.destination_addr(),
+                IpAddr::from(ipv4_header.destination)
+            );
+            prop_assert_eq!(header.slice(), &data[..ipv4_header.header_len()]);
+            prop_assert_eq!(header.try_to_header().unwrap(), expected.clone());
+            prop_assert_eq!(ip.to_header(), expected);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn header_round_trip_ipv6_proptest(
+            mut ipv6_header in ipv6_unknown(),
+            payload in proptest::collection::vec(any::<u8>(), 0..32)
+        ) {
+            ipv6_header.payload_length = payload.len() as u16;
+
+            let mut data = Vec::with_capacity(ipv6_header.header_len() + payload.len());
+            data.extend_from_slice(&ipv6_header.to_bytes());
+            data.extend_from_slice(&payload);
+
+            let ip = IpSlice::from_slice(&data).unwrap();
+            let header = ip.header();
+            let v6 = ip.ipv6().unwrap().header();
+            let expected = IpHeaders::Ipv6(ipv6_header.clone(), Default::default());
+
+            prop_assert_eq!(false, header.is_ipv4());
+            prop_assert!(header.is_ipv6());
+            prop_assert_eq!(header.ipv4(), None);
+            prop_assert_eq!(header.ipv6(), Some(v6));
+            prop_assert_eq!(header.version(), 6);
+            prop_assert_eq!(header.header_len(), Ipv6Header::LEN);
+            prop_assert_eq!(header.next_header(), ipv6_header.next_header);
+            prop_assert_eq!(header.source_addr(), IpAddr::from(ipv6_header.source));
+            prop_assert_eq!(
+                header.destination_addr(),
+                IpAddr::from(ipv6_header.destination)
+            );
+            prop_assert_eq!(header.slice(), &data[..Ipv6Header::LEN]);
+            prop_assert_eq!(header.try_to_header().unwrap(), expected.clone());
+            prop_assert_eq!(ip.to_header(), expected);
         }
     }
 

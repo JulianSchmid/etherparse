@@ -31,6 +31,9 @@ pub use ip_frag_offset::*;
 mod ip_headers;
 pub use ip_headers::*;
 
+mod ip_headers_slice;
+pub use ip_headers_slice::*;
+
 mod ip_number_impl;
 pub use ip_number_impl::*;
 
