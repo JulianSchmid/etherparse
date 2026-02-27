@@ -99,6 +99,18 @@ impl<'a> Icmpv6Slice<'a> {
                     return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
                 }
             }
+            TYPE_ROUTER_SOLICITATION => {
+                if 0 == self.code_u8() {
+                    return RouterSolicitation;
+                }
+            }
+            TYPE_ROUTER_ADVERTISEMENT => {
+                if 0 == self.code_u8() {
+                    return RouterAdvertisement(RouterAdvertisementHeader::from_bytes(
+                        self.bytes5to8(),
+                    ));
+                }
+            }
             TYPE_NEIGHBOR_SOLICITATION => {
                 if 0 == self.code_u8() {
                     return NeighborSolicitation;
@@ -109,6 +121,11 @@ impl<'a> Icmpv6Slice<'a> {
                     return NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(
                         self.bytes5to8(),
                     ));
+                }
+            }
+            TYPE_REDIRECT_MESSAGE => {
+                if 0 == self.code_u8() {
+                    return Redirect;
                 }
             }
             _ => {}
@@ -199,6 +216,12 @@ impl<'a> Icmpv6Slice<'a> {
         // Safe as the contructor checks that the slice has
         // at least the length of Icmpv6Header::MIN_LEN(8).
         unsafe { core::slice::from_raw_parts(self.slice.as_ptr().add(8), self.slice.len() - 8) }
+    }
+
+    /// Returns the structured payload of the ICMPv6 message if this type is supported.
+    #[inline]
+    pub fn payload_slice(&self) -> Result<icmpv6::Icmpv6PayloadSlice<'a>, err::LenError> {
+        icmpv6::Icmpv6PayloadSlice::from_type_u8(self.type_u8(), self.code_u8(), self.payload())
     }
 }
 
@@ -640,6 +663,124 @@ mod test {
                     &payload[..]
                 );
             }
+        }
+    }
+
+    #[test]
+    fn payload_slice() {
+        use crate::icmpv6::*;
+
+        {
+            let packet = [
+                TYPE_ROUTER_SOLICITATION,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                1,
+                1,
+                2,
+                3,
+                4,
+                5,
+                6,
+            ];
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::RouterSolicitation(
+                    RouterSolicitationPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let packet = [
+                TYPE_ROUTER_ADVERTISEMENT,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                1,
+                0,
+                0,
+                0,
+                2,
+                5,
+                1,
+                0,
+                0,
+                0,
+                0,
+                5,
+                220,
+            ];
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::RouterAdvertisement(
+                    RouterAdvertisementPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let mut packet = [0u8; 24];
+            packet[0] = TYPE_NEIGHBOR_SOLICITATION;
+            packet[8..24].copy_from_slice(&[1; 16]);
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::NeighborSolicitation(
+                    NeighborSolicitationPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let mut packet = [0u8; 24];
+            packet[0] = TYPE_NEIGHBOR_ADVERTISEMENT;
+            packet[8..24].copy_from_slice(&[2; 16]);
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::NeighborAdvertisement(
+                    NeighborAdvertisementPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let mut packet = [0u8; 40];
+            packet[0] = TYPE_REDIRECT_MESSAGE;
+            packet[8..24].copy_from_slice(&[3; 16]);
+            packet[24..40].copy_from_slice(&[4; 16]);
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::Redirect(
+                    RedirectPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let packet = [TYPE_ECHO_REQUEST, 0, 0, 0, 0, 0, 0, 0, 9, 9];
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::Raw(&packet[8..])
+            );
         }
     }
 

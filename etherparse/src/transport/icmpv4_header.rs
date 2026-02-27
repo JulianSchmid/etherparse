@@ -385,7 +385,7 @@ mod test {
         fn read(
             non_timestamp_type in any::<u8>().prop_filter(
                 "type must be a non timestamp type",
-                |v| (*v != icmpv4::TYPE_TIMESTAMP_REPLY && *v != icmpv4::TYPE_TIMESTAMP)
+                |v| *v != icmpv4::TYPE_TIMESTAMP_REPLY && *v != icmpv4::TYPE_TIMESTAMP
             ),
             non_zero_code in 1u8..=u8::MAX,
             bytes in any::<[u8;icmpv4::TimestampMessage::LEN]>()
