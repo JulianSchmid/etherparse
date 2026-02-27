@@ -687,6 +687,31 @@ impl Icmpv6Type {
         })
     }
 
+    /// Decode a structured payload based on this ICMPv6 type.
+    #[inline]
+    pub fn payload_slice<'a>(
+        &self,
+        payload: &'a [u8],
+    ) -> Result<icmpv6::Icmpv6PayloadSlice<'a>, err::LenError> {
+        icmpv6::Icmpv6PayloadSlice::from_slice(self, payload)
+    }
+
+    /// Convert a structured payload slice into an owned payload if supported.
+    ///
+    /// The returned [`icmpv6::Icmpv6Payload`] variants contain only fixed-part
+    /// message fields (for example `target_address`) and intentionally exclude
+    /// NDP options. For payload types with variable trailing data, the second
+    /// tuple element contains the remaining bytes that must be parsed
+    /// separately (for example via [`icmpv6::Icmpv6PayloadSlice`] option
+    /// accessors/iterators).
+    #[inline]
+    pub fn payload_from_slice<'a>(
+        &self,
+        payload: &'a [u8],
+    ) -> Result<Option<(icmpv6::Icmpv6Payload, &'a [u8])>, err::LenError> {
+        self.payload_slice(payload).map(|value| value.to_payload())
+    }
+
     /// Serialized length of the header in bytes/octets.
     ///
     /// Note that this size is not the size of the entire
@@ -1103,6 +1128,65 @@ mod test {
                 );
             }
         }
+    }
+
+    #[test]
+    fn payload_slice() {
+        use crate::icmpv6::*;
+
+        assert_eq!(
+            Icmpv6Type::RouterSolicitation
+                .payload_slice(&[1, 1, 1, 2, 3, 4, 5, 6])
+                .unwrap(),
+            Icmpv6PayloadSlice::RouterSolicitation(
+                RouterSolicitationPayloadSlice::from_slice(&[1, 1, 1, 2, 3, 4, 5, 6]).unwrap()
+            )
+        );
+
+        assert_eq!(
+            Icmpv6Type::RouterAdvertisement(RouterAdvertisementHeader {
+                cur_hop_limit: 0,
+                managed_address_config: false,
+                other_config: false,
+                router_lifetime: 0,
+            })
+            .payload_slice(&[0, 0, 0, 1, 0, 0, 0, 2])
+            .unwrap(),
+            Icmpv6PayloadSlice::RouterAdvertisement(
+                RouterAdvertisementPayloadSlice::from_slice(&[0, 0, 0, 1, 0, 0, 0, 2]).unwrap()
+            )
+        );
+
+        assert_eq!(
+            Icmpv6Type::NeighborSolicitation
+                .payload_from_slice(&[1; 16])
+                .unwrap(),
+            Some((
+                Icmpv6Payload::NeighborSolicitation(NeighborSolicitationPayload {
+                    target_address: [1; 16].into()
+                }),
+                &[][..]
+            ))
+        );
+
+        assert_eq!(
+            Icmpv6Type::NeighborSolicitation
+                .payload_from_slice(&[1; 16 + 8])
+                .unwrap(),
+            Some((
+                Icmpv6Payload::NeighborSolicitation(NeighborSolicitationPayload {
+                    target_address: [1; 16].into()
+                }),
+                &[1; 8][..]
+            ))
+        );
+
+        assert_eq!(
+            Icmpv6Type::EchoRequest(IcmpEchoHeader { id: 1, seq: 2 })
+                .payload_from_slice(&[1, 2, 3, 4])
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

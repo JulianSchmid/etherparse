@@ -13,6 +13,26 @@ pub use time_exceeded_code::*;
 mod neighbor_advertisement_header;
 pub use neighbor_advertisement_header::*;
 
+pub use ndp_option::prefix_information::*;
+
+mod ndp_option_type_impl;
+pub use ndp_option_type_impl::*;
+
+mod ndp_option;
+pub use ndp_option::*;
+
+mod ndp_option_read_error;
+pub use ndp_option_read_error::*;
+
+mod ndp_options_iterator;
+pub use ndp_options_iterator::*;
+
+mod icmpv6_payload;
+pub use icmpv6_payload::*;
+
+mod icmpv6_payload_slice;
+pub use icmpv6_payload_slice::*;
+
 mod router_advertisement_header;
 pub use router_advertisement_header::*;
 
