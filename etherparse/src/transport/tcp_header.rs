@@ -19,7 +19,7 @@ pub const TCP_MAXIMUM_DATA_OFFSET: u8 = 0xf;
 /// TCP header according to rfc 793.
 ///
 /// Field descriptions copied from RFC 793 page 15++
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct TcpHeader {
     /// The source port number.
     pub source_port: u16,
