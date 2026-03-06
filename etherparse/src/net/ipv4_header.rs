@@ -32,7 +32,7 @@ use arrayvec::ArrayVec;
 /// assert_eq!(header, decoded);
 /// assert_eq!(slice_rest, &[]);
 /// ```
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, PartialOrd, Ord)]
 pub struct Ipv4Header {
     /// Differentiated Services Code Point
     pub dscp: IpDscp,
