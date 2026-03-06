@@ -15,7 +15,7 @@ pub enum IpSlice<'a> {
 
 impl<'a> IpSlice<'a> {
     /// Returns a reference to the `Ipv4Slice` if `self` is a `IpSlice::Ipv4`.
-    pub fn ipv4(&self) -> Option<&Ipv4Slice> {
+    pub fn ipv4(&self) -> Option<&Ipv4Slice<'_>> {
         use IpSlice::*;
         match self {
             Ipv4(slice) => Some(slice),
@@ -24,7 +24,7 @@ impl<'a> IpSlice<'a> {
     }
 
     /// Returns a reference to the `Ipv6Slice` if `self` is a `IpSlice::Ipv6`.
-    pub fn ipv6(&self) -> Option<&Ipv6Slice> {
+    pub fn ipv6(&self) -> Option<&Ipv6Slice<'_>> {
         use IpSlice::*;
         match self {
             Ipv4(_) => None,
@@ -83,7 +83,7 @@ impl<'a> IpSlice<'a> {
     /// Separates and validates IP headers (including extension headers)
     /// in the given slice and determine the sub-slice containing the payload
     /// of the IP packet.
-    pub fn from_slice(slice: &[u8]) -> Result<IpSlice, err::ip::SliceError> {
+    pub fn from_slice(slice: &[u8]) -> Result<IpSlice<'_>, err::ip::SliceError> {
         use crate::ip_number::AUTH;
         use err::ip::{HeaderError::*, HeadersError::*, SliceError::*};
         use IpSlice::*;

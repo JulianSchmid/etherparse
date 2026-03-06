@@ -72,7 +72,7 @@ impl<'a> LinuxSllHeaderSlice<'a> {
     /// [`LinuxSllHeader::LEN`] and the fields are valid
     #[inline]
     #[cfg(feature = "std")]
-    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> LinuxSllHeaderSlice {
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> LinuxSllHeaderSlice<'_> {
         debug_assert!(slice.len() == LinuxSllHeader::LEN);
         LinuxSllHeaderSlice { slice }
     }

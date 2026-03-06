@@ -22,7 +22,7 @@ impl<'a> Ipv4Slice<'a> {
     ///
     /// If you want to ignore these kind of length errors based on the length
     /// fields in the IP headers use [`crate::LaxIpv4Slice::from_slice`] instead.
-    pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice, SliceError> {
+    pub fn from_slice(slice: &[u8]) -> Result<Ipv4Slice<'_>, SliceError> {
         use crate::ip_number::AUTH;
 
         // decode the header
@@ -118,13 +118,13 @@ impl<'a> Ipv4Slice<'a> {
 
     /// Returns a slice containing the IPv4 header.
     #[inline]
-    pub fn header(&self) -> Ipv4HeaderSlice {
+    pub fn header(&self) -> Ipv4HeaderSlice<'_> {
         self.header
     }
 
     /// Returns a slice containing the IPv4 extension headers.
     #[inline]
-    pub fn extensions(&self) -> Ipv4ExtensionsSlice {
+    pub fn extensions(&self) -> Ipv4ExtensionsSlice<'_> {
         self.exts
     }
 

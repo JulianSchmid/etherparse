@@ -456,7 +456,7 @@ impl TcpOptions {
     /// assert_eq!(v, vec![Ok(WindowScale(123)), Ok(Noop), Ok(Noop)]);
     /// ```
     #[inline]
-    pub fn elements_iter(&self) -> TcpOptionsIterator {
+    pub fn elements_iter(&self) -> TcpOptionsIterator<'_> {
         TcpOptionsIterator {
             options: self.as_slice(),
         }
@@ -512,7 +512,7 @@ impl core::hash::Hash for TcpOptions {
 
 impl core::cmp::PartialOrd for TcpOptions {
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
-        Some(self.as_slice().cmp(other.as_slice()))
+        Some(self.cmp(other))
     }
 }
 

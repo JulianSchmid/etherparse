@@ -43,7 +43,7 @@ impl<'a> SingleVlanHeaderSlice<'a> {
     /// The caller must ensured that the given slice has the length of
     /// [`SingleVlanHeader::LEN`]
     #[inline]
-    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> SingleVlanHeaderSlice {
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> SingleVlanHeaderSlice<'_> {
         SingleVlanHeaderSlice { slice }
     }
 

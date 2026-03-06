@@ -360,7 +360,7 @@ impl<'a> PacketHeaders<'a> {
     ///     }
     /// }
     /// ```
-    pub fn from_ip_slice(slice: &[u8]) -> Result<PacketHeaders, err::packet::SliceError> {
+    pub fn from_ip_slice(slice: &[u8]) -> Result<PacketHeaders<'_>, err::packet::SliceError> {
         use err::packet::SliceError::*;
 
         // read ip headers

@@ -43,7 +43,7 @@ impl<'a> Ethernet2HeaderSlice<'a> {
     /// [`Ethernet2Header::LEN`]
     #[inline]
     #[cfg(feature = "std")]
-    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ethernet2HeaderSlice {
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ethernet2HeaderSlice<'_> {
         debug_assert!(slice.len() == Ethernet2Header::LEN);
         Ethernet2HeaderSlice { slice }
     }

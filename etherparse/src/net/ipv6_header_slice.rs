@@ -56,7 +56,7 @@ impl<'a> Ipv6HeaderSlice<'a> {
     ///
     /// It must ensured that the slice length is at least [`Ipv6Header::LEN`].
     #[inline]
-    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ipv6HeaderSlice {
+    pub(crate) unsafe fn from_slice_unchecked(slice: &[u8]) -> Ipv6HeaderSlice<'_> {
         Ipv6HeaderSlice { slice }
     }
 
