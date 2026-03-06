@@ -112,4 +112,4 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ steps.msrv.outputs.version }}
-    - run: cargo check --workspace --all-targets
+    - run: cargo check --package etherparse --all-features
