@@ -1,7 +1,7 @@
 use crate::{err::ValueTooBigError, *};
 
 /// Udp header according to rfc768.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Default, PartialOrd, Ord)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash, Default, PartialOrd, Ord)]
 pub struct UdpHeader {
     /// Source port of the packet (optional).
     pub source_port: u16,

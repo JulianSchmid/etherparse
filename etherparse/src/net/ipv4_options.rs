@@ -34,7 +34,7 @@ use core::borrow::{Borrow, BorrowMut};
 ///     assert_eq!(result, Err(BadOptionsLen { bad_len: 3 }));
 /// }
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct Ipv4Options {
     pub(crate) len: u8,
     pub(crate) buf: [u8; 40],

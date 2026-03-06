@@ -125,7 +125,7 @@ use crate::{tcp_option, TcpHeader, TcpOptionElement, TcpOptionWriteError, TcpOpt
 ///     ]
 /// );
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct TcpOptions {
     /// Number of bytes in the buffer.
     pub(crate) len: u8,
