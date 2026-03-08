@@ -790,7 +790,20 @@ mod test {
             let slice = Icmpv6Slice::from_slice(&packet).unwrap();
             assert_eq!(
                 slice.payload_slice().unwrap(),
-                Icmpv6PayloadSlice::Raw(&packet[8..])
+                Icmpv6PayloadSlice::EchoRequest(
+                    EchoRequestPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
+            );
+        }
+
+        {
+            let packet = [TYPE_ECHO_REPLY, 0, 0, 0, 0, 0, 0, 0, 7, 7];
+            let slice = Icmpv6Slice::from_slice(&packet).unwrap();
+            assert_eq!(
+                slice.payload_slice().unwrap(),
+                Icmpv6PayloadSlice::EchoReply(
+                    EchoReplyPayloadSlice::from_slice(&packet[8..]).unwrap()
+                )
             );
         }
     }
