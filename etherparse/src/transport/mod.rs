@@ -25,6 +25,9 @@ pub use icmpv6_slice::*;
 mod icmpv6_type;
 pub use icmpv6_type::*;
 
+mod igmpv1_header;
+pub use igmpv1_header::*;
+
 mod tcp_header;
 pub use tcp_header::*;
 
@@ -66,3 +69,4 @@ pub use udp_header_slice::*;
 
 mod udp_slice;
 pub use udp_slice::*;
+
