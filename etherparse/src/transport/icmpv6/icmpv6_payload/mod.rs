@@ -45,10 +45,7 @@ impl Icmpv6Payload {
     /// Write the fixed payload bytes to the writer.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
-    pub fn write<T: std::io::Write + Sized>(
-        &self,
-        writer: &mut T,
-    ) -> Result<(), std::io::Error> {
+    pub fn write<T: std::io::Write + Sized>(&self, writer: &mut T) -> Result<(), std::io::Error> {
         match self {
             Icmpv6Payload::RouterSolicitation(value) => writer.write_all(&value.to_bytes()),
             Icmpv6Payload::RouterAdvertisement(value) => writer.write_all(&value.to_bytes()),
@@ -62,7 +59,6 @@ impl Icmpv6Payload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use alloc::format;
     use proptest::prelude::*;
 
     #[test]
