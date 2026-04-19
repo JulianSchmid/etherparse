@@ -2,6 +2,7 @@ use crate::err::{ipv4_exts, ipv6_exts, ValueTooBigError};
 use core::convert::Infallible;
 
 /// Error while serializing a packet into a [`alloc::vec::Vec`].
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum BuildVecWriteError {
     /// Error if the length of the payload is too
