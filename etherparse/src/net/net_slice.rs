@@ -6,7 +6,7 @@ use crate::*;
     since = "0.14.0",
     note = "Deprecated use crate::NetSlice or crate::IpSlice instead"
 )]
-pub use NetSlice as InternetSlice;
+pub use self::NetSlice as InternetSlice;
 
 /// Slice containing the network headers & payloads (e.g. IPv4, IPv6, ARP).
 #[derive(Clone, Debug, Eq, PartialEq)]
