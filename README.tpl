@@ -2,7 +2,6 @@
 [![docs.rs](https://docs.rs/etherparse/badge.svg)](https://docs.rs/etherparse)
 [![Build Status Github](https://github.com/JulianSchmid/etherparse/actions/workflows/main.yml/badge.svg?branch=master)](https://github.com/JulianSchmid/etherparse/actions/workflows/main.yml)
 [![Build Status Gitlab](https://gitlab.com/julian.schmid/etherparse/badges/master/pipeline.svg)](https://gitlab.com/julian.schmid/etherparse/-/commits/master)
-[![Codecov](https://codecov.io/gh/JulianSchmid/etherparse/branch/master/graph/badge.svg?token=yjfRLgScR6)](https://codecov.io/gh/JulianSchmid/etherparse)
 
 # {{crate}}
 
