@@ -75,7 +75,7 @@ fn main() {
                         ipv4.header().source_addr(),
                         ipv4.header().destination_addr()
                     );
-                    if false == ipv4.extensions().is_empty() {
+                    if !ipv4.extensions().is_empty() {
                         println!("    {:?}", ipv4.extensions());
                     }
                 }
@@ -85,7 +85,7 @@ fn main() {
                         ipv6.header().source_addr(),
                         ipv6.header().destination_addr()
                     );
-                    if false == ipv6.extensions().is_empty() {
+                    if !ipv6.extensions().is_empty() {
                         println!("    {:?}", ipv6.extensions());
                     }
                 }

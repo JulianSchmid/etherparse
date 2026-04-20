@@ -42,6 +42,12 @@ impl Icmpv6Payload {
         }
     }
 
+    /// Returns true if the serialized payload is empty.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        0 == self.len()
+    }
+
     /// Write the fixed payload bytes to the writer.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
@@ -59,11 +65,41 @@ impl Icmpv6Payload {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::net::Ipv6Addr;
     use proptest::prelude::*;
 
     #[test]
     fn router_solicitation_payload_to_bytes() {
         assert_eq!([] as [u8; 0], RouterSolicitationPayload.to_bytes());
+    }
+
+    #[test]
+    fn payload_is_empty() {
+        assert!(Icmpv6Payload::RouterSolicitation(RouterSolicitationPayload).is_empty());
+        assert!(
+            !Icmpv6Payload::RouterAdvertisement(RouterAdvertisementPayload {
+                reachable_time: 1,
+                retrans_timer: 2,
+            })
+            .is_empty()
+        );
+        assert!(
+            !Icmpv6Payload::NeighborSolicitation(NeighborSolicitationPayload {
+                target_address: Ipv6Addr::LOCALHOST,
+            })
+            .is_empty()
+        );
+        assert!(
+            !Icmpv6Payload::NeighborAdvertisement(NeighborAdvertisementPayload {
+                target_address: Ipv6Addr::LOCALHOST,
+            })
+            .is_empty()
+        );
+        assert!(!Icmpv6Payload::Redirect(RedirectPayload {
+            target_address: Ipv6Addr::LOCALHOST,
+            destination_address: Ipv6Addr::UNSPECIFIED,
+        })
+        .is_empty());
     }
 
     proptest! {

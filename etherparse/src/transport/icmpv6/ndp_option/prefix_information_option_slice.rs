@@ -41,11 +41,13 @@ impl<'a> PrefixInformationOptionSlice<'a> {
 
     pub fn from_slice(slice: &'a [u8]) -> Result<Self, NdpOptionReadError> {
         let slice: &'a [u8; PrefixInformation::LEN] =
-            slice.try_into().map_err(|_| NdpOptionReadError::UnexpectedSize {
-                option_id: NdpOptionType::PREFIX_INFORMATION,
-                expected_size: PrefixInformation::LEN,
-                actual_size: slice.len(),
-            })?;
+            slice
+                .try_into()
+                .map_err(|_| NdpOptionReadError::UnexpectedSize {
+                    option_id: NdpOptionType::PREFIX_INFORMATION,
+                    expected_size: PrefixInformation::LEN,
+                    actual_size: slice.len(),
+                })?;
         // Validate the encoded option header (`Type` and `Length`) as well.
         PrefixInformation::from_bytes(*slice)?;
         Ok(Self { slice })

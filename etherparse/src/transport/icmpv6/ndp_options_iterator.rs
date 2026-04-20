@@ -21,9 +21,7 @@ impl<'a> NdpOptionsIterator<'a> {
         self.options
     }
 
-    fn parse_next_option(
-        &mut self,
-    ) -> Result<NdpOptionSlice<'a>, NdpOptionReadError> {
+    fn parse_next_option(&mut self) -> Result<NdpOptionSlice<'a>, NdpOptionReadError> {
         use NdpOptionReadError::*;
 
         let (header, _) = NdpOptionHeader::from_slice(self.options)?;
@@ -34,12 +32,14 @@ impl<'a> NdpOptionsIterator<'a> {
         }
 
         let option_len = header.byte_len();
-        let (option, rest) = self.options.split_at_checked(option_len)
-            .ok_or_else(|| UnexpectedEndOfSlice {
-                option_id,
-                expected_size: option_len,
-                actual_size: self.options.len(),
-            })?;
+        let (option, rest) =
+            self.options
+                .split_at_checked(option_len)
+                .ok_or(UnexpectedEndOfSlice {
+                    option_id,
+                    expected_size: option_len,
+                    actual_size: self.options.len(),
+                })?;
 
         let parsed = match option_id {
             NdpOptionType::SOURCE_LINK_LAYER_ADDRESS => {
@@ -50,15 +50,11 @@ impl<'a> NdpOptionsIterator<'a> {
                 TargetLinkLayerAddressOptionSlice::from_slice(option)
                     .map(NdpOptionSlice::TargetLinkLayerAddress)
             }
-            NdpOptionType::PREFIX_INFORMATION => {
-                PrefixInformationOptionSlice::from_slice(option)
-                    .map(NdpOptionSlice::PrefixInformation)
-            }
+            NdpOptionType::PREFIX_INFORMATION => PrefixInformationOptionSlice::from_slice(option)
+                .map(NdpOptionSlice::PrefixInformation),
             NdpOptionType::REDIRECTED_HEADER => RedirectedHeaderOptionSlice::from_slice(option)
                 .map(NdpOptionSlice::RedirectedHeader),
-            NdpOptionType::MTU => {
-                    MtuOptionSlice::from_slice(option).map(NdpOptionSlice::Mtu)
-            }
+            NdpOptionType::MTU => MtuOptionSlice::from_slice(option).map(NdpOptionSlice::Mtu),
             _ => UnknownNdpOptionSlice::from_slice(option).map(NdpOptionSlice::Unknown),
         }?;
 
@@ -107,7 +103,6 @@ impl core::fmt::Debug for NdpOptionsIterator<'_> {
 mod tests {
     use super::*;
     use crate::icmpv6::PrefixInformation;
-
 
     #[test]
     fn from_slice_and_rest() {
