@@ -69,12 +69,10 @@ impl<'a> Icmpv6Slice<'a> {
                     return DestinationUnreachable(code);
                 }
             }
-            TYPE_PACKET_TOO_BIG => {
-                if 0 == self.code_u8() {
-                    return PacketTooBig {
-                        mtu: u32::from_be_bytes(self.bytes5to8()),
-                    };
-                }
+            TYPE_PACKET_TOO_BIG if 0 == self.code_u8() => {
+                return PacketTooBig {
+                    mtu: u32::from_be_bytes(self.bytes5to8()),
+                };
             }
             TYPE_TIME_EXCEEDED => {
                 if let Some(code) = TimeExceededCode::from_u8(self.code_u8()) {
@@ -89,44 +87,30 @@ impl<'a> Icmpv6Slice<'a> {
                     });
                 }
             }
-            TYPE_ECHO_REQUEST => {
-                if 0 == self.code_u8() {
-                    return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()));
-                }
+            TYPE_ECHO_REQUEST if 0 == self.code_u8() => {
+                return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()));
             }
-            TYPE_ECHO_REPLY => {
-                if 0 == self.code_u8() {
-                    return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
-                }
+            TYPE_ECHO_REPLY if 0 == self.code_u8() => {
+                return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
             }
-            TYPE_ROUTER_SOLICITATION => {
-                if 0 == self.code_u8() {
-                    return RouterSolicitation;
-                }
+            TYPE_ROUTER_SOLICITATION if 0 == self.code_u8() => {
+                return RouterSolicitation;
             }
-            TYPE_ROUTER_ADVERTISEMENT => {
-                if 0 == self.code_u8() {
-                    return RouterAdvertisement(RouterAdvertisementHeader::from_bytes(
-                        self.bytes5to8(),
-                    ));
-                }
+            TYPE_ROUTER_ADVERTISEMENT if 0 == self.code_u8() => {
+                return RouterAdvertisement(RouterAdvertisementHeader::from_bytes(
+                    self.bytes5to8(),
+                ));
             }
-            TYPE_NEIGHBOR_SOLICITATION => {
-                if 0 == self.code_u8() {
-                    return NeighborSolicitation;
-                }
+            TYPE_NEIGHBOR_SOLICITATION if 0 == self.code_u8() => {
+                return NeighborSolicitation;
             }
-            TYPE_NEIGHBOR_ADVERTISEMENT => {
-                if 0 == self.code_u8() {
-                    return NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(
-                        self.bytes5to8(),
-                    ));
-                }
+            TYPE_NEIGHBOR_ADVERTISEMENT if 0 == self.code_u8() => {
+                return NeighborAdvertisement(NeighborAdvertisementHeader::from_bytes(
+                    self.bytes5to8(),
+                ));
             }
-            TYPE_REDIRECT_MESSAGE => {
-                if 0 == self.code_u8() {
-                    return Redirect;
-                }
+            TYPE_REDIRECT_MESSAGE if 0 == self.code_u8() => {
+                return Redirect;
             }
             _ => {}
         }

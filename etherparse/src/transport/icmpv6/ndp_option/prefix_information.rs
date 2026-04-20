@@ -36,12 +36,7 @@ impl PrefixInformation {
         // Safe to unwrap because `bytes` originates from `[u8; Self::LEN]` and
         // the chunk sizes below exactly cover `Self::LEN` (32 bytes).
         let (type_and_len, rest) = bytes.split_first_chunk::<2>().unwrap();
-        if *type_and_len
-            != [
-                NdpOptionType::PREFIX_INFORMATION.0,
-                Self::LENGTH_UNITS,
-            ]
-        {
+        if *type_and_len != [NdpOptionType::PREFIX_INFORMATION.0, Self::LENGTH_UNITS] {
             return Err(NdpOptionReadError::UnexpectedHeader {
                 expected_option_id: NdpOptionType::PREFIX_INFORMATION,
                 actual_option_id: NdpOptionType(type_and_len[0]),

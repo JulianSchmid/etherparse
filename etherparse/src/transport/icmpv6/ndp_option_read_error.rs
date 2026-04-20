@@ -13,7 +13,8 @@ pub enum NdpOptionReadError {
     /// An ND option with a length value of zero was encountered.
     ZeroLength { option_id: NdpOptionType },
     /// The option has a fixed encoded size and the received size differs.
-    UnexpectedSize { option_id: NdpOptionType,
+    UnexpectedSize {
+        option_id: NdpOptionType,
         expected_size: usize,
         actual_size: usize,
     },

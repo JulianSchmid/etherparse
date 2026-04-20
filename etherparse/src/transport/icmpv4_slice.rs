@@ -38,27 +38,23 @@ impl<'a> Icmpv4Slice<'a> {
 
         // check type specific length
         match icmp_type {
-            TYPE_TIMESTAMP => {
-                if 0 == icmp_code && TimestampMessage::LEN != slice.len() {
-                    return Err(err::LenError {
-                        required_len: TimestampMessage::LEN,
-                        len: slice.len(),
-                        len_source: LenSource::Slice,
-                        layer: err::Layer::Icmpv4Timestamp,
-                        layer_start_offset: 0,
-                    });
-                }
+            TYPE_TIMESTAMP if 0 == icmp_code && TimestampMessage::LEN != slice.len() => {
+                return Err(err::LenError {
+                    required_len: TimestampMessage::LEN,
+                    len: slice.len(),
+                    len_source: LenSource::Slice,
+                    layer: err::Layer::Icmpv4Timestamp,
+                    layer_start_offset: 0,
+                });
             }
-            TYPE_TIMESTAMP_REPLY => {
-                if 0 == icmp_code && TimestampMessage::LEN != slice.len() {
-                    return Err(err::LenError {
-                        required_len: TimestampMessage::LEN,
-                        len: slice.len(),
-                        len_source: LenSource::Slice,
-                        layer: err::Layer::Icmpv4TimestampReply,
-                        layer_start_offset: 0,
-                    });
-                }
+            TYPE_TIMESTAMP_REPLY if 0 == icmp_code && TimestampMessage::LEN != slice.len() => {
+                return Err(err::LenError {
+                    required_len: TimestampMessage::LEN,
+                    len: slice.len(),
+                    len_source: LenSource::Slice,
+                    layer: err::Layer::Icmpv4TimestampReply,
+                    layer_start_offset: 0,
+                });
             }
             _ => {}
         }
@@ -82,13 +78,7 @@ impl<'a> Icmpv4Slice<'a> {
     #[inline]
     pub fn header_len(&self) -> usize {
         match self.type_u8() {
-            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
-                if 0 == self.code_u8() {
-                    TimestampMessage::LEN
-                } else {
-                    8
-                }
-            }
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY if 0 == self.code_u8() => TimestampMessage::LEN,
             _ => 8,
         }
     }
@@ -108,10 +98,8 @@ impl<'a> Icmpv4Slice<'a> {
         }
 
         match self.type_u8() {
-            TYPE_ECHO_REPLY => {
-                if 0 == self.code_u8() {
-                    return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
-                }
+            TYPE_ECHO_REPLY if 0 == self.code_u8() => {
+                return EchoReply(IcmpEchoHeader::from_bytes(self.bytes5to8()));
             }
             TYPE_DEST_UNREACH => {
                 use DestUnreachableHeader::*;
@@ -172,10 +160,8 @@ impl<'a> Icmpv4Slice<'a> {
                     });
                 }
             }
-            TYPE_ECHO_REQUEST => {
-                if 0 == self.code_u8() {
-                    return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()));
-                }
+            TYPE_ECHO_REQUEST if 0 == self.code_u8() => {
+                return EchoRequest(IcmpEchoHeader::from_bytes(self.bytes5to8()));
             }
             TYPE_TIME_EXCEEDED => {
                 use TimeExceededCode::*;
@@ -209,24 +195,20 @@ impl<'a> Icmpv4Slice<'a> {
                     _ => {}
                 }
             }
-            TYPE_TIMESTAMP => {
-                if 0 == self.code_u8() {
-                    // SAFETY:
-                    // Safe as the contructor checks that the slice has
-                    // the length of TimestampMessage::SERIALIZED_SIZE (20).
-                    unsafe {
-                        return TimestampRequest(timestamp_message(self.slice.as_ptr()));
-                    }
+            TYPE_TIMESTAMP if 0 == self.code_u8() => {
+                // SAFETY:
+                // Safe as the contructor checks that the slice has
+                // the length of TimestampMessage::SERIALIZED_SIZE (20).
+                unsafe {
+                    return TimestampRequest(timestamp_message(self.slice.as_ptr()));
                 }
             }
-            TYPE_TIMESTAMP_REPLY => {
-                if 0 == self.code_u8() {
-                    // SAFETY:
-                    // Safe as the contructor checks that the slice has
-                    // the length of TimestampMessage::SERIALIZED_SIZE (20).
-                    unsafe {
-                        return TimestampReply(timestamp_message(self.slice.as_ptr()));
-                    }
+            TYPE_TIMESTAMP_REPLY if 0 == self.code_u8() => {
+                // SAFETY:
+                // Safe as the contructor checks that the slice has
+                // the length of TimestampMessage::SERIALIZED_SIZE (20).
+                unsafe {
+                    return TimestampReply(timestamp_message(self.slice.as_ptr()));
                 }
             }
             _ => {}
@@ -307,13 +289,7 @@ impl<'a> Icmpv4Slice<'a> {
             // Length safe as the contructor checks that the slice has
             // the length of TimestampMessage::SERIALIZED_SIZE (20)
             // for the messages types TYPE_TIMESTAMP and TYPE_TIMESTAMP_REPLY.
-            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY => {
-                if 0 == self.code_u8() {
-                    TimestampMessage::LEN
-                } else {
-                    8
-                }
-            }
+            TYPE_TIMESTAMP | TYPE_TIMESTAMP_REPLY if 0 == self.code_u8() => TimestampMessage::LEN,
             // SAFETY:
             // Length safe as the contructor checks that the slice has
             // at least the length of Icmpv4Header::MIN_LEN(8) for

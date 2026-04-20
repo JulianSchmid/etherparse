@@ -190,7 +190,7 @@ mod icmpv4_regression {
         let offset = 14 + 20 + 1; // ethernet + iphdr + icmp_type
                                   // test all of the unreachable codes to make sure the maps are right
         for code_u8 in 0..icmpv4::CODE_DST_UNREACH_PRECEDENCE_CUTOFF {
-            let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES.clone();
+            let mut pkt = ICMP4_PORT_UNREACHABLE_BYTES;
             pkt[offset] = code_u8; // over write the code
             let parsed = PacketHeaders::from_ethernet_slice(&pkt).unwrap();
             let icmp4 = parsed.transport.unwrap().icmpv4().unwrap();

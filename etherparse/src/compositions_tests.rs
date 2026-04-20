@@ -70,7 +70,7 @@ impl<'a> ComponentTest<'a> {
             None => {}
         }
         use std::io::Write;
-        buffer.write(&self.payload[..]).unwrap();
+        buffer.write_all(self.payload).unwrap();
         buffer
     }
 
@@ -341,14 +341,14 @@ impl<'a> ComponentTest<'a> {
     fn assert_headers(&self, actual: PacketHeaders) {
         assert_eq!(self.link, actual.link);
         assert_eq!(self.link_exts, actual.link_exts);
-        assert_eq!(self.net, self.net);
+        assert_eq!(self.net, actual.net);
         assert_eq!(self.transport, actual.transport);
         assert_eq!(self.payload[..], actual.payload.slice()[..]);
     }
 
     fn assert_sliced_packet(&self, result: SlicedPacket) {
         //assert identity to touch the derives (code coverage hack)
-        assert_eq!(result, result);
+        assert_eq!(result.clone(), result);
 
         //ethernet & link extensions
         assert_eq!(
