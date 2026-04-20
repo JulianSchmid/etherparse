@@ -303,7 +303,7 @@
 // for docs.rs
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-#[cfg(test)]
+#[cfg(any(feature = "alloc", test))]
 extern crate alloc;
 #[cfg(test)]
 extern crate proptest;
@@ -343,6 +343,9 @@ mod compositions_tests;
 mod helpers;
 pub(crate) use helpers::*;
 
+mod writer;
+pub(crate) use writer::*;
+
 mod lax_packet_headers;
 pub use lax_packet_headers::*;
 
@@ -358,9 +361,7 @@ pub(crate) use lax_sliced_packet_cursor::*;
 mod len_source;
 pub use len_source::*;
 
-#[cfg(feature = "std")]
 mod packet_builder;
-#[cfg(feature = "std")]
 pub use crate::packet_builder::*;
 
 mod packet_headers;

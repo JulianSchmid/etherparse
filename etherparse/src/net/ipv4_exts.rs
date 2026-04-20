@@ -160,6 +160,28 @@ impl Ipv4Extensions {
     }
 
     /// Write the extensions to the writer.
+    pub(crate) fn write_internal<T: CoreWrite + ?Sized>(
+        &self,
+        writer: &mut T,
+        start_ip_number: IpNumber,
+    ) -> Result<(), WriteError<T::Error, err::ipv4_exts::ExtsWalkError>> {
+        use err::ipv4_exts::ExtsWalkError::*;
+        use ip_number::*;
+        match self.auth {
+            Some(ref header) => {
+                if AUTH == start_ip_number {
+                    writer.write_all(&header.to_bytes()).map_err(WriteError::Io)
+                } else {
+                    Err(WriteError::Content(ExtNotReferenced {
+                        missing_ext: IpNumber::AUTHENTICATION_HEADER,
+                    }))
+                }
+            }
+            None => Ok(()),
+        }
+    }
+
+    /// Write the extensions to the writer.
     #[cfg(feature = "std")]
     #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
     pub fn write<T: std::io::Write + Sized>(
@@ -167,20 +189,11 @@ impl Ipv4Extensions {
         writer: &mut T,
         start_ip_number: IpNumber,
     ) -> Result<(), err::ipv4_exts::HeaderWriteError> {
-        use err::ipv4_exts::{ExtsWalkError::*, HeaderWriteError::*};
-        use ip_number::*;
-        match self.auth {
-            Some(ref header) => {
-                if AUTH == start_ip_number {
-                    header.write(writer).map_err(Io)
-                } else {
-                    Err(Content(ExtNotReferenced {
-                        missing_ext: IpNumber::AUTHENTICATION_HEADER,
-                    }))
-                }
-            }
-            None => Ok(()),
-        }
+        self.write_internal(&mut IoWriter(writer), start_ip_number)
+            .map_err(|err| match err {
+                WriteError::Io(err) => err::ipv4_exts::HeaderWriteError::Io(err),
+                WriteError::Content(err) => err::ipv4_exts::HeaderWriteError::Content(err),
+            })
     }
 
     ///Length of the all present headers in bytes.
