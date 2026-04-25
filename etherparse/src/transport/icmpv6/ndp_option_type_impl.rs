@@ -41,6 +41,20 @@ impl NdpOptionType {
             _ => None,
         }
     }
+
+    /// Parses a keyword previously returned by [`NdpOptionType::keyword_str`].
+    ///
+    /// Only exact keyword matches are accepted.
+    pub fn from_keyword_str(keyword: &str) -> Option<Self> {
+        match keyword {
+            "Source Link-Layer Address" => Some(Self(1)),
+            "Target Link-Layer Address" => Some(Self(2)),
+            "Prefix Information" => Some(Self(3)),
+            "Redirected Header" => Some(Self(4)),
+            "MTU" => Some(Self(5)),
+            _ => None,
+        }
+    }
 }
 
 impl From<u8> for NdpOptionType {
@@ -63,6 +77,33 @@ impl core::fmt::Debug for NdpOptionType {
             write!(f, "{} ({})", self.0, keyword)
         } else {
             write!(f, "{}", self.0)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NdpOptionType;
+
+    #[test]
+    fn from_keyword_str() {
+        assert_eq!(
+            NdpOptionType::from_keyword_str("Source Link-Layer Address"),
+            Some(NdpOptionType::SOURCE_LINK_LAYER_ADDRESS)
+        );
+        assert_eq!(
+            NdpOptionType::from_keyword_str("source link-layer address"),
+            None
+        );
+        assert_eq!(NdpOptionType::from_keyword_str(""), None);
+
+        for i in 0u8..=u8::MAX {
+            if let Some(keyword) = NdpOptionType(i).keyword_str() {
+                assert_eq!(
+                    NdpOptionType::from_keyword_str(keyword),
+                    Some(NdpOptionType(i))
+                );
+            }
         }
     }
 }

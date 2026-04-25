@@ -337,6 +337,327 @@ impl IpNumber {
     pub const EXPERIMENTAL_AND_TESTING_1: IpNumber = Self(254);
 }
 
+macro_rules! str_by_number {
+    ($value:expr; $($num:literal $(| $alias:literal)* => $text:literal),* $(,)?) => {
+        match $value {
+            $($num $(| $alias)* => Some($text),)*
+            _ => None,
+        }
+    };
+}
+
+macro_rules! number_by_str {
+    ($value:expr; $($num:literal $(| $alias:literal)* => $text:literal),* $(,)?) => {
+        match $value {
+            $($text => Some(Self($num)),)*
+            _ => None,
+        }
+    };
+}
+
+/// # Data Source
+///
+/// The strings were copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
+/// on 2023-04-11.
+macro_rules! ip_number_keywords {
+    ($value:expr, $matcher:ident) => {
+        $matcher!(
+            $value;
+            0 => "HOPOPT",
+            1 => "ICMP",
+            2 => "IGMP",
+            3 => "GGP",
+            4 => "IPv4",
+            5 => "ST",
+            6 => "TCP",
+            7 => "CBT",
+            8 => "EGP",
+            9 => "IGP",
+            10 => "BBN-RCC-MON",
+            11 => "NVP-II",
+            12 => "PUP",
+            13 => "ARGUS (deprecated)",
+            14 => "EMCON",
+            15 => "XNET",
+            16 => "CHAOS",
+            17 => "UDP",
+            18 => "MUX",
+            19 => "DCN-MEAS",
+            20 => "HMP",
+            21 => "PRM",
+            22 => "XNS-IDP",
+            23 => "TRUNK-1",
+            24 => "TRUNK-2",
+            25 => "LEAF-1",
+            26 => "LEAF-2",
+            27 => "RDP",
+            28 => "IRTP",
+            29 => "ISO-TP4",
+            30 => "NETBLT",
+            31 => "MFE-NSP",
+            32 => "MERIT-INP",
+            33 => "DCCP",
+            34 => "3PC",
+            35 => "IDPR",
+            36 => "XTP",
+            37 => "DDP",
+            38 => "IDPR-CMTP",
+            39 => "TP++",
+            40 => "IL",
+            41 => "IPv6",
+            42 => "SDRP",
+            43 => "IPv6-Route",
+            44 => "IPv6-Frag",
+            45 => "IDRP",
+            46 => "RSVP",
+            47 => "GRE",
+            48 => "DSR",
+            49 => "BNA",
+            50 => "ESP",
+            51 => "AH",
+            52 => "I-NLSP",
+            53 => "SWIPE (deprecated)",
+            54 => "NARP",
+            55 => "MOBILE",
+            56 => "TLSP",
+            57 => "SKIP",
+            58 => "IPv6-ICMP",
+            59 => "IPv6-NoNxt",
+            60 => "IPv6-Opts",
+            62 => "CFTP",
+            64 => "SAT-EXPAK",
+            65 => "KRYPTOLAN",
+            66 => "RVD",
+            67 => "IPPC",
+            69 => "SAT-MON",
+            70 => "VISA",
+            71 => "IPCV",
+            72 => "CPNX",
+            73 => "CPHB",
+            74 => "WSN",
+            75 => "PVP",
+            76 => "BR-SAT-MON",
+            77 => "SUN-ND",
+            78 => "WB-MON",
+            79 => "WB-EXPAK",
+            80 => "ISO-IP",
+            81 => "VMTP",
+            82 => "SECURE-VMTP",
+            83 => "VINES",
+            84 => "IPTM",
+            85 => "NSFNET-IGP",
+            86 => "DGP",
+            87 => "TCF",
+            88 => "EIGRP",
+            89 => "OSPFIGP",
+            90 => "Sprite-RPC",
+            91 => "LARP",
+            92 => "MTP",
+            93 => "AX.25",
+            94 => "IPIP",
+            95 => "MICP (deprecated)",
+            96 => "SCC-SP",
+            97 => "ETHERIP",
+            98 => "ENCAP",
+            100 => "GMTP",
+            101 => "IFMP",
+            102 => "PNNI",
+            103 => "PIM",
+            104 => "ARIS",
+            105 => "SCPS",
+            106 => "QNX",
+            107 => "A/N",
+            108 => "IPComp",
+            109 => "SNP",
+            110 => "Compaq-Peer",
+            111 => "IPX-in-IP",
+            112 => "VRRP",
+            113 => "PGM",
+            115 => "L2TP",
+            116 => "DDX",
+            117 => "IATP",
+            118 => "STP",
+            119 => "SRP",
+            120 => "UTI",
+            121 => "SMP",
+            122 => "SM (deprecated)",
+            123 => "PTP",
+            124 => "ISIS over IPv4",
+            125 => "FIRE",
+            126 => "CRTP",
+            127 => "CRUDP",
+            128 => "SSCOPMCE",
+            129 => "IPLT",
+            130 => "SPS",
+            131 => "PIPE",
+            132 => "SCTP",
+            133 => "FC",
+            134 => "RSVP-E2E-IGNORE",
+            135 => "Mobility Header",
+            136 => "UDPLite",
+            137 => "MPLS-in-IP",
+            138 => "manet",
+            139 => "HIP",
+            140 => "Shim6",
+            141 => "WESP",
+            142 => "ROHC",
+            143 => "Ethernet",
+            144 => "AGGFRAG",
+            255 => "Reserved",
+        )
+    };
+}
+
+/// # Data Source
+///
+/// The strings were copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
+/// on 2023-04-11.
+macro_rules! ip_number_protocols {
+    ($value:expr, $matcher:ident) => {
+        $matcher!(
+            $value;
+            0 => "IPv6 Hop-by-Hop Option",
+            1 => "Internet Control Message",
+            2 => "Internet Group Management",
+            3 => "Gateway-to-Gateway",
+            4 => "IPv4 encapsulation",
+            5 => "Stream",
+            6 => "Transmission Control",
+            7 => "CBT",
+            8 => "Exterior Gateway Protocol",
+            9 => "any private interior gateway (used by Cisco for their IGRP)",
+            10 => "BBN RCC Monitoring",
+            11 => "Network Voice Protocol",
+            12 => "PUP",
+            13 => "ARGUS",
+            14 => "EMCON",
+            15 => "Cross Net Debugger",
+            16 => "Chaos",
+            17 => "User Datagram",
+            18 => "Multiplexing",
+            19 => "DCN Measurement Subsystems",
+            20 => "Host Monitoring",
+            21 => "Packet Radio Measurement",
+            22 => "XEROX NS IDP",
+            23 => "Trunk-1",
+            24 => "Trunk-2",
+            25 => "Leaf-1",
+            26 => "Leaf-2",
+            27 => "Reliable Data Protocol",
+            28 => "Internet Reliable Transaction",
+            29 => "ISO Transport Protocol Class 4",
+            30 => "Bulk Data Transfer Protocol",
+            31 => "MFE Network Services Protocol",
+            32 => "MERIT Internodal Protocol",
+            33 => "Datagram Congestion Control Protocol",
+            34 => "Third Party Connect Protocol",
+            35 => "Inter-Domain Policy Routing Protocol",
+            36 => "XTP",
+            37 => "Datagram Delivery Protocol",
+            38 => "IDPR Control Message Transport Proto",
+            39 => "TP++ Transport Protocol",
+            40 => "IL Transport Protocol",
+            41 => "IPv6 encapsulation",
+            42 => "Source Demand Routing Protocol",
+            43 => "Routing Header for IPv6",
+            44 => "Fragment Header for IPv6",
+            45 => "Inter-Domain Routing Protocol",
+            46 => "Reservation Protocol",
+            47 => "Generic Routing Encapsulation",
+            48 => "Dynamic Source Routing Protocol",
+            49 => "BNA",
+            50 => "Encap Security Payload",
+            51 => "Authentication Header",
+            52 => "Integrated Net Layer Security  TUBA",
+            53 => "IP with Encryption",
+            54 => "NBMA Address Resolution Protocol",
+            55 => "IP Mobility",
+            56 => "Transport Layer Security Protocol using Kryptonet key management",
+            57 => "SKIP",
+            58 => "ICMP for IPv6",
+            59 => "No Next Header for IPv6",
+            60 => "Destination Options for IPv6",
+            61 => "any host internal protocol",
+            62 => "CFTP",
+            63 => "any local network",
+            64 => "SATNET and Backroom EXPAK",
+            65 => "Kryptolan",
+            66 => "MIT Remote Virtual Disk Protocol",
+            67 => "Internet Pluribus Packet Core",
+            68 => "any distributed file system",
+            69 => "SATNET Monitoring",
+            70 => "VISA Protocol",
+            71 => "Internet Packet Core Utility",
+            72 => "Computer Protocol Network Executive",
+            73 => "Computer Protocol Heart Beat",
+            74 => "Wang Span Network",
+            75 => "Packet Video Protocol",
+            76 => "Backroom SATNET Monitoring",
+            77 => "SUN ND PROTOCOL-Temporary",
+            78 => "WIDEBAND Monitoring",
+            79 => "WIDEBAND EXPAK",
+            80 => "ISO Internet Protocol",
+            81 => "VMTP",
+            82 => "SECURE-VMTP",
+            83 => "VINES",
+            84 => "Internet Protocol Traffic Manager",
+            85 => "NSFNET-IGP",
+            86 => "Dissimilar Gateway Protocol",
+            87 => "TCF",
+            88 => "EIGRP",
+            89 => "OSPFIGP",
+            90 => "Sprite RPC Protocol",
+            91 => "Locus Address Resolution Protocol",
+            92 => "Multicast Transport Protocol",
+            93 => "AX.25 Frames",
+            94 => "IP-within-IP Encapsulation Protocol",
+            95 => "Mobile Internetworking Control Pro.",
+            96 => "Semaphore Communications Sec. Pro.",
+            97 => "Ethernet-within-IP Encapsulation",
+            98 => "Encapsulation Header",
+            99 => "any private encryption scheme",
+            100 => "GMTP",
+            101 => "Ipsilon Flow Management Protocol",
+            102 => "PNNI over IP",
+            103 => "Protocol Independent Multicast",
+            104 => "ARIS",
+            105 => "SCPS",
+            106 => "QNX",
+            107 => "Active Networks",
+            108 => "IP Payload Compression Protocol",
+            109 => "Sitara Networks Protocol",
+            110 => "Compaq Peer Protocol",
+            111 => "IPX in IP",
+            112 => "Virtual Router Redundancy Protocol",
+            113 => "PGM Reliable Transport Protocol",
+            114 => "any 0-hop protocol",
+            115 => "Layer Two Tunneling Protocol",
+            116 => "D-II Data Exchange (DDX)",
+            117 => "Interactive Agent Transfer Protocol",
+            118 => "Schedule Transfer Protocol",
+            119 => "SpectraLink Radio Protocol",
+            120 => "UTI",
+            121 => "Simple Message Protocol",
+            122 => "Simple Multicast Protocol",
+            123 => "Performance Transparency Protocol",
+            126 => "Combat Radio Transport Protocol",
+            127 => "Combat Radio User Datagram",
+            130 => "Secure Packet Shield",
+            131 => "Private IP Encapsulation within IP",
+            132 => "Stream Control Transmission Protocol",
+            133 => "Fibre Channel",
+            138 => "MANET Protocols",
+            139 => "Host Identity Protocol",
+            140 => "Shim6 Protocol",
+            141 => "Wrapped Encapsulating Security Payload",
+            142 => "Robust Header Compression",
+            143 => "Ethernet",
+            144 => "AGGFRAG encapsulation payload for ESP",
+            253 | 254 => "Use for experimentation and testing",
+        )
+    };
+}
+
 impl IpNumber {
     /// Returns true if the given number is the internet number of an IPV6 extension header.
     pub fn is_ipv6_ext_header_value(self) -> bool {
@@ -369,166 +690,24 @@ impl IpNumber {
     /// // Unassigned values return None
     /// assert_eq!(IpNumber(145).keyword_str(), None);
     /// ```
-    ///
-    /// # Data Source
-    ///
-    /// The strings were copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
-    /// on 2023-04-11.
     pub fn keyword_str(self) -> Option<&'static str> {
-        // auto generated from CSV
-        // https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
-        // on 2023-04-11.
-        match self.0 {
-            0 => Some("HOPOPT"),
-            1 => Some("ICMP"),
-            2 => Some("IGMP"),
-            3 => Some("GGP"),
-            4 => Some("IPv4"),
-            5 => Some("ST"),
-            6 => Some("TCP"),
-            7 => Some("CBT"),
-            8 => Some("EGP"),
-            9 => Some("IGP"),
-            10 => Some("BBN-RCC-MON"),
-            11 => Some("NVP-II"),
-            12 => Some("PUP"),
-            13 => Some("ARGUS (deprecated)"),
-            14 => Some("EMCON"),
-            15 => Some("XNET"),
-            16 => Some("CHAOS"),
-            17 => Some("UDP"),
-            18 => Some("MUX"),
-            19 => Some("DCN-MEAS"),
-            20 => Some("HMP"),
-            21 => Some("PRM"),
-            22 => Some("XNS-IDP"),
-            23 => Some("TRUNK-1"),
-            24 => Some("TRUNK-2"),
-            25 => Some("LEAF-1"),
-            26 => Some("LEAF-2"),
-            27 => Some("RDP"),
-            28 => Some("IRTP"),
-            29 => Some("ISO-TP4"),
-            30 => Some("NETBLT"),
-            31 => Some("MFE-NSP"),
-            32 => Some("MERIT-INP"),
-            33 => Some("DCCP"),
-            34 => Some("3PC"),
-            35 => Some("IDPR"),
-            36 => Some("XTP"),
-            37 => Some("DDP"),
-            38 => Some("IDPR-CMTP"),
-            39 => Some("TP++"),
-            40 => Some("IL"),
-            41 => Some("IPv6"),
-            42 => Some("SDRP"),
-            43 => Some("IPv6-Route"),
-            44 => Some("IPv6-Frag"),
-            45 => Some("IDRP"),
-            46 => Some("RSVP"),
-            47 => Some("GRE"),
-            48 => Some("DSR"),
-            49 => Some("BNA"),
-            50 => Some("ESP"),
-            51 => Some("AH"),
-            52 => Some("I-NLSP"),
-            53 => Some("SWIPE (deprecated)"),
-            54 => Some("NARP"),
-            55 => Some("MOBILE"),
-            56 => Some("TLSP"),
-            57 => Some("SKIP"),
-            58 => Some("IPv6-ICMP"),
-            59 => Some("IPv6-NoNxt"),
-            60 => Some("IPv6-Opts"),
-            61 => None,
-            62 => Some("CFTP"),
-            63 => None,
-            64 => Some("SAT-EXPAK"),
-            65 => Some("KRYPTOLAN"),
-            66 => Some("RVD"),
-            67 => Some("IPPC"),
-            68 => None,
-            69 => Some("SAT-MON"),
-            70 => Some("VISA"),
-            71 => Some("IPCV"),
-            72 => Some("CPNX"),
-            73 => Some("CPHB"),
-            74 => Some("WSN"),
-            75 => Some("PVP"),
-            76 => Some("BR-SAT-MON"),
-            77 => Some("SUN-ND"),
-            78 => Some("WB-MON"),
-            79 => Some("WB-EXPAK"),
-            80 => Some("ISO-IP"),
-            81 => Some("VMTP"),
-            82 => Some("SECURE-VMTP"),
-            83 => Some("VINES"),
-            84 => Some("IPTM"),
-            85 => Some("NSFNET-IGP"),
-            86 => Some("DGP"),
-            87 => Some("TCF"),
-            88 => Some("EIGRP"),
-            89 => Some("OSPFIGP"),
-            90 => Some("Sprite-RPC"),
-            91 => Some("LARP"),
-            92 => Some("MTP"),
-            93 => Some("AX.25"),
-            94 => Some("IPIP"),
-            95 => Some("MICP (deprecated)"),
-            96 => Some("SCC-SP"),
-            97 => Some("ETHERIP"),
-            98 => Some("ENCAP"),
-            99 => None,
-            100 => Some("GMTP"),
-            101 => Some("IFMP"),
-            102 => Some("PNNI"),
-            103 => Some("PIM"),
-            104 => Some("ARIS"),
-            105 => Some("SCPS"),
-            106 => Some("QNX"),
-            107 => Some("A/N"),
-            108 => Some("IPComp"),
-            109 => Some("SNP"),
-            110 => Some("Compaq-Peer"),
-            111 => Some("IPX-in-IP"),
-            112 => Some("VRRP"),
-            113 => Some("PGM"),
-            114 => None,
-            115 => Some("L2TP"),
-            116 => Some("DDX"),
-            117 => Some("IATP"),
-            118 => Some("STP"),
-            119 => Some("SRP"),
-            120 => Some("UTI"),
-            121 => Some("SMP"),
-            122 => Some("SM (deprecated)"),
-            123 => Some("PTP"),
-            124 => Some("ISIS over IPv4"),
-            125 => Some("FIRE"),
-            126 => Some("CRTP"),
-            127 => Some("CRUDP"),
-            128 => Some("SSCOPMCE"),
-            129 => Some("IPLT"),
-            130 => Some("SPS"),
-            131 => Some("PIPE"),
-            132 => Some("SCTP"),
-            133 => Some("FC"),
-            134 => Some("RSVP-E2E-IGNORE"),
-            135 => Some("Mobility Header"),
-            136 => Some("UDPLite"),
-            137 => Some("MPLS-in-IP"),
-            138 => Some("manet"),
-            139 => Some("HIP"),
-            140 => Some("Shim6"),
-            141 => Some("WESP"),
-            142 => Some("ROHC"),
-            143 => Some("Ethernet"),
-            144 => Some("AGGFRAG"),
-            145..=252 => None,
-            253 => None,
-            254 => None,
-            255 => Some("Reserved"),
-        }
+        ip_number_keywords!(self.0, str_by_number)
+    }
+
+    /// Parses a keyword previously returned by [`IpNumber::keyword_str`].
+    ///
+    /// Only exact keyword matches are accepted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use etherparse::IpNumber;
+    ///
+    /// assert_eq!(IpNumber::from_keyword_str("UDP"), Some(IpNumber::UDP));
+    /// assert_eq!(IpNumber::from_keyword_str("udp"), None);
+    /// ```
+    pub fn from_keyword_str(keyword: &str) -> Option<Self> {
+        ip_number_keywords!(keyword, number_by_str)
     }
 
     /// Returns the "protocol" string if known. Usually this the non abbreviated name of the protocol.
@@ -543,166 +722,25 @@ impl IpNumber {
     /// // Unassigned values return None
     /// assert_eq!(IpNumber(145).protocol_str(), None);
     /// ```
-    ///
-    /// # Data Source
-    ///
-    /// The string was copied from <https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml>
-    /// on 2023-04-11.
     pub fn protocol_str(self) -> Option<&'static str> {
-        // auto generated from CSV
-        // https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
-        // on 2023-04-11.
-        match self.0 {
-            0 => Some("IPv6 Hop-by-Hop Option"),
-            1 => Some("Internet Control Message"),
-            2 => Some("Internet Group Management"),
-            3 => Some("Gateway-to-Gateway"),
-            4 => Some("IPv4 encapsulation"),
-            5 => Some("Stream"),
-            6 => Some("Transmission Control"),
-            7 => Some("CBT"),
-            8 => Some("Exterior Gateway Protocol"),
-            9 => Some("any private interior gateway (used by Cisco for their IGRP)"),
-            10 => Some("BBN RCC Monitoring"),
-            11 => Some("Network Voice Protocol"),
-            12 => Some("PUP"),
-            13 => Some("ARGUS"),
-            14 => Some("EMCON"),
-            15 => Some("Cross Net Debugger"),
-            16 => Some("Chaos"),
-            17 => Some("User Datagram"),
-            18 => Some("Multiplexing"),
-            19 => Some("DCN Measurement Subsystems"),
-            20 => Some("Host Monitoring"),
-            21 => Some("Packet Radio Measurement"),
-            22 => Some("XEROX NS IDP"),
-            23 => Some("Trunk-1"),
-            24 => Some("Trunk-2"),
-            25 => Some("Leaf-1"),
-            26 => Some("Leaf-2"),
-            27 => Some("Reliable Data Protocol"),
-            28 => Some("Internet Reliable Transaction"),
-            29 => Some("ISO Transport Protocol Class 4"),
-            30 => Some("Bulk Data Transfer Protocol"),
-            31 => Some("MFE Network Services Protocol"),
-            32 => Some("MERIT Internodal Protocol"),
-            33 => Some("Datagram Congestion Control Protocol"),
-            34 => Some("Third Party Connect Protocol"),
-            35 => Some("Inter-Domain Policy Routing Protocol"),
-            36 => Some("XTP"),
-            37 => Some("Datagram Delivery Protocol"),
-            38 => Some("IDPR Control Message Transport Proto"),
-            39 => Some("TP++ Transport Protocol"),
-            40 => Some("IL Transport Protocol"),
-            41 => Some("IPv6 encapsulation"),
-            42 => Some("Source Demand Routing Protocol"),
-            43 => Some("Routing Header for IPv6"),
-            44 => Some("Fragment Header for IPv6"),
-            45 => Some("Inter-Domain Routing Protocol"),
-            46 => Some("Reservation Protocol"),
-            47 => Some("Generic Routing Encapsulation"),
-            48 => Some("Dynamic Source Routing Protocol"),
-            49 => Some("BNA"),
-            50 => Some("Encap Security Payload"),
-            51 => Some("Authentication Header"),
-            52 => Some("Integrated Net Layer Security  TUBA"),
-            53 => Some("IP with Encryption"),
-            54 => Some("NBMA Address Resolution Protocol"),
-            55 => Some("IP Mobility"),
-            56 => Some("Transport Layer Security Protocol using Kryptonet key management"),
-            57 => Some("SKIP"),
-            58 => Some("ICMP for IPv6"),
-            59 => Some("No Next Header for IPv6"),
-            60 => Some("Destination Options for IPv6"),
-            61 => Some("any host internal protocol"),
-            62 => Some("CFTP"),
-            63 => Some("any local network"),
-            64 => Some("SATNET and Backroom EXPAK"),
-            65 => Some("Kryptolan"),
-            66 => Some("MIT Remote Virtual Disk Protocol"),
-            67 => Some("Internet Pluribus Packet Core"),
-            68 => Some("any distributed file system"),
-            69 => Some("SATNET Monitoring"),
-            70 => Some("VISA Protocol"),
-            71 => Some("Internet Packet Core Utility"),
-            72 => Some("Computer Protocol Network Executive"),
-            73 => Some("Computer Protocol Heart Beat"),
-            74 => Some("Wang Span Network"),
-            75 => Some("Packet Video Protocol"),
-            76 => Some("Backroom SATNET Monitoring"),
-            77 => Some("SUN ND PROTOCOL-Temporary"),
-            78 => Some("WIDEBAND Monitoring"),
-            79 => Some("WIDEBAND EXPAK"),
-            80 => Some("ISO Internet Protocol"),
-            81 => Some("VMTP"),
-            82 => Some("SECURE-VMTP"),
-            83 => Some("VINES"),
-            84 => Some("Internet Protocol Traffic Manager"),
-            85 => Some("NSFNET-IGP"),
-            86 => Some("Dissimilar Gateway Protocol"),
-            87 => Some("TCF"),
-            88 => Some("EIGRP"),
-            89 => Some("OSPFIGP"),
-            90 => Some("Sprite RPC Protocol"),
-            91 => Some("Locus Address Resolution Protocol"),
-            92 => Some("Multicast Transport Protocol"),
-            93 => Some("AX.25 Frames"),
-            94 => Some("IP-within-IP Encapsulation Protocol"),
-            95 => Some("Mobile Internetworking Control Pro."),
-            96 => Some("Semaphore Communications Sec. Pro."),
-            97 => Some("Ethernet-within-IP Encapsulation"),
-            98 => Some("Encapsulation Header"),
-            99 => Some("any private encryption scheme"),
-            100 => Some("GMTP"),
-            101 => Some("Ipsilon Flow Management Protocol"),
-            102 => Some("PNNI over IP"),
-            103 => Some("Protocol Independent Multicast"),
-            104 => Some("ARIS"),
-            105 => Some("SCPS"),
-            106 => Some("QNX"),
-            107 => Some("Active Networks"),
-            108 => Some("IP Payload Compression Protocol"),
-            109 => Some("Sitara Networks Protocol"),
-            110 => Some("Compaq Peer Protocol"),
-            111 => Some("IPX in IP"),
-            112 => Some("Virtual Router Redundancy Protocol"),
-            113 => Some("PGM Reliable Transport Protocol"),
-            114 => Some("any 0-hop protocol"),
-            115 => Some("Layer Two Tunneling Protocol"),
-            116 => Some("D-II Data Exchange (DDX)"),
-            117 => Some("Interactive Agent Transfer Protocol"),
-            118 => Some("Schedule Transfer Protocol"),
-            119 => Some("SpectraLink Radio Protocol"),
-            120 => Some("UTI"),
-            121 => Some("Simple Message Protocol"),
-            122 => Some("Simple Multicast Protocol"),
-            123 => Some("Performance Transparency Protocol"),
-            124 => None,
-            125 => None,
-            126 => Some("Combat Radio Transport Protocol"),
-            127 => Some("Combat Radio User Datagram"),
-            128 => None,
-            129 => None,
-            130 => Some("Secure Packet Shield"),
-            131 => Some("Private IP Encapsulation within IP"),
-            132 => Some("Stream Control Transmission Protocol"),
-            133 => Some("Fibre Channel"),
-            134 => None,
-            135 => None,
-            136 => None,
-            137 => None,
-            138 => Some("MANET Protocols"),
-            139 => Some("Host Identity Protocol"),
-            140 => Some("Shim6 Protocol"),
-            141 => Some("Wrapped Encapsulating Security Payload"),
-            142 => Some("Robust Header Compression"),
-            143 => Some("Ethernet"),
-            144 => Some("AGGFRAG encapsulation payload for ESP"),
-            145..=252 => None,
-            253 => Some("Use for experimentation and testing"),
-            254 => Some("Use for experimentation and testing"),
-            255 => None,
-        }
+        ip_number_protocols!(self.0, str_by_number)
+    }
+
+    /// Parses a protocol string previously returned by [`IpNumber::protocol_str`].
+    ///
+    /// Only exact protocol-string matches are accepted.
+    /// If multiple values share the same protocol string, the first assigned number is returned.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use etherparse::IpNumber;
+    ///
+    /// assert_eq!(IpNumber::from_protocol_str("User Datagram"), Some(IpNumber::UDP));
+    /// assert_eq!(IpNumber::from_protocol_str("user datagram"), None);
+    /// ```
+    pub fn from_protocol_str(protocol: &str) -> Option<Self> {
+        ip_number_protocols!(protocol, number_by_str)
     }
 }
 
@@ -1272,6 +1310,24 @@ mod tests {
     }
 
     #[test]
+    fn from_keyword_str() {
+        assert_eq!(IpNumber::from_keyword_str("UDP"), Some(IpNumber::UDP));
+        assert_eq!(IpNumber::from_keyword_str("Reserved"), Some(IpNumber(255)));
+        assert_eq!(
+            IpNumber::from_keyword_str("Use for experimentation and testing"),
+            None
+        );
+        assert_eq!(IpNumber::from_keyword_str("udp"), None);
+        assert_eq!(IpNumber::from_keyword_str(""), None);
+
+        for i in 0u8..=u8::MAX {
+            if let Some(keyword) = IpNumber(i).keyword_str() {
+                assert_eq!(IpNumber::from_keyword_str(keyword), Some(IpNumber(i)));
+            }
+        }
+    }
+
+    #[test]
     fn protocol_str() {
         // auto generated from CSV
         // https://www.iana.org/assignments/protocol-numbers/protocol-numbers.xhtml
@@ -1625,6 +1681,28 @@ mod tests {
             Some("Use for experimentation and testing")
         );
         assert_eq!(IpNumber(255).protocol_str(), None);
+    }
+
+    #[test]
+    fn from_protocol_str() {
+        assert_eq!(
+            IpNumber::from_protocol_str("User Datagram"),
+            Some(IpNumber::UDP)
+        );
+        assert_eq!(
+            IpNumber::from_protocol_str("Use for experimentation and testing"),
+            Some(IpNumber(253))
+        );
+        assert_eq!(IpNumber::from_protocol_str("user datagram"), None);
+        assert_eq!(IpNumber::from_protocol_str(""), None);
+
+        let mut first_seen = std::collections::HashMap::new();
+        for i in 0u8..=u8::MAX {
+            if let Some(protocol) = IpNumber(i).protocol_str() {
+                let expected = *first_seen.entry(protocol).or_insert(IpNumber(i));
+                assert_eq!(IpNumber::from_protocol_str(protocol), Some(expected));
+            }
+        }
     }
 
     #[test]
