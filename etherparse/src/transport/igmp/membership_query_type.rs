@@ -35,6 +35,6 @@ pub struct MembershipQueryType {
 }
 
 impl MembershipQueryType {
-    /// Number of bytes/octets an [`MembershipQueryV2`] takes up in serialized form.
+    /// Number of bytes/octets an [`MembershipQueryType`] takes up in serialized form.
     pub const LEN: usize = 8;
 }

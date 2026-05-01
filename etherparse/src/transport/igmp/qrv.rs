@@ -1,7 +1,7 @@
 use crate::err::ValueTooBigError;
 
 /// 3 bit unsigned integer containing the "Querier's Robustness Variable"
-/// (present in the [`crate::igmp::MembershipQueryV3`].
+/// (present in the [`crate::igmp::MembershipQueryWithSourcesHeader`].
 ///
 /// Established in
 /// [RFC-3376](https://datatracker.ietf.org/doc/html/rfc3376).

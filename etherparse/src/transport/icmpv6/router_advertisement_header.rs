@@ -11,7 +11,7 @@ pub struct RouterAdvertisementHeader {
     /// "Managed address configuration" flag.
     ///
     /// When set, it indicates that addresses are available via
-    /// Dynamic Host Configuration Protocol [DHCPv6].
+    /// Dynamic Host Configuration Protocol \[DHCPv6\].
     ///
     /// If the M flag is set, the O flag is redundant and
     /// can be ignored because DHCPv6 will return all

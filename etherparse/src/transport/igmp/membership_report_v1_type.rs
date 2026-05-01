@@ -18,6 +18,6 @@ pub struct MembershipReportV1Type {
 }
 
 impl MembershipReportV1Type {
-    /// Number of bytes/octets an [`MembershipReportV1`] takes up in serialized form.
+    /// Number of bytes/octets an [`MembershipReportV1Type`] takes up in serialized form.
     pub const LEN: usize = 8;
 }
