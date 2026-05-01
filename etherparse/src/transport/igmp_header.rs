@@ -101,7 +101,7 @@ impl IgmpHeader {
     /// Creates an [`IgmpHeader`] with a checksum calculated based on the
     /// given IGMP type and payload.
     ///
-    /// Per RFC 1112, RFC 2236 and RFC 3376 the checksum is calculated
+    /// Per RFC 1112, RFC 2236 and RFC 9776 the checksum is calculated
     /// over the entire IGMP message (header + payload) with the
     /// checksum field set to zero, even for fields that are unused
     /// (e.g. the "Max Resp Time" / reserved fields in IGMPv1 messages).
@@ -116,7 +116,7 @@ impl IgmpHeader {
     /// resulting header and the unused part of the slice.
     ///
     /// The IGMP message variant is determined by the type byte (and, for
-    /// `0x11` "Membership Query" messages, the slice length per RFC 3376
+    /// `0x11` "Membership Query" messages, the slice length per RFC 9776
     /// §7.1: an exactly 8 byte slice is parsed as an IGMPv1/v2 query while
     /// a slice of 12 or more bytes is parsed as an IGMPv3 query). For all
     /// other recognized type bytes the fixed 8 byte header is consumed.
@@ -131,7 +131,7 @@ impl IgmpHeader {
     /// * [`err::igmp::HeaderSliceError::Content`] with
     ///   [`err::igmp::HeaderError::UnknownType`] if the IGMP type byte
     ///   does not match any of the message types defined in
-    ///   RFC 1112, RFC 2236 or RFC 3376.
+    ///   RFC 1112, RFC 2236 or RFC 9776.
     pub fn from_slice(slice: &[u8]) -> Result<(IgmpHeader, &[u8]), err::igmp::HeaderSliceError> {
         use err::igmp::HeaderSliceError::*;
 
@@ -312,7 +312,7 @@ impl IgmpHeader {
     /// source addresses of an IGMPv3 membership query or the group
     /// records of an IGMPv3 membership report).
     ///
-    /// RFC 1112, RFC 2236 and RFC 3376 specifies that the checksum must be
+    /// RFC 1112, RFC 2236 and RFC 9776 specifies that the checksum must be
     /// computed over the whole message even over the bytes that are
     /// otherwise ignored by the receiver (e.g. additional unused bytes after
     /// the header).

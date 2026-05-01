@@ -4,7 +4,7 @@ use crate::err::ValueTooBigError;
 /// (present in the [`crate::igmp::MembershipQueryWithSourcesHeader`].
 ///
 /// Established in
-/// [RFC-3376](https://datatracker.ietf.org/doc/html/rfc3376).
+/// [RFC-9776](https://datatracker.ietf.org/doc/html/rfc9776).
 #[derive(Copy, Clone, Default, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Qrv(u8);
 

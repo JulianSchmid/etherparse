@@ -2,7 +2,7 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum HeaderError {
     /// Error when the IGMP type byte does not match any of the message
-    /// types defined in RFC 1112, RFC 2236 or RFC 3376
+    /// types defined in RFC 1112, RFC 2236 or RFC 9776
     /// (`0x11`, `0x12`, `0x16`, `0x17`, `0x22`).
     UnknownType { type_u8: u8 },
 }
