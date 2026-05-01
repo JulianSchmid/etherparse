@@ -52,6 +52,6 @@ pub struct MembershipQueryWithSourcesHeader {
 }
 
 impl MembershipQueryWithSourcesHeader {
-    /// Number of bytes/octets an [`MembershipReportV1`] takes up in serialized form.
+    /// Number of bytes/octets an [`MembershipQueryWithSourcesHeader`] takes up in serialized form.
     pub const LEN: usize = 12;
 }

@@ -12,10 +12,10 @@ impl Qrv {
     /// QRV with value 0.
     pub const ZERO: Qrv = Qrv(0);
 
-    /// Maximum value of an IGMPv3 Membership Query QRV.
+    /// Maximum value of the IGMPv3 Membership Query QRV.
     pub const MAX_U8: u8 = 0b0000_0111;
 
-    /// Maximum value of DSCP field (6 bits).
+    /// Maximum value of the IGMPv3 Membership Query QRV.
     pub const MAX: Qrv = Qrv(Self::MAX_U8);
 
     /// Static array with all possible values.

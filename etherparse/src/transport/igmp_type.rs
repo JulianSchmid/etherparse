@@ -15,7 +15,7 @@ pub enum IgmpType {
     /// Membership Report message type (introduced in IGMPv2, type = 0x16 & fixed size).
     MembershipReportV2(igmp::MembershipReportV2Type),
 
-    /// Membership Report message type (introduced in IGMPv2, type = 0x16 & dynamic size).
+    /// Membership Report message type (introduced in IGMPv3, type = 0x22 & dynamic size).
     MembershipReportV3(igmp::MembershipReportV3Header),
 
     /// Leave Group message type (introduced in IGMPv2, type = 0x17).

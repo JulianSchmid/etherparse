@@ -1,5 +1,5 @@
 /// Max response code (specifies the maximum time allowed before
-/// sending a responding report in ICMPv3).
+/// sending a responding report in IGMPv3).
 ///
 /// The actual time allowed, called the Max
 /// Resp Time, is represented in units of 1/10 second and is derived from

@@ -18,6 +18,6 @@ pub struct LeaveGroupType {
 }
 
 impl LeaveGroupType {
-    /// Number of bytes/octets an [`MembershipQueryV2`] takes up in serialized form.
+    /// Number of bytes/octets an [`LeaveGroupType`] takes up in serialized form.
     pub const LEN: usize = 8;
 }
