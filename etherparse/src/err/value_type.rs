@@ -43,6 +43,8 @@ pub enum ValueType {
     Icmpv6PayloadLength,
     /// Packet type of a Linux Cooked Capture v1 (SLL)
     LinuxSllType,
+    /// QRV (Querier's Robustness Variable) of a IGMPv3 membership query message.
+    IgmpQrv,
 }
 
 impl core::fmt::Display for ValueType {
@@ -65,6 +67,7 @@ impl core::fmt::Display for ValueType {
             TcpPayloadLengthIpv6 => write!(f, "TCP Payload Length (in IPv6 checksum calculation)"),
             Icmpv6PayloadLength => write!(f, "ICMPv6 Payload Length"),
             LinuxSllType => write!(f, "Linux Cooked Capture v1 (SLL)"),
+            IgmpQrv => write!(f, "IGMPv3 QRV (Querier's Robustness Variable)"),
         }
     }
 }
@@ -134,5 +137,9 @@ mod test {
             &format!("{}", TcpPayloadLengthIpv6)
         );
         assert_eq!("ICMPv6 Payload Length", &format!("{}", Icmpv6PayloadLength));
+        assert_eq!(
+            "IGMPv3 QRV (Querier's Robustness Variable)",
+            &format!("{}", IgmpQrv)
+        );
     }
 }

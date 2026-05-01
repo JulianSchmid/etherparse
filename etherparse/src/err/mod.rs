@@ -1,4 +1,5 @@
 pub mod arp;
+pub mod igmp;
 #[cfg(feature = "std")]
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub mod io;
