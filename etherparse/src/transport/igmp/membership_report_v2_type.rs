@@ -10,7 +10,7 @@ use crate::igmp::GroupAddress;
 /// |                         Group Address                         |
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MembershipReportV2Type {
     /// IP multicast group address of the group being reported
     pub group_address: GroupAddress,

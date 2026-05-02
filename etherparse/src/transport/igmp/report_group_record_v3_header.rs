@@ -27,7 +27,7 @@ use crate::{err::LenError, igmp::ReportGroupRecordType, *};
 /// |                                                               |
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ReportGroupRecordV3Header {
     /// Identifies what type of record
     pub record_type: ReportGroupRecordType,

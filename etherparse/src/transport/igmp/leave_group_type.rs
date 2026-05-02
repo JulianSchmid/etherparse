@@ -11,7 +11,7 @@ use crate::igmp::GroupAddress;
 /// |                         Group Address                         |
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LeaveGroupType {
     /// The IP multicast group address of the group being left.
     pub group_address: GroupAddress,

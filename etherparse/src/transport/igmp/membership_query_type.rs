@@ -16,7 +16,7 @@ use crate::igmp::GroupAddress;
 /// |                         Group Address                         |
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 /// ```
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MembershipQueryType {
     /// The maximum response time for the membership report
     /// (only for IGMPv2, set to 0 for IGMPv1).
