@@ -106,8 +106,8 @@ impl MembershipQueryWithSourcesHeader {
     /// Sets the QRV (Querier's Robustness Variable) in
     /// the `raw_byte_8` field.
     pub fn set_qrv(&mut self, value: Qrv) {
-        self.raw_byte_8 =
-            (self.raw_byte_8 & (!Self::RAW_BYTE_8_MASK_QRV)) | (value.value() & Self::RAW_BYTE_8_MASK_QRV);
+        self.raw_byte_8 = (self.raw_byte_8 & (!Self::RAW_BYTE_8_MASK_QRV))
+            | (value.value() & Self::RAW_BYTE_8_MASK_QRV);
     }
 }
 
@@ -254,4 +254,3 @@ mod test {
         }
     }
 }
-
