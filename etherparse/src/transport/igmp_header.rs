@@ -1,9 +1,6 @@
 use arrayvec::ArrayVec;
 
-use crate::{
-    err::{igmp::HeaderSliceError, LenError},
-    *,
-};
+use crate::{err::LenError, *};
 
 /// A header of an IGMP packet.
 ///
@@ -125,8 +122,8 @@ impl IgmpHeader {
     /// * IGMPv3 Query: length >= 12 octets.
     /// * Query Messages of any other length (e.g. 9, 10 or 11 octets)
     ///   MUST be silently ignored. This parser surfaces them as a
-    ///   [`err::igmp::HeaderSliceError::Len`] error so that callers can
-    ///   make that decision explicitly.
+    ///   [`err::LenError`] so that callers can make that decision
+    ///   explicitly.
     ///
     /// IGMPv1 and IGMPv2 queries are returned as
     /// [`IgmpType::MembershipQuery`] (the `max_response_time` field is
@@ -138,26 +135,24 @@ impl IgmpHeader {
     /// follows the fixed header (e.g. the source addresses of an IGMPv3
     /// query or the group records of an IGMPv3 membership report).
     ///
+    /// IGMP type bytes that do not match any of the message types
+    /// defined in RFC 1112, RFC 2236 or RFC 9776 are returned as
+    /// [`IgmpType::Unknown`] with the raw header bytes preserved.
+    ///
     /// # Errors
     ///
-    /// * [`err::igmp::HeaderSliceError::Len`] if the slice is too small
-    ///   to contain a complete header (less than 8 bytes for known
-    ///   types, or 9-11 bytes for a Membership Query).
-    /// * [`err::igmp::HeaderSliceError::Content`] with
-    ///   [`err::igmp::HeaderError::UnknownType`] if the IGMP type byte
-    ///   does not match any of the message types defined in
-    ///   RFC 1112, RFC 2236 or RFC 9776.
-    pub fn from_slice(slice: &[u8]) -> Result<(IgmpHeader, &[u8]), err::igmp::HeaderSliceError> {
-        use err::igmp::HeaderSliceError::*;
-
+    /// * [`err::LenError`] if the slice is too small to contain a
+    ///   complete header (less than 8 bytes for any type, or 9-11 bytes
+    ///   for a Membership Query).
+    pub fn from_slice(slice: &[u8]) -> Result<(IgmpHeader, &[u8]), LenError> {
         if slice.len() < Self::MIN_LEN {
-            return Err(Len(err::LenError {
+            return Err(LenError {
                 required_len: Self::MIN_LEN,
                 len: slice.len(),
                 len_source: LenSource::Slice,
                 layer: err::Layer::Igmp,
                 layer_start_offset: 0,
-            }));
+            });
         }
 
         // SAFETY: length checked above to be >= MIN_LEN (8).
@@ -229,13 +224,13 @@ impl IgmpHeader {
                         },
                     ))
                 } else {
-                    Err(HeaderSliceError::Len(LenError {
+                    Err(LenError {
                         required_len: igmp::MembershipQueryWithSourcesHeader::LEN,
                         len: slice.len(),
                         len_source: LenSource::Slice,
                         layer: err::Layer::Igmp,
                         layer_start_offset: 0,
-                    }))
+                    })
                 }
             }
             igmp::IGMPV1_TYPE_MEMBERSHIP_REPORT => Ok((
@@ -311,7 +306,24 @@ impl IgmpHeader {
                     },
                 ))
             }
-            _ => Err(Content(err::igmp::HeaderError::UnknownType { type_u8 })),
+            _ => Ok((
+                IgmpHeader {
+                    igmp_type: IgmpType::Unknown(igmp::UnknownHeader {
+                        igmp_type: type_u8,
+                        raw_byte_1: max_resp,
+                        raw_bytes_4_7: group_address,
+                    }),
+                    checksum,
+                },
+                // SAFETY: Safe as the slice was previously verified to have at least the length
+                //         Self::MIN_LEN.
+                unsafe {
+                    core::slice::from_raw_parts(
+                        slice.as_ptr().add(Self::MIN_LEN),
+                        slice.len() - Self::MIN_LEN,
+                    )
+                },
+            )),
         }
     }
 
@@ -352,6 +364,9 @@ impl IgmpHeader {
             LeaveGroup(t) => checksum::Sum16BitWords::new()
                 .add_2bytes([igmp::IGMPV2_TYPE_LEAVE_GROUP, 0])
                 .add_4bytes(t.group_address.octets),
+            Unknown(t) => checksum::Sum16BitWords::new()
+                .add_2bytes([t.igmp_type, t.raw_byte_1])
+                .add_4bytes(t.raw_bytes_4_7),
         };
         sum.add_slice(payload).ones_complement().to_be()
     }
@@ -367,6 +382,7 @@ impl IgmpHeader {
             MembershipReportV2(_) => igmp::MembershipReportV2Type::LEN,
             MembershipReportV3(_) => igmp::MembershipReportV3Header::LEN,
             LeaveGroup(_) => igmp::LeaveGroupType::LEN,
+            Unknown(_) => igmp::UnknownHeader::LEN,
         }
     }
 
@@ -498,6 +514,27 @@ impl IgmpHeader {
                 }
                 bytes
             }
+            Unknown(t) => {
+                let mut bytes = ArrayVec::from([
+                    t.igmp_type,
+                    t.raw_byte_1,
+                    c[0],
+                    c[1],
+                    t.raw_bytes_4_7[0],
+                    t.raw_bytes_4_7[1],
+                    t.raw_bytes_4_7[2],
+                    t.raw_bytes_4_7[3],
+                    0,
+                    0,
+                    0,
+                    0,
+                ]);
+                // SAFETY: Safe as u8 has no destruction behavior and as 8 is smaller then 12.
+                unsafe {
+                    bytes.set_len(8);
+                }
+                bytes
+            }
         }
     }
 }
@@ -543,6 +580,8 @@ mod test {
                     igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT,
                 ].contains(t),
             ),
+            unknown_raw_byte_1 in any::<u8>(),
+            unknown_raw_bytes_4_7 in any::<[u8;4]>(),
         ) {
             let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
                 | ((s_flag as u8) << 3)
@@ -715,7 +754,7 @@ mod test {
 
             // serialize & deserialize all types
             {
-                let cases: [IgmpType; 6] = [
+                let cases: [IgmpType; 7] = [
                     IgmpType::MembershipQuery(igmp::MembershipQueryType {
                         max_response_time,
                         group_address: group_address.into(),
@@ -740,6 +779,11 @@ mod test {
                     IgmpType::LeaveGroup(igmp::LeaveGroupType {
                         group_address: group_address.into(),
                     }),
+                    IgmpType::Unknown(igmp::UnknownHeader {
+                        igmp_type: unknown_type,
+                        raw_byte_1: unknown_raw_byte_1,
+                        raw_bytes_4_7: unknown_raw_bytes_4_7,
+                    }),
                 ];
 
                 for igmp_type in cases {
@@ -757,13 +801,13 @@ mod test {
                 for bad_len in 0..IgmpHeader::MIN_LEN {
                     prop_assert_eq!(
                         IgmpHeader::from_slice(&buf[..bad_len]),
-                        Err(err::igmp::HeaderSliceError::Len(err::LenError {
+                        Err(err::LenError {
                             required_len: IgmpHeader::MIN_LEN,
                             len: bad_len,
                             len_source: LenSource::Slice,
                             layer: err::Layer::Igmp,
                             layer_start_offset: 0,
-                        }))
+                        })
                     );
                 }
             }
@@ -775,27 +819,44 @@ mod test {
                     buf[0] = igmp::IGMP_TYPE_MEMBERSHIP_QUERY;
                     prop_assert_eq!(
                         IgmpHeader::from_slice(&buf),
-                        Err(err::igmp::HeaderSliceError::Len(err::LenError {
+                        Err(err::LenError {
                             required_len: IgmpHeader::MAX_LEN,
                             len: bad_len,
                             len_source: LenSource::Slice,
                             layer: err::Layer::Igmp,
                             layer_start_offset: 0,
-                        }))
+                        })
                     );
                 }
             }
 
-            // unknown type
+            // unknown type is parsed as IgmpType::Unknown (with the raw
+            // header bytes preserved) instead of returning an error.
             {
-                let mut buf = [0u8; IgmpHeader::MIN_LEN];
-                buf[0] = unknown_type;
+                let bytes = [
+                    unknown_type,
+                    unknown_raw_byte_1,
+                    cs_be[0], cs_be[1],
+                    unknown_raw_bytes_4_7[0], unknown_raw_bytes_4_7[1],
+                    unknown_raw_bytes_4_7[2], unknown_raw_bytes_4_7[3],
+                ];
+                let mut full = Vec::with_capacity(bytes.len() + suffix.len());
+                full.extend_from_slice(&bytes);
+                full.extend_from_slice(&suffix);
+
+                let (header, rest) = IgmpHeader::from_slice(&full).unwrap();
                 prop_assert_eq!(
-                    IgmpHeader::from_slice(&buf),
-                    Err(err::igmp::HeaderSliceError::Content(
-                        err::igmp::HeaderError::UnknownType { type_u8: unknown_type }
-                    ))
+                    header,
+                    IgmpHeader {
+                        igmp_type: IgmpType::Unknown(igmp::UnknownHeader {
+                            igmp_type: unknown_type,
+                            raw_byte_1: unknown_raw_byte_1,
+                            raw_bytes_4_7: unknown_raw_bytes_4_7,
+                        }),
+                        checksum,
+                    }
                 );
+                prop_assert_eq!(rest, suffix.as_slice());
             }
         }
     }
@@ -827,6 +888,18 @@ mod test {
             report_flags in any::<[u8;2]>(),
             num_of_records in any::<u16>(),
             payload in proptest::collection::vec(any::<u8>(), 0..1024usize),
+            unknown_type in any::<u8>().prop_filter(
+                "must not be a known IGMP type",
+                |t| ![
+                    igmp::IGMP_TYPE_MEMBERSHIP_QUERY,
+                    igmp::IGMPV1_TYPE_MEMBERSHIP_REPORT,
+                    igmp::IGMPV2_TYPE_MEMBERSHIP_REPORT,
+                    igmp::IGMPV2_TYPE_LEAVE_GROUP,
+                    igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT,
+                ].contains(t),
+            ),
+            unknown_raw_byte_1 in any::<u8>(),
+            unknown_raw_bytes_4_7 in any::<[u8;4]>(),
         ) {
             let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
                 | ((s_flag as u8) << 3)
@@ -946,6 +1019,25 @@ mod test {
                 assert_rfc_verifies(&IgmpHeader::with_checksum(igmp_type, &payload), &payload);
             }
 
+            // unknown
+            {
+                let igmp_type = IgmpType::Unknown(igmp::UnknownHeader {
+                    igmp_type: unknown_type,
+                    raw_byte_1: unknown_raw_byte_1,
+                    raw_bytes_4_7: unknown_raw_bytes_4_7,
+                });
+                let header = IgmpHeader { igmp_type: igmp_type.clone(), checksum: 0 };
+
+                let expected = checksum::Sum16BitWords::new()
+                    .add_2bytes([unknown_type, unknown_raw_byte_1])
+                    .add_4bytes(unknown_raw_bytes_4_7)
+                    .add_slice(&payload)
+                    .ones_complement()
+                    .to_be();
+                prop_assert_eq!(expected, header.calc_checksum(&payload));
+                assert_rfc_verifies(&IgmpHeader::with_checksum(igmp_type, &payload), &payload);
+            }
+
             // Hand-rolled IGMPv2 Membership Report example with an externally
             // computed checksum. Verifies that we produce the exact same
             // checksum as the RFC formula applied byte-for-byte.
@@ -999,6 +1091,18 @@ mod test {
             report_flags in any::<[u8;2]>(),
             num_of_records in any::<u16>(),
             payload in proptest::collection::vec(any::<u8>(), 0..1024usize),
+            unknown_type in any::<u8>().prop_filter(
+                "must not be a known IGMP type",
+                |t| ![
+                    igmp::IGMP_TYPE_MEMBERSHIP_QUERY,
+                    igmp::IGMPV1_TYPE_MEMBERSHIP_REPORT,
+                    igmp::IGMPV2_TYPE_MEMBERSHIP_REPORT,
+                    igmp::IGMPV2_TYPE_LEAVE_GROUP,
+                    igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT,
+                ].contains(t),
+            ),
+            unknown_raw_byte_1 in any::<u8>(),
+            unknown_raw_bytes_4_7 in any::<[u8;4]>(),
         ) {
             let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
                 | ((s_flag as u8) << 3)
@@ -1007,7 +1111,7 @@ mod test {
             // For every IGMP variant, with_checksum must
             //   1) preserve the supplied IgmpType verbatim, and
             //   2) populate the checksum field with calc_checksum's result.
-            let cases: [IgmpType; 6] = [
+            let cases: [IgmpType; 7] = [
                 IgmpType::MembershipQuery(igmp::MembershipQueryType {
                     max_response_time,
                     group_address: group_address.into(),
@@ -1031,6 +1135,11 @@ mod test {
                 }),
                 IgmpType::LeaveGroup(igmp::LeaveGroupType {
                     group_address: group_address.into(),
+                }),
+                IgmpType::Unknown(igmp::UnknownHeader {
+                    igmp_type: unknown_type,
+                    raw_byte_1: unknown_raw_byte_1,
+                    raw_bytes_4_7: unknown_raw_bytes_4_7,
                 }),
             ];
 

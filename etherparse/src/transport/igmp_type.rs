@@ -20,4 +20,7 @@ pub enum IgmpType {
 
     /// Leave Group message type (introduced in IGMPv2, type = 0x17).
     LeaveGroup(igmp::LeaveGroupType),
+
+    /// Unknown type of IGMP message.
+    Unknown(igmp::UnknownHeader),
 }

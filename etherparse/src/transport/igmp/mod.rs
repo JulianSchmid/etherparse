@@ -25,6 +25,9 @@ pub use membership_report_v3_header::*;
 mod qrv;
 pub use qrv::*;
 
+mod unknown_header;
+pub use unknown_header::*;
+
 /// "Membership Query" message type (same in IGMPv1, IGMPv2, IGMPv3).
 pub const IGMP_TYPE_MEMBERSHIP_QUERY: u8 = 0x11;
 
