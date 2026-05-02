@@ -4,6 +4,9 @@ pub mod icmpv4;
 /// Module containing ICMPv6 related types and constants
 pub mod icmpv6;
 
+/// Module containing IGMP related types and constants.
+pub mod igmp;
+
 mod icmp_echo_header;
 pub use icmp_echo_header::*;
 
@@ -24,6 +27,12 @@ pub use icmpv6_slice::*;
 
 mod icmpv6_type;
 pub use icmpv6_type::*;
+
+mod igmp_type;
+pub use igmp_type::*;
+
+mod igmp_header;
+pub use igmp_header::*;
 
 mod tcp_header;
 pub use tcp_header::*;
