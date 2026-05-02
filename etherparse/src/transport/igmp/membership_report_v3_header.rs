@@ -1,4 +1,7 @@
-/// IGMPv3 Membership Report Message header part (without checksum).
+/// IGMPv3 Membership Report Message header part.
+///
+/// Note that the checksum is not stored in this type and is stored in
+/// [`crate::IgmpHeader`].
 ///
 /// ```text
 /// 0                   1                   2                   3

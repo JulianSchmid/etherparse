@@ -25,6 +25,12 @@ pub use membership_report_v3_header::*;
 mod qrv;
 pub use qrv::*;
 
+mod report_group_record_type;
+pub use report_group_record_type::*;
+
+mod report_group_record_v3_header;
+pub use report_group_record_v3_header::*;
+
 mod unknown_header;
 pub use unknown_header::*;
 
