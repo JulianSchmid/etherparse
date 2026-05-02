@@ -1,7 +1,11 @@
 use crate::igmp::GroupAddress;
 
-/// A membership query message type (present in IGMPv1 and IGMPv2, but
-/// the values are only filled for IGMPv2 with non zero values).
+/// IGMPv1/IGMPv2 Membership Query message type.
+///
+/// IGMPv1 & IGMPv2 can be distinguished via the `max_response_time` field:
+///
+/// * For IGMPv1 the `max_response_time` field is set to zero
+/// * For IGMPv2 the `max_response_time` field is set to NOT zero
 ///
 /// ```text
 /// 0                   1                   2                   3

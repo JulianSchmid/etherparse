@@ -10,7 +10,7 @@ use crate::{
 /// The header contains the static part of an IGMP
 /// packet.
 ///
-/// The following packet types the header contains all data:
+/// For the following message types the header contains all the data:
 ///
 /// - IGMP v1 & v2 membership query ([`crate::IgmpType::MembershipQuery`])
 /// - IGMP v1 membership report ([`crate::IgmpType::MembershipReportV1`])
@@ -19,7 +19,7 @@ use crate::{
 ///
 ///
 /// and for the followng messages only the static part is contained
-/// within the header:
+/// within the header (the variable-length part is in the payload):
 ///
 /// - IGMPv3 membership query ([`crate::IgmpType::MembershipQuery`]):
 ///   ```text
@@ -30,7 +30,7 @@ use crate::{
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  | part of header and
 ///   |                         Group Address                         |  | this type
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  |
-///   | Resv  |S| QRV |     QQIC      |     Number of Sources (N)     |  ↓
+///   | Flags |S| QRV |     QQIC      |     Number of Sources (N)     |  ↓
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  -
 ///   |                       Source Address [1]                      |  |
 ///   +-                                                             -+  |
@@ -49,7 +49,7 @@ use crate::{
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  -
 ///   |  Type = 0x22  |    Reserved   |           Checksum            |  | part of header &
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  | this type
-///   |           Reserved            |  Number of Group Records (M)  |  ↓
+///   |             Flags             |  Number of Group Records (M)  |  ↓
 ///   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  -
 ///   |                                                               |  |
 ///   .                                                               .  |
@@ -115,19 +115,34 @@ impl IgmpHeader {
     /// Reads an IGMP header from a slice and returns a tuple containing the
     /// resulting header and the unused part of the slice.
     ///
-    /// The IGMP message variant is determined by the type byte (and, for
-    /// `0x11` "Membership Query" messages, the slice length per RFC 9776
-    /// §7.1: an exactly 8 byte slice is parsed as an IGMPv1/v2 query while
-    /// a slice of 12 or more bytes is parsed as an IGMPv3 query). For all
-    /// other recognized type bytes the fixed 8 byte header is consumed.
-    /// The returned slice is the part of the input that follows the fixed
-    /// header (e.g. the source addresses of an IGMPv3 query or the group
-    /// records of an IGMPv3 membership report).
+    /// The IGMP message variant is determined by the type byte. For
+    /// `0x11` "Membership Query" messages, [RFC 9776 §7.1](
+    /// https://datatracker.ietf.org/doc/html/rfc9776#section-7.1) defines
+    /// the version distinction by message length:
+    ///
+    /// * IGMPv1 Query: length = 8 octets AND `Max Resp Code` field is zero.
+    /// * IGMPv2 Query: length = 8 octets AND `Max Resp Code` field is non-zero.
+    /// * IGMPv3 Query: length >= 12 octets.
+    /// * Query Messages of any other length (e.g. 9, 10 or 11 octets)
+    ///   MUST be silently ignored. This parser surfaces them as a
+    ///   [`err::igmp::HeaderSliceError::Len`] error so that callers can
+    ///   make that decision explicitly.
+    ///
+    /// IGMPv1 and IGMPv2 queries are returned as
+    /// [`IgmpType::MembershipQuery`] (the `max_response_time` field is
+    /// `0` for IGMPv1). IGMPv3 queries are returned as
+    /// [`IgmpType::MembershipQueryWithSources`].
+    ///
+    /// For all other recognized type bytes the fixed 8 byte header is
+    /// consumed. The returned slice is the part of the input that
+    /// follows the fixed header (e.g. the source addresses of an IGMPv3
+    /// query or the group records of an IGMPv3 membership report).
     ///
     /// # Errors
     ///
     /// * [`err::igmp::HeaderSliceError::Len`] if the slice is too small
-    ///   to contain a complete header (less than 8 bytes).
+    ///   to contain a complete header (less than 8 bytes for known
+    ///   types, or 9-11 bytes for a Membership Query).
     /// * [`err::igmp::HeaderSliceError::Content`] with
     ///   [`err::igmp::HeaderError::UnknownType`] if the IGMP type byte
     ///   does not match any of the message types defined in
@@ -184,24 +199,18 @@ impl IgmpHeader {
                 } else if slice.len() >= igmp::MembershipQueryWithSourcesHeader::LEN {
                     // IGMPv3 query messages additionally contain source addresses
                     // SAFETY: length checked above to be >= igmp::MembershipQueryWithSourcesHeader::LEN (12).
-                    let resv_s_qrv = unsafe { *slice.get_unchecked(8) };
+                    let raw_byte_8 = unsafe { *slice.get_unchecked(8) };
                     let qqic = unsafe { *slice.get_unchecked(9) };
                     let num_of_sources = u16::from_be_bytes(unsafe {
                         [*slice.get_unchecked(10), *slice.get_unchecked(11)]
                     });
-                    let s_flag = (resv_s_qrv & 0b1000) != 0;
-
-                    // SAFETY: only the lower 3 bits are kept which is always
-                    // within `[0, Qrv::MAX_U8]`.
-                    let qrv = unsafe { igmp::Qrv::new_unchecked(resv_s_qrv & 0b111) };
                     Ok((
                         IgmpHeader {
                             igmp_type: IgmpType::MembershipQueryWithSources(
                                 igmp::MembershipQueryWithSourcesHeader {
                                     max_response_code: igmp::MaxResponseCode(max_resp),
                                     group_address: group_address.into(),
-                                    s_flag,
-                                    qrv,
+                                    raw_byte_8,
                                     qqic,
                                     num_of_sources,
                                 },
@@ -278,13 +287,16 @@ impl IgmpHeader {
                 },
             )),
             igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT => {
-                // bytes 4-5 are reserved, bytes 6-7 are num_of_records.
+                // SAFETY: Safe as the slice was previously verified to have at least the length
+                //         Self::MIN_LEN (8).
+                let flags = unsafe { [*slice.get_unchecked(4), *slice.get_unchecked(5)] };
                 let num_of_records = u16::from_be_bytes(unsafe {
                     [*slice.get_unchecked(6), *slice.get_unchecked(7)]
                 });
                 Ok((
                     IgmpHeader {
                         igmp_type: IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                            flags,
                             num_of_records,
                         }),
                         checksum,
@@ -325,7 +337,7 @@ impl IgmpHeader {
             MembershipQueryWithSources(t) => checksum::Sum16BitWords::new()
                 .add_2bytes([igmp::IGMP_TYPE_MEMBERSHIP_QUERY, t.max_response_code.0])
                 .add_4bytes(t.group_address.octets)
-                .add_2bytes([((t.s_flag as u8) << 3) | (t.qrv.value() & 0b111), t.qqic])
+                .add_2bytes([t.raw_byte_8, t.qqic])
                 .add_2bytes(t.num_of_sources.to_be_bytes()),
             MembershipReportV1(t) => checksum::Sum16BitWords::new()
                 .add_2bytes([igmp::IGMPV1_TYPE_MEMBERSHIP_REPORT, 0])
@@ -335,7 +347,7 @@ impl IgmpHeader {
                 .add_4bytes(t.group_address.octets),
             MembershipReportV3(t) => checksum::Sum16BitWords::new()
                 .add_2bytes([igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT, 0])
-                .add_2bytes([0, 0])
+                .add_2bytes(t.flags)
                 .add_2bytes(t.num_of_records.to_be_bytes()),
             LeaveGroup(t) => checksum::Sum16BitWords::new()
                 .add_2bytes([igmp::IGMPV2_TYPE_LEAVE_GROUP, 0])
@@ -395,7 +407,7 @@ impl IgmpHeader {
                     t.group_address.octets[1],
                     t.group_address.octets[2],
                     t.group_address.octets[3],
-                    ((t.s_flag as u8) << 3) | (t.qrv.value() & 0b111),
+                    t.raw_byte_8,
                     t.qqic,
                     num_sources_be[0],
                     num_sources_be[1],
@@ -450,8 +462,8 @@ impl IgmpHeader {
                     0, // reserved
                     c[0],
                     c[1],
-                    0,
-                    0,
+                    t.flags[0],
+                    t.flags[1],
                     num_recs_be[0],
                     num_recs_be[1],
                     0,
@@ -510,8 +522,10 @@ mod test {
             group_address in any::<[u8;4]>(),
             s_flag in any::<bool>(),
             qrv_raw in 0u8..=igmp::Qrv::MAX_U8,
+            query_flags in 0u8..=(igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS >> igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS),
             qqic in any::<u8>(),
             num_of_sources in any::<u16>(),
+            report_flags in any::<[u8;2]>(),
             num_of_records in any::<u16>(),
             checksum in any::<u16>(),
             // arbitrary trailing bytes that should be returned as `rest`
@@ -530,7 +544,9 @@ mod test {
                 ].contains(t),
             ),
         ) {
-            let qrv = igmp::Qrv::try_new(qrv_raw).unwrap();
+            let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
+                | ((s_flag as u8) << 3)
+                | (qrv_raw & 0b111);
             let cs_be = checksum.to_be_bytes();
 
             // membership query
@@ -558,16 +574,13 @@ mod test {
 
             // membership query with sources
             {
-                // top 4 reserved bits set arbitrarily so we can also
-                // verify that the parser ignores them.
-                let resv_bits = 0b1010_0000u8;
                 let mut head = [0u8; 12];
                 head[0] = igmp::IGMP_TYPE_MEMBERSHIP_QUERY;
                 head[1] = max_response_code;
                 head[2] = cs_be[0];
                 head[3] = cs_be[1];
                 head[4..8].copy_from_slice(&group_address);
-                head[8] = resv_bits | ((s_flag as u8) << 3) | (qrv_raw & 0b111);
+                head[8] = raw_byte_8;
                 head[9] = qqic;
                 head[10..12].copy_from_slice(&num_of_sources.to_be_bytes());
 
@@ -583,8 +596,7 @@ mod test {
                             igmp::MembershipQueryWithSourcesHeader {
                                 max_response_code: igmp::MaxResponseCode(max_response_code),
                                 group_address: group_address.into(),
-                                s_flag,
-                                qrv,
+                                raw_byte_8,
                                 qqic,
                                 num_of_sources,
                             },
@@ -680,7 +692,7 @@ mod test {
                     igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT,
                     0,
                     cs_be[0], cs_be[1],
-                    0, 0,
+                    report_flags[0], report_flags[1],
                     nr_be[0], nr_be[1],
                 ];
                 let mut full = Vec::with_capacity(head.len() + suffix.len());
@@ -692,6 +704,7 @@ mod test {
                     header,
                     IgmpHeader {
                         igmp_type: IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                            flags: report_flags,
                             num_of_records,
                         }),
                         checksum,
@@ -710,8 +723,7 @@ mod test {
                     IgmpType::MembershipQueryWithSources(igmp::MembershipQueryWithSourcesHeader {
                         max_response_code: igmp::MaxResponseCode(max_response_code),
                         group_address: group_address.into(),
-                        s_flag,
-                        qrv,
+                        raw_byte_8,
                         qqic,
                         num_of_sources,
                     }),
@@ -722,6 +734,7 @@ mod test {
                         group_address: group_address.into(),
                     }),
                     IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                        flags: report_flags,
                         num_of_records,
                     }),
                     IgmpType::LeaveGroup(igmp::LeaveGroupType {
@@ -808,12 +821,16 @@ mod test {
             group_address in any::<[u8;4]>(),
             s_flag in any::<bool>(),
             qrv_raw in 0u8..=igmp::Qrv::MAX_U8,
+            query_flags in 0u8..=(igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS >> igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS),
             qqic in any::<u8>(),
             num_of_sources in any::<u16>(),
+            report_flags in any::<[u8;2]>(),
             num_of_records in any::<u16>(),
             payload in proptest::collection::vec(any::<u8>(), 0..1024usize),
         ) {
-            let qrv = igmp::Qrv::try_new(qrv_raw).unwrap();
+            let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
+                | ((s_flag as u8) << 3)
+                | (qrv_raw & 0b111);
 
             // membership query
             {
@@ -838,8 +855,7 @@ mod test {
                 let igmp_type = IgmpType::MembershipQueryWithSources(igmp::MembershipQueryWithSourcesHeader {
                     max_response_code: igmp::MaxResponseCode(max_response_code),
                     group_address: group_address.into(),
-                    s_flag,
-                    qrv,
+                    raw_byte_8,
                     qqic,
                     num_of_sources,
                 });
@@ -849,7 +865,7 @@ mod test {
                     .add_2bytes([igmp::IGMP_TYPE_MEMBERSHIP_QUERY, max_response_code])
                     .add_4bytes(group_address)
                     .add_2bytes([
-                        ((s_flag as u8) << 3) | (qrv_raw & 0b111),
+                        raw_byte_8,
                         qqic,
                     ])
                     .add_2bytes(num_of_sources.to_be_bytes())
@@ -897,13 +913,14 @@ mod test {
             // membership report v3
             {
                 let igmp_type = IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                    flags: report_flags,
                     num_of_records,
                 });
                 let header = IgmpHeader { igmp_type: igmp_type.clone(), checksum: 0 };
 
                 let expected = checksum::Sum16BitWords::new()
                     .add_2bytes([igmp::IGMPV3_TYPE_MEMBERSHIP_REPORT, 0])
-                    .add_2bytes([0, 0])
+                    .add_2bytes(report_flags)
                     .add_2bytes(num_of_records.to_be_bytes())
                     .add_slice(&payload)
                     .ones_complement()
@@ -955,6 +972,7 @@ mod test {
             // property when paired with their respective payloads).
             {
                 let igmp_type = IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                    flags: [0, 0],
                     num_of_records: 1,
                 });
                 let header_no_payload = IgmpHeader::with_checksum(igmp_type.clone(), &[]);
@@ -975,12 +993,16 @@ mod test {
             group_address in any::<[u8;4]>(),
             s_flag in any::<bool>(),
             qrv_raw in 0u8..=igmp::Qrv::MAX_U8,
+            query_flags in 0u8..=(igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS >> igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS),
             qqic in any::<u8>(),
             num_of_sources in any::<u16>(),
+            report_flags in any::<[u8;2]>(),
             num_of_records in any::<u16>(),
             payload in proptest::collection::vec(any::<u8>(), 0..1024usize),
         ) {
-            let qrv = igmp::Qrv::try_new(qrv_raw).unwrap();
+            let raw_byte_8 = ((query_flags & igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_MASK_FLAGS) << igmp::MembershipQueryWithSourcesHeader::RAW_BYTE_8_OFFSET_FLAGS)
+                | ((s_flag as u8) << 3)
+                | (qrv_raw & 0b111);
 
             // For every IGMP variant, with_checksum must
             //   1) preserve the supplied IgmpType verbatim, and
@@ -993,8 +1015,7 @@ mod test {
                 IgmpType::MembershipQueryWithSources(igmp::MembershipQueryWithSourcesHeader {
                     max_response_code: igmp::MaxResponseCode(max_response_code),
                     group_address: group_address.into(),
-                    s_flag,
-                    qrv,
+                    raw_byte_8,
                     qqic,
                     num_of_sources,
                 }),
@@ -1005,6 +1026,7 @@ mod test {
                     group_address: group_address.into(),
                 }),
                 IgmpType::MembershipReportV3(igmp::MembershipReportV3Header {
+                    flags: report_flags,
                     num_of_records,
                 }),
                 IgmpType::LeaveGroup(igmp::LeaveGroupType {

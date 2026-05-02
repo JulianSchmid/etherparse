@@ -6,7 +6,7 @@
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  -
 /// |  Type = 0x22  |    Reserved   |           Checksum            |  | part of header &
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  | this type
-/// |           Reserved            |  Number of Group Records (M)  |  ↓
+/// |             Flags             |  Number of Group Records (M)  |  ↓
 /// +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+  -
 /// |                                                               |  |
 /// .                                                               .  |
@@ -33,11 +33,20 @@
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MembershipReportV3Header {
-    /// The number of records in the membership report.
+    /// Additional `Flags`.
+    ///
+    /// Documented in the IANA page
+    /// [https://www.iana.org/assignments/igmp-type-numbers/igmp-type-numbers.xhtml#igmp-mld-report-message-flags].
+    pub flags: [u8; 2],
+
+    /// The number of group records in the membership report
     pub num_of_records: u16,
 }
 
 impl MembershipReportV3Header {
     /// Number of bytes/octets an [`MembershipReportV3Header`] takes up in serialized form.
     pub const LEN: usize = 8;
+
+    /// Mask of "extension" flag in `MembershipReportV3Header::flags[0]`.
+    pub const FLAGS_0_EXTENSION_MASK: u8 = 0b0000_0001;
 }
