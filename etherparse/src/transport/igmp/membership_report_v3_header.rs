@@ -36,7 +36,7 @@ pub struct MembershipReportV3Header {
     /// Additional `Flags`.
     ///
     /// Documented in the IANA page
-    /// [https://www.iana.org/assignments/igmp-type-numbers/igmp-type-numbers.xhtml#igmp-mld-report-message-flags].
+    /// <https://www.iana.org/assignments/igmp-type-numbers/igmp-type-numbers.xhtml#igmp-mld-report-message-flags>.
     pub flags: [u8; 2],
 
     /// The number of group records in the membership report
