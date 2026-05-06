@@ -31,6 +31,9 @@ pub use report_group_record_type::*;
 mod report_group_record_v3_header;
 pub use report_group_record_v3_header::*;
 
+mod report_group_record_v3_slice;
+pub use report_group_record_v3_slice::*;
+
 mod unknown_header;
 pub use unknown_header::*;
 
