@@ -34,6 +34,9 @@ pub use igmp_type::*;
 mod igmp_header;
 pub use igmp_header::*;
 
+mod igmp_slice;
+pub use igmp_slice::*;
+
 mod tcp_header;
 pub use tcp_header::*;
 
