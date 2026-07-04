@@ -15,6 +15,7 @@ jobs:
         build:
         - linux-stable
         - linux-32bit-stable
+        - linux-s390x-stable
         - linux-beta
         - linux-nightly
         - macos-stable
@@ -28,6 +29,10 @@ jobs:
           os: ubuntu-latest
           rust: stable
           target: i686-unknown-linux-gnu
+        - build: linux-s390x-stable
+          os: ubuntu-latest
+          rust: stable
+          target: s390x-unknown-linux-gnu
         - build: linux-beta
           os: ubuntu-latest
           rust: beta
