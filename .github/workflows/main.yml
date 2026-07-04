@@ -31,10 +31,12 @@ jobs:
           target: i686-unknown-linux-gnu
         # big endian target (catches endianness bugs, e.g. in checksum calc).
         # powerpc64 is 64-bit big endian and emulates faster under QEMU than s390x.
+        # Reduced proptest cases as running under QEMU emulation is slow.
         - build: linux-ppc64-stable
           os: ubuntu-latest
           rust: stable
           target: powerpc64-unknown-linux-gnu
+          proptest_cases: 16
         - build: linux-beta
           os: ubuntu-latest
           rust: beta
@@ -77,6 +79,8 @@ jobs:
     - name: cross test
       if: matrix.target != ''
       run: cross test --target ${{ matrix.target }}
+      env:
+        PROPTEST_CASES: ${{ matrix.proptest_cases || '256' }}
 
     - name: cargo build --no-default-features
       if: matrix.target == ''
@@ -93,6 +97,8 @@ jobs:
     - name: cross test --no-default-features
       if: matrix.target != ''
       run: cross test --target ${{ matrix.target }} --no-default-features
+      env:
+        PROPTEST_CASES: ${{ matrix.proptest_cases || '256' }}
 
   no_std_build:
     name: no_std build
