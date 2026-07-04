@@ -1,0 +1,4 @@
+# Forward env vars into the cross build/test container. `PROPTEST_CASES` lets
+# CI reduce the number of proptest iterations for slow emulated targets.
+[build.env]
+passthrough = ["PROPTEST_CASES"]

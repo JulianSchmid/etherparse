@@ -431,7 +431,7 @@ mod test {
                     ipv4.destination,
                     &base,
                     &payload
-                ).to_le());
+                ));
 
                 assert_eq!(
                     UdpHeader::with_ipv4_checksum(
@@ -533,7 +533,7 @@ mod test {
                     ipv4.destination,
                     &base,
                     &payload
-                ).to_le());
+                ));
 
                 // we now need to add a value that results in the value
                 // 0xffff (which will become 0 via the ones complement rule).
@@ -665,7 +665,7 @@ mod test {
                     ipv6.destination,
                     &base,
                     &payload
-                ).to_le());
+                ));
 
                 assert_eq!(
                     UdpHeader::with_ipv6_checksum(
@@ -769,7 +769,7 @@ mod test {
                     ipv6.destination,
                     &base,
                     &payload
-                ).to_le());
+                ));
 
                 assert_eq!(
                     UdpHeader::with_ipv6_checksum(
@@ -872,7 +872,7 @@ mod test {
                     ipv6.destination,
                     &base,
                     &payload
-                ).to_le());
+                ));
 
                 // we now need to add a value that results in the value
                 // 0xffff (which will become 0 via the ones complement rule).
