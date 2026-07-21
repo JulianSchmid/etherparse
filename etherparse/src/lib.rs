@@ -325,6 +325,11 @@ pub mod err;
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 pub mod defrag;
 
+/// Module containing helpers to re-assemble TCP payload streams (contains allocations).
+#[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+pub mod tcp_reassembly;
+
 mod link;
 pub use link::*;
 

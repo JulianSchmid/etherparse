@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+* Added TCP stream reassembly support (in the `std`-only `tcp_reassembly` module, contains allocations):
+  * `TcpStreamReassemblyBuf`, a re-usable buffer that reconstructs the payload byte stream of a single direction of a TCP connection. It is robust against retransmits, re-ordered & duplicated/overlapping segments, big offset jumps and 32 bit sequence number wrap-around (all bookkeeping is done in a monotonic 64 bit "absolute stream offset" space). Data is exposed in-place via `contiguous` and freed via `consume` ("collect then clean").
+  * `TcpStreamReassemblyPool<Timestamp, CustomChannelId>`, a pool that reassembles many streams in parallel while re-using the underlying buffers to minimize allocations (mirrors `defrag::IpDefragPool`). It interprets the TCP control flags automatically (`SYN` (re)bases a stream / handles reconnects, `FIN` marks the stream end, `RST` drops & recycles) and bounds per-stream memory via a configurable `max_capacity`, returning `TcpReassembleError` when a segment lands beyond the window.
+  * Supporting types `TcpStreamId`, `TcpStreamIpId`, `TcpSegmentRange`, `TcpReassembleError` and the `DEFAULT_MAX_TCP_STREAM_CAPACITY` constant, plus a `tcp_reassembly` example.
+
 * Added zero-copy IGMP support (IGMPv1, IGMPv2 & IGMPv3):
   * `IgmpSlice`, an enum with one zero-copy variant per message type (`MembershipQuery`, `MembershipQueryWithSources`, `MembershipReportV1`, `MembershipReportV2`, `MembershipReportV3`, `LeaveGroup` & `Unknown`), plus common accessors (`header`, `payload`, `slice`, `checksum`, `is_checksum_valid`).
   * Per-variant slice types (`MembershipQuerySlice`, `MembershipQueryWithSourcesSlice`, `MembershipReportV1Slice`, `MembershipReportV2Slice`, `MembershipReportV3Slice`, `LeaveGroupSlice` & `IgmpUnknownSlice`) with typed field accessors. Variable-length data is exposed where it exists: `MembershipReportV3Slice::group_records` and `MembershipQueryWithSourcesSlice::source_addresses` / `source_addrs_bytes` (no longer `Option`-returning).
