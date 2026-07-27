@@ -29,6 +29,18 @@ pub enum TcpReassembleError {
         /// Number of bytes that were attempted to be allocated.
         len: usize,
     },
+
+    /// Error if storing a segment would require tracking more separate
+    /// (non-contiguous) data sections than allowed.
+    ///
+    /// This guards against unbounded growth of the section bookkeeping
+    /// caused by maliciously crafted packets (e.g. many one byte segments
+    /// that are separated by gaps).
+    TooManySections {
+        /// Maximum number of separate (non-contiguous) data sections that
+        /// can be tracked at the same time.
+        max_sections: usize,
+    },
 }
 
 impl core::fmt::Display for TcpReassembleError {
@@ -37,6 +49,7 @@ impl core::fmt::Display for TcpReassembleError {
         match self {
             SegmentBeyondMaxWindow { end_offset, max_capacity } => write!(f, "Received a TCP segment that ends {end_offset} bytes ahead of the read cursor which exceeds the maximum buffer capacity of {max_capacity} bytes."),
             AllocationFailure { len } => write!(f, "Failed to allocate {len} bytes of memory to reconstruct the TCP stream."),
+            TooManySections { max_sections } => write!(f, "Received a TCP segment that would require tracking more than the maximum of {max_sections} separate data sections."),
         }
     }
 }
@@ -92,6 +105,10 @@ mod tests {
                 AllocationFailure { len: 128 },
                 "Failed to allocate 128 bytes of memory to reconstruct the TCP stream.",
             ),
+            (
+                TooManySections { max_sections: 1024 },
+                "Received a TCP segment that would require tracking more than the maximum of 1024 separate data sections.",
+            ),
         ];
         for test in tests {
             assert_eq!(format!("{}", test.0), test.1);
@@ -108,5 +125,6 @@ mod tests {
         }
         .source()
         .is_none());
+        assert!(TooManySections { max_sections: 0 }.source().is_none());
     }
 }

@@ -42,12 +42,17 @@ fn main() {
         };
 
         match pool.process_sliced_packet(&sliced_packet, (), ()) {
-            Ok(Some(stream)) => {
+            Ok(TcpReassemblyEvent::Stream(stream)) => {
                 // collect the in-order data that is available so far
                 let available = stream.contiguous();
                 if false == available.is_empty() {
                     println!(
-                        "in-order data available: {:?}",
+                        "in-order data available{}: {:?}",
+                        if stream.syn_observed() {
+                            ""
+                        } else {
+                            " (stream start not observed, prefix missing)"
+                        },
                         core::str::from_utf8(available).unwrap_or("<non utf8>")
                     );
 
@@ -63,12 +68,32 @@ fn main() {
                     fin_announced = true;
                 }
             }
-            Ok(None) => {
-                // not a TCP packet (or a RST reset the stream)
+            Ok(TcpReassemblyEvent::Closed(stream)) => {
+                // a RST ended the stream (or a new connection replaced it):
+                // the not yet consumed data can still be drained here
+                println!(
+                    "stream closed, leftover data: {:?}",
+                    core::str::from_utf8(stream.contiguous()).unwrap_or("<non utf8>")
+                );
+            }
+            Ok(TcpReassemblyEvent::Ignored) => {
+                // not a TCP packet (or an empty segment of an unknown stream)
             }
             Err(err) => {
                 println!("Error reassembling TCP stream: {err}");
             }
+        }
+    }
+
+    // at the end of the capture: drain whatever is left in the still
+    // tracked streams
+    for (_id, stream, _timestamp) in pool.iter_mut() {
+        let leftover = stream.contiguous();
+        if false == leftover.is_empty() {
+            println!(
+                "leftover data at end of capture: {:?}",
+                core::str::from_utf8(leftover).unwrap_or("<non utf8>")
+            );
         }
     }
 }

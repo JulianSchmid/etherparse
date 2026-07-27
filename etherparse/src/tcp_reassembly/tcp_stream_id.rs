@@ -11,10 +11,7 @@ use arrayvec::ArrayVec;
 /// differentiate streams if the addresses & ports alone are not enough
 /// (e.g. when capturing from multiple interfaces).
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
-pub struct TcpStreamId<CustomChannelId = ()>
-where
-    CustomChannelId: core::hash::Hash + Eq + PartialEq + Clone + Sized,
-{
+pub struct TcpStreamId<CustomChannelId = ()> {
     /// VLAN id's of the original packets.
     pub vlan_ids: ArrayVec<VlanId, 3>,
 

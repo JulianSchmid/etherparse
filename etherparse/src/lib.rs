@@ -326,8 +326,12 @@ pub mod err;
 pub mod defrag;
 
 /// Module containing helpers to re-assemble TCP payload streams (contains allocations).
-#[cfg(feature = "std")]
-#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+///
+/// [`tcp_reassembly::TcpStreamReassemblyBuf`] only requires the `alloc`
+/// feature, while [`tcp_reassembly::TcpStreamReassemblyPool`] additionally
+/// requires the `std` feature.
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub mod tcp_reassembly;
 
 mod link;
