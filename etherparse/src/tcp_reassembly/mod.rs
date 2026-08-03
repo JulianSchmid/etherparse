@@ -1,6 +1,9 @@
 mod tcp_reassemble_error;
 pub use tcp_reassemble_error::*;
 
+mod tcp_segment_outcome;
+pub use tcp_segment_outcome::*;
+
 mod tcp_segment_range;
 pub use tcp_segment_range::*;
 

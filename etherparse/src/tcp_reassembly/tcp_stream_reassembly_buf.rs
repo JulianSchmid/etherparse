@@ -23,7 +23,9 @@ const COMPACT_THRESHOLD: usize = 4096;
 ///
 /// # Typical usage
 ///
-/// * [`TcpStreamReassemblyBuf::add`] feeds the payload of a received segment.
+/// * [`TcpStreamReassemblyBuf::add_segment`] feeds a received segment
+///   including the interpretation of its `SYN` flag (use
+///   [`TcpStreamReassemblyBuf::add`] to feed just the payload).
 /// * [`TcpStreamReassemblyBuf::contiguous`] returns the in-order bytes that are
 ///   available starting at the current read cursor.
 /// * [`TcpStreamReassemblyBuf::consume`] advances the read cursor and frees the
@@ -35,8 +37,9 @@ const COMPACT_THRESHOLD: usize = 4096;
 /// capture starts in the middle of a connection) the buffer anchors itself on
 /// the first added segment. Such streams are still reconstructed, but their
 /// prefix is missing. [`TcpStreamReassemblyBuf::syn_observed`] allows
-/// differentiating these streams from streams that were re-based to a known
-/// stream start via [`TcpStreamReassemblyBuf::reset`].
+/// differentiating these streams from streams with a known start (established
+/// via [`TcpStreamReassemblyBuf::add_segment`] or
+/// [`TcpStreamReassemblyBuf::reset`]).
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct TcpStreamReassemblyBuf {
     /// Sequence number that is mapped to `base_offset`.
@@ -150,13 +153,18 @@ impl TcpStreamReassemblyBuf {
         self.fin_offset
     }
 
-    /// True if the stream start is known (the buffer was re-based to a known
-    /// start via [`TcpStreamReassemblyBuf::reset`], e.g. because a SYN was
-    /// observed).
+    /// True if the stream start is known (established by a SYN via
+    /// [`TcpStreamReassemblyBuf::add_segment`] or by
+    /// [`TcpStreamReassemblyBuf::reset`]).
     ///
     /// False if the buffer anchored itself on the first added segment (e.g.
     /// the capture started in the middle of a connection). The stream is
     /// still reconstructed in that case, but an unknown prefix is missing.
+    ///
+    /// Note that data *in front* of a known stream start is not part of the
+    /// stream and gets discarded, while a buffer that anchored itself is
+    /// re-anchored backwards if earlier data arrives (see
+    /// [`TcpStreamReassemblyBuf::add`]).
     #[inline]
     pub fn syn_observed(&self) -> bool {
         self.syn_observed
@@ -191,10 +199,130 @@ impl TcpStreamReassemblyBuf {
         self.syn_observed = true;
     }
 
-    /// Marks the stream start as known without re-basing (e.g. when a SYN
-    /// matching the already established base is observed late).
-    pub fn mark_syn_observed(&mut self) {
+    /// Re-anchors the buffer to a now known stream start (from a late SYN)
+    /// while keeping the already buffered data.
+    ///
+    /// `start_abs` is the absolute stream offset `base` maps to and must be
+    /// negative (the stream started before the current anchor).
+    fn anchor_stream_start(
+        &mut self,
+        base: u32,
+        start_abs: i128,
+    ) -> Result<(), TcpReassembleError> {
+        use TcpReassembleError::*;
+        debug_assert!(start_abs < 0);
+
+        // re-anchoring shifts the buffered data, which is only possible while
+        // nothing was consumed yet. If data was already handed out the missing
+        // prefix cannot be re-introduced, so the SYN is ignored and the stream
+        // keeps being flagged as "start not observed".
+        if self.base_offset > 0 {
+            return Ok(());
+        }
+
+        let buffered_len = self.data.len();
+        let Ok(shift) = usize::try_from(-start_abs) else {
+            return Err(SegmentBeyondMaxWindow {
+                required_capacity: u64::try_from(-start_abs)
+                    .unwrap_or(u64::MAX)
+                    .saturating_add(buffered_len as u64),
+                max_capacity: self.max_capacity,
+            });
+        };
+        let required = match shift.checked_add(buffered_len) {
+            Some(required) if required <= self.max_capacity => required,
+            _ => {
+                return Err(SegmentBeyondMaxWindow {
+                    required_capacity: (shift as u64).saturating_add(buffered_len as u64),
+                    max_capacity: self.max_capacity,
+                });
+            }
+        };
+        if self.data.capacity() < required
+            && self.data.try_reserve(required - buffered_len).is_err()
+        {
+            return Err(AllocationFailure { len: required });
+        }
+
+        // -- all checks done, commit --
+        self.shift_forward(shift);
+        self.base_seq = Some(base);
         self.syn_observed = true;
+        Ok(())
+    }
+
+    /// Add a received TCP segment, interpreting the `SYN` flag.
+    ///
+    /// This is the counterpart of [`Self::add`] for callers that want the
+    /// connection setup handled for them:
+    ///
+    /// * A `SYN` establishes the start of the stream (the `SYN` flag consumes
+    ///   one sequence number, so the payload starts at `seq + 1`). Duplicated
+    ///   and re-transmitted `SYN`s as well as a `SYN` arriving after the first
+    ///   data segments are recognized and keep the already buffered data.
+    /// * A `SYN` carrying a different initial sequence number belongs to a new
+    ///   connection re-using the same addresses & ports. It is reported via
+    ///   [`TcpSegmentOutcome::NewConnection`] and leaves the buffer untouched.
+    /// * `SYN`s carrying payload (TCP Fast Open) and/or a `FIN` are handled.
+    ///
+    /// See [`Self::add`] for the error conditions (the buffer is left
+    /// unmodified in case of an error).
+    pub fn add_segment(
+        &mut self,
+        seq: u32,
+        payload: &[u8],
+        syn: bool,
+        fin: bool,
+    ) -> Result<TcpSegmentOutcome, TcpReassembleError> {
+        if false == syn {
+            self.add(seq, payload, fin)?;
+            return Ok(TcpSegmentOutcome::Continued);
+        }
+
+        // the SYN flag consumes one sequence number, the payload starts after it
+        let base = seq.wrapping_add(1);
+
+        match self.base_seq {
+            None => {
+                self.base_seq = Some(base);
+                self.syn_observed = true;
+            }
+            Some(base_seq) => {
+                // Position of the stream start indicated by the SYN within the
+                // already reconstructed stream (offset 0 is where the buffer is
+                // anchored).
+                let start_abs = self.seq_to_abs_offset(base_seq, base);
+
+                // If the stream start is already known only an exact match is a
+                // duplicated/re-transmitted SYN. Initial sequence numbers are
+                // random, so *any* other value (in either direction) belongs to
+                // a new connection.
+                //
+                // If the start is not known yet the buffer anchored itself on
+                // the first seen segment, so a SYN at or before that anchor is
+                // the (re-ordered) start of the very same stream.
+                let same_stream = if self.syn_observed {
+                    start_abs == 0
+                } else {
+                    start_abs <= 0
+                };
+                if false == same_stream {
+                    return Ok(TcpSegmentOutcome::NewConnection);
+                }
+
+                if start_abs < 0 {
+                    self.anchor_stream_start(base, start_abs)?;
+                } else {
+                    self.syn_observed = true;
+                }
+            }
+        }
+
+        // TCP Fast Open: a SYN may already carry payload (and a FIN)
+        if fin || false == payload.is_empty() {
+            self.add(base, payload, fin)?;
+        }
+        Ok(TcpSegmentOutcome::Continued)
     }
 
     /// Maps a sequence number into the absolute stream offset space (using
@@ -232,11 +360,21 @@ impl TcpStreamReassemblyBuf {
     ///   the stream one byte past the payload).
     ///
     /// Retransmits, re-ordered segments and duplicated / overlapping payloads
-    /// are handled silently. Errors are only returned for segments landing
-    /// more than `max_capacity` bytes ahead of the read cursor, segments that
-    /// would require tracking more than `max_sections` separate data sections
-    /// and allocation failures. In case of an error the buffer is left
-    /// unmodified.
+    /// are handled silently. Payload bytes that are not part of the stream are
+    /// dropped:
+    ///
+    /// * bytes before the read cursor (already consumed data),
+    /// * bytes behind a received FIN (the end of the stream),
+    /// * bytes before a *known* stream start (see [`Self::syn_observed`]).
+    ///
+    /// If the stream start is not known yet and the segment starts before the
+    /// buffer anchor, the buffer is re-anchored backwards so the earlier data
+    /// can be kept (only possible while nothing was consumed yet).
+    ///
+    /// Errors are only returned for segments landing more than `max_capacity`
+    /// bytes ahead of the read cursor, segments that would require tracking
+    /// more than `max_sections` separate data sections and allocation
+    /// failures. In case of an error the buffer is left unmodified.
     pub fn add(&mut self, seq: u32, payload: &[u8], fin: bool) -> Result<(), TcpReassembleError> {
         use TcpReassembleError::*;
 
@@ -254,32 +392,42 @@ impl TcpStreamReassemblyBuf {
         // anchored too late (e.g. segments arriving highest-sequence-first at
         // the start of the capture). Plan a backwards re-anchoring of the
         // buffer (shift of the buffered data) so the earlier data can be kept.
+        //
+        // This is only done if the start of the stream is *not* known. Once a
+        // SYN established it (see `syn_observed`) data in front of it is not
+        // part of this stream (e.g. a retransmit of a previous connection
+        // re-using the same ports) and gets trimmed like already consumed
+        // data instead.
+        //
         // Note that `base_offset == 0` implies `head == 0` (nothing consumed).
-        let rebase_shift: usize =
-            if false == payload.is_empty() && self.base_offset == 0 && start_abs < 0 {
-                let Ok(shift) = usize::try_from(-start_abs) else {
+        let rebase_shift: usize = if false == payload.is_empty()
+            && false == self.syn_observed
+            && self.base_offset == 0
+            && start_abs < 0
+        {
+            let Ok(shift) = usize::try_from(-start_abs) else {
+                return Err(SegmentBeyondMaxWindow {
+                    required_capacity: u64::try_from(-start_abs)
+                        .unwrap_or(u64::MAX)
+                        .saturating_add(buffered_len as u64),
+                    max_capacity: self.max_capacity,
+                });
+            };
+            // the whole shifted buffer sits ahead of the (still at 0)
+            // read cursor
+            let rebased_len = shift.checked_add(buffered_len);
+            match rebased_len {
+                Some(rebased_len) if rebased_len <= self.max_capacity => shift,
+                _ => {
                     return Err(SegmentBeyondMaxWindow {
-                        end_offset: u64::try_from(-start_abs)
-                            .unwrap_or(u64::MAX)
-                            .saturating_add(buffered_len as u64),
+                        required_capacity: (shift as u64).saturating_add(buffered_len as u64),
                         max_capacity: self.max_capacity,
                     });
-                };
-                // the whole shifted buffer sits ahead of the (still at 0)
-                // read cursor
-                let rebased_len = shift.checked_add(buffered_len);
-                match rebased_len {
-                    Some(rebased_len) if rebased_len <= self.max_capacity => shift,
-                    _ => {
-                        return Err(SegmentBeyondMaxWindow {
-                            end_offset: (shift as u64).saturating_add(buffered_len as u64),
-                            max_capacity: self.max_capacity,
-                        });
-                    }
                 }
-            } else {
-                0
-            };
+            }
+        } else {
+            0
+        };
 
         // absolute payload position after the potential re-anchoring (the
         // re-anchoring moves the payload start to offset 0)
@@ -299,8 +447,18 @@ impl TcpStreamReassemblyBuf {
             None
         };
 
+        // end of the stream after this segment (in the potentially re-anchored
+        // coordinates). `planned_fin` is only set while `self.fin_offset` is
+        // `None`, so at most one of the two is `Some`.
+        let effective_fin: Option<u64> = match (planned_fin, self.fin_offset) {
+            (Some(fin_offset), _) => Some(fin_offset),
+            (None, Some(fin_offset)) => Some(fin_offset + rebase_shift as u64),
+            (None, None) => None,
+        };
+
         // trim the part that lies before the read cursor (already consumed /
-        // retransmitted data) & enforce the maximum buffer window
+        // retransmitted data) & behind the end of the stream (data behind the
+        // FIN is not part of the stream) and enforce the maximum buffer window
         let write: Option<(&[u8], i128)> = if payload.is_empty() {
             None
         } else if cursor - eff_start >= payload.len() as i128 {
@@ -312,21 +470,39 @@ impl TcpStreamReassemblyBuf {
             } else {
                 (payload, eff_start)
             };
-            let end_offset = (s + p.len() as i128 - cursor) as u64;
-            if end_offset > self.max_capacity as u64 {
-                return Err(SegmentBeyondMaxWindow {
-                    end_offset,
-                    max_capacity: self.max_capacity,
-                });
+            // `s >= cursor >= 0`, so the cast is lossless
+            let p = match effective_fin {
+                Some(fin_offset) => {
+                    let max_len = fin_offset.saturating_sub(s as u64) as usize;
+                    if p.len() > max_len {
+                        &p[..max_len]
+                    } else {
+                        p
+                    }
+                }
+                None => p,
+            };
+            if p.is_empty() {
+                None
+            } else {
+                let required_capacity = (s + p.len() as i128 - cursor) as u64;
+                if required_capacity > self.max_capacity as u64 {
+                    return Err(SegmentBeyondMaxWindow {
+                        required_capacity,
+                        max_capacity: self.max_capacity,
+                    });
+                }
+                Some((p, s))
             }
-            Some((p, s))
         };
 
         // check the section limit (in pre-re-anchoring coordinates, as the
         // recorded sections are not shifted yet)
         if let Some((p, s)) = write {
             let (cur_start, cur_end) = if rebase_shift > 0 {
-                (start_abs, end_abs)
+                // in the re-anchoring case the payload starts at the (still
+                // negative) `start_abs` and `s` is the post-shift position
+                (start_abs, start_abs + p.len() as i128)
             } else {
                 (s, s + p.len() as i128)
             };
@@ -350,15 +526,10 @@ impl TcpStreamReassemblyBuf {
                 // head == 0 in the re-anchoring case
                 core::cmp::max(rebase_shift + buffered_len, p.len())
             } else {
-                let end_off = (s + p.len() as i128 - cursor) as usize;
-                match self.head.checked_add(end_off) {
-                    Some(v) => v,
-                    None => {
-                        // free the consumed prefix to make the write indexable
-                        self.compact();
-                        end_off
-                    }
-                }
+                // saturates only for absurd `max_capacity` values, in which
+                // case the `try_reserve` below fails & reports the error
+                self.head
+                    .saturating_add((s + p.len() as i128 - cursor) as usize)
             };
             if self.data.len() < data_end
                 && self.data.capacity() < data_end
@@ -373,21 +544,7 @@ impl TcpStreamReassemblyBuf {
         self.base_seq = Some(base_seq);
 
         if rebase_shift > 0 {
-            // move existing data forward, zero the newly exposed front and
-            // re-anchor to the new (lower) base sequence number
-            let old_len = self.data.len();
-            self.data.resize(old_len + rebase_shift, 0);
-            self.data.copy_within(0..old_len, rebase_shift);
-            for b in &mut self.data[..rebase_shift] {
-                *b = 0;
-            }
-            for sec in &mut self.sections {
-                sec.start += rebase_shift as u64;
-                sec.end += rebase_shift as u64;
-            }
-            if let Some(fin_offset) = &mut self.fin_offset {
-                *fin_offset += rebase_shift as u64;
-            }
+            self.shift_forward(rebase_shift);
             self.base_seq = Some(seq);
         }
 
@@ -396,21 +553,75 @@ impl TcpStreamReassemblyBuf {
         }
 
         if let Some((p, s)) = write {
-            // grow the buffer if required (gaps are zero filled) & write
+            // grow the buffer if required (gaps are zero filled)
             let data_start = self.head + (s - cursor) as usize;
             let data_end = data_start + p.len();
             if self.data.len() < data_end {
                 self.data.resize(data_end, 0);
             }
-            self.data[data_start..data_end].copy_from_slice(p);
 
-            self.insert_section(TcpSegmentRange {
-                start: s as u64,
-                end: (s + p.len() as i128) as u64,
-            });
+            // Only write the bytes that were not received before ("first
+            // writer wins"). Overlapping segments carrying differing content
+            // are a known way to de-synchronize a reassembly from the actual
+            // receiver, so they are resolved deterministically instead of
+            // depending on when the caller happened to call `consume`.
+            let start = s as u64;
+            let end = start + p.len() as u64;
+            let mut pos = start;
+            let lo = self.sections.partition_point(|sec| sec.end <= start);
+            for idx in lo..self.sections.len() {
+                let sec = self.sections[idx];
+                if sec.start >= end {
+                    break;
+                }
+                if sec.start > pos {
+                    // gap in front of an already received section
+                    let from = (pos - start) as usize;
+                    let to = (sec.start - start) as usize;
+                    self.data[data_start + from..data_start + to]
+                        .copy_from_slice(&p[from..to]);
+                }
+                pos = core::cmp::max(pos, sec.end);
+                if pos >= end {
+                    break;
+                }
+            }
+            if pos < end {
+                let from = (pos - start) as usize;
+                self.data[data_start + from..data_end].copy_from_slice(&p[from..]);
+            }
+
+            self.insert_section(TcpSegmentRange { start, end });
         }
 
         Ok(())
+    }
+
+    /// Moves the buffered data `shift` bytes forward (making room for earlier
+    /// data at the front) and shifts every recorded offset accordingly.
+    ///
+    /// Only valid while nothing was consumed yet (`base_offset == 0`, which
+    /// implies `head == 0`). The caller has to make sure the required capacity
+    /// was reserved beforehand.
+    fn shift_forward(&mut self, shift: usize) {
+        debug_assert_eq!(0, self.base_offset);
+        debug_assert_eq!(0, self.head);
+
+        // move the existing data forward & zero the newly exposed front
+        let old_len = self.data.len();
+        self.data.resize(old_len + shift, 0);
+        self.data.copy_within(0..old_len, shift);
+        for b in &mut self.data[..shift] {
+            *b = 0;
+        }
+
+        for sec in &mut self.sections {
+            sec.start += shift as u64;
+            sec.end += shift as u64;
+        }
+        if let Some(fin_offset) = &mut self.fin_offset {
+            *fin_offset += shift as u64;
+        }
     }
 
     /// Insert a filled range into the sorted section list (merging it with
@@ -443,9 +654,18 @@ impl TcpStreamReassemblyBuf {
 
     /// Length of the in-order data available starting at the read cursor.
     fn contiguous_len(&self) -> usize {
-        match self.sections.first() {
+        let len = match self.sections.first() {
             Some(s) if s.start == self.base_offset => (s.end - self.base_offset) as usize,
             _ => 0,
+        };
+        // never hand out data behind the end of the stream (a FIN can be
+        // received after data behind it was already buffered)
+        match self.fin_offset {
+            Some(fin_offset) => core::cmp::min(
+                len,
+                fin_offset.saturating_sub(self.base_offset) as usize,
+            ),
+            None => len,
         }
     }
 
@@ -488,6 +708,49 @@ impl TcpStreamReassemblyBuf {
         } else if self.head >= COMPACT_THRESHOLD && self.head >= self.data.len() - self.head {
             self.compact();
         }
+    }
+
+    /// Skip a gap at the read cursor by advancing it to the start of the next
+    /// received data section & free the skipped bytes.
+    ///
+    /// Segments that are lost and never re-transmitted (e.g. dropped by the
+    /// capture) would otherwise stall the stream forever: the missing bytes
+    /// never arrive, so [`Self::contiguous`] stays empty while the following
+    /// data keeps accumulating until `max_capacity` is reached and every
+    /// further segment is rejected with
+    /// [`TcpReassembleError::SegmentBeyondMaxWindow`]. Skipping the gap gives
+    /// up on the missing bytes and lets the reconstruction continue.
+    ///
+    /// Returns the number of skipped (permanently lost) bytes. Returns `0` if
+    /// there is no gap at the read cursor, either because in-order data is
+    /// available (check [`Self::contiguous`] first) or because nothing is
+    /// buffered at all.
+    pub fn skip_gap(&mut self) -> u64 {
+        let Some(first) = self.sections.first() else {
+            return 0;
+        };
+        if first.start <= self.base_offset {
+            return 0;
+        }
+
+        let skipped = first.start - self.base_offset;
+        // the buffer covers all data up to the last section, so the skipped
+        // range is guaranteed to be present in `data`
+        self.head += skipped as usize;
+        self.base_offset = first.start;
+        // truncating cast is the intended "mod 2^32" mapping back into the
+        // 32 bit sequence number space
+        self.base_seq = self.base_seq.map(|s| s.wrapping_add(skipped as u32));
+
+        // free the skipped prefix once it dominates the buffer
+        if self.head == self.data.len() {
+            self.data.clear();
+            self.head = 0;
+        } else if self.head >= COMPACT_THRESHOLD && self.head >= self.data.len() - self.head {
+            self.compact();
+        }
+
+        skipped
     }
 
     /// Returns `true` once all bytes up to the FIN have been received and are
@@ -671,7 +934,7 @@ mod test {
         assert_eq!(
             err,
             TcpReassembleError::SegmentBeyondMaxWindow {
-                end_offset: 17,
+                required_capacity: 17,
                 max_capacity: 16
             }
         );
@@ -686,7 +949,7 @@ mod test {
         assert_eq!(
             err,
             TcpReassembleError::SegmentBeyondMaxWindow {
-                end_offset: 28,
+                required_capacity: 28,
                 max_capacity: 16
             }
         );
@@ -786,10 +1049,14 @@ mod test {
         buf.reset(2000);
         assert!(buf.syn_observed());
 
-        // late marking without re-base
+        // late SYN matching the anchor marks the start as known without
+        // dropping the buffered data
         let mut buf = new_buf();
         buf.add(1000, &sequence(0, 4), false).unwrap();
-        buf.mark_syn_observed();
+        assert_eq!(
+            buf.add_segment(999, &[], true, false).unwrap(),
+            TcpSegmentOutcome::Continued
+        );
         assert!(buf.syn_observed());
         assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
     }
@@ -893,7 +1160,7 @@ mod test {
         assert_eq!(
             err,
             TcpReassembleError::SegmentBeyondMaxWindow {
-                end_offset: 24,
+                required_capacity: 24,
                 max_capacity: 16
             }
         );
@@ -971,6 +1238,118 @@ mod test {
         assert_eq!(buf.contiguous(), &extra[..]);
         buf.consume(32);
         assert_eq!(buf.contiguous(), &[]);
+    }
+
+    #[test]
+    fn rebase_ignores_known_stream_start() {
+        // if the stream start is known (SYN observed) data before it is not
+        // part of the stream and must not re-anchor the buffer
+        let mut buf = new_buf();
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 4), false).unwrap();
+
+        buf.add(996, &sequence(100, 4), false).unwrap();
+
+        assert_eq!(buf.base_sequence_number(), Some(1000));
+        assert_eq!(buf.base_offset(), 0);
+        assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
+        assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn data_past_fin_is_ignored() {
+        // the FIN marks the end of the stream, bytes behind it are not part
+        // of it and must not be handed out
+        let mut buf = new_buf();
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 4), true).unwrap();
+        assert_eq!(buf.fin_offset(), Some(4));
+
+        buf.add(1004, &sequence(100, 8), false).unwrap();
+
+        assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
+        assert!(buf.is_fin_reached());
+        assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn overlap_keeps_first_received_bytes() {
+        // overlapping segments with differing content must resolve
+        // deterministically (first writer wins) instead of depending on when
+        // the caller happened to call `consume`
+        let mut buf = new_buf();
+        buf.add(1000, b"AAAA", false).unwrap();
+
+        // full overlap with different content
+        buf.add(1000, b"BBBB", false).unwrap();
+        assert_eq!(buf.contiguous(), b"AAAA");
+
+        // partial overlap: only the not yet received bytes are taken
+        buf.add(1002, b"CCCC", false).unwrap();
+        assert_eq!(buf.contiguous(), b"AAAACC");
+        assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn overlap_spanning_multiple_sections() {
+        let mut buf = new_buf();
+        // three separate sections with gaps in between
+        buf.add(1000, b"AA", false).unwrap();
+        buf.add(1004, b"BB", false).unwrap();
+        buf.add(1008, b"CC", false).unwrap();
+        assert_eq!(buf.sections().len(), 3);
+
+        // a big segment overlapping all of them with differing content: the
+        // already received bytes are kept, only the gaps get filled
+        buf.add(1000, b"xxxxxxxxxxxx", false).unwrap();
+        assert_eq!(buf.contiguous(), b"AAxxBBxxCCxx");
+        assert_eq!(buf.sections().len(), 1);
+        assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn skip_gap_recovers_from_permanently_lost_segment() {
+        let mut buf = new_buf();
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+        buf.consume(8);
+
+        // the segment at 1008..1016 is lost & never re-transmitted
+        buf.add(1016, &sequence(16, 8), false).unwrap();
+        assert_eq!(buf.contiguous(), &[]);
+
+        // skipping the hole lets the stream continue
+        assert_eq!(buf.skip_gap(), 8);
+        assert_eq!(buf.base_offset(), 16);
+        assert_eq!(buf.base_sequence_number(), Some(1016));
+        assert_eq!(buf.contiguous(), &sequence(16, 8)[..]);
+        assert_section_invariants(&buf);
+
+        // no gap at the read cursor -> nothing to skip
+        assert_eq!(buf.skip_gap(), 0);
+        buf.consume(8);
+        // nothing buffered at all -> nothing to skip
+        assert_eq!(buf.skip_gap(), 0);
+        assert_eq!(buf.base_offset(), 24);
+    }
+
+    #[test]
+    fn skip_gap_frees_the_max_window() {
+        // a permanent gap eventually fills up the whole window
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 16);
+        buf.add(1000, &sequence(0, 4), false).unwrap();
+        buf.consume(4);
+
+        // gap at 1004..1008, followed by data filling the window
+        buf.add(1008, &sequence(8, 12), false).unwrap();
+        assert_eq!(buf.contiguous(), &[]);
+        assert!(buf.add(1020, &sequence(20, 4), false).is_err());
+
+        // skipping the gap moves the window forward again
+        assert_eq!(buf.skip_gap(), 4);
+        buf.add(1020, &sequence(20, 4), false).unwrap();
+        assert_eq!(buf.contiguous(), &sequence(8, 16)[..]);
+        assert_section_invariants(&buf);
     }
 
     proptest! {

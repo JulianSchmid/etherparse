@@ -15,9 +15,15 @@ pub enum TcpReassembleError {
     /// the sequence number (e.g. from lost segments, re-orderings or
     /// maliciously crafted packets).
     SegmentBeyondMaxWindow {
-        /// Absolute stream offset (relative to the current read cursor)
-        /// at which the received segment would have ended.
-        end_offset: u64,
+        /// Number of bytes that would have to be buffered ahead of the read
+        /// cursor to store the segment.
+        ///
+        /// For a segment landing ahead of the cursor this is the offset at
+        /// which it would have ended. For a segment that would re-anchor the
+        /// buffer backwards (see
+        /// [`crate::tcp_reassembly::TcpStreamReassemblyBuf::syn_observed`])
+        /// it is the size of the re-anchored buffer.
+        required_capacity: u64,
 
         /// Maximum number of bytes that can be buffered ahead of the read
         /// cursor.
@@ -47,7 +53,7 @@ impl core::fmt::Display for TcpReassembleError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use TcpReassembleError::*;
         match self {
-            SegmentBeyondMaxWindow { end_offset, max_capacity } => write!(f, "Received a TCP segment that ends {end_offset} bytes ahead of the read cursor which exceeds the maximum buffer capacity of {max_capacity} bytes."),
+            SegmentBeyondMaxWindow { required_capacity, max_capacity } => write!(f, "Received a TCP segment that would require buffering {required_capacity} bytes ahead of the read cursor which exceeds the maximum buffer capacity of {max_capacity} bytes."),
             AllocationFailure { len } => write!(f, "Failed to allocate {len} bytes of memory to reconstruct the TCP stream."),
             TooManySections { max_sections } => write!(f, "Received a TCP segment that would require tracking more than the maximum of {max_sections} separate data sections."),
         }
@@ -98,8 +104,8 @@ mod tests {
     fn fmt() {
         let tests = [
             (
-                SegmentBeyondMaxWindow { end_offset: 5000, max_capacity: 4096 },
-                "Received a TCP segment that ends 5000 bytes ahead of the read cursor which exceeds the maximum buffer capacity of 4096 bytes.",
+                SegmentBeyondMaxWindow { required_capacity: 5000, max_capacity: 4096 },
+                "Received a TCP segment that would require buffering 5000 bytes ahead of the read cursor which exceeds the maximum buffer capacity of 4096 bytes.",
             ),
             (
                 AllocationFailure { len: 128 },
@@ -120,7 +126,7 @@ mod tests {
         use core::error::Error;
         assert!(AllocationFailure { len: 0 }.source().is_none());
         assert!(SegmentBeyondMaxWindow {
-            end_offset: 0,
+            required_capacity: 0,
             max_capacity: 0
         }
         .source()

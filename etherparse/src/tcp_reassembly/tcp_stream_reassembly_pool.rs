@@ -256,32 +256,18 @@ where
             });
         }
 
-        if syn {
-            // the SYN flag consumes one sequence number, so the payload
-            // starts at seq + 1
-            let base = seq.wrapping_add(1);
-            match self.active.entry(id) {
-                Entry::Occupied(entry) => {
-                    let value = entry.into_mut();
-                    value.1 = timestamp;
+        match self.active.entry(id) {
+            Entry::Occupied(entry) => {
+                let value = entry.into_mut();
 
-                    // Position of the data start indicated by the SYN
-                    // relative to the tracked stream start. `<= 0` means the
-                    // SYN belongs to the tracked stream (duplicated or
-                    // retransmitted SYN, or the late SYN of a stream that
-                    // had to anchor itself mid-stream) and the buffered
-                    // state must be kept. `> 0` means a new connection
-                    // re-using the same addresses & ports.
-                    let rel = value.0.seq_stream_offset(base).unwrap_or(0);
-                    if rel <= 0 {
-                        value.0.mark_syn_observed();
-                        // TCP Fast Open: a SYN may already carry payload
-                        // (and a FIN that has to be recorded)
-                        if fin || false == payload.is_empty() {
-                            value.0.add(base, payload, fin)?;
-                        }
+                // note: the timestamp is only updated after the fallible
+                // steps, so an error leaves the stream fully unchanged
+                match value.0.add_segment(seq, payload, syn, fin)? {
+                    TcpSegmentOutcome::Continued => {
+                        value.1 = timestamp;
                         Ok(Stream(&mut value.0))
-                    } else {
+                    }
+                    TcpSegmentOutcome::NewConnection => {
                         // reconnect: replace the stream with a fresh one
                         let mut fresh = pop_free_buf(
                             &mut self.finished_data_bufs,
@@ -289,85 +275,58 @@ where
                             self.default_max_capacity,
                             self.default_max_sections,
                         );
-                        fresh.reset(base);
+                        // the fresh buffer has no base yet, so this only
+                        // fails if the SYN payload exceeds the limits. The
+                        // replacement did not happen yet, so the previous
+                        // stream stays untouched & accessible in that case.
+                        if let Err(err) = fresh.add_segment(seq, payload, syn, fin) {
+                            recycle_buf(
+                                &mut self.finished_data_bufs,
+                                &mut self.finished_section_bufs,
+                                fresh,
+                            );
+                            return Err(err);
+                        }
+
+                        value.1 = timestamp;
                         let old = core::mem::replace(&mut value.0, fresh);
-                        let has_leftover = false == old.contiguous().is_empty();
-                        if has_leftover {
-                            self.pending_closed = Some(old);
-                        } else {
+                        if old.contiguous().is_empty() {
                             recycle_buf(
                                 &mut self.finished_data_bufs,
                                 &mut self.finished_section_bufs,
                                 old,
                             );
-                        }
-                        if fin || false == payload.is_empty() {
-                            // on error the old stream stays drainable via
-                            // the recycling stash, the fresh stream is kept
-                            value.0.add(base, payload, fin)?;
-                        }
-                        if has_leftover {
+                            Ok(Stream(&mut value.0))
+                        } else {
                             // "value" can no longer be returned, but the
                             // leftover data of the replaced stream can
-                            Ok(Closed(self.pending_closed.as_mut().unwrap()))
-                        } else {
-                            Ok(Stream(&mut value.0))
+                            Ok(Closed(self.pending_closed.insert(old)))
                         }
                     }
-                }
-                Entry::Vacant(entry) => {
-                    let mut buf = pop_free_buf(
-                        &mut self.finished_data_bufs,
-                        &mut self.finished_section_bufs,
-                        self.default_max_capacity,
-                        self.default_max_sections,
-                    );
-                    buf.reset(base);
-                    if fin || false == payload.is_empty() {
-                        if let Err(err) = buf.add(base, payload, fin) {
-                            recycle_buf(
-                                &mut self.finished_data_bufs,
-                                &mut self.finished_section_bufs,
-                                buf,
-                            );
-                            return Err(err);
-                        }
-                    }
-                    Ok(Stream(&mut entry.insert((buf, timestamp)).0))
                 }
             }
-        } else {
-            // regular data / FIN / ACK segment
-            match self.active.entry(id) {
-                Entry::Occupied(entry) => {
-                    let value = entry.into_mut();
-                    value.1 = timestamp;
-                    value.0.add(seq, payload, fin)?;
-                    Ok(Stream(&mut value.0))
+            Entry::Vacant(entry) => {
+                // segments without payload, SYN & FIN carry no data for the
+                // reassembly -> don't create a stream for them (e.g. pure
+                // ACKs, port scans, keep alives of unknown streams)
+                if payload.is_empty() && false == syn && false == fin {
+                    return Ok(Ignored);
                 }
-                Entry::Vacant(entry) => {
-                    // segments without payload & FIN carry no data for the
-                    // reassembly -> don't create a stream for them (e.g.
-                    // pure ACKs, port scans, keep alives of unknown streams)
-                    if payload.is_empty() && false == fin {
-                        return Ok(Ignored);
-                    }
-                    let mut buf = pop_free_buf(
-                        &mut self.finished_data_bufs,
-                        &mut self.finished_section_bufs,
-                        self.default_max_capacity,
-                        self.default_max_sections,
-                    );
-                    match buf.add(seq, payload, fin) {
-                        Ok(()) => Ok(Stream(&mut entry.insert((buf, timestamp)).0)),
-                        Err(err) => {
-                            recycle_buf(
-                                &mut self.finished_data_bufs,
-                                &mut self.finished_section_bufs,
-                                buf,
-                            );
-                            Err(err)
-                        }
+                let mut buf = pop_free_buf(
+                    &mut self.finished_data_bufs,
+                    &mut self.finished_section_bufs,
+                    self.default_max_capacity,
+                    self.default_max_sections,
+                );
+                match buf.add_segment(seq, payload, syn, fin) {
+                    Ok(_) => Ok(Stream(&mut entry.insert((buf, timestamp)).0)),
+                    Err(err) => {
+                        recycle_buf(
+                            &mut self.finished_data_bufs,
+                            &mut self.finished_section_bufs,
+                            buf,
+                        );
+                        Err(err)
                     }
                 }
             }
@@ -748,7 +707,7 @@ mod test {
         assert_eq!(
             err,
             TcpReassembleError::SegmentBeyondMaxWindow {
-                end_offset: 16,
+                required_capacity: 16,
                 max_capacity: 8
             }
         );
@@ -769,7 +728,7 @@ mod test {
         assert_eq!(
             err,
             TcpReassembleError::SegmentBeyondMaxWindow {
-                end_offset: 20,
+                required_capacity: 20,
                 max_capacity: 8
             }
         );
@@ -865,6 +824,65 @@ mod test {
         let buf = closed(pool.process_sliced_packet(&slice, (), ()).unwrap());
         assert_eq!(buf.contiguous(), &payload[..]);
         assert_eq!(pool.active_streams(), 0);
+    }
+
+    #[test]
+    fn reconnect_with_lower_isn_is_detected() {
+        // initial sequence numbers are random, so a reconnect is just as
+        // likely to pick a *lower* isn as a higher one
+        let mut pool = TcpStreamReassemblyPool::<(), u16>::new();
+        let id = ipv4_id(0);
+
+        pool.process_tcp(id.clone(), 999, &[], true, false, false, ())
+            .unwrap();
+        pool.process_tcp(id.clone(), 1000, &sequence(0, 8), false, false, false, ())
+            .unwrap();
+
+        // reconnect: the old stream is closed & stays drainable
+        let buf = closed(
+            pool.process_tcp(id.clone(), 499, &[], true, false, false, ())
+                .unwrap(),
+        );
+        assert_eq!(buf.contiguous(), &sequence(0, 8)[..]);
+
+        // the new stream is re-based and carries none of the old data
+        let buf = pool.stream_mut(&id).unwrap();
+        assert_eq!(buf.base_sequence_number(), Some(500));
+        assert!(buf.contiguous().is_empty());
+
+        let buf = stream(
+            pool.process_tcp(id.clone(), 500, &sequence(100, 4), false, false, false, ())
+                .unwrap(),
+        );
+        assert_eq!(buf.contiguous(), &sequence(100, 4)[..]);
+        assert_eq!(buf.sections().len(), 1);
+    }
+
+    #[test]
+    fn free_lists_are_bounded() {
+        // evicting many streams must not make the pool hold on to one buffer
+        // per evicted stream forever
+        let mut pool = TcpStreamReassemblyPool::<u32, u16>::new();
+        for port in 0..200u16 {
+            pool.process_tcp(ipv4_id(port), 1000, &sequence(0, 64), false, false, false, 1)
+                .unwrap();
+        }
+        assert_eq!(pool.active_streams(), 200);
+
+        pool.retain(|_, _| false);
+        assert_eq!(pool.active_streams(), 0);
+
+        // limit picked in phase 5 (max_pooled_bufs), 64 is an upper bound
+        assert!(
+            pool.finished_data_bufs.len() <= 64,
+            "unbounded data buf free list: {}",
+            pool.finished_data_bufs.len()
+        );
+        assert!(
+            pool.finished_section_bufs.len() <= 64,
+            "unbounded section buf free list: {}",
+            pool.finished_section_bufs.len()
+        );
     }
 
     fn build_ipv4_tcp_packet(seq: u32, syn: bool, fin: bool, rst: bool, payload: &[u8]) -> Vec<u8> {
