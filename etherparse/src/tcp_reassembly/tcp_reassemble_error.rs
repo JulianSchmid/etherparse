@@ -47,6 +47,18 @@ pub enum TcpReassembleError {
         /// can be tracked at the same time.
         max_sections: usize,
     },
+
+    /// Error if a segment would require tracking more connections than the
+    /// [`crate::tcp_reassembly::TcpStreamReassemblyPool`] allows.
+    ///
+    /// Evict connections that are no longer of interest (e.g. via
+    /// [`crate::tcp_reassembly::TcpStreamReassemblyPool::retain`]) to make
+    /// room for new ones.
+    TooManyConnections {
+        /// Maximum number of connections that can be tracked at the same
+        /// time.
+        max_connections: usize,
+    },
 }
 
 impl core::fmt::Display for TcpReassembleError {
@@ -56,6 +68,7 @@ impl core::fmt::Display for TcpReassembleError {
             SegmentBeyondMaxWindow { required_capacity, max_capacity } => write!(f, "Received a TCP segment that would require buffering {required_capacity} bytes ahead of the read cursor which exceeds the maximum buffer capacity of {max_capacity} bytes."),
             AllocationFailure { len } => write!(f, "Failed to allocate {len} bytes of memory to reconstruct the TCP stream."),
             TooManySections { max_sections } => write!(f, "Received a TCP segment that would require tracking more than the maximum of {max_sections} separate data sections."),
+            TooManyConnections { max_connections } => write!(f, "Received a TCP segment of a new connection which would require tracking more than the maximum of {max_connections} connections."),
         }
     }
 }
@@ -115,6 +128,10 @@ mod tests {
                 TooManySections { max_sections: 1024 },
                 "Received a TCP segment that would require tracking more than the maximum of 1024 separate data sections.",
             ),
+            (
+                TooManyConnections { max_connections: 512 },
+                "Received a TCP segment of a new connection which would require tracking more than the maximum of 512 connections.",
+            ),
         ];
         for test in tests {
             assert_eq!(format!("{}", test.0), test.1);
@@ -132,5 +149,10 @@ mod tests {
         .source()
         .is_none());
         assert!(TooManySections { max_sections: 0 }.source().is_none());
+        assert!(TooManyConnections {
+            max_connections: 0
+        }
+        .source()
+        .is_none());
     }
 }

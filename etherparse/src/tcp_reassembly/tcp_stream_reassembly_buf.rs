@@ -26,10 +26,29 @@ const COMPACT_THRESHOLD: usize = 4096;
 /// * [`TcpStreamReassemblyBuf::add_segment`] feeds a received segment
 ///   including the interpretation of its `SYN` flag (use
 ///   [`TcpStreamReassemblyBuf::add`] to feed just the payload).
+/// * [`TcpStreamReassemblyBuf::add_ack`] feeds the acknowledgment numbers
+///   observed in the **reverse** direction of the connection.
 /// * [`TcpStreamReassemblyBuf::contiguous`] returns the in-order bytes that are
 ///   available starting at the current read cursor.
 /// * [`TcpStreamReassemblyBuf::consume`] advances the read cursor and frees the
 ///   processed bytes so the buffer memory can be re-used.
+///
+/// # Only acknowledged data is handed out
+///
+/// By default ([`TcpAckPolicy::Required`]) only data that the receiver
+/// acknowledged is returned by [`TcpStreamReassemblyBuf::contiguous`], so
+/// segments that never reached the receiver do not end up in the
+/// reconstructed stream. This requires feeding the acknowledgment numbers of
+/// the reverse direction via [`TcpStreamReassemblyBuf::add_ack`].
+///
+/// As a capture usually ends before the last data is acknowledged (and may
+/// not contain the reverse direction at all), the trailing unacknowledged
+/// bytes are still reachable via
+/// [`TcpStreamReassemblyBuf::contiguous_unacked`] &
+/// [`TcpStreamReassemblyBuf::consume_unacked`]. Set
+/// [`TcpAckPolicy::Ignore`] via
+/// [`TcpStreamReassemblyBuf::with_ack_policy`] to disable the behavior
+/// entirely.
 ///
 /// # Streams without an observed connection setup
 ///
@@ -72,6 +91,20 @@ pub struct TcpStreamReassemblyBuf {
     /// segment with the FIN flag was received).
     fin_offset: Option<u64>,
 
+    /// Absolute stream offset up to which the receiver acknowledged the data
+    /// (exclusive).
+    ///
+    /// Monotonically increasing, only meaningful if `ack_observed` is true.
+    ack_offset: u64,
+
+    /// True once an acknowledgment for this direction was observed (via
+    /// [`TcpStreamReassemblyBuf::add_ack`]).
+    ack_observed: bool,
+
+    /// Decides if data has to be acknowledged before it is handed out by
+    /// [`TcpStreamReassemblyBuf::contiguous`].
+    ack_policy: TcpAckPolicy,
+
     /// True if the stream start is known (established via [`Self::reset`],
     /// e.g. from an observed SYN), false if the buffer had to anchor itself
     /// on the first added segment.
@@ -105,6 +138,9 @@ impl TcpStreamReassemblyBuf {
             data,
             sections,
             fin_offset: None,
+            ack_offset: 0,
+            ack_observed: false,
+            ack_policy: TcpAckPolicy::default(),
             syn_observed: false,
             max_capacity,
             max_sections: DEFAULT_MAX_TCP_STREAM_SECTIONS,
@@ -116,6 +152,14 @@ impl TcpStreamReassemblyBuf {
     /// [`TcpReassembleError::TooManySections`]).
     pub fn with_max_sections(mut self, max_sections: usize) -> TcpStreamReassemblyBuf {
         self.max_sections = max_sections;
+        self
+    }
+
+    /// Sets if data has to be acknowledged by the receiver before
+    /// [`TcpStreamReassemblyBuf::contiguous`] hands it out (defaults to
+    /// [`TcpAckPolicy::Required`]).
+    pub fn with_ack_policy(mut self, ack_policy: TcpAckPolicy) -> TcpStreamReassemblyBuf {
+        self.ack_policy = ack_policy;
         self
     }
 
@@ -170,6 +214,35 @@ impl TcpStreamReassemblyBuf {
         self.syn_observed
     }
 
+    /// Absolute stream offset up to which the receiver acknowledged the data
+    /// (exclusive), or `None` if no acknowledgment was observed yet.
+    #[inline]
+    pub fn ack_offset(&self) -> Option<u64> {
+        if self.ack_observed {
+            Some(self.ack_offset)
+        } else {
+            None
+        }
+    }
+
+    /// True once an acknowledgment for this stream direction was observed.
+    ///
+    /// Under [`TcpAckPolicy::Required`] a stream that never sees an
+    /// acknowledgment never hands out data via
+    /// [`TcpStreamReassemblyBuf::contiguous`]. This flag allows detecting
+    /// that case (e.g. a capture only containing one direction, or a stream
+    /// whose two directions did not get matched up).
+    #[inline]
+    pub fn ack_observed(&self) -> bool {
+        self.ack_observed
+    }
+
+    /// Policy deciding if data has to be acknowledged before it is handed out.
+    #[inline]
+    pub fn ack_policy(&self) -> TcpAckPolicy {
+        self.ack_policy
+    }
+
     /// Maximum number of bytes that may be buffered ahead of the read cursor.
     #[inline]
     pub fn max_capacity(&self) -> usize {
@@ -196,7 +269,82 @@ impl TcpStreamReassemblyBuf {
         self.base_offset = 0;
         self.head = 0;
         self.fin_offset = None;
+        self.ack_offset = 0;
+        self.ack_observed = false;
         self.syn_observed = true;
+    }
+
+    /// Record an acknowledgment number observed in the **reverse** direction
+    /// of the connection.
+    ///
+    /// Acknowledgments travel in the opposite direction of the data they
+    /// acknowledge, so the value has to be taken from the segments flowing
+    /// back to the sender of this stream (it is expressed in this stream's
+    /// sequence number space). Only segments with the `ACK` flag set carry a
+    /// valid acknowledgment number.
+    ///
+    /// Under [`TcpAckPolicy::Required`] this is what releases data for
+    /// [`TcpStreamReassemblyBuf::contiguous`].
+    ///
+    /// Acknowledgments that are re-ordered/stale (referencing data before the
+    /// read cursor) or that reference data far beyond anything that was
+    /// received are ignored.
+    pub fn add_ack(&mut self, ack_seq: u32) {
+        // even an unusable ack proves that the reverse direction is present
+        self.ack_observed = true;
+
+        let Some(base_seq) = self.base_seq else {
+            // without an established base the ack cannot be mapped
+            return;
+        };
+
+        let abs = self.seq_to_abs_offset(base_seq, ack_seq);
+        if abs <= self.base_offset as i128 {
+            // stale (also catches acks that the serial number arithmetic
+            // mapped far into the past)
+            return;
+        }
+        // Guard against nonsense acks (e.g. a wrapped ack that got mapped far
+        // into the future) releasing data that was never acknowledged.
+        if abs > self.plausible_offset_limit() as i128 {
+            return;
+        }
+
+        self.ack_offset = core::cmp::max(self.ack_offset, abs as u64);
+    }
+
+    /// Absolute stream offset one past the last received byte.
+    #[inline]
+    fn highest_received_offset(&self) -> u64 {
+        self.sections
+            .last()
+            .map(|s| s.end)
+            .unwrap_or(self.base_offset)
+    }
+
+    /// Highest absolute stream offset that a received segment may plausibly
+    /// reference.
+    ///
+    /// Referencing data ahead of what was received is normal if the capture
+    /// missed segments, hence the generous limit.
+    #[inline]
+    fn plausible_offset_limit(&self) -> u64 {
+        self.highest_received_offset()
+            .saturating_add(self.max_capacity as u64)
+    }
+
+    /// Returns `true` if `seq` references a plausible position of this stream:
+    /// at or after the read cursor and not far beyond the received data.
+    ///
+    /// Allows rejecting blindly injected segments, e.g. a `RST` carrying an
+    /// out of window sequence number. Returns `true` if no segment was
+    /// received for this stream yet (nothing to judge against).
+    pub fn is_seq_in_window(&self, seq: u32) -> bool {
+        let Some(base_seq) = self.base_seq else {
+            return true;
+        };
+        let abs = self.seq_to_abs_offset(base_seq, seq);
+        abs >= self.base_offset as i128 && abs <= self.plausible_offset_limit() as i128
     }
 
     /// Re-anchors the buffer to a now known stream start (from a late SYN)
@@ -622,6 +770,12 @@ impl TcpStreamReassemblyBuf {
         if let Some(fin_offset) = &mut self.fin_offset {
             *fin_offset += shift as u64;
         }
+        // the acknowledged data is now `shift` bytes further into the stream
+        // (the newly exposed prefix sits in front of it, so it was
+        // acknowledged as well). Only meaningful once an ack was observed.
+        if self.ack_observed {
+            self.ack_offset += shift as u64;
+        }
     }
 
     /// Insert a filled range into the sorted section list (merging it with
@@ -652,8 +806,9 @@ impl TcpStreamReassemblyBuf {
         }
     }
 
-    /// Length of the in-order data available starting at the read cursor.
-    fn contiguous_len(&self) -> usize {
+    /// Length of the in-order data received at the read cursor (ignoring the
+    /// [`TcpAckPolicy`]).
+    fn in_order_len(&self) -> usize {
         let len = match self.sections.first() {
             Some(s) if s.start == self.base_offset => (s.end - self.base_offset) as usize,
             _ => 0,
@@ -661,11 +816,22 @@ impl TcpStreamReassemblyBuf {
         // never hand out data behind the end of the stream (a FIN can be
         // received after data behind it was already buffered)
         match self.fin_offset {
-            Some(fin_offset) => core::cmp::min(
-                len,
-                fin_offset.saturating_sub(self.base_offset) as usize,
-            ),
+            Some(fin_offset) => {
+                core::cmp::min(len, fin_offset.saturating_sub(self.base_offset) as usize)
+            }
             None => len,
+        }
+    }
+
+    /// Length of the in-order data available at the read cursor after applying
+    /// the [`TcpAckPolicy`].
+    fn contiguous_len(&self) -> usize {
+        match self.ack_policy {
+            TcpAckPolicy::Ignore => self.in_order_len(),
+            TcpAckPolicy::Required => core::cmp::min(
+                self.in_order_len(),
+                self.ack_offset.saturating_sub(self.base_offset) as usize,
+            ),
         }
     }
 
@@ -673,19 +839,51 @@ impl TcpStreamReassemblyBuf {
     /// cursor.
     ///
     /// Returns an empty slice if the byte at the read cursor has not been
-    /// received yet (a gap at the front of the stream).
+    /// received yet (a gap at the front of the stream, see
+    /// [`TcpStreamReassemblyBuf::skip_gap`]) or, under the default
+    /// [`TcpAckPolicy::Required`], if the receiver did not acknowledge it yet
+    /// (see [`TcpStreamReassemblyBuf::add_ack`] &
+    /// [`TcpStreamReassemblyBuf::contiguous_unacked`]).
     #[inline]
     pub fn contiguous(&self) -> &[u8] {
         &self.data[self.head..self.head + self.contiguous_len()]
     }
 
+    /// Returns the in-order bytes at the read cursor **ignoring** the
+    /// [`TcpAckPolicy`].
+    ///
+    /// The end of a capture usually cuts off the acknowledgments of the last
+    /// received data, so under [`TcpAckPolicy::Required`] a trailing part of
+    /// each stream stays unacknowledged. This is the escape hatch to still
+    /// get at it (together with
+    /// [`TcpStreamReassemblyBuf::consume_unacked`]), e.g. when draining all
+    /// streams at the end of a capture or for captures that contain no
+    /// acknowledgments at all (see
+    /// [`TcpStreamReassemblyBuf::ack_observed`]).
+    #[inline]
+    pub fn contiguous_unacked(&self) -> &[u8] {
+        &self.data[self.head..self.head + self.in_order_len()]
+    }
+
     /// Advance the read cursor by `len` bytes and free the consumed data for
     /// re-use.
     ///
-    /// `len` is clamped to the currently available contiguous data so it is not
-    /// possible to consume into a not yet received gap.
+    /// `len` is clamped to the data currently returned by
+    /// [`TcpStreamReassemblyBuf::contiguous`], so it is not possible to
+    /// consume into a not yet received gap or past the acknowledged data.
     pub fn consume(&mut self, len: usize) {
-        let len = core::cmp::min(len, self.contiguous_len());
+        self.consume_clamped(core::cmp::min(len, self.contiguous_len()));
+    }
+
+    /// Advance the read cursor by `len` bytes **ignoring** the
+    /// [`TcpAckPolicy`] (clamped to
+    /// [`TcpStreamReassemblyBuf::contiguous_unacked`]).
+    pub fn consume_unacked(&mut self, len: usize) {
+        self.consume_clamped(core::cmp::min(len, self.in_order_len()));
+    }
+
+    /// Advance the read cursor by an already clamped `len`.
+    fn consume_clamped(&mut self, len: usize) {
         if len == 0 {
             return;
         }
@@ -755,9 +953,14 @@ impl TcpStreamReassemblyBuf {
 
     /// Returns `true` once all bytes up to the FIN have been received and are
     /// available as contiguous data.
+    ///
+    /// This is about *reception* and ignores the [`TcpAckPolicy`]: under
+    /// [`TcpAckPolicy::Required`] the last bytes of the stream may be
+    /// complete here while [`TcpStreamReassemblyBuf::contiguous`] still holds
+    /// them back because their acknowledgment was not captured.
     pub fn is_fin_reached(&self) -> bool {
         match self.fin_offset {
-            Some(fin) => self.base_offset + self.contiguous_len() as u64 >= fin,
+            Some(fin) => self.base_offset + self.in_order_len() as u64 >= fin,
             None => false,
         }
     }
@@ -777,8 +980,16 @@ mod test {
 
     const MAX: usize = 1 << 20;
 
+    /// Buffer with the given capacity that hands out data without requiring
+    /// acknowledgments (the tests below target the reassembly itself, the ack
+    /// gating has its own tests).
+    fn new_buf_capacity(max_capacity: usize) -> TcpStreamReassemblyBuf {
+        TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), max_capacity)
+            .with_ack_policy(TcpAckPolicy::Ignore)
+    }
+
     fn new_buf() -> TcpStreamReassemblyBuf {
-        TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX)
+        new_buf_capacity(MAX)
     }
 
     /// Returns a u8 vec counting up from "start" (truncating to u8).
@@ -834,6 +1045,9 @@ mod test {
         assert!(buf.sections().is_empty());
         assert_eq!(buf.fin_offset(), None);
         assert_eq!(false, buf.syn_observed());
+        assert_eq!(false, buf.ack_observed());
+        assert_eq!(buf.ack_offset(), None);
+        assert_eq!(buf.ack_policy(), TcpAckPolicy::Required);
         assert_eq!(buf.max_capacity(), 4096);
         assert_eq!(buf.max_sections(), DEFAULT_MAX_TCP_STREAM_SECTIONS);
         let buf = buf.with_max_sections(3);
@@ -925,7 +1139,7 @@ mod test {
 
     #[test]
     fn beyond_max_window() {
-        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 16);
+        let mut buf = new_buf_capacity(16);
         buf.add(0, &sequence(0, 4), false).unwrap();
         // just inside the window (ends at 16)
         buf.add(12, &sequence(12, 4), false).unwrap();
@@ -942,7 +1156,7 @@ mod test {
 
     #[test]
     fn error_leaves_state_unchanged() {
-        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 16);
+        let mut buf = new_buf_capacity(16);
         buf.add(0, &sequence(0, 4), false).unwrap();
         // segment (with FIN) beyond the window -> error & no state change
         let err = buf.add(20, &sequence(20, 8), true).unwrap_err();
@@ -1153,7 +1367,7 @@ mod test {
     #[test]
     fn rebase_backwards_bounds() {
         // a segment that would force a prepend beyond max_capacity is rejected
-        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 16);
+        let mut buf = new_buf_capacity(16);
         buf.add(1000, &sequence(0, 4), false).unwrap();
         // seq 980 is 20 bytes behind the anchor -> prepend of 20 + 4 buffered > 16
         let err = buf.add(980, &sequence(0, 4), false).unwrap_err();
@@ -1200,7 +1414,7 @@ mod test {
     #[test]
     fn too_many_sections() {
         let mut buf =
-            TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 1 << 16).with_max_sections(2);
+            new_buf_capacity(1 << 16).with_max_sections(2);
         buf.add(0, &sequence(0, 1), false).unwrap();
         buf.add(10, &sequence(10, 1), false).unwrap();
         assert_eq!(buf.sections().len(), 2);
@@ -1291,6 +1505,126 @@ mod test {
     }
 
     #[test]
+    fn ack_gating_is_the_default() {
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX);
+        assert_eq!(buf.ack_policy(), TcpAckPolicy::Required);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+
+        // nothing acknowledged yet -> nothing handed out
+        assert_eq!(false, buf.ack_observed());
+        assert_eq!(buf.ack_offset(), None);
+        assert_eq!(buf.contiguous(), &[]);
+        // ... while the data itself is available via the escape hatch
+        assert_eq!(buf.contiguous_unacked(), &sequence(0, 8)[..]);
+
+        // the receiver acknowledges the first 4 bytes
+        buf.add_ack(1004);
+        assert!(buf.ack_observed());
+        assert_eq!(buf.ack_offset(), Some(4));
+        assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
+
+        // consume is clamped to the acknowledged data
+        buf.consume(8);
+        assert_eq!(buf.base_offset(), 4);
+        assert_eq!(buf.contiguous(), &[]);
+        assert_eq!(buf.contiguous_unacked(), &sequence(4, 4)[..]);
+
+        // acknowledging the rest releases it
+        buf.add_ack(1008);
+        assert_eq!(buf.ack_offset(), Some(8));
+        assert_eq!(buf.contiguous(), &sequence(4, 4)[..]);
+    }
+
+    #[test]
+    fn ack_unacked_escape_hatch() {
+        // e.g. at the end of a capture: the last data is never acknowledged
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), true).unwrap();
+
+        // the FIN is "reached" even though nothing was acknowledged
+        assert!(buf.is_fin_reached());
+        assert_eq!(buf.contiguous(), &[]);
+
+        assert_eq!(buf.contiguous_unacked(), &sequence(0, 8)[..]);
+        buf.consume_unacked(8);
+        assert_eq!(buf.base_offset(), 8);
+        assert!(buf.contiguous_unacked().is_empty());
+    }
+
+    #[test]
+    fn ack_policy_ignore() {
+        let mut buf = new_buf();
+        assert_eq!(buf.ack_policy(), TcpAckPolicy::Ignore);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+        assert_eq!(false, buf.ack_observed());
+        assert_eq!(buf.contiguous(), &sequence(0, 8)[..]);
+    }
+
+    #[test]
+    fn ack_stale_and_nonsense_are_ignored() {
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 64);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+        buf.add_ack(1008);
+        assert_eq!(buf.ack_offset(), Some(8));
+
+        // a re-ordered / older ack does not move the offset backwards
+        buf.add_ack(1004);
+        assert_eq!(buf.ack_offset(), Some(8));
+
+        // an ack far beyond anything that was received is ignored
+        buf.add_ack(1000u32.wrapping_add(10_000));
+        assert_eq!(buf.ack_offset(), Some(8));
+
+        // an ack that the serial number arithmetic maps far into the past
+        buf.add_ack(1000u32.wrapping_sub(1_000_000));
+        assert_eq!(buf.ack_offset(), Some(8));
+
+        // an ack without an established base only records the observation
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 64);
+        buf.add_ack(1234);
+        assert!(buf.ack_observed());
+        assert_eq!(buf.ack_offset(), Some(0));
+    }
+
+    #[test]
+    fn ack_offset_shifts_on_reanchor() {
+        // a backwards re-anchor has to move the ack offset with the data
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX);
+        buf.add(1000, &sequence(10, 4), false).unwrap();
+        buf.add_ack(1004);
+        assert_eq!(buf.ack_offset(), Some(4));
+        assert_eq!(buf.contiguous(), &sequence(10, 4)[..]);
+
+        // earlier data re-anchors the buffer by 10 bytes, the acknowledged
+        // data moves with it (the prefix is in front of the ack, so it is
+        // acknowledged as well)
+        buf.add(990, &sequence(0, 10), false).unwrap();
+        assert_eq!(buf.ack_offset(), Some(14));
+        assert_eq!(buf.contiguous(), &sequence(0, 14)[..]);
+    }
+
+    #[test]
+    fn ack_state_cleared_by_reset() {
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+        buf.add_ack(1008);
+        assert_eq!(buf.ack_offset(), Some(8));
+
+        buf.reset(5000);
+        assert_eq!(false, buf.ack_observed());
+        assert_eq!(buf.ack_offset(), None);
+        buf.add(5000, &sequence(0, 4), false).unwrap();
+        assert_eq!(buf.contiguous(), &[]);
+        buf.add_ack(5004);
+        assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
+    }
+
+    #[test]
     fn overlap_spanning_multiple_sections() {
         let mut buf = new_buf();
         // three separate sections with gaps in between
@@ -1336,7 +1670,7 @@ mod test {
     #[test]
     fn skip_gap_frees_the_max_window() {
         // a permanent gap eventually fills up the whole window
-        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 16);
+        let mut buf = new_buf_capacity(16);
         buf.add(1000, &sequence(0, 4), false).unwrap();
         buf.consume(4);
 
@@ -1396,7 +1730,7 @@ mod test {
                 to_send.swap(i, j);
             }
 
-            let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 1 << 20);
+            let mut buf = new_buf_capacity(1 << 20);
             // model a known stream start (as if the ISN was learned from a SYN):
             // offset 0 of the reference maps to sequence number `isn`.
             buf.reset(isn);
