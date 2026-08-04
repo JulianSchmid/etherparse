@@ -4,27 +4,27 @@
 /// [`crate::tcp_reassembly::TcpStreamReassemblyBuf`] (a 64 bit, non-wrapping
 /// position within the stream), not raw 32 bit TCP sequence numbers.
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub struct TcpSegmentRange {
+pub struct TcpStreamRange {
     /// Absolute offset of the first byte of the section.
     pub start: u64,
     /// Absolute offset one past the last byte of the section (offset + length).
     pub end: u64,
 }
 
-impl TcpSegmentRange {
+impl TcpStreamRange {
     /// Return if the value is contained within the section.
     fn is_value_connected(&self, value: u64) -> bool {
         self.start <= value && self.end >= value
     }
 
     /// Combine both sections if they overlap or are directly adjacent.
-    pub fn merge(&self, other: TcpSegmentRange) -> Option<TcpSegmentRange> {
+    pub fn merge(&self, other: TcpStreamRange) -> Option<TcpStreamRange> {
         if self.is_value_connected(other.start)
             || self.is_value_connected(other.end)
             || other.is_value_connected(self.start)
             || other.is_value_connected(self.end)
         {
-            Some(TcpSegmentRange {
+            Some(TcpStreamRange {
                 start: core::cmp::min(self.start, other.start),
                 end: core::cmp::max(self.end, other.end),
             })
@@ -41,7 +41,7 @@ mod test {
 
     #[test]
     fn debug_clone_eq() {
-        let section = TcpSegmentRange { start: 1, end: 2 };
+        let section = TcpStreamRange { start: 1, end: 2 };
         let _ = format!("{:?}", section);
         assert_eq!(section, section.clone());
         assert_eq!(section.cmp(&section), core::cmp::Ordering::Equal);
@@ -67,7 +67,7 @@ mod test {
 
     #[test]
     fn is_value_connected() {
-        let s = TcpSegmentRange { start: 5, end: 9 };
+        let s = TcpStreamRange { start: 5, end: 9 };
         assert_eq!(false, s.is_value_connected(3));
         assert_eq!(false, s.is_value_connected(4));
         assert!(s.is_value_connected(5));
@@ -99,15 +99,15 @@ mod test {
             ),
         ];
         for t in tests {
-            let a = TcpSegmentRange {
+            let a = TcpStreamRange {
                 start: t.0 .0,
                 end: t.0 .1,
             };
-            let b = TcpSegmentRange {
+            let b = TcpStreamRange {
                 start: t.1 .0,
                 end: t.1 .1,
             };
-            let expected = t.2.map(|v| TcpSegmentRange {
+            let expected = t.2.map(|v| TcpStreamRange {
                 start: v.0,
                 end: v.1,
             });

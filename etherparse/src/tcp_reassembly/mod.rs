@@ -7,8 +7,8 @@ pub use tcp_reassemble_error::*;
 mod tcp_segment_outcome;
 pub use tcp_segment_outcome::*;
 
-mod tcp_segment_range;
-pub use tcp_segment_range::*;
+mod tcp_stream_range;
+pub use tcp_stream_range::*;
 
 mod tcp_connection;
 pub use tcp_connection::*;

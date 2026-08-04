@@ -85,7 +85,7 @@ pub struct TcpStreamReassemblyBuf {
     ///
     /// Sorted by start offset, the ranges are non-overlapping and
     /// non-adjacent (they get merged).
-    sections: Vec<TcpSegmentRange>,
+    sections: Vec<TcpStreamRange>,
 
     /// Absolute stream offset one past the last byte of the stream (set once a
     /// segment with the FIN flag was received).
@@ -126,7 +126,7 @@ impl TcpStreamReassemblyBuf {
     /// [`TcpStreamReassemblyBuf::with_max_sections`]).
     pub fn new(
         mut data: Vec<u8>,
-        mut sections: Vec<TcpSegmentRange>,
+        mut sections: Vec<TcpStreamRange>,
         max_capacity: usize,
     ) -> TcpStreamReassemblyBuf {
         data.clear();
@@ -177,16 +177,26 @@ impl TcpStreamReassemblyBuf {
         self.base_offset
     }
 
-    /// Buffered bytes starting at the read cursor (including not yet
-    /// contiguous, zeroed gaps).
+    /// Raw buffer starting at the read cursor.
+    ///
+    /// **This is not the reconstructed stream.** Byte ranges that were not
+    /// received yet are present as zeroes, so reading this without consulting
+    /// [`TcpStreamReassemblyBuf::sections`] silently mixes fabricated zero
+    /// bytes into the data. Use [`TcpStreamReassemblyBuf::contiguous`] to get
+    /// the reconstructed stream.
+    ///
+    /// It is exposed to allow reading data that was received out of order:
+    /// the byte at absolute stream offset `o` of a received section is at
+    /// `raw_buffer()[o - base_offset()]`.
     #[inline]
-    pub fn data(&self) -> &[u8] {
+    pub fn raw_buffer(&self) -> &[u8] {
         &self.data[self.head..]
     }
 
-    /// Filled ranges (in absolute stream offsets), sorted by start offset.
+    /// Received ranges (in absolute stream offsets), sorted by start offset,
+    /// non-overlapping & non-adjacent.
     #[inline]
-    pub fn sections(&self) -> &[TcpSegmentRange] {
+    pub fn sections(&self) -> &[TcpStreamRange] {
         &self.sections
     }
 
@@ -739,7 +749,7 @@ impl TcpStreamReassemblyBuf {
                 self.data[data_start + from..data_end].copy_from_slice(&p[from..]);
             }
 
-            self.insert_section(TcpSegmentRange { start, end });
+            self.insert_section(TcpStreamRange { start, end });
         }
 
         Ok(())
@@ -780,7 +790,7 @@ impl TcpStreamReassemblyBuf {
 
     /// Insert a filled range into the sorted section list (merging it with
     /// overlapping or directly adjacent sections).
-    fn insert_section(&mut self, mut range: TcpSegmentRange) {
+    fn insert_section(&mut self, mut range: TcpStreamRange) {
         // sections connected to the new range (sections are sorted by start
         // & disjoint, so they are also sorted by end)
         let lo = self.sections.partition_point(|s| s.end < range.start);
@@ -882,6 +892,48 @@ impl TcpStreamReassemblyBuf {
         self.consume_clamped(core::cmp::min(len, self.in_order_len()));
     }
 
+    /// Hands the available in-order data to `f` and consumes the number of
+    /// bytes it reports as processed.
+    ///
+    /// Convenience for the "read [`TcpStreamReassemblyBuf::contiguous`], then
+    /// [`TcpStreamReassemblyBuf::consume`] what was processed" cycle, which
+    /// cannot be written as a single expression because the data is borrowed
+    /// from the buffer. Returning less than `bytes.len()` keeps the remainder
+    /// buffered, which is what a parser that can only handle complete
+    /// messages wants:
+    ///
+    /// ```
+    /// # use etherparse::tcp_reassembly::*;
+    /// # let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 4096)
+    /// #     .with_ack_policy(TcpAckPolicy::Ignore);
+    /// # buf.add(1000, b"ab\ncd", false).unwrap();
+    /// // only consume up to the last complete line
+    /// let consumed = buf.drain(|bytes| match bytes.iter().rposition(|b| *b == b'\n') {
+    ///     Some(end) => {
+    ///         // ... process &bytes[..end + 1] ...
+    ///         end + 1
+    ///     }
+    ///     None => 0,
+    /// });
+    /// assert_eq!(consumed, 3);
+    /// ```
+    ///
+    /// Returns the number of consumed bytes (clamped to what was available).
+    pub fn drain<F: FnOnce(&[u8]) -> usize>(&mut self, f: F) -> usize {
+        let len = core::cmp::min(f(self.contiguous()), self.contiguous_len());
+        self.consume_clamped(len);
+        len
+    }
+
+    /// Like [`TcpStreamReassemblyBuf::drain`] but **ignoring** the
+    /// [`TcpAckPolicy`] (operates on
+    /// [`TcpStreamReassemblyBuf::contiguous_unacked`]).
+    pub fn drain_unacked<F: FnOnce(&[u8]) -> usize>(&mut self, f: F) -> usize {
+        let len = core::cmp::min(f(self.contiguous_unacked()), self.in_order_len());
+        self.consume_clamped(len);
+        len
+    }
+
     /// Advance the read cursor by an already clamped `len`.
     fn consume_clamped(&mut self, len: usize) {
         if len == 0 {
@@ -967,7 +1019,7 @@ impl TcpStreamReassemblyBuf {
 
     /// Consume the buffer and return the underlying buffers for re-use.
     #[inline]
-    pub fn take_bufs(self) -> (Vec<u8>, Vec<TcpSegmentRange>) {
+    pub fn take_bufs(self) -> (Vec<u8>, Vec<TcpStreamRange>) {
         (self.data, self.sections)
     }
 }
@@ -1036,12 +1088,12 @@ mod test {
     fn new_clears_bufs() {
         let buf = TcpStreamReassemblyBuf::new(
             vec![1, 2, 3],
-            vec![TcpSegmentRange { start: 0, end: 3 }],
+            vec![TcpStreamRange { start: 0, end: 3 }],
             4096,
         );
         assert_eq!(buf.base_sequence_number(), None);
         assert_eq!(buf.base_offset(), 0);
-        assert!(buf.data().is_empty());
+        assert!(buf.raw_buffer().is_empty());
         assert!(buf.sections().is_empty());
         assert_eq!(buf.fin_offset(), None);
         assert_eq!(false, buf.syn_observed());
@@ -1345,7 +1397,7 @@ mod test {
         buf.add(0, &[0xAA; 4], false).unwrap();
         buf.add(8, &[0xBB; 4], false).unwrap();
         // the gap (offset 4..8) is currently zeroed in the raw buffer
-        assert_eq!(&buf.data()[4..8], &[0, 0, 0, 0]);
+        assert_eq!(&buf.raw_buffer()[4..8], &[0, 0, 0, 0]);
         buf.add(4, &[0xCC; 4], false).unwrap();
         let mut expected = Vec::new();
         expected.extend_from_slice(&[0xAA; 4]);
@@ -1443,7 +1495,7 @@ mod test {
         buf.consume(2 * COMPACT_THRESHOLD);
         let consumed = 100 + 2 * COMPACT_THRESHOLD;
         assert_eq!(buf.contiguous(), &payload[consumed..]);
-        assert_eq!(buf.data().len(), payload.len() - consumed);
+        assert_eq!(buf.raw_buffer().len(), payload.len() - consumed);
 
         // adding & consuming afterwards still works
         let extra = sequence(payload.len(), 32);
@@ -1502,6 +1554,66 @@ mod test {
         buf.add(1002, b"CCCC", false).unwrap();
         assert_eq!(buf.contiguous(), b"AAAACC");
         assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn drain_consumes_what_was_processed() {
+        let mut buf = new_buf();
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+
+        // consuming only a part keeps the rest buffered
+        let consumed = buf.drain(|bytes| {
+            assert_eq!(bytes, &sequence(0, 8)[..]);
+            3
+        });
+        assert_eq!(consumed, 3);
+        assert_eq!(buf.base_offset(), 3);
+        assert_eq!(buf.contiguous(), &sequence(3, 5)[..]);
+
+        // consuming nothing is fine
+        assert_eq!(buf.drain(|_| 0), 0);
+        assert_eq!(buf.base_offset(), 3);
+
+        // over-reporting is clamped to what was available
+        assert_eq!(buf.drain(|_| 1000), 5);
+        assert_eq!(buf.base_offset(), 8);
+        assert!(buf.contiguous().is_empty());
+    }
+
+    #[test]
+    fn drain_respects_the_ack_policy() {
+        let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), MAX);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 8), false).unwrap();
+
+        // nothing acknowledged -> `drain` sees nothing
+        assert_eq!(buf.drain(|bytes| bytes.len()), 0);
+        assert_eq!(buf.base_offset(), 0);
+
+        // ... while `drain_unacked` sees everything
+        assert_eq!(buf.drain_unacked(|bytes| bytes.len()), 8);
+        assert_eq!(buf.base_offset(), 8);
+    }
+
+    #[test]
+    fn raw_buffer_exposes_out_of_order_data() {
+        let mut buf = new_buf();
+        buf.add(1000, &[0xAA; 4], false).unwrap();
+        // out of order segment behind a gap
+        buf.add(1008, &[0xBB; 4], false).unwrap();
+
+        // the gap is zero filled in the raw buffer & not part of `contiguous`
+        assert_eq!(buf.contiguous(), &[0xAA; 4]);
+        assert_eq!(&buf.raw_buffer()[4..8], &[0, 0, 0, 0]);
+
+        // the received section can be located via `sections` & `base_offset`
+        let section = buf.sections()[1];
+        assert_eq!((section.start, section.end), (8, 12));
+        let base = buf.base_offset();
+        assert_eq!(
+            &buf.raw_buffer()[(section.start - base) as usize..(section.end - base) as usize],
+            &[0xBB; 4]
+        );
     }
 
     #[test]
@@ -1699,36 +1811,8 @@ mod test {
         ) {
             use std::vec::Vec;
 
-            // simple deterministic xorshift RNG so no extra dependency is needed
-            let mut state = seed | 1;
-            let mut next = || {
-                state ^= state << 13;
-                state ^= state >> 7;
-                state ^= state << 17;
-                state
-            };
-
-            // split the reference into contiguous segments
-            let mut segments: Vec<(usize, usize)> = Vec::new(); // (offset, len)
-            let mut pos = 0usize;
-            while pos < reference.len() {
-                let remaining = reference.len() - pos;
-                let len = 1 + (next() as usize % remaining.min(40));
-                segments.push((pos, len));
-                pos += len;
-            }
-
-            // duplicate some segments and shuffle the send order
-            let mut to_send = segments.clone();
-            for seg in &segments {
-                if next() & 1 == 0 {
-                    to_send.push(*seg);
-                }
-            }
-            for i in (1..to_send.len()).rev() {
-                let j = next() as usize % (i + 1);
-                to_send.swap(i, j);
-            }
+            let mut next = xorshift(seed);
+            let to_send = split_and_shuffle(&reference, &mut next, true);
 
             let mut buf = new_buf_capacity(1 << 20);
             // model a known stream start (as if the ISN was learned from a SYN):
@@ -1766,5 +1850,165 @@ mod test {
                 prop_assert!(buf.is_fin_reached());
             }
         }
+
+        /// Same as `reassemble_random`, but without a known stream start: the
+        /// buffer has to anchor itself on whichever segment arrives first and
+        /// re-anchor backwards for every earlier one.
+        ///
+        /// Nothing is consumed while the segments arrive, as consuming would
+        /// (correctly) drop the data in front of the read cursor.
+        #[test]
+        fn reassemble_random_mid_stream_anchor(
+            reference in proptest::collection::vec(any::<u8>(), 1..600usize),
+            isn in any::<u32>(),
+            seed in any::<u64>(),
+        ) {
+            let mut next = xorshift(seed);
+            let to_send = split_and_shuffle(&reference, &mut next, true);
+
+            let mut buf = new_buf_capacity(1 << 20);
+            for (offset, len) in to_send {
+                let seq = isn.wrapping_add(offset as u32);
+                let is_last = offset + len == reference.len();
+                buf.add(seq, &reference[offset..offset + len], is_last).unwrap();
+
+                for w in buf.sections().windows(2) {
+                    prop_assert!(w[0].end < w[1].start);
+                }
+            }
+
+            // the stream start was never announced, but the re-anchoring kept
+            // every byte
+            prop_assert_eq!(false, buf.syn_observed());
+            prop_assert_eq!(buf.contiguous(), &reference[..]);
+            prop_assert!(buf.is_fin_reached());
+        }
+
+        /// Feeds acknowledgments interleaved with the segments and checks that
+        /// nothing beyond the acknowledged offset is ever handed out.
+        #[test]
+        fn reassemble_random_with_acks(
+            reference in proptest::collection::vec(any::<u8>(), 1..600usize),
+            isn in any::<u32>(),
+            seed in any::<u64>(),
+        ) {
+            let mut next = xorshift(seed);
+            let to_send = split_and_shuffle(&reference, &mut next, true);
+
+            let mut buf = TcpStreamReassemblyBuf::new(Vec::new(), Vec::new(), 1 << 20);
+            buf.reset(isn);
+            let mut collected: Vec<u8> = Vec::new();
+
+            for (offset, len) in to_send {
+                let seq = isn.wrapping_add(offset as u32);
+                let is_last = offset + len == reference.len();
+                buf.add(seq, &reference[offset..offset + len], is_last).unwrap();
+
+                // acknowledge a random position of the stream
+                if next() & 1 == 0 {
+                    let acked = next() as usize % (reference.len() + 1);
+                    buf.add_ack(isn.wrapping_add(acked as u32));
+                }
+
+                // never hand out more than what was acknowledged
+                match buf.ack_offset() {
+                    Some(ack_offset) => prop_assert!(
+                        buf.base_offset() + buf.contiguous().len() as u64 <= ack_offset
+                    ),
+                    None => prop_assert!(buf.contiguous().is_empty()),
+                }
+
+                if next() & 3 == 0 {
+                    let avail = buf.contiguous().len();
+                    let take = if avail == 0 { 0 } else { next() as usize % (avail + 1) };
+                    collected.extend_from_slice(&buf.contiguous()[..take]);
+                    buf.consume(take);
+                }
+            }
+
+            // acknowledging everything releases the rest
+            buf.add_ack(isn.wrapping_add(reference.len() as u32));
+            collected.extend_from_slice(buf.contiguous());
+            let avail = buf.contiguous().len();
+            buf.consume(avail);
+
+            prop_assert_eq!(&collected, &reference);
+            prop_assert!(buf.is_fin_reached());
+        }
+
+        /// Re-transmits carrying *different* content must never change bytes
+        /// that were already received ("first writer wins").
+        #[test]
+        fn corrupted_retransmits_do_not_change_received_data(
+            reference in proptest::collection::vec(any::<u8>(), 1..600usize),
+            isn in any::<u32>(),
+            seed in any::<u64>(),
+        ) {
+            let mut next = xorshift(seed);
+            let segments = split_and_shuffle(&reference, &mut next, false);
+
+            let mut buf = new_buf_capacity(1 << 20);
+            buf.reset(isn);
+
+            // the genuine data first (shuffled, but no duplicates) ...
+            for (offset, len) in &segments {
+                let seq = isn.wrapping_add(*offset as u32);
+                buf.add(seq, &reference[*offset..*offset + *len], false).unwrap();
+            }
+
+            // ... then re-transmits of the same ranges with corrupted content
+            for (offset, len) in &segments {
+                let corrupted: Vec<u8> = reference[*offset..*offset + *len]
+                    .iter()
+                    .map(|b| !*b)
+                    .collect();
+                let seq = isn.wrapping_add(*offset as u32);
+                buf.add(seq, &corrupted, false).unwrap();
+            }
+
+            prop_assert_eq!(buf.contiguous(), &reference[..]);
+        }
+    }
+
+    /// Simple deterministic xorshift RNG so no extra dependency is needed.
+    fn xorshift(seed: u64) -> impl FnMut() -> u64 {
+        let mut state = seed | 1;
+        move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        }
+    }
+
+    /// Splits `reference` into contiguous `(offset, len)` segments and
+    /// shuffles the send order (optionally duplicating some of them).
+    fn split_and_shuffle(
+        reference: &[u8],
+        next: &mut impl FnMut() -> u64,
+        duplicate: bool,
+    ) -> Vec<(usize, usize)> {
+        let mut segments: Vec<(usize, usize)> = Vec::new();
+        let mut pos = 0usize;
+        while pos < reference.len() {
+            let remaining = reference.len() - pos;
+            let len = 1 + (next() as usize % remaining.min(40));
+            segments.push((pos, len));
+            pos += len;
+        }
+
+        let mut to_send = segments.clone();
+        if duplicate {
+            for seg in &segments {
+                if next() & 1 == 0 {
+                    to_send.push(*seg);
+                }
+            }
+        }
+        for i in (1..to_send.len()).rev() {
+            let j = next() as usize % (i + 1);
+            to_send.swap(i, j);
+        }
+        to_send
     }
 }

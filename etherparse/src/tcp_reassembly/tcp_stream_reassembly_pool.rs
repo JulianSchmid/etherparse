@@ -132,7 +132,7 @@ pub struct TcpStreamReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     finished_data_bufs: Vec<Vec<u8>>,
 
     /// Section buffers that can be re-used.
-    finished_section_bufs: Vec<Vec<TcpSegmentRange>>,
+    finished_section_bufs: Vec<Vec<TcpStreamRange>>,
 
     /// Maximum number of bytes buffered ahead of the read cursor per stream.
     default_max_capacity: usize,
@@ -157,7 +157,7 @@ pub struct TcpStreamReassemblyPool<Timestamp = (), CustomChannelId = ()> {
 /// Takes a buffer from the free lists (or allocates a new one).
 fn pop_free_buf(
     free_data: &mut Vec<Vec<u8>>,
-    free_sections: &mut Vec<Vec<TcpSegmentRange>>,
+    free_sections: &mut Vec<Vec<TcpStreamRange>>,
     max_capacity: usize,
     max_sections: usize,
     ack_policy: TcpAckPolicy,
@@ -179,7 +179,7 @@ fn pop_free_buf(
 /// rest of its lifetime.
 fn recycle_buf(
     free_data: &mut Vec<Vec<u8>>,
-    free_sections: &mut Vec<Vec<TcpSegmentRange>>,
+    free_sections: &mut Vec<Vec<TcpStreamRange>>,
     max_pooled_bufs: usize,
     max_pooled_buf_capacity: usize,
     buf: TcpStreamReassemblyBuf,
@@ -202,7 +202,7 @@ fn recycle_buf(
 /// Takes the two buffers of a connection from the free lists.
 fn pop_free_connection(
     free_data: &mut Vec<Vec<u8>>,
-    free_sections: &mut Vec<Vec<TcpSegmentRange>>,
+    free_sections: &mut Vec<Vec<TcpStreamRange>>,
     max_capacity: usize,
     max_sections: usize,
     ack_policy: TcpAckPolicy,
@@ -229,7 +229,7 @@ fn pop_free_connection(
 /// lists.
 fn recycle_connection(
     free_data: &mut Vec<Vec<u8>>,
-    free_sections: &mut Vec<Vec<TcpSegmentRange>>,
+    free_sections: &mut Vec<Vec<TcpStreamRange>>,
     max_pooled_bufs: usize,
     max_pooled_buf_capacity: usize,
     connection: TcpConnection,
@@ -357,6 +357,27 @@ where
         channel_id: CustomChannelId,
     ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
         match TcpSegmentInfo::from_sliced_packet(slice, channel_id) {
+            Some(segment) => self.process(segment, timestamp),
+            None => {
+                self.recycle_pending_closed();
+                Ok(TcpReassemblyEvent::Ignored)
+            }
+        }
+    }
+
+    /// Process a TCP segment contained in a [`LaxSlicedPacket`].
+    ///
+    /// Behaves like [`TcpStreamReassemblyPool::process_sliced_packet`], but
+    /// accepts packets that were parsed without the length & consistency
+    /// checks. See [`TcpSegmentInfo::from_lax_sliced_packet`] for what that
+    /// implies for the reconstructed stream.
+    pub fn process_lax_sliced_packet(
+        &mut self,
+        slice: &LaxSlicedPacket,
+        timestamp: Timestamp,
+        channel_id: CustomChannelId,
+    ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
+        match TcpSegmentInfo::from_lax_sliced_packet(slice, channel_id) {
             Some(segment) => self.process(segment, timestamp),
             None => {
                 self.recycle_pending_closed();
@@ -669,6 +690,8 @@ where
 mod test {
     use super::*;
     use arrayvec::ArrayVec;
+    use proptest::prelude::*;
+    use std::format;
     use std::vec::Vec;
 
     fn endpoint_a() -> TcpEndpoint {
@@ -1372,6 +1395,51 @@ mod test {
     }
 
     #[test]
+    fn is_closed_after_both_fins() {
+        let mut pool = new_pool::<()>();
+
+        let payload = sequence(0, 4);
+        let mut fin = segment(false, 1000, &payload, 0);
+        fin.fin = true;
+        pool.process_tcp(fin, ()).unwrap();
+        // only one direction is done so far
+        assert_eq!(false, pool.connection(&conn_id(0)).unwrap().is_closed());
+
+        let mut fin = segment(true, 5000, &payload, 0);
+        fin.fin = true;
+        pool.process_tcp(fin, ()).unwrap();
+        assert!(pool.connection(&conn_id(0)).unwrap().is_closed());
+
+        // the connection is not evicted automatically, the data is still there
+        assert_eq!(pool.active_connections(), 1);
+        pool.retain(|_, _| false);
+        assert_eq!(pool.active_connections(), 0);
+    }
+
+    #[test]
+    fn process_lax_sliced_packet() {
+        let mut pool = new_pool::<()>();
+
+        // a laxly parsed packet is accepted as well
+        let payload = sequence(0, 8);
+        let pdata = build_ipv4_tcp_packet(1000, false, false, false, &payload);
+        let slice = LaxSlicedPacket::from_ethernet(&pdata).unwrap();
+        let buf = sender(pool.process_lax_sliced_packet(&slice, (), 0).unwrap());
+        assert_eq!(buf.contiguous(), &payload[..]);
+        assert_eq!(pool.active_connections(), 1);
+
+        // a packet without a TCP layer is ignored
+        let empty = LaxSlicedPacket {
+            link: None,
+            link_exts: Default::default(),
+            net: None,
+            transport: None,
+            stop_err: None,
+        };
+        assert_ignored(pool.process_lax_sliced_packet(&empty, (), 0).unwrap());
+    }
+
+    #[test]
     fn non_tcp_and_process_sliced_packet() {
         let mut pool = TcpStreamReassemblyPool::<(), ()>::new().with_ack_policy(TcpAckPolicy::Ignore);
 
@@ -1401,6 +1469,217 @@ mod test {
             &payload[..]
         );
         assert_eq!(pool.active_connections(), 0);
+    }
+
+    proptest! {
+        /// Drives a full bidirectional exchange through the pool: a handshake,
+        /// the client data split into randomly re-ordered & duplicated
+        /// segments, server acknowledgments releasing it and injected garbage
+        /// (out of window RSTs & pure ACKs) that must not disturb anything.
+        #[test]
+        fn pool_reassemble_random(
+            reference in proptest::collection::vec(any::<u8>(), 1..400usize),
+            client_isn in any::<u32>(),
+            server_isn in any::<u32>(),
+            seed in any::<u64>(),
+        ) {
+            // simple deterministic xorshift RNG so no extra dependency is needed
+            let mut state = seed | 1;
+            let mut next = move || {
+                state ^= state << 13;
+                state ^= state >> 7;
+                state ^= state << 17;
+                state
+            };
+
+            // split the reference into contiguous segments, duplicate some of
+            // them & shuffle the send order
+            let mut segments: Vec<(usize, usize)> = Vec::new();
+            let mut pos = 0usize;
+            while pos < reference.len() {
+                let remaining = reference.len() - pos;
+                let len = 1 + (next() as usize % remaining.min(40));
+                segments.push((pos, len));
+                pos += len;
+            }
+            let mut to_send = segments.clone();
+            for seg in &segments {
+                if next() & 1 == 0 {
+                    to_send.push(*seg);
+                }
+            }
+            for i in (1..to_send.len()).rev() {
+                let j = next() as usize % (i + 1);
+                to_send.swap(i, j);
+            }
+
+            // the SYN consumes one sequence number
+            let data_start = client_isn.wrapping_add(1);
+            let id = conn_id(0);
+            let mut pool = TcpStreamReassemblyPool::<(), u16>::new();
+            let mut collected: Vec<u8> = Vec::new();
+
+            /// Feeds a segment & asserts the connection was not torn down.
+            macro_rules! feed {
+                ($seg:expr) => {
+                    match pool.process_tcp($seg, ()) {
+                        Ok(TcpReassemblyEvent::Closed(_)) => {
+                            return Err(TestCaseError::fail("unexpected connection close"))
+                        }
+                        Ok(_) => {}
+                        Err(err) => {
+                            return Err(TestCaseError::fail(std::format!("{err}")))
+                        }
+                    }
+                };
+            }
+
+            // handshake
+            let mut syn = segment(false, client_isn, &[], 0);
+            syn.syn = true;
+            feed!(syn);
+            let mut syn_ack = segment(true, server_isn, &[], 0);
+            syn_ack.syn = true;
+            syn_ack.acknowledgment_number = Some(data_start);
+            feed!(syn_ack);
+
+            for (offset, len) in to_send {
+                let is_last = offset + len == reference.len();
+                let mut seg = segment(
+                    false,
+                    data_start.wrapping_add(offset as u32),
+                    &reference[offset..offset + len],
+                    0,
+                );
+                seg.fin = is_last;
+                seg.acknowledgment_number = Some(server_isn.wrapping_add(1));
+                feed!(seg);
+
+                // an out of window RST must never end the connection: one far
+                // in the future & one behind the read cursor
+                if next() & 3 == 0 {
+                    let bogus = if next() & 1 == 0 {
+                        data_start.wrapping_add(5_000_000)
+                    } else {
+                        data_start.wrapping_sub(1_000)
+                    };
+                    let mut rst = segment(false, bogus, &[], 0);
+                    rst.rst = true;
+                    feed!(rst);
+                }
+
+                // the server acknowledges a random position of the stream
+                if next() & 1 == 0 {
+                    let acked = next() as usize % (reference.len() + 1);
+                    let mut ack = segment(true, server_isn.wrapping_add(1), &[], 0);
+                    ack.acknowledgment_number =
+                        Some(data_start.wrapping_add(acked as u32));
+                    feed!(ack);
+                }
+
+                // drain whatever became available
+                if let Some(stream) = pool.stream_mut(&id, A_TO_B) {
+                    stream.drain(|available| {
+                        collected.extend_from_slice(available);
+                        available.len()
+                    });
+                }
+            }
+
+            // the server acknowledges everything
+            let mut ack = segment(true, server_isn.wrapping_add(1), &[], 0);
+            ack.acknowledgment_number =
+                Some(data_start.wrapping_add(reference.len() as u32));
+            feed!(ack);
+
+            let stream = pool.stream_mut(&id, A_TO_B).unwrap();
+            stream.drain(|available| {
+                collected.extend_from_slice(available);
+                available.len()
+            });
+
+            prop_assert_eq!(&collected, &reference);
+            prop_assert!(stream.syn_observed());
+            prop_assert!(stream.is_fin_reached());
+            prop_assert_eq!(pool.active_connections(), 1);
+            prop_assert!(pool.connection(&id).unwrap().is_bidirectional());
+
+            // an in window RST does end it
+            let mut rst = segment(
+                false,
+                data_start.wrapping_add(reference.len() as u32),
+                &[],
+                0,
+            );
+            rst.rst = true;
+            match pool.process_tcp(rst, ()) {
+                Ok(TcpReassemblyEvent::Closed(_)) => {}
+                other => {
+                    return Err(TestCaseError::fail(std::format!(
+                        "expected the connection to be closed, got {other:?}"
+                    )))
+                }
+            }
+            prop_assert_eq!(pool.active_connections(), 0);
+        }
+
+        /// A SYN with a new initial sequence number replaces the connection
+        /// without leaking any data of the previous one.
+        #[test]
+        fn pool_reconnect_random(
+            first in proptest::collection::vec(any::<u8>(), 1..200usize),
+            second in proptest::collection::vec(any::<u8>(), 1..200usize),
+            first_isn in any::<u32>(),
+            second_isn in any::<u32>(),
+        ) {
+            // the two connections have to be distinguishable
+            prop_assume!(first_isn != second_isn);
+
+            let id = conn_id(0);
+            let mut pool = new_pool::<()>();
+
+            // first connection
+            let mut syn = segment(false, first_isn, &[], 0);
+            syn.syn = true;
+            pool.process_tcp(syn, ()).unwrap();
+            pool.process_tcp(
+                segment(false, first_isn.wrapping_add(1), &first, 0),
+                (),
+            )
+            .unwrap();
+
+            // reconnect with a fresh isn (which is just as likely to be lower
+            // as it is to be higher than the previous one)
+            let mut syn = segment(false, second_isn, &[], 0);
+            syn.syn = true;
+            match pool.process_tcp(syn, ()) {
+                Ok(TcpReassemblyEvent::Closed(connection)) => {
+                    prop_assert_eq!(
+                        connection.stream(A_TO_B).contiguous_unacked(),
+                        &first[..]
+                    );
+                }
+                other => {
+                    return Err(TestCaseError::fail(std::format!(
+                        "expected the previous connection to be closed, got {other:?}"
+                    )))
+                }
+            }
+
+            // the replacement carries only the data of the new connection
+            pool.process_tcp(
+                segment(false, second_isn.wrapping_add(1), &second, 0),
+                (),
+            )
+            .unwrap();
+            let stream = pool.stream_mut(&id, A_TO_B).unwrap();
+            prop_assert_eq!(
+                stream.base_sequence_number(),
+                Some(second_isn.wrapping_add(1))
+            );
+            prop_assert_eq!(stream.contiguous(), &second[..]);
+            prop_assert_eq!(stream.sections().len(), 1);
+        }
     }
 
     fn build_ipv4_tcp_packet(seq: u32, syn: bool, fin: bool, rst: bool, payload: &[u8]) -> Vec<u8> {

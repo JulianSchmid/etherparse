@@ -80,24 +80,27 @@ fn main() {
                 // acknowledgment number can release data of the "receiver"
                 // stream, so both are worth draining.
                 for stream in [sender, receiver] {
-                    let available = stream.contiguous();
-                    if false == available.is_empty() {
-                        println!(
-                            "acknowledged data{}: {:?}",
-                            if stream.syn_observed() {
-                                ""
-                            } else {
-                                " (stream start not observed, prefix missing)"
-                            },
-                            core::str::from_utf8(available).unwrap_or("<non utf8>")
-                        );
+                    let syn_observed = stream.syn_observed();
+                    // `drain` hands over the available data and consumes
+                    // whatever the closure reports as processed (returning
+                    // less keeps the rest buffered)
+                    stream.drain(|available| {
+                        if false == available.is_empty() {
+                            println!(
+                                "acknowledged data{}: {:?}",
+                                if syn_observed {
+                                    ""
+                                } else {
+                                    " (stream start not observed, prefix missing)"
+                                },
+                                core::str::from_utf8(available).unwrap_or("<non utf8>")
+                            );
+                        }
 
                         // ... process the data here ...
 
-                        // "clean" the processed bytes so the memory is freed
-                        let len = available.len();
-                        stream.consume(len);
-                    }
+                        available.len()
+                    });
                 }
             }
             Ok(TcpReassemblyEvent::Closed(connection)) => {
@@ -136,16 +139,15 @@ fn main() {
             );
         }
         for direction in [TcpDirection::FirstToSecond, TcpDirection::SecondToFirst] {
-            let stream = connection.stream_mut(direction);
-            let leftover = stream.contiguous_unacked();
-            if false == leftover.is_empty() {
-                println!(
-                    "unacknowledged data at end of capture: {:?}",
-                    core::str::from_utf8(leftover).unwrap_or("<non utf8>")
-                );
-                let len = leftover.len();
-                stream.consume_unacked(len);
-            }
+            connection.stream_mut(direction).drain_unacked(|leftover| {
+                if false == leftover.is_empty() {
+                    println!(
+                        "unacknowledged data at end of capture: {:?}",
+                        core::str::from_utf8(leftover).unwrap_or("<non utf8>")
+                    );
+                }
+                leftover.len()
+            });
         }
     }
 }

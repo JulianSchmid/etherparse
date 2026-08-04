@@ -92,6 +92,58 @@ impl<'a, CustomChannelId> TcpSegmentInfo<'a, CustomChannelId> {
             rst: tcp.rst(),
         })
     }
+
+    /// Extracts the values relevant for the reassembly from a laxly sliced
+    /// packet.
+    ///
+    /// Returns `None` if the packet does not contain a TCP segment with an IP
+    /// header.
+    ///
+    /// Note that a [`LaxSlicedPacket`] may have stopped parsing because of an
+    /// error (see [`LaxSlicedPacket::stop_err`]) and that its lengths are not
+    /// validated, so the payload of a truncated packet is shorter than the
+    /// sender intended. Feeding such a segment inserts the truncated data at
+    /// its sequence number, which leaves a gap that is only filled if the
+    /// data arrives again.
+    pub fn from_lax_sliced_packet(
+        slice: &'a LaxSlicedPacket,
+        channel_id: CustomChannelId,
+    ) -> Option<TcpSegmentInfo<'a, CustomChannelId>> {
+        use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+        let Some(TransportSlice::Tcp(tcp)) = &slice.transport else {
+            return None;
+        };
+
+        let (source_ip, destination_ip) = match &slice.net {
+            Some(LaxNetSlice::Ipv4(v4)) => (
+                IpAddr::V4(Ipv4Addr::from(v4.header().source())),
+                IpAddr::V4(Ipv4Addr::from(v4.header().destination())),
+            ),
+            Some(LaxNetSlice::Ipv6(v6)) => (
+                IpAddr::V6(Ipv6Addr::from(v6.header().source())),
+                IpAddr::V6(Ipv6Addr::from(v6.header().destination())),
+            ),
+            Some(LaxNetSlice::Arp(_)) | None => return None,
+        };
+
+        Some(TcpSegmentInfo {
+            source: TcpEndpoint::new(source_ip, tcp.source_port()),
+            destination: TcpEndpoint::new(destination_ip, tcp.destination_port()),
+            vlan_ids: slice.vlan_ids(),
+            channel_id,
+            sequence_number: tcp.sequence_number(),
+            acknowledgment_number: if tcp.ack() {
+                Some(tcp.acknowledgment_number())
+            } else {
+                None
+            },
+            payload: tcp.payload(),
+            syn: tcp.syn(),
+            fin: tcp.fin(),
+            rst: tcp.rst(),
+        })
+    }
 }
 
 #[cfg(test)]

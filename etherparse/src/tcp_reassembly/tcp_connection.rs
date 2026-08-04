@@ -84,6 +84,23 @@ impl TcpConnection {
             && self.is_direction_observed(TcpDirection::SecondToFirst)
     }
 
+    /// True once **both** directions received all data up to their `FIN`,
+    /// i.e. the connection was closed gracefully and nothing is missing.
+    ///
+    /// A connection is not removed from a
+    /// [`TcpStreamReassemblyPool`] automatically when this becomes true (the
+    /// data still has to be drained). Use it to decide when to call
+    /// [`TcpStreamReassemblyPool::end_connection`] or as part of a
+    /// [`TcpStreamReassemblyPool::retain`] predicate.
+    ///
+    /// Note that this is about *reception* and ignores the
+    /// [`TcpAckPolicy`], see
+    /// [`TcpStreamReassemblyBuf::is_fin_reached`].
+    #[inline]
+    pub fn is_closed(&self) -> bool {
+        self.first_to_second.is_fin_reached() && self.second_to_first.is_fin_reached()
+    }
+
     /// True if either direction still holds in-order data that was not
     /// consumed yet (ignoring the [`TcpAckPolicy`]).
     #[inline]
