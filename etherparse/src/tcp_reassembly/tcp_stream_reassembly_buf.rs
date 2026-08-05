@@ -124,6 +124,12 @@ impl TcpStreamReassemblyBuf {
     /// The maximum number of separately tracked data sections is set to
     /// [`DEFAULT_MAX_TCP_STREAM_SECTIONS`] (adjustable via
     /// [`TcpStreamReassemblyBuf::with_max_sections`]).
+    ///
+    /// `max_capacity` must be less than 2^31: the serial number arithmetic
+    /// used to map sequence numbers into the absolute stream offset space
+    /// interprets differences of 2^31 or more as "behind the read cursor", so
+    /// with a bigger window legitimate far-ahead segments would be
+    /// misinterpreted as stale data.
     pub fn new(
         mut data: Vec<u8>,
         mut sections: Vec<TcpStreamRange>,
@@ -226,6 +232,10 @@ impl TcpStreamReassemblyBuf {
 
     /// Absolute stream offset up to which the receiver acknowledged the data
     /// (exclusive), or `None` if no acknowledgment was observed yet.
+    ///
+    /// Note that `Some(0)` is also returned if acknowledgments were observed
+    /// but none of them could be mapped into the stream (e.g. an ack arriving
+    /// before any segment established the base of this direction).
     #[inline]
     pub fn ack_offset(&self) -> Option<u64> {
         if self.ack_observed {
@@ -348,7 +358,9 @@ impl TcpStreamReassemblyBuf {
     ///
     /// Allows rejecting blindly injected segments, e.g. a `RST` carrying an
     /// out of window sequence number. Returns `true` if no segment was
-    /// received for this stream yet (nothing to judge against).
+    /// received for this stream yet (nothing to judge against), so a segment
+    /// in a direction that was never observed before passes the check with
+    /// any sequence number.
     pub fn is_seq_in_window(&self, seq: u32) -> bool {
         let Some(base_seq) = self.base_seq else {
             return true;
@@ -361,7 +373,9 @@ impl TcpStreamReassemblyBuf {
     /// while keeping the already buffered data.
     ///
     /// `start_abs` is the absolute stream offset `base` maps to and must be
-    /// negative (the stream started before the current anchor).
+    /// negative (the stream started before the current anchor). Only valid
+    /// while nothing was consumed yet (`base_offset == 0`), the caller has to
+    /// check that beforehand.
     fn anchor_stream_start(
         &mut self,
         base: u32,
@@ -369,14 +383,7 @@ impl TcpStreamReassemblyBuf {
     ) -> Result<(), TcpReassembleError> {
         use TcpReassembleError::*;
         debug_assert!(start_abs < 0);
-
-        // re-anchoring shifts the buffered data, which is only possible while
-        // nothing was consumed yet. If data was already handed out the missing
-        // prefix cannot be re-introduced, so the SYN is ignored and the stream
-        // keeps being flagged as "start not observed".
-        if self.base_offset > 0 {
-            return Ok(());
-        }
+        debug_assert_eq!(0, self.base_offset);
 
         let buffered_len = self.data.len();
         let Ok(shift) = usize::try_from(-start_abs) else {
@@ -440,46 +447,60 @@ impl TcpStreamReassemblyBuf {
         // the SYN flag consumes one sequence number, the payload starts after it
         let base = seq.wrapping_add(1);
 
-        match self.base_seq {
-            None => {
-                self.base_seq = Some(base);
-                self.syn_observed = true;
+        if let Some(base_seq) = self.base_seq {
+            // Position of the stream start indicated by the SYN within the
+            // already reconstructed stream (offset 0 is where the buffer is
+            // anchored).
+            let start_abs = self.seq_to_abs_offset(base_seq, base);
+
+            // If the stream start is already known only an exact match is a
+            // duplicated/re-transmitted SYN. Initial sequence numbers are
+            // random, so *any* other value (in either direction) belongs to
+            // a new connection.
+            //
+            // If the start is not known yet the buffer anchored itself on
+            // the first seen segment, so a SYN at or before that anchor is
+            // the (re-ordered) start of the very same stream.
+            let same_stream = if self.syn_observed {
+                start_abs == 0
+            } else {
+                start_abs <= 0
+            };
+            if false == same_stream {
+                return Ok(TcpSegmentOutcome::NewConnection);
             }
-            Some(base_seq) => {
-                // Position of the stream start indicated by the SYN within the
-                // already reconstructed stream (offset 0 is where the buffer is
-                // anchored).
-                let start_abs = self.seq_to_abs_offset(base_seq, base);
 
-                // If the stream start is already known only an exact match is a
-                // duplicated/re-transmitted SYN. Initial sequence numbers are
-                // random, so *any* other value (in either direction) belongs to
-                // a new connection.
-                //
-                // If the start is not known yet the buffer anchored itself on
-                // the first seen segment, so a SYN at or before that anchor is
-                // the (re-ordered) start of the very same stream.
-                let same_stream = if self.syn_observed {
-                    start_abs == 0
-                } else {
-                    start_abs <= 0
-                };
-                if false == same_stream {
-                    return Ok(TcpSegmentOutcome::NewConnection);
+            if start_abs < 0 {
+                // re-anchoring shifts the buffered data, which is only
+                // possible while nothing was consumed yet. If data was
+                // already handed out the missing prefix cannot be
+                // re-introduced anymore, so the SYN is ignored (the stream
+                // keeps being flagged as "start not observed") and only its
+                // payload is fed (mostly trimmed as already consumed data).
+                if self.base_offset > 0 {
+                    self.add(base, payload, fin)?;
+                    return Ok(TcpSegmentOutcome::Continued);
                 }
-
-                if start_abs < 0 {
+                // A SYN without payload cannot trigger the backwards
+                // re-anchoring of `add` (it re-anchors on payload bytes), so
+                // the buffer is shifted explicitly. The `add` afterwards only
+                // records a potential FIN, which cannot fail for an empty
+                // payload (so an error cannot leave a partially applied
+                // state). A SYN *with* payload (TCP Fast Open) skips this:
+                // `add` performs the identical re-anchoring itself, atomically
+                // together with the payload checks.
+                if payload.is_empty() {
                     self.anchor_stream_start(base, start_abs)?;
-                } else {
-                    self.syn_observed = true;
                 }
             }
         }
 
-        // TCP Fast Open: a SYN may already carry payload (and a FIN)
-        if fin || false == payload.is_empty() {
-            self.add(base, payload, fin)?;
-        }
+        // Anchor / re-anchor the buffer & feed the payload and FIN (TCP Fast
+        // Open SYNs may already carry both). Only mark the stream start as
+        // observed after every fallible step succeeded, so an error leaves
+        // the buffer unmodified.
+        self.add(base, payload, fin)?;
+        self.syn_observed = true;
         Ok(TcpSegmentOutcome::Continued)
     }
 
@@ -515,7 +536,11 @@ impl TcpStreamReassemblyBuf {
     ///
     /// * `seq` is the sequence number of the first payload byte.
     /// * `fin` records that this segment carried the FIN flag (marks the end of
-    ///   the stream one byte past the payload).
+    ///   the stream one byte past the payload). A FIN before the read cursor
+    ///   or referencing a position more than `max_capacity` bytes beyond the
+    ///   received data (which a real receiver would reject as out of window,
+    ///   e.g. a blindly injected segment) is ignored, as is a second FIN at a
+    ///   different position (the first one wins).
     ///
     /// Retransmits, re-ordered segments and duplicated / overlapping payloads
     /// are handled silently. Payload bytes that are not part of the stream are
@@ -598,8 +623,20 @@ impl TcpStreamReassemblyBuf {
         // the end of the stream indicated by the FIN flag (the FIN occupies
         // the sequence number right after the payload). FINs before the read
         // cursor are stale (e.g. wrapped far-future sequence numbers) and
-        // ignored, as is a second FIN at a different position (first wins).
-        let planned_fin: Option<u64> = if fin && self.fin_offset.is_none() && eff_end >= cursor {
+        // FINs referencing a position far beyond anything that was received
+        // are implausible (e.g. a blindly injected segment that a real
+        // receiver would reject as out of window); both are ignored, as is a
+        // second FIN at a different position (first wins). The limit is
+        // shifted into the re-anchored coordinates if required (the payload
+        // window check below catches data segments either way, this matters
+        // for FINs without storable payload).
+        let fin_limit =
+            self.plausible_offset_limit().saturating_add(rebase_shift as u64);
+        let planned_fin: Option<u64> = if fin
+            && self.fin_offset.is_none()
+            && eff_end >= cursor
+            && eff_end <= fin_limit as i128
+        {
             Some(eff_end as u64)
         } else {
             None
@@ -1294,6 +1331,37 @@ mod test {
     }
 
     #[test]
+    fn out_of_window_fin_is_ignored() {
+        // a pure FIN referencing a position far beyond the received data
+        // (e.g. a blindly injected segment that a real receiver would reject
+        // as out of window) must not set the end of the stream, as the first
+        // FIN wins & a bogus one would block the genuine FIN forever
+        let mut buf = new_buf_capacity(16);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 4), false).unwrap();
+
+        // received data ends at 4 -> positions up to 4 + 16 are plausible
+        buf.add(1000u32.wrapping_add(21), &[], true).unwrap();
+        assert_eq!(buf.fin_offset(), None);
+        let err = buf.add(1000u32.wrapping_add(1_000_000), &[], true);
+        assert_eq!(err, Ok(()));
+        assert_eq!(buf.fin_offset(), None);
+
+        // the genuine FIN afterwards is still accepted
+        buf.add(1004, &[], true).unwrap();
+        assert_eq!(buf.fin_offset(), Some(4));
+        assert!(buf.is_fin_reached());
+
+        // a FIN exactly at the plausible limit is accepted (e.g. after the
+        // capture missed segments)
+        let mut buf = new_buf_capacity(16);
+        buf.reset(1000);
+        buf.add(1000, &sequence(0, 4), false).unwrap();
+        buf.add(1000u32.wrapping_add(20), &[], true).unwrap();
+        assert_eq!(buf.fin_offset(), Some(20));
+    }
+
+    #[test]
     fn first_fin_wins() {
         let mut buf = new_buf();
         buf.add(100, &sequence(0, 4), true).unwrap();
@@ -1325,6 +1393,74 @@ mod test {
         );
         assert!(buf.syn_observed());
         assert_eq!(buf.contiguous(), &sequence(0, 4)[..]);
+    }
+
+    #[test]
+    fn add_segment_error_leaves_state_unchanged() {
+        // a SYN with a TCP Fast Open payload exceeding the window must not
+        // commit the connection setup (base & syn_observed) either
+        let mut buf = new_buf_capacity(4);
+        let err = buf.add_segment(1000, &sequence(0, 8), true, false);
+        assert_eq!(
+            err,
+            Err(TcpReassembleError::SegmentBeyondMaxWindow {
+                required_capacity: 8,
+                max_capacity: 4
+            })
+        );
+        assert_eq!(buf.base_sequence_number(), None);
+        assert_eq!(false, buf.syn_observed());
+        assert!(buf.sections().is_empty());
+
+        // same for a late SYN whose payload would re-anchor the buffer
+        // beyond the window
+        let mut buf = new_buf_capacity(8);
+        buf.add(1010, &sequence(10, 2), false).unwrap();
+        let err = buf.add_segment(999, &sequence(0, 8), true, false);
+        assert_eq!(
+            err,
+            Err(TcpReassembleError::SegmentBeyondMaxWindow {
+                required_capacity: 12,
+                max_capacity: 8
+            })
+        );
+        assert_eq!(buf.base_sequence_number(), Some(1010));
+        assert_eq!(buf.base_offset(), 0);
+        assert_eq!(false, buf.syn_observed());
+        assert_eq!(buf.contiguous(), &sequence(10, 2)[..]);
+        assert_section_invariants(&buf);
+    }
+
+    #[test]
+    fn late_pure_syn_reanchors_backwards() {
+        // buffer anchored mid-stream at 1004, then the (re-ordered) SYN
+        // announces the stream start at 1000 -> the buffer shifts backwards
+        // and leaves a gap for the not yet received bytes 1000..1004
+        let mut buf = new_buf();
+        buf.add(1004, &sequence(4, 4), false).unwrap();
+        assert_eq!(
+            buf.add_segment(999, &[], true, false).unwrap(),
+            TcpSegmentOutcome::Continued
+        );
+        assert!(buf.syn_observed());
+        assert_eq!(buf.base_sequence_number(), Some(1000));
+        // the first 4 bytes are still missing
+        assert_eq!(buf.contiguous(), &[]);
+        buf.add(1000, &sequence(0, 4), false).unwrap();
+        assert_eq!(buf.contiguous(), &sequence(0, 8)[..]);
+        assert_section_invariants(&buf);
+
+        // a late SYN after data was already consumed cannot re-anchor: it is
+        // ignored & the stream start stays flagged as not observed
+        let mut buf = new_buf();
+        buf.add(1004, &sequence(4, 4), false).unwrap();
+        buf.consume(4);
+        assert_eq!(
+            buf.add_segment(999, &[], true, false).unwrap(),
+            TcpSegmentOutcome::Continued
+        );
+        assert_eq!(false, buf.syn_observed());
+        assert_eq!(buf.base_sequence_number(), Some(1008));
     }
 
     #[test]

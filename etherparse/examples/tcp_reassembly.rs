@@ -103,14 +103,16 @@ fn main() {
                     });
                 }
             }
-            Ok(TcpReassemblyEvent::Closed(connection)) => {
+            Ok(TcpReassemblyEvent::Closed { id, connection }) => {
                 // a RST ended the connection (or a new connection replaced
                 // it): the not yet consumed data can still be drained here
                 for direction in [TcpDirection::FirstToSecond, TcpDirection::SecondToFirst] {
                     let leftover = connection.stream(direction).contiguous_unacked();
                     if false == leftover.is_empty() {
                         println!(
-                            "connection closed, leftover data: {:?}",
+                            "connection {:?} <-> {:?} closed, leftover data: {:?}",
+                            id.first(),
+                            id.second(),
                             core::str::from_utf8(leftover).unwrap_or("<non utf8>")
                         );
                     }

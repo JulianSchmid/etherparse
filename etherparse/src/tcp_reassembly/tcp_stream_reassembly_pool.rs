@@ -4,7 +4,7 @@ use std::vec::Vec;
 
 /// Result of processing a packet with a [`TcpStreamReassemblyPool`].
 #[derive(Debug)]
-pub enum TcpReassemblyEvent<'a> {
+pub enum TcpReassemblyEvent<'a, CustomChannelId = ()> {
     /// The packet did not affect any connection (not a TCP segment, or a
     /// segment of an unknown connection that carries nothing to reconstruct,
     /// e.g. a pure ACK or an out of window RST).
@@ -12,6 +12,11 @@ pub enum TcpReassemblyEvent<'a> {
 
     /// The segment was added to this (potentially newly created) connection.
     Segment {
+        /// Identifier the connection is tracked under (e.g. to key caller
+        /// side state or to access the connection later via
+        /// [`TcpStreamReassemblyPool::connection_mut`]).
+        id: TcpConnectionId<CustomChannelId>,
+
         /// Direction the segment was travelling in.
         direction: TcpDirection,
 
@@ -32,16 +37,22 @@ pub enum TcpReassemblyEvent<'a> {
 
     /// The connection was ended by a RST or replaced by a SYN with a new
     /// initial sequence number.
-    ///
-    /// In-order data that was never consumed can still be read from both
-    /// directions of the returned connection (use
-    /// [`TcpStreamReassemblyBuf::contiguous_unacked`], as the closing segment
-    /// is usually not acknowledged anymore). The buffers are automatically
-    /// recycled on the next `process_*` call.
-    ///
-    /// In the "replaced by a SYN" case the newly created connection can be
-    /// accessed via [`TcpStreamReassemblyPool::connection_mut`].
-    Closed(&'a mut TcpConnection),
+    Closed {
+        /// Identifier the connection was tracked under.
+        ///
+        /// In the "replaced by a SYN" case the newly created connection is
+        /// tracked under the same identifier and can be accessed via
+        /// [`TcpStreamReassemblyPool::connection_mut`].
+        id: TcpConnectionId<CustomChannelId>,
+
+        /// The closed connection.
+        ///
+        /// In-order data that was never consumed can still be read from both
+        /// directions (use [`TcpStreamReassemblyBuf::contiguous_unacked`], as
+        /// the closing segment is usually not acknowledged anymore). The
+        /// buffers are automatically recycled on the next `process_*` call.
+        connection: &'a mut TcpConnection,
+    },
 }
 
 /// Pool to reassemble the payload byte streams of multiple TCP connections in
@@ -82,7 +93,11 @@ pub enum TcpReassemblyEvent<'a> {
 /// * `RST` ends the connection (both directions) & recycles its buffers (see
 ///   [`TcpReassemblyEvent::Closed`]). RSTs carrying a sequence number outside
 ///   of the tracked window are ignored so a blindly injected RST cannot tear
-///   down a connection.
+///   down a connection. Note that this check needs previously observed
+///   segments of the direction the RST travels in to judge against: a RST
+///   arriving in a direction that was never observed before is accepted with
+///   any sequence number (rejecting it would also drop legitimate RSTs like
+///   a "connection refused" answering the initial SYN).
 ///
 /// Streams for which no SYN was observed (e.g. when the capture starts in the
 /// middle of a connection) are anchored on their first segment and
@@ -93,8 +108,11 @@ pub enum TcpReassemblyEvent<'a> {
 ///
 /// [`TcpStreamReassemblyPool::process_sliced_packet`] ignores IP fragments
 /// (the TCP layer of a fragmented packet is not decoded). Re-assemble
-/// fragmented packets first (e.g. via [`crate::defrag::IpDefragPool`]) and
-/// feed the result via [`TcpStreamReassemblyPool::process_tcp`].
+/// fragmented packets first (e.g. via [`crate::defrag::IpDefragPool`]), turn
+/// the result into a [`TcpSegmentInfo`] via
+/// [`TcpSegmentInfo::from_defragmented_payload`] and feed that via
+/// [`TcpStreamReassemblyPool::process_tcp`] (see the `pcap_tcp_reassembly`
+/// example).
 ///
 /// # TCP checksums are not verified
 ///
@@ -262,6 +280,9 @@ where
     }
 
     /// Creates a new pool with a custom per stream buffer limit.
+    ///
+    /// `max_capacity` must be less than 2^31 (see
+    /// [`TcpStreamReassemblyBuf::new`]).
     pub fn with_max_capacity(
         max_capacity: usize,
     ) -> TcpStreamReassemblyPool<Timestamp, CustomChannelId> {
@@ -269,6 +290,9 @@ where
     }
 
     /// Creates a new pool with custom per stream buffer & section limits.
+    ///
+    /// `max_capacity` must be less than 2^31 (see
+    /// [`TcpStreamReassemblyBuf::new`]).
     pub fn with_limits(
         max_capacity: usize,
         max_sections: usize,
@@ -347,7 +371,7 @@ where
     ///   connection (e.g. not a TCP segment).
     /// * `Ok(TcpReassemblyEvent::Segment{..})` giving access to both
     ///   directions of the affected connection.
-    /// * `Ok(TcpReassemblyEvent::Closed(..))` if a connection was ended by a
+    /// * `Ok(TcpReassemblyEvent::Closed{..})` if a connection was ended by a
     ///   RST or replaced by a new connection (leftover data can be drained).
     /// * `Err` if the segment could not be added (see [`TcpReassembleError`]).
     pub fn process_sliced_packet(
@@ -355,7 +379,10 @@ where
         slice: &SlicedPacket,
         timestamp: Timestamp,
         channel_id: CustomChannelId,
-    ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
+    ) -> Result<TcpReassemblyEvent<'_, CustomChannelId>, TcpReassembleError>
+    where
+        CustomChannelId: Clone,
+    {
         match TcpSegmentInfo::from_sliced_packet(slice, channel_id) {
             Some(segment) => self.process(segment, timestamp),
             None => {
@@ -376,7 +403,10 @@ where
         slice: &LaxSlicedPacket,
         timestamp: Timestamp,
         channel_id: CustomChannelId,
-    ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
+    ) -> Result<TcpReassemblyEvent<'_, CustomChannelId>, TcpReassembleError>
+    where
+        CustomChannelId: Clone,
+    {
         match TcpSegmentInfo::from_lax_sliced_packet(slice, channel_id) {
             Some(segment) => self.process(segment, timestamp),
             None => {
@@ -393,7 +423,10 @@ where
         &mut self,
         segment: TcpSegmentInfo<'_, CustomChannelId>,
         timestamp: Timestamp,
-    ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
+    ) -> Result<TcpReassemblyEvent<'_, CustomChannelId>, TcpReassembleError>
+    where
+        CustomChannelId: Clone,
+    {
         self.process(segment, timestamp)
     }
 
@@ -415,7 +448,10 @@ where
         &mut self,
         segment: TcpSegmentInfo<'_, CustomChannelId>,
         timestamp: Timestamp,
-    ) -> Result<TcpReassemblyEvent<'_>, TcpReassembleError> {
+    ) -> Result<TcpReassemblyEvent<'_, CustomChannelId>, TcpReassembleError>
+    where
+        CustomChannelId: Clone,
+    {
         use std::collections::hash_map::Entry;
         use TcpReassemblyEvent::*;
 
@@ -449,7 +485,10 @@ where
                 return Ok(Ignored);
             }
             return Ok(match self.active.remove(&id) {
-                Some((connection, _)) => Closed(self.pending_closed.insert(connection)),
+                Some((connection, _)) => Closed {
+                    id,
+                    connection: self.pending_closed.insert(connection),
+                },
                 None => Ignored,
             });
         }
@@ -459,6 +498,9 @@ where
 
         match self.active.entry(id) {
             Entry::Occupied(entry) => {
+                // the id was moved into the entry lookup, so the copy for the
+                // returned event has to be cloned back out of the key
+                let id = entry.key().clone();
                 let value = entry.into_mut();
 
                 // note: the timestamp is only updated after the fallible
@@ -476,6 +518,7 @@ where
                         value.1 = timestamp;
                         let (sender, receiver) = value.0.streams_mut(direction);
                         Ok(Segment {
+                            id,
                             direction,
                             sender,
                             receiver,
@@ -516,7 +559,10 @@ where
                         if old.has_leftover_data() {
                             // "value" can no longer be returned, but the
                             // leftover data of the replaced connection can
-                            Ok(Closed(self.pending_closed.insert(old)))
+                            Ok(Closed {
+                                id,
+                                connection: self.pending_closed.insert(old),
+                            })
                         } else {
                             recycle_connection(
                                 &mut self.finished_data_bufs,
@@ -527,6 +573,7 @@ where
                             );
                             let (sender, receiver) = value.0.streams_mut(direction);
                             Ok(Segment {
+                                id,
                                 direction,
                                 sender,
                                 receiver,
@@ -571,9 +618,11 @@ where
                 if let Some(ack) = ack {
                     connection.stream_mut(direction.reverse()).add_ack(ack);
                 }
+                let id = entry.key().clone();
                 let value = entry.insert((connection, timestamp));
                 let (sender, receiver) = value.0.streams_mut(direction);
                 Ok(Segment {
+                    id,
                     direction,
                     sender,
                     receiver,
@@ -741,7 +790,7 @@ mod test {
     }
 
     /// Unwraps the stream the payload was added to.
-    fn sender(ev: TcpReassemblyEvent<'_>) -> &mut TcpStreamReassemblyBuf {
+    fn sender<C: core::fmt::Debug>(ev: TcpReassemblyEvent<'_, C>) -> &mut TcpStreamReassemblyBuf {
         match ev {
             TcpReassemblyEvent::Segment { sender, .. } => sender,
             other => panic!("expected TcpReassemblyEvent::Segment, got {other:?}"),
@@ -749,7 +798,9 @@ mod test {
     }
 
     /// Unwraps the stream of the opposite direction.
-    fn receiver(ev: TcpReassemblyEvent<'_>) -> &mut TcpStreamReassemblyBuf {
+    fn receiver<C: core::fmt::Debug>(
+        ev: TcpReassemblyEvent<'_, C>,
+    ) -> &mut TcpStreamReassemblyBuf {
         match ev {
             TcpReassemblyEvent::Segment { receiver, .. } => receiver,
             other => panic!("expected TcpReassemblyEvent::Segment, got {other:?}"),
@@ -757,14 +808,14 @@ mod test {
     }
 
     /// Unwraps a [`TcpReassemblyEvent::Closed`].
-    fn closed(ev: TcpReassemblyEvent<'_>) -> &mut TcpConnection {
+    fn closed<C: core::fmt::Debug>(ev: TcpReassemblyEvent<'_, C>) -> &mut TcpConnection {
         match ev {
-            TcpReassemblyEvent::Closed(connection) => connection,
+            TcpReassemblyEvent::Closed { connection, .. } => connection,
             other => panic!("expected TcpReassemblyEvent::Closed, got {other:?}"),
         }
     }
 
-    fn assert_ignored(ev: TcpReassemblyEvent<'_>) {
+    fn assert_ignored<C>(ev: TcpReassemblyEvent<'_, C>) {
         assert!(matches!(ev, TcpReassemblyEvent::Ignored));
     }
 
@@ -850,10 +901,12 @@ mod test {
         let ev = pool.process_tcp(seg, ()).unwrap();
         match ev {
             TcpReassemblyEvent::Segment {
+                id,
                 direction,
                 sender,
                 receiver,
             } => {
+                assert_eq!(id, conn_id(0));
                 assert_eq!(direction, A_TO_B.reverse());
                 // the payload of this segment is not acknowledged yet
                 assert_eq!(sender.contiguous(), &[]);
@@ -902,6 +955,43 @@ mod test {
         // ... but it was not acknowledged, so only reachable unacked
         assert_eq!(buf.contiguous(), &[]);
         assert_eq!(buf.contiguous_unacked(), &sequence(8, 4)[..]);
+    }
+
+    #[test]
+    fn events_carry_the_connection_id() {
+        let mut pool = new_pool::<()>();
+
+        // a new connection reports the id it is tracked under ...
+        match pool
+            .process_tcp(segment(false, 1000, &sequence(0, 4), 7), ())
+            .unwrap()
+        {
+            TcpReassemblyEvent::Segment { id, direction, .. } => {
+                assert_eq!(id, conn_id(7));
+                assert_eq!(direction, A_TO_B);
+            }
+            other => panic!("expected Segment, got {other:?}"),
+        }
+
+        // ... as do segments of both directions of an existing connection
+        match pool
+            .process_tcp(segment(true, 5000, &sequence(4, 4), 7), ())
+            .unwrap()
+        {
+            TcpReassemblyEvent::Segment { id, direction, .. } => {
+                assert_eq!(id, conn_id(7));
+                assert_eq!(direction, A_TO_B.reverse());
+            }
+            other => panic!("expected Segment, got {other:?}"),
+        }
+
+        // ... and the close event
+        let mut rst = segment(false, 1004, &[], 7);
+        rst.rst = true;
+        match pool.process_tcp(rst, ()).unwrap() {
+            TcpReassemblyEvent::Closed { id, .. } => assert_eq!(id, conn_id(7)),
+            other => panic!("expected Closed, got {other:?}"),
+        }
     }
 
     #[test]
@@ -1523,7 +1613,7 @@ mod test {
             macro_rules! feed {
                 ($seg:expr) => {
                     match pool.process_tcp($seg, ()) {
-                        Ok(TcpReassemblyEvent::Closed(_)) => {
+                        Ok(TcpReassemblyEvent::Closed { .. }) => {
                             return Err(TestCaseError::fail("unexpected connection close"))
                         }
                         Ok(_) => {}
@@ -1613,7 +1703,7 @@ mod test {
             );
             rst.rst = true;
             match pool.process_tcp(rst, ()) {
-                Ok(TcpReassemblyEvent::Closed(_)) => {}
+                Ok(TcpReassemblyEvent::Closed { .. }) => {}
                 other => {
                     return Err(TestCaseError::fail(std::format!(
                         "expected the connection to be closed, got {other:?}"
@@ -1653,7 +1743,8 @@ mod test {
             let mut syn = segment(false, second_isn, &[], 0);
             syn.syn = true;
             match pool.process_tcp(syn, ()) {
-                Ok(TcpReassemblyEvent::Closed(connection)) => {
+                Ok(TcpReassemblyEvent::Closed { id: closed_id, connection }) => {
+                    prop_assert_eq!(closed_id, id.clone());
                     prop_assert_eq!(
                         connection.stream(A_TO_B).contiguous_unacked(),
                         &first[..]
