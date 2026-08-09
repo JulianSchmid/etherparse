@@ -91,7 +91,9 @@ impl TcpConnection {
     /// [`TcpStreamReassemblyPool`] automatically when this becomes true (the
     /// data still has to be drained). Use it to decide when to call
     /// [`TcpStreamReassemblyPool::end_connection`] or as part of a
-    /// [`TcpStreamReassemblyPool::retain`] predicate.
+    /// [`TcpStreamReassemblyPool::retain`] predicate (connections that are
+    /// simply inactive are better discarded via
+    /// [`TcpStreamReassemblyPool::evict_older_than`]).
     ///
     /// Note that this is about *reception* and ignores the
     /// [`TcpAckPolicy`], see
@@ -207,7 +209,8 @@ mod test {
         // not acknowledged, but still "leftover" (unacked data counts)
         assert!(conn.has_leftover_data());
 
-        conn.stream_mut(TcpDirection::SecondToFirst).consume_unacked(3);
+        conn.stream_mut(TcpDirection::SecondToFirst)
+            .consume_unacked(3);
         assert_eq!(false, conn.has_leftover_data());
 
         let (a, b) = conn.take_bufs();

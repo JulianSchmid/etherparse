@@ -104,6 +104,13 @@ pub enum TcpReassemblyEvent<'a, CustomChannelId = ()> {
 /// reconstructed from there on. They can be identified via
 /// [`TcpStreamReassemblyBuf::syn_observed`].
 ///
+/// Segments that carry nothing new for the reconstruction are accepted as
+/// well and only refresh the timestamp of the connection (see
+/// [`TcpStreamReassemblyPool::evict_older_than`]): keep alive probes (whose
+/// sequence number points at the last byte that was already sent, optionally
+/// with one byte of payload that a receiver discards), the acknowledgments
+/// answering them, window updates and re-transmits.
+///
 /// # IP fragmentation
 ///
 /// [`TcpStreamReassemblyPool::process_sliced_packet`] ignores IP fragments
@@ -134,8 +141,25 @@ pub enum TcpReassemblyEvent<'a, CustomChannelId = ()> {
 /// opening up many parallel connections. Set
 /// [`TcpStreamReassemblyPool::with_max_connections`] to bound it (new
 /// connections are then rejected with
-/// [`TcpReassembleError::TooManyConnections`]) and evict stale connections
-/// via [`TcpStreamReassemblyPool::retain`].
+/// [`TcpReassembleError::TooManyConnections`]).
+///
+/// # Discarding stale connections
+///
+/// Connections are never discarded automatically: a connection whose end is
+/// never observed (no `FIN`, no `RST`, e.g. because one side crashed or the
+/// capture simply does not contain the rest of it) would otherwise occupy
+/// memory forever.
+///
+/// Pass the capture time of the packets as `Timestamp` and discard the
+/// connections that have been inactive for too long via
+/// [`TcpStreamReassemblyPool::evict_older_than`] (or
+/// [`TcpStreamReassemblyPool::evict_older_than_with`] to get at the data of
+/// the discarded connections first). Every segment counts as activity, also
+/// keep alives & pure acknowledgments, see
+/// [`DEFAULT_TCP_CONNECTION_TIMEOUT`] for choosing the timeout.
+/// [`TcpStreamReassemblyPool::retain`] covers everything that is not purely
+/// time based (e.g. dropping connections that reached
+/// [`TcpConnection::is_closed`]).
 #[derive(Debug, Clone)]
 pub struct TcpStreamReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// Currently reconstructing TCP connections.
@@ -342,6 +366,7 @@ where
     /// Segments starting a new connection while the limit is reached are
     /// rejected with [`TcpReassembleError::TooManyConnections`]. Evict
     /// connections that are no longer of interest via
+    /// [`TcpStreamReassemblyPool::evict_older_than`],
     /// [`TcpStreamReassemblyPool::retain`] or
     /// [`TcpStreamReassemblyPool::end_connection`] to make room.
     pub fn with_max_connections(
@@ -632,10 +657,7 @@ where
     }
 
     /// Direct access to an active connection.
-    pub fn connection(
-        &self,
-        id: &TcpConnectionId<CustomChannelId>,
-    ) -> Option<&TcpConnection> {
+    pub fn connection(&self, id: &TcpConnectionId<CustomChannelId>) -> Option<&TcpConnection> {
         self.active.get(id).map(|(connection, _)| connection)
     }
 
@@ -692,19 +714,35 @@ where
         self.active.iter_mut().map(|(id, v)| (id, &mut v.0, &v.1))
     }
 
+    /// Timestamp of the last segment that was added to the given connection
+    /// (`None` if the connection is not tracked).
+    ///
+    /// See [`TcpStreamReassemblyPool::evict_older_than`] for what counts as
+    /// activity.
+    #[inline]
+    pub fn last_activity(&self, id: &TcpConnectionId<CustomChannelId>) -> Option<&Timestamp> {
+        self.active.get(id).map(|(_, timestamp)| timestamp)
+    }
+
     /// Retains only the connections specified by the predicate and recycles
-    /// the buffers of the evicted ones (e.g. to remove connections that have
-    /// not received data for a while based on the `Timestamp`).
+    /// the buffers of the evicted ones.
+    ///
+    /// The connection is passed to the predicate mutably, so data that was
+    /// reconstructed but never handed out can be drained before the
+    /// connection is dropped (see [`TcpStreamReassemblyBuf::drain_unacked`]).
+    ///
+    /// Use [`TcpStreamReassemblyPool::evict_older_than`] to discard
+    /// connections purely based on how long they have been inactive.
     pub fn retain<F>(&mut self, mut f: F)
     where
-        F: FnMut(&TcpConnectionId<CustomChannelId>, &Timestamp) -> bool,
+        F: FnMut(&TcpConnectionId<CustomChannelId>, &mut TcpConnection, &Timestamp) -> bool,
     {
         let finished_data_bufs = &mut self.finished_data_bufs;
         let finished_section_bufs = &mut self.finished_section_bufs;
         let max_pooled_bufs = self.max_pooled_bufs;
         let max_pooled_buf_capacity = self.max_pooled_buf_capacity;
         self.active.retain(|id, value| {
-            if f(id, &value.1) {
+            if f(id, &mut value.0, &value.1) {
                 true
             } else {
                 recycle_connection(
@@ -723,6 +761,106 @@ where
                 false
             }
         });
+    }
+
+    /// Discards all connections whose last activity is older than `cutoff`
+    /// (recycling their buffers) and returns how many were discarded.
+    ///
+    /// Data that was reconstructed but never handed out is dropped together
+    /// with the connection, use
+    /// [`TcpStreamReassemblyPool::evict_older_than_with`] to get at it first.
+    ///
+    /// Note that discarding a connection that is still alive is not just a
+    /// loss of the buffered data: a later segment of it starts a *new*
+    /// connection that is anchored on that segment (as if the capture had
+    /// started in the middle of the connection, see
+    /// [`TcpStreamReassemblyBuf::syn_observed`]).
+    ///
+    /// # What counts as activity
+    ///
+    /// The timestamp of a connection is updated by every segment that was
+    /// successfully added to it, **including segments that carry no data**:
+    /// keep alive probes, the acknowledgments answering them, window updates
+    /// and re-transmits all keep the connection alive, in either direction.
+    /// So the cutoff only has to outlast the keep alive interval of the
+    /// connections that are of interest, not their idle time (see
+    /// [`DEFAULT_TCP_CONNECTION_TIMEOUT`]).
+    ///
+    /// Segments that were rejected with a [`TcpReassembleError`] do *not*
+    /// count as activity, so a stream that is stalled (e.g. a segment that
+    /// was never re-transmitted followed by a full buffer, see
+    /// [`TcpStreamReassemblyBuf::skip_gap`]) is eventually discarded as well.
+    ///
+    /// # Timestamps
+    ///
+    /// The pool does not interpret its `Timestamp` type, it only requires it
+    /// to be comparable and compares with "less than", so the caller decides
+    /// what "older" means (e.g. the capture time of the packets or the wall
+    /// clock time at which they were processed). Note that pcap timestamps
+    /// are not guaranteed to increase monotonically.
+    ///
+    /// ```
+    /// # use etherparse::tcp_reassembly::*;
+    /// # use std::time::{Duration, SystemTime};
+    /// # let mut pool = TcpStreamReassemblyPool::<SystemTime, ()>::new();
+    /// # let packet_timestamp = SystemTime::now();
+    /// // "now" in capture time, e.g. the timestamp of the last read packet
+    /// if let Some(cutoff) = packet_timestamp.checked_sub(DEFAULT_TCP_CONNECTION_TIMEOUT) {
+    ///     pool.evict_older_than(&cutoff);
+    /// }
+    /// ```
+    ///
+    /// The check runs over all tracked connections, so call it in intervals
+    /// (e.g. once per second of capture time) instead of once per packet.
+    pub fn evict_older_than(&mut self, cutoff: &Timestamp) -> usize
+    where
+        Timestamp: PartialOrd,
+    {
+        self.evict_older_than_with(cutoff, |_, _| {})
+    }
+
+    /// Discards all connections whose last activity is older than `cutoff`
+    /// after handing each of them to the given closure (e.g. to drain the
+    /// data that was reconstructed but never handed out) and returns how many
+    /// were discarded.
+    ///
+    /// See [`TcpStreamReassemblyPool::evict_older_than`] for what counts as
+    /// activity & how the timestamps are compared.
+    ///
+    /// ```
+    /// # use etherparse::tcp_reassembly::*;
+    /// # let mut pool = TcpStreamReassemblyPool::<u64, ()>::new();
+    /// # let cutoff = 0u64;
+    /// pool.evict_older_than_with(&cutoff, |id, connection| {
+    ///     for direction in [TcpDirection::FirstToSecond, TcpDirection::SecondToFirst] {
+    ///         let stream = connection.stream_mut(direction);
+    ///         // the connection is gone, so the data that was never
+    ///         // acknowledged is taken as well
+    ///         let len = stream.contiguous_unacked().len();
+    ///         if len > 0 {
+    ///             println!("{} -> {}: {} leftover bytes",
+    ///                 id.source(direction).port, id.destination(direction).port, len);
+    ///             stream.consume_unacked(len);
+    ///         }
+    ///     }
+    /// });
+    /// ```
+    pub fn evict_older_than_with<F>(&mut self, cutoff: &Timestamp, mut f: F) -> usize
+    where
+        Timestamp: PartialOrd,
+        F: FnMut(&TcpConnectionId<CustomChannelId>, &mut TcpConnection),
+    {
+        let mut evicted = 0;
+        self.retain(|id, connection, timestamp| {
+            if *timestamp < *cutoff {
+                f(id, connection);
+                evicted += 1;
+                false
+            } else {
+                true
+            }
+        });
+        evicted
     }
 }
 
@@ -755,7 +893,12 @@ mod test {
     const A_TO_B: TcpDirection = TcpDirection::FirstToSecond;
 
     /// Segment travelling from a to b (`reverse == false`) or from b to a.
-    fn segment(reverse: bool, seq: u32, payload: &[u8], channel_id: u16) -> TcpSegmentInfo<'_, u16> {
+    fn segment(
+        reverse: bool,
+        seq: u32,
+        payload: &[u8],
+        channel_id: u16,
+    ) -> TcpSegmentInfo<'_, u16> {
         let (source, destination) = if reverse {
             (endpoint_b(), endpoint_a())
         } else {
@@ -798,9 +941,7 @@ mod test {
     }
 
     /// Unwraps the stream of the opposite direction.
-    fn receiver<C: core::fmt::Debug>(
-        ev: TcpReassemblyEvent<'_, C>,
-    ) -> &mut TcpStreamReassemblyBuf {
+    fn receiver<C: core::fmt::Debug>(ev: TcpReassemblyEvent<'_, C>) -> &mut TcpStreamReassemblyBuf {
         match ev {
             TcpReassemblyEvent::Segment { receiver, .. } => receiver,
             other => panic!("expected TcpReassemblyEvent::Segment, got {other:?}"),
@@ -1369,18 +1510,174 @@ mod test {
         assert_eq!(pool.active_connections(), 2);
 
         // no-op retain
-        pool.retain(|_, ts| *ts > 0);
+        pool.retain(|_, _, ts| *ts > 0);
         assert_eq!(pool.active_connections(), 2);
 
         // evict timestamp 1 (the connection id is passed to the predicate too)
-        pool.retain(|id, ts| {
+        let mut leftover = Vec::new();
+        pool.retain(|id, connection, ts| {
             assert_eq!(id.second().port, 80);
-            *ts > 1
+            if *ts > 1 {
+                true
+            } else {
+                // the connection is handed out mutably, so the data that was
+                // never consumed can be taken before it is dropped
+                leftover.push(connection.stream_mut(A_TO_B).contiguous_unacked().to_vec());
+                false
+            }
         });
+        assert_eq!(leftover, std::vec![sequence(0, 8)]);
         assert_eq!(pool.active_connections(), 1);
         assert_eq!(pool.finished_data_bufs.len(), 2);
         assert_eq!(pool.finished_section_bufs.len(), 2);
         assert!(pool.connection(&conn_id(1)).is_some());
+    }
+
+    #[test]
+    fn evict_older_than_discards_and_recycles() {
+        let mut pool = new_pool::<u32>();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 8), 0), 10)
+            .unwrap();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 8), 1), 20)
+            .unwrap();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 8), 2), 30)
+            .unwrap();
+        assert_eq!(pool.active_connections(), 3);
+        assert_eq!(pool.last_activity(&conn_id(0)), Some(&10));
+        assert_eq!(pool.last_activity(&conn_id(3)), None);
+
+        // nothing is older than the cutoff (the comparison is "less than", so
+        // a connection with the cutoff as timestamp is kept)
+        assert_eq!(pool.evict_older_than(&10), 0);
+        assert_eq!(pool.active_connections(), 3);
+
+        // only the connection that was inactive for too long is discarded &
+        // its buffers are recycled
+        assert_eq!(pool.evict_older_than(&20), 1);
+        assert_eq!(pool.active_connections(), 2);
+        assert!(pool.connection(&conn_id(0)).is_none());
+        assert!(pool.connection(&conn_id(1)).is_some());
+        assert_eq!(pool.finished_data_bufs.len(), 2);
+        assert_eq!(pool.finished_section_bufs.len(), 2);
+
+        assert_eq!(pool.evict_older_than(&1000), 2);
+        assert_eq!(pool.active_connections(), 0);
+    }
+
+    #[test]
+    fn evict_older_than_with_drains() {
+        let mut pool = new_pool::<u32>();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 8), 0), 10)
+            .unwrap();
+        pool.process_tcp(segment(true, 5000, &sequence(8, 4), 0), 10)
+            .unwrap();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 2), 1), 30)
+            .unwrap();
+
+        // the data of the discarded connections can be drained before they
+        // are dropped (both directions & including the data that was never
+        // acknowledged, as the connection is gone afterwards)
+        let mut drained = Vec::new();
+        let evicted = pool.evict_older_than_with(&20, |id, connection| {
+            for direction in [TcpDirection::FirstToSecond, TcpDirection::SecondToFirst] {
+                let stream = connection.stream_mut(direction);
+                let data = stream.contiguous_unacked().to_vec();
+                stream.consume_unacked(data.len());
+                drained.push((*id.channel_id(), direction, data));
+            }
+        });
+
+        assert_eq!(evicted, 1);
+        assert_eq!(
+            drained,
+            std::vec![
+                (0, TcpDirection::FirstToSecond, sequence(0, 8)),
+                (0, TcpDirection::SecondToFirst, sequence(8, 4)),
+            ]
+        );
+        assert_eq!(pool.active_connections(), 1);
+        assert!(pool.connection(&conn_id(1)).is_some());
+    }
+
+    /// Keep alive probes (and the acknowledgments answering them) must keep a
+    /// connection from being discarded as inactive, otherwise a connection
+    /// that is idle on the application layer but alive on the wire is lost.
+    #[test]
+    fn keep_alives_refresh_the_timestamp() {
+        for keep_alive_payload in [&[][..], &[0u8][..]] {
+            let mut pool = new_pool::<u32>();
+
+            // a connection with data in both directions
+            let payload = sequence(0, 8);
+            pool.process_tcp(segment(false, 1000, &payload, 0), 10)
+                .unwrap();
+            let buf = sender(
+                pool.process_tcp(segment(true, 5000, &sequence(8, 4), 0), 10)
+                    .unwrap(),
+            );
+            // consume it, so the read cursor sits behind the data the keep
+            // alive probe references
+            let len = buf.contiguous().len();
+            buf.consume(len);
+            let buf = pool.stream_mut(&conn_id(0), A_TO_B).unwrap();
+            let len = buf.contiguous().len();
+            buf.consume(len);
+            assert_eq!(pool.last_activity(&conn_id(0)), Some(&10));
+
+            // keep alive probe: the sequence number points at the last byte
+            // that was already sent (RFC 1122 4.2.3.6), optionally with one
+            // byte of payload that the receiver discards
+            let probe = segment(
+                false,
+                1000 + payload.len() as u32 - 1,
+                keep_alive_payload,
+                0,
+            );
+            let buf = sender(pool.process_tcp(probe, 500).unwrap());
+            // the probe is not part of the stream (it only re-sends data that
+            // was already handed out)
+            assert!(buf.contiguous().is_empty());
+            assert_eq!(pool.last_activity(&conn_id(0)), Some(&500));
+
+            // the acknowledgment answering it keeps the connection alive too
+            let mut reply = segment(true, 5000 + 4, &[], 0);
+            reply.acknowledgment_number = Some(1000 + payload.len() as u32);
+            pool.process_tcp(reply, 900).unwrap();
+            assert_eq!(pool.last_activity(&conn_id(0)), Some(&900));
+
+            // ... so the connection survives an eviction that would have
+            // discarded it based on the timestamp of the last data segment
+            assert_eq!(pool.evict_older_than(&500), 0);
+            assert_eq!(pool.active_connections(), 1);
+
+            // (while it is discarded once the keep alives stop)
+            assert_eq!(pool.evict_older_than(&901), 1);
+            assert_eq!(pool.active_connections(), 0);
+        }
+    }
+
+    /// Segments that are not attributed to a connection must not keep it
+    /// alive.
+    #[test]
+    fn rejected_segments_do_not_refresh_the_timestamp() {
+        let mut pool = new_pool::<u32>();
+        pool.process_tcp(segment(false, 1000, &sequence(0, 8), 0), 10)
+            .unwrap();
+
+        // a segment that is rejected leaves the connection unchanged
+        let payload = sequence(0, 8);
+        let mut oversized = segment(false, 1000, &payload, 0);
+        oversized.sequence_number = 1000u32.wrapping_add(1 << 30);
+        assert!(pool.process_tcp(oversized, 20).is_err());
+        assert_eq!(pool.last_activity(&conn_id(0)), Some(&10));
+
+        // an out of window RST is ignored & does not keep the connection alive
+        let mut rst = segment(false, 1000u32.wrapping_add(1 << 30), &[], 0);
+        rst.rst = true;
+        assert_ignored(pool.process_tcp(rst, 30).unwrap());
+        assert_eq!(pool.last_activity(&conn_id(0)), Some(&10));
+
+        assert_eq!(pool.evict_older_than(&20), 1);
     }
 
     #[test]
@@ -1395,7 +1692,7 @@ mod test {
         }
         assert_eq!(pool.active_connections(), 200);
 
-        pool.retain(|_, _| false);
+        pool.retain(|_, _, _| false);
         assert_eq!(pool.active_connections(), 0);
 
         assert_eq!(pool.finished_data_bufs.len(), DEFAULT_MAX_TCP_POOLED_BUFS);
@@ -1466,7 +1763,7 @@ mod test {
         assert_eq!(buf.contiguous(), &sequence(0, 8)[..]);
 
         // evicting makes room again
-        pool.retain(|id, _| *id.channel_id() != 0);
+        pool.retain(|id, _, _| *id.channel_id() != 0);
         assert_eq!(pool.active_connections(), 1);
         pool.process_tcp(segment(false, 1000, &payload, 2), ())
             .unwrap();
@@ -1502,7 +1799,7 @@ mod test {
 
         // the connection is not evicted automatically, the data is still there
         assert_eq!(pool.active_connections(), 1);
-        pool.retain(|_, _| false);
+        pool.retain(|_, _, _| false);
         assert_eq!(pool.active_connections(), 0);
     }
 
@@ -1531,7 +1828,8 @@ mod test {
 
     #[test]
     fn non_tcp_and_process_sliced_packet() {
-        let mut pool = TcpStreamReassemblyPool::<(), ()>::new().with_ack_policy(TcpAckPolicy::Ignore);
+        let mut pool =
+            TcpStreamReassemblyPool::<(), ()>::new().with_ack_policy(TcpAckPolicy::Ignore);
 
         // empty sliced packet -> Ignored
         let empty = SlicedPacket {
@@ -1554,10 +1852,7 @@ mod test {
         let pdata = build_ipv4_tcp_packet(1008, false, false, true, &[]);
         let slice = SlicedPacket::from_ethernet(&pdata).unwrap();
         let connection = closed(pool.process_sliced_packet(&slice, (), ()).unwrap());
-        assert_eq!(
-            connection.stream(A_TO_B).contiguous_unacked(),
-            &payload[..]
-        );
+        assert_eq!(connection.stream(A_TO_B).contiguous_unacked(), &payload[..]);
         assert_eq!(pool.active_connections(), 0);
     }
 

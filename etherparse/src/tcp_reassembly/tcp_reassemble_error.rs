@@ -51,9 +51,10 @@ pub enum TcpReassembleError {
     /// Error if a segment would require tracking more connections than the
     /// [`crate::tcp_reassembly::TcpStreamReassemblyPool`] allows.
     ///
-    /// Evict connections that are no longer of interest (e.g. via
-    /// [`crate::tcp_reassembly::TcpStreamReassemblyPool::retain`]) to make
-    /// room for new ones.
+    /// Evict connections that are no longer of interest (e.g. the inactive
+    /// ones via
+    /// [`crate::tcp_reassembly::TcpStreamReassemblyPool::evict_older_than`])
+    /// to make room for new ones.
     TooManyConnections {
         /// Maximum number of connections that can be tracked at the same
         /// time.
@@ -149,10 +150,6 @@ mod tests {
         .source()
         .is_none());
         assert!(TooManySections { max_sections: 0 }.source().is_none());
-        assert!(TooManyConnections {
-            max_connections: 0
-        }
-        .source()
-        .is_none());
+        assert!(TooManyConnections { max_connections: 0 }.source().is_none());
     }
 }

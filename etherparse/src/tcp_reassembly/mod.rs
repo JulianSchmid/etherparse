@@ -53,3 +53,36 @@ pub const DEFAULT_MAX_TCP_POOLED_BUFS: usize = 32;
 /// so a single burst does not make the pool hold on to the memory for the
 /// rest of its lifetime.
 pub const DEFAULT_MAX_TCP_POOLED_BUF_CAPACITY: usize = 64 * 1024;
+
+/// Recommended duration of inactivity after which a TCP connection is
+/// discarded from a [`TcpStreamReassemblyPool`] (10 minutes).
+///
+/// A [`TcpStreamReassemblyPool`] never discards connections on its own (it
+/// does not even know how to interpret its `Timestamp` type), so this is a
+/// recommendation for the cutoff passed to
+/// [`TcpStreamReassemblyPool::evict_older_than`], not an automatically
+/// applied default.
+///
+/// # Choosing a value
+///
+/// Every segment that is attributed to a connection counts as activity,
+/// including keep alive probes, their replies, pure acknowledgments and
+/// re-transmits (see [`TcpStreamReassemblyPool::evict_older_than`]), so this
+/// only has to outlast the *keep alive interval* of the connections that are
+/// of interest, not their idle time.
+///
+/// 10 minutes is a middle ground that follows the flow timeout other traffic
+/// analyzers use for established TCP connections (e.g. 600s in Suricata, 300s
+/// in Zeek). Consider a different value if:
+///
+/// * Connections must never be lost while they are still alive and are only
+///   kept alive by the operating system defaults: TCP keep alive probes only
+///   start after 2 hours of idle time on Linux & Windows, so a timeout
+///   following RFC 5382 (at least 2 hours and 4 minutes) is required to
+///   survive them.
+/// * The available memory is small compared to the number of parallel
+///   connections: shorter timeouts free the buffers of connections that
+///   silently disappeared (e.g. one side crashed, so neither a `FIN` nor a
+///   `RST` is ever sent) earlier.
+pub const DEFAULT_TCP_CONNECTION_TIMEOUT: core::time::Duration =
+    core::time::Duration::from_secs(600);

@@ -28,6 +28,7 @@ std = ["alloc", "arrayvec/std"]
 arrayvec = { version = "0.7.2", default-features = false }
 
 [dev-dependencies]
+clap = { version = "4.5.61", features = ["derive"] }
 proptest = "1.4.0"
 rpcap = "1.0.0"
 

@@ -630,8 +630,9 @@ impl TcpStreamReassemblyBuf {
         // shifted into the re-anchored coordinates if required (the payload
         // window check below catches data segments either way, this matters
         // for FINs without storable payload).
-        let fin_limit =
-            self.plausible_offset_limit().saturating_add(rebase_shift as u64);
+        let fin_limit = self
+            .plausible_offset_limit()
+            .saturating_add(rebase_shift as u64);
         let planned_fin: Option<u64> = if fin
             && self.fin_offset.is_none()
             && eff_end >= cursor
@@ -773,8 +774,7 @@ impl TcpStreamReassemblyBuf {
                     // gap in front of an already received section
                     let from = (pos - start) as usize;
                     let to = (sec.start - start) as usize;
-                    self.data[data_start + from..data_start + to]
-                        .copy_from_slice(&p[from..to]);
+                    self.data[data_start + from..data_start + to].copy_from_slice(&p[from..to]);
                 }
                 pos = core::cmp::max(pos, sec.end);
                 if pos >= end {
@@ -1601,8 +1601,7 @@ mod test {
 
     #[test]
     fn too_many_sections() {
-        let mut buf =
-            new_buf_capacity(1 << 16).with_max_sections(2);
+        let mut buf = new_buf_capacity(1 << 16).with_max_sections(2);
         buf.add(0, &sequence(0, 1), false).unwrap();
         buf.add(10, &sequence(10, 1), false).unwrap();
         assert_eq!(buf.sections().len(), 2);

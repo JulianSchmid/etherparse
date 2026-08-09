@@ -146,7 +146,10 @@ mod test {
         let (value, _) = TcpConnectionId::new(a, b, Default::default(), 7u16);
         let _ = format!("{:?}", value);
         assert_eq!(value, value.clone());
-        assert_ne!(value, TcpConnectionId::new(a, b, Default::default(), 8u16).0);
+        assert_ne!(
+            value,
+            TcpConnectionId::new(a, b, Default::default(), 8u16).0
+        );
 
         use core::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;

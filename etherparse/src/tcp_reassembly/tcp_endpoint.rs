@@ -84,9 +84,7 @@ mod test {
             IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4))
         );
 
-        let v6 = [
-            0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-        ];
+        let v6 = [0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
         assert_eq!(
             TcpEndpoint::from_ipv6(v6, 443).ip,
             IpAddr::V6(Ipv6Addr::from(v6))
