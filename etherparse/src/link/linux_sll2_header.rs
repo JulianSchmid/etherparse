@@ -36,10 +36,10 @@ pub struct LinuxSll2Header {
     pub packet_type: LinuxSllPacketType,
     /// The size of the address that is valid
     pub sender_address_valid_length: u8,
-    /// The link-layer address of the sender of the packet, with the meaningful
-    /// bytes specified by `sender_address_valid_length`. If the original is
-    /// larger, the value on the packet is truncated to the first 8 bytes. If
-    /// the original is smaller, the remaining bytes will be filled with 0s.
+    /// The link-layer address of the sender of the packet. Only the first
+    /// `sender_address_valid_length` bytes are meaningful. Capture producers
+    /// truncate longer addresses to 8 bytes and zero-pad shorter ones, but
+    /// this struct serializes the array as-is and does not enforce padding.
     pub sender_address: [u8; 8],
 }
 
