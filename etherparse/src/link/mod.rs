@@ -64,6 +64,15 @@ pub use linux_sll_protocol_type::*;
 mod linux_sll_slice;
 pub use linux_sll_slice::*;
 
+mod linux_sll2_header;
+pub use linux_sll2_header::*;
+
+mod linux_sll2_header_slice;
+pub use linux_sll2_header_slice::*;
+
+mod linux_sll2_slice;
+pub use linux_sll2_slice::*;
+
 mod macsec_an;
 pub use macsec_an::*;
 

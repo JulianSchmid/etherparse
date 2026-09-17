@@ -1,9 +1,10 @@
-use crate::{Ethernet2Header, LinuxSllHeader};
+use crate::{Ethernet2Header, LinuxSll2Header, LinuxSllHeader};
 
 /// The possible headers on the link layer
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum LinkHeader {
     LinuxSll(LinuxSllHeader),
+    LinuxSll2(LinuxSll2Header),
     Ethernet2(Ethernet2Header),
 }
 
@@ -52,12 +53,35 @@ impl LinkHeader {
         }
     }
 
+    /// Returns `Option::Some` containing the `LinuxSll2Header` if self has the
+    /// value LinuxSll2. Otherwise `Option::None` is returned.
+    pub fn linux_sll2(self) -> Option<LinuxSll2Header> {
+        use crate::LinkHeader::*;
+        if let LinuxSll2(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Returns `Option::Some` containing the `LinuxSll2Header` if self has the
+    /// value LinuxSll2. Otherwise `Option::None` is returned.
+    pub fn mut_linux_sll2(&mut self) -> Option<&mut LinuxSll2Header> {
+        use crate::LinkHeader::*;
+        if let LinuxSll2(value) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
     /// Returns the size of the link header
     pub fn header_len(&self) -> usize {
         use crate::LinkHeader::*;
         match self {
             Ethernet2(_) => Ethernet2Header::LEN,
             LinuxSll(_) => LinuxSllHeader::LEN,
+            LinuxSll2(_) => LinuxSll2Header::LEN,
         }
     }
 
@@ -69,6 +93,7 @@ impl LinkHeader {
         match self {
             Ethernet2(value) => value.write(writer),
             LinuxSll(value) => value.write(writer),
+            LinuxSll2(value) => value.write(writer),
         }
     }
 }
@@ -86,6 +111,7 @@ mod test {
         fn debug(
             ethernet2 in ethernet_2_any(),
             linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(
                 format!("Ethernet2({:?})", ethernet2),
@@ -95,6 +121,10 @@ mod test {
                 format!("LinuxSll({:?})", linux_sll),
                 format!("{:?}", LinkHeader::LinuxSll(linux_sll.clone())),
             );
+            assert_eq!(
+                format!("LinuxSll2({:?})", linux_sll2),
+                format!("{:?}", LinkHeader::LinuxSll2(linux_sll2.clone())),
+            );
         }
     }
 
@@ -103,10 +133,12 @@ mod test {
         fn clone_eq(
             ethernet2 in ethernet_2_any(),
             linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             let values = [
                 LinkHeader::Ethernet2(ethernet2),
                 LinkHeader::LinuxSll(linux_sll),
+                LinkHeader::LinuxSll2(linux_sll2),
             ];
             for value in values {
                 assert_eq!(value.clone(), value);
@@ -118,10 +150,12 @@ mod test {
         #[test]
         fn ethernet2(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(Some(ethernet2.clone()), LinkHeader::Ethernet2(ethernet2).ethernet2());
             assert_eq!(None, LinkHeader::LinuxSll(linux_sll).ethernet2());
+            assert_eq!(None, LinkHeader::LinuxSll2(linux_sll2).ethernet2());
         }
 
     }
@@ -129,10 +163,12 @@ mod test {
         #[test]
         fn mut_ethernet2(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(Some(&mut ethernet2.clone()), LinkHeader::Ethernet2(ethernet2).mut_ethernet2());
             assert_eq!(None, LinkHeader::LinuxSll(linux_sll).mut_ethernet2());
+            assert_eq!(None, LinkHeader::LinuxSll2(linux_sll2).mut_ethernet2());
         }
     }
 
@@ -140,10 +176,12 @@ mod test {
         #[test]
         fn linux_sll(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(Some(linux_sll.clone()), LinkHeader::LinuxSll(linux_sll).linux_sll());
             assert_eq!(None, LinkHeader::Ethernet2(ethernet2).linux_sll());
+            assert_eq!(None, LinkHeader::LinuxSll2(linux_sll2).linux_sll());
         }
 
     }
@@ -151,10 +189,38 @@ mod test {
         #[test]
         fn mut_linux_sll(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(Some(&mut linux_sll.clone()), LinkHeader::LinuxSll(linux_sll).mut_linux_sll());
             assert_eq!(None, LinkHeader::Ethernet2(ethernet2).mut_linux_sll());
+            assert_eq!(None, LinkHeader::LinuxSll2(linux_sll2).mut_linux_sll());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn linux_sll2(
+            ethernet2 in ethernet_2_any(),
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
+        ) {
+            assert_eq!(Some(linux_sll2.clone()), LinkHeader::LinuxSll2(linux_sll2).linux_sll2());
+            assert_eq!(None, LinkHeader::Ethernet2(ethernet2).linux_sll2());
+            assert_eq!(None, LinkHeader::LinuxSll(linux_sll).linux_sll2());
+        }
+
+    }
+    proptest! {
+        #[test]
+        fn mut_linux_sll2(
+            ethernet2 in ethernet_2_any(),
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
+        ) {
+            assert_eq!(Some(&mut linux_sll2.clone()), LinkHeader::LinuxSll2(linux_sll2).mut_linux_sll2());
+            assert_eq!(None, LinkHeader::Ethernet2(ethernet2).mut_linux_sll2());
+            assert_eq!(None, LinkHeader::LinuxSll(linux_sll).mut_linux_sll2());
         }
     }
 
@@ -162,7 +228,8 @@ mod test {
         #[test]
         fn header_size(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             assert_eq!(
                 LinkHeader::Ethernet2(ethernet2).header_len(),
@@ -172,6 +239,10 @@ mod test {
                 LinkHeader::LinuxSll(linux_sll.clone()).header_len(),
                 LinuxSllHeader::LEN
             );
+            assert_eq!(
+                LinkHeader::LinuxSll2(linux_sll2.clone()).header_len(),
+                LinuxSll2Header::LEN
+            );
         }
     }
 
@@ -179,7 +250,8 @@ mod test {
         #[test]
         fn write(
             ethernet2 in ethernet_2_any(),
-            linux_sll in linux_sll_any()
+            linux_sll in linux_sll_any(),
+            linux_sll2 in linux_sll2_any(),
         ) {
             // ethernet2
             {
@@ -228,6 +300,32 @@ mod test {
                     let mut a: [u8;0] = [];
                     assert!(
                         LinkHeader::LinuxSll(linux_sll.clone())
+                        .write(&mut Cursor::new(&mut a[..]))
+                        .is_err()
+                    );
+                }
+            }
+            // linux_sll2
+            {
+                //write
+                {
+                    let result_input = {
+                        let mut buffer = Vec::new();
+                        linux_sll2.write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    let result_transport = {
+                        let mut buffer = Vec::new();
+                        LinkHeader::LinuxSll2(linux_sll2.clone()).write(&mut buffer).unwrap();
+                        buffer
+                    };
+                    assert_eq!(result_input, result_transport);
+                }
+                //trigger an error
+                {
+                    let mut a: [u8;0] = [];
+                    assert!(
+                        LinkHeader::LinuxSll2(linux_sll2.clone())
                         .write(&mut Cursor::new(&mut a[..]))
                         .is_err()
                     );

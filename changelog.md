@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+* Added Linux Cooked Capture v2 (SLL2, `LINKTYPE_LINUX_SLL2`) support:
+  * New types `LinuxSll2Header`, `LinuxSll2HeaderSlice` & `LinuxSll2Slice` (the payload is exposed via the existing `LinuxSllPayloadSlice` and the protocol / packet type fields reuse `LinuxSllProtocolType` & `LinuxSllPacketType`).
+  * New enum variants `LinkHeader::LinuxSll2` & `LinkSlice::LinuxSll2` (plus `LinkHeader::linux_sll2` & `LinkHeader::mut_linux_sll2`) and the error layer `err::Layer::LinuxSll2Header`.
+  * `SlicedPacket::from_linux_sll2` & `LaxPacketHeaders::from_linux_sll2` for parsing from an SLL2 header downwards.
+  * `PacketBuilder::linux_sll2` for building packets starting with an SLL2 header.
+  * The display texts of the shared `err::linux_sll` errors no longer mention "v1" only, as they are now also used for SLL2 headers.
+
 * Added zero-copy IGMP support (IGMPv1, IGMPv2 & IGMPv3):
   * `IgmpSlice`, an enum with one zero-copy variant per message type (`MembershipQuery`, `MembershipQueryWithSources`, `MembershipReportV1`, `MembershipReportV2`, `MembershipReportV3`, `LeaveGroup` & `Unknown`), plus common accessors (`header`, `payload`, `slice`, `checksum`, `is_checksum_valid`).
   * Per-variant slice types (`MembershipQuerySlice`, `MembershipQueryWithSourcesSlice`, `MembershipReportV1Slice`, `MembershipReportV2Slice`, `MembershipReportV3Slice`, `LeaveGroupSlice` & `IgmpUnknownSlice`) with typed field accessors. Variable-length data is exposed where it exists: `MembershipReportV3Slice::group_records` and `MembershipQueryWithSourcesSlice::source_addresses` / `source_addrs_bytes` (no longer `Option`-returning).

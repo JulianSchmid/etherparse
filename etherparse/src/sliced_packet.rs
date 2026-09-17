@@ -144,6 +144,49 @@ impl<'a> SlicedPacket<'a> {
         SlicedPacketCursor::new().slice_linux_sll(data)
     }
 
+    /// Separates a network packet slice into different slices containing the
+    /// headers from the Linux Cooked Capture v2 (SLL2) header downwards.
+    ///
+    /// The result is returned as a [`SlicedPacket`] struct. This function
+    /// assumes the given data starts with a Linux Cooked Capture v2 (SLL2)
+    /// header.
+    ///
+    /// # Examples
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{SlicedPacket, PacketBuilder, LinuxSllPacketType};
+    /// # let builder = PacketBuilder::
+    /// #    linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    /// #               2, //interface index
+    /// #               6, //sender address valid length
+    /// #               [1,2,3,4,5,6,0,0]) //sender address with padding
+    /// #   .ipv4([192,168,1,1], //source ip
+    /// #         [192,168,1,2], //destination ip
+    /// #         20)            //time to life
+    /// #   .udp(21,    //source port
+    /// #        1234); //destination port
+    /// #    //payload of the udp packet
+    /// #    let payload = [1,2,3,4,5,6,7,8];
+    /// #    //get some memory to store the serialized data
+    /// #    let mut packet = Vec::<u8>::with_capacity(
+    /// #                            builder.size(payload.len()));
+    /// #    builder.write(&mut packet, &payload).unwrap();
+    /// match SlicedPacket::from_linux_sll2(&packet) {
+    ///     Err(value) => println!("Err {:?}", value),
+    ///     Ok(value) => {
+    ///         println!("link: {:?}", value.link);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
+    ///         println!("transport: {:?}", value.transport);
+    ///     }
+    /// };
+    /// ```
+    pub fn from_linux_sll2(data: &'a [u8]) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        SlicedPacketCursor::new().slice_linux_sll2(data)
+    }
+
     /// Separates a network packet slice into different slices containing the headers using
     /// the given `ether_type` number to identify the first header.
     ///
@@ -280,6 +323,10 @@ impl<'a> SlicedPacket<'a> {
                     LinuxSllProtocolType::EtherType(EtherType(v)) => Some(EtherType(v)),
                     _ => None,
                 },
+                LinkSlice::LinuxSll2(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(EtherType(v)) => Some(EtherType(v)),
+                    _ => None,
+                },
                 EtherPayload(e) => Some(e.ether_type),
                 LinkSlice::LinuxSllPayload(e) => match e.protocol_type {
                     LinuxSllProtocolType::EtherType(EtherType(v)) => Some(EtherType(v)),
@@ -328,6 +375,12 @@ impl<'a> SlicedPacket<'a> {
             match link {
                 LinkSlice::Ethernet2(e) => Some(e.payload()),
                 LinkSlice::LinuxSll(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(_) => {
+                        Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
+                    }
+                    _ => None,
+                },
+                LinkSlice::LinuxSll2(e) => match e.protocol_type() {
                     LinuxSllProtocolType::EtherType(_) => {
                         Some(EtherPayloadSlice::try_from(e.payload()).ok()?)
                     }
@@ -535,6 +588,78 @@ mod test {
                     payload: &payload
                 })
             );
+        }
+        // only linux_sll2 payload
+        {
+            let payload = [1, 2, 3, 4];
+            let mut buf = Vec::with_capacity(LinuxSll2Header::LEN + 4);
+            buf.extend_from_slice(
+                &LinuxSll2Header {
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
+                    interface_index: 3,
+                    arp_hrd_type: ArpHardwareId::ETHERNET,
+                    packet_type: LinuxSllPacketType::HOST,
+                    sender_address_valid_length: 6,
+                    sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
+                }
+                .to_bytes(),
+            );
+            buf.extend_from_slice(&payload);
+            assert_eq!(
+                SlicedPacket::from_linux_sll2(&buf).unwrap().ether_payload(),
+                Some(EtherPayloadSlice {
+                    ether_type: EtherType::WAKE_ON_LAN,
+                    len_source: LenSource::Slice,
+                    payload: &payload
+                })
+            );
+        }
+        // only linux sll2 (non ether protocol types)
+        {
+            let test = [
+                (None, ArpHardwareId::FRAD, LinuxSllProtocolType::Ignored(0)),
+                (
+                    None,
+                    ArpHardwareId::NETLINK,
+                    LinuxSllProtocolType::NetlinkProtocolType(0),
+                ),
+                (
+                    Some(ether_type::WAKE_ON_LAN),
+                    ArpHardwareId::ETHERNET,
+                    LinuxSllProtocolType::EtherType(ether_type::WAKE_ON_LAN),
+                ),
+                (
+                    None,
+                    ArpHardwareId::ETHERNET,
+                    LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType::CAN),
+                ),
+            ];
+
+            for (expected, arp_hrd_type, protocol_type) in test {
+                let l = LinuxSll2Header {
+                    protocol_type,
+                    interface_index: 0,
+                    arp_hrd_type,
+                    packet_type: LinuxSllPacketType::HOST,
+                    sender_address_valid_length: 6,
+                    sender_address: [0; 8],
+                };
+
+                let mut bytes = Vec::with_capacity(l.header_len());
+                l.write(&mut bytes).unwrap();
+
+                let s = SlicedPacket::from_linux_sll2(&bytes).unwrap();
+                assert_eq!(
+                    expected.map(|ether_type| {
+                        EtherPayloadSlice {
+                            ether_type,
+                            len_source: LenSource::Slice,
+                            payload: &[],
+                        }
+                    }),
+                    s.ether_payload()
+                );
+            }
         }
         // only linux sll
         {
@@ -1294,6 +1419,55 @@ mod test {
 
                     from_slice_assert_err(&test, &data[..len], SliceError::Len(err.clone()));
                 }
+            }
+        }
+
+        // linux_sll2
+        {
+            let linux_sll2 = LinuxSll2Header {
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType::WAKE_ON_LAN),
+                interface_index: 5,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                packet_type: LinuxSllPacketType::HOST,
+                sender_address_valid_length: 6,
+                sender_address: [1, 2, 3, 4, 5, 6, 0, 0],
+            };
+            let test = TestPacket {
+                link: Some(LinkHeader::LinuxSll2(linux_sll2.clone())),
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            };
+
+            // ok header with link exts, ip & transport variants
+            from_x_slice_link_exts_variants(&test);
+
+            // len error
+            {
+                let data = test.to_vec(&[]);
+                for len in 0..data.len() {
+                    let err = LenError {
+                        required_len: linux_sll2.header_len(),
+                        len,
+                        len_source: LenSource::Slice,
+                        layer: Layer::LinuxSll2Header,
+                        layer_start_offset: 0,
+                    };
+
+                    from_slice_assert_err(&test, &data[..len], SliceError::Len(err.clone()));
+                }
+            }
+
+            // content error
+            {
+                let mut data = test.to_vec(&[]);
+                data[10] = LinuxSllPacketType::MAX_VAL as u8 + 1;
+                assert_eq!(
+                    SlicedPacket::from_linux_sll2(&data).unwrap_err(),
+                    SliceError::LinuxSll(err::linux_sll::HeaderError::UnsupportedPacketTypeField {
+                        packet_type: LinuxSllPacketType::MAX_VAL + 1
+                    })
+                );
             }
         }
     }
@@ -2072,6 +2246,7 @@ mod test {
                     Some(s) => match s {
                         LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
                         LinkSlice::LinuxSll(e) => Some(LinkHeader::LinuxSll(e.to_header())),
+                        LinkSlice::LinuxSll2(e) => Some(LinkHeader::LinuxSll2(e.to_header())),
                         LinkSlice::EtherPayload(_) => None,
                         LinkSlice::LinuxSllPayload(_) => None,
                     },
@@ -2154,9 +2329,13 @@ mod test {
         // write data
         let data = test.to_vec(&payload);
 
-        // from_ethernet
-        if test.link.is_some() {
-            let result = SlicedPacket::from_ethernet(&data).unwrap();
+        // from_ethernet, from_linux_sll & from_linux_sll2
+        if let Some(link) = &test.link {
+            let result = match link {
+                LinkHeader::Ethernet2(_) => SlicedPacket::from_ethernet(&data).unwrap(),
+                LinkHeader::LinuxSll(_) => SlicedPacket::from_linux_sll(&data).unwrap(),
+                LinkHeader::LinuxSll2(_) => SlicedPacket::from_linux_sll2(&data).unwrap(),
+            };
             assert_test_result(&test, &payload, &result);
         }
         // from_ether_type (vlan at start)
@@ -2218,6 +2397,10 @@ mod test {
                     err.clone(),
                     SlicedPacket::from_linux_sll(&data).unwrap_err()
                 ),
+                LinkHeader::LinuxSll2(_) => assert_eq!(
+                    err.clone(),
+                    SlicedPacket::from_linux_sll2(&data).unwrap_err()
+                ),
             }
         }
         // from_ether_type (vlan at start)
@@ -2278,6 +2461,36 @@ mod test {
                     transport: None,
                 };
                 assert_eq!(None, s.payload_ether_type());
+            }
+
+            // only linux sll2
+            {
+                let test = [
+                    (None, ArpHardwareId::FRAD, LinuxSllProtocolType::Ignored(0)),
+                    (None, ArpHardwareId::NETLINK, LinuxSllProtocolType::NetlinkProtocolType(0)),
+                    (Some(ether_type::WAKE_ON_LAN), ArpHardwareId::ETHERNET, LinuxSllProtocolType::EtherType(ether_type::WAKE_ON_LAN)),
+                    (None, ArpHardwareId::ETHERNET, LinuxSllProtocolType::LinuxNonstandardEtherType(LinuxNonstandardEtherType::CAN)),
+                ];
+
+                for (expected, arp_hrd_type, protocol_type) in test {
+                    let l = LinuxSll2Header {
+                        protocol_type,
+                        interface_index: 1,
+                        arp_hrd_type,
+                        packet_type: linux_sll.packet_type,
+                        sender_address_valid_length: linux_sll.sender_address_valid_length as u8,
+                        sender_address: linux_sll.sender_address,
+                    };
+
+                    let mut bytes = Vec::with_capacity(l.header_len());
+                    l.write(&mut bytes).unwrap();
+
+                    let s = SlicedPacket::from_linux_sll2(&bytes).unwrap();
+                    assert_eq!(
+                        expected,
+                        s.payload_ether_type()
+                    );
+                }
             }
 
             // only linux sll

@@ -177,6 +177,27 @@ prop_compose! {
     }
 }
 
+prop_compose! {
+    pub fn linux_sll2_any()
+        (packet_type in linux_sll_packet_type_any(),
+        arp_hrd_type in linux_sll_arp_hrd_type_any(),
+        interface_index in any::<u32>(),
+        (sender_address_valid_length, sender_address) in linux_sll_sender_address_any(),
+        protocol_num in any::<u16>()
+    )
+        -> LinuxSll2Header
+    {
+        LinuxSll2Header {
+            protocol_type: LinuxSllProtocolType::try_from((arp_hrd_type, protocol_num)).unwrap(),
+            interface_index,
+            arp_hrd_type,
+            packet_type,
+            sender_address_valid_length: sender_address_valid_length as u8,
+            sender_address,
+        }
+    }
+}
+
 pub static ETHERNET_KNOWN_ETHER_TYPES: &'static [EtherType] = &[
     ether_type::ARP,
     ether_type::IPV4,

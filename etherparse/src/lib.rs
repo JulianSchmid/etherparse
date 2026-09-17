@@ -71,6 +71,7 @@
 //!
 //! * [`SlicedPacket::from_ethernet`] for parsing from an Ethernet II header downwards
 //! * [`SlicedPacket::from_linux_sll`] for parsing from a Linux Cooked Capture v1 (SLL) downwards
+//! * [`SlicedPacket::from_linux_sll2`] for parsing from a Linux Cooked Capture v2 (SLL2) downwards
 //! * [`SlicedPacket::from_ether_type`] for parsing a slice starting after an Ethernet II header
 //! * [`SlicedPacket::from_ip`] for parsing from an IPv4 or IPv6 downwards
 //!
@@ -129,6 +130,7 @@
 //!
 //! * [`Ethernet2Slice::from_slice_without_fcs`] & [`Ethernet2Slice::from_slice_with_crc32_fcs`]
 //! * [`LinuxSllSlice::from_slice`]
+//! * [`LinuxSll2Slice::from_slice`]
 //! * [`SingleVlanSlice::from_slice`]
 //! * [`MacsecSlice::from_slice`]
 //! * [`IpSlice::from_slice`] & [`LaxIpSlice::from_slice`]
@@ -152,6 +154,7 @@
 //!
 //! * [`Ethernet2HeaderSlice::from_slice`]
 //! * [`LinuxSllHeaderSlice::from_slice`]
+//! * [`LinuxSll2HeaderSlice::from_slice`]
 //! * [`SingleVlanHeaderSlice::from_slice`]
 //! * [`MacsecHeaderSlice::from_slice`]
 //! * [`ArpPacketSlice::from_slice`]
@@ -169,6 +172,7 @@
 //!
 //! * [`Ethernet2Header::read`] & [`Ethernet2Header::from_slice`]
 //! * [`LinuxSllHeader::read`] & [`LinuxSllHeader::from_slice`]
+//! * [`LinuxSll2Header::read`] & [`LinuxSll2Header::from_slice`]
 //! * [`SingleVlanHeader::read`] & [`SingleVlanHeader::from_slice`]
 //! * [`MacsecHeader::read`] & [`MacsecHeader::from_slice`]
 //! * [`ArpPacket::read`] & [`ArpPacket::from_slice`]
@@ -235,6 +239,7 @@
 //!
 //! * [`Ethernet2Header::to_bytes`] & [`Ethernet2Header::write`]
 //! * [`LinuxSllHeader::to_bytes`] & [`LinuxSllHeader::write`]
+//! * [`LinuxSll2Header::to_bytes`] & [`LinuxSll2Header::write`]
 //! * [`SingleVlanHeader::to_bytes`] & [`SingleVlanHeader::write`]
 //! * [`MacsecHeader::to_bytes`] & [`MacsecHeader::write`]
 //! * [`ArpPacket::to_bytes`] & [`ArpPacket::write`]
@@ -279,6 +284,7 @@
 //! * Multicast Listener Discovery (MLD) for IPv6 [RFC 2710](https://datatracker.ietf.org/doc/html/rfc2710)
 //! * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 //! * [LINKTYPE_LINUX_SLL](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html) on tcpdump
+//! * [LINKTYPE_LINUX_SLL2](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL2.html) on tcpdump
 //! * LINUX_SLL [header definition](https://github.com/the-tcpdump-group/libpcap/blob/a932566fa1f6df16176ac702b1762ea1cd9ed9a3/pcap/sll.h) on libpcap
 //! * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel
 //! * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
