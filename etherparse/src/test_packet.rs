@@ -83,6 +83,7 @@ impl TestPacket {
             match link {
                 LinkHeader::Ethernet2(ethernet) => ethernet.ether_type = next,
                 LinkHeader::LinuxSll(linux_sll) => linux_sll.protocol_type.change_value(next.0),
+                LinkHeader::LinuxSll2(linux_sll2) => linux_sll2.protocol_type.change_value(next.0),
             }
         }
     }

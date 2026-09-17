@@ -76,6 +76,39 @@ impl<'a> SlicedPacketCursor<'a> {
         }
     }
 
+    pub fn slice_linux_sll2(
+        mut self,
+        slice: &'a [u8],
+    ) -> Result<SlicedPacket<'a>, err::packet::SliceError> {
+        use err::packet::SliceError::*;
+
+        let result = LinuxSll2Slice::from_slice(slice).map_err(|err| match err {
+            err::linux_sll::HeaderSliceError::Len(len) => Len(len.add_offset(self.offset)),
+            err::linux_sll::HeaderSliceError::Content(content) => {
+                err::packet::SliceError::LinuxSll(content)
+            }
+        })?;
+
+        //cache the protocol type for later
+        let payload = result.payload();
+
+        //set the new data
+        self.offset += result.header_len();
+        self.result.link = Some(LinkSlice::LinuxSll2(result));
+
+        //continue parsing (if required)
+        match payload.protocol_type {
+            LinuxSllProtocolType::EtherType(next_ether_type) => {
+                self.slice_ether_type(EtherPayloadSlice {
+                    ether_type: next_ether_type,
+                    len_source: LenSource::Slice,
+                    payload: payload.payload,
+                })
+            }
+            _ => Ok(self.result),
+        }
+    }
+
     pub fn slice_ether_type(
         mut self,
         mut ether_payload: EtherPayloadSlice<'a>,

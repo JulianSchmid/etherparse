@@ -95,6 +95,7 @@ fn final_write_to_slice<B>(
 /// * Starting Options:
 ///     * [`PacketBuilder::ethernet2`]
 ///     * [`PacketBuilder::linux_sll`]
+///     * [`PacketBuilder::linux_sll2`]
 ///     * [`PacketBuilder::ip`]
 ///     * [`PacketBuilder::ipv4`]
 ///     * [`PacketBuilder::ipv6`]
@@ -110,6 +111,10 @@ fn final_write_to_slice<B>(
 ///     * [`PacketBuilderStep<LinuxSllHeader>::ip`]
 ///     * [`PacketBuilderStep<LinuxSllHeader>::ipv4`]
 ///     * [`PacketBuilderStep<LinuxSllHeader>::ipv6`]
+/// * Options after a Linux Cooked Capture v2 (SLL2) was added:
+///     * [`PacketBuilderStep<LinuxSll2Header>::ip`]
+///     * [`PacketBuilderStep<LinuxSll2Header>::ipv4`]
+///     * [`PacketBuilderStep<LinuxSll2Header>::ipv6`]
 /// * Options after an Vlan header was added:
 ///     * [`PacketBuilderStep<VlanHeader>::ip`]
 ///     * [`PacketBuilderStep<VlanHeader>::ipv4`]
@@ -245,6 +250,60 @@ impl PacketBuilder {
                 transport_header: None,
             },
             _marker: marker::PhantomData::<LinuxSllHeader> {},
+        }
+    }
+
+    /// Start an packet with an Linux Cooked Capture v2 (SLL2) header.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use etherparse::{PacketBuilder, LinuxSllPacketType};
+    /// #
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///    .ipv4([192,168,1,1], //source ip
+    ///          [192,168,1,2], //destination ip
+    ///          20)            //time to life
+    ///    .udp(21,    //source port
+    ///         1234); //destination port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn linux_sll2(
+        packet_type: LinuxSllPacketType,
+        interface_index: u32,
+        sender_address_valid_length: u8,
+        sender_address: [u8; 8],
+    ) -> PacketBuilderStep<LinuxSll2Header> {
+        PacketBuilderStep {
+            state: PacketImpl {
+                link_header: Some(LinkHeader::LinuxSll2(LinuxSll2Header {
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)), // Will be overwritten when writing depending on the net layer
+                    interface_index,
+                    arp_hrd_type: ArpHardwareId::ETHERNET,
+                    packet_type,
+                    sender_address_valid_length,
+                    sender_address,
+                })),
+                vlan_header: None,
+                net_header: None,
+                transport_header: None,
+            },
+            _marker: marker::PhantomData::<LinuxSll2Header> {},
         }
     }
 
@@ -934,6 +993,194 @@ impl PacketBuilderStep<LinuxSllHeader> {
     ///     linux_sll(LinuxSllPacketType::OTHERHOST, //packet type
     ///               6, //sender address valid length
     ///               [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///     .arp(ArpPacket::new(
+    ///         ArpHardwareId::ETHERNET,
+    ///         EtherType::IPV4,
+    ///         ArpOperation::REQUEST,
+    ///         &[1,2,3,4,5,6], // sender_hw_addr
+    ///         &[7,6,8,9],     // sender_protocol_addr
+    ///         &[10,11,12,14,15,16], // target_hw_addr
+    ///         &[17,18,19,20]        // target_protocol_addr
+    ///     ).unwrap());
+    ///
+    /// // get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(builder.size());
+    ///
+    /// // serialize
+    /// builder.write(&mut result).unwrap();
+    /// ```
+    pub fn arp(mut self, arp_packet: ArpPacket) -> PacketBuilderStep<ArpPacket> {
+        self.state.net_header = Some(NetHeaders::Arp(arp_packet));
+        // return for next step
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<ArpPacket> {},
+        }
+    }
+}
+
+impl PacketBuilderStep<LinuxSll2Header> {
+    /// Add an ip header (length, protocol/next_header & checksum fields will be overwritten based on the rest of the packet).
+    ///
+    /// # Example IPv4
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///    //payload_len, protocol & checksum will be replaced during write
+    ///    .ip(IpHeaders::Ipv4(
+    ///         Ipv4Header::new(
+    ///             0, //payload_len will be replaced during write
+    ///             12, //time_to_live
+    ///             ip_number::UDP, //will be replaced during write
+    ///             [0,1,2,3], //source
+    ///             [4,5,6,7] //destination
+    ///         ).unwrap(),
+    ///         Default::default() // IPv4 extension headers (default is none)
+    ///     ));
+    /// ```
+    ///
+    /// # Example IPv6
+    /// ```
+    /// # use etherparse::*;
+    /// #
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///    .ip(IpHeaders::Ipv6(
+    ///         Ipv6Header{
+    ///             traffic_class: 0,
+    ///             flow_label: 0.try_into().unwrap(),
+    ///             hop_limit: 4,
+    ///             source: [0;16],
+    ///             destination: [0;16],
+    ///             // payload_length & next_header will be replaced during write
+    ///             ..Default::default()
+    ///         },
+    ///         Default::default() // IPv6 extension headers (default is none)
+    ///     ));
+    /// ```
+    pub fn ip(self, ip_header: IpHeaders) -> PacketBuilderStep<IpHeaders> {
+        //use the method from the Ethernet2Header implementation
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ip(ip_header)
+    }
+
+    /// Add an IPv6 header
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use etherparse::{PacketBuilder, LinuxSllPacketType};
+    /// #
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///     .ipv6(
+    ///         //source
+    ///         [11,12,13,14,15,16,17,18,19,10,21,22,23,24,25,26],
+    ///         //destination
+    ///         [31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46],
+    ///         //hop_limit
+    ///         47)
+    ///     .udp(21,    //source port
+    ///          1234); //destination port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn ipv6(
+        self,
+        source: [u8; 16],
+        destination: [u8; 16],
+        hop_limit: u8,
+    ) -> PacketBuilderStep<IpHeaders> {
+        //use the method from the Ethernet2Header implementation
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv6(source, destination, hop_limit)
+    }
+
+    /// Add an IPv4 header
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// # use etherparse::{PacketBuilder, LinuxSllPacketType};
+    /// #
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
+    ///     .ipv4([192,168,1,1], //source ip
+    ///           [192,168,1,2], //destination ip
+    ///           20)            //time to life
+    ///     .udp(21,    //source port
+    ///          1234); //destination port
+    ///
+    /// //payload of the udp packet
+    /// let payload = [1,2,3,4,5,6,7,8];
+    ///
+    /// //get some memory to store the result
+    /// let mut result = Vec::<u8>::with_capacity(
+    ///                     builder.size(payload.len()));
+    ///
+    /// //serialize
+    /// builder.write(&mut result, &payload).unwrap();
+    /// ```
+    pub fn ipv4(
+        self,
+        source: [u8; 4],
+        destination: [u8; 4],
+        time_to_live: u8,
+    ) -> PacketBuilderStep<IpHeaders> {
+        //use the method from the Ethernet2Header implementation
+        PacketBuilderStep {
+            state: self.state,
+            _marker: marker::PhantomData::<Ethernet2Header> {},
+        }
+        .ipv4(source, destination, time_to_live)
+    }
+
+    /// Adds an ARP packet.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    /// ```
+    /// use etherparse::*;
+    ///
+    /// let builder = PacketBuilder::
+    ///     linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    ///                2, //interface index
+    ///                6, //sender address valid length
+    ///                [1,2,3,4,5,6,0,0]) //sender address with padding
     ///     .arp(ArpPacket::new(
     ///         ArpHardwareId::ETHERNET,
     ///         EtherType::IPV4,
@@ -2223,6 +2470,14 @@ where
                 linux_sll.protocol_type.change_value(net_ether_type.into());
                 writer.write_all(&linux_sll.to_bytes()).map_err(E::from)?;
             }
+            LinkHeader::LinuxSll2(mut linux_sll2) => {
+                // Assumes that next layers are ether based. If more types of
+                // layers are supported, this should be updated
+                debug_assert_eq!(linux_sll2.arp_hrd_type, ArpHardwareId::ETHERNET);
+
+                linux_sll2.protocol_type.change_value(net_ether_type.into());
+                writer.write_all(&linux_sll2.to_bytes()).map_err(E::from)?;
+            }
         }
     }
 
@@ -2722,6 +2977,150 @@ mod test {
         let mut actual_payload: [u8; 4] = [0; 4];
         cursor.read_exact(&mut actual_payload).unwrap();
         assert_eq!(actual_payload, in_payload);
+    }
+
+    #[test]
+    fn linuxsll2_ipv4_udp() {
+        //generate
+        let in_payload = [24, 25, 26, 27];
+        let mut serialized = Vec::new();
+        PacketBuilder::linux_sll2(
+            LinuxSllPacketType::OUTGOING,
+            42,
+            6,
+            [7, 8, 9, 10, 11, 12, 0, 0],
+        )
+        .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+        .udp(22, 23)
+        .write(&mut serialized, &in_payload)
+        .unwrap();
+
+        //check the deserialized size
+        let expected_ip_size: usize = UdpHeader::LEN + in_payload.len();
+        assert_eq!(
+            expected_ip_size + LinuxSll2Header::LEN + Ipv4Header::MIN_LEN,
+            serialized.len()
+        );
+
+        //deserialize and check that everything is as expected
+        use std::io::Cursor;
+        //deserialize each part of the message and check it
+        let mut cursor = Cursor::new(&serialized);
+
+        //sll2 header
+        assert_eq!(
+            LinuxSll2Header::read(&mut cursor).unwrap(),
+            LinuxSll2Header {
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType::IPV4),
+                interface_index: 42,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                packet_type: LinuxSllPacketType::OUTGOING,
+                sender_address_valid_length: 6,
+                sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
+            }
+        );
+
+        //ip header
+        let ip_actual = Ipv4Header::read(&mut cursor).unwrap();
+        let mut ip_expected = Ipv4Header::new(
+            expected_ip_size as u16,
+            21, //ttl
+            ip_number::UDP,
+            [13, 14, 15, 16],
+            [17, 18, 19, 20],
+        )
+        .unwrap();
+        ip_expected.header_checksum = ip_expected.calc_header_checksum();
+        assert_eq!(ip_actual, ip_expected);
+
+        //udp header
+        let udp_actual = UdpHeader::read(&mut cursor).unwrap();
+        let udp_expected =
+            UdpHeader::with_ipv4_checksum(22, 23, &ip_expected, &in_payload).unwrap();
+        assert_eq!(udp_actual, udp_expected);
+
+        //payload
+        let mut actual_payload: [u8; 4] = [0; 4];
+        cursor.read_exact(&mut actual_payload).unwrap();
+        assert_eq!(actual_payload, in_payload);
+    }
+
+    #[test]
+    fn linuxsll2_ipv6_arp() {
+        // ipv6 + udp
+        {
+            let in_payload = [1, 2, 3];
+            let mut serialized = Vec::new();
+            PacketBuilder::linux_sll2(LinuxSllPacketType::HOST, 1, 6, [7, 8, 9, 10, 11, 12, 0, 0])
+                .ipv6([1; 16], [2; 16], 47)
+                .udp(22, 23)
+                .write(&mut serialized, &in_payload)
+                .unwrap();
+            assert_eq!(
+                LinuxSll2Header::LEN + Ipv6Header::LEN + UdpHeader::LEN + in_payload.len(),
+                serialized.len()
+            );
+            let mut cursor = std::io::Cursor::new(&serialized);
+            assert_eq!(
+                LinuxSll2Header::read(&mut cursor).unwrap(),
+                LinuxSll2Header {
+                    protocol_type: LinuxSllProtocolType::EtherType(EtherType::IPV6),
+                    interface_index: 1,
+                    arp_hrd_type: ArpHardwareId::ETHERNET,
+                    packet_type: LinuxSllPacketType::HOST,
+                    sender_address_valid_length: 6,
+                    sender_address: [7, 8, 9, 10, 11, 12, 0, 0],
+                }
+            );
+        }
+        // ip (generic) + arp
+        {
+            let expected_arp = ArpPacket::new(
+                ArpHardwareId::ETHERNET,
+                EtherType::IPV4,
+                ArpOperation::REQUEST,
+                &[20, 30, 40, 50, 60, 70],
+                &[10, 1, 1, 5],
+                &[00, 01, 02, 03, 04, 05],
+                &[192, 168, 1, 2],
+            )
+            .unwrap();
+            let builder = PacketBuilder::linux_sll2(
+                LinuxSllPacketType::HOST,
+                1,
+                6,
+                [7, 8, 9, 10, 11, 12, 0, 0],
+            )
+            .arp(expected_arp.clone());
+            let mut serialized = Vec::with_capacity(builder.size());
+            builder.write(&mut serialized).unwrap();
+            assert_eq!(
+                LinuxSll2Header::LEN + expected_arp.packet_len(),
+                serialized.len()
+            );
+            let mut cursor = std::io::Cursor::new(&serialized);
+            assert_eq!(
+                LinuxSll2Header::read(&mut cursor).unwrap().protocol_type,
+                LinuxSllProtocolType::EtherType(EtherType::ARP)
+            );
+
+            // generic ip
+            let builder = PacketBuilder::linux_sll2(
+                LinuxSllPacketType::HOST,
+                1,
+                6,
+                [7, 8, 9, 10, 11, 12, 0, 0],
+            )
+            .ip(IpHeaders::Ipv4(
+                Ipv4Header::new(0, 12, ip_number::UDP, [0, 1, 2, 3], [4, 5, 6, 7]).unwrap(),
+                Default::default(),
+            ))
+            .udp(1, 2);
+            assert_eq!(
+                LinuxSll2Header::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 3,
+                builder.size(3)
+            );
+        }
     }
 
     #[test]
@@ -3986,6 +4385,38 @@ mod test {
                 )
                 .udp(22, 23)
                 .size(123)
+        );
+
+        //ipv4 linux_sll2
+        assert_eq!(
+            LinuxSll2Header::LEN + Ipv4Header::MIN_LEN + UdpHeader::LEN + 123,
+            PacketBuilder::linux_sll2(
+                LinuxSllPacketType::OUTGOING,
+                1,
+                6,
+                [7, 8, 9, 10, 11, 12, 0, 0]
+            )
+            .ipv4([13, 14, 15, 16], [17, 18, 19, 20], 21)
+            .udp(22, 23)
+            .size(123)
+        );
+
+        //ipv6 linux_sll2
+        assert_eq!(
+            LinuxSll2Header::LEN + Ipv6Header::LEN + UdpHeader::LEN + 123,
+            PacketBuilder::linux_sll2(
+                LinuxSllPacketType::OUTGOING,
+                1,
+                6,
+                [7, 8, 9, 10, 11, 12, 0, 0]
+            )
+            .ipv6(
+                [11, 12, 13, 14, 15, 16, 17, 18, 19, 10, 21, 22, 23, 24, 25, 26],
+                [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46],
+                47,
+            )
+            .udp(22, 23)
+            .size(123)
         );
 
         //ipv4 single vlan ethernet

@@ -16,8 +16,8 @@ impl core::fmt::Display for HeaderError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderError::*;
         match self {
-            UnsupportedPacketTypeField { packet_type } => write!(f, "Linux cooked capture v1 (SLL) Header Error: Encountered '{packet_type}' as the packet type, but its not supported."),
-            UnsupportedArpHardwareId { arp_hardware_type } => write!(f, "Linux cooked capture v1 (SLL)  Header Error:  Encountered '{arp_hardware_type:?}' as the ARP harware type, but its not supported."),
+            UnsupportedPacketTypeField { packet_type } => write!(f, "Linux cooked capture (SLL) Header Error: Encountered '{packet_type}' as the packet type, but its not supported."),
+            UnsupportedArpHardwareId { arp_hardware_type } => write!(f, "Linux cooked capture (SLL)  Header Error:  Encountered '{arp_hardware_type:?}' as the ARP harware type, but its not supported."),
         }
     }
 }
@@ -72,11 +72,11 @@ mod tests {
     #[test]
     fn fmt() {
         assert_eq!(
-            "Linux cooked capture v1 (SLL) Header Error: Encountered '6' as the packet type, but its not supported.",
+            "Linux cooked capture (SLL) Header Error: Encountered '6' as the packet type, but its not supported.",
             format!("{}", UnsupportedPacketTypeField{ packet_type: 6 })
         );
         assert_eq!(
-            "Linux cooked capture v1 (SLL)  Header Error:  Encountered '1 (Ethernet)' as the ARP harware type, but its not supported.",
+            "Linux cooked capture (SLL)  Header Error:  Encountered '1 (Ethernet)' as the ARP harware type, but its not supported.",
             format!("{}", UnsupportedArpHardwareId{ arp_hardware_type: ArpHardwareId::ETHERNET })
         );
     }

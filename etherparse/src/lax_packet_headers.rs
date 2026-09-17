@@ -695,6 +695,90 @@ impl<'a> LaxPacketHeaders<'a> {
         }
     }
 
+    /// Separates a network packet into different headers from the Linux Cooked Capture v2 (SLL2)
+    /// header downwards with lax length checks and non-terminating errors.
+    ///
+    /// # Example
+    ///
+    /// Basic usage:
+    ///
+    ///```
+    /// # use etherparse::{LinuxSllPacketType, PacketBuilder};
+    /// # let builder = PacketBuilder::
+    /// #    linux_sll2(LinuxSllPacketType::OTHERHOST, //packet type
+    /// #               2,                             //interface index
+    /// #               6,                             //sender address valid length
+    /// #               [1,2,3,4,5,6,0,0])             //sender address with padding
+    /// #    .ipv4([192,168,1,1], //source ip
+    /// #          [192,168,1,2], //destination ip
+    /// #          20)            //time to life
+    /// #    .udp(21,    //source port
+    /// #         1234); //destination port
+    /// # // payload of the udp packet
+    /// # let payload = [1,2,3,4,5,6,7,8];
+    /// # // get some memory to store the serialized data
+    /// # let mut packet = Vec::<u8>::with_capacity(
+    /// #     builder.size(payload.len())
+    /// # );
+    /// # builder.write(&mut packet, &payload).unwrap();
+    /// #
+    /// use etherparse::{ether_type, LaxPacketHeaders, LenSource, LaxPayloadSlice};
+    ///
+    /// match LaxPacketHeaders::from_linux_sll2(&packet) {
+    ///     Err(value) => {
+    ///         // An error is returned in case the SLL2 header could
+    ///         // not be parsed (other errors are stored in the "stop_err" field)
+    ///         println!("Err {:?}", value)
+    ///     },
+    ///     Ok(value) => {
+    ///         if let Some((stop_err, error_layer)) = value.stop_err.as_ref() {
+    ///             // error was encountered after parsing the SLL2 header
+    ///             println!("Error on layer {}: {:?}", error_layer, stop_err);
+    ///         }
+    ///
+    ///         // parts that could be parsed without error
+    ///         println!("link: {:?}", value.link);
+    ///         println!("link_exts: {:?}", value.link_exts); // vlan & macsec
+    ///         println!("net: {:?}", value.net); // ip & arp
+    ///         println!("transport: {:?}", value.transport);
+    ///
+    ///         match value.payload {
+    ///             LaxPayloadSlice::LinuxSll(linux_sll) => {
+    ///                 println!("Linux SLL payload (protocol type {:?}): {:?}", linux_sll.protocol_type, linux_sll.payload);
+    ///             }
+    ///             other => println!("payload: {:?}", other),
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// ```
+    pub fn from_linux_sll2(
+        slice: &'a [u8],
+    ) -> Result<LaxPacketHeaders<'a>, err::linux_sll::HeaderSliceError> {
+        let (linux_sll2, payload) = LinuxSll2Header::from_slice(slice)?;
+        match linux_sll2.protocol_type {
+            LinuxSllProtocolType::EtherType(ether_type) => {
+                let mut result = Self::from_ether_type(ether_type, payload);
+                if let Some((SliceError::Len(l), _)) = result.stop_err.as_mut() {
+                    l.layer_start_offset += linux_sll2.header_len();
+                }
+                result.link = Some(LinkHeader::LinuxSll2(linux_sll2));
+                Ok(result)
+            }
+            _ => Ok(LaxPacketHeaders {
+                payload: LaxPayloadSlice::LinuxSll(LinuxSllPayloadSlice {
+                    protocol_type: linux_sll2.protocol_type,
+                    payload,
+                }),
+                link: Some(LinkHeader::LinuxSll2(linux_sll2)),
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+                stop_err: None,
+            }),
+        }
+    }
+
     /// Returns the first two VLAN headers.
     pub fn vlan(&self) -> Option<VlanHeader> {
         let mut result = None;
@@ -1187,6 +1271,67 @@ mod test {
                 let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
                 let expected = LaxPacketHeaders {
                     link: Some(LinkHeader::LinuxSll(header.clone())),
+                    link_exts: Default::default(),
+                    net: None,
+                    transport: None,
+                    payload: LaxPayloadSlice::LinuxSll(LinuxSllPayloadSlice {
+                        protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                        payload: &payload,
+                    }),
+                    stop_err: None,
+                };
+                assert_eq!(expected, actual);
+            }
+        }
+
+        // linux sll2
+        {
+            let linux_sll2 = LinuxSll2Header {
+                protocol_type: LinuxSllProtocolType::EtherType(EtherType(0)),
+                interface_index: 7,
+                arp_hrd_type: ArpHardwareId::ETHERNET,
+                packet_type: LinuxSllPacketType::HOST,
+                sender_address_valid_length: 0,
+                sender_address: [0; 8],
+            };
+            let test = TestPacket {
+                link: Some(LinkHeader::LinuxSll2(linux_sll2.clone())),
+                link_exts: ArrayVec::new_const(),
+                net: None,
+                transport: None,
+            };
+
+            // ok header (with unknown next)
+            from_x_slice_link_exts_variants(&test);
+
+            // len error
+            {
+                let data = test.to_vec(&[]);
+                for len in 0..data.len() {
+                    assert_test_result(&test, &[], &data[..len], None, None);
+                }
+            }
+
+            // non ethernet linux sll2
+            {
+                let header = LinuxSll2Header {
+                    protocol_type: LinuxSllProtocolType::NetlinkProtocolType(0),
+                    interface_index: 7,
+                    arp_hrd_type: ArpHardwareId::NETLINK,
+                    packet_type: LinuxSllPacketType::HOST,
+                    sender_address_valid_length: 0,
+                    sender_address: [0; 8],
+                };
+                let payload = [1, 2, 3, 4];
+                let data = {
+                    let mut data = Vec::with_capacity(header.header_len() + payload.len());
+                    data.extend_from_slice(&header.to_bytes());
+                    data.extend_from_slice(&payload);
+                    data
+                };
+                let actual = LaxPacketHeaders::from_linux_sll2(&data).unwrap();
+                let expected = LaxPacketHeaders {
+                    link: Some(LinkHeader::LinuxSll2(header.clone())),
                     link_exts: Default::default(),
                     net: None,
                     transport: None,
@@ -2266,21 +2411,46 @@ mod test {
                 }
             }
         }
-        // from_linux_sll
-        if matches!(test.link, Some(LinkHeader::LinuxSll(_))) {
-            if data.len() < LinuxSllHeader::LEN {
-                assert_eq!(
-                    err::linux_sll::HeaderSliceError::Len(LenError {
-                        required_len: LinuxSllHeader::LEN,
-                        len: data.len(),
-                        len_source: LenSource::Slice,
-                        layer: Layer::LinuxSllHeader,
-                        layer_start_offset: 0
-                    }),
-                    LaxPacketHeaders::from_linux_sll(&data).unwrap_err()
-                );
-            } else {
-                let actual = LaxPacketHeaders::from_linux_sll(&data).unwrap();
+        // from_linux_sll & from_linux_sll2
+        let sll_actual = match test.link {
+            Some(LinkHeader::LinuxSll(_)) => {
+                if data.len() < LinuxSllHeader::LEN {
+                    assert_eq!(
+                        err::linux_sll::HeaderSliceError::Len(LenError {
+                            required_len: LinuxSllHeader::LEN,
+                            len: data.len(),
+                            len_source: LenSource::Slice,
+                            layer: Layer::LinuxSllHeader,
+                            layer_start_offset: 0
+                        }),
+                        LaxPacketHeaders::from_linux_sll(&data).unwrap_err()
+                    );
+                    None
+                } else {
+                    Some(LaxPacketHeaders::from_linux_sll(&data).unwrap())
+                }
+            }
+            Some(LinkHeader::LinuxSll2(_)) => {
+                if data.len() < LinuxSll2Header::LEN {
+                    assert_eq!(
+                        err::linux_sll::HeaderSliceError::Len(LenError {
+                            required_len: LinuxSll2Header::LEN,
+                            len: data.len(),
+                            len_source: LenSource::Slice,
+                            layer: Layer::LinuxSll2Header,
+                            layer_start_offset: 0
+                        }),
+                        LaxPacketHeaders::from_linux_sll2(&data).unwrap_err()
+                    );
+                    None
+                } else {
+                    Some(LaxPacketHeaders::from_linux_sll2(&data).unwrap())
+                }
+            }
+            _ => None,
+        };
+        if let Some(actual) = sll_actual {
+            {
                 assert_eq!(actual.stop_err, expected_stop_err);
                 match expected_stop_err.as_ref().map(|v| v.1) {
                     None => {

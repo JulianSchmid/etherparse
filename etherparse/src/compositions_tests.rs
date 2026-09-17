@@ -129,6 +129,9 @@ impl<'a> ComponentTest<'a> {
                         LinkHeader::LinuxSll(sll) => {
                             sll.protocol_type = LinuxSllProtocolType::EtherType(e);
                         }
+                        LinkHeader::LinuxSll2(sll2) => {
+                            sll2.protocol_type = LinuxSllProtocolType::EtherType(e);
+                        }
                         LinkHeader::Ethernet2(eth) => {
                             eth.ether_type = e;
                         }
@@ -358,6 +361,7 @@ impl<'a> ComponentTest<'a> {
                 Some(l) => match l {
                     LinkSlice::Ethernet2(e) => Some(LinkHeader::Ethernet2(e.to_header())),
                     LinkSlice::LinuxSll(e) => Some(LinkHeader::LinuxSll(e.to_header())),
+                    LinkSlice::LinuxSll2(e) => Some(LinkHeader::LinuxSll2(e.to_header())),
                     LinkSlice::EtherPayload(_) => None,
                     LinkSlice::LinuxSllPayload(_) => None,
                 },

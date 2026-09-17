@@ -1,6 +1,6 @@
 use super::HeaderError;
 
-/// Error when decoding Linux Cooked Capture v1 (SLL) headers via a
+/// Error when decoding Linux Cooked Capture (SLL) headers via a
 /// `std::io::Read` source.
 ///
 /// Requires crate feature `std`.
@@ -47,7 +47,7 @@ impl core::fmt::Display for HeaderReadError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         use HeaderReadError::*;
         match self {
-            Io(err) => write!(f, "Linux Cooked Capture v1 (SLL) Header IO Error: {err}"),
+            Io(err) => write!(f, "Linux Cooked Capture (SLL) Header IO Error: {err}"),
             Content(value) => value.fmt(f),
         }
     }
@@ -85,7 +85,7 @@ mod test {
                 "failed to fill whole buffer",
             );
             assert_eq!(
-                format!("Linux Cooked Capture v1 (SLL) Header IO Error: {}", err),
+                format!("Linux Cooked Capture (SLL) Header IO Error: {}", err),
                 format!("{}", Io(err))
             );
         }

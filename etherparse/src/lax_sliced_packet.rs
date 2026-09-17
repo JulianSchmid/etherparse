@@ -308,6 +308,19 @@ impl<'a> LaxSlicedPacket<'a> {
                     }
                     _ => None,
                 },
+                LinkSlice::LinuxSll2(e) => match e.protocol_type() {
+                    LinuxSllProtocolType::EtherType(_)
+                    | LinuxSllProtocolType::LinuxNonstandardEtherType(_) => {
+                        let p = EtherPayloadSlice::try_from(e.payload()).ok()?;
+                        Some(LaxEtherPayloadSlice {
+                            incomplete: false,
+                            ether_type: p.ether_type,
+                            len_source: LenSource::Slice,
+                            payload: p.payload,
+                        })
+                    }
+                    _ => None,
+                },
                 LinkSlice::EtherPayload(p) => Some(LaxEtherPayloadSlice {
                     incomplete: false,
                     ether_type: p.ether_type,

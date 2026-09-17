@@ -49,6 +49,12 @@ fn main() {
                     value.packet_type(),
                     value.sender_address(),
                 ),
+                Some(LinuxSll2(value)) => println!(
+                    "  LinuxSll2 (packet type: {:?}, interface index: {}, source address: {:?})",
+                    value.packet_type(),
+                    value.interface_index(),
+                    value.sender_address(),
+                ),
                 Some(EtherPayload(payload)) => {
                     println!("  EtherPayload (ether type {:?})", payload.ether_type)
                 }

@@ -63,6 +63,7 @@ Depending from which point downward you want to slice a package check out the fu
 
 * [`SlicedPacket::from_ethernet`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SlicedPacket.html#method.from_ethernet) for parsing from an Ethernet II header downwards
 * [`SlicedPacket::from_linux_sll`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SlicedPacket.html#method.from_linux_sll) for parsing from a Linux Cooked Capture v1 (SLL) downwards
+* [`SlicedPacket::from_linux_sll2`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SlicedPacket.html#method.from_linux_sll2) for parsing from a Linux Cooked Capture v2 (SLL2) downwards
 * [`SlicedPacket::from_ether_type`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SlicedPacket.html#method.from_ether_type) for parsing a slice starting after an Ethernet II header
 * [`SlicedPacket::from_ip`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SlicedPacket.html#method.from_ip) for parsing from an IPv4 or IPv6 downwards
 
@@ -97,6 +98,7 @@ In case you want to parse cut off packets (e.g. packets returned in in ICMP mess
 
 * [`LaxPacketHeaders::from_ethernet`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LaxPacketHeaders.html#method.from_ethernet) for parsing from an Ethernet II header downwards
 * [`LaxPacketHeaders::from_linux_sll`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LaxPacketHeaders.html#method.from_linux_sll) for parsing from a Linux Cooked Capture v1 (SLL) downwards
+* [`LaxPacketHeaders::from_linux_sll2`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LaxPacketHeaders.html#method.from_linux_sll2) for parsing from a Linux Cooked Capture v2 (SLL2) downwards
 * [`LaxPacketHeaders::from_ether_type`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LaxPacketHeaders.html#method.from_ether_type) for parsing a slice starting after an Ethernet II header
 * [`LaxPacketHeaders::from_ip`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LaxPacketHeaders.html#method.from_ip) for parsing from an IPv4 or IPv6 downwards
 
@@ -106,6 +108,7 @@ It is also possible to only slice one packet layer:
 
 * [`Ethernet2Slice::from_slice_without_fcs`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Slice.html#method.from_slice_without_fcs) & [`Ethernet2Slice::from_slice_with_crc32_fcs`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Slice.html#method.from_slice_with_crc32_fcs)
 * [`LinuxSllSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllSlice.html#method.from_slice)
+* [`LinuxSll2Slice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2Slice.html#method.from_slice)
 * [`SingleVlanSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanSlice.html#method.from_slice)
 * [`MacsecSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecSlice.html#method.from_slice)
 * [`ArpPacketSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.ArpPacketSlice.html#method.from_slice)
@@ -130,6 +133,7 @@ following \[NAME\]HeaderSlice.from_slice methods, if you want to just slice the 
 
 * [`Ethernet2HeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2HeaderSlice.html#method.from_slice)
 * [`LinuxSllHeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllHeaderSlice.html#method.from_slice)
+* [`LinuxSll2HeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2HeaderSlice.html#method.from_slice)
 * [`SingleVlanHeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanHeaderSlice.html#method.from_slice)
 * [`MacsecHeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecHeaderSlice.html#method.from_slice)
 * [`Ipv4HeaderSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ipv4HeaderSlice.html#method.from_slice)
@@ -146,6 +150,7 @@ And for deserialization into the corresponding header structs have a look at:
 
 * [`Ethernet2Header::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Header.html#method.read) & [`Ethernet2Header::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Header.html#method.from_slice)
 * [`LinuxSllHeader::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllHeader.html#method.read) & [`LinuxSllHeader::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllHeader.html#method.from_slice)
+* [`LinuxSll2Header::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2Header.html#method.read) & [`LinuxSll2Header::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2Header.html#method.from_slice)
 * [`SingleVlanHeader::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanHeader.html#method.read) & [`SingleVlanHeader::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanHeader.html#method.from_slice)
 * [`MacsecHeader::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecHeader.html#method.read) & [`MacsecHeader::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecHeader.html#method.from_slice)
 * [`ArpPacket::read`](https://docs.rs/etherparse/0.21.0/etherparse/struct.ArpPacket.html#method.read) & [`ArpPacket::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.ArpPacket.html#method.from_slice)
@@ -205,6 +210,7 @@ Read the documentations of the different methods for a more details:
 
 * [`Ethernet2Header::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Header.html#method.to_bytes) & [`Ethernet2Header::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Ethernet2Header.html#method.write)
 * [`LinuxSllHeader::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllHeader.html#method.to_bytes) & [`LinuxSllHeader::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSllHeader.html#method.write)
+* [`LinuxSll2Header::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2Header.html#method.to_bytes) & [`LinuxSll2Header::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.LinuxSll2Header.html#method.write)
 * [`SingleVlanHeader::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanHeader.html#method.to_bytes) & [`SingleVlanHeader::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.SingleVlanHeader.html#method.write)
 * [`MacsecHeader::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecHeader.html#method.to_bytes) & [`MacsecHeader::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.MacsecHeader.html#method.write)
 * [`ArpPacket::to_bytes`](https://docs.rs/etherparse/0.21.0/etherparse/struct.ArpPacket.html#method.to_bytes) & [`ArpPacket::write`](https://docs.rs/etherparse/0.21.0/etherparse/struct.ArpPacket.html#method.write)
@@ -248,6 +254,7 @@ Read the documentations of the different methods for a more details:
 * Multicast Listener Discovery (MLD) for IPv6 [RFC 2710](https://datatracker.ietf.org/doc/html/rfc2710)
 * Neighbor Discovery for IP version 6 (IPv6) [RFC 4861](https://datatracker.ietf.org/doc/html/rfc4861)
 * [LINKTYPE_LINUX_SLL](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL.html) on tcpdump
+* [LINKTYPE_LINUX_SLL2](https://www.tcpdump.org/linktypes/LINKTYPE_LINUX_SLL2.html) on tcpdump
 * LINUX_SLL [header definition](https://github.com/the-tcpdump-group/libpcap/blob/a932566fa1f6df16176ac702b1762ea1cd9ed9a3/pcap/sll.h) on libpcap
 * [Linux packet types definitions](https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/include/uapi/linux/if_packet.h?id=e33c4963bf536900f917fb65a687724d5539bc21) on the Linux kernel 
 * Address Resolution Protocol (ARP) Parameters [Harware Types](https://www.iana.org/assignments/arp-parameters/arp-parameters.xhtml#arp-parameters-2)
