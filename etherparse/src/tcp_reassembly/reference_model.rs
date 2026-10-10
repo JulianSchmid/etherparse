@@ -23,10 +23,13 @@ pub(crate) struct ReferenceModel {
 /// Model of one stream.
 #[derive(Clone, Debug, Default)]
 struct ModelStream {
-    /// Received bytes by offset, up to the highest offset.
+    /// Received bytes by offset, up to the furthest received byte.
     bytes: Vec<Option<u8>>,
     /// Contiguous received bytes from offset 0 on.
     received: Vec<u8>,
+    /// Offset after the furthest byte known to be sent (received, ACKed or
+    /// before the FIN).
+    highest: u64,
     /// Offset of the FIN.
     fin_offset: Option<u64>,
     /// Number of segments with bytes that differ from the bytes received
@@ -35,7 +38,7 @@ struct ModelStream {
     /// Number of segments with bytes or a FIN after the window, or with
     /// bytes after the FIN.
     out_of_window_segments: u64,
-    /// Highest offset ACKed by the other side.
+    /// Highest ACK of the other side that was not ignored.
     ack: u64,
     /// Offset of the next byte to read.
     read_offset: u64,
@@ -49,7 +52,7 @@ impl ModelStream {
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
     ///   retransmission if unread ones differ;
-    /// - the first FIN that doesn't lie before the highest offset ends the
+    /// - the first FIN that doesn't lie before received bytes ends the
     ///   stream, and bytes after it are counted and not stored;
     /// - bytes before the highest offset that were not received are holes.
     fn add_segment<CustomChannelId>(
@@ -59,13 +62,15 @@ impl ModelStream {
     ) {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
-        let window_end = self.ack.max(self.bytes.len() as u64) + 2 * window;
+        let window_end = self.ack.max(self.highest) + 2 * window;
         if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
             self.out_of_window_segments += 1;
             return;
         }
         if segment.header.fin && self.fin_offset.is_none() && end >= self.bytes.len() as u64 {
             self.fin_offset = Some(end);
+            // missing bytes after the FIN (from an ACK of it) don't exist
+            self.highest = end;
         }
         let payload = match self.fin_offset {
             Some(fin) if end > fin && false == segment.payload.is_empty() => {
@@ -96,15 +101,25 @@ impl ModelStream {
                     *slot = Some(*byte);
                 }
             }
-        }
-        if let Some(fin) = self.fin_offset {
-            if self.bytes.len() < fin as usize {
-                self.bytes.resize(fin as usize, None);
-            }
+            self.highest = self.highest.max(end as u64);
         }
         let received_len = self.received.len();
         let next = self.bytes[received_len..].iter().map_while(|byte| *byte);
         self.received.extend(next);
+    }
+
+    /// Applies an ACK of the other side, whose receive window before it was
+    /// `window`: ACKs more than one window after the highest offset (plus
+    /// the FIN) are ignored, others mark the bytes up to them as sent (but
+    /// none after the FIN).
+    fn add_ack(&mut self, ack: u64, window: u64) {
+        let sent_end = self.highest + u64::from(self.fin_offset.is_some());
+        if ack > sent_end + window {
+            return;
+        }
+        self.ack = self.ack.max(ack);
+        let end = self.fin_offset.map_or(self.ack, |fin| fin.min(self.ack));
+        self.highest = self.highest.max(end);
     }
 
     /// Ranges of missing bytes before the highest offset.
@@ -120,12 +135,17 @@ impl ModelStream {
                 _ => holes.push(offset..offset + 1),
             }
         }
+        // the bytes after the furthest received one are missing too
+        let received_end = self.bytes.len() as u64;
+        if received_end < self.highest {
+            holes.push(received_end..self.highest);
+        }
         holes
     }
 
     /// Offset up to which the other side ACKed the bytes.
     fn acked_offset(&self) -> u64 {
-        self.ack.min(self.bytes.len() as u64)
+        self.ack.min(self.highest)
     }
 
     /// Expected result of reading the contiguous received bytes from the
@@ -155,20 +175,21 @@ impl ModelStream {
 }
 
 impl ReferenceModel {
-    /// Applies a segment to the stream of its sender and its ACK to the
-    /// other stream. The connection is finished once both streams are
-    /// finished and both FINs are ACKed; later segments change nothing.
+    /// Applies the ACK of a segment to the other stream and the segment to
+    /// the stream of its sender. The connection is finished once both
+    /// streams are finished and both FINs are ACKed; later segments change
+    /// nothing.
     pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
         if self.end.is_some() {
             return;
         }
         let sender = role_index(segment.sender);
+        if let Some(ack) = segment.ack {
+            let window = self.window(segment.sender.other());
+            self.streams[role_index(segment.sender.other())].add_ack(ack, window);
+        }
         let window = self.window(segment.sender);
         self.streams[sender].add_segment(segment, window);
-        if let Some(ack) = segment.ack {
-            let other = &mut self.streams[role_index(segment.sender.other())];
-            other.ack = other.ack.max(ack);
-        }
         self.windows[sender] = Some(segment.header.window_size);
         self.syns[sender] |= segment.header.syn;
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
@@ -216,7 +237,7 @@ impl ReferenceModel {
         let expected = &mut self.streams[role_index(role)];
         prop_assert_eq!(expected.read_offset, stream.read_offset());
         prop_assert_eq!(expected.acked_offset(), stream.acked_offset());
-        prop_assert_eq!(expected.bytes.len() as u64, stream.highest_offset());
+        prop_assert_eq!(expected.highest, stream.highest_offset());
         prop_assert_eq!(expected.fin_offset, stream.fin_offset());
         prop_assert_eq!(expected.holes(), stream.holes().collect::<Vec<_>>());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
@@ -588,6 +609,7 @@ mod test {
             resent_lens in vec(0usize..1000, 1..32),
             directions in vec(any::<bool>(), 1..64),
             fins in [any::<bool>(), any::<bool>()],
+            windows in vec(prop_oneof![0u16..64, any::<u16>()], 1..16),
             acks in vec((tcp_role_any(), any::<Index>(), any::<Index>()), 0..32),
             consume_lens in vec(0usize..3000, 1..32),
             acked_reads in vec(any::<bool>(), 1..32),
@@ -613,6 +635,11 @@ mod test {
                 let ack = script.segments.pop().unwrap();
                 let position = 3 + position.index(script.segments.len() - 2);
                 script.segments.insert(position, ack);
+            }
+
+            // random receive windows, which make some of the ACKs implausible
+            for (segment, window) in script.segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
             }
 
             let mut pool = TcpReassemblyPool::<(), ()>::default();

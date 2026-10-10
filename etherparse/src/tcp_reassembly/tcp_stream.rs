@@ -46,7 +46,8 @@ pub struct TcpStream {
     fin_offset: Option<u64>,
 
     /// Highest offset ACKed by the receiver, where an ACK of the FIN is
-    /// `fin_offset + 1`.
+    /// `fin_offset + 1` (ACKs that the sender can't have sent bytes for
+    /// are ignored).
     seen_ack: u64,
 
     status: TcpStreamStatus,
@@ -138,12 +139,19 @@ impl TcpStream {
     }
 
     /// Offset up to which the receiver ACKed the stream's bytes.
+    ///
+    /// ACKs of bytes more than one receive window after the highest offset
+    /// are ignored, as the sender can't have sent these bytes.
     pub fn acked_offset(&self) -> u64 {
-        // ACKs can lie after the highest offset (e.g. the ACK of the FIN)
+        // the ACK of the FIN lies after the highest offset
         self.seen_ack.min(self.highest_offset)
     }
 
-    /// Offset after the furthest byte the sender is known to have sent.
+    /// Offset after the furthest byte the sender is known to have sent, as
+    /// it was received or ACKed.
+    ///
+    /// It moves back to the FIN offset, and [`TcpStream::acked_offset`] with
+    /// it, when a FIN arrives inside bytes that an earlier ACK covered.
     pub fn highest_offset(&self) -> u64 {
         self.highest_offset
     }
@@ -294,8 +302,11 @@ impl TcpStream {
 
         // the first FIN wins, but it can't lie before received bytes (even
         // if bytes before it are missing)
-        if tcp.fin() && self.fin_offset.is_none() && end >= self.highest_offset as i64 {
+        if tcp.fin() && self.fin_offset.is_none() && end >= self.buf_end() as i64 {
             self.fin_offset = Some(end as u64);
+            // an ACK of the FIN that arrived before it marked the FIN's
+            // position as a missing byte
+            self.truncate_to(end as u64);
         }
 
         // bytes after the FIN are not part of the stream
@@ -315,14 +326,26 @@ impl TcpStream {
         }
     }
 
-    /// Applies the ACK number of a segment sent by the stream's receiver.
-    pub(crate) fn add_ack(&mut self, ack: u32) {
-        if let Some(start_seq) = self.start_seq {
-            let offset = self.offset(start_seq, ack);
-            if offset > self.seen_ack as i64 {
-                self.seen_ack = offset as u64;
-            }
+    /// Applies the ACK number of a segment sent by the stream's receiver,
+    /// whose receive window before that segment was `window`.
+    pub(crate) fn add_ack(&mut self, ack: u32, window: u64) {
+        let Some(start_seq) = self.start_seq else {
+            return;
+        };
+        let ack = self.offset(start_seq, ack);
+        // the sender can't have sent more than one window after the bytes
+        // it is known to have sent (and its FIN)
+        let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
+        if ack <= self.seen_ack as i64 || ack as u64 > sent_end.saturating_add(window) {
+            return;
         }
+        self.seen_ack = ack as u64;
+        // the receiver got bytes that were not captured, but none after the
+        // FIN
+        let end = self
+            .fin_offset
+            .map_or(self.seen_ack, |fin| fin.min(self.seen_ack));
+        self.extend_to(end);
     }
 
     /// Stores the bytes of `data` (starting at offset `start`) that were not
@@ -402,7 +425,23 @@ impl TcpStream {
     /// are missing.
     fn extend_to(&mut self, offset: u64) {
         if offset > self.highest_offset {
-            self.holes.push(self.highest_offset..offset);
+            match self.holes.last_mut() {
+                Some(hole) if hole.end == self.highest_offset => hole.end = offset,
+                _ => self.holes.push(self.highest_offset..offset),
+            }
+            self.highest_offset = offset;
+        }
+    }
+
+    /// Moves the highest offset back to `offset` (at or after the end of
+    /// `buf`), the missing bytes after it don't exist.
+    fn truncate_to(&mut self, offset: u64) {
+        if offset < self.highest_offset {
+            let kept = self.holes.partition_point(|hole| hole.start < offset);
+            self.holes.truncate(kept);
+            if let Some(hole) = self.holes.last_mut() {
+                hole.end = hole.end.min(offset);
+            }
             self.highest_offset = offset;
         }
     }
@@ -1119,6 +1158,41 @@ mod test {
                 assert_eq!(0, stream.holes().count());
             }
         }
+
+        // ACKs count up to one window after the highest offset, using the
+        // window the receiver advertised before the ACK
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 104)
+                .ack_to(Responder, 103);
+            // a window of 0 limits the next ACK, not the one in its segment
+            script.window_size = 0;
+            script.ack_to(Responder, 203).ack_to(Responder, 204);
+            script.feed(&mut pool, ..4);
+            for (segment, expected) in script.segments[4..].iter().zip([0, 103, 203, 203]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).acked_offset());
+            }
+        }
+
+        // after the FIN, ACKs count up to one window after the FIN (the ACK
+        // of the FIN even with a window of 0)
+        for (window, ack, expected) in [(0, 4, 3), (100, 104, 3), (100, 105, 0)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = window;
+            script
+                .handshake()
+                .fin_with_data(Initiator, b"abc")
+                .ack_to(Responder, ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(expected, connection.stream(Initiator).acked_offset());
+        }
     }
 
     #[test]
@@ -1195,6 +1269,26 @@ mod test {
             assert_eq!(0, stream.holes().count());
             assert_eq!(1, stream.status().out_of_window_segments);
         }
+
+        // ACKs within the receiver's window move it, a FIN before it moves it
+        // back
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 50)
+                // more than one window after it
+                .ack_to(Responder, 151)
+                .fin_at(Initiator, 20, &[]);
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip([3, 50, 50, 20]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).highest_offset());
+            }
+        }
     }
 
     #[test]
@@ -1265,6 +1359,46 @@ mod test {
                 &[3..6][..],
                 connection.stream(Initiator).holes().collect::<Vec<_>>()
             );
+        }
+
+        // an ACK after the highest offset adds a hole up to it (merged with
+        // a hole at the end), and a FIN cuts it
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            script
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"g")
+                .ack_to(Responder, 10)
+                .ack_to(Responder, 12)
+                .fin_at(Initiator, 9, &[]);
+            script.feed(&mut pool, ..3);
+            let expected: [&[Range<u64>]; 5] =
+                [&[], &[3..6], &[3..6, 7..10], &[3..6, 7..12], &[3..6, 7..9]];
+            for (segment, expected) in script.segments[3..].iter().zip(expected) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!(expected, stream.holes().collect::<Vec<_>>());
+            }
+        }
+
+        // the ACK of a FIN arriving before the FIN adds a hole that the FIN
+        // removes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 4)
+                .fin(Initiator);
+            script.feed(&mut pool, ..4);
+            for (segment, expected) in script.segments[4..].iter().zip([&[3..4][..], &[]]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!(expected, stream.holes().collect::<Vec<_>>());
+            }
         }
     }
 
@@ -1368,6 +1502,19 @@ mod test {
                 TcpRead::Data(b"abcdefgh"),
                 connection.stream_mut(Initiator).read_received()
             );
+        }
+
+        // a FIN before bytes that were ACKed, but not received
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 10)
+                .fin_at(Initiator, 6, &[]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(6), connection.stream(Initiator).fin_offset());
         }
 
         // a FIN starting after the receiver's window is ignored

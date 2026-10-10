@@ -113,12 +113,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
+        // the window the sender advertised before this segment limits what
+        // the other side could send, so the ACK is applied first
+        if tcp.ack() {
+            let window = self.window(sender.other(), config);
+            self.stream_mut(sender.other())
+                .add_ack(tcp.acknowledgment_number(), window);
+        }
         let window = self.window(sender, config);
         self.stream_mut(sender).add_segment(tcp, window, config);
-        if tcp.ack() {
-            self.stream_mut(sender.other())
-                .add_ack(tcp.acknowledgment_number());
-        }
 
         // finished once all bytes up to both FINs are known and both FINs
         // were ACKed
@@ -406,6 +409,27 @@ mod test {
                 .acknowledgment_number = ack_number;
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(None, connection.end());
+        }
+
+        // an ACK more than one window after the FIN doesn't ACK it
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            script.segments[5].header.acknowledgment_number = script.seq(Initiator, 105);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            script.ack_to(Responder, 104);
+            let connection = script.feed(&mut pool, 7..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
 
         // the ACK of a FIN arrives before the FIN (reordered capture)
