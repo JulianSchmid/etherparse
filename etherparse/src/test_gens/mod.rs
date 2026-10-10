@@ -950,6 +950,35 @@ prop_compose! {
     }
 }
 
+/// TCP initial sequence numbers, often within 2^16 of 2^32 so that the
+/// sequence numbers of a connection wrap around.
+pub fn tcp_isn_any() -> impl Strategy<Value = u32> {
+    prop_oneof![
+        any::<u32>(),
+        (u32::MAX - 0xffff)..=u32::MAX,
+        (u32::MAX - 0x1fff)..=u32::MAX,
+    ]
+}
+
+/// Bytes of a TCP stream with a length below `max_len`.
+///
+/// The bytes come from a pseudo-random generator, which is a lot faster
+/// than generating each byte with proptest.
+pub fn stream_data_any(max_len: usize) -> impl Strategy<Value = std::vec::Vec<u8>> {
+    (0..max_len, any::<u64>()).prop_map(|(len, seed)| {
+        let mut state = seed;
+        (0..len)
+            .map(|_| {
+                // linear congruential generator (Knuth's MMIX constants)
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (state >> 56) as u8
+            })
+            .collect()
+    })
+}
+
 #[cfg(feature = "std")]
 pub fn tcp_role_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpRole> {
     use crate::tcp_reassembly::TcpRole;
