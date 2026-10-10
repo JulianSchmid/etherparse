@@ -7,6 +7,9 @@ pub struct TcpProcessed<'a, Timestamp = (), CustomChannelId = ()> {
     /// segment's sender.
     pub active: Option<(&'a mut TcpConnection<Timestamp, CustomChannelId>, TcpRole)>,
 
+    /// Connection ended by the packet, handed over with its remaining bytes.
+    pub ended: Option<TcpConnection<Timestamp, CustomChannelId>>,
+
     /// Reason why the packet was applied to no connection.
     pub ignored: Option<TcpIgnoreReason>,
 }
@@ -20,10 +23,11 @@ mod test {
     fn debug() {
         let processed = TcpProcessed::<(), ()> {
             active: None,
+            ended: None,
             ignored: Some(TcpIgnoreReason::NoConnection),
         };
         assert_eq!(
-            "TcpProcessed { active: None, ignored: Some(NoConnection) }",
+            "TcpProcessed { active: None, ended: None, ignored: Some(NoConnection) }",
             format!("{:?}", processed)
         );
     }

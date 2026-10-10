@@ -4,6 +4,9 @@
 pub enum TcpIgnoreReason {
     /// The packet belongs to no known connection and does not start one.
     NoConnection,
+
+    /// The packet belongs to a connection that already ended.
+    AfterEnd,
 }
 
 #[cfg(test)]
@@ -20,13 +23,17 @@ mod test {
             let b = a;
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
+            assert_ne!(TcpIgnoreReason::AfterEnd, a);
         }
 
         // debug
-        assert_eq!(
-            "NoConnection",
-            format!("{:?}", TcpIgnoreReason::NoConnection)
-        );
+        {
+            assert_eq!(
+                "NoConnection",
+                format!("{:?}", TcpIgnoreReason::NoConnection)
+            );
+            assert_eq!("AfterEnd", format!("{:?}", TcpIgnoreReason::AfterEnd));
+        }
 
         // hash
         {

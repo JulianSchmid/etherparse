@@ -10,6 +10,9 @@ pub(crate) struct TestSegment<CustomChannelId = ()> {
     pub sender: TcpRole,
     /// Stream offset of the first payload byte.
     pub offset: u64,
+    /// Offset in the other stream up to which the segment ACKs (`None`
+    /// without the ACK flag).
+    pub ack: Option<u64>,
     pub vlan_ids: ArrayVec<VlanId, 3>,
     pub source: SocketAddr,
     pub destination: SocketAddr,
@@ -184,13 +187,15 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             0xffff,
         );
         let other = role_index(sender.other());
-        if self.syns_sent[other] {
+        let ack = self.syns_sent[other].then_some(self.next_offsets[other]);
+        if let Some(ack) = ack {
             header.ack = true;
-            header.acknowledgment_number = self.seq(sender.other(), self.next_offsets[other]);
+            header.acknowledgment_number = self.seq(sender.other(), ack);
         }
         TestSegment {
             sender,
             offset,
+            ack,
             vlan_ids: self.vlan_ids.clone(),
             source: self.endpoint(sender),
             destination: self.endpoint(sender.other()),
@@ -276,6 +281,14 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
     pub fn fin_at(&mut self, sender: TcpRole, offset: u64, data: &[u8]) -> &mut Self {
         let segment = self.fin_segment(sender, offset, data);
         self.push(segment)
+    }
+
+    /// FINs of both endpoints, each sent before the other one's FIN arrived.
+    pub fn simultaneous_fins(&mut self) -> &mut Self {
+        let responder = TcpRole::Responder;
+        let responder_fin =
+            self.fin_segment(responder, self.next_offsets[role_index(responder)], &[]);
+        self.fin(TcpRole::Initiator).push(responder_fin)
     }
 
     /// Next bytes of the stream of `sender`.

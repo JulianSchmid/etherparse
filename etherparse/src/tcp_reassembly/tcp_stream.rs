@@ -31,6 +31,10 @@ pub struct TcpStream {
     /// Offset of the FIN (`None` until the first FIN was seen).
     fin_offset: Option<u64>,
 
+    /// Highest offset ACKed by the receiver, where an ACK of the FIN is
+    /// `fin_offset + 1`.
+    seen_ack: u64,
+
     status: TcpStreamStatus,
 }
 
@@ -45,6 +49,7 @@ impl TcpStream {
             head: 0,
             last_read_len: 0,
             fin_offset: None,
+            seen_ack: 0,
             status: TcpStreamStatus {
                 out_of_window_segments: 0,
             },
@@ -114,6 +119,11 @@ impl TcpStream {
         self.is_finished()
     }
 
+    /// Returns true if the receiver ACKed the stream's FIN.
+    pub(crate) fn is_fin_acked(&self) -> bool {
+        self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
+    }
+
     /// Offset after the last received byte.
     fn received_end(&self) -> u64 {
         self.read_offset + (self.buf.len() - self.head) as u64
@@ -163,6 +173,16 @@ impl TcpStream {
             _ => data,
         };
         self.add_data(start, data);
+    }
+
+    /// Applies the ACK number of a segment sent by the stream's receiver.
+    pub(crate) fn add_ack(&mut self, ack: u32) {
+        if let Some(start_seq) = self.start_seq {
+            let offset = self.offset(start_seq, ack);
+            if offset > self.seen_ack as i64 {
+                self.seen_ack = offset as u64;
+            }
+        }
     }
 
     /// Appends the bytes of `data` (starting at offset `start`) that follow

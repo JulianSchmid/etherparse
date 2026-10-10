@@ -67,6 +67,8 @@ use std::collections::{hash_map::Entry, HashMap};
 #[derive(Clone, Debug)]
 pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     config: TcpReassemblyConfig,
+    /// Open connections, plus the tombstones of ended connections (without
+    /// buffers) that absorb their late segments.
     connections:
         HashMap<TcpConnectionKey<CustomChannelId>, TcpConnection<Timestamp, CustomChannelId>>,
     /// Id of the next connection.
@@ -97,6 +99,10 @@ where
     /// A SYN of an unknown connection starts a new one. Other segments of
     /// unknown connections are ignored with
     /// [`TcpIgnoreReason::NoConnection`].
+    ///
+    /// A connection that ends is handed over in [`TcpProcessed::ended`].
+    /// Its late segments are then ignored with
+    /// [`TcpIgnoreReason::AfterEnd`].
     pub fn process_segment(
         &mut self,
         segment: TcpSegment<'_, CustomChannelId>,
@@ -114,6 +120,7 @@ where
                 if false == tcp.syn() || tcp.ack() {
                     return TcpProcessed {
                         active: None,
+                        ended: None,
                         ignored: Some(TcpIgnoreReason::NoConnection),
                     };
                 }
@@ -123,9 +130,25 @@ where
                 entry.insert(TcpConnection::new(id, key, source, timestamp.clone()))
             }
         };
+        if connection.end().is_some() {
+            // the tombstone of an ended connection absorbs its late segments
+            return TcpProcessed {
+                active: None,
+                ended: None,
+                ignored: Some(TcpIgnoreReason::AfterEnd),
+            };
+        }
         let sender = connection.add_segment(source, &tcp, timestamp);
+        if connection.end().is_some() {
+            return TcpProcessed {
+                active: None,
+                ended: Some(connection.hand_over()),
+                ignored: None,
+            };
+        }
         TcpProcessed {
             active: Some((connection, sender)),
+            ended: None,
             ignored: None,
         }
     }
@@ -269,6 +292,63 @@ mod test {
                 TcpRead::Data(b"HTTP/1.1"),
                 connection.stream_mut(Responder).read_received()
             );
+        }
+
+        // a connection whose FINs were both ACKed is handed over
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"GET /")
+                .send(Responder, b"HTTP/1.1")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let (last, rest) = script.segments.split_last().unwrap();
+            for (i, segment) in rest.iter().enumerate() {
+                let processed = segment.feed(&mut pool, i as u32);
+                assert!(processed.active.is_some());
+                assert!(processed.ended.is_none());
+            }
+            let processed = last.feed(&mut pool, 100);
+            assert!(processed.active.is_none());
+            assert_eq!(None, processed.ignored);
+            let mut connection = processed.ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(&0, connection.first_seen());
+            assert_eq!(&100, connection.last_seen());
+            for (role, data) in [(Initiator, &b"GET /"[..]), (Responder, &b"HTTP/1.1"[..])] {
+                let stream = connection.stream_mut(role);
+                assert!(stream.is_complete());
+                assert_eq!(TcpRead::Data(data), stream.read_received());
+                stream.consume(data.len());
+                assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            }
+        }
+
+        // late segments of an ended connection are ignored and start no
+        // new connection
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator)
+                // new bytes after the end
+                .send(Responder, b"def");
+            script.feed(&mut pool, ..7).ended.unwrap();
+            // retransmissions of every segment after the SYN
+            for segment in &script.segments[1..] {
+                let processed = segment.feed(&mut pool, ());
+                assert!(processed.active.is_none());
+                assert!(processed.ended.is_none());
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
         }
 
         // segments with a different key belong to a different connection

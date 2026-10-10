@@ -12,6 +12,7 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     responder_stream: TcpStream,
     first_seen: Timestamp,
     last_seen: Timestamp,
+    end: Option<TcpConnectionEnd>,
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
@@ -34,6 +35,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             responder_stream: TcpStream::new(),
             first_seen: timestamp.clone(),
             last_seen: timestamp,
+            end: None,
         }
     }
 
@@ -88,6 +90,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         &self.last_seen
     }
 
+    /// Reason why the connection ended, `None` while it is open.
+    pub fn end(&self) -> Option<TcpConnectionEnd> {
+        self.end
+    }
+
     /// Applies a segment sent by `source` and returns the role of the sender.
     pub(crate) fn add_segment(
         &mut self,
@@ -102,7 +109,40 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             TcpRole::Responder
         };
         self.stream_mut(sender).add_segment(tcp);
+        if tcp.ack() {
+            self.stream_mut(sender.other())
+                .add_ack(tcp.acknowledgment_number());
+        }
+
+        // finished once all bytes up to both FINs are known and both FINs
+        // were ACKed
+        if [&self.initiator_stream, &self.responder_stream]
+            .iter()
+            .all(|stream| stream.is_finished() && stream.is_fin_acked())
+        {
+            self.end = Some(TcpConnectionEnd::Finished);
+        }
         sender
+    }
+
+    /// Returns the connection with its streams and leaves a tombstone
+    /// without buffers in its place, which keeps the key, id and timestamps.
+    pub(crate) fn hand_over(&mut self) -> TcpConnection<Timestamp, CustomChannelId>
+    where
+        Timestamp: Clone,
+        CustomChannelId: Clone,
+    {
+        let tombstone = TcpConnection {
+            id: self.id,
+            key: self.key.clone(),
+            initiator: self.initiator,
+            initiator_stream: TcpStream::new(),
+            responder_stream: TcpStream::new(),
+            first_seen: self.first_seen.clone(),
+            last_seen: self.last_seen.clone(),
+            end: self.end,
+        };
+        core::mem::replace(self, tombstone)
     }
 }
 
@@ -255,6 +295,135 @@ mod test {
         for (i, segment) in script.segments.iter().enumerate() {
             let (connection, _) = segment.feed(&mut pool, 10 + i as u32).active.unwrap();
             assert_eq!(&(10 + i as u32), connection.last_seen());
+        }
+    }
+
+    #[test]
+    fn end() {
+        // open connection
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+        }
+
+        // every order of the FINs finishes the connection with the last ACK
+        let closes: [fn(&mut ConnectionScript); 4] = [
+            // initiator first
+            |script| {
+                script.fin(Initiator).fin(Responder).ack(Initiator);
+            },
+            // initiator first, ACKed before the responder's FIN
+            |script| {
+                script
+                    .fin(Initiator)
+                    .ack(Responder)
+                    .fin(Responder)
+                    .ack(Initiator);
+            },
+            // responder first
+            |script| {
+                script.fin(Responder).fin(Initiator).ack(Responder);
+            },
+            // simultaneous
+            |script| {
+                script.simultaneous_fins().ack(Initiator).ack(Responder);
+            },
+        ];
+        for close in closes {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            close(&mut script);
+            let (last, rest) = script.segments.split_last().unwrap();
+            for segment in rest {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let connection = last.feed(&mut pool, ()).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // without the last ACK the connection stays open, although both
+        // streams are finished
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            assert!(connection.stream(Initiator).is_finished());
+            assert!(connection.stream(Responder).is_finished());
+        }
+
+        // an ACK of the bytes before the FIN doesn't ACK the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Responder, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let ack_number = script.seq(Responder, 3);
+            script
+                .segments
+                .last_mut()
+                .unwrap()
+                .header
+                .acknowledgment_number = ack_number;
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+        }
+
+        // the ACK of a FIN arrives before the FIN (reordered capture)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Responder, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let ack = script.segments.pop().unwrap();
+            script.segments.insert(5, ack);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // both FINs are ACKed, but bytes before a FIN are missing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let missing = script.segments.remove(4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let mut connection = missing.feed(&mut pool, ()).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(
+                TcpRead::Data(b"abcdef"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
     }
 }

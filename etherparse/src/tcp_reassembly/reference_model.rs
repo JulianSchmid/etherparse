@@ -10,6 +10,8 @@ use std::vec::Vec;
 pub(crate) struct ReferenceModel {
     /// Streams indexed by role.
     streams: [ModelStream; 2],
+    /// End of the connection.
+    end: Option<TcpConnectionEnd>,
 }
 
 /// Model of one stream.
@@ -23,6 +25,8 @@ struct ModelStream {
     fin_offset: Option<u64>,
     /// Number of segments with bytes after the FIN.
     out_of_window_segments: u64,
+    /// Highest offset ACKed by the other side.
+    ack: u64,
 }
 
 impl ModelStream {
@@ -65,12 +69,34 @@ impl ModelStream {
     fn is_finished(&self) -> bool {
         Some(self.received.len() as u64) == self.fin_offset
     }
+
+    /// Returns true if the stream is finished and its FIN was ACKed.
+    fn is_finished_and_acked(&self) -> bool {
+        self.is_finished() && self.fin_offset.is_some_and(|fin| fin < self.ack)
+    }
 }
 
 impl ReferenceModel {
-    /// Applies a segment to the stream of its sender.
+    /// Applies a segment to the stream of its sender and its ACK to the
+    /// other stream. The connection is finished once both streams are
+    /// finished and both FINs are ACKed; later segments change nothing.
     pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
+        if self.end.is_some() {
+            return;
+        }
         self.streams[role_index(segment.sender)].add_segment(segment);
+        if let Some(ack) = segment.ack {
+            let other = &mut self.streams[role_index(segment.sender.other())];
+            other.ack = other.ack.max(ack);
+        }
+        if self.streams.iter().all(ModelStream::is_finished_and_acked) {
+            self.end = Some(TcpConnectionEnd::Finished);
+        }
+    }
+
+    /// End of the connection, `None` while it is open.
+    pub fn end(&self) -> Option<TcpConnectionEnd> {
+        self.end
     }
 
     /// Contiguous received bytes of the stream of `role` from offset 0 on.
@@ -133,6 +159,8 @@ mod test {
     enum FinOrder {
         InitiatorFirst,
         ResponderFirst,
+        /// Each FIN is sent before the other one arrived.
+        Simultaneous,
     }
 
     proptest! {
@@ -146,7 +174,12 @@ mod test {
             resent_lens in vec(0usize..1000, 1..32),
             directions in vec(any::<bool>(), 1..64),
             fin_data_lens in [proptest::option::of(0usize..64), proptest::option::of(0usize..64)],
-            fin_order in prop_oneof![Just(FinOrder::InitiatorFirst), Just(FinOrder::ResponderFirst)],
+            fin_order in prop_oneof![
+                Just(FinOrder::InitiatorFirst),
+                Just(FinOrder::ResponderFirst),
+                Just(FinOrder::Simultaneous),
+            ],
+            final_acks in [any::<bool>(), any::<bool>()],
             late_segments in vec(
                 (tcp_role_any(), 0usize..8, vec(any::<u8>(), 0..8), any::<bool>()),
                 0..8
@@ -184,16 +217,31 @@ mod test {
 
             // FINs carrying the rest of the bytes
             let roles = match fin_order {
-                FinOrder::InitiatorFirst => [Initiator, Responder],
                 FinOrder::ResponderFirst => [Responder, Initiator],
+                _ => [Initiator, Responder],
             };
-            for role in roles {
-                let i = role_index(role);
-                if fin_data_lens[i].is_some() {
-                    script.fin_with_data(role, &data[i][data_lens[i]..]);
-                } else {
-                    // without a FIN, the rest is sent as normal bytes
+            let both_fins = fin_data_lens.iter().all(Option::is_some);
+            if matches!(fin_order, FinOrder::Simultaneous) && both_fins {
+                for (i, role) in [Initiator, Responder].into_iter().enumerate() {
                     script.send(role, &data[i][data_lens[i]..]);
+                }
+                script.simultaneous_fins();
+            } else {
+                for role in roles {
+                    let i = role_index(role);
+                    if fin_data_lens[i].is_some() {
+                        script.fin_with_data(role, &data[i][data_lens[i]..]);
+                    } else {
+                        // without a FIN, the rest is sent as normal bytes
+                        script.send(role, &data[i][data_lens[i]..]);
+                    }
+                }
+            }
+
+            // ACKs of the FINs that were not ACKed yet
+            for role in roles {
+                if final_acks[role_index(role)] {
+                    script.ack(role);
                 }
             }
 
@@ -209,13 +257,32 @@ mod test {
                 }
             }
 
-            // feed the segments and read partially after each one
+            // feed the segments and read partially after each one, from
+            // the pool or from the ended connection it handed over
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut model = ReferenceModel::default();
+            let mut ended = None;
             let mut consumed = [0usize, 0usize];
             for (step, segment) in script.segments.iter().enumerate() {
+                let after_end = model.end().is_some();
                 model.apply(segment);
-                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let processed = segment.feed(&mut pool, ());
+                let connection = if after_end {
+                    prop_assert!(processed.active.is_none());
+                    prop_assert!(processed.ended.is_none());
+                    prop_assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+                    ended.as_mut().unwrap()
+                } else if model.end().is_some() {
+                    prop_assert!(processed.active.is_none());
+                    prop_assert_eq!(None, processed.ignored);
+                    ended = processed.ended;
+                    ended.as_mut().unwrap()
+                } else {
+                    prop_assert!(processed.ended.is_none());
+                    prop_assert_eq!(None, processed.ignored);
+                    processed.active.unwrap().0
+                };
+                prop_assert_eq!(model.end(), connection.end());
                 for role in [Initiator, Responder] {
                     let i = role_index(role);
                     model.check_and_consume(
@@ -233,6 +300,23 @@ mod test {
                 prop_assert_eq!(&data[i][..], &model.received(role)[..data[i].len()]);
                 if fin_data_lens[i].is_some() {
                     prop_assert_eq!(Some(data[i].len() as u64), model.fin_offset(role));
+                }
+            }
+
+            // with both FINs and their ACKs the connection is finished
+            if both_fins && final_acks.iter().all(|ack| *ack) {
+                prop_assert_eq!(Some(TcpConnectionEnd::Finished), model.end());
+            }
+
+            // an ended connection is complete and can be read to its end
+            if let Some(mut connection) = ended {
+                for role in [Initiator, Responder] {
+                    let stream = connection.stream_mut(role);
+                    prop_assert!(stream.is_complete());
+                    stream.read_received();
+                    stream.consume(usize::MAX);
+                    prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+                    prop_assert_eq!(model.fin_offset(role), Some(stream.read_offset()));
                 }
             }
         }
