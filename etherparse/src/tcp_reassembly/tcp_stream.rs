@@ -12,10 +12,13 @@ pub struct TcpStream {
     /// the stream is unknown).
     start_seq: Option<u32>,
 
-    /// Window scale option in the sender's SYN.
-    // Only stored so far, the receiver window is not tracked yet.
-    #[allow(dead_code)]
-    window_scale: Option<u8>,
+    /// Window scale option in the sender's SYN (`None` while the SYN was
+    /// not seen, `Some(None)` for a SYN without the option).
+    window_scale: Option<Option<u8>>,
+
+    /// "window" field of the sender's last segment and whether that segment
+    /// was a SYN (`None` before the sender's first segment).
+    window: Option<(u16, bool)>,
 
     /// Offset of the byte at `buf[head]`.
     read_offset: u64,
@@ -56,6 +59,7 @@ impl TcpStream {
         TcpStream {
             start_seq: None,
             window_scale: None,
+            window: None,
             read_offset: 0,
             highest_offset: 0,
             buf,
@@ -202,6 +206,35 @@ impl TcpStream {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
     }
 
+    /// Receive window in bytes that the stream's sender advertised for the
+    /// other stream `other`, `None` while it is unknown.
+    pub(crate) fn advertised_window(&self, other: &TcpStream) -> Option<u64> {
+        // the window scale is only known if both SYNs were seen (RFC 7323)
+        match (self.window, self.window_scale, other.window_scale) {
+            (Some((window, in_syn)), Some(scale), Some(other_scale)) => {
+                // the window of a SYN is never scaled, and both directions
+                // are only scaled if both SYNs had the option
+                let shift = match (scale, other_scale) {
+                    (Some(scale), Some(_)) if false == in_syn => scale.min(14),
+                    _ => 0,
+                };
+                Some(u64::from(window) << shift)
+            }
+            _ => None,
+        }
+    }
+
+    /// Offset after which the receiver with the receive window `window`
+    /// doesn't accept bytes.
+    fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
+        // allow for several windows, as the window can change and not all
+        // ACKs are captured
+        let factor = config.hole_give_up_window_factor.unwrap_or(2);
+        self.seen_ack
+            .max(self.highest_offset)
+            .saturating_add(window.saturating_mul(u64::from(factor)))
+    }
+
     /// Offset after the last byte in `buf`.
     fn buf_end(&self) -> u64 {
         self.read_offset + (self.buf.len() - self.head) as u64
@@ -222,8 +255,17 @@ impl TcpStream {
         highest as i64 + i64::from(distance)
     }
 
-    /// Applies a segment sent by the stream's sender.
-    pub(crate) fn add_segment(&mut self, tcp: &TcpSlice<'_>) {
+    /// Applies a segment sent by the stream's sender, whose receiver has the
+    /// receive window `window`.
+    pub(crate) fn add_segment(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        // the window the sender advertises for the other stream
+        self.window = Some((tcp.window_size(), tcp.syn()));
+
         // the SYN occupies the sequence number before the first byte
         let seq = if tcp.syn() {
             tcp.sequence_number().wrapping_add(1)
@@ -232,7 +274,7 @@ impl TcpStream {
         };
         if tcp.syn() && self.start_seq.is_none() {
             self.start_seq = Some(seq);
-            self.window_scale = window_scale(tcp);
+            self.window_scale = Some(window_scale(tcp));
         }
         let Some(start_seq) = self.start_seq else {
             return;
@@ -240,6 +282,15 @@ impl TcpStream {
         let start = self.offset(start_seq, seq);
         let data = tcp.payload();
         let end = start + data.len() as i64;
+
+        // the receiver doesn't accept bytes or a FIN starting after its
+        // window
+        if (false == data.is_empty() || tcp.fin())
+            && u64::try_from(start).is_ok_and(|start| start > self.window_end(window, config))
+        {
+            self.status.out_of_window_segments += 1;
+            return;
+        }
 
         // the first FIN wins, but it can't lie before received bytes (even
         // if bytes before it are missing)
@@ -664,6 +715,22 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
             stream.consume(3);
+            assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
+        // bytes starting after the receiver's window are never readable
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send_at(Initiator, 201, b"x")
+                .send_at(Initiator, 0, &[b'a'; 201]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(&[b'a'; 201]), stream.read_received());
+            stream.consume(201);
             assert_eq!(TcpRead::Pending, stream.read_received());
         }
 
@@ -1112,6 +1179,22 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(6, connection.stream(Initiator).highest_offset());
         }
+
+        // a segment far after the receiver's window doesn't move it (and
+        // allocates no buffer for the bytes before it)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1 << 30, b"x");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(3, stream.highest_offset());
+            assert_eq!(0, stream.holes().count());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
     }
 
     #[test]
@@ -1285,6 +1368,16 @@ mod test {
                 TcpRead::Data(b"abcdefgh"),
                 connection.stream_mut(Initiator).read_received()
             );
+        }
+
+        // a FIN starting after the receiver's window is ignored
+        for (offset, expected) in [(201, None), (200, Some(200))] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().fin_at(Initiator, offset, &[]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(expected, connection.stream(Initiator).fin_offset());
         }
 
         // FIN of a stream whose start was not seen
@@ -1539,6 +1632,178 @@ mod test {
                 );
             }
         }
+
+        // bytes starting more than two windows of the receiver after the
+        // highest offset count as out-of-window, where the window of the
+        // SYN-ACK is never scaled
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script.handshake();
+            assert_window_end(Default::default(), &script, 200);
+        }
+
+        // later windows of the receiver are scaled by its window scale if
+        // both SYNs had the option (shifts above 14 count as 14), and the
+        // last one counts
+        for (scales, windows, end) in [
+            ([Some(5), Some(3)], &[100][..], 2 * (100 << 3)),
+            ([Some(5), Some(3)], &[200, 100][..], 2 * (100 << 3)),
+            ([Some(0), Some(14)], &[1][..], 2 * (1 << 14)),
+            ([Some(0), Some(15)], &[1][..], 2 * (1 << 14)),
+            // one SYN without the option
+            ([None, Some(3)], &[100][..], 200),
+            ([Some(3), None], &[100][..], 200),
+        ] {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = scales;
+            script.window_size = 1000;
+            script.handshake();
+            for window in windows {
+                script.window_size = *window;
+                script.ack(Responder);
+            }
+            assert_window_end(Default::default(), &script, end);
+        }
+
+        // a SYN with a malformed window scale option has none
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.handshake();
+            script.window_size = 100;
+            script.ack(Responder);
+            // window scale option with a wrong length
+            script.segments[0]
+                .header
+                .set_options_raw(&[3, 4, 3, 0])
+                .unwrap();
+            assert_window_end(Default::default(), &script, 200);
+        }
+
+        // the first window scale option counts, also after other options
+        for options in [
+            &[
+                TcpOptionElement::MaximumSegmentSize(1460),
+                TcpOptionElement::WindowScale(3),
+            ][..],
+            &[
+                TcpOptionElement::WindowScale(3),
+                TcpOptionElement::WindowScale(5),
+            ][..],
+        ] {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(0), None];
+            script.handshake();
+            script.window_size = 100;
+            script.ack(Responder);
+            script.segments[1].header.set_options(options).unwrap();
+            assert_window_end(Default::default(), &script, 2 * (100 << 3));
+        }
+
+        // the fallback window is used while the window scale is unknown
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 50,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().ack(Responder);
+            // remove the SYN-ACK
+            script.segments.remove(1);
+            assert_window_end(config, &script, 100);
+        }
+
+        // the number of windows is the hole give up window factor
+        for (factor, end) in [(Some(1), 100), (Some(3), 300), (None, 200)] {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake();
+            assert_window_end(config, &script, end);
+        }
+
+        // the window starts at the highest offset or at the ACKed offset,
+        // whichever is higher
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            assert_window_end(Default::default(), &script, 203);
+            script.ack_to(Responder, 50);
+            assert_window_end(Default::default(), &script, 250);
+        }
+
+        // after the FIN, the window starts at the ACK of the FIN
+        for (offset, expected) in [(204, 0), (205, 1)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .fin_with_data(Initiator, b"abc")
+                .ack(Responder);
+            let fin = script.injected(|s| {
+                s.fin_at(Initiator, offset, &[]);
+            });
+            script.segments.push(fin);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                expected,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
+        }
+
+        // FINs starting after the window count too, pure ACKs don't
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake();
+            let fin = script.injected(|s| {
+                s.fin_at(Initiator, 201, &[]);
+            });
+            let ack = script.injected(|s| {
+                s.send_at(Initiator, 201, &[]);
+            });
+            script.segments.extend([fin, ack]);
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip([1, 1]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(
+                    expected,
+                    connection.stream(Initiator).status().out_of_window_segments
+                );
+            }
+        }
+    }
+
+    /// Checks that after `script`, bytes of the initiator starting at `end`
+    /// are stored, but bytes starting after it count as out-of-window.
+    fn assert_window_end(config: TcpReassemblyConfig, script: &ConnectionScript, end: u64) {
+        let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+        let mut probes = script.clone();
+        probes.segments.clear();
+        probes
+            .send_at(Initiator, end + 1, b"x")
+            .send_at(Initiator, end, b"y");
+        let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+        let highest_offset = connection.stream(Initiator).highest_offset();
+        {
+            let (connection, _) = probes.segments[0].feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(highest_offset, stream.highest_offset());
+        }
+        let (connection, _) = probes.segments[1].feed(&mut pool, ()).active.unwrap();
+        let stream = connection.stream(Initiator);
+        assert_eq!(1, stream.status().out_of_window_segments);
+        assert_eq!(end + 1, stream.highest_offset());
     }
 
     #[test]

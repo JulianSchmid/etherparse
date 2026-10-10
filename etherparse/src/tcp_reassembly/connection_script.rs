@@ -98,6 +98,8 @@ pub(crate) struct ConnectionScript<CustomChannelId = ()> {
     syns_sent: [bool; 2],
     /// Window scale option put into the SYN of each role.
     pub window_scales: [Option<u8>; 2],
+    /// "window" field of the next segments.
+    pub window_size: u16,
     pub segments: Vec<TestSegment<CustomChannelId>>,
 }
 
@@ -139,6 +141,7 @@ impl ConnectionScript<()> {
             next_offsets: [0, 0],
             syns_sent: [false, false],
             window_scales: [None, None],
+            window_size: 0xffff,
             segments: Vec::new(),
         }
     }
@@ -156,6 +159,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             next_offsets: self.next_offsets,
             syns_sent: self.syns_sent,
             window_scales: self.window_scales,
+            window_size: self.window_size,
             segments: Vec::new(),
         }
     }
@@ -184,7 +188,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             self.endpoint(sender).port(),
             self.endpoint(sender.other()).port(),
             self.seq(sender, offset),
-            0xffff,
+            self.window_size,
         );
         let other = role_index(sender.other());
         let ack = self.syns_sent[other].then_some(self.next_offsets[other]);
@@ -224,6 +228,15 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             .max(segment.offset + segment.payload.len() as u64 + u64::from(segment.header.fin));
         self.segments.push(segment);
         self
+    }
+
+    /// Segment that `step` appends to a copy of the script, e.g. to inject a
+    /// segment that changes neither what the endpoints send nor what they
+    /// ACK.
+    pub fn injected(&self, step: impl FnOnce(&mut Self)) -> TestSegment<CustomChannelId> {
+        let mut copy = self.clone();
+        step(&mut copy);
+        copy.segments.pop().unwrap()
     }
 
     /// SYN of `sender` carrying `data` (TCP Fast Open if not empty).

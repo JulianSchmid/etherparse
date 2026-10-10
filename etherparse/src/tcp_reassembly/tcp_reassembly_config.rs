@@ -28,7 +28,10 @@ pub struct TcpReassemblyConfig {
     /// up (default `Some(2)`).
     ///
     /// The receiver must have acknowledged the missing bytes by then. `None`
-    /// switches this rule off.
+    /// switches giving up holes this way off.
+    ///
+    /// The same number of windows limits how far after the furthest received
+    /// or ACKed byte new bytes are accepted (2 windows with `None`).
     pub hole_give_up_window_factor: Option<u32>,
 
     /// Receiver window in bytes that is assumed whenever the real one is

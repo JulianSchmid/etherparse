@@ -6,11 +6,16 @@ use std::vec::Vec;
 ///
 /// It works on the true stream offsets that a [`ConnectionScript`] records
 /// in its segments, so it is independent of the sequence number handling
-/// it checks.
+/// it checks. It expects the default configuration and segments without
+/// window scale options.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Streams indexed by role.
     streams: [ModelStream; 2],
+    /// "window" field of the last segment of each role.
+    windows: [Option<u16>; 2],
+    /// Whether the SYN of each role was seen.
+    syns: [bool; 2],
     /// End of the connection.
     end: Option<TcpConnectionEnd>,
 }
@@ -27,7 +32,8 @@ struct ModelStream {
     /// Number of segments with bytes that differ from the bytes received
     /// first (from the read offset on).
     conflicting_retransmissions: u64,
-    /// Number of segments with bytes after the FIN.
+    /// Number of segments with bytes or a FIN after the window, or with
+    /// bytes after the FIN.
     out_of_window_segments: u64,
     /// Highest offset ACKed by the other side.
     ack: u64,
@@ -36,16 +42,28 @@ struct ModelStream {
 }
 
 impl ModelStream {
-    /// Applies a segment of the stream's sender:
+    /// Applies a segment of the stream's sender, whose receiver has the
+    /// receive window `window`:
+    /// - a segment with bytes or a FIN starting more than two windows after
+    ///   the highest or the ACKed offset is counted and not stored;
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
     ///   retransmission if unread ones differ;
     /// - the first FIN that doesn't lie before the highest offset ends the
-    ///   stream, and bytes after it are counted and dropped;
+    ///   stream, and bytes after it are counted and not stored;
     /// - bytes before the highest offset that were not received are holes.
-    fn add_segment<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
+    fn add_segment<CustomChannelId>(
+        &mut self,
+        segment: &TestSegment<CustomChannelId>,
+        window: u64,
+    ) {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
+        let window_end = self.ack.max(self.bytes.len() as u64) + 2 * window;
+        if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
+            self.out_of_window_segments += 1;
+            return;
+        }
         if segment.header.fin && self.fin_offset.is_none() && end >= self.bytes.len() as u64 {
             self.fin_offset = Some(end);
         }
@@ -144,13 +162,27 @@ impl ReferenceModel {
         if self.end.is_some() {
             return;
         }
-        self.streams[role_index(segment.sender)].add_segment(segment);
+        let sender = role_index(segment.sender);
+        let window = self.window(segment.sender);
+        self.streams[sender].add_segment(segment, window);
         if let Some(ack) = segment.ack {
             let other = &mut self.streams[role_index(segment.sender.other())];
             other.ack = other.ack.max(ack);
         }
+        self.windows[sender] = Some(segment.header.window_size);
+        self.syns[sender] |= segment.header.syn;
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
             self.end = Some(TcpConnectionEnd::Finished);
+        }
+    }
+
+    /// Receive window of the stream of `role`: the last window its receiver
+    /// advertised (never scaled, as there are no window scale options), or
+    /// the fallback window until both SYNs were seen.
+    fn window(&self, role: TcpRole) -> u64 {
+        match self.windows[role_index(role.other())] {
+            Some(window) if self.syns == [true, true] => u64::from(window),
+            _ => u64::from(TcpReassemblyConfig::default().fallback_window),
         }
     }
 
@@ -594,6 +626,76 @@ mod test {
             // the ACKs don't change the received bytes
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
                 prop_assert_eq!(data[i], model.received(role));
+            }
+        }
+
+        #[test]
+        fn out_of_window_segments(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(16 * 1024),
+            responder_data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            windows in vec(prop_oneof![0u16..64, 0u16..2048], 1..16),
+            injected in vec(
+                (
+                    tcp_role_any(),
+                    any::<Index>(),
+                    0u64..8192,
+                    vec(any::<u8>(), 0..8),
+                    any::<bool>(),
+                ),
+                0..16
+            ),
+            consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &[0], &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // segments the endpoints didn't send, with bytes or a FIN after
+            // the end of the stream, at random positions after the handshake
+            for (role, position, distance, payload, fin) in &injected {
+                let offset = data[role_index(*role)].len() as u64 + distance;
+                let segment = script.injected(|script| {
+                    if *fin {
+                        script.fin_at(*role, offset, payload);
+                    } else {
+                        script.send_at(*role, offset, payload);
+                    }
+                });
+                let position = 3 + position.index(script.segments.len() - 2);
+                script.segments.insert(position, segment);
+            }
+
+            // random receive windows
+            for (segment, window) in script.segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let (model, _) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+            )?;
+
+            // the injected bytes don't change the bytes that were sent
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert!(model.received(role).starts_with(data[i]));
             }
         }
 

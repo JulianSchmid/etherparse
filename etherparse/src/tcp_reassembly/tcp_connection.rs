@@ -105,6 +105,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         timestamp: Timestamp,
+        config: &TcpReassemblyConfig,
     ) -> TcpRole {
         self.last_seen = timestamp;
         let sender = if source == self.initiator {
@@ -112,7 +113,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
-        self.stream_mut(sender).add_segment(tcp);
+        let window = self.window(sender, config);
+        self.stream_mut(sender).add_segment(tcp, window, config);
         if tcp.ack() {
             self.stream_mut(sender.other())
                 .add_ack(tcp.acknowledgment_number());
@@ -127,6 +129,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.end = Some(TcpConnectionEnd::Finished);
         }
         sender
+    }
+
+    /// Receive window of the stream sent by `role`, as advertised by its
+    /// receiver, or the fallback window while that is unknown.
+    fn window(&self, role: TcpRole, config: &TcpReassemblyConfig) -> u64 {
+        self.stream(role.other())
+            .advertised_window(self.stream(role))
+            .unwrap_or(u64::from(config.fallback_window))
     }
 
     /// Returns the connection with its streams and leaves a tombstone
@@ -412,6 +422,26 @@ mod test {
             script.segments.insert(5, ack);
             let connection = script.feed_all(&mut pool).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // an injected FIN after the receiver's window doesn't keep the real
+        // FIN from finishing the connection (regression test, the old
+        // tcp-reassembly branch accepted it)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let injected = script.injected(|s| {
+                s.fin_at(Initiator, 1 << 20, &[]);
+            });
+            script.segments.push(injected);
+            script.fin(Initiator).fin(Responder).ack(Initiator);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(Some(3), stream.fin_offset());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
         }
 
         // both FINs are ACKed, but bytes before a FIN are missing (with and

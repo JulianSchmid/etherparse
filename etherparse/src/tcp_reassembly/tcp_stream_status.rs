@@ -9,10 +9,11 @@ pub struct TcpStreamStatus {
     /// are not compared.
     pub conflicting_retransmissions: u64,
 
-    /// Number of segments with bytes that lie outside of the stream, e.g.
-    /// after its FIN.
+    /// Number of segments with bytes that lie outside of the stream: they
+    /// start after the receiver's window, or lie after the stream's FIN.
     ///
-    /// These bytes are not stored.
+    /// These bytes are not stored. FINs starting after the receiver's window
+    /// count too.
     pub out_of_window_segments: u64,
 }
 

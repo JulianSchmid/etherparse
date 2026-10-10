@@ -154,7 +154,7 @@ where
                 ignored: Some(TcpIgnoreReason::AfterEnd),
             };
         }
-        let sender = connection.add_segment(source, &tcp, timestamp);
+        let sender = connection.add_segment(source, &tcp, timestamp, &self.config);
         if connection.end().is_some() {
             return TcpProcessed {
                 active: None,
