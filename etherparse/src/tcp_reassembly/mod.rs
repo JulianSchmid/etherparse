@@ -1,6 +1,9 @@
 mod tcp_connection;
 pub use tcp_connection::*;
 
+mod tcp_connection_end;
+pub use tcp_connection_end::*;
+
 mod tcp_connection_id;
 pub use tcp_connection_id::*;
 
@@ -30,6 +33,12 @@ pub use tcp_segment::*;
 
 mod tcp_stream;
 pub use tcp_stream::*;
+
+mod tcp_stream_end;
+pub use tcp_stream_end::*;
+
+mod tcp_stream_status;
+pub use tcp_stream_status::*;
 
 #[cfg(test)]
 mod connection_script;
