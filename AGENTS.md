@@ -1,6 +1,6 @@
 # etherparse
 
-Zero-allocation `no_std` library for parsing and writing packet-based protocols (Ethernet II, VLAN, MACsec, Linux SLL, ARP, IPv4/IPv6 + extension headers, UDP, TCP, ICMPv4/v6, IGMP). Only IP defragmentation (`defrag`) allocates.
+Zero-allocation `no_std` library for parsing and writing packet-based protocols (Ethernet II, VLAN, MACsec, Linux SLL, ARP, IPv4/IPv6 + extension headers, UDP, TCP, ICMPv4/v6, IGMP). Only IP defragmentation (`defrag`) and TCP reassembly (`tcp_reassembly`) allocate.
 
 ## Commands
 
@@ -25,7 +25,7 @@ Coverage: `coverage/coverage.bash` (needs `llvm-tools-preview`, `cargo-binutils`
 
 ## Architecture
 
-The crate root (`etherparse/src/lib.rs`) is `#![no_std]`; `alloc`/`std` are opt-in features (`std` is default). `std`-only modules (`defrag`, `io`, writer/`read` APIs) are gated with `#[cfg(feature = "std")]` plus `#[cfg_attr(docsrs, doc(cfg(feature = "std")))]`.
+The crate root (`etherparse/src/lib.rs`) is `#![no_std]`; `alloc`/`std` are opt-in features (`std` is default). `std`-only modules (`defrag`, `tcp_reassembly`, `io`, writer/`read` APIs) are gated with `#[cfg(feature = "std")]` plus `#[cfg_attr(docsrs, doc(cfg(feature = "std")))]`.
 
 Protocols are grouped by layer: `link/`, `net/`, `transport/`. Each layer module re-exports everything flat (`pub use link::*`), so the public API is flat at the crate root. Errors live in a parallel tree under `err/` (`err::ipv4::HeaderError`, `err::tcp::HeaderSliceError`, ...), with shared types like `LenError`, `Layer` and `LenSource`.
 
@@ -56,7 +56,7 @@ Value newtypes (`EtherType`, `IpNumber`, `VlanId`, `IpDscp`, ...) wrap the raw i
 
 Follow `docs/coding-style.md` (naming across type families, `unsafe`/`SAFETY` rules, error types, docs and test structure). In short:
 
-- No allocations or syscalls outside `defrag` (and `std`-gated reading/writing).
+- No allocations or syscalls outside `defrag` and `tcp_reassembly` (and `std`-gated reading/writing).
 - Keep etherparse's `[dependencies]` minimal: implement what you need inside the crate; a new dependency is a last resort. Dev-dependencies for examples and test frameworks are fine.
 - No `unwrap`/`expect`/panics on input-derived data in library code (hard rule).
 - `false == value`, never `!value` (`clippy::bool_comparison` is allowed on purpose).
