@@ -65,6 +65,7 @@ impl TcpStream {
             fin_offset: None,
             seen_ack: 0,
             status: TcpStreamStatus {
+                conflicting_retransmissions: 0,
                 out_of_window_segments: 0,
             },
         }
@@ -134,6 +135,15 @@ impl TcpStream {
         self.status
     }
 
+    /// Returns true if the stream has no defects so far: no retransmission
+    /// with differing bytes (see
+    /// [`TcpStreamStatus::conflicting_retransmissions`]).
+    ///
+    /// Holes don't count, as retransmissions can still fill them.
+    pub fn is_clean(&self) -> bool {
+        0 == self.status.conflicting_retransmissions
+    }
+
     /// Returns true if the stream's FIN was seen and no bytes before it are
     /// missing.
     pub fn is_finished(&self) -> bool {
@@ -141,14 +151,15 @@ impl TcpStream {
         self.fin_offset.is_some() && self.holes.is_empty()
     }
 
-    /// Returns true if the stream is complete: it is clean, has an observed
-    /// start and is finished.
+    /// Returns true if the stream is complete: it is clean (see
+    /// [`TcpStream::is_clean`]), has an observed start and is finished (see
+    /// [`TcpStream::is_finished`]).
     ///
     /// All bytes the sender sent are then delivered exactly once and
     /// unambiguously.
     pub fn is_complete(&self) -> bool {
-        // every stream is clean and has an observed start so far
-        self.is_finished()
+        // every stream has an observed start so far
+        self.is_clean() && self.is_finished()
     }
 
     /// Returns the stream's buffer, emptied for re-use.
@@ -248,8 +259,12 @@ impl TcpStream {
         let start = (start + skipped as i64) as u64;
         let end = start + data.len() as u64;
 
-        // fill the holes in the buffer, bytes received before keep their
-        // content
+        // bytes received before keep their content
+        if self.differs_from_received(start, data) {
+            self.status.conflicting_retransmissions += 1;
+        }
+
+        // fill the holes in the buffer
         let buf_end = self.buf_end();
         for hole in &self.holes {
             let from = hole.start.max(start);
@@ -275,6 +290,33 @@ impl TcpStream {
         }
         self.extend_to(end);
         self.remove_from_holes(start..end);
+    }
+
+    /// Returns true if bytes of `data` (starting at offset `start`, at or
+    /// after the read position) differ from the bytes received for the same
+    /// offsets.
+    fn differs_from_received(&self, start: u64, data: &[u8]) -> bool {
+        let end = start + data.len() as u64;
+        // the received bytes lie before each hole and before the highest
+        // offset (an empty hole at the end)
+        let mut received_start = self.read_offset;
+        let holes = self
+            .holes
+            .iter()
+            .map(|hole| (hole.start, hole.end))
+            .chain([(self.highest_offset, self.highest_offset)]);
+        for (hole_start, hole_end) in holes {
+            let from = received_start.max(start);
+            let to = hole_start.min(end);
+            if from < to
+                && self.buf[self.index(from)..self.index(to)]
+                    != data[(from - start) as usize..(to - start) as usize]
+            {
+                return true;
+            }
+            received_start = hole_end;
+        }
+        false
     }
 
     /// Moves the highest offset forward to `offset`, the bytes in between
@@ -1146,7 +1188,8 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(
                 TcpStreamStatus {
-                    out_of_window_segments: 0
+                    conflicting_retransmissions: 0,
+                    out_of_window_segments: 0,
                 },
                 connection.stream(Initiator).status()
             );
@@ -1212,6 +1255,144 @@ mod test {
             stream.consume(6);
             assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         }
+
+        // retransmissions with differing bytes count once per segment, the
+        // bytes received first are kept
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcdef")
+                // same bytes
+                .send_at(Initiator, 1, b"bcd")
+                // one differing byte
+                .send_at(Initiator, 0, b"aXc")
+                // several differing bytes
+                .send_at(Initiator, 2, b"XYZ")
+                // differing bytes followed by new bytes
+                .send_at(Initiator, 5, b"Xgh");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(3, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abcdefgh"), stream.read_received());
+        }
+
+        // bytes in holes are not compared, the received bytes around them
+        // are
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"ab")
+                .send_at(Initiator, 4, b"ef")
+                .send_at(Initiator, 8, b"ij")
+                // fills the holes
+                .send_at(Initiator, 1, b"bcdefgh")
+                // received bytes after a hole differ
+                .send_at(Initiator, 5, b"Xghi");
+            script.feed(&mut pool, ..3);
+            let segments = &script.segments[3..];
+            for (i, (segment, expected)) in segments.iter().zip([0, 0, 0, 0, 1]).enumerate() {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(expected, stream.status().conflicting_retransmissions);
+                if i + 1 == segments.len() {
+                    assert_eq!(TcpRead::Data(b"abcdefghij"), stream.read_received());
+                }
+            }
+        }
+
+        // bytes that were already consumed are not compared
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 0, b"XYc");
+            {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(2);
+            }
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
+            assert_eq!(
+                0,
+                connection
+                    .stream(Initiator)
+                    .status()
+                    .conflicting_retransmissions
+            );
+        }
+
+        // differing bytes after the FIN only count as out-of-window, a
+        // differing FIN retransmission counts
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .fin_with_data(Initiator, b"abc")
+                .send_at(Initiator, 2, b"cX")
+                .fin_at(Initiator, 1, b"Xc");
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip([0, 0, 1]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(
+                    expected,
+                    connection
+                        .stream(Initiator)
+                        .status()
+                        .conflicting_retransmissions
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn is_clean() {
+        // new stream
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(connection.stream(Initiator).is_clean());
+        }
+
+        // holes, retransmissions with the same bytes and bytes after the FIN
+        // keep it clean
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .send_at(Initiator, 4, b"efX")
+                .send_at(Initiator, 0, b"abc");
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(1, stream.holes().count());
+            assert!(stream.is_clean());
+        }
+
+        // a conflicting retransmission makes it unclean
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 0, b"X");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(false == connection.stream(Initiator).is_clean());
+        }
     }
 
     #[test]
@@ -1251,6 +1432,21 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert!(connection.stream(Initiator).is_complete());
             assert!(connection.stream(Responder).is_complete());
+        }
+
+        // finished, but a retransmission had differing bytes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 0, b"X")
+                .fin(Initiator);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert!(stream.is_finished());
+            assert!(false == stream.is_complete());
         }
     }
 }

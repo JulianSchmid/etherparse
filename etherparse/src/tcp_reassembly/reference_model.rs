@@ -24,6 +24,9 @@ struct ModelStream {
     received: Vec<u8>,
     /// Offset of the FIN.
     fin_offset: Option<u64>,
+    /// Number of segments with bytes that differ from the bytes received
+    /// first (from the read offset on).
+    conflicting_retransmissions: u64,
     /// Number of segments with bytes after the FIN.
     out_of_window_segments: u64,
     /// Highest offset ACKed by the other side.
@@ -35,7 +38,8 @@ struct ModelStream {
 impl ModelStream {
     /// Applies a segment of the stream's sender:
     /// - bytes received for the first time are stored, bytes received before
-    ///   keep their first content;
+    ///   keep their first content, and the segment counts as a conflicting
+    ///   retransmission if unread ones differ;
     /// - the first FIN that doesn't lie before the highest offset ends the
     ///   stream, and bytes after it are counted and dropped;
     /// - bytes before the highest offset that were not received are holes.
@@ -56,6 +60,16 @@ impl ModelStream {
         if false == payload.is_empty() {
             let start = start as usize;
             let end = start + payload.len();
+            let conflicting = (start..end).zip(payload).any(|(offset, byte)| {
+                offset as u64 >= self.read_offset
+                    && self
+                        .bytes
+                        .get(offset)
+                        .is_some_and(|received| received.is_some_and(|b| b != *byte))
+            });
+            if conflicting {
+                self.conflicting_retransmissions += 1;
+            }
             if self.bytes.len() < end {
                 self.bytes.resize(end, None);
             }
@@ -153,9 +167,12 @@ impl ReferenceModel {
         prop_assert_eq!(expected.fin_offset, stream.fin_offset());
         prop_assert_eq!(expected.holes(), stream.holes().collect::<Vec<_>>());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
-        prop_assert_eq!(expected.is_finished(), stream.is_complete());
+        let clean = 0 == expected.conflicting_retransmissions;
+        prop_assert_eq!(clean, stream.is_clean());
+        prop_assert_eq!(clean && expected.is_finished(), stream.is_complete());
         prop_assert_eq!(
             TcpStreamStatus {
+                conflicting_retransmissions: expected.conflicting_retransmissions,
                 out_of_window_segments: expected.out_of_window_segments,
             },
             stream.status()
@@ -365,11 +382,12 @@ mod test {
                 prop_assert_eq!(Some(TcpConnectionEnd::Finished), model.end());
             }
 
-            // an ended connection is complete and can be read to its end
+            // an ended connection is finished and can be read to its end
+            // (late segments with differing bytes can make it unclean)
             if let Some(mut connection) = ended {
                 for role in [Initiator, Responder] {
                     let stream = connection.stream_mut(role);
-                    prop_assert!(stream.is_complete());
+                    prop_assert!(stream.is_finished());
                     stream.read_received();
                     stream.consume(usize::MAX);
                     prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
@@ -389,7 +407,15 @@ mod test {
             resent_lens in vec(0usize..1000, 1..32),
             directions in vec(any::<bool>(), 1..64),
             fins in [any::<bool>(), any::<bool>()],
-            retransmissions in vec((tcp_role_any(), any::<Index>(), 0usize..3000), 0..16),
+            retransmissions in vec(
+                (
+                    tcp_role_any(),
+                    any::<Index>(),
+                    0usize..3000,
+                    proptest::option::of((any::<Index>(), 1u8..=255)),
+                ),
+                0..16
+            ),
             duplicates in vec(any::<Index>(), 0..8),
             positions in vec(any::<Index>(), 1..16),
             delays in vec(0usize..8, 1..64),
@@ -409,16 +435,25 @@ mod test {
             script.ack(Initiator).ack(Responder);
 
             // retransmissions cut differently than the original segments
-            // (carrying the FIN if they reach it), and duplicates
+            // (carrying the FIN if they reach it, some with a corrupted byte),
+            // and duplicates
             let originals = script.segments.len() - 3;
-            for (role, start, len) in &retransmissions {
+            let mut corrupted = false;
+            for (role, start, len, corruption) in &retransmissions {
                 let i = role_index(*role);
                 let start = start.index(data[i].len() + 1);
                 let end = (start + len).min(data[i].len());
+                let mut payload = data[i][start..end].to_vec();
+                if let Some((position, xor)) = corruption {
+                    if start < end {
+                        payload[position.index(end - start)] ^= xor;
+                        corrupted = true;
+                    }
+                }
                 if fins[i] && end == data[i].len() {
-                    script.fin_at(*role, start as u64, &data[i][start..end]);
+                    script.fin_at(*role, start as u64, &payload);
                 } else {
-                    script.send_at(*role, start as u64, &data[i][start..end]);
+                    script.send_at(*role, start as u64, &payload);
                 }
             }
             if originals > 0 {
@@ -450,13 +485,64 @@ mod test {
             let (model, ended) = feed_and_check(&mut pool, &script.segments, &consume_lens)?;
 
             // every byte arrived, so the streams were delivered byte-exact
+            // (unless a corrupted retransmission arrived first)
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
-                prop_assert_eq!(data[i], model.received(role));
+                if false == corrupted {
+                    prop_assert_eq!(data[i], model.received(role));
+                }
+                prop_assert_eq!(data[i].len(), model.received(role).len());
                 prop_assert_eq!(fins[i].then_some(data[i].len() as u64), model.fin_offset(role));
             }
 
             // with both FINs the connection is finished
             prop_assert_eq!(fins[0] && fins[1], ended.is_some());
+        }
+
+        #[test]
+        fn conflicting_retransmissions(
+            isn in tcp_isn_any(),
+            data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            retransmissions in vec(
+                (
+                    any::<Index>(),
+                    1usize..3000,
+                    proptest::option::of((any::<Index>(), 1u8..=255)),
+                ),
+                0..16
+            ),
+        ) {
+            // the stream in order, followed by retransmissions of randomly cut
+            // ranges, some of them with a corrupted byte
+            let mut script = ConnectionScript::with_isns(isn, 2000);
+            script.handshake();
+            send_interleaved(&mut script, [&data, &[]], &segment_lens, &[0], &[true]);
+            let mut corrupted = 0;
+            if false == data.is_empty() {
+                for (start, len, corruption) in &retransmissions {
+                    let start = start.index(data.len());
+                    let end = (start + len).min(data.len());
+                    let mut payload = data[start..end].to_vec();
+                    if let Some((position, xor)) = corruption {
+                        payload[position.index(end - start)] ^= xor;
+                        corrupted += 1;
+                    }
+                    script.send_at(Initiator, start as u64, &payload);
+                }
+            }
+
+            // the bytes received first are delivered, and each corrupted
+            // segment counts once
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            prop_assert_eq!(corrupted, stream.status().conflicting_retransmissions);
+            prop_assert_eq!(0 == corrupted, stream.is_clean());
+            if data.is_empty() {
+                prop_assert_eq!(TcpRead::Pending, stream.read_received());
+            } else {
+                prop_assert_eq!(TcpRead::Data(&data[..]), stream.read_received());
+            }
         }
     }
 }

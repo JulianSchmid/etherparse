@@ -61,7 +61,7 @@ A segment carrying bytes of a stream that were already received.
 _Avoid_: resend, duplicate
 
 **Conflicting retransmission**:
-A retransmission of not yet ACKed bytes whose content differs from the bytes first received for the same positions; the first received bytes are kept. Retransmissions of ACKed bytes never conflict, as the receiver ignores them too.
+A retransmission of bytes that are neither ACKed nor consumed yet, whose content differs from the bytes first received for the same positions; the first received bytes are kept. Retransmissions of ACKed bytes never conflict, as the receiver ignores them too, and consumed bytes are no longer buffered to compare against.
 _Avoid_: overlap conflict, corrupted retransmit
 
 **Hole**:

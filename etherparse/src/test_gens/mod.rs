@@ -1045,9 +1045,15 @@ prop_compose! {
 #[cfg(feature = "std")]
 prop_compose! {
     pub fn tcp_stream_status_any()
-        (out_of_window_segments in any::<u64>())
+        (
+            conflicting_retransmissions in any::<u64>(),
+            out_of_window_segments in any::<u64>(),
+        )
         -> crate::tcp_reassembly::TcpStreamStatus
     {
-        crate::tcp_reassembly::TcpStreamStatus { out_of_window_segments }
+        crate::tcp_reassembly::TcpStreamStatus {
+            conflicting_retransmissions,
+            out_of_window_segments,
+        }
     }
 }

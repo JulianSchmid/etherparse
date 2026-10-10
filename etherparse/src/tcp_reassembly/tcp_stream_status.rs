@@ -2,6 +2,13 @@
 /// [`crate::tcp_reassembly::TcpStream`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpStreamStatus {
+    /// Number of retransmitted segments whose bytes differ from the bytes
+    /// received first at the same positions.
+    ///
+    /// The bytes received first are kept. Bytes that were already consumed
+    /// are not compared.
+    pub conflicting_retransmissions: u64,
+
     /// Number of segments with bytes that lie outside of the stream, e.g.
     /// after its FIN.
     ///
@@ -30,7 +37,8 @@ mod test {
             // debug
             assert_eq!(
                 format!(
-                    "TcpStreamStatus {{ out_of_window_segments: {} }}",
+                    "TcpStreamStatus {{ conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    status.conflicting_retransmissions,
                     status.out_of_window_segments
                 ),
                 format!("{:?}", status)
