@@ -19,7 +19,7 @@ CI (`.github/workflows/main.yml`) additionally checks:
 
 - **Big-endian / 32-bit**: `cross test --target powerpc64-unknown-linux-gnu` and `i686-unknown-linux-gnu` (`Cross.toml` passes `PROPTEST_CASES` through). Catches endianness bugs, e.g. in checksums.
 - **Bare-metal no_std**: `cd etherparse/ensure_no_std && cargo build --target x86_64-unknown-none`.
-- **MSRV**: `cargo check --package etherparse --all-features` on the `rust-version` from `etherparse/Cargo.toml` (currently 1.83.0). Don't use newer language/std features.
+- **MSRV**: `cargo check --package etherparse --all-features` on the `rust-version` from `etherparse/Cargo.toml` (currently 1.83.0). Stay within it; when a newer language/std feature is worth it, raising `rust-version` (in both crates) to a release that is at least a year old is fine.
 
 Coverage: `coverage/coverage.bash` (needs `llvm-tools-preview`, `cargo-binutils`, `rustfilt`, `jq`); reports land in `target/coverage/`.
 
@@ -57,6 +57,7 @@ Value newtypes (`EtherType`, `IpNumber`, `VlanId`, `IpDscp`, ...) wrap the raw i
 Follow `docs/coding-style.md` (naming across type families, `unsafe`/`SAFETY` rules, error types, docs and test structure). In short:
 
 - No allocations or syscalls outside `defrag` (and `std`-gated reading/writing).
+- Keep etherparse's `[dependencies]` minimal: implement what you need inside the crate; a new dependency is a last resort. Dev-dependencies for examples and test frameworks are fine.
 - No `unwrap`/`expect`/panics on input-derived data in library code (hard rule).
 - `false == value`, never `!value` (`clippy::bool_comparison` is allowed on purpose).
 - Doc comments are short and written for users: description, then example, then only the details users need.
