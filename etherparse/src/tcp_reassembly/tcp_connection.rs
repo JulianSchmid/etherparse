@@ -1,5 +1,6 @@
 use crate::{tcp_reassembly::*, *};
 use core::net::SocketAddr;
+use std::vec::Vec;
 
 /// Both streams of a TCP connection, as reassembled by a
 /// [`TcpReassemblyPool`].
@@ -17,22 +18,25 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Creates a connection whose first packet, sent by `initiator`, was
-    /// seen at `timestamp`.
+    /// seen at `timestamp`. Its streams store their bytes in the empty
+    /// `buffers`.
     pub(crate) fn new(
         id: TcpConnectionId,
         key: TcpConnectionKey<CustomChannelId>,
         initiator: SocketAddr,
         timestamp: Timestamp,
+        buffers: [Vec<u8>; 2],
     ) -> TcpConnection<Timestamp, CustomChannelId>
     where
         Timestamp: Clone,
     {
+        let [initiator_buffer, responder_buffer] = buffers;
         TcpConnection {
             id,
             key,
             initiator,
-            initiator_stream: TcpStream::new(),
-            responder_stream: TcpStream::new(),
+            initiator_stream: TcpStream::new(initiator_buffer),
+            responder_stream: TcpStream::new(responder_buffer),
             first_seen: timestamp.clone(),
             last_seen: timestamp,
             end: None,
@@ -136,13 +140,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             id: self.id,
             key: self.key.clone(),
             initiator: self.initiator,
-            initiator_stream: TcpStream::new(),
-            responder_stream: TcpStream::new(),
+            initiator_stream: TcpStream::new(Vec::new()),
+            responder_stream: TcpStream::new(Vec::new()),
             first_seen: self.first_seen.clone(),
             last_seen: self.last_seen.clone(),
             end: self.end,
         };
         core::mem::replace(self, tombstone)
+    }
+
+    /// Returns the buffers of both streams, emptied for re-use.
+    pub(crate) fn into_buffers(self) -> [Vec<u8>; 2] {
+        [
+            self.initiator_stream.into_buffer(),
+            self.responder_stream.into_buffer(),
+        ]
     }
 }
 

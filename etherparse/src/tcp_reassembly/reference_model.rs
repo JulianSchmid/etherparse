@@ -318,6 +318,7 @@ mod test {
                     prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
                     prop_assert_eq!(model.fin_offset(role), Some(stream.read_offset()));
                 }
+                pool.recycle(connection);
             }
         }
     }

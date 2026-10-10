@@ -8,6 +8,9 @@ pub struct TcpProcessed<'a, Timestamp = (), CustomChannelId = ()> {
     pub active: Option<(&'a mut TcpConnection<Timestamp, CustomChannelId>, TcpRole)>,
 
     /// Connection ended by the packet, handed over with its remaining bytes.
+    ///
+    /// Pass it to [`TcpReassemblyPool::recycle`] once you are done with it,
+    /// so that its buffers are re-used.
     pub ended: Option<TcpConnection<Timestamp, CustomChannelId>>,
 
     /// Reason why the packet was applied to no connection.

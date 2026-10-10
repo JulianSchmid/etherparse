@@ -39,13 +39,14 @@ pub struct TcpStream {
 }
 
 impl TcpStream {
-    /// Creates a stream whose start is not known yet.
-    pub(crate) fn new() -> TcpStream {
+    /// Creates a stream whose start is not known yet, storing its bytes in
+    /// the empty buffer `buf`.
+    pub(crate) fn new(buf: Vec<u8>) -> TcpStream {
         TcpStream {
             start_seq: None,
             window_scale: None,
             read_offset: 0,
-            buf: Vec::new(),
+            buf,
             head: 0,
             last_read_len: 0,
             fin_offset: None,
@@ -117,6 +118,13 @@ impl TcpStream {
     pub fn is_complete(&self) -> bool {
         // every stream is clean and has an observed start so far
         self.is_finished()
+    }
+
+    /// Returns the stream's buffer, emptied for re-use.
+    pub(crate) fn into_buffer(self) -> Vec<u8> {
+        let mut buf = self.buf;
+        buf.clear();
+        buf
     }
 
     /// Returns true if the receiver ACKed the stream's FIN.

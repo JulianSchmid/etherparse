@@ -1,6 +1,9 @@
 use crate::tcp_reassembly::*;
 use core::net::SocketAddr;
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    vec::Vec,
+};
 
 /// Reassembles the byte streams of TCP connections from captured segments.
 ///
@@ -71,6 +74,8 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// buffers) that absorb their late segments.
     connections:
         HashMap<TcpConnectionKey<CustomChannelId>, TcpConnection<Timestamp, CustomChannelId>>,
+    /// Emptied buffers of recycled connections, re-used by new connections.
+    free_buffers: Vec<Vec<u8>>,
     /// Id of the next connection.
     next_id: TcpConnectionId,
 }
@@ -85,6 +90,7 @@ where
         TcpReassemblyPool {
             config,
             connections: HashMap::new(),
+            free_buffers: Vec::new(),
             next_id: TcpConnectionId(0),
         }
     }
@@ -127,7 +133,17 @@ where
                 let id = self.next_id;
                 self.next_id = TcpConnectionId(id.0.wrapping_add(1));
                 let key = entry.key().clone();
-                entry.insert(TcpConnection::new(id, key, source, timestamp.clone()))
+                let buffers = [
+                    self.free_buffers.pop().unwrap_or_default(),
+                    self.free_buffers.pop().unwrap_or_default(),
+                ];
+                entry.insert(TcpConnection::new(
+                    id,
+                    key,
+                    source,
+                    timestamp.clone(),
+                    buffers,
+                ))
             }
         };
         if connection.end().is_some() {
@@ -151,6 +167,12 @@ where
             ended: None,
             ignored: None,
         }
+    }
+
+    /// Takes back an ended connection, so that its buffers are re-used by
+    /// new connections.
+    pub fn recycle(&mut self, connection: TcpConnection<Timestamp, CustomChannelId>) {
+        self.free_buffers.extend(connection.into_buffers());
     }
 }
 
@@ -398,6 +420,36 @@ mod test {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn recycle() {
+        let mut pool = TcpReassemblyPool::<(), ()>::default();
+        let mut script = ConnectionScript::with_isns(1000, 2000);
+        script
+            .handshake()
+            .send(Initiator, b"abc")
+            .send(Responder, b"defgh")
+            .fin(Initiator)
+            .fin(Responder)
+            .ack(Initiator);
+        let mut ended = script.feed_all(&mut pool).ended.unwrap();
+        // partly read
+        ended.stream_mut(Initiator).read_received();
+        ended.stream_mut(Initiator).consume(1);
+        pool.recycle(ended);
+
+        // a new connection re-uses the buffers without their old bytes
+        let mut next =
+            ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+        next.handshake().send(Initiator, b"x").send(Responder, b"y");
+        let (connection, _) = next.feed_all(&mut pool).active.unwrap();
+        assert_eq!(TcpConnectionId(1), connection.id());
+        for (role, data) in [(Initiator, b"x"), (Responder, b"y")] {
+            let stream = connection.stream_mut(role);
+            assert_eq!(0, stream.read_offset());
+            assert_eq!(TcpRead::Data(data), stream.read_received());
         }
     }
 }
