@@ -73,6 +73,21 @@ impl TcpStream {
         self.read_offset
     }
 
+    /// Offset after the last received byte.
+    fn received_end(&self) -> u64 {
+        self.read_offset + (self.buf.len() - self.head) as u64
+    }
+
+    /// Maps the sequence number `seq` to a stream offset, relative to the
+    /// end of the received bytes (RFC 1982 serial number arithmetic).
+    ///
+    /// Offsets before the stream's first byte are negative.
+    fn offset(&self, start_seq: u32, seq: u32) -> i64 {
+        let end = self.received_end();
+        let distance = seq.wrapping_sub(start_seq.wrapping_add(end as u32)) as i32;
+        end as i64 + i64::from(distance)
+    }
+
     /// Applies a segment sent by the stream's sender.
     pub(crate) fn add_segment(&mut self, tcp: &TcpSlice<'_>) {
         // the SYN occupies the sequence number before the first byte
@@ -85,25 +100,24 @@ impl TcpStream {
             self.start_seq = Some(seq);
             self.window_scale = window_scale(tcp);
         }
-        if let Some(start_seq) = self.start_seq {
-            self.add_data(start_seq, seq, tcp.payload());
-        }
+        let Some(start_seq) = self.start_seq else {
+            return;
+        };
+        let start = self.offset(start_seq, seq);
+        self.add_data(start, tcp.payload());
     }
 
-    /// Appends the bytes of `data` (starting at `seq`) that follow the
-    /// received bytes.
-    fn add_data(&mut self, start_seq: u32, seq: u32, data: &[u8]) {
-        // distance from the end of the received bytes to the segment start
-        // (RFC 1982 serial number arithmetic)
-        let end = self.read_offset + (self.buf.len() - self.head) as u64;
-        let distance = seq.wrapping_sub(start_seq.wrapping_add(end as u32)) as i32;
-        if distance > 0 {
+    /// Appends the bytes of `data` (starting at offset `start`) that follow
+    /// the received bytes.
+    fn add_data(&mut self, start: i64, data: &[u8]) {
+        let end = self.received_end() as i64;
+        if start > end {
             // bytes behind missing bytes are not stored
             return;
         }
 
         // skip the bytes that were already received
-        let new_bytes = match data.get(distance.unsigned_abs() as usize..) {
+        let new_bytes = match data.get((end - start) as usize..) {
             Some(new_bytes) if false == new_bytes.is_empty() => new_bytes,
             _ => return,
         };
