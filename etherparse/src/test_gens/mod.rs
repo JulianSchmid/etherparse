@@ -924,3 +924,91 @@ prop_compose! {
         Icmpv6Header::from_slice(&bytes).unwrap().0
     }
 }
+
+prop_compose! {
+    pub fn vlan_ids_any()
+        (vlan_ids in proptest::collection::vec(vlan_id_any(), 0..=3))
+        -> arrayvec::ArrayVec<VlanId, 3>
+    {
+        vlan_ids.into_iter().collect()
+    }
+}
+
+pub fn ip_addr_any() -> impl Strategy<Value = core::net::IpAddr> {
+    prop_oneof![
+        any::<[u8; 4]>().prop_map(core::net::IpAddr::from),
+        any::<[u8; 16]>().prop_map(core::net::IpAddr::from),
+    ]
+}
+
+prop_compose! {
+    pub fn socket_addr_any()
+        (ip in ip_addr_any(), port in any::<u16>())
+        -> core::net::SocketAddr
+    {
+        core::net::SocketAddr::new(ip, port)
+    }
+}
+
+#[cfg(feature = "std")]
+pub fn tcp_role_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpRole> {
+    use crate::tcp_reassembly::TcpRole;
+    prop_oneof![Just(TcpRole::Initiator), Just(TcpRole::Responder)]
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_connection_id_any()
+        (value in any::<u64>())
+        -> crate::tcp_reassembly::TcpConnectionId
+    {
+        crate::tcp_reassembly::TcpConnectionId(value)
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_connection_key_any()
+        (
+            vlan_ids in vlan_ids_any(),
+            a in socket_addr_any(),
+            b in socket_addr_any(),
+            channel_id in any::<u32>(),
+        )
+        -> crate::tcp_reassembly::TcpConnectionKey<u32>
+    {
+        crate::tcp_reassembly::TcpConnectionKey::new(vlan_ids, a, b, channel_id)
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_reassembly_config_any()
+        (
+            max_stream_buffer in any::<usize>(),
+            max_holes_per_stream in any::<usize>(),
+            hole_give_up_window_factor in proptest::option::of(any::<u32>()),
+            fallback_window in any::<u32>(),
+            ack_reorder_tolerance in any::<u32>(),
+            resync_after_segments in proptest::option::of(any::<u32>()),
+            max_connections in proptest::option::of(any::<usize>()),
+            max_total_buffered in proptest::option::of(any::<usize>()),
+            max_pooled_buffers in any::<usize>(),
+            max_pooled_buffer_capacity in any::<usize>(),
+        )
+        -> crate::tcp_reassembly::TcpReassemblyConfig
+    {
+        crate::tcp_reassembly::TcpReassemblyConfig {
+            max_stream_buffer,
+            max_holes_per_stream,
+            hole_give_up_window_factor,
+            fallback_window,
+            ack_reorder_tolerance,
+            resync_after_segments,
+            max_connections,
+            max_total_buffered,
+            max_pooled_buffers,
+            max_pooled_buffer_capacity,
+        }
+    }
+}
