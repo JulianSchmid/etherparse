@@ -78,12 +78,34 @@ impl TcpStream {
     /// the read position forward. Without readable bytes, the result is
     /// [`TcpRead::Pending`] while more bytes can arrive (e.g. to fill a
     /// hole), and [`TcpRead::End`] once all bytes up to the FIN were read.
+    ///
+    /// Use [`TcpStream::read_acked`] to read only the bytes the receiver
+    /// ACKed.
     pub fn read_received(&mut self) -> TcpRead<'_> {
+        self.read_until(u64::MAX)
+    }
+
+    /// Returns the received bytes from the read position up to the first
+    /// missing byte, but only the ones the receiver ACKed (see
+    /// [`TcpStream::acked_offset`]).
+    ///
+    /// Otherwise it works like [`TcpStream::read_received`]. Bytes that were
+    /// consumed after reading them with [`TcpStream::read_received`] are
+    /// not returned again.
+    pub fn read_acked(&mut self) -> TcpRead<'_> {
+        self.read_until(self.acked_offset())
+    }
+
+    /// Returns the received bytes from the read position up to the first
+    /// missing byte, but not after `limit`.
+    fn read_until(&mut self, limit: u64) -> TcpRead<'_> {
         // all bytes before the first hole were received
         let end = self
             .holes
             .first()
-            .map_or(self.highest_offset, |hole| hole.start);
+            .map_or(self.highest_offset, |hole| hole.start)
+            .min(limit)
+            .max(self.read_offset);
         let data = &self.buf[self.head..self.index(end)];
         self.last_read_len = data.len();
         if false == data.is_empty() {
@@ -109,6 +131,12 @@ impl TcpStream {
     /// Offset of the next byte to read.
     pub fn read_offset(&self) -> u64 {
         self.read_offset
+    }
+
+    /// Offset up to which the receiver ACKed the stream's bytes.
+    pub fn acked_offset(&self) -> u64 {
+        // ACKs can lie after the highest offset (e.g. the ACK of the FIN)
+        self.seen_ack.min(self.highest_offset)
     }
 
     /// Offset after the furthest byte the sender is known to have sent.
@@ -658,6 +686,117 @@ mod test {
     }
 
     #[test]
+    fn read_acked() {
+        // nothing ACKed yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Pending, stream.read_acked());
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+        }
+
+        // bytes up to the ACKed offset (also across a wrap-around of the
+        // sequence numbers)
+        for isn in [1000, u32::MAX - 2] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(isn, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .ack_to(Responder, 4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abcd"), stream.read_acked());
+                stream.consume(4);
+                assert_eq!(TcpRead::Pending, stream.read_acked());
+            }
+            script.ack(Responder);
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"ef"),
+                connection.stream_mut(Initiator).read_acked()
+            );
+        }
+
+        // consuming is limited to the ACKed bytes that were read
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcdef")
+                .ack_to(Responder, 2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"ab"), stream.read_acked());
+            stream.consume(10);
+            assert_eq!(2, stream.read_offset());
+            assert_eq!(TcpRead::Data(b"cdef"), stream.read_received());
+        }
+
+        // reading stops at a hole, even if bytes after it are ACKed
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .ack(Responder);
+            let missing = script.segments.remove(4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(
+                    TcpRead::Data(b"abc"),
+                    connection.stream_mut(Initiator).read_acked()
+                );
+            }
+            let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"abcdefghi"),
+                connection.stream_mut(Initiator).read_acked()
+            );
+        }
+
+        // the end is reported once all bytes up to the FIN were read
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .fin_with_data(Initiator, b"abc")
+                .ack(Responder);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_acked());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_acked());
+        }
+
+        // bytes consumed after reading them with read_received
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcdef")
+                .ack_to(Responder, 2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            stream.consume(4);
+            assert_eq!(TcpRead::Pending, stream.read_acked());
+            assert_eq!(TcpRead::Data(b"ef"), stream.read_received());
+        }
+    }
+
+    #[test]
     fn consume() {
         // partial consumes
         {
@@ -862,6 +1001,56 @@ mod test {
                 offset += SEGMENT_LEN as u64;
             }
             assert!(offset > 3 << 32);
+        }
+    }
+
+    #[test]
+    fn acked_offset() {
+        // nothing ACKed yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).acked_offset());
+            assert_eq!(0, connection.stream(Responder).acked_offset());
+        }
+
+        // follows the highest ACK, older ACKs arriving later change nothing
+        // (also across a wrap-around of the sequence numbers)
+        for isn in [1000, u32::MAX - 2] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(isn, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcdef")
+                .ack_to(Responder, 2)
+                .ack_to(Responder, 5)
+                .ack_to(Responder, 3)
+                .ack_to(Responder, 6);
+            script.feed(&mut pool, ..4);
+            for (segment, expected) in script.segments[4..].iter().zip([2, 5, 5, 6]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).acked_offset());
+            }
+        }
+
+        // an ACK of the FIN ACKs all bytes, but nothing after them
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .fin_with_data(Initiator, b"abc")
+                .ack_to(Responder, 4)
+                .ack_to(Responder, 5);
+            script.feed(&mut pool, ..4);
+            for segment in &script.segments[4..] {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!(3, stream.acked_offset());
+                assert_eq!(0, stream.holes().count());
+            }
         }
     }
 

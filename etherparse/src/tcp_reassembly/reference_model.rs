@@ -105,6 +105,25 @@ impl ModelStream {
         holes
     }
 
+    /// Offset up to which the other side ACKed the bytes.
+    fn acked_offset(&self) -> u64 {
+        self.ack.min(self.bytes.len() as u64)
+    }
+
+    /// Expected result of reading the contiguous received bytes from the
+    /// read offset on, but not after `limit`.
+    fn read(&self, limit: u64) -> TcpRead<'_> {
+        let start = self.read_offset as usize;
+        let end = (self.received.len() as u64).min(limit) as usize;
+        if start < end {
+            TcpRead::Data(&self.received[start..end])
+        } else if Some(self.read_offset) == self.fin_offset {
+            TcpRead::End(TcpStreamEnd::Fin)
+        } else {
+            TcpRead::Pending
+        }
+    }
+
     /// Returns true if the FIN was seen and all bytes before it were
     /// received.
     fn is_finished(&self) -> bool {
@@ -151,18 +170,20 @@ impl ReferenceModel {
     }
 
     /// Checks that `stream` matches the stream of `role`, then consumes
-    /// `consume_len` bytes of both.
+    /// `consume_len` bytes of both after reading them with `read_acked` (if
+    /// `acked`) or `read_received`.
     pub fn check_and_consume(
         &mut self,
         role: TcpRole,
         stream: &mut TcpStream,
         consume_len: usize,
+        acked: bool,
     ) -> Result<(), proptest::test_runner::TestCaseError> {
         use proptest::prelude::*;
 
         let expected = &mut self.streams[role_index(role)];
-        let consumed = expected.read_offset as usize;
         prop_assert_eq!(expected.read_offset, stream.read_offset());
+        prop_assert_eq!(expected.acked_offset(), stream.acked_offset());
         prop_assert_eq!(expected.bytes.len() as u64, stream.highest_offset());
         prop_assert_eq!(expected.fin_offset, stream.fin_offset());
         prop_assert_eq!(expected.holes(), stream.holes().collect::<Vec<_>>());
@@ -177,18 +198,29 @@ impl ReferenceModel {
             },
             stream.status()
         );
-        if consumed < expected.received.len() {
-            prop_assert_eq!(
-                TcpRead::Data(&expected.received[consumed..]),
-                stream.read_received()
-            );
-        } else if Some(expected.read_offset) == expected.fin_offset {
-            prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
-        } else {
-            prop_assert_eq!(TcpRead::Pending, stream.read_received());
+
+        // read both ways, the last read limits the bytes that are consumed
+        let mut read_len = 0;
+        for read_acked in [false == acked, acked] {
+            let read_offset = stream.read_offset();
+            let acked_offset = stream.acked_offset();
+            let (expected_read, read) = if read_acked {
+                (expected.read(expected.acked_offset()), stream.read_acked())
+            } else {
+                (expected.read(u64::MAX), stream.read_received())
+            };
+            prop_assert_eq!(expected_read, read);
+            read_len = match read {
+                TcpRead::Data(data) => data.len(),
+                _ => 0,
+            };
+            // read_acked never returns bytes that were not ACKed
+            if read_acked && read_len > 0 {
+                prop_assert!(read_offset + read_len as u64 <= acked_offset);
+            }
         }
         stream.consume(consume_len);
-        expected.read_offset = (consumed + consume_len).min(expected.received.len()) as u64;
+        expected.read_offset += consume_len.min(read_len) as u64;
         Ok(())
     }
 }
@@ -242,13 +274,16 @@ mod test {
 
     /// Feeds `segments` to `pool` and checks both streams against the
     /// reference model after each segment, reading partially from the pool
-    /// or from the ended connection it handed over.
+    /// or from the ended connection it handed over. `acked_reads` decides
+    /// whether the bytes are consumed after reading them with `read_acked`
+    /// or `read_received`.
     ///
     /// Returns the model and the ended connection, if any.
     fn feed_and_check(
         pool: &mut TcpReassemblyPool<(), ()>,
         segments: &[TestSegment],
         consume_lens: &[usize],
+        acked_reads: &[bool],
     ) -> Result<(ReferenceModel, Option<TcpConnection>), TestCaseError> {
         let mut model = ReferenceModel::default();
         let mut ended = None;
@@ -277,6 +312,7 @@ mod test {
                     role,
                     connection.stream_mut(role),
                     consume_lens[(step + i) % consume_lens.len()],
+                    acked_reads[(step + i) % acked_reads.len()],
                 )?;
             }
         }
@@ -305,6 +341,7 @@ mod test {
                 0..8
             ),
             consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
         ) {
             // write the connection with randomly cut and interleaved segments,
             // some of them starting with bytes that were already sent
@@ -366,7 +403,12 @@ mod test {
             }
 
             let mut pool = TcpReassemblyPool::<(), ()>::default();
-            let (model, ended) = feed_and_check(&mut pool, &script.segments, &consume_lens)?;
+            let (model, ended) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+            )?;
 
             // the model received everything that was sent, and the FINs end
             // the streams
@@ -420,6 +462,7 @@ mod test {
             positions in vec(any::<Index>(), 1..16),
             delays in vec(0usize..8, 1..64),
             consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
         ) {
             // write the connection with randomly cut and interleaved segments,
             // followed by the FINs and their ACKs
@@ -482,7 +525,12 @@ mod test {
             script.segments.extend(keyed.into_iter().map(|(_, segment)| segment));
 
             let mut pool = TcpReassemblyPool::<(), ()>::default();
-            let (model, ended) = feed_and_check(&mut pool, &script.segments, &consume_lens)?;
+            let (model, ended) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+            )?;
 
             // every byte arrived, so the streams were delivered byte-exact
             // (unless a corrupted retransmission arrived first)
@@ -496,6 +544,57 @@ mod test {
 
             // with both FINs the connection is finished
             prop_assert_eq!(fins[0] && fins[1], ended.is_some());
+        }
+
+        #[test]
+        fn random_acks(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(16 * 1024),
+            responder_data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            resent_lens in vec(0usize..1000, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            acks in vec((tcp_role_any(), any::<Index>(), any::<Index>()), 0..32),
+            consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &resent_lens, &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // pure ACKs of random offsets (also after the bytes that were
+            // sent) at random positions after the handshake
+            for (role, position, offset) in &acks {
+                let sent = data[role_index(role.other())].len() + 1;
+                script.ack_to(*role, offset.index(2 * sent) as u64);
+                let ack = script.segments.pop().unwrap();
+                let position = 3 + position.index(script.segments.len() - 2);
+                script.segments.insert(position, ack);
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let (model, _) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+            )?;
+
+            // the ACKs don't change the received bytes
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert_eq!(data[i], model.received(role));
+            }
         }
 
         #[test]

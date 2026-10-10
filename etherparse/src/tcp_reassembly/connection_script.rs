@@ -261,6 +261,16 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         self.send(sender, &[])
     }
 
+    /// ACK of `sender` without data, ACKing the other stream up to `offset`
+    /// instead of everything the other side sent so far.
+    pub fn ack_to(&mut self, sender: TcpRole, offset: u64) -> &mut Self {
+        let mut segment = self.segment(sender, self.next_offsets[role_index(sender)], &[]);
+        segment.ack = Some(offset);
+        segment.header.ack = true;
+        segment.header.acknowledgment_number = self.seq(sender.other(), offset);
+        self.push(segment)
+    }
+
     /// SYN, SYN-ACK and the initiator's ACK.
     pub fn handshake(&mut self) -> &mut Self {
         self.syn().syn_ack().ack(TcpRole::Initiator)
