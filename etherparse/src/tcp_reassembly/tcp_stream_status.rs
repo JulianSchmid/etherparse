@@ -5,8 +5,8 @@ pub struct TcpStreamStatus {
     /// Number of retransmitted segments whose bytes differ from the bytes
     /// received first at the same positions.
     ///
-    /// The bytes received first are kept. Bytes that were already consumed
-    /// are not compared.
+    /// The bytes received first are kept. Only bytes that are neither ACKed
+    /// nor consumed are compared, so keep-alive probes don't count.
     pub conflicting_retransmissions: u64,
 
     /// Number of segments with bytes that lie outside of the stream: they

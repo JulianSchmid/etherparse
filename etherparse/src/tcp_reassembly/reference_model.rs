@@ -33,7 +33,7 @@ struct ModelStream {
     /// Offset of the FIN.
     fin_offset: Option<u64>,
     /// Number of segments with bytes that differ from the bytes received
-    /// first (from the read offset on).
+    /// first (from the read and ACKed offsets on).
     conflicting_retransmissions: u64,
     /// Number of segments with bytes or a FIN after the window, or with
     /// bytes after the FIN.
@@ -51,7 +51,7 @@ impl ModelStream {
     ///   the highest or the ACKed offset is counted and not stored;
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
-    ///   retransmission if unread ones differ;
+    ///   retransmission if ones that are neither read nor ACKed differ;
     /// - the first FIN that doesn't lie before received bytes ends the
     ///   stream, and bytes after it are counted and not stored;
     /// - bytes before the highest offset that were not received are holes.
@@ -83,8 +83,9 @@ impl ModelStream {
         if false == payload.is_empty() {
             let start = start as usize;
             let end = start + payload.len();
+            let compared_start = self.read_offset.max(self.acked_offset());
             let conflicting = (start..end).zip(payload).any(|(offset, byte)| {
-                offset as u64 >= self.read_offset
+                offset as u64 >= compared_start
                     && self
                         .bytes
                         .get(offset)

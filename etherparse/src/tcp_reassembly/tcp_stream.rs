@@ -396,9 +396,12 @@ impl TcpStream {
 
     /// Returns true if bytes of `data` (starting at offset `start`, at or
     /// after the read position) differ from the bytes received for the same
-    /// offsets.
+    /// offsets, ignoring ACKed bytes.
     fn differs_from_received(&self, start: u64, data: &[u8]) -> bool {
         let end = start + data.len() as u64;
+        // the receiver ignores retransmissions of ACKed bytes (e.g. keep-alive
+        // probes), so they don't conflict
+        let compared_start = start.max(self.acked_offset());
         // the received bytes lie before each hole and before the highest
         // offset (an empty hole at the end)
         let mut received_start = self.read_offset;
@@ -408,7 +411,7 @@ impl TcpStream {
             .map(|hole| (hole.start, hole.end))
             .chain([(self.highest_offset, self.highest_offset)]);
         for (hole_start, hole_end) in holes {
-            let from = received_start.max(start);
+            let from = received_start.max(compared_start);
             let to = hole_start.min(end);
             if from < to
                 && self.buf[self.index(from)..self.index(to)]
@@ -1757,6 +1760,27 @@ mod test {
             );
         }
 
+        // ACKed bytes are not compared, as the receiver ignores them too
+        // (e.g. keep-alive probes)
+        for (payload, expected) in [
+            // only ACKed bytes differ
+            (&b"Xc"[..], 0),
+            // ACKed and not ACKed bytes differ
+            (&b"XcY"[..], 1),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcdef")
+                .ack_to(Responder, 3)
+                .send_at(Initiator, 1, payload);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(expected, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
+
         // differing bytes after the FIN only count as out-of-window, a
         // differing FIN retransmission counts
         {
@@ -1981,6 +2005,22 @@ mod test {
             let stream = connection.stream(Initiator);
             assert_eq!(1, stream.holes().count());
             assert!(stream.is_clean());
+        }
+
+        // a Windows keep-alive probe (the last ACKed byte again, with
+        // different content) keeps it clean
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack(Responder)
+                .send_at(Initiator, 2, &[0]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.is_clean());
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_acked());
         }
 
         // a conflicting retransmission makes it unclean
