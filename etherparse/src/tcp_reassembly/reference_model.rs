@@ -8,37 +8,49 @@ use std::vec::Vec;
 /// it checks.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
-    /// Received bytes of each stream by offset, indexed by role.
-    streams: [Vec<Option<u8>>; 2],
-    /// Contiguous received bytes of each stream from offset 0 on, indexed
-    /// by role.
-    received: [Vec<u8>; 2],
+    /// Streams indexed by role.
+    streams: [ModelStream; 2],
 }
 
-impl ReferenceModel {
-    /// Applies a segment: bytes received for the first time are stored,
-    /// bytes received before keep their first content.
-    pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
-        let i = role_index(segment.sender);
-        let stream = &mut self.streams[i];
+/// Model of one stream.
+#[derive(Clone, Debug, Default)]
+struct ModelStream {
+    /// Received bytes by offset.
+    bytes: Vec<Option<u8>>,
+    /// Contiguous received bytes from offset 0 on.
+    received: Vec<u8>,
+}
+
+impl ModelStream {
+    /// Applies a segment of the stream's sender: bytes received for the
+    /// first time are stored, bytes received before keep their first
+    /// content.
+    fn add_segment<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
         let start = segment.offset as usize;
         let end = start + segment.payload.len();
-        if stream.len() < end {
-            stream.resize(end, None);
+        if self.bytes.len() < end {
+            self.bytes.resize(end, None);
         }
-        for (slot, byte) in stream[start..end].iter_mut().zip(&segment.payload) {
+        for (slot, byte) in self.bytes[start..end].iter_mut().zip(&segment.payload) {
             if slot.is_none() {
                 *slot = Some(*byte);
             }
         }
-        let received = &mut self.received[i];
-        let next = stream[received.len()..].iter().map_while(|byte| *byte);
-        received.extend(next);
+        let received_len = self.received.len();
+        let next = self.bytes[received_len..].iter().map_while(|byte| *byte);
+        self.received.extend(next);
+    }
+}
+
+impl ReferenceModel {
+    /// Applies a segment to the stream of its sender.
+    pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
+        self.streams[role_index(segment.sender)].add_segment(segment);
     }
 
     /// Contiguous received bytes of the stream of `role` from offset 0 on.
     pub fn received(&self, role: TcpRole) -> &[u8] {
-        &self.received[role_index(role)]
+        &self.streams[role_index(role)].received
     }
 }
 

@@ -1,8 +1,7 @@
 /// Reason why a [`crate::tcp_reassembly::TcpConnection`] ended.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TcpConnectionEnd {
-    /// Both endpoints closed their streams with a FIN, and both FINs were
-    /// ACKed.
+    /// Both endpoints sent a FIN, and both FINs were ACKed.
     Finished,
 }
 

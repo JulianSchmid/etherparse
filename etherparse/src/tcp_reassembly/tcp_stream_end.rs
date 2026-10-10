@@ -2,7 +2,7 @@
 /// [`crate::tcp_reassembly::TcpStream`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TcpStreamEnd {
-    /// The sender closed the stream with a FIN.
+    /// The sender ended the stream with a FIN.
     Fin,
 }
 

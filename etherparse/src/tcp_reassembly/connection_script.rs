@@ -167,35 +167,26 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             .wrapping_add(offset as u32)
     }
 
-    /// Header of a segment sent by `sender` starting at `offset`, ACKing
+    /// Segment sent by `sender` with `payload` starting at `offset`, ACKing
     /// everything the other side sent so far (once its SYN was sent).
-    fn header(&self, sender: TcpRole, offset: u64) -> TcpHeader {
+    fn segment(
+        &self,
+        sender: TcpRole,
+        offset: u64,
+        payload: &[u8],
+    ) -> TestSegment<CustomChannelId> {
         let mut header = TcpHeader::new(
             self.endpoint(sender).port(),
             self.endpoint(sender.other()).port(),
             self.seq(sender, offset),
             0xffff,
         );
-        if self.syns_sent[role_index(sender.other())] {
+        let other = role_index(sender.other());
+        if self.syns_sent[other] {
             header.ack = true;
-            header.acknowledgment_number = self.seq(
-                sender.other(),
-                self.next_offsets[role_index(sender.other())],
-            );
+            header.acknowledgment_number = self.seq(sender.other(), self.next_offsets[other]);
         }
-        header
-    }
-
-    fn push(
-        &mut self,
-        sender: TcpRole,
-        offset: u64,
-        header: TcpHeader,
-        payload: &[u8],
-    ) -> &mut Self {
-        let next_offset = &mut self.next_offsets[role_index(sender)];
-        *next_offset = (*next_offset).max(offset + payload.len() as u64);
-        self.segments.push(TestSegment {
+        TestSegment {
             sender,
             offset,
             vlan_ids: self.vlan_ids.clone(),
@@ -204,22 +195,29 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             channel_id: self.channel_id.clone(),
             header,
             payload: payload.to_vec(),
-        });
+        }
+    }
+
+    fn push(&mut self, segment: TestSegment<CustomChannelId>) -> &mut Self {
+        let next_offset = &mut self.next_offsets[role_index(segment.sender)];
+        *next_offset = (*next_offset).max(segment.offset + segment.payload.len() as u64);
+        self.segments.push(segment);
         self
     }
 
     /// SYN of `sender` carrying `data` (TCP Fast Open if not empty).
     fn syn_of(&mut self, sender: TcpRole, data: &[u8]) -> &mut Self {
-        let mut header = self.header(sender, 0);
-        header.syn = true;
-        header.sequence_number = self.isns[role_index(sender)];
+        let mut segment = self.segment(sender, 0, data);
+        segment.header.syn = true;
+        segment.header.sequence_number = self.isns[role_index(sender)];
         self.syns_sent[role_index(sender)] = true;
         if let Some(scale) = self.window_scales[role_index(sender)] {
-            header
+            segment
+                .header
                 .set_options(&[TcpOptionElement::WindowScale(scale), TcpOptionElement::Noop])
                 .unwrap();
         }
-        self.push(sender, 0, header, data)
+        self.push(segment)
     }
 
     /// SYN of the initiator.
@@ -255,7 +253,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
     /// Bytes of the stream of `sender` starting at `offset`, e.g. to
     /// retransmit bytes.
     pub fn send_at(&mut self, sender: TcpRole, offset: u64, data: &[u8]) -> &mut Self {
-        let header = self.header(sender, offset);
-        self.push(sender, offset, header, data)
+        let segment = self.segment(sender, offset, data);
+        self.push(segment)
     }
 }
