@@ -27,6 +27,8 @@ struct ModelStream {
     out_of_window_segments: u64,
     /// Highest offset ACKed by the other side.
     ack: u64,
+    /// Offset of the next byte to read.
+    read_offset: u64,
 }
 
 impl ModelStream {
@@ -110,19 +112,18 @@ impl ReferenceModel {
     }
 
     /// Checks that `stream` matches the stream of `role`, then consumes
-    /// `consume_len` bytes of it. `consumed` holds the number of bytes
-    /// consumed before.
+    /// `consume_len` bytes of both.
     pub fn check_and_consume(
-        &self,
+        &mut self,
         role: TcpRole,
         stream: &mut TcpStream,
-        consumed: &mut usize,
         consume_len: usize,
     ) -> Result<(), proptest::test_runner::TestCaseError> {
         use proptest::prelude::*;
 
-        let expected = &self.streams[role_index(role)];
-        prop_assert_eq!(*consumed as u64, stream.read_offset());
+        let expected = &mut self.streams[role_index(role)];
+        let consumed = expected.read_offset as usize;
+        prop_assert_eq!(expected.read_offset, stream.read_offset());
         prop_assert_eq!(expected.fin_offset, stream.fin_offset());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
         prop_assert_eq!(expected.is_finished(), stream.is_complete());
@@ -132,18 +133,18 @@ impl ReferenceModel {
             },
             stream.status()
         );
-        if *consumed < expected.received.len() {
+        if consumed < expected.received.len() {
             prop_assert_eq!(
-                TcpRead::Data(&expected.received[*consumed..]),
+                TcpRead::Data(&expected.received[consumed..]),
                 stream.read_received()
             );
-        } else if Some(*consumed as u64) == expected.fin_offset {
+        } else if Some(expected.read_offset) == expected.fin_offset {
             prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         } else {
             prop_assert_eq!(TcpRead::Pending, stream.read_received());
         }
         stream.consume(consume_len);
-        *consumed = (*consumed + consume_len).min(expected.received.len());
+        expected.read_offset = (consumed + consume_len).min(expected.received.len()) as u64;
         Ok(())
     }
 }
@@ -161,6 +162,81 @@ mod test {
         ResponderFirst,
         /// Each FIN is sent before the other one arrived.
         Simultaneous,
+    }
+
+    /// Sends the bytes `data` of both streams (indexed by role) in segments
+    /// cut by `segment_lens` and interleaved by `directions` (true for the
+    /// initiator). Each segment starts with up to `resent_lens` bytes that
+    /// were already sent.
+    fn send_interleaved(
+        script: &mut ConnectionScript,
+        data: [&[u8]; 2],
+        segment_lens: &[usize],
+        resent_lens: &[usize],
+        directions: &[bool],
+    ) {
+        let mut sent = [0usize, 0usize];
+        let mut step = 0;
+        while sent[0] < data[0].len() || sent[1] < data[1].len() {
+            let initiator_done = sent[0] == data[0].len();
+            let responder_done = sent[1] == data[1].len();
+            let role = if responder_done
+                || (false == initiator_done && directions[step % directions.len()])
+            {
+                Initiator
+            } else {
+                Responder
+            };
+            let i = role_index(role);
+            let start = sent[i] - resent_lens[step % resent_lens.len()].min(sent[i]);
+            let len = segment_lens[step % segment_lens.len()].min(data[i].len() - sent[i]);
+            script.send_at(role, start as u64, &data[i][start..sent[i] + len]);
+            sent[i] += len;
+            step += 1;
+        }
+    }
+
+    /// Feeds `segments` to `pool` and checks both streams against the
+    /// reference model after each segment, reading partially from the pool
+    /// or from the ended connection it handed over.
+    ///
+    /// Returns the model and the ended connection, if any.
+    fn feed_and_check(
+        pool: &mut TcpReassemblyPool<(), ()>,
+        segments: &[TestSegment],
+        consume_lens: &[usize],
+    ) -> Result<(ReferenceModel, Option<TcpConnection>), TestCaseError> {
+        let mut model = ReferenceModel::default();
+        let mut ended = None;
+        for (step, segment) in segments.iter().enumerate() {
+            let after_end = model.end().is_some();
+            model.apply(segment);
+            let processed = segment.feed(pool, ());
+            let connection = if after_end {
+                prop_assert!(processed.active.is_none());
+                prop_assert!(processed.ended.is_none());
+                prop_assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+                ended.as_mut().unwrap()
+            } else if model.end().is_some() {
+                prop_assert!(processed.active.is_none());
+                prop_assert_eq!(None, processed.ignored);
+                ended = processed.ended;
+                ended.as_mut().unwrap()
+            } else {
+                prop_assert!(processed.ended.is_none());
+                prop_assert_eq!(None, processed.ignored);
+                processed.active.unwrap().0
+            };
+            prop_assert_eq!(model.end(), connection.end());
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                model.check_and_consume(
+                    role,
+                    connection.stream_mut(role),
+                    consume_lens[(step + i) % consume_lens.len()],
+                )?;
+            }
+        }
+        Ok((model, ended))
     }
 
     proptest! {
@@ -195,25 +271,13 @@ mod test {
             let data_lens = [0, 1].map(|i| {
                 data[i].len() - fin_data_lens[i].unwrap_or(0).min(data[i].len())
             });
-            let mut sent = [0usize, 0usize];
-            let mut step = 0;
-            while sent[0] < data_lens[0] || sent[1] < data_lens[1] {
-                let initiator_done = sent[0] == data_lens[0];
-                let responder_done = sent[1] == data_lens[1];
-                let role = if responder_done
-                    || (false == initiator_done && directions[step % directions.len()])
-                {
-                    Initiator
-                } else {
-                    Responder
-                };
-                let i = role_index(role);
-                let start = sent[i] - resent_lens[step % resent_lens.len()].min(sent[i]);
-                let len = segment_lens[step % segment_lens.len()].min(data_lens[i] - sent[i]);
-                script.send_at(role, start as u64, &data[i][start..sent[i] + len]);
-                sent[i] += len;
-                step += 1;
-            }
+            send_interleaved(
+                &mut script,
+                [&data[0][..data_lens[0]], &data[1][..data_lens[1]]],
+                &segment_lens,
+                &resent_lens,
+                &directions,
+            );
 
             // FINs carrying the rest of the bytes
             let roles = match fin_order {
@@ -257,42 +321,8 @@ mod test {
                 }
             }
 
-            // feed the segments and read partially after each one, from
-            // the pool or from the ended connection it handed over
             let mut pool = TcpReassemblyPool::<(), ()>::default();
-            let mut model = ReferenceModel::default();
-            let mut ended = None;
-            let mut consumed = [0usize, 0usize];
-            for (step, segment) in script.segments.iter().enumerate() {
-                let after_end = model.end().is_some();
-                model.apply(segment);
-                let processed = segment.feed(&mut pool, ());
-                let connection = if after_end {
-                    prop_assert!(processed.active.is_none());
-                    prop_assert!(processed.ended.is_none());
-                    prop_assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
-                    ended.as_mut().unwrap()
-                } else if model.end().is_some() {
-                    prop_assert!(processed.active.is_none());
-                    prop_assert_eq!(None, processed.ignored);
-                    ended = processed.ended;
-                    ended.as_mut().unwrap()
-                } else {
-                    prop_assert!(processed.ended.is_none());
-                    prop_assert_eq!(None, processed.ignored);
-                    processed.active.unwrap().0
-                };
-                prop_assert_eq!(model.end(), connection.end());
-                for role in [Initiator, Responder] {
-                    let i = role_index(role);
-                    model.check_and_consume(
-                        role,
-                        connection.stream_mut(role),
-                        &mut consumed[i],
-                        consume_lens[(step + i) % consume_lens.len()],
-                    )?;
-                }
-            }
+            let (model, ended) = feed_and_check(&mut pool, &script.segments, &consume_lens)?;
 
             // the model received everything that was sent, and the FINs end
             // the streams
