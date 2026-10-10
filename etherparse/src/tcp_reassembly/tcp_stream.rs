@@ -27,6 +27,11 @@ pub struct TcpStream {
 
     /// Number of bytes the last read returned that are not consumed yet.
     last_read_len: usize,
+
+    /// Offset of the FIN (`None` until the first FIN was seen).
+    fin_offset: Option<u64>,
+
+    status: TcpStreamStatus,
 }
 
 impl TcpStream {
@@ -39,21 +44,29 @@ impl TcpStream {
             buf: Vec::new(),
             head: 0,
             last_read_len: 0,
+            fin_offset: None,
+            status: TcpStreamStatus {
+                out_of_window_segments: 0,
+            },
         }
     }
 
     /// Returns the received bytes from the read position up to the first
-    /// missing byte, or [`TcpRead::Pending`] if there are none yet.
+    /// missing byte.
     ///
     /// Call [`TcpStream::consume`] with the number of bytes you used to move
-    /// the read position forward.
+    /// the read position forward. Without readable bytes, the result is
+    /// [`TcpRead::Pending`] while more bytes can arrive, and
+    /// [`TcpRead::End`] once all bytes up to the FIN were read.
     pub fn read_received(&mut self) -> TcpRead<'_> {
         let data = &self.buf[self.head..];
         self.last_read_len = data.len();
-        if data.is_empty() {
-            TcpRead::Pending
-        } else {
+        if false == data.is_empty() {
             TcpRead::Data(data)
+        } else if Some(self.read_offset) == self.fin_offset {
+            TcpRead::End(TcpStreamEnd::Fin)
+        } else {
+            TcpRead::Pending
         }
     }
 
@@ -71,6 +84,34 @@ impl TcpStream {
     /// Offset of the next byte to read.
     pub fn read_offset(&self) -> u64 {
         self.read_offset
+    }
+
+    /// Offset of the stream's FIN, which is the number of bytes in the
+    /// stream, if a FIN was seen.
+    pub fn fin_offset(&self) -> Option<u64> {
+        self.fin_offset
+    }
+
+    /// Counters that describe the quality of the stream.
+    pub fn status(&self) -> TcpStreamStatus {
+        self.status
+    }
+
+    /// Returns true if the stream's FIN was seen and no bytes before it are
+    /// missing.
+    pub fn is_finished(&self) -> bool {
+        // bytes beyond the FIN are never stored
+        Some(self.received_end()) == self.fin_offset
+    }
+
+    /// Returns true if the stream is complete: it is clean, has an observed
+    /// start and is finished.
+    ///
+    /// All bytes the sender sent are then delivered exactly once and
+    /// unambiguously.
+    pub fn is_complete(&self) -> bool {
+        // every stream is clean and has an observed start so far
+        self.is_finished()
     }
 
     /// Offset after the last received byte.
@@ -104,7 +145,24 @@ impl TcpStream {
             return;
         };
         let start = self.offset(start_seq, seq);
-        self.add_data(start, tcp.payload());
+        let data = tcp.payload();
+        let end = start + data.len() as i64;
+
+        // the first FIN wins, but it can't lie before received bytes
+        if tcp.fin() && self.fin_offset.is_none() && end >= self.received_end() as i64 {
+            self.fin_offset = Some(end as u64);
+        }
+
+        // bytes after the FIN are not part of the stream
+        let data = match self.fin_offset {
+            Some(fin) if false == data.is_empty() && end > fin as i64 => {
+                self.status.out_of_window_segments += 1;
+                let len = (fin as i64 - start).max(0) as usize;
+                data.get(..len).unwrap_or_default()
+            }
+            _ => data,
+        };
+        self.add_data(start, data);
     }
 
     /// Appends the bytes of `data` (starting at offset `start`) that follow
@@ -332,6 +390,63 @@ mod test {
             );
         }
 
+        // the end is reported once all bytes up to the FIN were read
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .fin_with_data(Initiator, b"c")
+                .fin(Responder);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(2);
+            assert_eq!(TcpRead::Data(b"c"), stream.read_received());
+            stream.consume(1);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            // without bytes
+            assert_eq!(
+                TcpRead::End(TcpStreamEnd::Fin),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
+        // bytes after the FIN are never readable
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .send(Initiator, b"def")
+                .send_at(Initiator, 1, b"bcdef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // no end while bytes before the FIN are missing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
         // a retransmitted SYN changes nothing
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -522,6 +637,259 @@ mod test {
                 offset += SEGMENT_LEN as u64;
             }
             assert!(offset > 3 << 32);
+        }
+    }
+
+    #[test]
+    fn fin_offset() {
+        // no FIN yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.stream(Initiator).fin_offset());
+            assert_eq!(None, connection.stream(Responder).fin_offset());
+        }
+
+        // FIN after the bytes, with and without data (also across a
+        // wrap-around of the sequence numbers)
+        for isn in [1000, u32::MAX - 4] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(isn, isn);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .send(Responder, b"de")
+                .fin_with_data(Responder, b"fgh");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(3), connection.stream(Initiator).fin_offset());
+            assert_eq!(Some(5), connection.stream(Responder).fin_offset());
+        }
+
+        // FIN of a stream without bytes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().fin(Initiator);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(0), connection.stream(Initiator).fin_offset());
+        }
+
+        // FIN behind missing bytes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(6), connection.stream(Initiator).fin_offset());
+        }
+
+        // the first FIN wins, a retransmission of it (offset 2) and later
+        // FINs at other offsets change nothing
+        for later_offset in [2, 3, 4, 10] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .fin(Initiator)
+                .fin_at(Initiator, later_offset, &[]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(2), connection.stream(Initiator).fin_offset());
+        }
+
+        // a FIN before already received bytes is ignored
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_at(Initiator, 2, &[]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.stream(Initiator).fin_offset());
+        }
+
+        // FIN of a stream whose start was not seen
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().fin(Responder);
+            // remove the SYN-ACK
+            script.segments.remove(1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.stream(Responder).fin_offset());
+        }
+    }
+
+    #[test]
+    fn is_finished() {
+        // no FIN yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(false == connection.stream(Initiator).is_finished());
+        }
+
+        // FIN after all bytes (finished before they were read)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(connection.stream(Initiator).is_finished());
+            assert!(connection.stream(Responder).is_finished());
+        }
+
+        // FIN behind missing bytes finishes once they arrive
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            let missing = script.segments.remove(4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert!(false == connection.stream(Initiator).is_finished());
+            }
+            let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.is_finished());
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
+    }
+
+    #[test]
+    fn status() {
+        // new stream
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                TcpStreamStatus {
+                    out_of_window_segments: 0
+                },
+                connection.stream(Initiator).status()
+            );
+        }
+
+        // every segment with bytes after the FIN counts as out-of-window
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                // bytes after the FIN
+                .send(Initiator, b"x")
+                // bytes starting at the FIN
+                .send_at(Initiator, 3, b"y")
+                // retransmitted bytes followed by bytes after the FIN
+                .send_at(Initiator, 1, b"bcz");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(3, stream.status().out_of_window_segments);
+            assert!(stream.is_finished());
+        }
+
+        // segments without bytes after the FIN don't count
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                // ACK after the FIN
+                .ack(Initiator)
+                // retransmission of the FIN
+                .fin_at(Initiator, 0, b"abc")
+                // a FIN without bytes at another offset
+                .fin_at(Initiator, 7, &[]);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                0,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
+        }
+
+        // bytes after the FIN count while bytes before it are missing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .send(Initiator, b"x");
+            let missing = script.segments.remove(4);
+            script.segments.push(missing);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            stream.consume(6);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+    }
+
+    #[test]
+    fn is_complete() {
+        // no FIN yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(false == connection.stream(Initiator).is_complete());
+        }
+
+        // bytes before the FIN are missing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(false == connection.stream(Initiator).is_complete());
+        }
+
+        // all bytes from the SYN to the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert!(connection.stream(Initiator).is_complete());
+            assert!(connection.stream(Responder).is_complete());
         }
     }
 }

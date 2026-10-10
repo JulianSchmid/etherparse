@@ -1,3 +1,5 @@
+use crate::tcp_reassembly::*;
+
 /// Result of reading from a [`crate::tcp_reassembly::TcpStream`].
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TcpRead<'a> {
@@ -6,6 +8,9 @@ pub enum TcpRead<'a> {
 
     /// Nothing is readable yet, but more bytes can still arrive.
     Pending,
+
+    /// Everything was read and no more bytes can arrive.
+    End(TcpStreamEnd),
 }
 
 #[cfg(test)]
@@ -23,12 +28,14 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
             assert_ne!(TcpRead::Pending, a);
+            assert_ne!(TcpRead::End(TcpStreamEnd::Fin), a);
         }
 
         // debug
         {
             assert_eq!("Data([1, 2])", format!("{:?}", TcpRead::Data(&[1, 2])));
             assert_eq!("Pending", format!("{:?}", TcpRead::Pending));
+            assert_eq!("End(Fin)", format!("{:?}", TcpRead::End(TcpStreamEnd::Fin)));
         }
 
         // hash

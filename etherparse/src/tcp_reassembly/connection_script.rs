@@ -78,7 +78,8 @@ where
 /// Writes a TCP connection as a script of segments for both directions.
 ///
 /// Every method appends segments to `segments`, sending the next bytes of
-/// a stream and ACKing everything the other side sent so far.
+/// a stream and ACKing everything the other side sent so far (including
+/// its SYN and FIN).
 #[derive(Clone, Debug)]
 pub(crate) struct ConnectionScript<CustomChannelId = ()> {
     pub vlan_ids: ArrayVec<VlanId, 3>,
@@ -87,7 +88,8 @@ pub(crate) struct ConnectionScript<CustomChannelId = ()> {
     endpoints: [SocketAddr; 2],
     /// Initial sequence numbers indexed by role.
     isns: [u32; 2],
-    /// Stream offset of the next byte to send, indexed by role.
+    /// Stream offset of the next byte to send (after a FIN, the offset after
+    /// the FIN), indexed by role.
     next_offsets: [u64; 2],
     /// Whether each role sent its SYN.
     syns_sent: [bool; 2],
@@ -198,9 +200,23 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         }
     }
 
+    /// FIN segment of `sender` after the bytes `data` starting at `offset`.
+    fn fin_segment(
+        &self,
+        sender: TcpRole,
+        offset: u64,
+        data: &[u8],
+    ) -> TestSegment<CustomChannelId> {
+        let mut segment = self.segment(sender, offset, data);
+        segment.header.fin = true;
+        segment
+    }
+
     fn push(&mut self, segment: TestSegment<CustomChannelId>) -> &mut Self {
+        // a FIN occupies the sequence number after the last byte
         let next_offset = &mut self.next_offsets[role_index(segment.sender)];
-        *next_offset = (*next_offset).max(segment.offset + segment.payload.len() as u64);
+        *next_offset = (*next_offset)
+            .max(segment.offset + segment.payload.len() as u64 + u64::from(segment.header.fin));
         self.segments.push(segment);
         self
     }
@@ -243,6 +259,23 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
     /// SYN, SYN-ACK and the initiator's ACK.
     pub fn handshake(&mut self) -> &mut Self {
         self.syn().syn_ack().ack(TcpRole::Initiator)
+    }
+
+    /// FIN of `sender`.
+    pub fn fin(&mut self, sender: TcpRole) -> &mut Self {
+        self.fin_with_data(sender, &[])
+    }
+
+    /// FIN of `sender` after its next bytes `data`.
+    pub fn fin_with_data(&mut self, sender: TcpRole, data: &[u8]) -> &mut Self {
+        self.fin_at(sender, self.next_offsets[role_index(sender)], data)
+    }
+
+    /// FIN of `sender` after the bytes `data` starting at `offset`, e.g. to
+    /// retransmit a FIN or to send one at another offset.
+    pub fn fin_at(&mut self, sender: TcpRole, offset: u64, data: &[u8]) -> &mut Self {
+        let segment = self.fin_segment(sender, offset, data);
+        self.push(segment)
     }
 
     /// Next bytes of the stream of `sender`.
