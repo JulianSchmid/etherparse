@@ -414,15 +414,16 @@ mod test {
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
 
-        // both FINs are ACKed, but bytes before a FIN are missing
-        {
+        // both FINs are ACKed, but bytes before a FIN are missing (with and
+        // without bytes in the FIN)
+        for fin_data in [&b""[..], b"gh"] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
                 .send(Initiator, b"abc")
                 .send(Initiator, b"def")
-                .fin(Initiator)
+                .fin_with_data(Initiator, fin_data)
                 .fin(Responder)
                 .ack(Initiator);
             let missing = script.segments.remove(4);
@@ -433,7 +434,7 @@ mod test {
             let mut connection = missing.feed(&mut pool, ()).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
             assert_eq!(
-                TcpRead::Data(b"abcdef"),
+                TcpRead::Data(&[&b"abcdef"[..], fin_data].concat()[..]),
                 connection.stream_mut(Initiator).read_received()
             );
         }

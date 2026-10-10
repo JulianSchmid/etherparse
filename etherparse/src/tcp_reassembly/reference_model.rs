@@ -1,4 +1,5 @@
 use crate::tcp_reassembly::*;
+use core::ops::Range;
 use std::vec::Vec;
 
 /// Simple model of the bytes a [`TcpReassemblyPool`] delivers.
@@ -17,7 +18,7 @@ pub(crate) struct ReferenceModel {
 /// Model of one stream.
 #[derive(Clone, Debug, Default)]
 struct ModelStream {
-    /// Received bytes by offset.
+    /// Received bytes by offset, up to the highest offset.
     bytes: Vec<Option<u8>>,
     /// Contiguous received bytes from offset 0 on.
     received: Vec<u8>,
@@ -35,12 +36,13 @@ impl ModelStream {
     /// Applies a segment of the stream's sender:
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content;
-    /// - the first FIN that doesn't lie before received bytes ends the
-    ///   stream, and bytes after it are counted and dropped.
+    /// - the first FIN that doesn't lie before the highest offset ends the
+    ///   stream, and bytes after it are counted and dropped;
+    /// - bytes before the highest offset that were not received are holes.
     fn add_segment<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
-        if segment.header.fin && self.fin_offset.is_none() && end >= self.received.len() as u64 {
+        if segment.header.fin && self.fin_offset.is_none() && end >= self.bytes.len() as u64 {
             self.fin_offset = Some(end);
         }
         let payload = match self.fin_offset {
@@ -51,19 +53,42 @@ impl ModelStream {
             _ => &segment.payload[..],
         };
 
-        let start = start as usize;
-        let end = start + payload.len();
-        if self.bytes.len() < end {
-            self.bytes.resize(end, None);
+        if false == payload.is_empty() {
+            let start = start as usize;
+            let end = start + payload.len();
+            if self.bytes.len() < end {
+                self.bytes.resize(end, None);
+            }
+            for (slot, byte) in self.bytes[start..end].iter_mut().zip(payload) {
+                if slot.is_none() {
+                    *slot = Some(*byte);
+                }
+            }
         }
-        for (slot, byte) in self.bytes[start..end].iter_mut().zip(payload) {
-            if slot.is_none() {
-                *slot = Some(*byte);
+        if let Some(fin) = self.fin_offset {
+            if self.bytes.len() < fin as usize {
+                self.bytes.resize(fin as usize, None);
             }
         }
         let received_len = self.received.len();
         let next = self.bytes[received_len..].iter().map_while(|byte| *byte);
         self.received.extend(next);
+    }
+
+    /// Ranges of missing bytes before the highest offset.
+    fn holes(&self) -> Vec<Range<u64>> {
+        let mut holes: Vec<Range<u64>> = Vec::new();
+        // all bytes before the first missing one were received
+        let first_missing = self.received.len();
+        for (offset, byte) in self.bytes.iter().enumerate().skip(first_missing) {
+            let offset = offset as u64;
+            match holes.last_mut() {
+                _ if byte.is_some() => {}
+                Some(hole) if hole.end == offset => hole.end += 1,
+                _ => holes.push(offset..offset + 1),
+            }
+        }
+        holes
     }
 
     /// Returns true if the FIN was seen and all bytes before it were
@@ -124,7 +149,9 @@ impl ReferenceModel {
         let expected = &mut self.streams[role_index(role)];
         let consumed = expected.read_offset as usize;
         prop_assert_eq!(expected.read_offset, stream.read_offset());
+        prop_assert_eq!(expected.bytes.len() as u64, stream.highest_offset());
         prop_assert_eq!(expected.fin_offset, stream.fin_offset());
+        prop_assert_eq!(expected.holes(), stream.holes().collect::<Vec<_>>());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
         prop_assert_eq!(expected.is_finished(), stream.is_complete());
         prop_assert_eq!(
@@ -153,7 +180,7 @@ impl ReferenceModel {
 mod test {
     use super::*;
     use crate::{tcp_reassembly::TcpRole::*, test_gens::*};
-    use proptest::{collection::vec, prelude::*};
+    use proptest::{collection::vec, prelude::*, sample::Index};
 
     /// Order in which the endpoints send their FINs.
     #[derive(Copy, Clone, Debug)]
@@ -350,6 +377,86 @@ mod test {
                 }
                 pool.recycle(connection);
             }
+        }
+
+        #[test]
+        fn reordered_streams(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(16 * 1024),
+            responder_data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            resent_lens in vec(0usize..1000, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            retransmissions in vec((tcp_role_any(), any::<Index>(), 0usize..3000), 0..16),
+            duplicates in vec(any::<Index>(), 0..8),
+            positions in vec(any::<Index>(), 1..16),
+            delays in vec(0usize..8, 1..64),
+            consume_lens in vec(0usize..3000, 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &resent_lens, &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // retransmissions cut differently than the original segments
+            // (carrying the FIN if they reach it), and duplicates
+            let originals = script.segments.len() - 3;
+            for (role, start, len) in &retransmissions {
+                let i = role_index(*role);
+                let start = start.index(data[i].len() + 1);
+                let end = (start + len).min(data[i].len());
+                if fins[i] && end == data[i].len() {
+                    script.fin_at(*role, start as u64, &data[i][start..end]);
+                } else {
+                    script.send_at(*role, start as u64, &data[i][start..end]);
+                }
+            }
+            if originals > 0 {
+                for index in &duplicates {
+                    let duplicate = script.segments[3 + index.index(originals)].clone();
+                    script.segments.push(duplicate);
+                }
+            }
+
+            // move the segments after the handshake by a bounded distance,
+            // the retransmissions and duplicates start at random positions
+            let mut keyed: Vec<_> = script
+                .segments
+                .drain(3..)
+                .enumerate()
+                .map(|(i, segment)| {
+                    let position = if i < originals {
+                        i
+                    } else {
+                        positions[i % positions.len()].index(originals + 1)
+                    };
+                    (position + delays[i % delays.len()], segment)
+                })
+                .collect();
+            keyed.sort_by_key(|(key, _)| *key);
+            script.segments.extend(keyed.into_iter().map(|(_, segment)| segment));
+
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let (model, ended) = feed_and_check(&mut pool, &script.segments, &consume_lens)?;
+
+            // every byte arrived, so the streams were delivered byte-exact
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert_eq!(data[i], model.received(role));
+                prop_assert_eq!(fins[i].then_some(data[i].len() as u64), model.fin_offset(role));
+            }
+
+            // with both FINs the connection is finished
+            prop_assert_eq!(fins[0] && fins[1], ended.is_some());
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::{tcp_reassembly::*, *};
+use core::ops::Range;
 use std::vec::Vec;
 
 /// Bytes sent in one direction of a TCP connection.
@@ -19,11 +20,21 @@ pub struct TcpStream {
     /// Offset of the byte at `buf[head]`.
     read_offset: u64,
 
-    /// Received bytes, the ones before `head` are already consumed.
+    /// Offset after the furthest byte the sender is known to have sent.
+    highest_offset: u64,
+
+    /// Received bytes up to the furthest one, where `buf[head]` is the byte
+    /// at `read_offset`. The bytes before `head` are already consumed, and
+    /// the bytes in holes are placeholders.
     buf: Vec<u8>,
 
     /// Number of consumed bytes at the start of `buf`.
     head: usize,
+
+    /// Missing bytes between `read_offset` and `highest_offset`, sorted and
+    /// without overlaps. Missing bytes after the end of `buf` always lie in
+    /// a hole.
+    holes: Vec<Range<u64>>,
 
     /// Number of bytes the last read returned that are not consumed yet.
     last_read_len: usize,
@@ -46,8 +57,10 @@ impl TcpStream {
             start_seq: None,
             window_scale: None,
             read_offset: 0,
+            highest_offset: 0,
             buf,
             head: 0,
+            holes: Vec::new(),
             last_read_len: 0,
             fin_offset: None,
             seen_ack: 0,
@@ -62,10 +75,15 @@ impl TcpStream {
     ///
     /// Call [`TcpStream::consume`] with the number of bytes you used to move
     /// the read position forward. Without readable bytes, the result is
-    /// [`TcpRead::Pending`] while more bytes can arrive, and
-    /// [`TcpRead::End`] once all bytes up to the FIN were read.
+    /// [`TcpRead::Pending`] while more bytes can arrive (e.g. to fill a
+    /// hole), and [`TcpRead::End`] once all bytes up to the FIN were read.
     pub fn read_received(&mut self) -> TcpRead<'_> {
-        let data = &self.buf[self.head..];
+        // all bytes before the first hole were received
+        let end = self
+            .holes
+            .first()
+            .map_or(self.highest_offset, |hole| hole.start);
+        let data = &self.buf[self.head..self.index(end)];
         self.last_read_len = data.len();
         if false == data.is_empty() {
             TcpRead::Data(data)
@@ -92,10 +110,23 @@ impl TcpStream {
         self.read_offset
     }
 
+    /// Offset after the furthest byte the sender is known to have sent.
+    pub fn highest_offset(&self) -> u64 {
+        self.highest_offset
+    }
+
     /// Offset of the stream's FIN, which is the number of bytes in the
     /// stream, if a FIN was seen.
     pub fn fin_offset(&self) -> Option<u64> {
         self.fin_offset
+    }
+
+    /// Ranges of missing bytes between the read position and the highest
+    /// offset, in order.
+    ///
+    /// Reading stops at the first hole until a retransmission fills it.
+    pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
+        self.holes.iter().cloned()
     }
 
     /// Counters that describe the quality of the stream.
@@ -106,8 +137,8 @@ impl TcpStream {
     /// Returns true if the stream's FIN was seen and no bytes before it are
     /// missing.
     pub fn is_finished(&self) -> bool {
-        // bytes beyond the FIN are never stored
-        Some(self.received_end()) == self.fin_offset
+        // the FIN moves the highest offset to it, so all holes lie before it
+        self.fin_offset.is_some() && self.holes.is_empty()
     }
 
     /// Returns true if the stream is complete: it is clean, has an observed
@@ -132,19 +163,24 @@ impl TcpStream {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
     }
 
-    /// Offset after the last received byte.
-    fn received_end(&self) -> u64 {
+    /// Offset after the last byte in `buf`.
+    fn buf_end(&self) -> u64 {
         self.read_offset + (self.buf.len() - self.head) as u64
     }
 
+    /// Index in `buf` of the byte at `offset` (at or after `read_offset`).
+    fn index(&self, offset: u64) -> usize {
+        self.head + (offset - self.read_offset) as usize
+    }
+
     /// Maps the sequence number `seq` to a stream offset, relative to the
-    /// end of the received bytes (RFC 1982 serial number arithmetic).
+    /// highest offset (RFC 1982 serial number arithmetic).
     ///
     /// Offsets before the stream's first byte are negative.
     fn offset(&self, start_seq: u32, seq: u32) -> i64 {
-        let end = self.received_end();
-        let distance = seq.wrapping_sub(start_seq.wrapping_add(end as u32)) as i32;
-        end as i64 + i64::from(distance)
+        let highest = self.highest_offset;
+        let distance = seq.wrapping_sub(start_seq.wrapping_add(highest as u32)) as i32;
+        highest as i64 + i64::from(distance)
     }
 
     /// Applies a segment sent by the stream's sender.
@@ -166,8 +202,9 @@ impl TcpStream {
         let data = tcp.payload();
         let end = start + data.len() as i64;
 
-        // the first FIN wins, but it can't lie before received bytes
-        if tcp.fin() && self.fin_offset.is_none() && end >= self.received_end() as i64 {
+        // the first FIN wins, but it can't lie before received bytes (even
+        // if bytes before it are missing)
+        if tcp.fin() && self.fin_offset.is_none() && end >= self.highest_offset as i64 {
             self.fin_offset = Some(end as u64);
         }
 
@@ -181,6 +218,11 @@ impl TcpStream {
             _ => data,
         };
         self.add_data(start, data);
+
+        // the sender sent all bytes before its FIN
+        if let Some(fin) = self.fin_offset {
+            self.extend_to(fin);
+        }
     }
 
     /// Applies the ACK number of a segment sent by the stream's receiver.
@@ -193,27 +235,77 @@ impl TcpStream {
         }
     }
 
-    /// Appends the bytes of `data` (starting at offset `start`) that follow
-    /// the received bytes.
+    /// Stores the bytes of `data` (starting at offset `start`) that were not
+    /// received before.
     fn add_data(&mut self, start: i64, data: &[u8]) {
-        let end = self.received_end() as i64;
-        if start > end {
-            // bytes behind missing bytes are not stored
+        // skip the bytes before the read position (consumed, or before the
+        // stream's first byte)
+        let skipped = (self.read_offset as i64).saturating_sub(start).max(0) as usize;
+        let data = match data.get(skipped..) {
+            Some(data) if false == data.is_empty() => data,
+            _ => return,
+        };
+        let start = (start + skipped as i64) as u64;
+        let end = start + data.len() as u64;
+
+        // fill the holes in the buffer, bytes received before keep their
+        // content
+        let buf_end = self.buf_end();
+        for hole in &self.holes {
+            let from = hole.start.max(start);
+            let to = hole.end.min(end).min(buf_end);
+            if from < to {
+                let (buf_from, buf_to) = (self.index(from), self.index(to));
+                self.buf[buf_from..buf_to]
+                    .copy_from_slice(&data[(from - start) as usize..(to - start) as usize]);
+            }
+        }
+
+        // append the bytes after the end of the buffer (all missing so far)
+        if buf_end < end {
+            // drop the consumed bytes once they make up half of the buffer
+            if self.head >= self.buf.len() - self.head {
+                self.buf.drain(..self.head);
+                self.head = 0;
+            }
+            // placeholders for missing bytes before the segment
+            let from = start.max(buf_end);
+            self.buf.resize(self.index(from), 0);
+            self.buf.extend_from_slice(&data[(from - start) as usize..]);
+        }
+        self.extend_to(end);
+        self.remove_from_holes(start..end);
+    }
+
+    /// Moves the highest offset forward to `offset`, the bytes in between
+    /// are missing.
+    fn extend_to(&mut self, offset: u64) {
+        if offset > self.highest_offset {
+            self.holes.push(self.highest_offset..offset);
+            self.highest_offset = offset;
+        }
+    }
+
+    /// Removes the bytes in `range` from the holes.
+    fn remove_from_holes(&mut self, range: Range<u64>) {
+        // holes overlapping the range
+        let first = self.holes.partition_point(|hole| hole.end <= range.start);
+        let last = self.holes.partition_point(|hole| hole.start < range.end);
+        if first >= last {
             return;
         }
 
-        // skip the bytes that were already received
-        let new_bytes = match data.get((end - start) as usize..) {
-            Some(new_bytes) if false == new_bytes.is_empty() => new_bytes,
-            _ => return,
-        };
-
-        // drop the consumed bytes once they make up half of the buffer
-        if self.head >= self.buf.len() - self.head {
-            self.buf.drain(..self.head);
-            self.head = 0;
+        // the parts of these holes before and after the range stay missing
+        let before = self.holes[first].start..range.start;
+        let after = range.end..self.holes[last - 1].end;
+        self.holes.drain(first..last);
+        let mut index = first;
+        for part in [before, after] {
+            if false == part.is_empty() {
+                self.holes.insert(index, part);
+                index += 1;
+            }
         }
-        self.buf.extend_from_slice(new_bytes);
     }
 }
 
@@ -386,7 +478,7 @@ mod test {
             );
         }
 
-        // reading stops at missing bytes
+        // reading stops at a hole and continues once it is filled
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -395,10 +487,40 @@ mod test {
                 .send(Initiator, b"abc")
                 .send(Initiator, b"de")
                 .send(Initiator, b"fg");
-            script.segments.remove(4);
-            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let missing = script.segments.remove(4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
             assert_eq!(
-                TcpRead::Data(b"abc"),
+                TcpRead::Data(b"defg"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // a hole at the start of the stream
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            let missing = script.segments.remove(3);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(
+                    TcpRead::Pending,
+                    connection.stream_mut(Initiator).read_received()
+                );
+            }
+            let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"abcdef"),
                 connection.stream_mut(Initiator).read_received()
             );
         }
@@ -583,6 +705,39 @@ mod test {
             );
         }
 
+        // a long stream with swapped segments, consumed in small steps that
+        // fall behind the received bytes
+        {
+            let data: Vec<u8> = (0..64 * 1024).map(|i| (i % 251) as u8).collect();
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            for chunk in data.chunks(1000) {
+                script.send(Initiator, chunk);
+            }
+            for pair in script.segments[3..].chunks_mut(2) {
+                pair.reverse();
+            }
+            let mut delivered = Vec::new();
+            for (i, segment) in script.segments.iter().enumerate() {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                // at most 100 reads per segment, all bytes after the last one
+                let last = i + 1 == script.segments.len();
+                let mut reads = 0;
+                while let TcpRead::Data(d) = stream.read_received() {
+                    if 100 == reads && false == last {
+                        break;
+                    }
+                    let len = d.len().min(7);
+                    delivered.extend_from_slice(&d[..len]);
+                    stream.consume(len);
+                    reads += 1;
+                }
+            }
+            assert_eq!(data, delivered);
+        }
+
         // retransmissions of consumed bytes are not delivered again
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -669,6 +824,137 @@ mod test {
     }
 
     #[test]
+    fn highest_offset() {
+        // nothing received yet
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).highest_offset());
+            assert_eq!(0, connection.stream(Responder).highest_offset());
+        }
+
+        // follows the furthest received byte, also behind holes (and across
+        // a wrap-around of the sequence numbers)
+        for isn in [1000, u32::MAX - 2] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(isn, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"abc")
+                // behind a hole
+                .send_at(Initiator, 6, b"gh")
+                // filling the hole
+                .send_at(Initiator, 3, b"def")
+                // retransmission
+                .send_at(Initiator, 0, b"ab");
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip([3, 8, 8, 8]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).highest_offset());
+            }
+        }
+
+        // reading doesn't move it
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.read_received();
+            stream.consume(2);
+            assert_eq!(3, stream.highest_offset());
+        }
+
+        // a FIN behind missing bytes moves it to the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(6, connection.stream(Initiator).highest_offset());
+        }
+    }
+
+    #[test]
+    fn holes() {
+        // no holes while the bytes arrive in order
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).holes().count());
+        }
+
+        // segments create holes and fill them completely or in parts
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let steps: [(u64, &[u8], &[Range<u64>]); 10] = [
+                // hole at the start of the stream
+                (2, b"c", &[0..2]),
+                // hole after received bytes
+                (6, b"gh", &[0..2, 3..6]),
+                (12, b"m", &[0..2, 3..6, 8..12]),
+                // splits a hole
+                (4, b"e", &[0..2, 3..4, 5..6, 8..12]),
+                (9, b"j", &[0..2, 3..4, 5..6, 8..9, 10..12]),
+                // fills the end of one hole and another one completely
+                (1, b"bcde", &[0..1, 5..6, 8..9, 10..12]),
+                // fills two holes completely
+                (5, b"fghij", &[0..1, 10..12]),
+                // fills the start of a hole
+                (10, b"k", &[0..1, 11..12]),
+                // fills a hole and overlaps received bytes
+                (11, b"lm", &[0..1]),
+                // fills the last hole
+                (0, b"a", &[]),
+            ];
+            for (offset, data, _) in steps {
+                script.send_at(Initiator, offset, data);
+            }
+            script.feed(&mut pool, ..3);
+            for (segment, (_, _, expected)) in script.segments[3..].iter().zip(steps) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(expected, stream.holes().collect::<Vec<_>>());
+                if expected.is_empty() {
+                    assert_eq!(TcpRead::Data(b"abcdefghijklm"), stream.read_received());
+                }
+            }
+        }
+
+        // missing bytes before a FIN, with and without bytes in the FIN
+        for fin_data in [&b""[..], b"gh"] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin_with_data(Initiator, fin_data);
+            script.segments.remove(4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                &[3..6][..],
+                connection.stream(Initiator).holes().collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
     fn fin_offset() {
         // no FIN yet
         {
@@ -745,6 +1031,31 @@ mod test {
             assert_eq!(None, connection.stream(Initiator).fin_offset());
         }
 
+        // a FIN before already received bytes is ignored, even if bytes
+        // before the FIN are missing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"defgh")
+                .fin_at(Initiator, 6, &[]);
+            let missing = script.segments.remove(3);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!(None, stream.fin_offset());
+                assert_eq!(8, stream.highest_offset());
+            }
+            // the bytes after it stay readable
+            let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"abcdefgh"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
         // FIN of a stream whose start was not seen
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -782,15 +1093,16 @@ mod test {
             assert!(connection.stream(Responder).is_finished());
         }
 
-        // FIN behind missing bytes finishes once they arrive
-        {
+        // FIN behind missing bytes finishes once they arrive, with and
+        // without bytes in the FIN
+        for fin_data in [&b""[..], b"gh"] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
                 .send(Initiator, b"abc")
                 .send(Initiator, b"def")
-                .fin(Initiator);
+                .fin_with_data(Initiator, fin_data);
             let missing = script.segments.remove(4);
             {
                 let (connection, _) = script.feed_all(&mut pool).active.unwrap();
@@ -799,7 +1111,28 @@ mod test {
             let (connection, _) = missing.feed(&mut pool, ()).active.unwrap();
             let stream = connection.stream_mut(Initiator);
             assert!(stream.is_finished());
-            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            assert_eq!(
+                TcpRead::Data(&[&b"abcdef"[..], fin_data].concat()[..]),
+                stream.read_received()
+            );
+        }
+
+        // FIN behind several holes finishes once the last one is filled
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 1, b"b")
+                .fin_at(Initiator, 3, b"d")
+                .send_at(Initiator, 0, b"a")
+                .send_at(Initiator, 2, b"c");
+            script.feed(&mut pool, ..3);
+            for (segment, finished) in script.segments[3..].iter().zip([false, false, false, true])
+            {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(finished, connection.stream(Initiator).is_finished());
+            }
         }
     }
 
