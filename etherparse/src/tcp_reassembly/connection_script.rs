@@ -169,6 +169,11 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         self.endpoints[role_index(role)]
     }
 
+    /// Stream offset of the next byte the endpoint with the role sends.
+    pub fn next_offset(&self, role: TcpRole) -> u64 {
+        self.next_offsets[role_index(role)]
+    }
+
     /// Sequence number of the byte at `offset` in the stream of `role`.
     pub fn seq(&self, role: TcpRole, offset: u64) -> u32 {
         self.isns[role_index(role)]
@@ -317,6 +322,13 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
     /// Next bytes of the stream of `sender`.
     pub fn send(&mut self, sender: TcpRole, data: &[u8]) -> &mut Self {
         self.send_at(sender, self.next_offsets[role_index(sender)], data)
+    }
+
+    /// Sends the next `len` bytes of the stream of `sender` without them
+    /// being captured (the other side ACKs them).
+    pub fn send_uncaptured(&mut self, sender: TcpRole, len: u64) -> &mut Self {
+        self.next_offsets[role_index(sender)] += len;
+        self
     }
 
     /// Bytes of the stream of `sender` starting at `offset`, e.g. to

@@ -46,6 +46,8 @@ pub(crate) enum ReaderAction {
     DiscardAhead(u64),
     /// [`TcpStream::discard_all`]
     DiscardAll,
+    /// [`TcpStream::force_resync`]
+    ForceResync,
 }
 
 /// Model of one stream.
@@ -114,12 +116,14 @@ struct ModelStream {
     /// Offsets of the gaps of unknown length that resyncs left, which the
     /// reader didn't step over yet.
     resync_gaps: Vec<u64>,
-    /// Latest data segment after the window, while the stream didn't move
-    /// forward or receive other bytes.
-    candidate: Option<ModelCandidate>,
+    /// Data segments after the window since the stream moved forward or
+    /// received other bytes. The last one is the candidate of a resync.
+    candidates: Vec<ModelCandidate>,
     /// True offset of the latest ACK more than one window after the bytes
     /// known to be sent, while the stream didn't move forward.
     resync_ack: Option<u64>,
+    /// Whether the next data segment is the stream's new start.
+    forced: bool,
 }
 
 /// Data segment after the window that a stream may have jumped to.
@@ -129,6 +133,8 @@ struct ModelCandidate {
     bytes: Range<u64>,
     /// Whether a FIN follows the bytes.
     fin: bool,
+    /// Whether the bytes lie within one window of the candidate before.
+    agrees: bool,
 }
 
 impl ModelStream {
@@ -147,12 +153,15 @@ impl ModelStream {
     ///   the highest or the ACKed offset is counted and not stored (k is the
     ///   hole give up window factor, 2 without one). If its bytes lie within
     ///   one window of the last ACK more than one window after the bytes
-    ///   sent, the stream resyncs at them, and that ACK counts after them (and
+    ///   sent, or if it is the n-th consecutive such segment that lies within
+    ///   one window of the one before (with `resync_after_segments = n`),
+    ///   the stream resyncs at them, and that ACK counts after them (and
     ///   ACKs the bytes before them). Otherwise they are the candidate of a
     ///   resync (unless the FIN is known or it is a SYN), and a FIN without
     ///   bytes right after them is the candidate's FIN;
     /// - other bytes show that the stream didn't jump, so there is no
-    ///   candidate anymore;
+    ///   candidate anymore, and after `force_resync` the next bytes are the
+    ///   stream's new start wherever they lie;
     /// - a keep-alive (one byte ending at the ACK, without SYN, FIN or RST)
     ///   inside an overdue hole is ignored;
     /// - bytes received for the first time are stored, bytes received before
@@ -202,16 +211,30 @@ impl ModelStream {
                 .resync_ack
                 .filter(|ack| within_window(&bytes, *ack, window));
             let confirmed = if after_window {
-                self.candidate = Some(ModelCandidate {
+                let agrees = self
+                    .candidates
+                    .last()
+                    .is_some_and(|previous| within_window(&previous.bytes, bytes.start, window));
+                self.candidates.push(ModelCandidate {
                     bytes,
                     fin: header.fin,
+                    agrees,
                 });
+                let consecutive = 1 + self
+                    .candidates
+                    .iter()
+                    .rev()
+                    .take_while(|candidate| candidate.agrees)
+                    .count();
                 confirming_ack.is_some()
+                    || config
+                        .resync_after_segments
+                        .is_some_and(|after| consecutive >= after as usize)
             } else {
-                self.candidate = None;
+                self.candidates.clear();
                 false
             };
-            if confirmed {
+            if self.forced || confirmed {
                 jump_ack = confirming_ack;
                 self.resync(segment.offset);
                 start = segment.offset as i64 - self.shift;
@@ -219,7 +242,7 @@ impl ModelStream {
             }
         }
         if (false == payload.is_empty() || header.fin) && after_window {
-            if let Some(candidate) = &mut self.candidate {
+            if let Some(candidate) = self.candidates.last_mut() {
                 if payload.is_empty() && segment.offset == candidate.bytes.end {
                     candidate.fin = true;
                 }
@@ -341,12 +364,21 @@ impl ModelStream {
 
     /// Returns true if bytes can be prepended to the stream: it is a
     /// mid-stream pickup whose read offset never moved, that wasn't picked
-    /// up at a FIN and didn't resync.
+    /// up at a FIN, didn't resync and has no resync forced.
     fn can_prepend(&self) -> bool {
         false == self.observed
             && false == self.read_moved
             && false == self.started_at_fin
             && self.resyncs.is_empty()
+            && false == self.forced
+    }
+
+    /// Makes the next data segment the stream's new start, unless the stream
+    /// has no start yet or its FIN is known.
+    fn force_resync(&mut self) {
+        if self.base.is_some() && self.fin_offset.is_none() {
+            self.forced = true;
+        }
     }
 
     /// Moves the first byte the pool knows to `start` (at or before the
@@ -394,7 +426,7 @@ impl ModelStream {
     /// anymore.
     fn set_highest(&mut self, offset: u64) {
         if offset > self.highest {
-            self.candidate = None;
+            self.candidates.clear();
             self.resync_ack = None;
         }
         self.highest = offset;
@@ -413,8 +445,9 @@ impl ModelStream {
         }
         self.shift = start as i64 - self.highest as i64;
         self.resyncs.push((self.highest, self.shift));
-        self.candidate = None;
+        self.candidates.clear();
         self.resync_ack = None;
+        self.forced = false;
     }
 
     /// Applies the ACK of the other side at the true offset `ack` in the
@@ -439,7 +472,7 @@ impl ModelStream {
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         if offset > (sent_end + window) as i64 {
-            match self.candidate.clone() {
+            match self.candidates.last().cloned() {
                 Some(candidate)
                     if self.fin_offset.is_none()
                         && within_window(&candidate.bytes, ack, window) =>
@@ -847,6 +880,10 @@ impl ReferenceModel {
                 expected.discard_until(expected.highest);
                 stream.discard_all();
             }
+            ReaderAction::ForceResync => {
+                expected.force_resync();
+                stream.force_resync();
+            }
         }
         Ok(())
     }
@@ -949,10 +986,11 @@ mod test {
         Simultaneous,
     }
 
-    /// Sends the bytes `data` of both streams (indexed by role) in segments
-    /// cut by `segment_lens` and interleaved by `directions` (true for the
-    /// initiator). Each segment starts with up to `resent_lens` bytes that
-    /// were already sent.
+    /// Sends the bytes `data` of both streams (indexed by role) after the
+    /// bytes each role sent so far, in segments cut by `segment_lens` and
+    /// interleaved by `directions` (true for the initiator). Each segment
+    /// starts with up to `resent_lens` bytes of `data` that were already
+    /// sent.
     fn send_interleaved(
         script: &mut ConnectionScript,
         data: [&[u8]; 2],
@@ -960,6 +998,7 @@ mod test {
         resent_lens: &[usize],
         directions: &[bool],
     ) {
+        let offsets = [Initiator, Responder].map(|role| script.next_offset(role));
         let mut sent = [0usize, 0usize];
         let mut step = 0;
         while sent[0] < data[0].len() || sent[1] < data[1].len() {
@@ -975,7 +1014,11 @@ mod test {
             let i = role_index(role);
             let start = sent[i] - resent_lens[step % resent_lens.len()].min(sent[i]);
             let len = segment_lens[step % segment_lens.len()].min(data[i].len() - sent[i]);
-            script.send_at(role, start as u64, &data[i][start..sent[i] + len]);
+            script.send_at(
+                role,
+                offsets[i] + start as u64,
+                &data[i][start..sent[i] + len],
+            );
             sent[i] += len;
             step += 1;
         }
@@ -1659,6 +1702,147 @@ mod test {
             // ones that were given up or lie before the first byte captured
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
                 prop_assert!(model.received_matches(role, data[i]));
+            }
+        }
+
+        #[test]
+        fn resyncs(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            before in [stream_data_any(4 * 1024), stream_data_any(4 * 1024)],
+            after in [stream_data_any(4 * 1024), stream_data_any(4 * 1024)],
+            jumps in [
+                proptest::option::of(prop_oneof![0u64..1000, 3000u64..20_000]),
+                proptest::option::of(prop_oneof![0u64..1000, 3000u64..20_000]),
+            ],
+            segment_lens in vec(1usize..200, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            pickup in any::<bool>(),
+            one_direction in any::<bool>(),
+            lost in vec(any::<Index>(), 0..4),
+            injected in vec(
+                (tcp_role_any(), any::<Index>(), 0u64..5000, vec(any::<u8>(), 1..8)),
+                0..4
+            ),
+            window in 200u16..1000,
+            resync_after_segments in proptest::option::of(0u32..4),
+            delays in proptest::option::of(vec(0usize..3, 1..64)),
+            actions in vec(proptest::option::weighted(0.05, Just(ReaderAction::ForceResync)), 1..32),
+            consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // both streams send their bytes, then the streams with a jump
+            // continue later (the bytes in between were not captured),
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.window_size = window;
+            script.handshake();
+            send_interleaved(&mut script, [&before[0], &before[1]], &segment_lens, &[0], &directions);
+            for (role, jump) in [Initiator, Responder].into_iter().zip(jumps) {
+                if let Some(jump) = jump {
+                    script.send_uncaptured(role, jump);
+                }
+            }
+            send_interleaved(&mut script, [&after[0], &after[1]], &segment_lens, &[0], &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // segments lost in the capture
+            for index in &lost {
+                if script.segments.len() > 3 {
+                    script.segments.remove(3 + index.index(script.segments.len() - 3));
+                }
+            }
+
+            // segments the endpoints didn't send, without an ACK, near or
+            // after the end of the stream (data after the window that
+            // doesn't agree with the bytes after the jump)
+            let sent = [0, 1].map(|i| {
+                before[i].len() as u64 + jumps[i].unwrap_or(0) + after[i].len() as u64
+            });
+            for (role, position, distance, payload) in &injected {
+                let mut segment = script.injected(|script| {
+                    script.send_at(*role, sent[role_index(*role)] + distance, payload);
+                });
+                segment.header.ack = false;
+                segment.ack = None;
+                let position = 3 + position.index(script.segments.len() - 2);
+                script.segments.insert(position, segment);
+            }
+
+            // a capture of the initiator's direction only (and the SYN-ACK),
+            // so no ACKs confirm its jump
+            if one_direction {
+                let mut i = 0;
+                script.segments.retain(|segment| {
+                    i += 1;
+                    i <= 3 || Initiator == segment.sender
+                });
+            }
+
+            // the capture starts after the handshake
+            let first = if pickup {
+                script.segments.drain(..3);
+                0
+            } else {
+                3
+            };
+
+            // move the segments after the handshake by a bounded distance
+            if let Some(delays) = &delays {
+                let mut keyed: Vec<_> = script
+                    .segments
+                    .drain(first..)
+                    .enumerate()
+                    .map(|(i, segment)| (i + delays[i % delays.len()], segment))
+                    .collect();
+                keyed.sort_by_key(|(key, _)| *key);
+                script.segments.extend(keyed.into_iter().map(|(_, segment)| segment));
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                fallback_window: u32::from(window),
+                resync_after_segments,
+                ..Default::default()
+            });
+            let (model, _) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+                &actions,
+            )?;
+
+            // the bytes after a resync are the ones sent after the jump (the
+            // injected bytes lie after them)
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                let mut sent = before[i].clone();
+                sent.resize(before[i].len() + jumps[i].unwrap_or(0) as usize, 0);
+                sent.extend_from_slice(&after[i]);
+                prop_assert!(model.received_matches(role, &sent));
+            }
+
+            // in an undisturbed capture of both directions, the ACKs of the
+            // other side make a stream resync after a jump of more than k
+            // windows (if earlier bytes arrive after the bytes after the
+            // jump, they show that the stream didn't jump, until more bytes
+            // after the jump arrive)
+            let disturbed = one_direction
+                || delays.is_some()
+                || false == lost.is_empty()
+                || false == injected.is_empty();
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                let jumped = jumps[i].is_some_and(|jump| jump >= 3000)
+                    && false == after[i].is_empty()
+                    && (false == pickup || false == before[i].is_empty());
+                if jumped && false == disturbed {
+                    prop_assert!(model.resyncs(role) > 0);
+                }
             }
         }
 
