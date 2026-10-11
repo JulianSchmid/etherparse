@@ -248,17 +248,16 @@ impl TcpStream {
     /// position hasn't reached).
     fn give_up_overdue_hole(&mut self) {
         if let Some(hole) = self.hole_at_read_offset() {
-            if hole.end <= self.overdue_end() {
+            if self.is_overdue(&hole) {
                 self.give_up_holes_before(hole.end);
             }
         }
     }
 
-    /// Offset up to which holes are overdue: they lie before the implied
-    /// ACK, or the seen ACK has covered them for `ack_reorder_tolerance`
-    /// packets.
-    fn overdue_end(&self) -> u64 {
-        self.implied_ack.max(self.settled_ack)
+    /// Returns true if all of `hole` lies before the implied ACK, or if the
+    /// seen ACK has covered all of it for `ack_reorder_tolerance` packets.
+    fn is_overdue(&self, hole: &Range<u64>) -> bool {
+        hole.end <= self.implied_ack.max(self.settled_ack)
     }
 
     /// Returns true if the byte at `offset` lies in an overdue hole.
@@ -266,7 +265,7 @@ impl TcpStream {
         let index = self.holes.partition_point(|hole| hole.end <= offset);
         self.holes
             .get(index)
-            .is_some_and(|hole| hole.start <= offset && hole.end <= self.overdue_end())
+            .is_some_and(|hole| hole.start <= offset && self.is_overdue(hole))
     }
 
     /// Hole starting at the read position, if any.
@@ -392,10 +391,7 @@ impl TcpStream {
     /// left are overdue, so that the stream can end as finished.
     pub(crate) fn can_finish(&self) -> bool {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
-            && self
-                .holes
-                .last()
-                .is_none_or(|hole| hole.end <= self.overdue_end())
+            && self.holes.last().is_none_or(|hole| self.is_overdue(hole))
     }
 
     /// Gives up all holes, as the connection ended.

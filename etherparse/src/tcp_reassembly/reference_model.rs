@@ -118,7 +118,7 @@ impl ModelStream {
             && self
                 .holes()
                 .iter()
-                .any(|hole| hole.contains(&start) && hole.end <= self.overdue_end())
+                .any(|hole| hole.contains(&start) && self.is_overdue(hole))
         {
             return;
         }
@@ -248,17 +248,34 @@ impl ModelStream {
         (start < end).then_some(start..end)
     }
 
-    /// Offset up to which holes are overdue.
-    fn overdue_end(&self) -> u64 {
-        self.implied_ack.max(self.settled_ack)
+    /// Returns true if `hole` ends at or before the implied ACK or the ACK
+    /// of `ack_reorder_tolerance` packets ago.
+    fn is_overdue(&self, hole: &Range<u64>) -> bool {
+        hole.end <= self.implied_ack.max(self.settled_ack)
     }
 
-    /// Gives up the hole at the read offset if all of it is overdue.
+    /// Updates the implied ACK (with the hole give up window factor
+    /// `factor`) and the ACK of `tolerance` packets ago after the packet
+    /// with the number `packet`, where `window` is the receive window of
+    /// the stream's receiver, and gives up an overdue hole at the read
+    /// offset.
+    fn after_packet(&mut self, window: u64, factor: Option<u32>, tolerance: u64, packet: u64) {
+        if let Some(factor) = factor {
+            let implied_ack = self.highest.saturating_sub(u64::from(factor) * window);
+            self.implied_ack = self.implied_ack.max(implied_ack);
+        }
+        self.settled_ack = self
+            .ack_history
+            .iter()
+            .rev()
+            .find(|(ack_packet, _)| ack_packet + tolerance <= packet)
+            .map_or(0, |(_, ack)| *ack);
+        self.give_up_overdue_hole();
+    }
+
+    /// Gives up the hole at the read offset if it is overdue.
     fn give_up_overdue_hole(&mut self) {
-        if self
-            .first_hole()
-            .is_some_and(|hole| hole.end <= self.overdue_end())
-        {
+        if self.first_hole().is_some_and(|hole| self.is_overdue(&hole)) {
             self.give_up_hole();
         }
     }
@@ -268,15 +285,21 @@ impl ModelStream {
     fn give_up_hole(&mut self) -> bool {
         match self.first_hole() {
             Some(hole) if hole.start == self.read_offset => {
-                self.given_up.push(hole.clone());
-                self.gap_count += 1;
-                self.gap_bytes += hole.end - hole.start;
-                self.gaps.insert(0, hole.clone());
-                self.extend_received();
+                self.give_up(hole);
                 true
             }
             _ => false,
         }
+    }
+
+    /// Turns `hole` into a gap.
+    fn give_up(&mut self, hole: Range<u64>) {
+        self.given_up.push(hole.clone());
+        self.gap_count += 1;
+        self.gap_bytes += hole.end - hole.start;
+        self.gaps.push(hole);
+        self.gaps.sort_by_key(|gap| gap.start);
+        self.extend_received();
     }
 
     /// Moves the read offset over the gap at the read offset, if any.
@@ -354,22 +377,14 @@ impl ModelStream {
     /// Returns true if the FIN was ACKed and all holes are overdue.
     fn can_finish(&self) -> bool {
         self.fin_offset.is_some_and(|fin| fin < self.ack)
-            && self
-                .holes()
-                .iter()
-                .all(|hole| hole.end <= self.overdue_end())
+            && self.holes().iter().all(|hole| self.is_overdue(hole))
     }
 
     /// Gives up all holes.
     fn give_up_all_holes(&mut self) {
         for hole in self.holes() {
-            self.given_up.push(hole.clone());
-            self.gap_count += 1;
-            self.gap_bytes += hole.end - hole.start;
-            self.gaps.push(hole);
+            self.give_up(hole);
         }
-        self.gaps.sort_by_key(|gap| gap.start);
-        self.extend_received();
     }
 }
 
@@ -400,23 +415,11 @@ impl ReferenceModel {
         self.streams[sender].add_segment(segment, window, &self.config);
         self.windows[sender] = Some(segment.header.window_size);
         self.syns[sender] |= segment.header.syn;
-        if let Some(factor) = self.config.hole_give_up_window_factor {
-            for role in [TcpRole::Initiator, TcpRole::Responder] {
-                let window = self.window(role);
-                let stream = &mut self.streams[role_index(role)];
-                let implied_ack = stream.highest.saturating_sub(u64::from(factor) * window);
-                stream.implied_ack = stream.implied_ack.max(implied_ack);
-            }
-        }
+        let factor = self.config.hole_give_up_window_factor;
         let tolerance = u64::from(self.config.ack_reorder_tolerance);
-        for stream in &mut self.streams {
-            stream.settled_ack = stream
-                .ack_history
-                .iter()
-                .rev()
-                .find(|(packet, _)| packet + tolerance <= self.packets)
-                .map_or(0, |(_, ack)| *ack);
-            stream.give_up_overdue_hole();
+        for role in [TcpRole::Initiator, TcpRole::Responder] {
+            let window = self.window(role);
+            self.streams[role_index(role)].after_packet(window, factor, tolerance, self.packets);
         }
         if self.streams.iter().all(ModelStream::can_finish) {
             self.end = Some(TcpConnectionEnd::Finished);
