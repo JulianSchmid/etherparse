@@ -440,11 +440,7 @@ impl TcpStream {
     /// `buf`), the missing bytes after it don't exist.
     fn truncate_to(&mut self, offset: u64) {
         if offset < self.highest_offset {
-            let kept = self.holes.partition_point(|hole| hole.start < offset);
-            self.holes.truncate(kept);
-            if let Some(hole) = self.holes.last_mut() {
-                hole.end = hole.end.min(offset);
-            }
+            truncate_ranges(&mut self.holes, offset);
             self.highest_offset = offset;
         }
     }
@@ -469,6 +465,15 @@ impl TcpStream {
                 index += 1;
             }
         }
+    }
+}
+
+/// Removes the parts of the sorted `ranges` at or after `offset`.
+fn truncate_ranges(ranges: &mut Vec<Range<u64>>, offset: u64) {
+    let kept = ranges.partition_point(|range| range.start < offset);
+    ranges.truncate(kept);
+    if let Some(range) = ranges.last_mut() {
+        range.end = range.end.min(offset);
     }
 }
 
