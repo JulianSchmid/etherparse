@@ -34,3 +34,5 @@ Parent: ../spec.md
 - up to about one window is lost at an ACK-confirmed resync;
 - spoofed ACKs can force a resync;
 - a FIN without bytes after the window without a candidate before it is lost.
+
+**2026-10-11 — carry-over from ticket 08 (decisions):** also document that a receiver shrinking its window's right edge (discouraged by RFC 9293) can make the last-window checks of S4 and K1 count data sent into its earlier window as out-of-window, and even make it a resync candidate.

@@ -95,3 +95,14 @@ Known limits (documentation for ticket 16):
 - With the ACK after the data, all out-of-window data before the first confirming ACK is lost, up to about one window.
 - Spoofed ACKs plus data after the window can force a resync (ADR-0002).
 - A FIN without bytes after the window and without a candidate before it is lost.
+
+**2026-10-11 — user decisions on the points above.** The user went through all 15 implementation decisions as illustrated questions, and confirmed every one as implemented:
+- Decision 2 was discussed first. The user leaned towards the largest advertised window for "within one window", and asked for pros and cons:
+  - pro: busy receivers that advertise window 0 still confirm a jump, as K2 argues;
+  - con: the range never shrinks again, so stray or forged ACKs confirm junk more easily, and a false resync makes the real bytes be ignored;
+  - con: R3 lets unrelated segments agree.
+
+  The user then kept the last window.
+- spec.md now records all of them in R1–R4, A3 and the API (`discard_until`).
+
+Side finding of that discussion, left as it is (known limit for ticket 16): S4 and K1 judge data and ACKs with the receiver's last window. A receiver that shrinks its window's right edge, which RFC 9293 discourages, can make data that was sent into the earlier, larger window count as out-of-window. Such data can then even become a resync candidate.
