@@ -102,7 +102,9 @@ impl TcpStream {
     /// [`TcpRead::Pending`] while more bytes can arrive (e.g. to fill a
     /// hole), and [`TcpRead::End`] once all bytes up to the FIN were read.
     /// At a gap, the result is [`TcpRead::Gap`] until you call
-    /// [`TcpStream::consume_gap`].
+    /// [`TcpStream::consume_gap`]. A hole becomes a gap when you give it up,
+    /// or when the read position reaches it while it is overdue (see
+    /// [`TcpStream::holes`]).
     ///
     /// Use [`TcpStream::read_acked`] to read only the bytes the receiver
     /// ACKed.
@@ -157,6 +159,7 @@ impl TcpStream {
         self.head += len;
         self.read_offset += len as u64;
         self.last_read_len -= len;
+        self.give_up_overdue_hole();
     }
 
     /// Gives up the hole at the read position, if there is one.
@@ -164,7 +167,8 @@ impl TcpStream {
     /// The missing bytes become a gap: reading returns [`TcpRead::Gap`]
     /// until you step over it with [`TcpStream::consume_gap`], and bytes of
     /// the gap that arrive later are ignored. Returns false if the read
-    /// position is not at a hole.
+    /// position is not at a hole (an overdue hole at the read position is a
+    /// gap already).
     pub fn give_up_hole(&mut self) -> bool {
         match self.hole_at_read_offset() {
             Some(hole) => {
@@ -183,6 +187,7 @@ impl TcpStream {
         if let Some(gap) = self.gap_at_read_offset() {
             self.gaps.remove(0);
             self.advance_to(gap.end);
+            self.give_up_overdue_hole();
         }
     }
 
@@ -202,6 +207,7 @@ impl TcpStream {
         remove_before(&mut self.holes, offset);
         remove_before(&mut self.gaps, offset);
         self.advance_to(offset);
+        self.give_up_overdue_hole();
     }
 
     /// Discards all buffered bytes and holes, so that the stream continues
@@ -223,6 +229,18 @@ impl TcpStream {
         }
         self.holes.retain(|hole| false == hole.is_empty());
         self.gaps.sort_unstable_by_key(|gap| gap.start);
+    }
+
+    /// Gives up the hole at the read position if it is overdue: the
+    /// receiver must have received its bytes, so they will most likely not
+    /// be captured anymore (late segments still fill overdue holes the read
+    /// position hasn't reached).
+    fn give_up_overdue_hole(&mut self) {
+        if let Some(hole) = self.hole_at_read_offset() {
+            if hole.end <= self.implied_ack {
+                self.give_up_holes_before(hole.end);
+            }
+        }
     }
 
     /// Hole starting at the read position, if any.
@@ -291,7 +309,12 @@ impl TcpStream {
     /// offset that can still arrive, in order.
     ///
     /// Reading stops at the first hole until a retransmission fills it or
-    /// it is given up (see [`TcpStream::give_up_hole`]).
+    /// it is given up (see [`TcpStream::give_up_hole`]). A hole is also
+    /// given up once it is overdue and the read position reaches it. A hole
+    /// is overdue if it lies before the implied ACK (see
+    /// [`TcpStream::acked_offset`]), as the receiver must have received its
+    /// bytes. Late segments still fill overdue holes the read position
+    /// hasn't reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
         self.holes.iter().cloned()
     }
@@ -312,6 +335,9 @@ impl TcpStream {
 
     /// Returns true if the stream's FIN was seen and all bytes before it
     /// were received or given up (no holes are left).
+    ///
+    /// Overdue holes (see [`TcpStream::holes`]) count as holes, as late
+    /// segments can still fill them.
     pub fn is_finished(&self) -> bool {
         // the FIN moves the highest offset to it, so all holes lie before it
         self.fin_offset.is_some() && self.holes.is_empty()
@@ -462,6 +488,7 @@ impl TcpStream {
                 .saturating_sub(window.saturating_mul(u64::from(factor)));
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
+        self.give_up_overdue_hole();
     }
 
     /// Applies the ACK number of a segment sent by the stream's receiver,
@@ -656,7 +683,7 @@ fn window_scale(tcp: &TcpSlice<'_>) -> Option<u8> {
 mod test {
     use super::*;
     use crate::tcp_reassembly::TcpRole::*;
-    use std::format;
+    use std::{format, vec};
 
     #[test]
     fn derived_traits() {
@@ -858,6 +885,63 @@ mod test {
             );
         }
 
+        // an overdue hole at the read position (its end lies before the
+        // implied ACK) is read as one gap, but not while only a part of it
+        // is overdue, and never without a hole give up window factor
+        for (factor, expected) in [
+            (Some(2), TcpRead::Gap { len: Some(3) }),
+            (None, TcpRead::Pending),
+        ] {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Initiator, b"jkl");
+            script.segments.remove(2);
+            {
+                let (connection, _) = script.feed(&mut pool, ..3).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+                // the implied ACK (5) lies inside the hole
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            // the implied ACK (8) lies after the hole
+            let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
+            assert_eq!(expected, connection.stream_mut(Initiator).read_received());
+        }
+
+        // late segments still fill an overdue hole that the read position
+        // hasn't reached
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Initiator, b"jkl");
+            let late = script.segments.remove(2);
+            script.segments.push(late);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abcdefghijkl"), stream.read_received());
+            assert!(stream.is_clean());
+        }
+
         // data of a stream whose start was not seen is ignored
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -1017,6 +1101,49 @@ mod test {
                 TcpRead::Data(b"ab"),
                 connection.stream_mut(Initiator).read_acked()
             );
+        }
+
+        // regression test (the old tcp-reassembly branch stalled after
+        // capture loss): in a capture of one direction, the implied ACK alone
+        // delivers the bytes up to two fallback windows before the highest
+        // offset, with one gap per lost range
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            for chunk in b"abcdefghijklmnopqrstuvwx".chunks(2) {
+                script.send(Initiator, chunk);
+            }
+            // lose "cd", "ij" and "kl"
+            for index in [6, 5, 2] {
+                script.segments.remove(index);
+            }
+            let mut delivered = Vec::new();
+            let mut gaps = Vec::new();
+            for segment in &script.segments {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                loop {
+                    match stream.read_acked() {
+                        TcpRead::Data(data) => {
+                            delivered.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            gaps.push((stream.read_offset(), len));
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+            }
+            assert_eq!(&b"abefghmnopqrst"[..], &delivered[..]);
+            assert_eq!(vec![(2, Some(2)), (8, Some(4))], gaps);
         }
 
         // consuming is limited to the ACKed bytes that were read
@@ -1215,6 +1342,33 @@ mod test {
             assert_eq!(data, delivered);
         }
 
+        // consuming up to an overdue hole gives it up right away, as the
+        // read position reaches it
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Initiator, b"jkl");
+            script.segments.remove(2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(2);
+            assert_eq!(&[3..6][..], stream.holes().collect::<Vec<_>>());
+            stream.consume(1);
+            assert_eq!(0, stream.holes().count());
+            assert_eq!((1, 3), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+        }
+
         // retransmissions of consumed bytes are not delivered again
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -1382,6 +1536,24 @@ mod test {
             // the counters keep the bytes that were given up
             assert_eq!((1, 7), (stream.status().gaps, stream.status().gap_bytes));
         }
+
+        // an overdue hole at the read position is a gap already
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send_at(Initiator, 3, b"def")
+                .send_at(Initiator, 6, b"ghi");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(false == stream.give_up_hole());
+            assert_eq!((1, 3), (stream.status().gaps, stream.status().gap_bytes));
+        }
     }
 
     #[test]
@@ -1474,6 +1646,38 @@ mod test {
             assert!(stream.give_up_hole());
             stream.consume_gap();
             assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // steps onto an overdue hole, which is given up right away
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 5;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 6);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(3);
+                assert!(stream.give_up_hole());
+            }
+            // a hole after the gap, overdue once the implied ACK (11) passes
+            // it
+            script
+                .ack_to(Responder, 10)
+                .send_at(Initiator, 10, b"klmnopqrstu");
+            let (connection, _) = script.feed(&mut pool, 5..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(&[6..10][..], stream.holes().collect::<Vec<_>>());
+            stream.consume_gap();
+            assert_eq!(0, stream.holes().count());
+            assert_eq!((2, 7), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Gap { len: Some(4) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"klmnopqrstu"), stream.read_received());
         }
     }
 
@@ -1609,6 +1813,29 @@ mod test {
             assert_eq!((1, 5), (stream.status().gaps, stream.status().gap_bytes));
             stream.discard_until(5);
             assert_eq!(TcpRead::Data(b"f"), stream.read_received());
+        }
+
+        // an offset inside an overdue hole gives up the rest of it, as the
+        // read position reaches it (the discarded part doesn't count)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 4,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 9, b"jkl")
+                .send(Initiator, b"mno")
+                .send(Initiator, b"pqr");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_until(5);
+            assert_eq!(0, stream.holes().count());
+            assert_eq!((1, 4), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Gap { len: Some(4) }, stream.read_received());
         }
 
         // up to the FIN
@@ -2088,6 +2315,27 @@ mod test {
                 assert_eq!(expected, stream.holes().collect::<Vec<_>>());
             }
         }
+
+        // an overdue hole is listed until the read position reaches it
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"ghi")
+                .send(Initiator, b"jkl");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(&[3..6][..], stream.holes().collect::<Vec<_>>());
+            stream.read_received();
+            stream.consume(3);
+            assert_eq!(0, stream.holes().count());
+        }
     }
 
     #[test]
@@ -2348,6 +2596,28 @@ mod test {
                 assert_eq!(finished, connection.stream(Initiator).is_finished());
             }
         }
+
+        // an overdue hole before the FIN keeps it unfinished until the read
+        // position reaches it, as late segments can still fill it
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"ghi")
+                .fin_with_data(Initiator, b"jkl");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(false == stream.is_finished());
+            stream.read_received();
+            stream.consume(3);
+            assert!(stream.is_finished());
+        }
     }
 
     #[test]
@@ -2386,6 +2656,29 @@ mod test {
             stream.consume(1);
             assert!(stream.give_up_hole());
             assert_eq!((2, 6), (stream.status().gaps, stream.status().gap_bytes));
+        }
+
+        // an overdue hole counts as a gap once the read position reaches it
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send_at(Initiator, 2, b"c")
+                .send_at(Initiator, 4, b"efgh")
+                .send(Initiator, b"ijkl");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            // the hole at the read position, but not the one after it
+            assert_eq!((1, 2), (stream.status().gaps, stream.status().gap_bytes));
+            stream.consume_gap();
+            stream.read_received();
+            stream.consume(1);
+            assert_eq!((2, 3), (stream.status().gaps, stream.status().gap_bytes));
         }
 
         // every segment with bytes after the FIN counts as out-of-window
@@ -2889,6 +3182,28 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream(Initiator);
             assert!(stream.is_finished());
+            assert!(false == stream.is_complete());
+        }
+
+        // an overdue hole before the FIN: incomplete before and after the
+        // read position reaches it
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"ghi")
+                .fin_with_data(Initiator, b"jkl");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(false == stream.is_complete());
+            stream.read_received();
+            stream.consume(3);
             assert!(false == stream.is_complete());
         }
     }

@@ -49,6 +49,8 @@ struct ModelStream {
     /// Holes that were given up and not stepped over yet, in order (they
     /// lie in `received`).
     gaps: Vec<Range<u64>>,
+    /// Every hole that was given up, in the order they were given up.
+    given_up: Vec<Range<u64>>,
     /// Number of gaps (holes that were given up).
     gap_count: u64,
     /// Number of bytes in the holes that were given up.
@@ -214,11 +216,37 @@ impl ModelStream {
         holes
     }
 
+    /// First range of missing bytes before the highest offset, if any.
+    fn first_hole(&self) -> Option<Range<u64>> {
+        // all bytes before the first missing one were received
+        let start = self.received.len() as u64;
+        let end = (start..self.highest.min(self.bytes.len() as u64))
+            .find(|offset| self.bytes[*offset as usize].is_some())
+            .unwrap_or(self.highest);
+        (start < end).then_some(start..end)
+    }
+
+    /// Offset up to which holes are overdue.
+    fn overdue_end(&self) -> u64 {
+        self.implied_ack
+    }
+
+    /// Gives up the hole at the read offset if all of it is overdue.
+    fn give_up_overdue_hole(&mut self) {
+        if self
+            .first_hole()
+            .is_some_and(|hole| hole.end <= self.overdue_end())
+        {
+            self.give_up_hole();
+        }
+    }
+
     /// Gives up the hole at the read offset, returns false if there is
     /// none.
     fn give_up_hole(&mut self) -> bool {
-        match self.holes().first() {
+        match self.first_hole() {
             Some(hole) if hole.start == self.read_offset => {
+                self.given_up.push(hole.clone());
                 self.gap_count += 1;
                 self.gap_bytes += hole.end - hole.start;
                 self.gaps.insert(0, hole.clone());
@@ -234,7 +262,14 @@ impl ModelStream {
         if let Some(gap) = self.gap_at_read_offset() {
             self.gaps.remove(0);
             self.read_offset = gap.end;
+            self.give_up_overdue_hole();
         }
+    }
+
+    /// Moves the read offset over `len` bytes.
+    fn consume(&mut self, len: u64) {
+        self.read_offset += len;
+        self.give_up_overdue_hole();
     }
 
     /// Gap at the read offset, if any.
@@ -259,6 +294,7 @@ impl ModelStream {
         });
         self.read_offset = offset;
         self.extend_received();
+        self.give_up_overdue_hole();
     }
 
     /// Offset up to which the other side ACKed the bytes, or must have
@@ -333,6 +369,9 @@ impl ReferenceModel {
                 stream.implied_ack = stream.implied_ack.max(implied_ack);
             }
         }
+        for stream in &mut self.streams {
+            stream.give_up_overdue_hole();
+        }
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
             self.end = Some(TcpConnectionEnd::Finished);
         }
@@ -356,6 +395,21 @@ impl ReferenceModel {
     /// Contiguous received bytes of the stream of `role` from offset 0 on.
     pub fn received(&self, role: TcpRole) -> &[u8] {
         &self.streams[role_index(role)].received
+    }
+
+    /// Returns true if the contiguous received bytes of the stream of
+    /// `role` cover `data` and match it, apart from bytes that were given
+    /// up.
+    pub fn received_matches(&self, role: TcpRole, data: &[u8]) -> bool {
+        let stream = &self.streams[role_index(role)];
+        stream.received.len() >= data.len()
+            && data.iter().enumerate().all(|(offset, byte)| {
+                stream.received[offset] == *byte
+                    || stream
+                        .given_up
+                        .iter()
+                        .any(|gap| gap.contains(&(offset as u64)))
+            })
     }
 
     /// FIN offset of the stream of `role`.
@@ -448,7 +502,7 @@ impl ReferenceModel {
             }
         }
         stream.consume(consume_len);
-        expected.read_offset += consume_len.min(read_len) as u64;
+        expected.consume(consume_len.min(read_len) as u64);
         Ok(())
     }
 }
@@ -833,9 +887,10 @@ mod test {
                 &[None],
             )?;
 
-            // the ACKs don't change the received bytes
+            // the ACKs don't change the received bytes, but they can make
+            // holes overdue, whose bytes are ignored after they were given up
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
-                prop_assert_eq!(data[i], model.received(role));
+                prop_assert!(model.received_matches(role, data[i]));
             }
         }
 
@@ -904,9 +959,11 @@ mod test {
                 &[None],
             )?;
 
-            // the injected bytes don't change the bytes that were sent
+            // the injected bytes don't change the bytes that were sent (the
+            // ACKs of injected segments can make holes overdue, whose bytes
+            // are ignored after they were given up)
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
-                prop_assert!(model.received(role).starts_with(data[i]));
+                prop_assert!(model.received_matches(role, data[i]));
             }
         }
 

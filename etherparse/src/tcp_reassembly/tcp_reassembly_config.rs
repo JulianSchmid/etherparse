@@ -24,11 +24,12 @@ pub struct TcpReassemblyConfig {
     /// A segment that would create more holes is rejected.
     pub max_holes_per_stream: usize,
 
-    /// Number of receiver windows of later data after which a hole is given
-    /// up (default `Some(2)`).
+    /// Number of receiver windows of later data after which a hole is
+    /// overdue (default `Some(2)`).
     ///
-    /// The receiver must have acknowledged the missing bytes by then. `None`
-    /// switches giving up holes this way off.
+    /// The receiver must have acknowledged the missing bytes by then. An
+    /// overdue hole is given up once the read position reaches it, and late
+    /// segments fill it until then. `None` switches this off.
     ///
     /// The same number of windows limits how far after the furthest received
     /// or ACKed byte new bytes are accepted (2 windows with `None`).
