@@ -26,3 +26,7 @@ The reference model's expected delivered bytes, gaps, status counters and end re
   - a pure ACK creating an entry;
   - a keep-alive as the first segment
 - [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+
+## Comments
+
+**2026-10-11 — carry-over from ticket 07:** the reference model handles pickups: a base per stream, prepends, pending ACKs, guessed roles. It assumes ports that make the guess right; wrong guesses are only unit-tested. `mid_stream_pickups` shows how to start a capture at a random segment and capture lost segments later.

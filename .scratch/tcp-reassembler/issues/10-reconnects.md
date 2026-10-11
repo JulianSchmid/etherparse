@@ -32,3 +32,9 @@ Rules: C1–C4, F5, F6 (`End(Reconnect)`).
 **2026-10-11 — carry-over from ticket 06:**
 - The keep-alive filter test in `TcpStream::holes()` feeds a 1-byte segment with the SYN flag into an open connection and expects it to fill the hole. Adapt it once SYNs on open connections go through C2/C3.
 - The old connection's holes become gaps through `TcpStream::give_up_all_holes()`.
+
+**2026-10-11 — carry-over from ticket 07:**
+- C4: `TcpStream::add_segment` counts a SYN that `observe_start` refuses as out-of-window and returns early. That is where a pickup's SYN goes through C2. Counters never decrease (Q4), so decide whether such SYNs still count.
+- A SYN with another ISN on a stream with an observed start is still applied as an ordinary segment (its TCP Fast Open bytes are stored at their mapped offset). C2/C3 must catch it first.
+- `observe_start` returns true without a change on streams with an observed start, also for the ACK of a SYN-ACK with a new ISN, so C2's check has to come before it in `TcpConnection::add_segment`.
+- A reconnect of a connection with guessed roles starts with observed roles.

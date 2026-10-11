@@ -41,7 +41,7 @@ The endpoint of a connection that answered the SYN.
 _Avoid_: server, B
 
 **Guessed roles**:
-Initiator and responder assigned from the port numbers (the lower port is the responder) because the handshake was not seen.
+Initiator and responder assigned from the port numbers (the lower port is the responder) because the handshake was not seen; a late SYN or SYN-ACK that agrees with them confirms them.
 _Avoid_: unknown roles, heuristic direction
 
 **Stream**:

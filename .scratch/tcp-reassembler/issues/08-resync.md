@@ -30,3 +30,8 @@ Rules: R1–R4, S2 (unmappable distances), ADR-0002.
 **2026-10-11 — carry-over from ticket 05:** `TcpRead::Gap { len: Option<u64> }` exists, but only `Some` is produced so far.
 - Gaps are stored as `Range<u64>` in `TcpStream::gaps`. A resync gap takes no offsets (the stream continues right after the highest offset), so it needs a marker, e.g. an empty range plus a flag. `read_until`, `consume_gap()` and `gap_at_read_offset()` have to handle it.
 - Decide what `gap_bytes` counts for a gap of unknown length (probably nothing).
+
+**2026-10-11 — carry-over from ticket 07:**
+- A resync before the first read of a mid-stream pickup: prepending afterwards would move the offsets under the resync's gap. A resync (R2, R4) should end prepending (`TcpStream::can_prepend`), or `prepend` has to move the resync gap too. The same goes for `force_resync()` before the first read.
+- Bytes before offset 0 of a pickup that can't take them count as out-of-window (ticket 07, decision 5). Decide whether only S4's forward out-of-window data records a resync candidate (R1), not bytes before offset 0 or after the FIN.
+- `pending_ack` is applied again after every packet. If R2 keeps implausible ACKs as evidence, a pending ACK must not count as new evidence each time.

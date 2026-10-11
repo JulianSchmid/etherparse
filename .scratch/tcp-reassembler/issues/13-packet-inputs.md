@@ -19,3 +19,7 @@ Rules: P1, P2, D6.
 - [ ] Lax input with a truncated payload: the captured bytes plus a hole; the FIN on a truncated segment is ignored
 - [ ] A TCP segment reassembled by `IpDefragPool` and fed through `process_segment` is reassembled correctly
 - [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+
+## Comments
+
+**2026-10-11 — carry-over from ticket 07:** the start rules of a pickup look at `tcp.payload()`. With truncated payload (D6), a segment with 1 captured byte can look like a keep-alive, and the ignored FIN of a truncated segment must not start a stream at its FIN either.

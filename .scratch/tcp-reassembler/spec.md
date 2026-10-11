@@ -228,13 +228,15 @@ The rule ids are for referencing from tickets and test names.
 - **A2** A SYN-ACK gives the responder stream an observed start. If the SYN was not seen, its ACK number also gives the initiator stream an observed start.
 - **A3** The window scale is known only if both SYN and SYN-ACK were seen. Per RFC 7323, a missing option on either side means scale 0 for both directions.
 - **A4** On a mid-stream pickup, the first data segment of a stream puts offset 0 at its first byte.
+  - A FIN without bytes puts offset 0 at the FIN, so the stream is empty and finished, and the connection can finish. Such a stream takes nothing in front afterwards (A5), as a reader may have read its end (user decision, 2026-10-11).
+  - A 1-byte segment without SYN, FIN or RST that ends at the last ACK the other side sent before the stream had a start is a keep-alive and doesn't start the stream. As a connection's very first packet, the ACK is not known, so its filler byte becomes byte 0 (user decision, 2026-10-11).
 - **A5** Until the first consume or discard on a stream:
   - bytes before offset 0 that lie within the window are prepended, and offsets shift;
   - a late SYN under the same conditions upgrades the stream to observed start.
 
   After that, such bytes count as out-of-window.
 - **A6** Pure ACKs, FIN-only segments and RSTs for unknown keys never create a connection (`NoConnection`).
-- **A7** Roles: the SYN sender is the initiator and the SYN-ACK sender is the responder. Without a handshake the roles are guessed: the lower port is the responder, and on equal ports the sender of the first packet is the initiator.
+- **A7** Roles: the SYN sender is the initiator and the SYN-ACK sender is the responder. Without a handshake the roles are guessed: the lower port is the responder, and on equal ports the sender of the first packet is the initiator. A late SYN or SYN-ACK that gives a stream an observed start confirms guessed roles if its sender has the role the guess gave it. One that contradicts the guess leaves the roles guessed; roles never change (user decision, 2026-10-11).
 
 **Data (D)**
 - **D1** First wins: overlapping bytes keep the content received first.

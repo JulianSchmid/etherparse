@@ -23,3 +23,8 @@ Parent: ../spec.md
 **2026-10-10 — noted in ticket 01's review:** the crate docs (`lib.rs`: "Special attention has been paid to not use allocations or syscalls.") and `README.md` ("... except in the "defragmentation" code.") were already out of sync before this branch. Neither mentions `tcp_reassembly`, which now allocates too. `tcp_stream.rs` cites RFC 1982, and RFC 7323 is used for the window scale option. The `TcpReassemblyPool` doc example currently builds segments from `TcpHeader`s by hand.
 
 **2026-10-11 — carry-over from ticket 05:** the standards review noted that `give_up_hole()`, `consume_gap()`, `discard_until()` and `discard_all()` have no doc test. They are part of the user-facing reading API, so the examples should show the `Gap` / `consume_gap()` loop.
+
+**2026-10-11 — carry-over from ticket 07:** document for users:
+- mid-stream pickups, prepending until the first read, and that `consume` after a prepend consumes nothing until the next read;
+- guessed roles and their confirmation by a late handshake;
+- the known limits: a keep-alive as a connection's very first packet starts the stream with its filler byte; TCP Fast Open bytes that a SYN-ACK ACKs are lost if their SYN is captured after the SYN-ACK.

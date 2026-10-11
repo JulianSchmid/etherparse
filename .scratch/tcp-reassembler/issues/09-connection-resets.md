@@ -30,3 +30,8 @@ Rules: F4, F5, F6 (`End(Reset)`), P3.
 **2026-10-11 — carry-over from ticket 06:**
 - F5 can use `TcpStream::give_up_all_holes()`, which the `Finished` end already calls.
 - The keep-alive filter test in `TcpStream::holes()` feeds a 1-byte segment with the RST flag and expects it to fill the hole, because RSTs are not handled yet. Adapt it once an in-window RST ends the connection.
+
+**2026-10-11 — carry-over from ticket 07:**
+- F4 accepts an RST "if that stream has never been seen". A stream can now have been seen (pure ACKs) without a start (`start_seq` is `None`). Decide which one F4 means.
+- The `read_received` test block "other segments at the position of a keep-alive" pins that a 1-byte segment with RST starts a stream with its byte as data. Adapt it when RSTs end connections.
+- RSTs of unknown keys start no connection, also with bytes or a SYN (`process_segment` test).
