@@ -102,9 +102,11 @@ where
 
     /// Applies a TCP segment to its connection.
     ///
-    /// A SYN or SYN-ACK of an unknown connection starts a new one. Other
-    /// segments of unknown connections are ignored with
-    /// [`TcpIgnoreReason::NoConnection`].
+    /// A SYN, a SYN-ACK or a segment with bytes of an unknown connection
+    /// starts a new one. Without a SYN or SYN-ACK, the roles of the
+    /// endpoints are guessed (see [`TcpConnection::roles_guessed`]). Other
+    /// segments of unknown connections (pure ACKs, FINs without bytes and
+    /// RSTs) are ignored with [`TcpIgnoreReason::NoConnection`].
     ///
     /// A connection that ends is handed over in [`TcpProcessed::ended`].
     /// Its late segments are then ignored with
@@ -122,16 +124,33 @@ where
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
-                // only a SYN or SYN-ACK starts a connection
-                if false == tcp.syn() {
+                // a SYN or SYN-ACK starts a connection with known roles, and
+                // bytes one with roles guessed from the ports (pure ACKs,
+                // FINs without bytes and RSTs don't start one)
+                let roles = if tcp.rst() {
+                    None
+                } else if tcp.syn() {
+                    // the SYN-ACK is sent by the responder
+                    Some((if tcp.ack() { destination } else { source }, false))
+                } else if false == tcp.payload().is_empty() {
+                    // the lower port is the responder's, with equal ports the
+                    // sender is the initiator
+                    let initiator = if source.port() < destination.port() {
+                        destination
+                    } else {
+                        source
+                    };
+                    Some((initiator, true))
+                } else {
+                    None
+                };
+                let Some((initiator, roles_guessed)) = roles else {
                     return TcpProcessed {
                         active: None,
                         ended: None,
                         ignored: Some(TcpIgnoreReason::NoConnection),
                     };
-                }
-                // the SYN-ACK is sent by the responder
-                let initiator = if tcp.ack() { destination } else { source };
+                };
                 let id = self.next_id;
                 self.next_id = TcpConnectionId(id.0.wrapping_add(1));
                 let key = entry.key().clone();
@@ -143,6 +162,7 @@ where
                     id,
                     key,
                     initiator,
+                    roles_guessed,
                     timestamp.clone(),
                     buffers,
                 ))
@@ -250,21 +270,47 @@ mod test {
 
     #[test]
     fn process_segment() {
-        // segments of an unknown connection that are neither a SYN nor a
-        // SYN-ACK
+        // pure ACKs, FINs without bytes and RSTs (also with bytes or a SYN)
+        // of an unknown connection start no connection (regression test:
+        // the old tcp-reassembly branch created entries for pure ACKs)
         {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
-            let mut script =
-                ConnectionScript::new(addr("10.0.0.1:50000"), addr("10.0.0.2:80"), 1000, 2000);
-            script
-                .handshake()
-                .send(Initiator, b"abc")
-                .send(Responder, b"def");
-            for segment in &script.segments[2..] {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().fin(Initiator).fin(Responder);
+            let mut rsts = Vec::new();
+            for (syn, payload) in [(false, &b""[..]), (false, b"x"), (true, b"")] {
+                let mut rst = script.injected(|s| {
+                    s.send(Initiator, payload);
+                });
+                rst.header.rst = true;
+                rst.header.syn = syn;
+                rsts.push(rst);
+            }
+            for segment in script.segments[2..].iter().chain(&rsts) {
                 let processed = segment.feed(&mut pool, 0);
                 assert!(processed.active.is_none());
+                assert!(processed.ended.is_none());
                 assert_eq!(Some(TcpIgnoreReason::NoConnection), processed.ignored);
             }
+        }
+
+        // bytes start a connection, with roles guessed from the ports
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Responder, b"abc");
+            let processed = script.segments[3].feed(&mut pool, 7);
+            assert_eq!(None, processed.ignored);
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Responder, sender);
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert!(connection.roles_guessed());
+            assert_eq!(addr("10.0.0.1:50000"), connection.endpoint(Initiator));
+            assert_eq!(&7, connection.first_seen());
+            assert_eq!(
+                TcpRead::Data(b"abc"),
+                connection.stream_mut(Responder).read_received()
+            );
         }
 
         // a SYN-ACK starts a connection, its sender is the responder
@@ -278,6 +324,7 @@ mod test {
             let (connection, sender) = processed.active.unwrap();
             assert_eq!(Responder, sender);
             assert_eq!(TcpConnectionId(0), connection.id());
+            assert!(false == connection.roles_guessed());
             assert_eq!(addr("10.0.0.1:50000"), connection.endpoint(Initiator));
             assert_eq!(addr("10.0.0.2:80"), connection.endpoint(Responder));
             assert_eq!(&7, connection.first_seen());
@@ -294,6 +341,7 @@ mod test {
             let (connection, sender) = processed.active.unwrap();
             assert_eq!(Initiator, sender);
             assert_eq!(TcpConnectionId(0), connection.id());
+            assert!(false == connection.roles_guessed());
             assert_eq!(
                 &TcpConnectionKey::new(
                     Default::default(),

@@ -5,12 +5,19 @@ use std::{collections::VecDeque, vec::Vec};
 /// Bytes sent in one direction of a TCP connection.
 ///
 /// Positions in a stream are 64-bit offsets counted from the stream's first
-/// byte, so they never wrap around.
+/// byte, so they never wrap around. If the stream's start was not captured,
+/// they count from the first byte that was (see
+/// [`TcpStreamStart::MidStreamPickup`]).
 #[derive(Clone, Debug)]
 pub struct TcpStream {
     /// Sequence number of the byte at offset 0 (`None` while the start of
     /// the stream is unknown).
     start_seq: Option<u32>,
+
+    /// Last ACK number of the receiver that the stream couldn't apply yet,
+    /// as it had no start. It is applied after every packet until it counts
+    /// (a keep-alive ending there doesn't start the stream).
+    pending_ack: Option<u32>,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
     /// not seen, `Some(None)` for a SYN without the option).
@@ -86,6 +93,7 @@ impl TcpStream {
     pub(crate) fn new(buf: Vec<u8>) -> TcpStream {
         TcpStream {
             start_seq: None,
+            pending_ack: None,
             window_scale: None,
             window: None,
             read_offset: 0,
@@ -392,8 +400,7 @@ impl TcpStream {
     /// All bytes the sender sent are then delivered exactly once and
     /// unambiguously.
     pub fn is_complete(&self) -> bool {
-        // every stream has an observed start so far
-        self.is_clean() && self.is_finished()
+        self.is_clean() && TcpStreamStart::Observed == self.status.start && self.is_finished()
     }
 
     /// Returns the stream's buffer, emptied for re-use.
@@ -481,6 +488,7 @@ impl TcpStream {
         } else {
             tcp.sequence_number()
         };
+        let data = tcp.payload();
         if tcp.syn() {
             self.observe_start(seq);
             // the window scale is only known from the sender's SYN, which
@@ -488,12 +496,21 @@ impl TcpStream {
             if self.window_scale.is_none() && Some(seq) == self.start_seq {
                 self.window_scale = Some(window_scale(tcp));
             }
+        } else if self.start_seq.is_none() {
+            // without its SYN, the stream starts at its first bytes, or at
+            // a FIN without bytes, but not at the filler byte of a
+            // keep-alive, which ends at the receiver's ACK
+            let keep_alive =
+                is_keep_alive_shaped(tcp) && Some(seq.wrapping_add(1)) == self.pending_ack;
+
+            if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
+                self.start_seq = Some(seq);
+            }
         }
         let Some(start_seq) = self.start_seq else {
             return;
         };
         let start = self.offset(start_seq, seq);
-        let data = tcp.payload();
         let end = start + data.len() as i64;
 
         // the receiver doesn't accept bytes or a FIN starting after its
@@ -505,10 +522,8 @@ impl TcpStream {
             return;
         }
 
-        // a keep-alive probe repeats the last ACKed byte with a filler byte
-        // (RFC 1122 4.2.3.6), which must not fill an overdue hole
-        if 1 == data.len()
-            && false == (tcp.syn() || tcp.fin() || tcp.rst())
+        // the filler byte of a keep-alive must not fill an overdue hole
+        if is_keep_alive_shaped(tcp)
             && end == self.seen_ack as i64
             && u64::try_from(start).is_ok_and(|start| self.in_overdue_hole(start))
         {
@@ -559,6 +574,12 @@ impl TcpStream {
         packet: u64,
         config: &TcpReassemblyConfig,
     ) {
+        // an ACK that couldn't be applied counts once the stream has a start
+        // or its offsets moved (until then, it stays pending)
+        if let Some(ack) = self.pending_ack.take() {
+            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
+            self.add_ack(ack, ack_window, packet);
+        }
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);
@@ -597,6 +618,7 @@ impl TcpStream {
     /// with the number `packet` of the connection.
     pub(crate) fn add_ack(&mut self, ack: u32, window: u64, packet: u64) {
         let Some(start_seq) = self.start_seq else {
+            self.pending_ack = Some(ack);
             return;
         };
         let ack = self.offset(start_seq, ack);
@@ -773,6 +795,13 @@ fn truncate_ranges(ranges: &mut Vec<Range<u64>>, offset: u64) {
     if let Some(range) = ranges.last_mut() {
         range.end = range.end.min(offset);
     }
+}
+
+/// Returns true if the segment has the shape of a keep-alive probe: one
+/// filler byte, without SYN, FIN or RST, that repeats the byte before the
+/// receiver's ACK (RFC 1122 4.2.3.6).
+fn is_keep_alive_shaped(tcp: &TcpSlice<'_>) -> bool {
+    1 == tcp.payload().len() && false == (tcp.syn() || tcp.fin() || tcp.rst())
 }
 
 /// Returns the value of the window scale option (RFC 7323), if present.
@@ -1197,18 +1226,83 @@ mod test {
             assert!(stream.is_clean());
         }
 
-        // data of a stream whose start was not seen is ignored
-        {
+        // a stream whose SYN was not seen starts at its first bytes (also
+        // after packets of the receiver, and across a wrap-around of the
+        // sequence numbers)
+        for (isn, receiver_first) in [(2000, false), (2000, true), (u32::MAX - 4, false)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, isn);
+            script
+                .handshake()
+                .send(Responder, b"lost")
+                .send(Initiator, b"x")
+                .send(Responder, b"abc")
+                .send(Responder, b"def");
+            script.segments.drain(..4);
+            if false == receiver_first {
+                script.segments.remove(0);
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            assert_eq!(0, stream.read_offset());
+        }
+
+        // a keep-alive doesn't start a stream if it ends at the receiver's
+        // ACK, but as the first packet it does, with its filler byte
+        // (regression test: the old tcp-reassembly branch always started
+        // the stream at it)
+        for (receiver_first, expected) in [(true, &b"def"[..]), (false, b"xdef")] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.handshake().send(Responder, b"abc");
-            // remove the SYN-ACK
-            script.segments.remove(1);
-            let (connection, sender) = script.feed_all(&mut pool).active.unwrap();
-            assert_eq!(Responder, sender);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"ghi");
+            let keep_alive = script.injected(|s| {
+                s.send_at(Initiator, 2, b"x");
+            });
+            script.send(Initiator, b"def");
+            // without the handshake and the bytes before the keep-alive
+            script.segments.drain(..4);
+            script
+                .segments
+                .insert(usize::from(receiver_first), keep_alive);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(
-                TcpRead::Pending,
-                connection.stream_mut(Responder).read_received()
+                TcpRead::Data(expected),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // other segments at the position of a keep-alive (the byte before
+        // the receiver's ACK) start the stream: two bytes, a byte with a
+        // FIN, and a byte with an RST. A keep-alive without bytes doesn't
+        // (the following bytes start the stream).
+        for (payload, fin, rst, expected) in [
+            (&b"bc"[..], false, false, &b"bcd"[..]),
+            (b"b", true, false, b"b"),
+            (b"b", false, true, b"bcd"),
+            (b"", false, false, b"cd"),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .send(Responder, b"ghi");
+            let segment = script.injected(|s| {
+                s.send_at(Initiator, 1, payload);
+            });
+            script.send_at(Initiator, 2, b"cd");
+            script.segments.drain(..4);
+            script.segments.insert(1, segment);
+            script.segments[1].header.fin = fin;
+            script.segments[1].header.rst = rst;
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(expected),
+                connection.stream_mut(Initiator).read_received()
             );
         }
 
@@ -2253,6 +2347,27 @@ mod test {
 
     #[test]
     fn acked_offset() {
+        // the last ACK seen before a mid-stream pickup started counts once
+        // it starts ("de" at offset 0), unless it lies more than one window
+        // after its bytes, or before its first byte
+        for (fallback_window, ack, expected) in [(4, 9, 6), (2, 9, 0), (4, 2, 0)] {
+            let config = TcpReassemblyConfig {
+                fallback_window,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"x")
+                .ack_to(Responder, ack)
+                .send(Initiator, b"de");
+            script.segments.drain(..4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(expected, connection.stream(Initiator).acked_offset());
+        }
+
         // nothing ACKed yet
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -2823,15 +2938,22 @@ mod test {
             assert_eq!(expected, connection.stream(Initiator).fin_offset());
         }
 
-        // FIN of a stream whose start was not seen
+        // a FIN without bytes starts a stream whose SYN was not seen, which
+        // is then empty and finished
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.handshake().fin(Responder);
-            // remove the SYN-ACK
-            script.segments.remove(1);
+            script
+                .handshake()
+                .send(Responder, b"lost")
+                .send(Initiator, b"abc")
+                .fin(Responder);
+            script.segments.drain(..4);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-            assert_eq!(None, connection.stream(Responder).fin_offset());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(0), stream.fin_offset());
+            assert!(stream.is_finished());
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         }
     }
 
@@ -2965,6 +3087,24 @@ mod test {
                 TcpStreamStart::MidStreamPickup,
                 connection.stream(Responder).status().start
             );
+        }
+
+        // a stream whose SYN was not seen is a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            script.segments.drain(..2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            for role in [Initiator, Responder] {
+                assert_eq!(
+                    TcpStreamStart::MidStreamPickup,
+                    connection.stream(role).status().start
+                );
+            }
         }
 
         // the SYN-ACK gives the responder's stream an observed start, and
@@ -3292,7 +3432,18 @@ mod test {
         }
 
         // the fallback window is used while the window scale is unknown
-        // (without the SYN-ACK or without the SYN)
+        // (without the SYN-ACK, without the SYN, or without both)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 50,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc").ack(Responder);
+            script.segments.drain(..3);
+            assert_window_end(config, &script, 103);
+        }
         for missing in [1, 0] {
             let config = TcpReassemblyConfig {
                 fallback_window: 50,
@@ -3545,6 +3696,19 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert!(connection.stream(Initiator).is_complete());
             assert!(connection.stream(Responder).is_complete());
+        }
+
+        // clean and finished, but a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc").fin(Initiator);
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert!(stream.is_clean());
+            assert!(stream.is_finished());
+            assert!(false == stream.is_complete());
         }
 
         // finished, but a hole was given up

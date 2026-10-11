@@ -1,4 +1,7 @@
 /// Role of an endpoint in a TCP connection.
+///
+/// If the handshake was not captured, the roles are guessed (see
+/// [`crate::tcp_reassembly::TcpConnection::roles_guessed`]).
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum TcpRole {
     /// Endpoint that sent the SYN.

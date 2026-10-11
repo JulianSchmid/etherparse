@@ -9,6 +9,7 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     id: TcpConnectionId,
     key: TcpConnectionKey<CustomChannelId>,
     initiator: SocketAddr,
+    roles_guessed: bool,
     initiator_stream: TcpStream,
     responder_stream: TcpStream,
     first_seen: Timestamp,
@@ -19,13 +20,15 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
-    /// Creates a connection whose initiator is the endpoint `initiator` and
-    /// whose first packet was seen at `timestamp`. Its streams store their
-    /// bytes in the empty `buffers`.
+    /// Creates a connection whose initiator is the endpoint `initiator`
+    /// (guessed from the ports if `roles_guessed`) and whose first packet
+    /// was seen at `timestamp`. Its streams store their bytes in the empty
+    /// `buffers`.
     pub(crate) fn new(
         id: TcpConnectionId,
         key: TcpConnectionKey<CustomChannelId>,
         initiator: SocketAddr,
+        roles_guessed: bool,
         timestamp: Timestamp,
         buffers: [Vec<u8>; 2],
     ) -> TcpConnection<Timestamp, CustomChannelId>
@@ -37,6 +40,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             id,
             key,
             initiator,
+            roles_guessed,
             initiator_stream: TcpStream::new(initiator_buffer),
             responder_stream: TcpStream::new(responder_buffer),
             first_seen: timestamp.clone(),
@@ -69,6 +73,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 }
             }
         }
+    }
+
+    /// Returns true if the roles of the endpoints were guessed from their
+    /// ports, as the connection started without a SYN or SYN-ACK.
+    ///
+    /// The endpoint with the lower port is then the responder. With equal
+    /// ports, the sender of the connection's first packet is the initiator.
+    pub fn roles_guessed(&self) -> bool {
+        self.roles_guessed
     }
 
     /// Stream sent by the endpoint with the given role.
@@ -174,6 +187,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             id: self.id,
             key: self.key.clone(),
             initiator: self.initiator,
+            roles_guessed: self.roles_guessed,
             initiator_stream: TcpStream::new(Vec::new()),
             responder_stream: TcpStream::new(Vec::new()),
             first_seen: self.first_seen.clone(),
@@ -281,6 +295,54 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(initiator, connection.endpoint(Initiator));
             assert_eq!(responder, connection.endpoint(Responder));
+        }
+    }
+
+    #[test]
+    fn roles_guessed() {
+        // a SYN or SYN-ACK starts the connection: the roles are known
+        for first in [0, 1] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let (connection, _) = script.feed(&mut pool, first..).active.unwrap();
+            assert!(false == connection.roles_guessed());
+        }
+
+        // bytes start the connection: the endpoint with the lower port is
+        // the responder, with equal ports the sender is the initiator
+        for (initiator, responder, first_sender, guessed_initiator) in [
+            // first bytes from the initiator, with the higher port
+            ("10.0.0.1:50000", "10.0.0.2:80", Initiator, "10.0.0.1:50000"),
+            // first bytes from the responder, with the lower port
+            ("10.0.0.1:50000", "10.0.0.2:80", Responder, "10.0.0.1:50000"),
+            // the initiator has the lower port, so the guess is wrong
+            ("10.0.0.1:80", "10.0.0.2:50000", Initiator, "10.0.0.2:50000"),
+            // equal ports
+            ("10.0.0.1:80", "10.0.0.2:80", Initiator, "10.0.0.1:80"),
+            ("10.0.0.1:80", "10.0.0.2:80", Responder, "10.0.0.2:80"),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::new(addr(initiator), addr(responder), 1000, 2000);
+            script
+                .handshake()
+                .send(first_sender, b"abc")
+                .send(first_sender.other(), b"def");
+            let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
+            assert!(connection.roles_guessed());
+            assert_eq!(addr(guessed_initiator), connection.endpoint(Initiator));
+            // the streams belong to the guessed roles
+            for (sender, data) in [(first_sender, b"abc"), (first_sender.other(), b"def")] {
+                let role = if script.endpoint(sender) == addr(guessed_initiator) {
+                    Initiator
+                } else {
+                    Responder
+                };
+                assert_eq!(
+                    TcpRead::Data(data),
+                    connection.stream_mut(role).read_received()
+                );
+            }
         }
     }
 
@@ -626,6 +688,45 @@ mod test {
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
             let status = connection.stream(sender).status();
             assert_eq!((2, 6), (status.gaps, status.gap_bytes));
+        }
+
+        // a connection picked up in the middle finishes too, also if one
+        // side sent nothing but its FIN
+        for initiator_data in [&b"abc"[..], b""] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"lost")
+                .send(Responder, b"def")
+                .send(Initiator, initiator_data)
+                .fin(Responder)
+                .fin(Initiator)
+                .ack(Responder);
+            script.segments.drain(..4);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(Some(initiator_data.len() as u64), stream.fin_offset());
+            assert!(stream.is_finished());
+        }
+
+        // ... and also if the ACK of the FIN of the side that sent nothing
+        // else arrives before that FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"lost")
+                .send(Responder, b"def")
+                .fin(Responder)
+                .fin(Initiator)
+                .ack(Responder);
+            script.segments.drain(..4);
+            script.segments.swap(2, 3);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
 
         // all holes left have to be overdue, not only the first one
