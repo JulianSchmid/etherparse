@@ -80,6 +80,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ///
     /// The endpoint with the lower port is then the responder. With equal
     /// ports, the sender of the connection's first packet is the initiator.
+    /// A late SYN or SYN-ACK that gives a stream an observed start confirms
+    /// the roles if it agrees with them; the roles never change.
     pub fn roles_guessed(&self) -> bool {
         self.roles_guessed
     }
@@ -130,6 +132,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
+        let starts = self.starts();
         // the SYN-ACK ACKs the other side's SYN, so the other stream starts
         // there, even if its SYN was not seen
         if tcp.syn() && tcp.ack() {
@@ -147,6 +150,19 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
         let window = self.window(sender, config);
         self.stream_mut(sender).add_segment(tcp, window, config);
+
+        // a late SYN or SYN-ACK that gave a stream an observed start
+        // confirms guessed roles if its sender has the role the guess gave it
+        if self.roles_guessed && tcp.syn() {
+            let syn_sender = if tcp.ack() {
+                TcpRole::Responder
+            } else {
+                TcpRole::Initiator
+            };
+            if syn_sender == sender && starts != self.starts() {
+                self.roles_guessed = false;
+            }
+        }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
                 .stream(role.other())
@@ -167,6 +183,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.responder_stream.give_up_all_holes();
         }
         sender
+    }
+
+    /// How the streams of the initiator and the responder started.
+    fn starts(&self) -> [TcpStreamStart; 2] {
+        [&self.initiator_stream, &self.responder_stream].map(|stream| stream.status().start)
     }
 
     /// Receive window of the stream sent by `role`, as advertised by its
@@ -344,6 +365,54 @@ mod test {
                     connection.stream_mut(role).read_received()
                 );
             }
+        }
+
+        // a late SYN or SYN-ACK that gives a stream an observed start
+        // confirms guessed roles if it agrees with them
+        for (late, initiator, responder, guessed) in [
+            // SYN of the guessed initiator
+            (0, "10.0.0.1:50000", "10.0.0.2:80", false),
+            // SYN-ACK of the guessed responder
+            (1, "10.0.0.1:50000", "10.0.0.2:80", false),
+            // SYN of the guessed responder
+            (0, "10.0.0.1:80", "10.0.0.2:50000", true),
+            // SYN-ACK of the guessed initiator
+            (1, "10.0.0.1:80", "10.0.0.2:50000", true),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::new(addr(initiator), addr(responder), 1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            let late = script.segments[late].clone();
+            script.segments.drain(..3);
+            script.segments.push(late);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(guessed, connection.roles_guessed());
+        }
+
+        // ... but not if it gives no stream an observed start, as the
+        // streams were read from
+        for late in [0, 1] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            let late = script.segments[late].clone();
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                for role in [Initiator, Responder] {
+                    let stream = connection.stream_mut(role);
+                    stream.read_received();
+                    stream.consume(1);
+                }
+            }
+            let (connection, _) = late.feed(&mut pool, ()).active.unwrap();
+            assert!(connection.roles_guessed());
         }
     }
 
