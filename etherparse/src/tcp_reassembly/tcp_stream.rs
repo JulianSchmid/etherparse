@@ -166,12 +166,12 @@ impl TcpStream {
     /// the gap that arrive later are ignored. Returns false if the read
     /// position is not at a hole.
     pub fn give_up_hole(&mut self) -> bool {
-        match self.holes.first() {
-            Some(hole) if hole.start == self.read_offset => {
+        match self.hole_at_read_offset() {
+            Some(hole) => {
                 self.give_up_holes_before(hole.end);
                 true
             }
-            _ => false,
+            None => false,
         }
     }
 
@@ -223,6 +223,14 @@ impl TcpStream {
         }
         self.holes.retain(|hole| false == hole.is_empty());
         self.gaps.sort_unstable_by_key(|gap| gap.start);
+    }
+
+    /// Hole starting at the read position, if any.
+    fn hole_at_read_offset(&self) -> Option<Range<u64>> {
+        self.holes
+            .first()
+            .filter(|hole| hole.start == self.read_offset)
+            .cloned()
     }
 
     /// Gap starting at the read position, if any.
