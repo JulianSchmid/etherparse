@@ -2,6 +2,13 @@
 /// [`crate::tcp_reassembly::TcpStream`].
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpStreamStatus {
+    /// Number of gaps: holes that were given up, e.g. with
+    /// [`crate::tcp_reassembly::TcpStream::give_up_hole`].
+    pub gaps: u64,
+
+    /// Number of bytes in the holes that were given up.
+    pub gap_bytes: u64,
+
     /// Number of retransmitted segments whose bytes differ from the bytes
     /// received first at the same positions.
     ///
@@ -34,7 +41,9 @@ mod test {
             // debug
             assert_eq!(
                 format!(
-                    "TcpStreamStatus {{ conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    "TcpStreamStatus {{ gaps: {}, gap_bytes: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    status.gaps,
+                    status.gap_bytes,
                     status.conflicting_retransmissions,
                     status.out_of_window_segments
                 ),

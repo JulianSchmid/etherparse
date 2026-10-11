@@ -6,6 +6,15 @@ pub enum TcpRead<'a> {
     /// Contiguous bytes starting at the read position.
     Data(&'a [u8]),
 
+    /// Bytes at the read position are missing and will never be delivered.
+    ///
+    /// Call [`crate::tcp_reassembly::TcpStream::consume_gap`] to continue
+    /// with the bytes after the gap.
+    Gap {
+        /// Number of missing bytes, `None` if it is unknown.
+        len: Option<u64>,
+    },
+
     /// Nothing is readable yet, but more bytes can still arrive.
     Pending,
 
@@ -27,6 +36,7 @@ mod test {
             let b = a;
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
+            assert_ne!(TcpRead::Gap { len: Some(2) }, a);
             assert_ne!(TcpRead::Pending, a);
             assert_ne!(TcpRead::End(TcpStreamEnd::Fin), a);
         }
@@ -34,6 +44,14 @@ mod test {
         // debug
         {
             assert_eq!("Data([1, 2])", format!("{:?}", TcpRead::Data(&[1, 2])));
+            assert_eq!(
+                "Gap { len: Some(2) }",
+                format!("{:?}", TcpRead::Gap { len: Some(2) })
+            );
+            assert_eq!(
+                "Gap { len: None }",
+                format!("{:?}", TcpRead::Gap { len: None })
+            );
             assert_eq!("Pending", format!("{:?}", TcpRead::Pending));
             assert_eq!("End(Fin)", format!("{:?}", TcpRead::End(TcpStreamEnd::Fin)));
         }

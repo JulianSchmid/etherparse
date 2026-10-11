@@ -432,6 +432,52 @@ mod test {
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
 
+        // both FINs are ACKed, but bytes before a FIN were not captured: the
+        // next segment after the hole was given up finishes the connection
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator)
+                .ack(Initiator);
+            script.segments.remove(3);
+            {
+                let (connection, _) = script.feed(&mut pool, ..6).active.unwrap();
+                assert!(connection.stream_mut(Initiator).give_up_hole());
+                assert_eq!(None, connection.end());
+            }
+            let connection = script.feed(&mut pool, 6..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // the ACK of a FIN arrives before the FIN, and its position was
+        // given up before the FIN arrived
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Responder, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let fin = script.segments.remove(5);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Responder);
+                stream.read_received();
+                stream.consume(3);
+                assert!(stream.give_up_hole());
+                stream.consume_gap();
+            }
+            let connection = fin.feed(&mut pool, ()).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
         // the ACK of a FIN arrives before the FIN (reordered capture)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
