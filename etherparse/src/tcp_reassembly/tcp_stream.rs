@@ -446,12 +446,9 @@ impl TcpStream {
     /// Offset after which the receiver with the receive window `window`
     /// doesn't accept bytes.
     fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
-        // allow for several windows, as the window can change and not all
-        // ACKs are captured
-        let factor = config.hole_give_up_window_factor.unwrap_or(2);
         self.seen_ack
             .max(self.highest_offset)
-            .saturating_add(window.saturating_mul(u64::from(factor)))
+            .saturating_add(window_range(window, config))
     }
 
     /// Offset after the last byte in `buf`.
@@ -495,7 +492,7 @@ impl TcpStream {
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
             // stream's own one
-            if false == self.observe_start(seq, window) {
+            if false == self.observe_start(seq, window, config) {
                 self.status.out_of_window_segments += 1;
                 return;
             }
@@ -526,7 +523,7 @@ impl TcpStream {
             && false == data.is_empty()
             && TcpStreamStart::MidStreamPickup == self.status.start
         {
-            if self.move_start_back(seq, start, window) {
+            if self.move_start_back(seq, start, window, config) {
                 start = 0;
             } else {
                 out_of_window = true;
@@ -585,14 +582,19 @@ impl TcpStream {
     ///
     /// A mid-stream pickup moves its start back to `seq`. Returns false if
     /// it can't, and true if the stream has an observed start afterwards.
-    pub(crate) fn observe_start(&mut self, seq: u32, window: u64) -> bool {
+    pub(crate) fn observe_start(
+        &mut self,
+        seq: u32,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
         match self.start_seq {
             None => self.start_seq = Some(seq),
             Some(_) if TcpStreamStart::Observed == self.status.start => return true,
             Some(start_seq) => {
                 // a late SYN lies at or before the first byte received
                 let start = self.offset(start_seq, seq);
-                if false == self.move_start_back(seq, start, window) {
+                if false == self.move_start_back(seq, start, window, config) {
                     return false;
                 }
             }
@@ -603,10 +605,19 @@ impl TcpStream {
 
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
     /// `seq` at offset `start`, if bytes can still be prepended and `seq`
-    /// lies at most the receiver's receive window `window` before offset 0.
-    /// Returns false otherwise.
-    fn move_start_back(&mut self, seq: u32, start: i64, window: u64) -> bool {
-        if 0 < start || start.unsigned_abs() > window || false == self.can_prepend() {
+    /// lies within the range of the receiver's receive window `window`
+    /// before offset 0. Returns false otherwise.
+    fn move_start_back(
+        &mut self,
+        seq: u32,
+        start: i64,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        if 0 < start
+            || start.unsigned_abs() > window_range(window, config)
+            || false == self.can_prepend()
+        {
             return false;
         }
         if start < 0 {
@@ -892,6 +903,14 @@ fn truncate_ranges(ranges: &mut Vec<Range<u64>>, offset: u64) {
     if let Some(range) = ranges.last_mut() {
         range.end = range.end.min(offset);
     }
+}
+
+/// Number of bytes before or after the stream's bytes that a receiver with
+/// the receive window `window` accepts: several windows, as the window can
+/// change and not all ACKs are captured.
+fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
+    let factor = config.hole_give_up_window_factor.unwrap_or(2);
+    window.saturating_mul(u64::from(factor))
 }
 
 /// Returns true if the segment has the shape of a keep-alive probe: one
@@ -3552,10 +3571,17 @@ mod test {
         }
 
         // a late SYN gives a mid-stream pickup an observed start before its
-        // read position moved, when it lies within the window before the
-        // first byte (moving the offsets), or at it
-        for (fallback_window, lost, expected) in [(3, &b"abc"[..], &b""[..]), (3, b"", b"abcdef")] {
+        // read position moved, when it lies at most k windows (the hole give
+        // up window factor, 2 without one) before the first byte (moving the
+        // offsets), or at it
+        for (factor, fallback_window, lost, expected) in [
+            (Some(2), 2, &b"abcd"[..], &b""[..]),
+            (Some(1), 4, b"abcd", b""),
+            (None, 2, b"abcd", b""),
+            (None, 2, b"", b"abcdef"),
+        ] {
             let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
                 fallback_window,
                 ..Default::default()
             };
@@ -3582,15 +3608,18 @@ mod test {
 
         // other SYNs of a mid-stream pickup count as out-of-window and
         // change nothing, not even with bytes (TCP Fast Open): after the
-        // read position moved, more than one window before the first byte,
+        // read position moved, more than k windows before the first byte,
         // after the first byte, and for a pickup that starts at its FIN
-        for (fallback_window, lost, consumed, syn_offset, fin) in [
-            (3, &b""[..], 1, 0, false),
-            (2, b"abc", 0, 0, false),
-            (3, b"", 0, 2, false),
-            (3, b"", 0, 0, true),
+        for (factor, fallback_window, lost, consumed, syn_offset, fin) in [
+            (None, 3, &b""[..], 1, 0, false),
+            (Some(2), 2, b"abcde", 0, 0, false),
+            (Some(1), 4, b"abcde", 0, 0, false),
+            (None, 2, b"abcde", 0, 0, false),
+            (None, 3, b"", 0, 2, false),
+            (None, 3, b"", 0, 0, true),
         ] {
             let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
                 fallback_window,
                 ..Default::default()
             };
@@ -3697,12 +3726,12 @@ mod test {
 
         // bytes before the first byte of a mid-stream pickup count as
         // out-of-window if they can't be put in front: after the read
-        // position moved, or more than one window before. Each segment
+        // position moved, or more than k windows before. Each segment
         // counts once, also with bytes after the FIN, and its bytes from
         // the read position on are stored.
         for (fallback_window, consumed, earlier, expected) in [
             (3, 1, &b"abcd"[..], &b"fX"[..]),
-            (2, 0, b"abcd", b"efX"),
+            (1, 0, b"abcd", b"efX"),
             // put in front, only the bytes after the FIN count
             (3, 0, b"bcd", b"bcdefX"),
         ] {

@@ -114,9 +114,9 @@ impl ModelStream {
     /// - without a start, the first bytes or a FIN without bytes start a
     ///   mid-stream pickup, but a byte ending at the last ACK of the other
     ///   side (a keep-alive) doesn't;
-    /// - bytes before the first byte of a mid-stream pickup are put in front
-    ///   (see [`ModelStream::can_prepend`]), or count as out-of-window
-    ///   (once per segment);
+    /// - bytes up to k windows before the first byte of a mid-stream pickup
+    ///   are put in front (see [`ModelStream::can_prepend`]), other bytes
+    ///   before it count as out-of-window (once per segment);
     /// - a segment with bytes or a FIN starting more than k windows after
     ///   the highest or the ACKed offset is counted and not stored (k is the
     ///   hole give up window factor, 2 without one);
@@ -139,8 +139,11 @@ impl ModelStream {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
         let header = &segment.header;
+        // the receiver accepts k windows before and after the stream's bytes
+        let factor = config.hole_give_up_window_factor.unwrap_or(2);
+        let range = u64::from(factor) * window;
         if header.syn {
-            if false == self.observe_start(start, window) {
+            if false == self.observe_start(start, range) {
                 self.out_of_window_segments += 1;
                 return;
             }
@@ -157,7 +160,7 @@ impl ModelStream {
         let mut out_of_window = false;
         if let Some(base) = self.base {
             if start < base && false == segment.payload.is_empty() && false == self.observed {
-                if self.can_prepend() && base - start <= window {
+                if self.can_prepend() && base - start <= range {
                     self.start_at(start);
                 } else {
                     out_of_window = true;
@@ -165,8 +168,7 @@ impl ModelStream {
             }
         }
 
-        let factor = config.hole_give_up_window_factor.unwrap_or(2);
-        let window_end = self.ack.max(self.highest) + u64::from(factor) * window;
+        let window_end = self.ack.max(self.highest) + range;
         if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
             self.out_of_window_segments += 1;
             return;
@@ -237,15 +239,14 @@ impl ModelStream {
         self.extend_received();
     }
 
-    /// Gives the stream an observed start at `start`, where `window` is the
-    /// receive window of its receiver. A mid-stream pickup takes it if it is
-    /// at or before its first byte, at most one window before it, and bytes
-    /// can be prepended. Returns true if the stream has an observed start
-    /// afterwards.
-    fn observe_start(&mut self, start: u64, window: u64) -> bool {
+    /// Gives the stream an observed start at `start`. A mid-stream pickup
+    /// takes it if it is at or before its first byte, at most `range` bytes
+    /// before it, and bytes can be prepended. Returns true if the stream has
+    /// an observed start afterwards.
+    fn observe_start(&mut self, start: u64, range: u64) -> bool {
         match self.base {
             Some(_) if self.observed => return true,
-            Some(base) if start > base || base - start > window || false == self.can_prepend() => {
+            Some(base) if start > base || base - start > range || false == self.can_prepend() => {
                 return false
             }
             _ => {}
@@ -547,8 +548,9 @@ impl ReferenceModel {
         let other = role_index(segment.sender.other());
         let observed = self.streams.each_ref().map(|stream| stream.observed);
         if let (true, Some(ack)) = (header.syn, segment.ack) {
-            let window = self.window(segment.sender.other());
-            self.streams[other].observe_start(ack, window);
+            let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
+            let range = u64::from(factor) * self.window(segment.sender.other());
+            self.streams[other].observe_start(ack, range);
         }
         if let Some(ack) = segment.ack {
             let window = self.window(segment.sender.other());

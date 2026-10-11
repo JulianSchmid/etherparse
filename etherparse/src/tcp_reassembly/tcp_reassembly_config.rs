@@ -33,7 +33,9 @@ pub struct TcpReassemblyConfig {
     /// segments fill it until then. `None` switches this off.
     ///
     /// The same number of windows limits how far after the furthest received
-    /// or ACKed byte new bytes are accepted (2 windows with `None`).
+    /// or ACKed byte new bytes are accepted, and how far before the first
+    /// byte of a mid-stream pickup earlier bytes are put in front (2 windows
+    /// with `None`).
     pub hole_give_up_window_factor: Option<u32>,
 
     /// Receiver window in bytes that is assumed whenever the real one is
