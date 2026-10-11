@@ -38,3 +38,10 @@ Any SYN from a stream that isn't anchored yet currently anchors it, including a 
 - `add_segment` records the sender's advertised window even when its stream isn't anchored yet; A5's "within the window" can use the `window` parameter.
 
 **2026-10-11 — carry-over from ticket 05:** A5 says "until the first consume or discard". `discard_until()`, `discard_all()` and `consume_gap()` also move the read position, so they presumably end the prepend window like `consume()`. Also decide whether `give_up_hole()` alone ends it: it doesn't move the read position, but it gives up bytes at offset 0 that prepended bytes could precede.
+
+**2026-10-11 — carry-over from ticket 06:**
+- When A5 prepends bytes and shifts the offsets, shift the overdue state of `TcpStream` with them:
+  - `implied_ack` and `settled_ack`;
+  - the ACK values in `recent_acks`;
+  - the seen ACK, holes and gaps, as before.
+- A mid-stream pickup has no known window scale, so `largest_window` stays `None` and the implied ACK uses `fallback_window` (2 × 4 MiB by default). A late SYN upgrade (A5) still doesn't make the scale known unless both SYNs are seen (A3).
