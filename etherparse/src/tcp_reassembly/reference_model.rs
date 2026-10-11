@@ -28,6 +28,11 @@ pub(crate) enum ReaderAction {
     GiveUpHole,
     /// [`TcpStream::consume_gap`]
     ConsumeGap,
+    /// [`TcpStream::discard_until`] with an offset this far after the read
+    /// offset
+    DiscardAhead(u64),
+    /// [`TcpStream::discard_all`]
+    DiscardAll,
 }
 
 /// Model of one stream.
@@ -38,7 +43,7 @@ struct ModelStream {
     bytes: Vec<Option<u8>>,
     /// Bytes from offset 0 on up to the first missing byte that can still
     /// arrive: received bytes, and placeholders for bytes that were given
-    /// up (in gaps).
+    /// up (in gaps) or discarded (before the read offset).
     received: Vec<u8>,
     /// Holes that were given up and not stepped over yet, in order (they
     /// lie in `received`).
@@ -149,7 +154,7 @@ impl ModelStream {
             let offset = self.received.len() as u64;
             let byte = match self.bytes.get(offset as usize) {
                 Some(Some(byte)) => *byte,
-                _ if self.in_gap(offset) => 0,
+                _ if offset < self.read_offset || self.in_gap(offset) => 0,
                 _ => break,
             };
             self.received.push(byte);
@@ -231,6 +236,22 @@ impl ModelStream {
             .first()
             .filter(|gap| gap.start == self.read_offset)
             .cloned()
+    }
+
+    /// Moves the read offset to `offset` (at most the highest offset),
+    /// discarding the holes and gaps before it (without counting the holes
+    /// as gaps).
+    fn discard_until(&mut self, offset: u64) {
+        let offset = offset.min(self.highest);
+        if offset <= self.read_offset {
+            return;
+        }
+        self.gaps.retain_mut(|gap| {
+            gap.start = gap.start.max(offset);
+            gap.start < gap.end
+        });
+        self.read_offset = offset;
+        self.extend_received();
     }
 
     /// Offset up to which the other side ACKed the bytes.
@@ -336,6 +357,15 @@ impl ReferenceModel {
             ReaderAction::ConsumeGap => {
                 expected.consume_gap();
                 stream.consume_gap();
+            }
+            ReaderAction::DiscardAhead(distance) => {
+                let offset = expected.read_offset + distance;
+                expected.discard_until(offset);
+                stream.discard_until(offset);
+            }
+            ReaderAction::DiscardAll => {
+                expected.discard_until(expected.highest);
+                stream.discard_all();
             }
         }
         Ok(())
@@ -919,6 +949,8 @@ mod test {
                 proptest::option::weighted(0.3, prop_oneof![
                     3 => Just(ReaderAction::GiveUpHole),
                     3 => Just(ReaderAction::ConsumeGap),
+                    2 => prop_oneof![0u64..64, 0u64..32 * 1024].prop_map(ReaderAction::DiscardAhead),
+                    1 => Just(ReaderAction::DiscardAll),
                 ]),
                 1..32
             ),

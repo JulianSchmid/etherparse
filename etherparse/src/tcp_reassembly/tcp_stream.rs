@@ -180,6 +180,32 @@ impl TcpStream {
         }
     }
 
+    /// Moves the read position forward to `offset`, discarding the bytes
+    /// and holes before it.
+    ///
+    /// Bytes before the offset that arrive later are ignored. Discarding
+    /// keeps the stream clean, also where bytes were missing (they are not
+    /// counted as gaps). Offsets after [`TcpStream::highest_offset`] count
+    /// as the highest offset, so bytes after it stay readable once they
+    /// arrive.
+    pub fn discard_until(&mut self, offset: u64) {
+        let offset = offset.min(self.highest_offset);
+        if offset <= self.read_offset {
+            return;
+        }
+        remove_before(&mut self.holes, offset);
+        remove_before(&mut self.gaps, offset);
+        self.advance_to(offset);
+    }
+
+    /// Discards all buffered bytes and holes, so that the stream continues
+    /// with the next new bytes.
+    ///
+    /// Works like [`TcpStream::discard_until`] with the highest offset.
+    pub fn discard_all(&mut self) {
+        self.discard_until(self.highest_offset);
+    }
+
     /// Turns the parts of the holes before `offset` into gaps.
     fn give_up_holes_before(&mut self, offset: u64) {
         for hole in self.holes.iter_mut().take_while(|hole| hole.start < offset) {
@@ -260,7 +286,8 @@ impl TcpStream {
     /// Returns true if the stream has no defects so far: no gaps and no
     /// retransmission with differing bytes (see [`TcpStreamStatus`]).
     ///
-    /// Holes don't count, as retransmissions can still fill them.
+    /// Holes don't count, as retransmissions can still fill them, and
+    /// neither do discarded bytes (see [`TcpStream::discard_until`]).
     pub fn is_clean(&self) -> bool {
         0 == self.status.gaps && 0 == self.status.conflicting_retransmissions
     }
@@ -564,6 +591,15 @@ impl TcpStream {
                 index += 1;
             }
         }
+    }
+}
+
+/// Removes the parts of the sorted `ranges` before `offset`.
+fn remove_before(ranges: &mut Vec<Range<u64>>, offset: u64) {
+    let removed = ranges.partition_point(|range| range.end <= offset);
+    ranges.drain(..removed);
+    if let Some(range) = ranges.first_mut() {
+        range.start = range.start.max(offset);
     }
 }
 
@@ -1395,6 +1431,231 @@ mod test {
     }
 
     #[test]
+    fn discard_until() {
+        // an offset inside the received bytes drops the bytes before it,
+        // which keeps the stream clean
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abcdef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_until(2);
+            assert_eq!(2, stream.read_offset());
+            assert_eq!(TcpRead::Data(b"cdef"), stream.read_received());
+            stream.discard_until(5);
+            assert_eq!(TcpRead::Data(b"f"), stream.read_received());
+            assert!(stream.is_clean());
+        }
+
+        // offsets at or before the read offset change nothing
+        for offset in [0, 1, 2] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abcdef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.read_received();
+            stream.consume(2);
+            assert_eq!(TcpRead::Data(b"cdef"), stream.read_received());
+            stream.discard_until(offset);
+            assert_eq!(2, stream.read_offset());
+            // the bytes of the last read can still be consumed
+            stream.consume(1);
+            assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+        }
+
+        // the bytes of the last read can't be consumed after a discard
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abcdef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            stream.discard_until(2);
+            stream.consume(2);
+            assert_eq!(TcpRead::Data(b"cdef"), stream.read_received());
+        }
+
+        // holes before the offset are dropped (a hole containing it only
+        // partly) without counting as gaps, the missing bytes after it stay
+        // a hole
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"ab")
+                .send_at(Initiator, 4, b"ef")
+                .send_at(Initiator, 10, b"k");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_until(8);
+            assert_eq!(8, stream.read_offset());
+            assert_eq!(&[8..10][..], stream.holes().collect::<Vec<_>>());
+            assert_eq!(TcpRead::Pending, stream.read_received());
+            assert_eq!((0, 0), (stream.status().gaps, stream.status().gap_bytes));
+            assert!(stream.is_clean());
+            // the rest of the hole can still be filled
+            script.send_at(Initiator, 6, b"ghij");
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"ijk"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // an offset after the highest offset drops all bytes and holes up to
+        // the highest offset, the bytes after it are readable once they
+        // arrive
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 5);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.discard_until(100);
+                assert_eq!(5, stream.read_offset());
+                assert_eq!(0, stream.holes().count());
+                assert_eq!((0, 0), (stream.status().gaps, stream.status().gap_bytes));
+            }
+            script.send_at(Initiator, 5, b"fg");
+            let (connection, _) = script.feed(&mut pool, 5..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"fg"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // retransmissions of discarded bytes are ignored
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abcdef");
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                connection.stream_mut(Initiator).discard_until(4);
+            }
+            script.send_at(Initiator, 0, b"XYZWe");
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"ef"), stream.read_received());
+            assert!(stream.is_clean());
+        }
+
+        // an offset inside a gap at the read position shortens the gap
+        // without counting it again
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send_at(Initiator, 5, b"f");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.give_up_hole());
+            stream.discard_until(2);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            assert_eq!((1, 5), (stream.status().gaps, stream.status().gap_bytes));
+            stream.discard_until(5);
+            assert_eq!(TcpRead::Data(b"f"), stream.read_received());
+        }
+
+        // up to the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().fin_with_data(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_until(10);
+            assert_eq!(3, stream.read_offset());
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            assert!(stream.is_complete());
+        }
+    }
+
+    #[test]
+    fn discard_all() {
+        // drops the received bytes, which keeps the stream clean, and new
+        // bytes continue the stream
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.discard_all();
+                assert_eq!(3, stream.read_offset());
+                assert_eq!(TcpRead::Pending, stream.read_received());
+                assert!(stream.is_clean());
+            }
+            script.send(Initiator, b"def");
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"def"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // drops the holes without counting them as gaps, and a gap at the
+        // read position that was counted when it was given up
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 2, b"c")
+                .send_at(Initiator, 5, b"f")
+                .ack_to(Responder, 8);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert!(stream.give_up_hole());
+                stream.discard_all();
+                assert_eq!(8, stream.read_offset());
+                assert_eq!(0, stream.holes().count());
+                assert_eq!(TcpRead::Pending, stream.read_received());
+                assert_eq!((1, 2), (stream.status().gaps, stream.status().gap_bytes));
+            }
+            script.send_at(Initiator, 6, b"ghij");
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"ij"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // nothing buffered
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_all();
+            assert_eq!(0, stream.read_offset());
+            assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
+        // up to the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().fin_with_data(Initiator, b"abc");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            stream.discard_all();
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+    }
+
+    #[test]
     fn read_offset() {
         // starts at 0 and grows by the consumed bytes
         {
@@ -1871,10 +2132,13 @@ mod test {
         // a FIN before the read position, which lies after bytes up to an
         // ACK that were given up, moves the read position back to it (with
         // the ACK of the FIN and a larger ACK)
-        let give_ups: [fn(&mut TcpStream); 1] = [|stream| {
-            assert!(stream.give_up_hole());
-            stream.consume_gap();
-        }];
+        let give_ups: [fn(&mut TcpStream); 2] = [
+            |stream| {
+                assert!(stream.give_up_hole());
+                stream.consume_gap();
+            },
+            |stream| stream.discard_all(),
+        ];
         for ((ack, fin), give_up) in [(4, 3), (10, 6)]
             .into_iter()
             .flat_map(|offsets| give_ups.map(|give_up| (offsets, give_up)))

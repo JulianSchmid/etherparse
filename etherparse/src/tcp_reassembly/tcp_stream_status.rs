@@ -4,6 +4,9 @@
 pub struct TcpStreamStatus {
     /// Number of gaps: holes that were given up, e.g. with
     /// [`crate::tcp_reassembly::TcpStream::give_up_hole`].
+    ///
+    /// Discarded holes don't count (see
+    /// [`crate::tcp_reassembly::TcpStream::discard_until`]).
     pub gaps: u64,
 
     /// Number of bytes in the holes that were given up.
