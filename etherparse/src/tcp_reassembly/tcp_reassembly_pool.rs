@@ -1,4 +1,4 @@
-use crate::tcp_reassembly::*;
+use crate::{tcp_reassembly::*, *};
 use core::net::SocketAddr;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -125,47 +125,23 @@ where
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
-                // a SYN or SYN-ACK starts a connection with known roles, and
-                // bytes one with roles guessed from the ports (pure ACKs,
-                // FINs without bytes and RSTs don't start one)
-                let roles = if tcp.rst() {
-                    None
-                } else if tcp.syn() {
-                    // the SYN-ACK is sent by the responder
-                    Some((if tcp.ack() { destination } else { source }, false))
-                } else if false == tcp.payload().is_empty() {
-                    // the lower port is the responder's, with equal ports the
-                    // sender is the initiator
-                    let initiator = if source.port() < destination.port() {
-                        destination
-                    } else {
-                        source
-                    };
-                    Some((initiator, true))
-                } else {
-                    None
-                };
-                let Some((initiator, roles_guessed)) = roles else {
+                let Some((initiator, roles_guessed)) =
+                    new_connection_initiator(&tcp, source, destination)
+                else {
                     return TcpProcessed {
                         active: None,
                         ended: None,
                         ignored: Some(TcpIgnoreReason::NoConnection),
                     };
                 };
-                let id = self.next_id;
-                self.next_id = TcpConnectionId(id.0.wrapping_add(1));
                 let key = entry.key().clone();
-                let buffers = [
-                    self.free_buffers.pop().unwrap_or_default(),
-                    self.free_buffers.pop().unwrap_or_default(),
-                ];
-                entry.insert(TcpConnection::new(
-                    id,
+                entry.insert(new_connection(
+                    &mut self.next_id,
+                    &mut self.free_buffers,
                     key,
                     initiator,
                     roles_guessed,
                     timestamp.clone(),
-                    buffers,
                 ))
             }
         };
@@ -207,6 +183,69 @@ where
     fn default() -> Self {
         Self::new(TcpReassemblyConfig::default())
     }
+}
+
+/// Initiator of the connection that the segment `tcp` from `source` to
+/// `destination` starts, and whether it is guessed from the ports. `None`
+/// if the segment starts no connection.
+fn new_connection_initiator(
+    tcp: &TcpSlice<'_>,
+    source: SocketAddr,
+    destination: SocketAddr,
+) -> Option<(SocketAddr, bool)> {
+    // a SYN or SYN-ACK starts a connection with known roles, and bytes one
+    // with roles guessed from the ports (pure ACKs, FINs without bytes and
+    // RSTs don't start one)
+    if tcp.rst() {
+        None
+    } else if tcp.syn() {
+        Some((handshake_initiator(tcp, source, destination), false))
+    } else if false == tcp.payload().is_empty() {
+        // the lower port is the responder's, with equal ports the sender is
+        // the initiator
+        let initiator = if source.port() < destination.port() {
+            destination
+        } else {
+            source
+        };
+        Some((initiator, true))
+    } else {
+        None
+    }
+}
+
+/// Initiator of the connection whose SYN or SYN-ACK `tcp` was sent from
+/// `source` to `destination`.
+fn handshake_initiator(
+    tcp: &TcpSlice<'_>,
+    source: SocketAddr,
+    destination: SocketAddr,
+) -> SocketAddr {
+    // the SYN-ACK is sent by the responder
+    if tcp.ack() {
+        destination
+    } else {
+        source
+    }
+}
+
+/// Creates a connection with the id `next_id` (and moves `next_id` on),
+/// whose streams store their bytes in buffers taken from `free_buffers`.
+fn new_connection<Timestamp: Clone, CustomChannelId>(
+    next_id: &mut TcpConnectionId,
+    free_buffers: &mut Vec<Vec<u8>>,
+    key: TcpConnectionKey<CustomChannelId>,
+    initiator: SocketAddr,
+    roles_guessed: bool,
+    timestamp: Timestamp,
+) -> TcpConnection<Timestamp, CustomChannelId> {
+    let id = *next_id;
+    *next_id = TcpConnectionId(id.0.wrapping_add(1));
+    let buffers = [
+        free_buffers.pop().unwrap_or_default(),
+        free_buffers.pop().unwrap_or_default(),
+    ];
+    TcpConnection::new(id, key, initiator, roles_guessed, timestamp, buffers)
 }
 
 #[cfg(test)]

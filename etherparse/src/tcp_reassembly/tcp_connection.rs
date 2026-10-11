@@ -127,11 +127,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ) -> TcpRole {
         self.last_seen = timestamp;
         self.packets = self.packets.saturating_add(1);
-        let sender = if source == self.initiator {
-            TcpRole::Initiator
-        } else {
-            TcpRole::Responder
-        };
+        let sender = self.role(source);
         if tcp.rst() {
             self.add_reset(sender, tcp, config);
         } else {
@@ -154,14 +150,22 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.end = Some(TcpConnectionEnd::Finished);
         }
         if let Some(end) = self.end {
-            let stream_end = match end {
-                TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
-                TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
-            };
-            self.initiator_stream.connection_ended(stream_end);
-            self.responder_stream.connection_ended(stream_end);
+            self.end_with(end);
         }
         sender
+    }
+
+    /// Ends the connection with `end`: the holes of both streams become
+    /// gaps, as late segments can't fill them anymore, and reads return the
+    /// end once nothing more is readable.
+    pub(crate) fn end_with(&mut self, end: TcpConnectionEnd) {
+        self.end = Some(end);
+        let stream_end = match end {
+            TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
+            TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+        };
+        self.initiator_stream.connection_ended(stream_end);
+        self.responder_stream.connection_ended(stream_end);
     }
 
     /// Applies a segment without RST sent by `sender`.
@@ -226,6 +230,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             let packet = self.packets;
             self.stream_mut(sender.other())
                 .add_ack(tcp.acknowledgment_number(), window, packet);
+        }
+    }
+
+    /// Role of the endpoint `source`.
+    fn role(&self, source: SocketAddr) -> TcpRole {
+        if source == self.initiator {
+            TcpRole::Initiator
+        } else {
+            TcpRole::Responder
         }
     }
 

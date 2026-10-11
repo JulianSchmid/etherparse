@@ -771,7 +771,7 @@ impl ReferenceModel {
     /// The connection is finished once both FINs are ACKed and all holes
     /// left are overdue, unless it was reset. Ending it gives up all holes;
     /// later segments change nothing.
-    pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
+    pub fn apply(&mut self, segment: &TestSegment) {
         let header = &segment.header;
         if self.end.is_some() {
             return;
@@ -800,8 +800,7 @@ impl ReferenceModel {
         } else {
             let observed = self.streams.each_ref().map(|stream| stream.observed);
             if let (true, Some(ack)) = (header.syn, segment.ack) {
-                let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
-                let range = u64::from(factor) * self.window(segment.sender.other());
+                let range = self.range(segment.sender.other());
                 self.streams[other].observe_start(ack, range);
             }
             if let Some(ack) = segment.ack {
@@ -832,14 +831,28 @@ impl ReferenceModel {
             self.end = Some(TcpConnectionEnd::Finished);
         }
         if let Some(end) = self.end {
-            let stream_end = match end {
-                TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
-                TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
-            };
-            for stream in &mut self.streams {
-                stream.connection_ended(stream_end);
-            }
+            self.end_with(end);
         }
+    }
+
+    /// Ends the connection with `end`, giving up all holes.
+    fn end_with(&mut self, end: TcpConnectionEnd) {
+        self.end = Some(end);
+        let stream_end = match end {
+            TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
+            TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+        };
+        for stream in &mut self.streams {
+            stream.connection_ended(stream_end);
+        }
+    }
+
+    /// Range before and after the bytes of the stream of `role` that its
+    /// receiver accepts: k windows (k is the hole give up window factor, 2
+    /// without one).
+    fn range(&self, role: TcpRole) -> u64 {
+        let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
+        u64::from(factor) * self.window(role)
     }
 
     /// Receive window of the stream of `role`: the last window its receiver
