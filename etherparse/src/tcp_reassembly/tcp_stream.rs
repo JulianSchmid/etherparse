@@ -171,8 +171,8 @@ impl TcpStream {
     }
 
     /// Counters that describe the quality of the stream.
-    pub fn status(&self) -> TcpStreamStatus {
-        self.status
+    pub fn status(&self) -> &TcpStreamStatus {
+        &self.status
     }
 
     /// Returns true if the stream has no defects so far: no retransmission
@@ -1619,7 +1619,7 @@ mod test {
             script.syn();
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(
-                TcpStreamStatus {
+                &TcpStreamStatus {
                     conflicting_retransmissions: 0,
                     out_of_window_segments: 0,
                 },

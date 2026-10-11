@@ -1,6 +1,6 @@
 /// Counters that describe the quality of a
 /// [`crate::tcp_reassembly::TcpStream`].
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpStreamStatus {
     /// Number of retransmitted segments whose bytes differ from the bytes
     /// received first at the same positions.
@@ -28,12 +28,8 @@ mod test {
     proptest! {
         #[test]
         fn derived_traits(status in tcp_stream_status_any()) {
-            // copy & clone
-            {
-                let copy = status;
-                assert_eq!(status, copy);
-                assert_eq!(status.clone(), status);
-            }
+            // clone
+            assert_eq!(status.clone(), status);
 
             // debug
             assert_eq!(
@@ -48,12 +44,12 @@ mod test {
             // hash
             {
                 use std::collections::hash_map::DefaultHasher;
-                let hash = |status: TcpStreamStatus| {
+                let hash = |status: &TcpStreamStatus| {
                     let mut hasher = DefaultHasher::new();
                     status.hash(&mut hasher);
                     hasher.finish()
                 };
-                assert_eq!(hash(status), hash(status.clone()));
+                assert_eq!(hash(&status), hash(&status.clone()));
             }
         }
     }

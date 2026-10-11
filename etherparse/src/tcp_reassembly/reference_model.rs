@@ -246,7 +246,7 @@ impl ReferenceModel {
         prop_assert_eq!(clean, stream.is_clean());
         prop_assert_eq!(clean && expected.is_finished(), stream.is_complete());
         prop_assert_eq!(
-            TcpStreamStatus {
+            &TcpStreamStatus {
                 conflicting_retransmissions: expected.conflicting_retransmissions,
                 out_of_window_segments: expected.out_of_window_segments,
             },
