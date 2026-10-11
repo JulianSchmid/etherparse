@@ -1070,6 +1070,111 @@ mod test {
         }
 
         #[test]
+        fn capture_loss(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(16 * 1024),
+            responder_data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            resent_lens in vec(0usize..1000, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            extra_acks in 0usize..32,
+            keep_alives in vec((tcp_role_any(), any::<Index>()), 0..4),
+            lost in vec((any::<Index>(), proptest::option::of(any::<Index>())), 0..16),
+            windows in vec(
+                prop_oneof![1 => 1u16..256, 2 => 256u16..8192, 1 => Just(u16::MAX)],
+                1..16
+            ),
+            config in tcp_overdue_config_any(),
+            consume_lens in vec(0usize..3000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs, their ACKs and more ACKs (so that the ACK
+            // reorder tolerance can pass)
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &resent_lens, &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+            for i in 0..extra_acks {
+                script.ack(if 0 == i % 2 { Initiator } else { Responder });
+            }
+
+            // keep-alive probes repeating the last byte sent, at random
+            // positions after the handshake
+            for (role, position) in &keep_alives {
+                let data = data[role_index(*role)];
+                if let Some(last) = data.last() {
+                    let probe = script.injected(|script| {
+                        script.send_at(*role, data.len() as u64 - 1, &[*last]);
+                    });
+                    let position = 3 + position.index(script.segments.len() - 2);
+                    script.segments.insert(position, probe);
+                }
+            }
+
+            // segments lost in the capture, or captured later
+            for (index, later) in &lost {
+                if script.segments.len() > 3 {
+                    let i = 3 + index.index(script.segments.len() - 3);
+                    let segment = script.segments.remove(i);
+                    if let Some(later) = later {
+                        let position = i + later.index(script.segments.len() - i + 1);
+                        script.segments.insert(position, segment);
+                    }
+                }
+            }
+
+            // random receive windows, small ones make holes overdue early
+            for (segment, window) in script.segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let (model, ended) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+                &[None],
+            )?;
+
+            // the received bytes are the ones that were sent, apart from the
+            // ones that were given up
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                let len = model.received(role).len().min(data[i].len());
+                prop_assert!(model.received_matches(role, &data[i][..len]));
+            }
+
+            // a finished connection can be read to its FINs, stepping over
+            // the gaps
+            if let Some(mut connection) = ended {
+                for role in [Initiator, Responder] {
+                    let stream = connection.stream_mut(role);
+                    prop_assert!(stream.is_finished());
+                    for _ in 0..10_000 {
+                        match stream.read_received() {
+                            TcpRead::Data(data) => {
+                                let len = data.len();
+                                stream.consume(len);
+                            }
+                            TcpRead::Gap { .. } => stream.consume_gap(),
+                            _ => break,
+                        }
+                    }
+                    prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+                }
+            }
+        }
+
+        #[test]
         fn reader_actions(
             initiator_isn in tcp_isn_any(),
             responder_isn in tcp_isn_any(),

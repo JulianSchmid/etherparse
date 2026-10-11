@@ -1012,6 +1012,26 @@ prop_compose! {
 
 #[cfg(feature = "std")]
 prop_compose! {
+    /// Default configurations of a
+    /// [`crate::tcp_reassembly::TcpReassemblyPool`] with small values for the
+    /// settings that make holes overdue.
+    pub fn tcp_overdue_config_any()
+        (
+            hole_give_up_window_factor in proptest::option::of(1u32..4),
+            ack_reorder_tolerance in 0u32..24,
+        )
+        -> crate::tcp_reassembly::TcpReassemblyConfig
+    {
+        crate::tcp_reassembly::TcpReassemblyConfig {
+            hole_give_up_window_factor,
+            ack_reorder_tolerance,
+            ..Default::default()
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+prop_compose! {
     pub fn tcp_reassembly_config_any()
         (
             max_stream_buffer in any::<usize>(),
