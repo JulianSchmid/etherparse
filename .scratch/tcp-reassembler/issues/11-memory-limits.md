@@ -34,3 +34,5 @@ Rules: D4, P3 (tombstones count), Q1.
 - Holes created by rejected bytes must stay holes that the user can give up.
 
 **2026-10-11 — carry-over from the ticket-06 grilling (lazy gaps):** overdue holes are holes. They count towards `max_holes_per_stream`, and their placeholders towards `max_stream_buffer`, until the read position reaches them or the connection ends (ADR-0002 consequences). While a connection is open, gaps exist only at the read position.
+
+**2026-10-11 — carry-over from ticket 06 (review finding):** while a stream has holes, `TcpStream::recent_acks` keeps one entry (16 bytes) per ACK-advancing packet, for up to `ack_reorder_tolerance` packets. `max_total_buffered` doesn't count these entries. With a large tolerance (the `reordered_streams` proptest uses `u32::MAX`), forged 1-byte ACK advances grow the queue with every packet. Decide whether to count or cap it.

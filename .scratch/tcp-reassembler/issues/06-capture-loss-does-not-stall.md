@@ -16,17 +16,17 @@ Rules: K2, K3, K4, D3, F2, F3, F5, ADR-0002.
 
 **Status:** ready-for-agent
 
-- [ ] Regression test (old branch stall): in a one-direction capture with lost segments, the implied ACK alone eventually delivers all bytes up to `highest offset − k × window` through `read_acked`, with one gap per lost range
-- [ ] A late segment fills an overdue hole that the read position hasn't reached; its bytes are delivered as data and no gap is counted
-- [ ] An ACK-covered hole at the read position becomes a gap after exactly N further packets and not after N − 1; a hole filled within the tolerance never becomes a gap
-- [ ] A hole that lies only partly before the implied ACK stays a hole; once it is overdue as a whole, it is read as one `Gap` with its full length
-- [ ] The overdue hole at the read position is a gap without any read call: `holes()`, `status()`, `give_up_hole()` and `consume_gap()` agree right after the packet or read-position move that made it one
-- [ ] `is_finished()` and `is_complete()` stay false while an overdue hole remains before the FIN
-- [ ] A connection with both FINs ACKed and only overdue holes left ends as `Finished`; its holes are handed over as counted gaps, and reads end in `End(Fin)`
-- [ ] A 1-byte keep-alive ending at the seen ACK doesn't fill an overdue hole; the same segment still fills a hole that isn't overdue yet (D3 known limit); a 1-byte segment with FIN, or a 2-byte segment, still fills an overdue hole
-- [ ] With the factor set to `None`, only the ACK rule makes holes overdue
-- [ ] The reference model is extended with dropped segments and lazy gaps, giving the expected gaps. It states K4 itself instead of mirroring the code
-- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+- [x] Regression test (old branch stall): in a one-direction capture with lost segments, the implied ACK alone eventually delivers all bytes up to `highest offset − k × window` through `read_acked`, with one gap per lost range
+- [x] A late segment fills an overdue hole that the read position hasn't reached; its bytes are delivered as data and no gap is counted
+- [x] An ACK-covered hole at the read position becomes a gap after exactly N further packets and not after N − 1; a hole filled within the tolerance never becomes a gap
+- [x] A hole that lies only partly before the implied ACK stays a hole; once it is overdue as a whole, it is read as one `Gap` with its full length
+- [x] The overdue hole at the read position is a gap without any read call: `holes()`, `status()`, `give_up_hole()` and `consume_gap()` agree right after the packet or read-position move that made it one
+- [x] `is_finished()` and `is_complete()` stay false while an overdue hole remains before the FIN
+- [x] A connection with both FINs ACKed and only overdue holes left ends as `Finished`; its holes are handed over as counted gaps, and reads end in `End(Fin)`
+- [x] A 1-byte keep-alive ending at the seen ACK doesn't fill an overdue hole; the same segment still fills a hole that isn't overdue yet (D3 known limit); a 1-byte segment with FIN, or a 2-byte segment, still fills an overdue hole
+- [x] With the factor set to `None`, only the ACK rule makes holes overdue
+- [x] The reference model is extended with dropped segments and lazy gaps, giving the expected gaps. It states K4 itself instead of mirroring the code
+- [x] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
 
 ## Comments
 
@@ -81,3 +81,33 @@ Implementation notes:
   - `read_received()`.
 - The 1-byte hole at a FIN's position whose ACK came first becomes a gap only if it is at the read position and overdue before the FIN arrives. The FIN then moves the read position back (ticket 05), and the gap stays counted (Q4).
 - Reference model: overdue holes stay missing in `bytes`. After each step, if the read offset is at a missing range that is overdue as a whole, record a gap there. Compute the implied ACK and the seen ACK of N packets ago from the model's own state, in separate fields as with the highest offset.
+
+**2026-10-11 — implemented** (commits `b1078c1` through `418aee0`). Decisions taken while implementing, for the user to confirm:
+1. **The implied ACK never moves back.** It is the running maximum of `highest offset − k × window`, because bytes sent earlier still prove what the receiver had ACKed then. K2's formula alone would let it fall when the window grows. Once confirmed, add this to K2.
+2. **K4 timing within a packet.** The bytes of a packet are applied before that packet's overdue check. So a hole is overdue *after* the N-th further packet, and the N-th packet's own bytes still fill it (a keep-alive in it too). This matches the acceptance criterion ("after exactly N further packets"). K4 says "overdue on the N-th packet", so only its wording needs a fix.
+3. **The implied ACK's timing.** It is updated after every packet, with the receiver's current window. D2/D3 checks inside a packet use the implied ACK from before that packet.
+
+**Open, needs a user decision (review finding): zero or shrinking windows.**
+- The implied ACK uses the receiver's last advertised window. An ACK segment that advertises window 0 sets the implied ACK to the highest offset in the same packet.
+- So the hole that this ACK created (K1) is overdue at once, and `ack_reorder_tolerance` is skipped. That is the merged-capture case K4(b) should tolerate.
+- S3 already checks an ACK against the window from before its segment. For K2, using the window from before the packet only delays the problem by one packet.
+- Options:
+  - (a) use the largest window the receiver advertised, which is conservative and robust to shrinking;
+  - (b) use the window from before the packet;
+  - (c) accept it and document it.
+
+Implementation notes:
+- K4(b) is exact: each stream keeps a queue of `(packet number, seen ACK)` for the last N packets, but only while it has holes. The per-hole stamps from the grilling comment were not needed, so spec.md stays as it is.
+- F3/F5: `TcpStream::can_finish()` and `TcpStream::give_up_all_holes()`. Tickets 09, 10 and 12 can reuse the latter for F5.
+- Equivalent mutants:
+  - clearing `recent_acks` when there are no holes, and recording ACKs only while there are holes. Both only bound memory, because later holes lie after the seen ACK;
+  - `hole.start <= offset` in `in_overdue_hole`. A keep-alive byte that was already received lies before the ACKed offset, so it is neither stored nor compared either way.
+- Proptests:
+  - `random_acks` and `out_of_window_segments` now check the received bytes outside the gaps only, because their ACKs run ahead of the data.
+  - `reordered_streams` switches the ACK rule off (`ack_reorder_tolerance = u32::MAX`), because its retransmissions at random positions ACK bytes sent much later.
+  - The new `capture_loss` test uses a random factor and tolerance (`tcp_overdue_config_any`), small windows, lost or late segments and keep-alives. On its own it kills every non-equivalent mutant tried.
+- Known: a connection whose last hole was covered fewer than N packets before its last packet stays open until eviction. Ticket 12 makes it end as `Finished` there.
+- Review judgement calls left as they are:
+  - the docs of `acked_offset()` and `ack_reorder_tolerance` explain the implied ACK and the memory cost to users;
+  - the `(u64, u64)` tuple in `recent_acks` is private and documented;
+  - `first_hole()` in the reference model came with the behaviour commit that needed it.

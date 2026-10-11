@@ -26,3 +26,7 @@ Rules: F4, F5, F6 (`End(Reset)`), P3.
 **2026-10-10 — carry-over from ticket 02:** a connection ends by setting `TcpConnection::end` in `add_segment`. The pool hands over every connection whose `end()` is set, through `hand_over()`, which leaves the tombstone. `TcpStreamEnd` and `TcpConnectionEnd` only have `Fin` and `Finished` so far. For `End(Reset)`, the streams also need to know how the connection ended.
 
 **2026-10-11 — carry-over from ticket 05:** for F5 (all holes become gaps), use `TcpStream::give_up_holes_before(highest_offset)`. It counts the gaps and keeps them sorted. Reading then returns `Gap { len: Some(n) }` at each of them, and `consume_gap()` steps over it.
+
+**2026-10-11 — carry-over from ticket 06:**
+- F5 can use `TcpStream::give_up_all_holes()`, which the `Finished` end already calls.
+- The keep-alive filter test in `TcpStream::holes()` feeds a 1-byte segment with the RST flag and expects it to fill the hole, because RSTs are not handled yet. Adapt it once an in-window RST ends the connection.
