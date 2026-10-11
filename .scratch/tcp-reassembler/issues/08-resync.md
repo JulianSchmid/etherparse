@@ -42,3 +42,9 @@ Rules: R1–R4, S2 (unmappable distances), ADR-0002.
 3. **Forward jumps only:** only data after the window (S4) or at an unmappable distance (S2) becomes a candidate. A new ISN that maps behind the stream (half of all ISN changes) is not detected: bytes before offset 0 stay ignored on an observed start (counted on a pickup), and ACKs behind the seen ACK stay ignored. `force_resync()` recovers such streams. Known limit for the docs (ticket 16).
 
 spec.md R1 and R2 are updated.
+
+**2026-10-11 — user decisions after the review (asked before fixing):**
+4. **Decision 1 corrected:** with the ACK after the data, not one segment but all out-of-window data before the first confirming ACK is lost, up to about one window (one round trip). The illustration of decision 1 showed only one segment. The user keeps the decision: these bytes are part of `Gap { len: None }`, and no copies are kept (rejected: copies of the agreeing out-of-window segments, up to one window per stream). A FIN in the candidate's segment, or a FIN without bytes right after it, ends the stream at the resync point, so the stream still finishes (the review found that the FIN was lost and its ACK left a 1-byte hole that never closed).
+5. **The ACK that confirms a jump ACKs the bytes before it:** also when it maps before the resync point (it ACKs bytes that fell into the gap). Otherwise `read_acked()` stalls in front of the gap if no later ACK comes.
+
+spec.md R2 is updated.
