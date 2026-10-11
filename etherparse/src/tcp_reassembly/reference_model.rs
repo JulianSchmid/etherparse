@@ -12,8 +12,9 @@ use std::vec::Vec;
 /// expects segments without window scale options, and endpoints whose ports
 /// make guessed roles right.
 ///
-/// A SYN on the tombstone of an ended connection starts the model again as
-/// a new connection, which takes the later segments.
+/// A SYN on the tombstone of an ended connection, or a confirmed reconnect,
+/// starts the model again as a new connection, which takes the later
+/// segments.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Configuration of the pool the model is compared with.
@@ -37,6 +38,9 @@ pub(crate) struct ReferenceModel {
     end: Option<TcpConnectionEnd>,
     /// Number of packets applied so far.
     packets: u64,
+    /// SYN that is not the own SYN of its sender's stream, kept until the
+    /// SYN-ACK of the other endpoint ACKs it and starts a reconnect.
+    reconnect_syn: Option<TestSegment>,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -363,6 +367,23 @@ impl ModelStream {
         self.start_at(start);
         self.observed = true;
         true
+    }
+
+    /// Returns true if the SYN `segment` of the stream's sender can be the
+    /// stream's own SYN: it has the ISN of the stream's observed start (see
+    /// [`ModelStream::has_isn_of`]), or without one, the SYN's first byte
+    /// lies at or before the stream's first byte and at most `range` bytes
+    /// before it. Without a start, the same holds for the other side's kept
+    /// ACK, if there is one.
+    fn is_own_syn(&self, segment: &TestSegment, range: u64) -> bool {
+        let start = segment.offset as i64;
+        let within = |first: i64| (0..=range as i64).contains(&(first - start));
+        match self.base {
+            _ if self.observed => self.has_isn_of(segment),
+            // offsets of the pool leave out the jumps of the resyncs
+            Some(base) => within(base as i64 + self.shift),
+            None => self.pending_ack.is_none_or(|ack| within(ack as i64)),
+        }
     }
 
     /// Returns true if the stream has an observed start that has the ISN of
@@ -710,8 +731,12 @@ impl ModelStream {
 
     /// Returns true if the FIN was ACKed and all holes are overdue.
     fn can_finish(&self) -> bool {
+        self.is_fin_acked() && self.holes().iter().all(|hole| self.is_overdue(hole))
+    }
+
+    /// Returns true if the FIN was ACKed.
+    fn is_fin_acked(&self) -> bool {
         self.fin_offset.is_some_and(|fin| fin < self.ack)
-            && self.holes().iter().all(|hole| self.is_overdue(hole))
     }
 
     /// Gives up all holes, as the connection ended, and makes reading
@@ -755,6 +780,14 @@ impl ModelStream {
     }
 }
 
+/// Returns true if the SYN-ACK `segment` ACKs the SYN `syn`: it comes from
+/// the other endpoint and ACKs from the SYN's first byte up to the end of
+/// its bytes.
+fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
+    let bytes = syn.offset..=syn.offset + syn.payload.len() as u64;
+    syn.source != segment.source && segment.ack.is_some_and(|ack| bytes.contains(&ack))
+}
+
 /// Returns true if the true offset `offset` lies at most `window` bytes
 /// before or after the `bytes`.
 fn within_window(bytes: &Range<u64>, offset: u64, window: u64) -> bool {
@@ -782,22 +815,52 @@ impl ReferenceModel {
     ///   counts. Other RSTs count as out-of-window. Neither stores anything
     ///   else of the RST.
     ///
+    /// A SYN or SYN-ACK that is not the own one of its sender's stream (see
+    /// [`ReferenceModel::is_own_syn`]) changes nothing but the packet count.
+    /// Such a SYN is kept (a retransmission of it changes nothing, another
+    /// one replaces it), also by the tombstone, until a SYN-ACK confirms a
+    /// reconnect (see [`ReferenceModel::confirms_reconnect`]). That SYN-ACK
+    /// ends the connection, as finished if both FINs were ACKed and as a
+    /// reconnect otherwise, and the model starts again as a new connection
+    /// with the kept SYN (if the SYN-ACK ACKs it) and the SYN-ACK. The ended
+    /// connection is returned.
+    ///
     /// The connection is finished once both FINs are ACKed and all holes
     /// left are overdue, unless it was reset. Ending it gives up all holes;
     /// later segments change nothing, but a SYN or SYN-ACK that doesn't
     /// belong to its handshake starts a new connection (see
     /// [`ReferenceModel::is_own_handshake`]).
-    pub fn apply(&mut self, segment: &TestSegment) {
+    pub fn apply(&mut self, segment: &TestSegment) -> Option<ReferenceModel> {
         let header = &segment.header;
-        if self.end.is_some() {
+        let reconnect = if self.end.is_some() {
             if header.rst || false == header.syn || self.is_own_handshake(segment) {
-                return;
+                return None;
             }
-            *self = self.next_connection();
+            true
+        } else {
+            self.confirms_reconnect(segment)
+        };
+        if reconnect {
+            // the reconnect starts with the kept SYN if the segment ACKs it
+            let syn = self
+                .reconnect_syn
+                .take()
+                .filter(|syn| acks_syn(segment, syn));
+            let next = self.next_connection();
+            let mut replaced = core::mem::replace(self, next);
+            if let Some(syn) = syn {
+                self.apply(&syn);
+            }
+            self.apply(segment);
+            if replaced.end.is_some() {
+                return None;
+            }
+            replaced.end_replaced();
+            return Some(replaced);
         }
         if false == self.created {
             if header.rst || (false == header.syn && segment.payload.is_empty()) {
-                return;
+                return None;
             }
             self.created = true;
             self.roles_guessed = false == header.syn;
@@ -815,6 +878,16 @@ impl ReferenceModel {
                 self.end = Some(TcpConnectionEnd::Reset { by: segment.sender });
             } else {
                 self.streams[sender].out_of_window_segments += 1;
+            }
+        } else if header.syn && false == self.is_own_syn(segment) {
+            // the SYNs of a script all have the same ISN
+            if false == header.ack
+                && self
+                    .reconnect_syn
+                    .as_ref()
+                    .is_none_or(|syn| syn.sender != segment.sender)
+            {
+                self.reconnect_syn = Some(segment.clone());
             }
         } else {
             let observed = self.streams.each_ref().map(|stream| stream.observed);
@@ -852,6 +925,7 @@ impl ReferenceModel {
         if let Some(end) = self.end {
             self.end_with(end);
         }
+        None
     }
 
     /// Ends the connection with `end`, giving up all holes.
@@ -867,11 +941,46 @@ impl ReferenceModel {
         }
     }
 
+    /// Ends the connection that a reconnect replaces: as finished if both
+    /// FINs were ACKed, as a reconnect otherwise.
+    fn end_replaced(&mut self) {
+        let finished = self.streams.iter().all(ModelStream::is_fin_acked);
+        self.end_with(if finished {
+            TcpConnectionEnd::Finished
+        } else {
+            TcpConnectionEnd::Reconnect
+        });
+    }
+
     /// Model of the next connection on the same key.
     fn next_connection(&self) -> ReferenceModel {
         ReferenceModel {
             id: self.id + 1,
             ..ReferenceModel::new(self.config.clone())
+        }
+    }
+
+    /// Returns true if the SYN-ACK `segment` confirms a reconnect: a SYN is
+    /// kept, the SYN-ACK comes from the other endpoint, and it ACKs the kept
+    /// SYN without having the ISN of its sender's stream, or it is not the
+    /// own SYN-ACK of its sender's stream (see
+    /// [`ReferenceModel::is_own_syn`]).
+    fn confirms_reconnect(&self, segment: &TestSegment) -> bool {
+        let header = &segment.header;
+        let Some(syn) = self
+            .reconnect_syn
+            .as_ref()
+            .filter(|syn| syn.source != segment.source)
+        else {
+            return false;
+        };
+        if false == (header.syn && header.ack) || header.rst {
+            return false;
+        }
+        if acks_syn(segment, syn) {
+            false == self.streams[role_index(segment.sender)].has_isn_of(segment)
+        } else {
+            false == self.is_own_syn(segment)
         }
     }
 
@@ -890,6 +999,12 @@ impl ReferenceModel {
         let other = &self.streams[role_index(segment.sender.other())];
         self.streams[role_index(segment.sender)].has_isn_of(segment)
             || (other.observed && segment.ack == other.base)
+    }
+
+    /// Returns true if the SYN `segment` can be the own SYN of its sender's
+    /// stream (see [`ModelStream::is_own_syn`]).
+    fn is_own_syn(&self, segment: &TestSegment) -> bool {
+        self.streams[role_index(segment.sender)].is_own_syn(segment, self.range(segment.sender))
     }
 
     /// Receive window of the stream of `role`: the last window its receiver
@@ -1162,7 +1277,7 @@ mod test {
             // connection
             let id = model.id();
             let after_end = model.end().is_some();
-            model.apply(segment);
+            let replaced = model.apply(segment);
             let after_end = after_end && id == model.id();
             let processed = segment.feed(pool, ());
             if false == model.created() {
@@ -1182,8 +1297,16 @@ mod test {
                 ended = processed.ended;
                 ended.as_mut().unwrap()
             } else {
-                prop_assert!(processed.ended.is_none());
+                // a confirmed reconnect hands over the connection it replaced
                 prop_assert_eq!(None, processed.ignored);
+                prop_assert_eq!(replaced.is_some(), processed.ended.is_some());
+                if let (Some(mut expected), Some(mut replaced)) = (replaced, processed.ended) {
+                    prop_assert_eq!(expected.id(), replaced.id());
+                    prop_assert_eq!(expected.end(), replaced.end());
+                    for role in [Initiator, Responder] {
+                        expected.check_and_consume(role, replaced.stream_mut(role), 0, false)?;
+                    }
+                }
                 processed.active.unwrap().0
             };
             prop_assert_eq!(model.id(), connection.id());

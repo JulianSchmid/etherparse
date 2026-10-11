@@ -14,7 +14,9 @@ pub enum TcpStreamStart {
     /// late SYN turns the start into [`TcpStreamStart::Observed`]. This
     /// holds for bytes up to
     /// [`crate::tcp_reassembly::TcpReassemblyConfig::hole_give_up_window_factor`]
-    /// receiver windows before offset 0.
+    /// receiver windows before offset 0. A SYN outside of that range can
+    /// start a reconnect (see
+    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reconnect`]).
     MidStreamPickup,
 }
 

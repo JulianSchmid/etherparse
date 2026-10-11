@@ -138,7 +138,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let sender = self.role(source);
         if tcp.rst() {
             self.add_reset(sender, tcp, config);
-        } else if tcp.syn() && false == self.stream(sender).is_own_syn(tcp) {
+        } else if tcp.syn()
+            && false
+                == self
+                    .stream(sender)
+                    .is_own_syn(tcp, self.window(sender, config), config)
+        {
             // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
             // it, until then it changes nothing, and neither does a SYN-ACK
             // with a new ISN that confirms none
@@ -286,7 +291,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// a reconnect: a SYN with a new ISN is kept, and the SYN-ACK comes from
     /// the other endpoint. It ACKs the kept SYN without having the ISN of
     /// its sender's stream, or it has a new ISN itself.
-    pub(crate) fn confirms_reconnect(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+    pub(crate) fn confirms_reconnect(
+        &self,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
         if false == (tcp.syn() && tcp.ack()) || tcp.rst() {
             return false;
         }
@@ -303,7 +313,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             // a retransmission of the sender's own SYN-ACK confirms nothing
             Some(tcp.sequence_number()) != stream.isn()
         } else {
-            false == stream.is_own_syn(tcp)
+            false == stream.is_own_syn(tcp, self.window(sender, config), config)
         }
     }
 

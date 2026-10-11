@@ -144,7 +144,7 @@ where
                         && false == tcp.rst()
                         && false == connection.is_own_handshake(source, &tcp)
                 } else {
-                    connection.confirms_reconnect(source, &tcp)
+                    connection.confirms_reconnect(source, &tcp, &self.config)
                 };
                 if reconnect {
                     // the reconnect starts with the kept SYN if the SYN-ACK
@@ -862,6 +862,25 @@ mod test {
             assert_eq!(13, connection.stream(Initiator).highest_offset());
         }
 
+        // ... also on a pickup whose client only sent ACKs: its ACK gives
+        // the client's stream no start
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Responder, b"abc");
+            let mut syn_ack = script.segments[1].clone();
+            syn_ack.header.sequence_number = 900_000;
+            syn_ack.header.acknowledgment_number = 777_001;
+            script.segments.drain(..3);
+            script.segments.push(syn_ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            for role in [Initiator, Responder] {
+                let start = connection.stream(role).status().start;
+                assert_eq!(TcpStreamStart::MidStreamPickup, start);
+            }
+            assert_eq!(0, connection.stream(Initiator).highest_offset());
+        }
+
         // a SYN without the ACK flag doesn't confirm a kept SYN, even if its
         // ACK number does: it replaces the kept SYN, as a SYN of the other
         // endpoint
@@ -938,6 +957,106 @@ mod test {
             assert!(processed.ended.is_some());
             let (connection, _) = processed.active.unwrap();
             assert_eq!(&first_seen, connection.first_seen());
+        }
+
+        // a SYN on a mid-stream pickup is its own late SYN if it lies at
+        // most k windows before the stream's first byte: it gives the stream
+        // an observed start, or counts as out-of-window once the read
+        // position moved. Other SYNs start a reconnect that the SYN-ACK
+        // confirms (k windows are 2 * 100 bytes, the capture starts at the
+        // initiator's byte 300)
+        for (position, consumed, expected) in [
+            (0, false, Some(TcpStreamStart::Observed)),
+            (-200, false, Some(TcpStreamStart::Observed)),
+            (0, true, Some(TcpStreamStart::MidStreamPickup)),
+            (-200, true, Some(TcpStreamStart::MidStreamPickup)),
+            (-201, false, None),
+            (-201, true, None),
+            (1, false, None),
+            (1, true, None),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 300)
+                .send(Initiator, b"abc");
+            let mut syn = script.segments[0].clone();
+            syn.header.sequence_number = script.seq(Initiator, (300 + position) as u64) - 1;
+            let mut syn_ack = script.segments[1].clone();
+            syn_ack.header.sequence_number = 7000;
+            syn_ack.header.acknowledgment_number = syn.header.sequence_number + 1;
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                if consumed {
+                    let stream = connection.stream_mut(Initiator);
+                    stream.read_received();
+                    stream.consume(1);
+                }
+            }
+            {
+                let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
+                let status = connection.stream(Initiator).status();
+                if let Some(start) = expected {
+                    assert_eq!(start, status.start);
+                    let counted = TcpStreamStart::MidStreamPickup == start;
+                    assert_eq!(u64::from(counted), status.out_of_window_segments);
+                } else {
+                    assert_eq!(TcpStreamStart::MidStreamPickup, status.start);
+                    assert_eq!(0, status.out_of_window_segments);
+                }
+            }
+            let processed = syn_ack.feed(&mut pool, ());
+            assert_eq!(expected.is_none(), processed.ended.is_some());
+        }
+
+        // a SYN on a stream without a start is its own late SYN if it lies
+        // at most k windows before the other side's last ACK of the stream,
+        // or if there is no such ACK. Other SYNs start a reconnect that the
+        // SYN-ACK confirms (k windows are 2 * 100 bytes, the responder ACKs
+        // the initiator's byte 300)
+        for (offset, acked, own) in [
+            (300, true, true),
+            (100, true, true),
+            (99, true, false),
+            (301, true, false),
+            (301, false, true),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 300)
+                .send(Responder, b"abc");
+            let mut syn = script.segments[0].clone();
+            syn.header.sequence_number = script.seq(Initiator, offset) - 1;
+            let mut syn_ack = script.segments[1].clone();
+            syn_ack.header.sequence_number = 7000;
+            syn_ack.header.acknowledgment_number = syn.header.sequence_number + 1;
+            script.segments.drain(..3);
+            script.segments[0].header.ack = acked;
+            script.feed_all(&mut pool);
+            {
+                let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
+                let status = connection.stream(Initiator).status();
+                let start = if own {
+                    TcpStreamStart::Observed
+                } else {
+                    TcpStreamStart::MidStreamPickup
+                };
+                assert_eq!(start, status.start);
+            }
+            let processed = syn_ack.feed(&mut pool, ());
+            assert_eq!(own, processed.ended.is_none());
         }
 
         // a connection that ends while a SYN is kept leaves it in its
