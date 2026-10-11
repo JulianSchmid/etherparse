@@ -6,16 +6,23 @@ use std::vec::Vec;
 ///
 /// It works on the true stream offsets that a [`ConnectionScript`] records
 /// in its segments, so it is independent of the sequence number handling
-/// it checks. It expects segments without window scale options.
+/// it checks. Offsets of the pool are relative to the first byte the pool
+/// knows of a stream (its base). It expects segments without window scale
+/// options, and endpoints whose ports make guessed roles right.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Configuration of the pool the model is compared with.
     config: TcpReassemblyConfig,
+    /// Whether a segment started the connection.
+    created: bool,
+    /// Whether the roles are guessed, as a segment without a SYN started
+    /// the connection and no late SYN confirmed them.
+    roles_guessed: bool,
     /// Streams indexed by role.
     streams: [ModelStream; 2],
     /// "window" field of the last segment of each role.
     windows: [Option<u16>; 2],
-    /// Whether the SYN of each role was seen.
+    /// Whether the stream of each role took its SYN.
     syns: [bool; 2],
     /// End of the connection.
     end: Option<TcpConnectionEnd>,
@@ -41,6 +48,20 @@ pub(crate) enum ReaderAction {
 /// Model of one stream.
 #[derive(Clone, Debug, Default)]
 struct ModelStream {
+    /// Offset of the pool's offset 0 (`None` while the stream has no
+    /// start).
+    base: Option<u64>,
+    /// Whether the start is known from the stream's SYN or the ACK of the
+    /// SYN-ACK.
+    observed: bool,
+    /// Whether the stream was picked up at a FIN without bytes.
+    started_at_fin: bool,
+    /// Whether the read offset moved forward.
+    read_moved: bool,
+    /// Last ACK of the other side that couldn't be applied yet: before the
+    /// stream had a start, or at or before its first byte while bytes can
+    /// be prepended.
+    pending_ack: Option<u64>,
     /// Received bytes by offset, up to the furthest received byte (bytes
     /// that arrive after they were consumed or given up are ignored).
     bytes: Vec<Option<u8>>,
@@ -87,6 +108,15 @@ struct ModelStream {
 impl ModelStream {
     /// Applies a segment of the stream's sender, whose receiver has the
     /// receive window `window`:
+    /// - a SYN gives the stream an observed start at it (see
+    ///   [`ModelStream::observe_start`]), a SYN that a mid-stream pickup
+    ///   can't take counts as out-of-window and is ignored;
+    /// - without a start, the first bytes or a FIN without bytes start a
+    ///   mid-stream pickup, but a byte ending at the last ACK of the other
+    ///   side (a keep-alive) doesn't;
+    /// - bytes before the first byte of a mid-stream pickup are put in front
+    ///   (see [`ModelStream::can_prepend`]), or count as out-of-window
+    ///   (once per segment);
     /// - a segment with bytes or a FIN starting more than k windows after
     ///   the highest or the ACKed offset is counted and not stored (k is the
     ///   hole give up window factor, 2 without one);
@@ -108,13 +138,39 @@ impl ModelStream {
     ) {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
+        let header = &segment.header;
+        if header.syn {
+            if false == self.observe_start(start, window) {
+                self.out_of_window_segments += 1;
+                return;
+            }
+        } else if self.base.is_none() {
+            let keep_alive = 1 == segment.payload.len()
+                && false == (header.fin || header.rst)
+                && Some(end) == self.pending_ack;
+            if (segment.payload.is_empty() && false == header.fin) || keep_alive {
+                return;
+            }
+            self.start_at(start);
+            self.started_at_fin = segment.payload.is_empty();
+        }
+        let mut out_of_window = false;
+        if let Some(base) = self.base {
+            if start < base && false == segment.payload.is_empty() && false == self.observed {
+                if self.can_prepend() && base - start <= window {
+                    self.start_at(start);
+                } else {
+                    out_of_window = true;
+                }
+            }
+        }
+
         let factor = config.hole_give_up_window_factor.unwrap_or(2);
         let window_end = self.ack.max(self.highest) + u64::from(factor) * window;
         if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
             self.out_of_window_segments += 1;
             return;
         }
-        let header = &segment.header;
         if 1 == segment.payload.len()
             && false == (header.syn || header.fin || header.rst)
             && end == self.ack
@@ -139,11 +195,14 @@ impl ModelStream {
         }
         let payload = match self.fin_offset {
             Some(fin) if end > fin && false == segment.payload.is_empty() => {
-                self.out_of_window_segments += 1;
+                out_of_window = true;
                 &segment.payload[..fin.saturating_sub(start) as usize]
             }
             _ => &segment.payload[..],
         };
+        if out_of_window {
+            self.out_of_window_segments += 1;
+        }
 
         if false == payload.is_empty() {
             let start = start as usize;
@@ -178,6 +237,41 @@ impl ModelStream {
         self.extend_received();
     }
 
+    /// Gives the stream an observed start at `start`, where `window` is the
+    /// receive window of its receiver. A mid-stream pickup takes it if it is
+    /// at or before its first byte, at most one window before it, and bytes
+    /// can be prepended. Returns true if the stream has an observed start
+    /// afterwards.
+    fn observe_start(&mut self, start: u64, window: u64) -> bool {
+        match self.base {
+            Some(_) if self.observed => return true,
+            Some(base) if start > base || base - start > window || false == self.can_prepend() => {
+                return false
+            }
+            _ => {}
+        }
+        self.start_at(start);
+        self.observed = true;
+        true
+    }
+
+    /// Returns true if bytes can be prepended to the stream: it is a
+    /// mid-stream pickup whose read offset never moved and that wasn't
+    /// picked up at a FIN.
+    fn can_prepend(&self) -> bool {
+        false == self.observed && false == self.read_moved && false == self.started_at_fin
+    }
+
+    /// Moves the first byte the pool knows to `start` (at or before the
+    /// previous one).
+    fn start_at(&mut self, start: u64) {
+        self.base = Some(start);
+        self.read_offset = start;
+        self.highest = self.highest.max(start);
+        self.received.truncate(start as usize);
+        self.extend_received();
+    }
+
     /// Appends the received bytes and the placeholders of given up bytes
     /// after the end of `received`.
     fn extend_received(&mut self) {
@@ -207,12 +301,23 @@ impl ModelStream {
     /// `packet`, whose receive window before it was `window`: ACKs more than
     /// one window after the highest offset (plus the FIN) are ignored,
     /// others mark the bytes up to them as sent (but none after the FIN).
+    /// ACKs of the stream's first byte or before it don't count. The last
+    /// ACK before the stream had a start, or at or before its first byte
+    /// while bytes can be prepended, is kept and applied after every packet.
     fn add_ack(&mut self, ack: u64, window: u64, packet: u64) {
+        let Some(base) = self.base else {
+            self.pending_ack = Some(ack);
+            return;
+        };
+        if ack <= base && self.can_prepend() {
+            self.pending_ack = Some(ack);
+            return;
+        }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         if ack > sent_end + window {
             return;
         }
-        if ack > self.ack {
+        if ack > self.ack.max(base) {
             self.ack = ack;
             self.ack_history.push((packet, ack));
         }
@@ -257,11 +362,16 @@ impl ModelStream {
         hole.end <= self.implied_ack.max(self.settled_ack)
     }
 
-    /// Updates the implied ACK and the ACK of `ack_reorder_tolerance`
-    /// packets ago after the packet with the number `packet`, where `window`
-    /// is the receive window of the stream's receiver (`None` while it is
-    /// unknown), and gives up an overdue hole at the read offset.
+    /// Applies the pending ACK, updates the implied ACK and the ACK of
+    /// `ack_reorder_tolerance` packets ago after the packet with the number
+    /// `packet`, where `window` is the receive window of the stream's
+    /// receiver (`None` while it is unknown), and gives up an overdue hole
+    /// at the read offset.
     fn after_packet(&mut self, window: Option<u64>, packet: u64, config: &TcpReassemblyConfig) {
+        if let Some(ack) = self.pending_ack.take() {
+            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
+            self.add_ack(ack, ack_window, packet);
+        }
         if let Some(window) = window {
             self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
         }
@@ -316,6 +426,7 @@ impl ModelStream {
         if let Some(gap) = self.gap_at_read_offset() {
             self.gaps.remove(0);
             self.read_offset = gap.end;
+            self.read_moved = true;
             self.give_up_overdue_hole();
         }
     }
@@ -323,6 +434,7 @@ impl ModelStream {
     /// Moves the read offset over `len` bytes.
     fn consume(&mut self, len: u64) {
         self.read_offset += len;
+        self.read_moved |= 0 < len;
         self.give_up_overdue_hole();
     }
 
@@ -347,6 +459,7 @@ impl ModelStream {
             gap.start < gap.end
         });
         self.read_offset = offset;
+        self.read_moved = true;
         self.extend_received();
         self.give_up_overdue_hole();
     }
@@ -407,23 +520,55 @@ impl ReferenceModel {
     }
 
     /// Applies the ACK of a segment to the other stream and the segment to
-    /// the stream of its sender. The connection is finished once both FINs
-    /// are ACKed and all holes left are overdue, which gives up these holes;
-    /// later segments change nothing.
+    /// the stream of its sender:
+    /// - only a SYN or bytes without an RST start the connection, which has
+    ///   guessed roles without a SYN;
+    /// - the ACK of a SYN-ACK gives the other stream an observed start;
+    /// - a SYN or SYN-ACK of the role it belongs to confirms guessed roles
+    ///   if it gives a stream an observed start.
+    ///
+    /// The connection is finished once both FINs are ACKed and all holes
+    /// left are overdue, which gives up these holes; later segments change
+    /// nothing.
     pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
+        let header = &segment.header;
         if self.end.is_some() {
             return;
         }
+        if false == self.created {
+            if header.rst || (false == header.syn && segment.payload.is_empty()) {
+                return;
+            }
+            self.created = true;
+            self.roles_guessed = false == header.syn;
+        }
         self.packets += 1;
         let sender = role_index(segment.sender);
+        let other = role_index(segment.sender.other());
+        let observed = self.streams.each_ref().map(|stream| stream.observed);
+        if let (true, Some(ack)) = (header.syn, segment.ack) {
+            let window = self.window(segment.sender.other());
+            self.streams[other].observe_start(ack, window);
+        }
         if let Some(ack) = segment.ack {
             let window = self.window(segment.sender.other());
-            self.streams[role_index(segment.sender.other())].add_ack(ack, window, self.packets);
+            self.streams[other].add_ack(ack, window, self.packets);
         }
         let window = self.window(segment.sender);
         self.streams[sender].add_segment(segment, window, &self.config);
-        self.windows[sender] = Some(segment.header.window_size);
-        self.syns[sender] |= segment.header.syn;
+        self.windows[sender] = Some(header.window_size);
+        self.syns[sender] |= header.syn && self.streams[sender].observed;
+        let syn_role = if header.ack {
+            TcpRole::Responder
+        } else {
+            TcpRole::Initiator
+        };
+        if header.syn
+            && syn_role == segment.sender
+            && observed != self.streams.each_ref().map(|stream| stream.observed)
+        {
+            self.roles_guessed = false;
+        }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self.known_window(role);
             self.streams[role_index(role)].after_packet(window, self.packets, &self.config);
@@ -458,6 +603,16 @@ impl ReferenceModel {
         self.end
     }
 
+    /// Returns true once a segment started the connection.
+    pub fn created(&self) -> bool {
+        self.created
+    }
+
+    /// Returns true if the roles are guessed.
+    pub fn roles_guessed(&self) -> bool {
+        self.roles_guessed
+    }
+
     /// Contiguous received bytes of the stream of `role` from offset 0 on.
     pub fn received(&self, role: TcpRole) -> &[u8] {
         &self.streams[role_index(role)].received
@@ -465,12 +620,14 @@ impl ReferenceModel {
 
     /// Returns true if the contiguous received bytes of the stream of
     /// `role` cover `data` and match it, apart from bytes that were given
-    /// up.
+    /// up and bytes before the stream's first byte known to the pool.
     pub fn received_matches(&self, role: TcpRole, data: &[u8]) -> bool {
         let stream = &self.streams[role_index(role)];
+        let base = stream.base.unwrap_or(0);
         stream.received.len() >= data.len()
             && data.iter().enumerate().all(|(offset, byte)| {
                 stream.received[offset] == *byte
+                    || (offset as u64) < base
                     || stream
                         .given_up
                         .iter()
@@ -505,7 +662,7 @@ impl ReferenceModel {
             ReaderAction::DiscardAhead(distance) => {
                 let offset = expected.read_offset + distance;
                 expected.discard_until(offset);
-                stream.discard_until(offset);
+                stream.discard_until(offset - expected.base.unwrap_or(0));
             }
             ReaderAction::DiscardAll => {
                 expected.discard_until(expected.highest);
@@ -528,16 +685,32 @@ impl ReferenceModel {
         use proptest::prelude::*;
 
         let expected = &mut self.streams[role_index(role)];
-        prop_assert_eq!(expected.read_offset, stream.read_offset());
-        prop_assert_eq!(expected.acked_offset(), stream.acked_offset());
-        prop_assert_eq!(expected.highest, stream.highest_offset());
-        prop_assert_eq!(expected.fin_offset, stream.fin_offset());
-        prop_assert_eq!(expected.holes(), stream.holes().collect::<Vec<_>>());
+        // offsets of the pool are relative to the stream's first byte
+        let base = expected.base.unwrap_or(0);
+        prop_assert_eq!(expected.read_offset - base, stream.read_offset());
+        prop_assert_eq!(
+            expected.acked_offset().saturating_sub(base),
+            stream.acked_offset()
+        );
+        prop_assert_eq!(expected.highest - base, stream.highest_offset());
+        prop_assert_eq!(
+            expected.fin_offset.map(|fin| fin - base),
+            stream.fin_offset()
+        );
+        let holes: Vec<_> = expected
+            .holes()
+            .into_iter()
+            .map(|hole| hole.start - base..hole.end - base)
+            .collect();
+        prop_assert_eq!(holes, stream.holes().collect::<Vec<_>>());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
         let clean = 0 == expected.gap_count && 0 == expected.conflicting_retransmissions;
         prop_assert_eq!(clean, stream.is_clean());
-        let observed = self.syns[role_index(role)];
-        prop_assert_eq!(clean && expected.is_finished(), stream.is_complete());
+        let observed = expected.observed;
+        prop_assert_eq!(
+            clean && observed && expected.is_finished(),
+            stream.is_complete()
+        );
         prop_assert_eq!(
             &TcpStreamStatus {
                 start: if observed {
@@ -647,6 +820,12 @@ mod test {
             let after_end = model.end().is_some();
             model.apply(segment);
             let processed = segment.feed(pool, ());
+            if false == model.created() {
+                prop_assert!(processed.active.is_none());
+                prop_assert!(processed.ended.is_none());
+                prop_assert_eq!(Some(TcpIgnoreReason::NoConnection), processed.ignored);
+                continue;
+            }
             let connection = if after_end {
                 prop_assert!(processed.active.is_none());
                 prop_assert!(processed.ended.is_none());
@@ -663,6 +842,7 @@ mod test {
                 processed.active.unwrap().0
             };
             prop_assert_eq!(model.end(), connection.end());
+            prop_assert_eq!(model.roles_guessed(), connection.roles_guessed());
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
                 if let Some(action) = actions[(step + i) % actions.len()] {
                     model.apply_action(role, connection.stream_mut(role), action)?;
@@ -1194,6 +1374,104 @@ mod test {
                     }
                     prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
                 }
+            }
+        }
+
+        #[test]
+        fn mid_stream_pickups(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(16 * 1024),
+            responder_data in stream_data_any(16 * 1024),
+            segment_lens in vec(1usize..2000, 1..32),
+            resent_lens in vec(0usize..1000, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            pickup in any::<Index>(),
+            late in vec((any::<Index>(), 0usize..16), 0..6),
+            keep_alives in vec((tcp_role_any(), any::<Index>()), 0..4),
+            delays in vec(0usize..4, 1..64),
+            windows in vec(
+                prop_oneof![1 => 1u16..256, 2 => 256u16..8192, 1 => Just(u16::MAX)],
+                1..16
+            ),
+            fallback_window in prop_oneof![Just(4 * 1024 * 1024), 64u32..8192],
+            config in tcp_overdue_config_any(),
+            consume_lens in vec(prop_oneof![Just(0usize), 0usize..3000], 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &resent_lens, &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // the capture starts at a random segment, a few of the segments
+            // before it are captured later (e.g. the SYN)
+            let lost: Vec<_> = script
+                .segments
+                .drain(..pickup.index(script.segments.len()))
+                .collect();
+            if false == lost.is_empty() {
+                for (index, position) in &late {
+                    let segment = lost[index.index(lost.len())].clone();
+                    let position = (*position).min(script.segments.len());
+                    script.segments.insert(position, segment);
+                }
+            }
+
+            // keep-alive probes repeating the last byte sent, at random
+            // positions (some of them the first segment of their stream)
+            for (role, position) in &keep_alives {
+                let data = data[role_index(*role)];
+                if let Some(last) = data.last() {
+                    let probe = script.injected(|script| {
+                        script.send_at(*role, data.len() as u64 - 1, &[*last]);
+                    });
+                    let position = position.index(script.segments.len() + 1);
+                    script.segments.insert(position, probe);
+                }
+            }
+
+            // move the segments by a bounded distance
+            let mut keyed: Vec<_> = script
+                .segments
+                .drain(..)
+                .enumerate()
+                .map(|(i, segment)| (i + delays[i % delays.len()], segment))
+                .collect();
+            keyed.sort_by_key(|(key, _)| *key);
+            script.segments.extend(keyed.into_iter().map(|(_, segment)| segment));
+
+            // random receive windows (used once both SYNs were seen)
+            for (segment, window) in script.segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                fallback_window,
+                ..config
+            });
+            let (model, _) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+                &[None],
+            )?;
+
+            // the received bytes are the ones that were sent, apart from the
+            // ones that were given up or lie before the first byte captured
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                let len = model.received(role).len().min(data[i].len());
+                prop_assert!(model.received_matches(role, &data[i][..len]));
             }
         }
 
