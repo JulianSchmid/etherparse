@@ -13,6 +13,8 @@ pub(crate) struct TestSegment<CustomChannelId = ()> {
     /// Offset in the other stream up to which the segment ACKs (`None`
     /// without the ACK flag).
     pub ack: Option<u64>,
+    /// Incarnation of the script that wrote the segment.
+    pub incarnation: u32,
     pub vlan_ids: ArrayVec<VlanId, 3>,
     pub source: SocketAddr,
     pub destination: SocketAddr,
@@ -96,6 +98,9 @@ pub(crate) struct ConnectionScript<CustomChannelId = ()> {
     next_offsets: [u64; 2],
     /// Whether each role sent its SYN.
     syns_sent: [bool; 2],
+    /// Number that tells the scripts of different connections on the same
+    /// key apart (copied into the segments).
+    pub incarnation: u32,
     /// Window scale option put into the SYN of each role.
     pub window_scales: [Option<u8>; 2],
     /// "window" field of the next segments.
@@ -140,6 +145,7 @@ impl ConnectionScript<()> {
             isns: [initiator_isn, responder_isn],
             next_offsets: [0, 0],
             syns_sent: [false, false],
+            incarnation: 0,
             window_scales: [None, None],
             window_size: 0xffff,
             segments: Vec::new(),
@@ -158,6 +164,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             isns: self.isns,
             next_offsets: self.next_offsets,
             syns_sent: self.syns_sent,
+            incarnation: self.incarnation,
             window_scales: self.window_scales,
             window_size: self.window_size,
             segments: Vec::new(),
@@ -205,6 +212,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             sender,
             offset,
             ack,
+            incarnation: self.incarnation,
             vlan_ids: self.vlan_ids.clone(),
             source: self.endpoint(sender),
             destination: self.endpoint(sender.other()),

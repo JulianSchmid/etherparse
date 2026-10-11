@@ -14,7 +14,10 @@ use std::vec::Vec;
 ///
 /// A SYN on the tombstone of an ended connection, or a confirmed reconnect,
 /// starts the model again as a new connection, which takes the later
-/// segments.
+/// segments. Segments of another script than the connection's (see
+/// [`ConnectionScript::incarnation`]) are assumed to lie far away from its
+/// streams, and the model only predicts what the pool does with some of
+/// them (see [`ReferenceModel::predicts`]).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Configuration of the pool the model is compared with.
@@ -24,6 +27,8 @@ pub(crate) struct ReferenceModel {
     id: u64,
     /// Whether a segment started the connection.
     created: bool,
+    /// Incarnation of the script whose segment started the connection.
+    incarnation: Option<u32>,
     /// Whether the roles are guessed, as a segment without a SYN started
     /// the connection and no late SYN confirmed them.
     roles_guessed: bool,
@@ -780,12 +785,14 @@ impl ModelStream {
     }
 }
 
-/// Returns true if the SYN-ACK `segment` ACKs the SYN `syn`: it comes from
-/// the other endpoint and ACKs from the SYN's first byte up to the end of
-/// its bytes.
+/// Returns true if the SYN-ACK `segment` ACKs the SYN `syn` of the same
+/// script: it comes from the other endpoint and ACKs from the SYN's first
+/// byte up to the end of its bytes.
 fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
     let bytes = syn.offset..=syn.offset + syn.payload.len() as u64;
-    syn.source != segment.source && segment.ack.is_some_and(|ack| bytes.contains(&ack))
+    syn.incarnation == segment.incarnation
+        && syn.source != segment.source
+        && segment.ack.is_some_and(|ack| bytes.contains(&ack))
 }
 
 /// Returns true if the true offset `offset` lies at most `window` bytes
@@ -863,6 +870,7 @@ impl ReferenceModel {
                 return None;
             }
             self.created = true;
+            self.incarnation = Some(segment.incarnation);
             self.roles_guessed = false == header.syn;
         }
         self.packets += 1;
@@ -882,10 +890,9 @@ impl ReferenceModel {
         } else if header.syn && false == self.is_own_syn(segment) {
             // the SYNs of a script all have the same ISN
             if false == header.ack
-                && self
-                    .reconnect_syn
-                    .as_ref()
-                    .is_none_or(|syn| syn.sender != segment.sender)
+                && self.reconnect_syn.as_ref().is_none_or(|syn| {
+                    syn.incarnation != segment.incarnation || syn.sender != segment.sender
+                })
             {
                 self.reconnect_syn = Some(segment.clone());
             }
@@ -978,7 +985,7 @@ impl ReferenceModel {
             return false;
         }
         if acks_syn(segment, syn) {
-            false == self.streams[role_index(segment.sender)].has_isn_of(segment)
+            false == self.has_isn_of_sender(segment)
         } else {
             false == self.is_own_syn(segment)
         }
@@ -993,18 +1000,56 @@ impl ReferenceModel {
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` belongs to the handshake
-    /// of the connection: it has the ISN of its sender's stream, or it is a
-    /// SYN-ACK that ACKs the observed start of the other stream.
+    /// of the connection: it comes from the connection's script, and it has
+    /// the ISN of its sender's stream, or it is a SYN-ACK that ACKs the
+    /// observed start of the other stream.
     fn is_own_handshake(&self, segment: &TestSegment) -> bool {
         let other = &self.streams[role_index(segment.sender.other())];
-        self.streams[role_index(segment.sender)].has_isn_of(segment)
-            || (other.observed && segment.ack == other.base)
+        self.has_isn_of_sender(segment)
+            || (Some(segment.incarnation) == self.incarnation
+                && other.observed
+                && segment.ack == other.base)
+    }
+
+    /// Returns true if the SYN or SYN-ACK `segment` comes from the
+    /// connection's script and has the ISN of its sender's stream (see
+    /// [`ModelStream::has_isn_of`]).
+    fn has_isn_of_sender(&self, segment: &TestSegment) -> bool {
+        Some(segment.incarnation) == self.incarnation
+            && self.streams[role_index(segment.sender)].has_isn_of(segment)
     }
 
     /// Returns true if the SYN `segment` can be the own SYN of its sender's
-    /// stream (see [`ModelStream::is_own_syn`]).
+    /// stream (see [`ModelStream::is_own_syn`]). SYNs of other scripts lie
+    /// far away from the streams, so they never are.
     fn is_own_syn(&self, segment: &TestSegment) -> bool {
-        self.streams[role_index(segment.sender)].is_own_syn(segment, self.range(segment.sender))
+        Some(segment.incarnation) == self.incarnation
+            && self.streams[role_index(segment.sender)]
+                .is_own_syn(segment, self.range(segment.sender))
+    }
+
+    /// Returns true if the model predicts what the pool does with
+    /// `segment`. For segments of another script than the connection's, it
+    /// only does on the tombstone of an ended connection, for a SYN-ACK that
+    /// ACKs the kept SYN, and for SYNs and SYN-ACKs while every stream has a
+    /// start or an ACK of the other side (a stream without either takes any
+    /// of them as its own, and its role is unknown here).
+    pub fn predicts(&self, segment: &TestSegment) -> bool {
+        let header = &segment.header;
+        let acks_kept_syn = self
+            .reconnect_syn
+            .as_ref()
+            .is_some_and(|syn| acks_syn(segment, syn));
+        false == self.created
+            || self.end.is_some()
+            || Some(segment.incarnation) == self.incarnation
+            || (header.syn
+                && false == header.rst
+                && (acks_kept_syn
+                    || self
+                        .streams
+                        .iter()
+                        .all(|stream| stream.base.is_some() || stream.pending_ack.is_some())))
     }
 
     /// Receive window of the stream of `role`: the last window its receiver
@@ -1032,6 +1077,11 @@ impl ReferenceModel {
     /// Id of the connection.
     pub fn id(&self) -> TcpConnectionId {
         TcpConnectionId(self.id)
+    }
+
+    /// Incarnation of the script whose segment started the connection.
+    pub fn incarnation(&self) -> Option<u32> {
+        self.incarnation
     }
 
     /// Returns true once a segment started the connection.
@@ -1260,7 +1310,8 @@ mod test {
     /// or from the ended connection it handed over. `acked_reads` decides
     /// whether the bytes are consumed after reading them with `read_acked`
     /// or `read_received`, and `actions` what the reader does before
-    /// reading.
+    /// reading. Segments whose effect the model can't predict are left out
+    /// (see [`ReferenceModel::predicts`]).
     ///
     /// Returns the model and the ended connection, if any.
     fn feed_and_check(
@@ -1273,6 +1324,9 @@ mod test {
         let mut model = ReferenceModel::new(pool.config().clone());
         let mut ended = None;
         for (step, segment) in segments.iter().enumerate() {
+            if false == model.predicts(segment) {
+                continue;
+            }
             // segments on the tombstone are ignored, unless they start a new
             // connection
             let id = model.id();
@@ -2277,6 +2331,154 @@ mod test {
                     prop_assert_eq!(TcpRead::End(end), stream.read_received());
                 }
                 pool.recycle(connection);
+            }
+        }
+
+        #[test]
+        fn reconnects(
+            isns in [tcp_isn_any(), tcp_isn_any()],
+            new_isn_distances in [0u32..(1 << 20), 0u32..(1 << 20)],
+            old_data in [stream_data_any(2 * 1024), stream_data_any(2 * 1024)],
+            new_data in [stream_data_any(2 * 1024), stream_data_any(2 * 1024)],
+            fast_open in stream_data_any(16),
+            segment_lens in vec(1usize..500, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            old_end in proptest::option::of(proptest::option::of(tcp_role_any())),
+            pickup in any::<bool>(),
+            lost in vec(any::<Index>(), 0..4),
+            swapped in any::<bool>(),
+            syn_position in any::<Index>(),
+            syn_ack_delay in 0usize..8,
+            interleaving in vec(any::<bool>(), 1..64),
+            retransmitted_syns in vec((any::<bool>(), any::<Index>()), 0..3),
+            spoofed_syns in vec((tcp_role_any(), any::<Index>(), 0u32..(1 << 20)), 0..3),
+            windows in vec(
+                prop_oneof![1 => 1u16..256, 2 => 256u16..8192, 1 => Just(u16::MAX)],
+                1..16
+            ),
+            fallback_window in prop_oneof![Just(4 * 1024 * 1024), 64u32..8192],
+            config in tcp_overdue_config_any(),
+            consume_lens in vec(0usize..1000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // the connection on the key before the reconnect: open, finished
+            // (`Some(None)`) or reset by an endpoint, captured from its
+            // handshake or picked up in the middle, with lost segments
+            let mut old = ConnectionScript::with_isns(isns[0], isns[1]);
+            old.handshake();
+            let data = [&old_data[0][..], &old_data[1][..]];
+            send_interleaved(&mut old, data, &segment_lens, &[0], &directions);
+            match old_end {
+                Some(None) => {
+                    old.fin(Initiator).fin(Responder).ack(Initiator);
+                }
+                Some(Some(role)) => {
+                    old.rst(role);
+                }
+                None => {}
+            }
+            for index in &lost {
+                if old.segments.len() > 3 {
+                    old.segments.remove(3 + index.index(old.segments.len() - 3));
+                }
+            }
+            let old_syn = old.segments[0].clone();
+            if pickup {
+                old.segments.drain(..3);
+            }
+
+            // the reconnect, whose initiator is either endpoint (with TCP Fast
+            // Open bytes in its SYN), and whose ISNs lie far away from the
+            // ones each endpoint used before
+            let endpoints = [addr("10.0.0.1:50000"), addr("10.0.0.2:80")];
+            let order = if swapped { [1, 0] } else { [0, 1] };
+            let new_isns =
+                order.map(|i| isns[i].wrapping_add((1 << 30) + new_isn_distances[i]));
+            let [initiator, responder] = order.map(|i| endpoints[i]);
+            let mut new = ConnectionScript::new(initiator, responder, new_isns[0], new_isns[1]);
+            new.incarnation = 1;
+            new.syn_with_data(&fast_open).syn_ack().ack(Initiator);
+            let data = [&new_data[0][..], &new_data[1][..]];
+            send_interleaved(&mut new, data, &segment_lens, &[0], &directions);
+            new.fin(Initiator).fin(Responder).ack(Initiator);
+
+            // the new SYN comes after the old handshake (or the first segment
+            // of a pickup), its SYN-ACK a few old segments later, and then
+            // the rest of both connections interleaved (old segments after
+            // the reconnect are left out, see `ReferenceModel::predicts`)
+            let first = (if pickup { 1 } else { 2 }).min(old.segments.len());
+            let syn_at = first + syn_position.index(old.segments.len() - first + 1);
+            let syn_ack_at = (syn_at + syn_ack_delay).min(old.segments.len());
+            let mut segments = old.segments[..syn_at].to_vec();
+            segments.push(new.segments[0].clone());
+            segments.extend_from_slice(&old.segments[syn_at..syn_ack_at]);
+            segments.push(new.segments[1].clone());
+            let mut old_rest = old.segments[syn_ack_at..].iter();
+            let mut new_rest = new.segments[2..].iter();
+            for take_old in interleaving.iter().cycle() {
+                let next = if *take_old {
+                    old_rest.next().or_else(|| new_rest.next())
+                } else {
+                    new_rest.next().or_else(|| old_rest.next())
+                };
+                let Some(segment) = next else {
+                    break;
+                };
+                segments.push(segment.clone());
+            }
+
+            // retransmissions of the old or the new SYN, and SYNs with other
+            // ISNs that no SYN-ACK confirms (spoofed ones), from either
+            // endpoint
+            for (retransmit_new, position) in &retransmitted_syns {
+                let syn = if *retransmit_new { &new.segments[0] } else { &old_syn };
+                segments.insert(1 + position.index(segments.len()), syn.clone());
+            }
+            for (i, (role, position, distance)) in spoofed_syns.iter().enumerate() {
+                let sender = endpoints[role_index(*role)];
+                let receiver = endpoints[role_index(role.other())];
+                let isn = isns[role_index(*role)].wrapping_add((1 << 30) + (1 << 29) + distance);
+                let mut spoofed = ConnectionScript::new(sender, receiver, isn, 0);
+                spoofed.incarnation = 2 + i as u32;
+                spoofed.syn();
+                let position = first + position.index(segments.len() - first + 1);
+                segments.insert(position, spoofed.segments[0].clone());
+            }
+
+            // random receive windows (used once both SYNs were seen)
+            for (segment, window) in segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                fallback_window,
+                ..config
+            });
+            let (model, _) = feed_and_check(
+                &mut pool,
+                &segments,
+                &consume_lens,
+                &acked_reads,
+                &[None],
+            )?;
+
+            // the received bytes are the ones that were sent, apart from the
+            // ones that were given up or lie before the first byte captured
+            let new_initiator_data = [&fast_open[..], &new_data[0][..]].concat();
+            let data = match model.incarnation() {
+                Some(1) => [&new_initiator_data[..], &new_data[1][..]],
+                _ => [&old_data[0][..], &old_data[1][..]],
+            };
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                if Some(2) > model.incarnation() {
+                    prop_assert!(model.received_matches(role, data[i]));
+                }
+            }
+
+            // without SYNs between them, the new SYN and its SYN-ACK always
+            // start the reconnect, whether the old connection ended or not
+            if spoofed_syns.is_empty() && retransmitted_syns.iter().all(|(new, _)| *new) {
+                prop_assert_eq!(Some(1), model.incarnation());
             }
         }
 
