@@ -464,11 +464,13 @@ impl TcpStream {
     /// Maps the sequence number `seq` to a stream offset, relative to the
     /// highest offset (RFC 1982 serial number arithmetic).
     ///
-    /// Offsets before the stream's first byte are negative.
-    fn offset(&self, start_seq: u32, seq: u32) -> i64 {
+    /// Offsets before the stream's first byte are negative. A sequence
+    /// number 2^31 away from the highest offset lies neither before nor
+    /// after it, so it can't be mapped (`None`).
+    fn offset(&self, start_seq: u32, seq: u32) -> Option<i64> {
         let highest = self.highest_offset;
         let distance = seq.wrapping_sub(start_seq.wrapping_add(highest as u32)) as i32;
-        highest as i64 + i64::from(distance)
+        (i32::MIN != distance).then(|| highest as i64 + i64::from(distance))
     }
 
     /// Applies a segment sent by the stream's sender, whose receiver has the
@@ -514,7 +516,13 @@ impl TcpStream {
         let Some(start_seq) = self.start_seq else {
             return;
         };
-        let mut start = self.offset(start_seq, seq);
+        // bytes or a FIN that can't be mapped lie outside of the window
+        let Some(mut start) = self.offset(start_seq, seq) else {
+            if false == data.is_empty() || tcp.fin() {
+                self.status.out_of_window_segments += 1;
+            }
+            return;
+        };
 
         // bytes before offset 0 of a mid-stream pickup are prepended until
         // it is read from, and are outside of the stream after that
@@ -593,7 +601,9 @@ impl TcpStream {
             Some(_) if TcpStreamStart::Observed == self.status.start => return true,
             Some(start_seq) => {
                 // a late SYN lies at or before the first byte received
-                let start = self.offset(start_seq, seq);
+                let Some(start) = self.offset(start_seq, seq) else {
+                    return false;
+                };
                 if false == self.move_start_back(seq, start, window, config) {
                     return false;
                 }
@@ -723,7 +733,10 @@ impl TcpStream {
             self.pending_ack = Some(ack_seq);
             return;
         };
-        let ack = self.offset(start_seq, ack_seq);
+        // the receiver can't have ACKed bytes that can't be mapped
+        let Some(ack) = self.offset(start_seq, ack_seq) else {
+            return;
+        };
         // an ACK of offset 0 or before it can ACK bytes prepended later
         if ack <= 0 && self.can_prepend() {
             self.pending_ack = Some(ack_seq);
@@ -2867,6 +2880,29 @@ mod test {
             }
         }
 
+        // ACKs up to 2^31 - 1 after the highest offset count (with a window
+        // above 2^31), one 2^31 away can't be mapped, and one 2^31 + 1 after
+        // it lies 2^31 - 1 before it
+        for (distance, expected) in [
+            ((1 << 31) - 1, 2 + (1 << 31)),
+            (1 << 31, 0),
+            ((1 << 31) + 1, 0),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window: u32::MAX,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 3 + distance);
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(expected, connection.stream(Initiator).acked_offset());
+        }
+
         // after the FIN, ACKs count up to one window after the FIN (the ACK
         // of the FIN even with a window of 0)
         for (window, ack, expected) in [(0, 4, 3), (100, 104, 3), (100, 105, 0)] {
@@ -3250,6 +3286,33 @@ mod test {
             assert_eq!(None, connection.stream(Responder).fin_offset());
         }
 
+        // a FIN up to 2^31 - 1 after the highest offset lies after it (a
+        // window above 2^31 takes it), one 2^31 away can't be mapped and
+        // counts as out-of-window, and one 2^31 + 1 after it lies 2^31 - 1
+        // before it
+        for (distance, expected, out_of_window) in [
+            ((1 << 31) - 1, Some(2 + (1 << 31)), 0),
+            (1 << 31, None, 1),
+            ((1 << 31) + 1, None, 0),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window: u32::MAX,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let fin = script.injected(|s| {
+                s.fin_at(Initiator, 3 + distance, &[]);
+            });
+            script.segments.drain(..3);
+            script.segments.push(fin);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(expected, stream.fin_offset());
+            assert_eq!(out_of_window, stream.status().out_of_window_segments);
+        }
+
         // FIN after the bytes, with and without data (also across a
         // wrap-around of the sequence numbers)
         for isn in [1000, u32::MAX - 4] {
@@ -3609,13 +3672,15 @@ mod test {
         // other SYNs of a mid-stream pickup count as out-of-window and
         // change nothing, not even with bytes (TCP Fast Open): after the
         // read position moved, more than k windows before the first byte,
-        // after the first byte, and for a pickup that starts at its FIN
+        // after the first byte, 2^31 away from the highest offset (can't be
+        // mapped), and for a pickup that starts at its FIN
         for (factor, fallback_window, lost, consumed, syn_offset, fin) in [
             (None, 3, &b""[..], 1, 0, false),
             (Some(2), 2, b"abcde", 0, 0, false),
             (Some(1), 4, b"abcde", 0, 0, false),
             (None, 2, b"abcde", 0, 0, false),
             (None, 3, b"", 0, 2, false),
+            (None, 3, b"", 0, (1 << 31) + 3, false),
             (None, 3, b"", 0, 0, true),
         ] {
             let config = TcpReassemblyConfig {
@@ -3843,6 +3908,40 @@ mod test {
             stream.read_received();
             stream.consume(1);
             assert_eq!((2, 3), (stream.status().gaps, stream.status().gap_bytes));
+        }
+
+        // bytes starting 2^31 - 1 after the highest offset lie after the
+        // window, ones 2^31 after it can't be mapped and count too, and ones
+        // 2^31 + 1 after it lie 2^31 - 1 before it (before the first byte,
+        // which doesn't count)
+        for (distance, expected) in [((1 << 31) - 1, 1), (1 << 31, 1), ((1 << 31) + 1, 0)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let segment = script.injected(|s| {
+                s.send_at(Initiator, 3 + distance, b"x");
+            });
+            script.segments.push(segment);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(expected, stream.status().out_of_window_segments);
+            assert_eq!(3, stream.highest_offset());
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+        }
+
+        // ... while a segment without bytes there changes nothing
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let ack = script.injected(|s| {
+                s.send_at(Initiator, 3 + (1 << 31), &[]);
+            });
+            script.segments.push(ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(3, stream.highest_offset());
         }
 
         // every segment with bytes after the FIN counts as out-of-window
