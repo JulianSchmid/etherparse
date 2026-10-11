@@ -108,8 +108,9 @@ where
     /// segments of unknown connections (pure ACKs, FINs without bytes and
     /// RSTs) are ignored with [`TcpIgnoreReason::NoConnection`].
     ///
-    /// A connection that ends is handed over in [`TcpProcessed::ended`].
-    /// Its late segments are then ignored with
+    /// A connection that ends, e.g. by an RST (see
+    /// [`TcpConnectionEnd::Reset`]), is handed over in
+    /// [`TcpProcessed::ended`]. Its late segments are then ignored with
     /// [`TcpIgnoreReason::AfterEnd`].
     pub fn process_segment(
         &mut self,
@@ -438,6 +439,52 @@ mod test {
                 assert!(processed.ended.is_none());
                 assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             }
+        }
+
+        // a connection reset by an RST that the receiver can accept is
+        // handed over with its bytes, and its late segments are ignored
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .rst(Responder)
+                // new bytes after the end
+                .send(Initiator, b"def");
+            let processed = script.feed(&mut pool, ..5);
+            assert!(processed.active.is_none());
+            assert_eq!(None, processed.ignored);
+            let mut connection = processed.ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                connection.end()
+            );
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"abc"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            for segment in &script.segments[1..] {
+                let processed = segment.feed(&mut pool, 0);
+                assert!(processed.active.is_none());
+                assert!(processed.ended.is_none());
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+        }
+
+        // an RST outside of the receiver's window is applied to the
+        // connection without ending it
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().rst_at(Responder, 1 << 30);
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            assert_eq!(None, processed.ignored);
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Responder, sender);
+            assert_eq!(None, connection.end());
         }
 
         // segments with a different key belong to a different connection

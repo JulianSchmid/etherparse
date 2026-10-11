@@ -319,6 +319,19 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         self.fin(TcpRole::Initiator).push(responder_fin)
     }
 
+    /// RST of `sender` at its next byte.
+    pub fn rst(&mut self, sender: TcpRole) -> &mut Self {
+        self.rst_at(sender, self.next_offsets[role_index(sender)])
+    }
+
+    /// RST of `sender` with the sequence number of the byte at `offset` in
+    /// its stream.
+    pub fn rst_at(&mut self, sender: TcpRole, offset: u64) -> &mut Self {
+        let mut segment = self.segment(sender, offset, &[]);
+        segment.header.rst = true;
+        self.push(segment)
+    }
+
     /// Next bytes of the stream of `sender`.
     pub fn send(&mut self, sender: TcpRole, data: &[u8]) -> &mut Self {
         self.send_at(sender, self.next_offsets[role_index(sender)], data)

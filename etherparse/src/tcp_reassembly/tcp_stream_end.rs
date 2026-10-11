@@ -4,6 +4,10 @@
 pub enum TcpStreamEnd {
     /// The sender ended the stream with a FIN.
     Fin,
+
+    /// The connection was reset before the read position reached a FIN
+    /// (see [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]).
+    Reset,
 }
 
 #[cfg(test)]
@@ -20,10 +24,14 @@ mod test {
             let b = a;
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
+            assert_ne!(TcpStreamEnd::Reset, a);
         }
 
         // debug
-        assert_eq!("Fin", format!("{:?}", TcpStreamEnd::Fin));
+        {
+            assert_eq!("Fin", format!("{:?}", TcpStreamEnd::Fin));
+            assert_eq!("Reset", format!("{:?}", TcpStreamEnd::Reset));
+        }
 
         // hash
         {

@@ -132,7 +132,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
-        self.add_data_segment(sender, tcp, config);
+        if tcp.rst() {
+            self.add_reset(sender, tcp, config);
+        } else {
+            self.add_data_segment(sender, tcp, config);
+        }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
                 .stream(role.other())
@@ -142,20 +146,25 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
 
         // finished once both FINs were ACKed and the holes left are overdue
-        if [&self.initiator_stream, &self.responder_stream]
-            .iter()
-            .all(|stream| stream.can_finish())
+        if self.end.is_none()
+            && [&self.initiator_stream, &self.responder_stream]
+                .iter()
+                .all(|stream| stream.can_finish())
         {
             self.end = Some(TcpConnectionEnd::Finished);
-            // late segments are ignored after the end, so they can't fill
-            // the holes anymore
-            self.initiator_stream.give_up_all_holes();
-            self.responder_stream.give_up_all_holes();
+        }
+        if let Some(end) = self.end {
+            let stream_end = match end {
+                TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
+                TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            };
+            self.initiator_stream.connection_ended(stream_end);
+            self.responder_stream.connection_ended(stream_end);
         }
         sender
     }
 
-    /// Applies a segment sent by `sender` to the streams.
+    /// Applies a segment without RST sent by `sender`.
     fn add_data_segment(
         &mut self,
         sender: TcpRole,
@@ -192,6 +201,20 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             if syn_sender == sender && starts != self.starts() {
                 self.roles_guessed = false;
             }
+        }
+    }
+
+    /// Applies an RST sent by `sender`: one that the receiver can accept
+    /// ends the connection, and its ACK counts. Others are ignored with
+    /// their ACK and window, as they don't belong to the connection (e.g.
+    /// injected ones). RSTs carry no bytes of the stream, and their SYN and
+    /// FIN flags are ignored.
+    fn add_reset(&mut self, sender: TcpRole, tcp: &TcpSlice<'_>, config: &TcpReassemblyConfig) {
+        let window = self.window(sender, config);
+        let seq = tcp.sequence_number();
+        if self.stream_mut(sender).add_reset(seq, window) {
+            self.add_ack(sender, tcp, config);
+            self.end = Some(TcpConnectionEnd::Reset { by: sender });
         }
     }
 
@@ -489,9 +512,11 @@ mod test {
         let mut pool = TcpReassemblyPool::<u32, ()>::default();
         let mut script = ConnectionScript::with_isns(1000, 2000);
         script.handshake().send(Initiator, b"abc");
-        // a retransmission updates it too
+        // a retransmission updates it too, and so does an RST outside of the
+        // receiver's window
         let retransmission = script.segments[3].clone();
         script.segments.push(retransmission);
+        script.rst_at(Responder, 1 << 30);
         for (i, segment) in script.segments.iter().enumerate() {
             let (connection, _) = segment.feed(&mut pool, 10 + i as u32).active.unwrap();
             assert_eq!(&(10 + i as u32), connection.last_seen());
@@ -867,6 +892,293 @@ mod test {
             }
             let connection = script.feed(&mut pool, 11..).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // an RST at the sender's next byte resets the connection, sent by
+        // either side
+        for sender in [Initiator, Responder] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def")
+                .rst(sender);
+            {
+                let (connection, _) = script.feed(&mut pool, ..5).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let connection = script.feed(&mut pool, 5..).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: sender }),
+                connection.end()
+            );
+        }
+
+        // an injected RST after the receiver's window is counted, but
+        // doesn't end the connection (regression test, the old
+        // tcp-reassembly branch accepted it)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            let injected = script.injected(|s| {
+                s.rst_at(Initiator, 1 << 20);
+            });
+            script.segments.push(injected);
+            {
+                let (connection, sender) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(Initiator, sender);
+                assert_eq!(None, connection.end());
+                let status = connection.stream(Initiator).status();
+                assert_eq!(1, status.out_of_window_segments);
+            }
+            script.fin(Initiator).fin(Responder).ack(Initiator);
+            let connection = script.feed(&mut pool, 5..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // the receiver accepts an RST from its ACK up to one window after
+        // the bytes sent (and the FIN), also with a window of 0
+        for (window, fin, offset, reset) in [
+            // before the ACK
+            (100, false, 3, false),
+            // at the ACK
+            (100, false, 4, true),
+            // up to one window after the bytes sent
+            (100, false, 110, true),
+            (100, false, 111, false),
+            // ... and after the FIN
+            (100, true, 111, true),
+            (100, true, 112, false),
+            // window of 0
+            (0, false, 3, false),
+            (0, false, 4, true),
+            (0, false, 10, true),
+            (0, false, 11, false),
+            (0, true, 11, true),
+            (0, true, 12, false),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"0123456789");
+            if fin {
+                script.fin(Initiator);
+            }
+            script.window_size = window;
+            script.ack_to(Responder, 4);
+            let rst = script.injected(|s| {
+                s.rst_at(Initiator, offset);
+            });
+            script.segments.push(rst);
+            let processed = script.feed_all(&mut pool);
+            if reset {
+                let connection = processed.ended.unwrap();
+                assert_eq!(
+                    Some(TcpConnectionEnd::Reset { by: Initiator }),
+                    connection.end()
+                );
+            } else {
+                let (connection, _) = processed.active.unwrap();
+                assert_eq!(None, connection.end());
+                let status = connection.stream(Initiator).status();
+                assert_eq!(1, status.out_of_window_segments);
+            }
+        }
+
+        // an RST 2^31 away from the bytes sent, or before the stream's first
+        // byte, is not accepted
+        for seq in [1001u32.wrapping_add(1 << 31), 1000] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let mut rst = script.injected(|s| {
+                s.rst(Initiator);
+            });
+            rst.header.sequence_number = seq;
+            script.segments.push(rst);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            let status = connection.stream(Initiator).status();
+            assert_eq!(1, status.out_of_window_segments);
+        }
+
+        // an RST of a stream without a start is accepted from the other
+        // side's ACK of the stream up to one window after it (the
+        // initiator's stream was not captured, the responder ACKs 10 bytes
+        // of it)
+        for (offset, reset) in [(9, false), (10, true), (110, true), (111, false)] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"0123456789")
+                .send(Responder, b"abc")
+                .ack(Initiator)
+                .rst_at(Initiator, offset);
+            script.segments.drain(..4);
+            let processed = script.feed_all(&mut pool);
+            if reset {
+                let connection = processed.ended.unwrap();
+                assert_eq!(
+                    Some(TcpConnectionEnd::Reset { by: Initiator }),
+                    connection.end()
+                );
+            } else {
+                let (connection, _) = processed.active.unwrap();
+                assert_eq!(None, connection.end());
+                let status = connection.stream(Initiator).status();
+                assert_eq!(1, status.out_of_window_segments);
+            }
+        }
+
+        // ... and at any sequence number without such an ACK
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"0123456789")
+                .send(Responder, b"abc")
+                .rst_at(Initiator, 1 << 30);
+            script.segments.drain(..4);
+            script.segments[0].header.ack = false;
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                connection.end()
+            );
+        }
+
+        // an RST with bytes, a SYN or a FIN resets the connection too,
+        // without storing its bytes or its FIN
+        for (payload, syn, fin) in [
+            (&b"xyz"[..], false, false),
+            (b"", true, false),
+            (b"", false, true),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let mut rst = script.injected(|s| {
+                s.send(Initiator, payload);
+            });
+            rst.header.rst = true;
+            rst.header.syn = syn;
+            rst.header.fin = fin;
+            script.segments.push(rst);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                connection.end()
+            );
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_received());
+        }
+
+        // an RST whose ACK ACKs the last FIN resets the connection, it
+        // doesn't finish it
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin(Initiator)
+                .fin(Responder)
+                .rst(Initiator);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                connection.end()
+            );
+        }
+
+        // an ACK doesn't keep an RST at or after the received bytes from
+        // resetting the connection, as a forged ACK could (also once a FIN
+        // cut the hole that ACK left, with a window of 0), but RSTs before
+        // the received bytes stay ignored
+        for (fin, window, offset, reset) in [
+            (false, 100, 3, true),
+            (false, 100, 2, false),
+            (true, 0, 4, true),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            let mut forged = script.injected(|s| {
+                s.ack_to(Responder, 10);
+            });
+            forged.header.window_size = window;
+            script.segments.push(forged);
+            if fin {
+                script.fin(Initiator);
+            }
+            let rst = script.injected(|s| {
+                s.rst_at(Initiator, offset);
+            });
+            script.segments.push(rst);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
+        // a pickup accepts an RST at the receiver's ACK before its first
+        // byte, which is kept until bytes can't be prepended anymore (the
+        // capture starts at the initiator's byte 5, the responder ACKs 3)
+        for (offset, reset) in [(3, true), (2, false)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"01234")
+                .send(Initiator, b"56789")
+                .ack_to(Responder, 3)
+                .rst_at(Initiator, offset);
+            script.segments.drain(..4);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
+        // RSTs before the point a stream resynced at are ignored, also
+        // without an ACK of the jump
+        for (offset, reset) in [(998, false), (1000, true)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(1),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /")
+                .rst_at(Initiator, offset);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
+        // an RST from a direction never seen resets the connection, e.g.
+        // the answer to a SYN on a closed port
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().rst(Responder);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                connection.end()
+            );
         }
     }
 }

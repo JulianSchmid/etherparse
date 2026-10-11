@@ -37,7 +37,9 @@ pub struct TcpStreamStatus {
     /// anymore (see [`TcpStreamStart::MidStreamPickup`]).
     ///
     /// These bytes are not stored. FINs starting after the receiver's window
-    /// count too, and so do SYNs that a mid-stream pickup can't take.
+    /// count too, and so do SYNs that a mid-stream pickup can't take and
+    /// RSTs that the receiver can't accept (see
+    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]).
     pub out_of_window_segments: u64,
 }
 

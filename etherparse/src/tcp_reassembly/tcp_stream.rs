@@ -113,6 +113,11 @@ pub struct TcpStream {
     /// [`TcpStream::force_resync`]).
     resync_forced: bool,
 
+    /// What reads return once nothing more is readable and the read
+    /// position is not at the FIN, as the connection ended (`None` while it
+    /// is open).
+    connection_end: Option<TcpStreamEnd>,
+
     status: TcpStreamStatus,
 }
 
@@ -143,6 +148,7 @@ impl TcpStream {
             resync_ack: None,
             resync_offset: 0,
             resync_forced: false,
+            connection_end: None,
             status: TcpStreamStatus {
                 start: TcpStreamStart::MidStreamPickup,
                 gaps: 0,
@@ -160,8 +166,10 @@ impl TcpStream {
     /// Call [`TcpStream::consume`] with the number of bytes you used to move
     /// the read position forward. Without readable bytes, the result is
     /// [`TcpRead::Pending`] while more bytes can arrive (e.g. to fill a
-    /// hole), and [`TcpRead::End`] once all bytes up to the FIN were read.
-    /// At a gap, the result is [`TcpRead::Gap`] until you call
+    /// hole), and [`TcpRead::End`] once all bytes up to the FIN were read,
+    /// or once the connection ended (see [`TcpConnection::end`]) and
+    /// everything readable was read. At a gap, the result is
+    /// [`TcpRead::Gap`] until you call
     /// [`TcpStream::consume_gap`]. A hole becomes a gap when you give it up,
     /// or when the read position reaches it while it is overdue (see
     /// [`TcpStream::holes`]). A resync leaves a gap of unknown length (see
@@ -179,7 +187,9 @@ impl TcpStream {
     ///
     /// Otherwise it works like [`TcpStream::read_received`]. Bytes that were
     /// consumed after reading them with [`TcpStream::read_received`] are
-    /// not returned again.
+    /// not returned again. Once the connection ended, e.g. by a reset, the
+    /// result is [`TcpRead::End`] after the ACKed bytes, while
+    /// [`TcpStream::read_received`] still returns the bytes after them.
     pub fn read_acked(&mut self) -> TcpRead<'_> {
         self.read_until(self.acked_offset())
     }
@@ -206,6 +216,8 @@ impl TcpStream {
             TcpRead::Data(data)
         } else if Some(self.read_offset) == self.fin_offset {
             TcpRead::End(TcpStreamEnd::Fin)
+        } else if let Some(end) = self.connection_end {
+            TcpRead::End(end)
         } else {
             TcpRead::Pending
         }
@@ -474,9 +486,13 @@ impl TcpStream {
             && self.holes.last().is_none_or(|hole| self.is_overdue(hole))
     }
 
-    /// Gives up all holes, as the connection ended.
-    pub(crate) fn give_up_all_holes(&mut self) {
+    /// Gives up all holes, as the connection ended (late segments are
+    /// ignored after the end, so they can't fill them anymore). Once nothing
+    /// more is readable, reads return `end` (or [`TcpStreamEnd::Fin`] at
+    /// the FIN).
+    pub(crate) fn connection_ended(&mut self, end: TcpStreamEnd) {
         self.give_up_holes_before(self.highest_offset);
+        self.connection_end = Some(end);
     }
 
     /// Receive window in bytes that the stream's sender advertised for the
@@ -681,6 +697,46 @@ impl TcpStream {
         if let Some(ack) = jump_ack {
             self.add_jump_ack(ack, window, packet);
         }
+    }
+
+    /// Applies an RST of the stream's sender with the sequence number `seq`,
+    /// whose receiver has the receive window `window`. Returns true if the
+    /// receiver can accept it, so that it ends the connection. Otherwise
+    /// the RST counts as out-of-window.
+    pub(crate) fn add_reset(&mut self, seq: u32, window: u64) -> bool {
+        // the receiver accepts an RST from the next byte it expects up to
+        // one window after it (RFC 9293 3.10.7.4), and that byte lies
+        // between the receiver's ACK and the bytes sent (and the FIN)
+        let accepted = match (self.start_seq, self.pending_ack) {
+            (Some(start_seq), pending_ack) => {
+                // the receiver's ACK can be kept at or before offset 0 (see
+                // `pending_ack`), but no ACK blocks an RST at or after the
+                // received bytes (a forged one could)
+                let ack = pending_ack
+                    .and_then(|ack| self.offset(start_seq, ack))
+                    .unwrap_or(self.seen_ack as i64);
+                let mut first = ack.min(self.received_end as i64);
+                // nothing before a jump counts
+                if 0 < self.status.resyncs {
+                    first = first.max(self.resync_offset as i64);
+                }
+                let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
+                let last = i64::try_from(sent_end.saturating_add(window)).unwrap_or(i64::MAX);
+                self.offset(start_seq, seq)
+                    .is_some_and(|offset| first <= offset && offset <= last)
+            }
+            // without a start, the receiver's ACK is the next byte it
+            // expects
+            (None, Some(ack)) => {
+                u64::try_from(seq.wrapping_sub(ack) as i32).is_ok_and(|distance| distance <= window)
+            }
+            // nothing tells which bytes the receiver expects
+            (None, None) => true,
+        };
+        if false == accepted {
+            self.status.out_of_window_segments += 1;
+        }
+        accepted
     }
 
     /// Gives the stream an observed start at `seq`, the sequence number
@@ -1157,10 +1213,10 @@ impl ResyncCandidate {
 }
 
 /// Returns true if the segment has the shape of a keep-alive probe: one
-/// filler byte, without SYN, FIN or RST, that repeats the byte before the
-/// receiver's ACK (RFC 1122 4.2.3.6).
+/// filler byte, without SYN or FIN, that repeats the byte before the
+/// receiver's ACK (RFC 1122 4.2.3.6). RSTs carry no bytes of the stream.
 fn is_keep_alive_shaped(tcp: &TcpSlice<'_>) -> bool {
-    1 == tcp.payload().len() && false == (tcp.syn() || tcp.fin() || tcp.rst())
+    1 == tcp.payload().len() && false == (tcp.syn() || tcp.fin())
 }
 
 /// Returns the value of the window scale option (RFC 7323), if present.
@@ -1762,14 +1818,13 @@ mod test {
         }
 
         // other segments at the position of a keep-alive (the byte before
-        // the receiver's ACK) start the stream: two bytes, a byte with a
-        // FIN, and a byte with an RST. A keep-alive without bytes doesn't
-        // (the following bytes start the stream).
-        for (payload, fin, rst, expected) in [
-            (&b"bc"[..], false, false, &b"bcd"[..]),
-            (b"b", true, false, b"b"),
-            (b"b", false, true, b"bcd"),
-            (b"", false, false, b"cd"),
+        // the receiver's ACK) start the stream: two bytes and a byte with a
+        // FIN. A keep-alive without bytes doesn't (the following bytes start
+        // the stream).
+        for (payload, fin, expected) in [
+            (&b"bc"[..], false, &b"bcd"[..]),
+            (b"b", true, b"b"),
+            (b"", false, b"cd"),
         ] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -1784,7 +1839,6 @@ mod test {
             script.segments.drain(..4);
             script.segments.insert(1, segment);
             script.segments[1].header.fin = fin;
-            script.segments[1].header.rst = rst;
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(
                 TcpRead::Data(expected),
@@ -2036,6 +2090,79 @@ mod test {
                 assert_eq!(TcpRead::Pending, stream.read_received());
             }
         }
+
+        // after a reset, the holes are gaps, every byte received can be
+        // read, and then the end is reported
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .rst(Responder);
+            script.segments.remove(4);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"ghi"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_received());
+            assert_eq!(
+                TcpRead::End(TcpStreamEnd::Reset),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
+        // ... also behind the gap of a resync
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /")
+                .ack(Responder)
+                .rst(Initiator);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_received());
+        }
+
+        // a stream whose FIN arrived before the reset ends at its FIN, also
+        // with a hole before the FIN
+        for lost in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_with_data(Initiator, b"def")
+                .rst(Responder);
+            if lost {
+                script.segments.remove(3);
+            }
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            if lost {
+                assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+                stream.consume_gap();
+                assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+            } else {
+                assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+            }
+            stream.consume(6);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
     }
 
     #[test]
@@ -2235,6 +2362,52 @@ mod test {
                 TcpRead::Data(b"a.js"),
                 connection.stream_mut(Initiator).read_acked()
             );
+        }
+
+        // after a reset, the end is reported once the ACKed bytes were read,
+        // even if bytes that were not ACKed are left (they can still be
+        // read with read_received). The ACK of the RST counts.
+        for (rst_acks, acked) in [(false, &b"abc"[..]), (true, b"abcdef")] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack(Responder)
+                .send(Initiator, b"def")
+                .rst(Responder);
+            script.segments[6].header.ack = rst_acks;
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(acked), stream.read_acked());
+            stream.consume(acked.len());
+            assert_eq!(TcpRead::End(TcpStreamEnd::Reset), stream.read_acked());
+            if false == rst_acks {
+                assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+            }
+        }
+
+        // a stream whose FIN arrived before the reset ends at the FIN once
+        // the bytes before it are ACKed, otherwise the reset ends it before
+        // the bytes that were not ACKed
+        for (rst_acks, acked, end) in [
+            (false, &b"abc"[..], TcpStreamEnd::Reset),
+            (true, b"abcdef", TcpStreamEnd::Fin),
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack(Responder)
+                .fin_with_data(Initiator, b"def")
+                .rst(Responder);
+            script.segments[6].header.ack = rst_acks;
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(acked), stream.read_acked());
+            stream.consume(acked.len());
+            assert_eq!(TcpRead::End(end), stream.read_acked());
         }
     }
 
@@ -3671,6 +3844,18 @@ mod test {
             assert_eq!(1, stream.status().resyncs);
             assert_eq!(0, stream.acked_offset());
         }
+
+        // an RST outside of the receiver's window doesn't ACK bytes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .rst_at(Responder, 1 << 30);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).acked_offset());
+        }
     }
 
     #[test]
@@ -3963,22 +4148,21 @@ mod test {
             assert_eq!(0, stream.holes().count());
         }
 
-        // a keep-alive probe (one byte ending at the seen ACK, without SYN,
-        // FIN or RST) doesn't fill an overdue hole, other segments do, and
-        // so does a keep-alive before the hole is overdue
-        for (packets, offset, payload, [syn, fin, rst], expected) in [
+        // a keep-alive probe (one byte ending at the seen ACK, without SYN
+        // or FIN) doesn't fill an overdue hole, other segments do, and so
+        // does a keep-alive before the hole is overdue
+        for (packets, offset, payload, [syn, fin], expected) in [
             // keep-alive
-            (2, 5, &[0][..], [false; 3], &[3..6][..]),
+            (2, 5, &[0][..], [false; 2], &[3..6][..]),
             // keep-alive before the hole is overdue
-            (1, 5, &[0], [false; 3], &[3..5]),
+            (1, 5, &[0], [false; 2], &[3..5]),
             // two bytes
-            (2, 4, b"ef", [false; 3], &[3..4]),
+            (2, 4, b"ef", [false; 2], &[3..4]),
             // one byte that doesn't end at the seen ACK
-            (2, 4, b"e", [false; 3], &[3..4, 5..6]),
-            // SYN, FIN or RST
-            (2, 5, &[0], [true, false, false], &[3..5]),
-            (2, 5, &[0], [false, true, false], &[3..5]),
-            (2, 5, &[0], [false, false, true], &[3..5]),
+            (2, 4, b"e", [false; 2], &[3..4, 5..6]),
+            // SYN or FIN
+            (2, 5, &[0], [true, false], &[3..5]),
+            (2, 5, &[0], [false, true], &[3..5]),
         ] {
             let config = TcpReassemblyConfig {
                 ack_reorder_tolerance: 2,
@@ -3998,7 +4182,6 @@ mod test {
             });
             probe.header.syn = syn;
             probe.header.fin = fin;
-            probe.header.rst = rst;
             if syn {
                 // the SYN occupies the sequence number before the byte
                 probe.header.sequence_number -= 1;
@@ -4463,6 +4646,26 @@ mod test {
             stream.read_received();
             stream.consume(3);
             assert!(stream.is_finished());
+        }
+
+        // a reset finishes a stream whose FIN was seen, as the holes before
+        // the FIN become gaps, but not a stream without a FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_with_data(Initiator, b"def")
+                .rst(Responder);
+            script.segments.remove(3);
+            {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                assert!(false == connection.stream(Initiator).is_finished());
+            }
+            let connection = script.feed(&mut pool, 4..).ended.unwrap();
+            assert!(connection.stream(Initiator).is_finished());
+            assert!(false == connection.stream(Responder).is_finished());
         }
     }
 
@@ -5710,6 +5913,51 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let status = connection.stream(Initiator).status();
             assert_eq!((1, 0), (status.resyncs, status.out_of_window_segments));
+        }
+
+        // a reset gives up all holes, they count as gaps
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Initiator, b"jkl")
+                .ack(Responder)
+                .rst(Initiator);
+            script.segments.remove(6);
+            script.segments.remove(4);
+            {
+                let (connection, _) = script.feed(&mut pool, ..5).active.unwrap();
+                assert_eq!(0, connection.stream(Initiator).status().gaps);
+            }
+            let connection = script.feed(&mut pool, 5..).ended.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!((2, 6), (status.gaps, status.gap_bytes));
+        }
+
+        // an RST outside of the receiver's window counts for the stream of
+        // its sender, and its window doesn't apply
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            let mut rst = script.injected(|s| {
+                s.rst_at(Responder, 1 << 30);
+            });
+            rst.header.window_size = 0;
+            script.segments.push(rst);
+            {
+                let mut pool = TcpReassemblyPool::<(), ()>::default();
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let [initiator, responder] =
+                    [Initiator, Responder].map(|role| connection.stream(role).status());
+                assert_eq!(0, initiator.out_of_window_segments);
+                assert_eq!(1, responder.out_of_window_segments);
+            }
+            assert_window_end(Default::default(), &script, 203);
         }
     }
 
