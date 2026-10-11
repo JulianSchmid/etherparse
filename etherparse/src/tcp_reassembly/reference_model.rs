@@ -6,9 +6,11 @@ use std::vec::Vec;
 ///
 /// It works on the true stream offsets that a [`ConnectionScript`] records
 /// in its segments, so it is independent of the sequence number handling
-/// it checks. Offsets of the pool are relative to the first byte the pool
-/// knows of a stream (its base). It expects segments without window scale
-/// options, and endpoints whose ports make guessed roles right.
+/// it checks. After a resync, the offsets of a stream leave out the jump
+/// (they are the true offsets minus a shift). Offsets of the pool are
+/// relative to the first byte the pool knows of a stream (its base). It
+/// expects segments without window scale options, and endpoints whose ports
+/// make guessed roles right.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Configuration of the pool the model is compared with.
@@ -22,7 +24,8 @@ pub(crate) struct ReferenceModel {
     streams: [ModelStream; 2],
     /// "window" field of the last segment of each role.
     windows: [Option<u16>; 2],
-    /// Whether the stream of each role took its SYN.
+    /// Whether the stream of each role took its SYN (the one before its
+    /// first byte, which a resync can move).
     syns: [bool; 2],
     /// End of the connection.
     end: Option<TcpConnectionEnd>,
@@ -103,11 +106,34 @@ struct ModelStream {
     largest_window: Option<u64>,
     /// Offset of the next byte to read.
     read_offset: u64,
+    /// True offset minus offset of the bytes after the last resync (0
+    /// without one).
+    shift: i64,
+    /// Offset of each resync and the shift of the bytes from there on.
+    resyncs: Vec<(u64, i64)>,
+    /// Offsets of the gaps of unknown length that resyncs left, which the
+    /// reader didn't step over yet.
+    resync_gaps: Vec<u64>,
+    /// Latest data segment after the window, while the stream didn't move
+    /// forward or receive other bytes.
+    candidate: Option<ModelCandidate>,
+    /// True offset of the latest ACK more than one window after the bytes
+    /// known to be sent, while the stream didn't move forward.
+    resync_ack: Option<u64>,
+}
+
+/// Data segment after the window that a stream may have jumped to.
+#[derive(Clone, Debug)]
+struct ModelCandidate {
+    /// True offsets of the bytes.
+    bytes: Range<u64>,
+    /// Whether a FIN follows the bytes.
+    fin: bool,
 }
 
 impl ModelStream {
-    /// Applies a segment of the stream's sender, whose receiver has the
-    /// receive window `window`:
+    /// Applies a segment of the stream's sender in the packet with the
+    /// number `packet`, whose receiver has the receive window `window`:
     /// - a SYN gives the stream an observed start at it (see
     ///   [`ModelStream::observe_start`]), a SYN that a mid-stream pickup
     ///   can't take counts as out-of-window and is ignored;
@@ -119,75 +145,118 @@ impl ModelStream {
     ///   before it count as out-of-window (once per segment);
     /// - a segment with bytes or a FIN starting more than k windows after
     ///   the highest or the ACKed offset is counted and not stored (k is the
-    ///   hole give up window factor, 2 without one);
+    ///   hole give up window factor, 2 without one). If its bytes lie within
+    ///   one window of the last ACK more than one window after the bytes
+    ///   sent, the stream resyncs at them, and that ACK counts after them (and
+    ///   ACKs the bytes before them). Otherwise they are the candidate of a
+    ///   resync (unless the FIN is known or it is a SYN), and a FIN without
+    ///   bytes right after them is the candidate's FIN;
+    /// - other bytes show that the stream didn't jump, so there is no
+    ///   candidate anymore;
     /// - a keep-alive (one byte ending at the ACK, without SYN, FIN or RST)
     ///   inside an overdue hole is ignored;
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
-    ///   retransmission if ones that are neither read, ACKed nor in a gap
-    ///   differ;
-    /// - the first FIN that doesn't lie before received bytes ends the
-    ///   stream (cutting the gaps and moving the read offset back to it),
-    ///   and bytes after it are counted and not stored;
+    ///   retransmission if ones that are neither read, ACKed, in a gap nor
+    ///   before a resync differ;
+    /// - the first FIN that doesn't lie before received bytes or a resync
+    ///   ends the stream (cutting the gaps and moving the read offset back
+    ///   to it), and bytes after it are counted and not stored;
     /// - bytes before the highest offset that were not received are holes.
     fn add_segment<CustomChannelId>(
         &mut self,
         segment: &TestSegment<CustomChannelId>,
         window: u64,
+        packet: u64,
         config: &TcpReassemblyConfig,
     ) {
-        let start = segment.offset;
-        let end = start + segment.payload.len() as u64;
+        let payload = &segment.payload[..];
         let header = &segment.header;
         // the receiver accepts k windows before and after the stream's bytes
         let factor = config.hole_give_up_window_factor.unwrap_or(2);
         let range = u64::from(factor) * window;
         if header.syn {
-            if false == self.observe_start(start, range) {
+            if false == self.observe_start(segment.offset, range) {
                 self.out_of_window_segments += 1;
                 return;
             }
         } else if self.base.is_none() {
-            let keep_alive = 1 == segment.payload.len()
+            let keep_alive = 1 == payload.len()
                 && false == (header.fin || header.rst)
-                && Some(end) == self.pending_ack;
-            if (segment.payload.is_empty() && false == header.fin) || keep_alive {
+                && Some(segment.offset + 1) == self.pending_ack;
+            if (payload.is_empty() && false == header.fin) || keep_alive {
                 return;
             }
-            self.start_at(start);
-            self.started_at_fin = segment.payload.is_empty();
+            self.start_at(segment.offset);
+            self.started_at_fin = payload.is_empty();
         }
+        // offsets leave out the jumps of the resyncs so far
+        let mut start = segment.offset as i64 - self.shift;
+
+        let window_end = (self.ack.max(self.highest) + range) as i64;
+        let mut after_window = start > window_end;
+        let mut jump_ack = None;
+        if false == payload.is_empty() && false == header.syn && self.fin_offset.is_none() {
+            let bytes = segment.offset..segment.offset + payload.len() as u64;
+            let confirming_ack = self
+                .resync_ack
+                .filter(|ack| within_window(&bytes, *ack, window));
+            let confirmed = if after_window {
+                self.candidate = Some(ModelCandidate {
+                    bytes,
+                    fin: header.fin,
+                });
+                confirming_ack.is_some()
+            } else {
+                self.candidate = None;
+                false
+            };
+            if confirmed {
+                jump_ack = confirming_ack;
+                self.resync(segment.offset);
+                start = segment.offset as i64 - self.shift;
+                after_window = false;
+            }
+        }
+        if (false == payload.is_empty() || header.fin) && after_window {
+            if let Some(candidate) = &mut self.candidate {
+                if payload.is_empty() && segment.offset == candidate.bytes.end {
+                    candidate.fin = true;
+                }
+            }
+            self.out_of_window_segments += 1;
+            return;
+        }
+
         let mut out_of_window = false;
         if let Some(base) = self.base {
-            if start < base && false == segment.payload.is_empty() && false == self.observed {
-                if self.can_prepend() && base - start <= range {
-                    self.start_at(start);
+            if start < base as i64 && false == payload.is_empty() && false == self.observed {
+                if self.can_prepend() && base as i64 - start <= range as i64 {
+                    self.start_at(start as u64);
                 } else {
                     out_of_window = true;
                 }
             }
         }
+        let end = start + payload.len() as i64;
 
-        let window_end = self.ack.max(self.highest) + range;
-        if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
-            self.out_of_window_segments += 1;
-            return;
-        }
-        if 1 == segment.payload.len()
+        if 1 == payload.len()
             && false == (header.syn || header.fin || header.rst)
-            && end == self.ack
+            && end == self.ack as i64
             && self
                 .holes()
                 .iter()
-                .any(|hole| hole.contains(&start) && self.is_overdue(hole))
+                .any(|hole| hole.contains(&(start as u64)) && self.is_overdue(hole))
         {
             return;
         }
-        if segment.header.fin && self.fin_offset.is_none() && end >= self.bytes.len() as u64 {
+        let received_end = (self.bytes.len() as u64).max(self.resync_offset());
+        if segment.header.fin && self.fin_offset.is_none() && end >= received_end as i64 {
+            let end = end as u64;
             self.fin_offset = Some(end);
             // missing bytes after the FIN (from an ACK of it) don't exist,
             // even if they were given up
-            self.highest = end;
+            self.set_highest(end);
             self.read_offset = self.read_offset.min(end);
             self.gaps.retain_mut(|gap| {
                 gap.end = gap.end.min(end);
@@ -196,59 +265,67 @@ impl ModelStream {
             self.received.truncate(end as usize);
         }
         let payload = match self.fin_offset {
-            Some(fin) if end > fin && false == segment.payload.is_empty() => {
+            Some(fin) if end > fin as i64 && false == payload.is_empty() => {
                 out_of_window = true;
-                &segment.payload[..fin.saturating_sub(start) as usize]
+                &payload[..(fin as i64 - start).max(0) as usize]
             }
-            _ => &segment.payload[..],
+            _ => payload,
         };
         if out_of_window {
             self.out_of_window_segments += 1;
         }
 
+        // bytes that were consumed, given up, or sent before a jump are
+        // ignored
+        let new: Vec<(u64, u8)> = (start..)
+            .zip(payload)
+            .filter_map(|(offset, byte)| {
+                u64::try_from(offset)
+                    .ok()
+                    .filter(|offset| false == self.ignores(*offset))
+                    .map(|offset| (offset, *byte))
+            })
+            .collect();
+        let acked = self.acked_offset();
+        let conflicting = new.iter().any(|(offset, byte)| {
+            *offset >= acked
+                && self
+                    .bytes
+                    .get(*offset as usize)
+                    .is_some_and(|received| received.is_some_and(|b| b != *byte))
+        });
+        if conflicting {
+            self.conflicting_retransmissions += 1;
+        }
+        if let Some((last, _)) = new.last() {
+            if self.bytes.len() <= *last as usize {
+                self.bytes.resize(*last as usize + 1, None);
+            }
+        }
+        for (offset, byte) in new {
+            self.bytes[offset as usize].get_or_insert(byte);
+        }
         if false == payload.is_empty() {
-            let start = start as usize;
-            let end = start + payload.len();
-            let compared_start = self.read_offset.max(self.acked_offset());
-            let conflicting = (start..end).zip(payload).any(|(offset, byte)| {
-                offset as u64 >= compared_start
-                    && false == self.in_gap(offset as u64)
-                    && self
-                        .bytes
-                        .get(offset)
-                        .is_some_and(|received| received.is_some_and(|b| b != *byte))
-            });
-            if conflicting {
-                self.conflicting_retransmissions += 1;
-            }
-            // bytes that were consumed or given up are ignored
-            let stored_end = (start..end)
-                .rev()
-                .find(|offset| false == self.ignores(*offset as u64))
-                .map_or(0, |offset| offset + 1);
-            if self.bytes.len() < stored_end {
-                self.bytes.resize(stored_end, None);
-            }
-            for (offset, byte) in (start..end).zip(payload) {
-                if false == self.ignores(offset as u64) {
-                    self.bytes[offset].get_or_insert(*byte);
-                }
-            }
-            self.highest = self.highest.max(end as u64);
+            let end = start + payload.len() as i64;
+            self.set_highest(self.highest.max(end.max(0) as u64));
         }
         self.extend_received();
+        if let Some(ack) = jump_ack {
+            self.add_jump_ack(ack, window, packet);
+        }
     }
 
-    /// Gives the stream an observed start at `start`. A mid-stream pickup
-    /// takes it if it is at or before its first byte, at most `range` bytes
-    /// before it, and bytes can be prepended. Returns true if the stream has
-    /// an observed start afterwards.
+    /// Gives the stream an observed start at the true offset `start`. A
+    /// mid-stream pickup takes it if it is at or before its first byte, at
+    /// most `range` bytes before it, and bytes can be prepended. Returns true
+    /// if the stream has an observed start afterwards.
     fn observe_start(&mut self, start: u64, range: u64) -> bool {
+        // a stream that can prepend didn't resync, its offsets are the true
+        // ones
         match self.base {
             Some(_) if self.observed => return true,
-            Some(base) if start > base || base - start > range || false == self.can_prepend() => {
-                return false
-            }
+            Some(_) if false == self.can_prepend() => return false,
+            Some(base) if start > base || base - start > range => return false,
             _ => {}
         }
         self.start_at(start);
@@ -256,11 +333,20 @@ impl ModelStream {
         true
     }
 
+    /// Returns true if the stream has an observed start at the byte with
+    /// the true offset `offset`.
+    fn starts_at(&self, offset: u64) -> bool {
+        self.observed && Some(offset as i64 - self.shift) == self.base.map(|base| base as i64)
+    }
+
     /// Returns true if bytes can be prepended to the stream: it is a
-    /// mid-stream pickup whose read offset never moved and that wasn't
-    /// picked up at a FIN.
+    /// mid-stream pickup whose read offset never moved, that wasn't picked
+    /// up at a FIN and didn't resync.
     fn can_prepend(&self) -> bool {
-        false == self.observed && false == self.read_moved && false == self.started_at_fin
+        false == self.observed
+            && false == self.read_moved
+            && false == self.started_at_fin
+            && self.resyncs.is_empty()
     }
 
     /// Moves the first byte the pool knows to `start` (at or before the
@@ -268,7 +354,7 @@ impl ModelStream {
     fn start_at(&mut self, start: u64) {
         self.base = Some(start);
         self.read_offset = start;
-        self.highest = self.highest.max(start);
+        self.set_highest(self.highest.max(start));
         self.received.truncate(start as usize);
         self.extend_received();
     }
@@ -293,37 +379,98 @@ impl ModelStream {
     }
 
     /// Returns true if a byte arriving at `offset` is ignored, as it was
-    /// consumed or given up.
+    /// consumed or given up, or lies before a resync.
     fn ignores(&self, offset: u64) -> bool {
-        offset < self.read_offset || self.in_gap(offset)
+        offset < self.read_offset || self.in_gap(offset) || offset < self.resync_offset()
     }
 
-    /// Applies an ACK of the other side in the packet with the number
-    /// `packet`, whose receive window before it was `window`: ACKs more than
-    /// one window after the highest offset (plus the FIN) are ignored,
-    /// others mark the bytes up to them as sent (but none after the FIN).
-    /// ACKs of the stream's first byte or before it don't count. The last
-    /// ACK before the stream had a start, or at or before its first byte
-    /// while bytes can be prepended, is kept and applied after every packet.
+    /// Offset of the last resync (0 without one).
+    fn resync_offset(&self) -> u64 {
+        self.resyncs.last().map_or(0, |(offset, _)| *offset)
+    }
+
+    /// Moves the highest offset to `offset`. If that moves the stream
+    /// forward, it didn't jump: there is no candidate or ACK of a jump
+    /// anymore.
+    fn set_highest(&mut self, offset: u64) {
+        if offset > self.highest {
+            self.candidate = None;
+            self.resync_ack = None;
+        }
+        self.highest = offset;
+    }
+
+    /// Continues the stream with the byte at the true offset `start` at the
+    /// highest offset, behind a gap of unknown length: all holes are given
+    /// up, and later offsets leave out the jump.
+    fn resync(&mut self, start: u64) {
+        for hole in self.holes() {
+            self.give_up(hole);
+        }
+        // resyncs without bytes between them leave one gap
+        if Some(&self.highest) != self.resync_gaps.last() {
+            self.resync_gaps.push(self.highest);
+        }
+        self.shift = start as i64 - self.highest as i64;
+        self.resyncs.push((self.highest, self.shift));
+        self.candidate = None;
+        self.resync_ack = None;
+    }
+
+    /// Applies the ACK of the other side at the true offset `ack` in the
+    /// packet with the number `packet`, whose receive window before it was
+    /// `window`: ACKs more than one window after the highest offset (plus
+    /// the FIN) resync the stream after the candidate if they lie within one
+    /// window of it, and are kept for a resync otherwise. Other ACKs mark
+    /// the bytes up to them as sent (but none after the FIN). ACKs of the
+    /// stream's first byte or before it, or before a resync, don't count.
+    /// The last ACK before the stream had a start, or at or before its first
+    /// byte while bytes can be prepended, is kept and applied after every
+    /// packet.
     fn add_ack(&mut self, ack: u64, window: u64, packet: u64) {
         let Some(base) = self.base else {
             self.pending_ack = Some(ack);
             return;
         };
-        if ack <= base && self.can_prepend() {
+        let offset = ack as i64 - self.shift;
+        if offset <= base as i64 && self.can_prepend() {
             self.pending_ack = Some(ack);
             return;
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
-        if ack > sent_end + window {
+        if offset > (sent_end + window) as i64 {
+            match self.candidate.clone() {
+                Some(candidate)
+                    if self.fin_offset.is_none()
+                        && within_window(&candidate.bytes, ack, window) =>
+                {
+                    self.resync(candidate.bytes.end);
+                    if candidate.fin {
+                        self.fin_offset = Some(self.highest);
+                    }
+                    self.add_jump_ack(ack, window, packet);
+                }
+                _ => self.resync_ack = Some(ack),
+            }
             return;
         }
-        if ack > self.ack.max(base) {
-            self.ack = ack;
-            self.ack_history.push((packet, ack));
+        if offset < self.resync_offset() as i64 {
+            return;
+        }
+        let offset = offset as u64;
+        if offset > self.ack.max(base) {
+            self.ack = offset;
+            self.ack_history.push((packet, offset));
         }
         let end = self.fin_offset.map_or(self.ack, |fin| fin.min(self.ack));
-        self.highest = self.highest.max(end);
+        self.set_highest(self.highest.max(end));
+    }
+
+    /// Applies the ACK at the true offset `ack` that confirmed a jump, after
+    /// the resync: it ACKs the bytes before the jump too.
+    fn add_jump_ack(&mut self, ack: u64, window: u64, packet: u64) {
+        self.add_ack(ack, window, packet);
+        self.ack = self.ack.max(self.resync_offset());
     }
 
     /// Ranges of missing bytes before the highest offset.
@@ -422,9 +569,13 @@ impl ModelStream {
         self.extend_received();
     }
 
-    /// Moves the read offset over the gap at the read offset, if any.
+    /// Moves the read offset over the gap at the read offset, if any (the
+    /// gap of a resync comes first).
     fn consume_gap(&mut self) {
-        if let Some(gap) = self.gap_at_read_offset() {
+        if Some(&self.read_offset) == self.resync_gaps.first() {
+            self.resync_gaps.remove(0);
+            self.give_up_overdue_hole();
+        } else if let Some(gap) = self.gap_at_read_offset() {
             self.gaps.remove(0);
             self.read_offset = gap.end;
             self.read_moved = true;
@@ -449,7 +600,7 @@ impl ModelStream {
 
     /// Moves the read offset to `offset` (at most the highest offset),
     /// discarding the holes and gaps before it (without counting the holes
-    /// as gaps).
+    /// as gaps). The gap of a resync at `offset` stays.
     fn discard_until(&mut self, offset: u64) {
         let offset = offset.min(self.highest);
         if offset <= self.read_offset {
@@ -459,6 +610,7 @@ impl ModelStream {
             gap.start = gap.start.max(offset);
             gap.start < gap.end
         });
+        self.resync_gaps.retain(|gap| *gap >= offset);
         self.read_offset = offset;
         self.read_moved = true;
         self.extend_received();
@@ -474,12 +626,19 @@ impl ModelStream {
     /// Expected result of reading the contiguous received bytes from the
     /// read offset on, but not after `limit` or a gap.
     fn read(&self, limit: u64) -> TcpRead<'_> {
+        if Some(&self.read_offset) == self.resync_gaps.first() {
+            return TcpRead::Gap { len: None };
+        }
         if let Some(gap) = self.gap_at_read_offset() {
             return TcpRead::Gap {
                 len: Some(gap.end - gap.start),
             };
         }
-        let next_gap = self.gaps.first().map_or(u64::MAX, |gap| gap.start);
+        let next_gap = self
+            .gaps
+            .first()
+            .map_or(u64::MAX, |gap| gap.start)
+            .min(self.resync_gaps.first().copied().unwrap_or(u64::MAX));
         let start = self.read_offset as usize;
         let end = (self.received.len() as u64).min(limit).min(next_gap) as usize;
         if start < end {
@@ -509,6 +668,12 @@ impl ModelStream {
             self.give_up(hole);
         }
     }
+}
+
+/// Returns true if the true offset `offset` lies at most `window` bytes
+/// before or after the `bytes`.
+fn within_window(bytes: &Range<u64>, offset: u64, window: u64) -> bool {
+    offset + window >= bytes.start && offset <= bytes.end + window
 }
 
 impl ReferenceModel {
@@ -557,9 +722,9 @@ impl ReferenceModel {
             self.streams[other].add_ack(ack, window, self.packets);
         }
         let window = self.window(segment.sender);
-        self.streams[sender].add_segment(segment, window, &self.config);
+        self.streams[sender].add_segment(segment, window, self.packets, &self.config);
         self.windows[sender] = Some(header.window_size);
-        self.syns[sender] |= header.syn && self.streams[sender].observed;
+        self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);
         let syn_role = if header.ack {
             TcpRole::Responder
         } else {
@@ -621,20 +786,32 @@ impl ReferenceModel {
     }
 
     /// Returns true if the contiguous received bytes of the stream of
-    /// `role` cover `data` and match it, apart from bytes that were given
-    /// up and bytes before the stream's first byte known to the pool.
+    /// `role` match the bytes of `data` sent at the same true offsets,
+    /// apart from bytes that were given up and bytes before the stream's
+    /// first byte known to the pool.
     pub fn received_matches(&self, role: TcpRole, data: &[u8]) -> bool {
         let stream = &self.streams[role_index(role)];
         let base = stream.base.unwrap_or(0);
-        stream.received.len() >= data.len()
-            && data.iter().enumerate().all(|(offset, byte)| {
-                stream.received[offset] == *byte
-                    || (offset as u64) < base
-                    || stream
-                        .given_up
-                        .iter()
-                        .any(|gap| gap.contains(&(offset as u64)))
-            })
+        stream.received.iter().enumerate().all(|(offset, byte)| {
+            let offset = offset as u64;
+            let shift = stream
+                .resyncs
+                .iter()
+                .rev()
+                .find(|(resync, _)| *resync <= offset)
+                .map_or(0, |(_, shift)| *shift);
+            let sent = usize::try_from(offset as i64 + shift)
+                .ok()
+                .and_then(|offset| data.get(offset));
+            offset < base
+                || stream.given_up.iter().any(|gap| gap.contains(&offset))
+                || sent.is_none_or(|sent| sent == byte)
+        })
+    }
+
+    /// Number of resyncs of the stream of `role`.
+    pub fn resyncs(&self, role: TcpRole) -> u64 {
+        self.streams[role_index(role)].resyncs.len() as u64
     }
 
     /// FIN offset of the stream of `role`.
@@ -706,7 +883,9 @@ impl ReferenceModel {
             .collect();
         prop_assert_eq!(holes, stream.holes().collect::<Vec<_>>());
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
-        let clean = 0 == expected.gap_count && 0 == expected.conflicting_retransmissions;
+        let clean = 0 == expected.gap_count
+            && expected.resyncs.is_empty()
+            && 0 == expected.conflicting_retransmissions;
         prop_assert_eq!(clean, stream.is_clean());
         let observed = expected.observed;
         prop_assert_eq!(
@@ -722,7 +901,7 @@ impl ReferenceModel {
                 },
                 gaps: expected.gap_count,
                 gap_bytes: expected.gap_bytes,
-                resyncs: 0,
+                resyncs: expected.resyncs.len() as u64,
                 conflicting_retransmissions: expected.conflicting_retransmissions,
                 out_of_window_segments: expected.out_of_window_segments,
             },
@@ -1151,6 +1330,7 @@ mod test {
             // the ACKs don't change the received bytes, but they can make
             // holes overdue, whose bytes are ignored after they were given up
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert!(model.received(role).len() >= data[i].len());
                 prop_assert!(model.received_matches(role, data[i]));
             }
         }
@@ -1193,15 +1373,18 @@ mod test {
 
             // segments the endpoints didn't send, with bytes or a FIN after
             // the end of the stream, at random positions after the handshake
+            // (without an ACK, so that nothing confirms a jump to them)
             for (role, position, distance, payload, fin) in &injected {
                 let offset = data[role_index(*role)].len() as u64 + distance;
-                let segment = script.injected(|script| {
+                let mut segment = script.injected(|script| {
                     if *fin {
                         script.fin_at(*role, offset, payload);
                     } else {
                         script.send_at(*role, offset, payload);
                     }
                 });
+                segment.header.ack = false;
+                segment.ack = None;
                 let position = 3 + position.index(script.segments.len() - 2);
                 script.segments.insert(position, segment);
             }
@@ -1220,10 +1403,13 @@ mod test {
                 &[None],
             )?;
 
-            // the injected bytes don't change the bytes that were sent (the
-            // ACKs of injected segments can make holes overdue, whose bytes
-            // are ignored after they were given up)
+            // the injected segments after the window are only counted: the
+            // streams don't resync, and keep the bytes that were sent
+            // (injected bytes within the window can make the hole before
+            // them overdue, whose bytes are ignored after it was given up)
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert_eq!(0, model.resyncs(role));
+                prop_assert!(model.received(role).len() >= data[i].len());
                 prop_assert!(model.received_matches(role, data[i]));
             }
         }
@@ -1355,8 +1541,7 @@ mod test {
             // the received bytes are the ones that were sent, apart from the
             // ones that were given up
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
-                let len = model.received(role).len().min(data[i].len());
-                prop_assert!(model.received_matches(role, &data[i][..len]));
+                prop_assert!(model.received_matches(role, data[i]));
             }
 
             // a finished connection can be read to its FINs, stepping over
@@ -1473,8 +1658,7 @@ mod test {
             // the received bytes are the ones that were sent, apart from the
             // ones that were given up or lie before the first byte captured
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {
-                let len = model.received(role).len().min(data[i].len());
-                prop_assert!(model.received_matches(role, &data[i][..len]));
+                prop_assert!(model.received_matches(role, data[i]));
             }
         }
 

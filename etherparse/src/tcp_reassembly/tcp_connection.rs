@@ -152,7 +152,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 .add_ack(tcp.acknowledgment_number(), window, packet);
         }
         let window = self.window(sender, config);
-        self.stream_mut(sender).add_segment(tcp, window, config);
+        let packet = self.packets;
+        self.stream_mut(sender)
+            .add_segment(tcp, window, packet, config);
 
         // a late SYN or SYN-ACK that gave a stream an observed start
         // confirms guessed roles if its sender has the role the guess gave it
@@ -800,6 +802,22 @@ mod test {
             script.segments.swap(2, 3);
             let connection = script.feed_all(&mut pool).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+        }
+
+        // a connection finishes after a jump right before a FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_at(Initiator, 1000, b"xyz")
+                .fin(Responder)
+                .ack(Initiator);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(1, connection.stream(Initiator).status().resyncs);
         }
 
         // all holes left have to be overdue, not only the first one

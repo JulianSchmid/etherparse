@@ -11,7 +11,9 @@ pub enum TcpRead<'a> {
     /// Call [`crate::tcp_reassembly::TcpStream::consume_gap`] to continue
     /// with the bytes after the gap.
     Gap {
-        /// Number of missing bytes, `None` if it is unknown.
+        /// Number of missing bytes, `None` if it is unknown because the
+        /// sequence numbers jumped (see
+        /// [`crate::tcp_reassembly::TcpStreamStatus::resyncs`]).
         len: Option<u64>,
     },
 
