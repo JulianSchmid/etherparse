@@ -38,6 +38,6 @@ Rules: D4, P3 (tombstones count), Q1.
 **2026-10-11 — carry-over from ticket 06 (review finding):** while a stream has holes, `TcpStream::recent_acks` keeps one entry (16 bytes) per ACK-advancing packet, for up to `ack_reorder_tolerance` packets. `max_total_buffered` doesn't count these entries. With a large tolerance (the `reordered_streams` proptest uses `u32::MAX`), forged 1-byte ACK advances grow the queue with every packet. Decide whether to count or cap it.
 
 **2026-10-11 — carry-over from ticket 07:**
-- `TcpStream::prepend` zero-fills up to one window (the 4 MiB fallback window on a pickup) at the front of the buffer, and a pickup takes earlier bytes until its first read. D4's `max_stream_buffer` has to cover bytes put in front too.
+- `TcpStream::prepend` zero-fills up to k windows (2 × the 4 MiB fallback window on a pickup, user decision on ticket 07) at the front of the buffer, and a pickup takes earlier bytes until its first read. D4's `max_stream_buffer` has to cover bytes put in front too.
 - `prepend` assumes that byte 0 of a pickup was received: there is no gap at the read position, and the new hole doesn't touch a hole at the old offset 0. If D4 rejects the bytes of the segment that starts a pickup, both break. Either shift the gaps and merge the holes, or don't start a pickup with rejected bytes.
 - While a pickup can still prepend, it keeps the K4(b) ACK history also without holes (memory per pickup until its first read).

@@ -88,3 +88,9 @@ Review judgement calls left as they are:
 - "a SYN-ACK is sent by the responder" is written out in the pool (endpoint) and in the connection (role); they pick different things.
 - `(initiator, roles_guessed)` travel together into `TcpConnection::new` only.
 - `observe_start` keeps its name; its doc says when it refuses.
+
+**2026-10-11 — user decisions on the points above.** The user went through all of them, with illustrated scenarios. Everything follows the recommendation, except decision 2:
+- **Decision 2 changed:** earlier bytes and late SYNs may lie up to k windows before offset 0, the same range that limits bytes after the stream (S4, k = `hole_give_up_window_factor`, 2 without one), instead of one window. Implemented in `9612fc5`.
+- Decisions 1, 3–10 are confirmed as implemented, and so is accepting the TCP Fast Open limit as documented.
+- spec.md is updated: the API (`start` of a stream without a start), A2 (late SYN-ACK, TFO limit), A5 (what ends prepending, the k-window range, out-of-window counting, `consume` after a prepend), A6 (RSTs with bytes or SYN), K1 (pending ACKs), and K4 (ACK history for prepended holes).
+

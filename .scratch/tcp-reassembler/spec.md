@@ -187,7 +187,7 @@ The generic parameters are named `Timestamp` and `CustomChannelId`, as in `IpDef
   - `Pending`;
   - `End(TcpStreamEnd)`, where `TcpStreamEnd` is `Fin | Reset | Evicted | Reconnect`.
 - `TcpStreamStatus` is not `Copy`, because it is larger than the 128 bits the coding style allows for `Copy`. `status()` returns a reference. It contains:
-  - `start` (`TcpStreamStart`: `Observed | MidStreamPickup`);
+  - `start` (`TcpStreamStart`: `Observed | MidStreamPickup`). A stream without a start yet reports `MidStreamPickup`, so the value only ever changes to `Observed` (user decision, 2026-10-11);
   - `gaps` and `gap_bytes`;
   - `resyncs`;
   - `conflicting_retransmissions`, counting segments;
@@ -225,17 +225,18 @@ The rule ids are for referencing from tickets and test names.
 
 **Anchoring (A)**
 - **A1** A SYN gives the initiator stream an observed start. Payload in the SYN (TCP Fast Open) is data at offset 0.
-- **A2** A SYN-ACK gives the responder stream an observed start. If the SYN was not seen, its ACK number also gives the initiator stream an observed start.
+- **A2** A SYN-ACK gives the responder stream an observed start. If the SYN was not seen, its ACK number also gives the initiator stream an observed start; on a mid-stream pickup it counts as the initiator's late SYN (A5) (user decision, 2026-10-11).
+  - Known limit: if the SYN carried TCP Fast Open bytes that the SYN-ACK ACKs, and the SYN is captured after the SYN-ACK, the initiator stream starts after these bytes and they are lost. This is documented (user decision, 2026-10-11).
 - **A3** The window scale is known only if both SYN and SYN-ACK were seen. Per RFC 7323, a missing option on either side means scale 0 for both directions.
 - **A4** On a mid-stream pickup, the first data segment of a stream puts offset 0 at its first byte.
   - A FIN without bytes puts offset 0 at the FIN, so the stream is empty and finished, and the connection can finish. Such a stream takes nothing in front afterwards (A5), as a reader may have read its end (user decision, 2026-10-11).
   - A 1-byte segment without SYN, FIN or RST that ends at the last ACK the other side sent before the stream had a start is a keep-alive and doesn't start the stream. As a connection's very first packet, the ACK is not known, so its filler byte becomes byte 0 (user decision, 2026-10-11).
-- **A5** Until the first consume or discard on a stream:
-  - bytes before offset 0 that lie within the window are prepended, and offsets shift;
-  - a late SYN under the same conditions upgrades the stream to observed start.
+- **A5** Until the read position of a mid-stream pickup first moves forward (a consume of at least 1 byte, `consume_gap`, or a discard that moves it; reads, `consume(0)` and `discard_until(0)` don't count):
+  - bytes that start at most k × window before offset 0 (k and window as in S4) are prepended, and the offsets shift, with the FIN, the holes, the seen and implied ACK and the ACKs of K4(b);
+  - a late SYN under the same conditions, or the ACK number of a late SYN-ACK (A2), upgrades the stream to observed start.
 
-  After that, such bytes count as out-of-window.
-- **A6** Pure ACKs, FIN-only segments and RSTs for unknown keys never create a connection (`NoConnection`).
+  A pickup that started at a FIN without bytes takes nothing in front (A4). After that, such bytes count as out-of-window, once per segment, and the segment's bytes from the read position on are still stored. Such a SYN counts as out-of-window and is ignored with its bytes, until C4 sends it through C2. On a stream with an observed start, bytes before offset 0 are ignored without counting, because the filler byte of a keep-alive lies there when no bytes were sent yet. A `consume(n)` after a prepend consumes nothing until the next read, because the bytes the last read returned are no longer at the read position (user decisions, 2026-10-11).
+- **A6** Pure ACKs, FIN-only segments and RSTs (also with bytes or a SYN) for unknown keys never create a connection (`NoConnection`) (user decision, 2026-10-11).
 - **A7** Roles: the SYN sender is the initiator and the SYN-ACK sender is the responder. Without a handshake the roles are guessed: the lower port is the responder, and on equal ports the sender of the first packet is the initiator. A late SYN or SYN-ACK that gives a stream an observed start confirms guessed roles if its sender has the role the guess gave it. One that contradicts the guess leaves the roles guessed; roles never change (user decision, 2026-10-11).
 
 **Data (D)**
@@ -256,6 +257,7 @@ The rule ids are for referencing from tickets and test names.
   - An ACK beyond `highest offset + window` is ignored, except as resync evidence (R2). Once the FIN offset is known, the limit is one higher, so the ACK of the FIN counts even with a window of 0. The window is the one from before the ACK's segment (S3) (user decision, 2026-10-11).
   - An ACK beyond the highest offset turns the uncaptured bytes up to it into a hole.
   - An ACK never moves the ACKed offset past the FIN offset and never adds holes after it.
+  - An ACK that a stream can't apply yet, because it has no start, or because the ACK lies at or before offset 0 while bytes can still be prepended (A5), is kept and applied after every packet until it counts. The last such ACK is kept, as ACKs before a start can't be ordered, and a forged one is then replaced by the next real one (user decision, 2026-10-11).
 - **K2** The implied ACK is `highest offset − k × window`, saturating at 0. It applies only while `hole_give_up_window_factor` is `Some(k)`. It is updated after every packet of the connection, and the checks inside a packet use its value from before that packet.
   - The window is the largest window the receiver has advertised, as the sender can have sent bytes into a larger window before the window shrank, e.g. to 0 when the receiver's buffer is full. The fallback window applies only while no window is known (S3). With the last window, an ACK that advertises window 0 would make the hole it adds overdue at once, without waiting for `ack_reorder_tolerance` (user decision, 2026-10-11).
   - The implied ACK never moves back, e.g. when the window grows: bytes sent earlier still prove what the receiver had ACKed then (user decision, 2026-10-11).
@@ -265,6 +267,8 @@ The rule ids are for referencing from tickets and test names.
   - (b) the seen ACK as it was `ack_reorder_tolerance` packets ago. Every packet applied to the connection counts, in either direction, as for `last_seen` (P7). The packet whose ACK covers the hole doesn't count, so the hole is overdue after the N-th packet after it. The bytes of a packet are stored before the packet's overdue check, so the N-th packet still fills the hole (user decision, 2026-10-11).
 
   A hole is overdue as a whole, never in parts: a hole that is only partly before these offsets is not overdue. One lost range thus gives one gap (user decision, 2026-10-11).
+
+  K4(b) also holds for a hole that a prepend (A5) adds before an ACK seen earlier, so a pickup that can still prepend keeps the ACKs of the last `ack_reorder_tolerance` packets even without holes (user decision, 2026-10-11).
 
   Gaps are lazy (user decision, 2026-10-11):
   - an overdue hole stays a hole, and late segments still fill it, so the reassembler never drops bytes the reader hasn't reached;
