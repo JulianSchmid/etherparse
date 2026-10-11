@@ -233,6 +233,17 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
     }
 
+    /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
+    /// to the handshake of the connection: it has the ISN of its sender's
+    /// stream, or it is a SYN-ACK that ACKs the SYN of the other stream.
+    pub(crate) fn is_own_handshake(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        let sender = self.role(source);
+        Some(tcp.sequence_number()) == self.stream(sender).isn()
+            || (tcp.ack()
+                && Some(tcp.acknowledgment_number().wrapping_sub(1))
+                    == self.stream(sender.other()).isn())
+    }
+
     /// Role of the endpoint `source`.
     fn role(&self, source: SocketAddr) -> TcpRole {
         if source == self.initiator {
@@ -256,7 +267,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Returns the connection with its streams and leaves a tombstone
-    /// without buffers in its place, which keeps the key, id and timestamps.
+    /// without buffers in its place, which keeps the key, id, timestamps and
+    /// the ISNs of the streams.
     pub(crate) fn hand_over(&mut self) -> TcpConnection<Timestamp, CustomChannelId>
     where
         Timestamp: Clone,
@@ -267,8 +279,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             key: self.key.clone(),
             initiator: self.initiator,
             roles_guessed: self.roles_guessed,
-            initiator_stream: TcpStream::new(Vec::new()),
-            responder_stream: TcpStream::new(Vec::new()),
+            initiator_stream: self.initiator_stream.tombstone(),
+            responder_stream: self.responder_stream.tombstone(),
             first_seen: self.first_seen.clone(),
             last_seen: self.last_seen.clone(),
             end: self.end,

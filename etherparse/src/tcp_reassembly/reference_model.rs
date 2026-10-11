@@ -11,10 +11,16 @@ use std::vec::Vec;
 /// relative to the first byte the pool knows of a stream (its base). It
 /// expects segments without window scale options, and endpoints whose ports
 /// make guessed roles right.
+///
+/// A SYN on the tombstone of an ended connection starts the model again as
+/// a new connection, which takes the later segments.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
     /// Configuration of the pool the model is compared with.
     config: TcpReassemblyConfig,
+    /// Id of the connection (the number of connections before it on the
+    /// same key).
+    id: u64,
     /// Whether a segment started the connection.
     created: bool,
     /// Whether the roles are guessed, as a segment without a SYN started
@@ -357,6 +363,14 @@ impl ModelStream {
         self.start_at(start);
         self.observed = true;
         true
+    }
+
+    /// Returns true if the stream has an observed start that has the ISN of
+    /// the SYN or SYN-ACK `segment` of the same script: the start is the
+    /// first byte of that SYN (and not, e.g., the ACK of a SYN-ACK after the
+    /// bytes of the SYN). Resyncs don't change it.
+    fn has_isn_of(&self, segment: &TestSegment) -> bool {
+        self.observed && Some(segment.offset) == self.base
     }
 
     /// Returns true if the stream has an observed start at the byte with
@@ -770,11 +784,16 @@ impl ReferenceModel {
     ///
     /// The connection is finished once both FINs are ACKed and all holes
     /// left are overdue, unless it was reset. Ending it gives up all holes;
-    /// later segments change nothing.
+    /// later segments change nothing, but a SYN or SYN-ACK that doesn't
+    /// belong to its handshake starts a new connection (see
+    /// [`ReferenceModel::is_own_handshake`]).
     pub fn apply(&mut self, segment: &TestSegment) {
         let header = &segment.header;
         if self.end.is_some() {
-            return;
+            if header.rst || false == header.syn || self.is_own_handshake(segment) {
+                return;
+            }
+            *self = self.next_connection();
         }
         if false == self.created {
             if header.rst || (false == header.syn && segment.payload.is_empty()) {
@@ -847,12 +866,29 @@ impl ReferenceModel {
         }
     }
 
+    /// Model of the next connection on the same key.
+    fn next_connection(&self) -> ReferenceModel {
+        ReferenceModel {
+            id: self.id + 1,
+            ..ReferenceModel::new(self.config.clone())
+        }
+    }
+
     /// Range before and after the bytes of the stream of `role` that its
     /// receiver accepts: k windows (k is the hole give up window factor, 2
     /// without one).
     fn range(&self, role: TcpRole) -> u64 {
         let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
         u64::from(factor) * self.window(role)
+    }
+
+    /// Returns true if the SYN or SYN-ACK `segment` belongs to the handshake
+    /// of the connection: it has the ISN of its sender's stream, or it is a
+    /// SYN-ACK that ACKs the observed start of the other stream.
+    fn is_own_handshake(&self, segment: &TestSegment) -> bool {
+        let other = &self.streams[role_index(segment.sender.other())];
+        self.streams[role_index(segment.sender)].has_isn_of(segment)
+            || (other.observed && segment.ack == other.base)
     }
 
     /// Receive window of the stream of `role`: the last window its receiver
@@ -875,6 +911,11 @@ impl ReferenceModel {
     /// End of the connection, `None` while it is open.
     pub fn end(&self) -> Option<TcpConnectionEnd> {
         self.end
+    }
+
+    /// Id of the connection.
+    pub fn id(&self) -> TcpConnectionId {
+        TcpConnectionId(self.id)
     }
 
     /// Returns true once a segment started the connection.
@@ -1116,8 +1157,12 @@ mod test {
         let mut model = ReferenceModel::new(pool.config().clone());
         let mut ended = None;
         for (step, segment) in segments.iter().enumerate() {
+            // segments on the tombstone are ignored, unless they start a new
+            // connection
+            let id = model.id();
             let after_end = model.end().is_some();
             model.apply(segment);
+            let after_end = after_end && id == model.id();
             let processed = segment.feed(pool, ());
             if false == model.created() {
                 prop_assert!(processed.active.is_none());
@@ -1140,6 +1185,7 @@ mod test {
                 prop_assert_eq!(None, processed.ignored);
                 processed.active.unwrap().0
             };
+            prop_assert_eq!(model.id(), connection.id());
             prop_assert_eq!(model.end(), connection.end());
             prop_assert_eq!(model.roles_guessed(), connection.roles_guessed());
             for (i, role) in [Initiator, Responder].into_iter().enumerate() {

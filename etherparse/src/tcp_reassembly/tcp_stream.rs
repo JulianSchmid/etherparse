@@ -21,6 +21,11 @@ pub struct TcpStream {
     /// the stream is unknown).
     start_seq: Option<u32>,
 
+    /// Sequence number of the SYN before the stream's observed start, known
+    /// from the SYN or from the ACK of the SYN-ACK (`None` without an
+    /// observed start). A resync doesn't change it.
+    isn: Option<u32>,
+
     /// Last ACK number of the receiver that the stream couldn't apply yet,
     /// as it had no start or the ACK lies at or before offset 0 while bytes
     /// can still be prepended. It is applied after every packet until it
@@ -127,6 +132,7 @@ impl TcpStream {
     pub(crate) fn new(buf: Vec<u8>) -> TcpStream {
         TcpStream {
             start_seq: None,
+            isn: None,
             pending_ack: None,
             window_scale: None,
             window: None,
@@ -472,6 +478,22 @@ impl TcpStream {
         self.is_clean() && TcpStreamStart::Observed == self.status.start && self.is_finished()
     }
 
+    /// Sequence number of the SYN that gave the stream its observed start,
+    /// if it has one.
+    pub(crate) fn isn(&self) -> Option<u32> {
+        self.isn
+    }
+
+    /// Stream without buffers for the tombstone of an ended connection: it
+    /// keeps the ISN of the observed start, so that a late retransmission
+    /// of the SYN can be told from a reconnect.
+    pub(crate) fn tombstone(&self) -> TcpStream {
+        TcpStream {
+            isn: self.isn,
+            ..TcpStream::new(Vec::new())
+        }
+    }
+
     /// Returns the stream's buffer, emptied for re-use.
     pub(crate) fn into_buffer(self) -> Vec<u8> {
         let mut buf = self.buf;
@@ -763,6 +785,7 @@ impl TcpStream {
                 }
             }
         }
+        self.isn = Some(seq.wrapping_sub(1));
         self.status.start = TcpStreamStart::Observed;
         true
     }
