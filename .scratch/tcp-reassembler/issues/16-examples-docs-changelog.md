@@ -36,3 +36,11 @@ Parent: ../spec.md
 - a FIN without bytes after the window without a candidate before it is lost.
 
 **2026-10-11 — carry-over from ticket 08 (decisions):** also document that a receiver shrinking its window's right edge (discouraged by RFC 9293) can make the last-window checks of S4 and K1 count data sent into its earlier window as out-of-window, and even make it a resync candidate.
+
+**2026-10-11 — carry-over from ticket 09:** document resets for users:
+- which RSTs count (`TcpConnectionEnd::Reset` has a short version);
+- `End(Fin)` vs `End(Reset)`, and that `read_acked` ends before bytes that were not ACKed;
+- that RST bytes are ignored;
+- the known limits on ticket 09 (a blind RST inside the window resets the connection).
+
+The code now cites RFC 9293 3.10.7.4 for the RST check, and the spec cites RFC 9293 3.5.3 and RFC 1122 4.2.2.12 for RST data. The changelog entry should name the new variants `TcpConnectionEnd::Reset` and `TcpStreamEnd::Reset`.

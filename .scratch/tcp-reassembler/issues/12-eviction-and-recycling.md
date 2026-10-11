@@ -40,3 +40,7 @@ F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see tic
 **2026-10-11 — carry-over from ticket 06:** `TcpStream::can_finish()` checks F3 for a stream: the FIN is ACKed and every hole left is overdue. Eviction needs a variant that treats every hole the seen ACK covers as overdue (the tolerance counts as elapsed). `give_up_all_holes()` then turns them into counted gaps.
 
 **2026-10-11 — carry-over from ticket 08:** a stream's FIN can sit at a resync point (the candidate's FIN, R2), with the resync's gap in front of it, so `can_finish()` and eviction see a finished stream behind a `Gap { len: None }`. F5 at eviction keeps that gap (it is an empty range in `TcpStream::gaps`, which `give_up_holes_before` leaves alone).
+
+**2026-10-11 — carry-over from ticket 09:**
+- F5 at eviction is `TcpStream::connection_ended(TcpStreamEnd::Evicted)`, which replaced `give_up_all_holes()`. It also makes reads return `End(Evicted)` away from the FIN. `Evicted` needs an arm in the `TcpConnectionEnd → TcpStreamEnd` match in `TcpConnection::add_segment`, or a shared mapping.
+- Ignored RSTs update `last_seen` (user decision), so injected RSTs keep a connection from being evicted, like any other packet of it.

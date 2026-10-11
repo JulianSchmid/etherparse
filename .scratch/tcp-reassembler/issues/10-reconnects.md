@@ -42,3 +42,8 @@ Rules: C1–C4, F5, F6 (`End(Reconnect)`).
 **2026-10-11 — carry-over from ticket 08:**
 - After a resync, `TcpStream::start_seq` no longer belongs to the stream's ISN. C2/C3 must compare a SYN's ISN with the ISN of the observed start, not with `start_seq`, or a retransmitted SYN after a resync looks like a reconnect. A late SYN after a resync doesn't make the window scale known (test in `status()`), which C3 must keep.
 - SYNs are excluded from resyncs (no candidate, no new start, no clearing), so C2 decides alone what a SYN with a new ISN does.
+
+**2026-10-11 — carry-over from ticket 09:**
+- `TcpConnection::add_segment` ends every connection through `self.end`: after `after_packet`, `TcpStream::connection_ended(TcpStreamEnd)` gives up the holes of both streams (F5) and stores the end for reads (F6). `Reconnect` needs an arm in the `TcpConnectionEnd → TcpStreamEnd` match there. `give_up_all_holes()`, which the carry-overs of tickets 05 and 06 name, is gone.
+- `Finished` is only set while `end` is `None`, so an end set during the packet wins.
+- An RST with the SYN flag is handled as an RST before any SYN logic (`add_reset` vs `add_data_segment`), so C2 never sees it.
