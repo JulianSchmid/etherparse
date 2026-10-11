@@ -132,42 +132,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
-        let starts = self.starts();
-        // the SYN-ACK ACKs the other side's SYN, so the other stream starts
-        // there, even if its SYN was not seen
-        if tcp.syn() && tcp.ack() {
-            let window = self.window(sender.other(), config);
-            self.stream_mut(sender.other()).observe_start(
-                tcp.acknowledgment_number(),
-                window,
-                config,
-            );
-        }
-        // the window the sender advertised before this segment limits what
-        // the other side could send, so the ACK is applied first
-        if tcp.ack() {
-            let window = self.window(sender.other(), config);
-            let packet = self.packets;
-            self.stream_mut(sender.other())
-                .add_ack(tcp.acknowledgment_number(), window, packet);
-        }
-        let window = self.window(sender, config);
-        let packet = self.packets;
-        self.stream_mut(sender)
-            .add_segment(tcp, window, packet, config);
-
-        // a late SYN or SYN-ACK that gave a stream an observed start
-        // confirms guessed roles if its sender has the role the guess gave it
-        if self.roles_guessed && tcp.syn() {
-            let syn_sender = if tcp.ack() {
-                TcpRole::Responder
-            } else {
-                TcpRole::Initiator
-            };
-            if syn_sender == sender && starts != self.starts() {
-                self.roles_guessed = false;
-            }
-        }
+        self.add_data_segment(sender, tcp, config);
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
                 .stream(role.other())
@@ -188,6 +153,57 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.responder_stream.give_up_all_holes();
         }
         sender
+    }
+
+    /// Applies a segment sent by `sender` to the streams.
+    fn add_data_segment(
+        &mut self,
+        sender: TcpRole,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) {
+        let starts = self.starts();
+        // the SYN-ACK ACKs the other side's SYN, so the other stream starts
+        // there, even if its SYN was not seen
+        if tcp.syn() && tcp.ack() {
+            let window = self.window(sender.other(), config);
+            self.stream_mut(sender.other()).observe_start(
+                tcp.acknowledgment_number(),
+                window,
+                config,
+            );
+        }
+        // the window the sender advertised before this segment limits what
+        // the other side could send, so the ACK is applied first
+        self.add_ack(sender, tcp, config);
+        let window = self.window(sender, config);
+        let packet = self.packets;
+        self.stream_mut(sender)
+            .add_segment(tcp, window, packet, config);
+
+        // a late SYN or SYN-ACK that gave a stream an observed start
+        // confirms guessed roles if its sender has the role the guess gave it
+        if self.roles_guessed && tcp.syn() {
+            let syn_sender = if tcp.ack() {
+                TcpRole::Responder
+            } else {
+                TcpRole::Initiator
+            };
+            if syn_sender == sender && starts != self.starts() {
+                self.roles_guessed = false;
+            }
+        }
+    }
+
+    /// Applies the ACK number of a segment sent by `sender` (if it has one)
+    /// to the other stream.
+    fn add_ack(&mut self, sender: TcpRole, tcp: &TcpSlice<'_>, config: &TcpReassemblyConfig) {
+        if tcp.ack() {
+            let window = self.window(sender.other(), config);
+            let packet = self.packets;
+            self.stream_mut(sender.other())
+                .add_ack(tcp.acknowledgment_number(), window, packet);
+        }
     }
 
     /// How the streams of the initiator and the responder started.
