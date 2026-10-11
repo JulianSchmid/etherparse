@@ -65,11 +65,15 @@ A retransmission of bytes that are neither ACKed nor consumed yet, whose content
 _Avoid_: overlap conflict, corrupted retransmit
 
 **Hole**:
-Missing bytes of a stream with later bytes already received behind them; a retransmission can still fill it.
+Missing bytes of a stream before the furthest byte received or ACKed; a retransmission can still fill it.
 _Avoid_: gap (while the bytes may still arrive), missing segment
 
+**Overdue hole**:
+A hole whose bytes the receiver must already have, by the implied ACK or by an ACK seen long enough ago; late segments still fill it, but it becomes a gap once the reader reaches it.
+_Avoid_: stale hole, expired hole
+
 **Gap**:
-A hole that was given up, by the user or by a policy; a permanent break in the delivered bytes.
+A hole that was given up, by the user, by the reader reaching it while it was overdue, or by the connection ending; a permanent break in the delivered bytes.
 _Avoid_: hole (once given up), loss, skip
 
 **Implied ACK**:
@@ -89,7 +93,7 @@ A stream whose FIN was seen and that has no holes before the FIN.
 _Avoid_: closed stream, complete stream
 
 **Finished connection**:
-A connection whose two streams are finished and whose two FINs were both ACKed.
+A connection whose two FINs were both seen and ACKed and whose remaining holes are all overdue; ending it turns those holes into gaps, so both its streams are then finished.
 _Avoid_: closed connection, completed connection
 
 **Clean**:

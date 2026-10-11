@@ -32,3 +32,5 @@ Rules: D4, P3 (tombstones count), Q1.
 - `discard_until()` and `discard_all()` move the read position, and `max_stream_buffer` counts from it, so discarding makes room in the buffer.
 - Bytes that arrive in a gap at the read position, or after they were consumed or discarded, are not stored.
 - Holes created by rejected bytes must stay holes that the user can give up.
+
+**2026-10-11 — carry-over from the ticket-06 grilling (lazy gaps):** overdue holes are holes. They count towards `max_holes_per_stream`, and their placeholders towards `max_stream_buffer`, until the read position reaches them or the connection ends (ADR-0002 consequences). While a connection is open, gaps exist only at the read position.

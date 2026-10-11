@@ -34,7 +34,7 @@ A new `tcp_reassembly` module, gated on the `std` feature, provides a `TcpReasse
 
 **Robustness**
 - The pool handles retransmissions, reordering, sequence-number wrap-around and **mid-stream pickup**.
-- It gives up **holes** automatically once the receiver must already have the missing bytes (**implied ACK**).
+- It gives up **holes** automatically when the reader reaches them, once the receiver must already have the missing bytes (**implied ACK**). Until then, late segments still fill them.
 - It recovers from large sequence jumps (**resync**) and detects reconnects.
 - Every stream reports how it started and ended, and whether it is **clean** or **complete**.
 
@@ -75,8 +75,8 @@ A new `tcp_reassembly` module, gated on the `std` feature, provides a `TcpReasse
 27. As a tool developer, I want keep-alive probes and other retransmissions of ACKed bytes to be ignored, so that idle connections don't get flagged as conflicting.
 28. As a tool developer, I want sequence-number wrap-around to be handled transparently, so that very long or very fast connections are reassembled correctly.
 29. As a tool developer, I want all stream positions as 64-bit offsets from the stream's first byte, so that positions never wrap and are easy to compare.
-30. As a tool developer, I want holes caused by capture loss to become gaps automatically once the receiver has ACKed past them or must have received them (implied ACK), so that streams never stall after packets were lost in the capture.
-31. As a tool developer, I want a hole that an ACK covers to stay fillable for a configurable number of packets, so that reordering between the two directions in a merged capture doesn't create false gaps.
+30. As a tool developer, I want holes caused by capture loss to become gaps automatically when my reader reaches them, once the receiver has ACKed past them or must have received them (implied ACK), so that streams never stall after packets were lost in the capture, while late segments still fill the holes my reader hasn't reached.
+31. As a tool developer, I want a hole that an ACK covers to stay fillable for at least a configurable number of packets, so that reordering between the two directions in a merged capture doesn't create false gaps.
 32. As a tool developer, I want to configure how many windows of later data make a hole permanent, or switch that rule off, so that I can tune or disable inference for my traffic.
 33. As a tool developer, I want to configure the window that is assumed when the real one is unknown (mid-stream pickup, one-direction capture), so that inference still works with a size that suits my traffic.
 34. As a tool developer, I want the window scale option to be honoured when the handshake was captured, so that inference uses the real receiver window.
@@ -102,7 +102,7 @@ A new `tcp_reassembly` module, gated on the `std` feature, provides a `TcpReasse
 54. As a tool developer, I want each connection's first-seen and last-seen timestamps, so that I can report durations and pick idle connections.
 55. As a tool developer, I want each stream to report counts of gaps, missing bytes, resyncs, conflicting retransmissions, rejected bytes and out-of-window segments, so that I can judge its quality.
 56. As a tool developer, I want to ask whether a stream is clean (no defects so far) and whether it is complete (clean, observed start, finished), so that I can classify streams at a glance.
-57. As a tool developer, I want to ask whether a stream is finished, so that I know whether all of its bytes up to its FIN are known.
+57. As a tool developer, I want to ask whether a stream is finished, so that I know whether bytes before its FIN can still arrive.
 58. As a tool developer, I want to see a stream's current holes and its read, ACKed, highest and FIN offsets, so that I can debug or visualise reassembly.
 59. As a security monitoring developer, I want per-stream limits on buffered bytes and on the number of holes, so that one hostile connection can't exhaust memory, even with 1-byte holes.
 60. As a security monitoring developer, I want optional pool-wide limits on the number of connections and on total buffered bytes, so that memory stays bounded however many connections an attacker opens.
@@ -133,7 +133,7 @@ A new `tcp_reassembly` module, gated on the `std` feature, provides a `TcpReasse
 
 - **One pool entry per connection.** It holds both streams, so the ACKs and window from one direction update the other stream with a single lookup.
 - **Contiguous buffers that users pull from** (ADR-0001). Each stream keeps one contiguous buffer, and users read it as a slice and then consume it. Buffers come from the pool's free list and go back to it.
-- **Inferred receiver state** (ADR-0002). Holes are given up by implied ACK and by ACK coverage, and a large jump is followed by a resync once ACKs confirm it.
+- **Inferred receiver state** (ADR-0002). Holes become **overdue** by implied ACK and by ACK coverage, and become gaps once the reader reaches them. A large jump is followed by a resync once ACKs confirm it.
 - **Ended connections are handed to the user as owned values.** The pool keeps a **tombstone** for the key, without buffers, so late segments are absorbed. A reconnect SYN or eviction removes the tombstone.
 - **Unique connection ids.** The pool numbers connections in creation order, so a connection and its reconnect never share an id.
 - **The connection table uses std's `RandomState` hasher**, because the keys are attacker-controlled.
@@ -177,8 +177,8 @@ The generic parameters are named `Timestamp` and `CustomChannelId`, as in `IpDef
   - `consume(len)` is clamped to the bytes the last read returned.
   - `consume_gap()` does nothing unless the read position is at a gap.
 - Dropping data: `give_up_hole()` returns a `bool`, plus `discard_until(offset)`, `discard_all()` and `force_resync()`. `discard_until` treats offsets after the highest offset as the highest offset, so it never discards bytes that haven't arrived yet; `discard_all()` equals `discard_until(highest offset)` (user decision, 2026-10-11).
-- Positions: `read_offset()`, `acked_offset()`, `highest_offset()` and `fin_offset()`, plus `holes()`, an iterator of offset ranges.
-- Classification: `status()`, `is_finished()`, `is_clean()` and `is_complete()`.
+- Positions: `read_offset()`, `acked_offset()`, `highest_offset()` and `fin_offset()`, plus `holes()`, an iterator of offset ranges. `holes()` lists overdue holes too, as late segments can still fill them; it doesn't mark them (user decision, 2026-10-11).
+- Classification: `status()`, `is_finished()`, `is_clean()` and `is_complete()`. `is_finished()` follows F2, so an overdue hole before the FIN keeps it and `is_complete()` false.
 
 **Reading and status types**
 - `TcpRead` has four variants:
@@ -206,7 +206,7 @@ The generic parameters are named `Timestamp` and `CustomChannelId`, as in `IpDef
 | `max_holes_per_stream` | 256 | |
 | `hole_give_up_window_factor` | `Some(2)` | k in the implied-ACK rule; `None` switches the window rule off |
 | `fallback_window` | 4 MiB | used whenever the receiver's window is unknown |
-| `ack_reorder_tolerance` | 16 packets | how long an ACK-covered hole stays fillable |
+| `ack_reorder_tolerance` | 16 packets | after how many packets an ACK-covered hole becomes overdue |
 | `resync_after_segments` | `None` | opt-in resync without ACK confirmation |
 | `max_connections` | `None` | tombstones count towards it |
 | `max_total_buffered` | `None` | pool-wide |
@@ -239,7 +239,8 @@ The rule ids are for referencing from tickets and test names.
 **Data (D)**
 - **D1** First wins: overlapping bytes keep the content received first.
 - **D2** A retransmission whose overlapping not-yet-ACKed bytes differ increments `conflicting_retransmissions` once per segment. ACKed means a seen ACK or the implied ACK. Bytes the user already consumed are not compared, because they are no longer buffered (user decision, 2026-10-10).
-- **D3** Bytes before the ACKed offset in a retransmission are ignored without comparison. This covers keep-alive probes. Missing bytes before the ACKed offset are still stored, because captures can show an ACK before the data it acknowledges. Known limit: if an ACKed segment was not captured, a keep-alive's garbage byte at seen ACK − 1 fills the last byte of its hole (user decision, 2026-10-11).
+- **D3** Bytes before the ACKed offset in a retransmission are ignored without comparison. This covers keep-alive probes. Missing bytes before the ACKed offset are still stored, because captures can show an ACK before the data it acknowledges. Known limit: if an ACKed segment was not captured, a keep-alive's garbage byte at seen ACK − 1 fills the last byte of its hole while that hole is not overdue yet (user decision, 2026-10-11).
+  - In an overdue hole (K4), a segment without SYN, FIN or RST that carries exactly 1 byte and ends at the seen ACK is ignored and touches no counter. It has the shape of a keep-alive, whose byte is filler (RFC 1122 4.2.3.6), and a receiver discards it too. Without this rule, lazy gaps would let a keep-alive put a garbage byte into the stream until the reader reaches the hole (user decision, 2026-10-11).
 - **D4** Limits:
   - Bytes beyond `max_stream_buffer` are rejected and counted as `rejected_bytes`.
   - A segment that would exceed `max_holes_per_stream` is rejected entirely.
@@ -255,15 +256,17 @@ The rule ids are for referencing from tickets and test names.
   - An ACK never moves the ACKed offset past the FIN offset and never adds holes after it.
 - **K2** The implied ACK is `highest offset − k × window`, saturating at 0. It applies only while `hole_give_up_window_factor` is `Some(k)`.
 - **K3** The ACKed offset is `max(seen ACK, implied ACK)`. `read_acked()` returns contiguous bytes up to it.
-- **K4** A hole may be given up when either:
-  - (a) it lies before the implied ACK, or
-  - (b) the seen ACK has covered it for at least `ack_reorder_tolerance` further packets of the connection.
+- **K4** A hole is **overdue** once its end lies at or before either:
+  - (a) the implied ACK, or
+  - (b) the seen ACK as it was `ack_reorder_tolerance` packets ago. Every packet applied to the connection counts, in either direction, as for `last_seen` (P7). The packet whose ACK covers the hole doesn't count, so the hole is overdue on the N-th packet after it.
+
+  A hole is overdue as a whole, never in parts: a hole that is only partly before these offsets is not overdue. One lost range thus gives one gap (user decision, 2026-10-11).
 
   Gaps are lazy (user decision, 2026-10-11):
-  - such a hole stays fillable until the read position reaches it;
-  - only then does it become a gap, which is read as `Gap` and counted;
-  - a late segment that arrives before then still fills it, so the reassembler never drops bytes the reader hasn't reached;
-  - for F2, F3 and F5, holes that may be given up count as given up, so streams still finish and connections still end on time.
+  - an overdue hole stays a hole, and late segments still fill it, so the reassembler never drops bytes the reader hasn't reached;
+  - the overdue hole at the read position becomes a gap as soon as it is overdue. This is checked after every packet and after every move of the read position, so reads, `holes()`, `status()` and `consume_gap()` always agree, whether or not the user has called `read_*()`. The gap is read as `Gap` and counted;
+  - when a connection ends, its remaining holes become gaps (F5);
+  - at eviction (P6), no more packets come, so every hole that the seen ACK covers counts as overdue.
 
 **Resync (R)**
 - **R1** Out-of-window data records the latest candidate sequence number.
@@ -275,10 +278,10 @@ The rule ids are for referencing from tickets and test names.
 - **F1** The first FIN within the window sets the FIN offset. Later FINs at other offsets are ignored. A FIN that lies before bytes already received is ignored.
   - An ACK never blocks a FIN. A FIN inside a hole that an ACK created is accepted, cuts the hole, and moves the highest offset back to the FIN offset. It counts as ACKed if the seen ACK lies after it. Otherwise one forged ACK within the window could keep the stream from ever finishing (user decision, 2026-10-11).
   - "Received" means stored: bytes that arrive after they were consumed or given up are ignored and don't count. A FIN that lies before the read position, because the user gave up or discarded bytes up to an ACK after it, is accepted and moves the read position back to it. Example: the ACK of a FIN arrives before the FIN, and the user gives up the FIN's position (user decision, 2026-10-11).
-- **F2** A finished stream has its FIN seen and no holes before the FIN offset (holes that may be given up by K4 don't count).
-- **F3** A finished connection has both streams finished and both FINs ACKed. It ends as `Finished`.
+- **F2** A finished stream has its FIN seen and no holes before the FIN offset. Overdue holes count as holes, because late segments can still fill them, and because otherwise `is_complete()` would turn from true to false once the reader reaches such a hole (user decision, 2026-10-11).
+- **F3** A finished connection has both FINs seen and ACKed, and every hole it has left is overdue. It ends as `Finished`, and its remaining holes become gaps (F5), so both streams are then finished (user decision, 2026-10-11).
 - **F4** An RST is accepted if its sequence number lies within one window of the sender stream's highest offset, or if that stream has never been seen. It ends the connection as `Reset { by }`.
-- **F5** When a connection ends without finishing (reset, evicted, reconnect), all its holes become gaps.
+- **F5** When a connection ends, for any reason, all its holes become gaps and are counted, so its status is final when it is handed over. Late segments go to the tombstone (P3) and can't fill them anymore (user decision, 2026-10-11).
 - **F6** `read_*()` returns `End(..)` once everything readable has been read and no more bytes can come. On an ended connection, `read_acked()` returns `End` even if un-ACKed bytes remain; `read_received()` still returns them.
 
 **Reconnect (C)**
@@ -293,7 +296,7 @@ The rule ids are for referencing from tickets and test names.
 - **P3** A connection that ends other than by eviction leaves a tombstone with its key, id and last-seen time. Late segments are ignored with `AfterEnd`. A SYN (C1) or eviction removes the tombstone. Tombstones count towards `max_connections`.
 - **P4** Connection ids start at 0 and increase by one for each new connection.
 - **P5** The free list keeps at most `max_pooled_buffers` buffers per kind. Recycled buffers are shrunk to `max_pooled_buffer_capacity`.
-- **P6** `evict_older_than` ends connections with `last_seen < cutoff` as `Evicted` (F5). A connection that is already finished (F3), e.g. because the user gave up its last hole after both FINs were ACKed, ends as `Finished` instead; `evict_all` does the same (user decision, 2026-10-11). It calls the callback and then recycles their buffers. It also removes tombstones older than the cutoff. The return value counts evicted connections only, not tombstones.
+- **P6** `evict_older_than` ends connections with `last_seen < cutoff` as `Evicted` (F5). A connection that is already finished (F3), e.g. because the user gave up its last hole after both FINs were ACKed, ends as `Finished` instead; `evict_all` does the same (user decision, 2026-10-11). For this check, every hole that the seen ACK covers counts as overdue (K4). Otherwise a connection that closed cleanly, with fewer than `ack_reorder_tolerance` packets after the ACK that covered its last hole, would end as `Evicted` (user decision, 2026-10-11). It calls the callback and then recycles their buffers. It also removes tombstones older than the cutoff. The return value counts evicted connections only, not tombstones.
 - **P7** Every processed packet of a connection updates `last_seen`. `first_seen` is the timestamp of its first packet.
 
 **Status (Q)**

@@ -34,3 +34,5 @@ Rules: P5, P6, F5, F6 (`End(Evicted)`).
 **User decision (2026-10-11):** `evict_older_than` and `evict_all` check F3 first. A connection that is already finished ends as `Finished`, not `Evicted` (P6 in spec.md). No new pool method.
 
 F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see ticket 09).
+
+**2026-10-11 — carry-over from the ticket-06 grilling (lazy gaps):** when P6 checks F3 at eviction (`evict_older_than` and `evict_all`), every hole that the seen ACK covers counts as overdue, because no more packets come. Example: a connection that closed cleanly, whose last hole was covered by the ACK of a FIN with fewer than `ack_reorder_tolerance` packets after it, ends as `Finished`, not `Evicted`. As at every end, its holes become counted gaps (F5), and reads end in `End(Fin)`. Add a test for exactly this case.
