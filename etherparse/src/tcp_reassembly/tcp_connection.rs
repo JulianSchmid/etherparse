@@ -133,8 +133,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // the SYN-ACK ACKs the other side's SYN, so the other stream starts
         // there, even if its SYN was not seen
         if tcp.syn() && tcp.ack() {
+            let window = self.window(sender.other(), config);
             self.stream_mut(sender.other())
-                .observe_start(tcp.acknowledgment_number());
+                .observe_start(tcp.acknowledgment_number(), window);
         }
         // the window the sender advertised before this segment limits what
         // the other side could send, so the ACK is applied first

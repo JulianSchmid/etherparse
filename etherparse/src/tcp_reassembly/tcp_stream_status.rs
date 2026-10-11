@@ -25,10 +25,12 @@ pub struct TcpStreamStatus {
     pub conflicting_retransmissions: u64,
 
     /// Number of segments with bytes that lie outside of the stream: they
-    /// start after the receiver's window, or lie after the stream's FIN.
+    /// start after the receiver's window, lie after the stream's FIN, or lie
+    /// before the first byte of a mid-stream pickup that can't take them
+    /// anymore (see [`TcpStreamStart::MidStreamPickup`]).
     ///
     /// These bytes are not stored. FINs starting after the receiver's window
-    /// count too.
+    /// count too, and so do SYNs that a mid-stream pickup can't take.
     pub out_of_window_segments: u64,
 }
 

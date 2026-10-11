@@ -8,7 +8,11 @@ pub enum TcpStreamStart {
     /// unknown.
     ///
     /// Offset 0 is the first byte captured, so it is most likely not the
-    /// start of a message.
+    /// start of a message. Until the read position first moves (see
+    /// [`crate::tcp_reassembly::TcpStream::consume`]), earlier bytes within
+    /// the receiver's window that arrive late are put in front and the
+    /// offsets move with them, and a late SYN turns the start into
+    /// [`TcpStreamStart::Observed`].
     MidStreamPickup,
 }
 

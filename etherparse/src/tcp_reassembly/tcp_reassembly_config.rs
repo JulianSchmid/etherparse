@@ -49,8 +49,9 @@ pub struct TcpReassemblyConfig {
     /// This tolerates captures in which the ACK arrives before the bytes it
     /// ACKs, e.g. when both directions were captured separately and merged.
     /// An overdue hole is given up once the read position reaches it, and
-    /// late segments fill it until then. While a stream has holes, it keeps
-    /// the ACKs of up to this many packets.
+    /// late segments fill it until then. While a stream has holes, or is a
+    /// mid-stream pickup that was not read from yet, it keeps the ACKs of
+    /// up to this many packets.
     pub ack_reorder_tolerance: u32,
 
     /// Number of consecutive out-of-window segments agreeing on a new

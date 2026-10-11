@@ -15,8 +15,9 @@ pub struct TcpStream {
     start_seq: Option<u32>,
 
     /// Last ACK number of the receiver that the stream couldn't apply yet,
-    /// as it had no start. It is applied after every packet until it counts
-    /// (a keep-alive ending there doesn't start the stream).
+    /// as it had no start or the ACK lies at or before offset 0 while bytes
+    /// can still be prepended. It is applied after every packet until it
+    /// counts (a keep-alive ending there doesn't start the stream).
     pending_ack: Option<u32>,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
@@ -179,7 +180,9 @@ impl TcpStream {
     /// Consumes `len` bytes at the read position.
     ///
     /// At most the bytes returned by the last read are consumed, so bytes
-    /// that arrived after the read stay unread.
+    /// that arrived after the read stay unread. If earlier bytes were put in
+    /// front of a mid-stream pickup since the read, nothing is consumed (see
+    /// [`TcpStreamStart::MidStreamPickup`]).
     pub fn consume(&mut self, len: usize) {
         let len = len.min(self.last_read_len);
         self.head += len;
@@ -490,7 +493,12 @@ impl TcpStream {
         };
         let data = tcp.payload();
         if tcp.syn() {
-            self.observe_start(seq);
+            // a SYN whose start a mid-stream pickup can't take is not the
+            // stream's own one
+            if false == self.observe_start(seq, window) {
+                self.status.out_of_window_segments += 1;
+                return;
+            }
             // the window scale is only known from the sender's SYN, which
             // can arrive after the SYN-ACK that started the stream
             if self.window_scale.is_none() && Some(seq) == self.start_seq {
@@ -502,7 +510,6 @@ impl TcpStream {
             // keep-alive, which ends at the receiver's ACK
             let keep_alive =
                 is_keep_alive_shaped(tcp) && Some(seq.wrapping_add(1)) == self.pending_ack;
-
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
                 self.start_seq = Some(seq);
             }
@@ -510,7 +517,21 @@ impl TcpStream {
         let Some(start_seq) = self.start_seq else {
             return;
         };
-        let start = self.offset(start_seq, seq);
+        let mut start = self.offset(start_seq, seq);
+
+        // bytes before offset 0 of a mid-stream pickup are prepended until
+        // it is read from, and are outside of the stream after that
+        let mut out_of_window = false;
+        if start < 0
+            && false == data.is_empty()
+            && TcpStreamStart::MidStreamPickup == self.status.start
+        {
+            if self.move_start_back(seq, start, window) {
+                start = 0;
+            } else {
+                out_of_window = true;
+            }
+        }
         let end = start + data.len() as i64;
 
         // the receiver doesn't accept bytes or a FIN starting after its
@@ -542,12 +563,15 @@ impl TcpStream {
         // bytes after the FIN are not part of the stream
         let data = match self.fin_offset {
             Some(fin) if false == data.is_empty() && end > fin as i64 => {
-                self.status.out_of_window_segments += 1;
+                out_of_window = true;
                 let len = (fin as i64 - start).max(0) as usize;
                 data.get(..len).unwrap_or_default()
             }
             _ => data,
         };
+        if out_of_window {
+            self.status.out_of_window_segments += 1;
+        }
         self.add_data(start, data);
 
         // the sender sent all bytes before its FIN
@@ -557,12 +581,79 @@ impl TcpStream {
     }
 
     /// Gives the stream an observed start at `seq`, the sequence number
-    /// after its SYN, unless it has a start already.
-    pub(crate) fn observe_start(&mut self, seq: u32) {
-        if self.start_seq.is_none() {
-            self.start_seq = Some(seq);
-            self.status.start = TcpStreamStart::Observed;
+    /// after its SYN, where `window` is the receiver's receive window.
+    ///
+    /// A mid-stream pickup moves its start back to `seq`. Returns false if
+    /// it can't, and true if the stream has an observed start afterwards.
+    pub(crate) fn observe_start(&mut self, seq: u32, window: u64) -> bool {
+        match self.start_seq {
+            None => self.start_seq = Some(seq),
+            Some(_) if TcpStreamStart::Observed == self.status.start => return true,
+            Some(start_seq) => {
+                // a late SYN lies at or before the first byte received
+                let start = self.offset(start_seq, seq);
+                if false == self.move_start_back(seq, start, window) {
+                    return false;
+                }
+            }
         }
+        self.status.start = TcpStreamStart::Observed;
+        true
+    }
+
+    /// Moves offset 0 of a mid-stream pickup back to the sequence number
+    /// `seq` at offset `start`, if bytes can still be prepended and `seq`
+    /// lies at most the receiver's receive window `window` before offset 0.
+    /// Returns false otherwise.
+    fn move_start_back(&mut self, seq: u32, start: i64, window: u64) -> bool {
+        if 0 < start || start.unsigned_abs() > window || false == self.can_prepend() {
+            return false;
+        }
+        if start < 0 {
+            self.prepend(start.unsigned_abs());
+        }
+        self.start_seq = Some(seq);
+        true
+    }
+
+    /// Returns true if bytes can still be prepended to the stream, as it is
+    /// a mid-stream pickup whose offsets no reader has used yet.
+    fn can_prepend(&self) -> bool {
+        // the read position of a pickup never moves back to 0 (a FIN can't
+        // lie before the first byte received), and a reader may have read
+        // the end of a pickup that starts at its FIN
+        TcpStreamStart::MidStreamPickup == self.status.start
+            && 0 == self.read_offset
+            && Some(0) != self.fin_offset
+    }
+
+    /// Moves offset 0 of the mid-stream pickup `len` bytes back, these
+    /// bytes are a hole until they arrive.
+    fn prepend(&mut self, len: u64) {
+        // nothing was consumed yet, and there are no gaps, as the read
+        // position is at the first byte received
+        self.buf.splice(..0, core::iter::repeat_n(0, len as usize));
+        self.highest_offset += len;
+        self.received_end += len;
+        for hole in &mut self.holes {
+            hole.start += len;
+            hole.end += len;
+        }
+        self.holes.insert(0, 0..len);
+        self.fin_offset = self.fin_offset.map(|fin| fin + len);
+        // ACKs of offset 0 or before it were ignored, so 0 means none
+        if 0 < self.seen_ack {
+            self.seen_ack += len;
+        }
+        if 0 < self.settled_ack {
+            self.settled_ack += len;
+        }
+        for (_, ack) in &mut self.recent_acks {
+            *ack += len;
+        }
+        self.implied_ack = self.implied_ack.map(|ack| ack.saturating_add(len as i64));
+        // a read before returned other bytes at the read position
+        self.last_read_len = 0;
     }
 
     /// Updates what the receiver must have received after the packet with
@@ -605,9 +696,9 @@ impl TcpStream {
             self.settled_ack = ack;
             self.recent_acks.pop_front();
         }
-        if self.holes.is_empty() {
+        if self.holes.is_empty() && false == self.can_prepend() {
             // later holes lie after the seen ACK, so they can't be overdue
-            // by the ACKs so far
+            // by the ACKs so far (a prepend adds a hole before it)
             self.recent_acks.clear();
         }
         self.give_up_overdue_hole();
@@ -616,12 +707,17 @@ impl TcpStream {
     /// Applies the ACK number of a segment sent by the stream's receiver,
     /// whose receive window before that segment was `window`, in the packet
     /// with the number `packet` of the connection.
-    pub(crate) fn add_ack(&mut self, ack: u32, window: u64, packet: u64) {
+    pub(crate) fn add_ack(&mut self, ack_seq: u32, window: u64, packet: u64) {
         let Some(start_seq) = self.start_seq else {
-            self.pending_ack = Some(ack);
+            self.pending_ack = Some(ack_seq);
             return;
         };
-        let ack = self.offset(start_seq, ack);
+        let ack = self.offset(start_seq, ack_seq);
+        // an ACK of offset 0 or before it can ACK bytes prepended later
+        if ack <= 0 && self.can_prepend() {
+            self.pending_ack = Some(ack_seq);
+            return;
+        }
         // the sender can't have sent more than one window after the bytes
         // it is known to have sent (and its FIN)
         let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
@@ -635,8 +731,9 @@ impl TcpStream {
             .fin_offset
             .map_or(self.seen_ack, |fin| fin.min(self.seen_ack));
         self.extend_to(end);
-        // only holes can become overdue by the ACK
-        if false == self.holes.is_empty() {
+        // only holes can become overdue by the ACK, also ones that a
+        // prepend adds before it
+        if false == self.holes.is_empty() || self.can_prepend() {
             self.recent_acks.push_back((packet, self.seen_ack));
         }
     }
@@ -1248,6 +1345,133 @@ mod test {
             assert_eq!(0, stream.read_offset());
         }
 
+        // earlier bytes arriving before the read position moved are put in
+        // front of a mid-stream pickup, moving the offsets (also when they
+        // overlap the first bytes or leave a hole)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghij")
+                .send_at(Initiator, 5, b"fgh");
+            script.segments.drain(..3);
+            for (i, expected) in [
+                (2, &b"ghij"[..]),
+                (3, b"fghij"),
+                (0, b"abc"),
+                (1, b"abcdefghij"),
+            ] {
+                let (connection, _) = script.segments[i].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(expected), stream.read_received());
+                assert_eq!(0, stream.read_offset());
+                assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+            }
+        }
+
+        // the hole a prepend leaves before the seen ACK is overdue once that
+        // ACK was seen N packets ago, also if there was no hole when it was
+        // seen
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"x")
+                .send(Initiator, b"bc")
+                .send(Initiator, b"def")
+                .ack(Responder)
+                .ack(Responder);
+            script.segments.drain(..3);
+            // without "bc", "x" after the ACKs
+            script.segments.remove(1);
+            script.segments.rotate_left(1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(vec![1..3], stream.holes().collect::<Vec<_>>());
+            stream.read_received();
+            stream.consume(1);
+            assert_eq!(TcpRead::Gap { len: Some(2) }, stream.read_received());
+        }
+
+        // a prepend moves the overdue state with the offsets: the ACK of N
+        // packets ago, settled before the prepend or after it
+        for (tolerance, acks_after) in [(1, 1), (2, 0)] {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: tolerance,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"lostlostxy")
+                .send(Initiator, b"abc")
+                .send(Initiator, b"lll")
+                .send(Initiator, b"ghi");
+            let x = script.injected(|s| {
+                s.send_at(Initiator, 8, b"x");
+            });
+            // ACKs of the bytes up to "ghi", before and after "x"
+            for _ in 0..1 + acks_after {
+                script.ack_to(Responder, 16);
+            }
+            script.segments.push(x);
+            script.ack_to(Responder, 16);
+            script.segments.drain(..4);
+            // without "lll"
+            script.segments.remove(1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            // "x", hole, "abc", hole, "ghi", where the ACK of the "ghi" covers
+            // both holes for long enough
+            assert_eq!(vec![1..2, 5..8], stream.holes().collect::<Vec<_>>());
+            assert_eq!(TcpRead::Data(b"x"), stream.read_received());
+            stream.consume(1);
+            assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+        }
+
+        // the implied ACK moves with the offsets too, also after a FIN moved
+        // the highest offset back (the implied ACK never moves back)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"lostlostxy")
+                .send(Initiator, b"abc");
+            let x = script.injected(|s| {
+                s.send_at(Initiator, 8, b"x");
+            });
+            // an ACK two bytes after "abc" (one window), then the FIN after
+            // "abc", which moves the highest offset back
+            script.ack_to(Responder, 15).fin(Initiator);
+            script.segments.push(x);
+            script.segments.drain(..4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(Some(5), stream.fin_offset());
+            assert_eq!(TcpRead::Data(b"x"), stream.read_received());
+            stream.consume(1);
+            // the implied ACK was 2 windows before the ACK, 3 after "x"
+            assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+        }
+
         // a keep-alive doesn't start a stream if it ends at the receiver's
         // ACK, but as the first packet it does, with its filler byte
         // (regression test: the old tcp-reassembly branch always started
@@ -1570,6 +1794,39 @@ mod test {
 
     #[test]
     fn consume() {
+        // moving the read position ends putting earlier bytes in front of
+        // a mid-stream pickup, consuming nothing doesn't. A consume after
+        // bytes were put in front consumes nothing until the next read.
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi");
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.segments[2].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"ghi"), stream.read_received());
+                stream.consume(0);
+            }
+            {
+                let (connection, _) = script.segments[1].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.consume(3);
+                assert_eq!(0, stream.read_offset());
+                assert_eq!(TcpRead::Data(b"defghi"), stream.read_received());
+                stream.consume(1);
+            }
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.read_offset());
+            assert_eq!(TcpRead::Data(b"efghi"), stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
         // partial consumes
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -2032,6 +2289,33 @@ mod test {
 
     #[test]
     fn discard_until() {
+        // discarding ends putting earlier bytes in front of a mid-stream
+        // pickup, discarding up to its first byte doesn't
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi");
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.segments[2].feed(&mut pool, ()).active.unwrap();
+                connection.stream_mut(Initiator).discard_until(0);
+            }
+            {
+                let (connection, _) = script.segments[1].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"defghi"), stream.read_received());
+                stream.discard_until(1);
+            }
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"efghi"), stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
         // an offset inside the received bytes drops the bytes before it,
         // which keeps the stream clean
         {
@@ -2203,6 +2487,26 @@ mod test {
 
     #[test]
     fn discard_all() {
+        // ends putting earlier bytes in front of a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.segments[1].feed(&mut pool, ()).active.unwrap();
+                connection.stream_mut(Initiator).discard_all();
+            }
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(3, stream.read_offset());
+            assert_eq!(TcpRead::Pending, stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
         // drops the received bytes, which keeps the stream clean, and new
         // bytes continue the stream
         {
@@ -2280,6 +2584,21 @@ mod test {
 
     #[test]
     fn read_offset() {
+        // stays at 0 when earlier bytes are put in front of a mid-stream
+        // pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            script.segments.drain(..3);
+            script.segments.swap(0, 1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).read_offset());
+        }
+
         // starts at 0 and grows by the consumed bytes
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -2347,6 +2666,51 @@ mod test {
 
     #[test]
     fn acked_offset() {
+        // earlier bytes put in front of a mid-stream pickup move the ACKed
+        // offset, and an ACK of the pickup's first byte or before it counts
+        // once the bytes it ACKs were put in front
+        for (ack, expected) in [(6, 6), (3, 3), (2, 2)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .ack_to(Responder, ack);
+            script.segments.drain(..3);
+            // "def", ACK, "abc"
+            script.segments.rotate_left(1);
+            {
+                let (connection, _) = script.feed(&mut pool, ..2).active.unwrap();
+                assert_eq!(
+                    ack.saturating_sub(3),
+                    connection.stream(Initiator).acked_offset()
+                );
+            }
+            let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+            assert_eq!(expected, connection.stream(Initiator).acked_offset());
+        }
+
+        // ... but not after the read position moved
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .ack_to(Responder, 3);
+            script.segments.drain(..4);
+            {
+                let (connection, _) = script.feed(&mut pool, ..1).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(1);
+            }
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).acked_offset());
+        }
+
         // the last ACK seen before a mid-stream pickup started counts once
         // it starts ("de" at offset 0), unless it lies more than one window
         // after its bytes, or before its first byte
@@ -2501,6 +2865,24 @@ mod test {
 
     #[test]
     fn highest_offset() {
+        // moves with earlier bytes put in front of a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            script.segments.drain(..3);
+            script.segments.swap(0, 1);
+            {
+                let (connection, _) = script.feed(&mut pool, ..1).active.unwrap();
+                assert_eq!(3, connection.stream(Initiator).highest_offset());
+            }
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            assert_eq!(6, connection.stream(Initiator).highest_offset());
+        }
+
         // nothing received yet
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -2597,6 +2979,33 @@ mod test {
 
     #[test]
     fn holes() {
+        // earlier bytes put in front of a mid-stream pickup move the holes,
+        // and the bytes in between are a hole (that is not overdue)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .send(Initiator, b"cd")
+                .send(Initiator, b"ef")
+                .send(Initiator, b"gh")
+                .send(Initiator, b"ij");
+            script.segments.drain(..3);
+            // "ef", "ij", "ab"
+            script.segments = vec![
+                script.segments[2].clone(),
+                script.segments[4].clone(),
+                script.segments[0].clone(),
+            ];
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(vec![2..4, 6..8], stream.holes().collect::<Vec<_>>());
+            stream.read_received();
+            stream.consume(2);
+            assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
         // no holes while the bytes arrive in order
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -2777,6 +3186,41 @@ mod test {
 
     #[test]
     fn fin_offset() {
+        // a FIN before the bytes received is still ignored after earlier
+        // bytes were put in front of a mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            let early_fin = script.injected(|s| {
+                s.fin_at(Initiator, 4, &[]);
+            });
+            script.segments.drain(..3);
+            script.segments.swap(0, 1);
+            script.segments.push(early_fin);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.stream(Initiator).fin_offset());
+        }
+
+        // earlier bytes put in front of a mid-stream pickup move the FIN
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator);
+            script.segments.drain(..3);
+            // "def", FIN, "abc"
+            script.segments.rotate_left(1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(6), connection.stream(Initiator).fin_offset());
+        }
+
         // no FIN yet
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -3105,6 +3549,211 @@ mod test {
                     connection.stream(role).status().start
                 );
             }
+        }
+
+        // a late SYN gives a mid-stream pickup an observed start before its
+        // read position moved, when it lies within the window before the
+        // first byte (moving the offsets), or at it
+        for (fallback_window, lost, expected) in [(3, &b"abc"[..], &b""[..]), (3, b"", b"abcdef")] {
+            let config = TcpReassemblyConfig {
+                fallback_window,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, lost)
+                .send(Initiator, b"abcdef"[lost.len()..].as_ref());
+            let syn = script.segments[0].clone();
+            script.segments.drain(..4);
+            script.segments.push(syn);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(6, stream.highest_offset());
+            if expected.is_empty() {
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            } else {
+                assert_eq!(TcpRead::Data(expected), stream.read_received());
+            }
+        }
+
+        // other SYNs of a mid-stream pickup count as out-of-window and
+        // change nothing, not even with bytes (TCP Fast Open): after the
+        // read position moved, more than one window before the first byte,
+        // after the first byte, and for a pickup that starts at its FIN
+        for (fallback_window, lost, consumed, syn_offset, fin) in [
+            (3, &b""[..], 1, 0, false),
+            (2, b"abc", 0, 0, false),
+            (3, b"", 0, 2, false),
+            (3, b"", 0, 0, true),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, lost);
+            if fin {
+                script.fin(Initiator);
+            } else {
+                script.send(Initiator, b"def");
+            }
+            let mut syn = script.segments[0].clone();
+            syn.header.sequence_number += syn_offset;
+            syn.payload = b"XYZ".to_vec();
+            script.segments.drain(..4);
+            // the responder's bytes start the connection
+            script.send(Responder, b"x");
+            let responder = script.segments.pop().unwrap();
+            script.segments.insert(0, responder);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(consumed);
+            }
+            let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(0, stream.status().conflicting_retransmissions);
+            assert_eq!(if fin { 0 } else { 3 }, stream.highest_offset());
+        }
+
+        // segments without bytes before the first byte of a mid-stream
+        // pickup change nothing (e.g. earlier ACKs of its sender, or its
+        // keep-alives), before and after the read position moved
+        for consumed in [0, 1] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            let ack = script.injected(|s| {
+                s.send_at(Initiator, 1, &[]);
+            });
+            script.segments.drain(..4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(consumed);
+            }
+            let (connection, _) = ack.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(3, stream.highest_offset());
+            assert_eq!(Vec::<Range<u64>>::new(), stream.holes().collect::<Vec<_>>());
+        }
+
+        // a late SYN-ACK gives both streams of mid-stream pickups an
+        // observed start (the initiator's at its ACK), but not to streams
+        // whose read position moved; a SYN after it changes nothing
+        for consumed in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            let syn = script.segments[0].clone();
+            let syn_ack = script.segments[1].clone();
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                for role in [Initiator, Responder] {
+                    let stream = connection.stream_mut(role);
+                    stream.read_received();
+                    stream.consume(usize::from(consumed));
+                }
+            }
+            let expected = if consumed {
+                TcpStreamStart::MidStreamPickup
+            } else {
+                TcpStreamStart::Observed
+            };
+            for segment in [syn_ack, syn] {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                for role in [Initiator, Responder] {
+                    let status = connection.stream(role).status();
+                    assert_eq!(expected, status.start);
+                }
+            }
+            // the SYN-ACK counts for the responder's stream, the SYN for
+            // the initiator's
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            for role in [Initiator, Responder] {
+                assert_eq!(
+                    u64::from(consumed),
+                    connection.stream(role).status().out_of_window_segments
+                );
+            }
+        }
+
+        // bytes before the first byte of a mid-stream pickup count as
+        // out-of-window if they can't be put in front: after the read
+        // position moved, or more than one window before. Each segment
+        // counts once, also with bytes after the FIN, and its bytes from
+        // the read position on are stored.
+        for (fallback_window, consumed, earlier, expected) in [
+            (3, 1, &b"abcd"[..], &b"fX"[..]),
+            (2, 0, b"abcd", b"efX"),
+            // put in front, only the bytes after the FIN count
+            (3, 0, b"bcd", b"bcdefX"),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"e");
+            // the segment fills the missing byte "f"
+            let segment = script.injected(|s| {
+                s.send_at(
+                    Initiator,
+                    (4 - earlier.len()) as u64,
+                    &[earlier, b"efXh"].concat(),
+                );
+            });
+            script.send_at(Initiator, 6, b"X").fin_at(Initiator, 7, &[]);
+            script.segments.drain(..4);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(consumed);
+            }
+            let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(expected), stream.read_received());
+        }
+
+        // bytes before the first byte of a stream with an observed start
+        // don't count (e.g. the filler byte of a keep-alive before any
+        // bytes were sent)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let mut keep_alive = script.injected(|s| {
+                s.send(Initiator, b"x");
+            });
+            keep_alive.header.sequence_number -= 1;
+            script.segments.push(keep_alive);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Pending, stream.read_received());
         }
 
         // the SYN-ACK gives the responder's stream an observed start, and
