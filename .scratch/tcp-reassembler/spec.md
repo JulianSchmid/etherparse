@@ -254,11 +254,13 @@ The rule ids are for referencing from tickets and test names.
   - An ACK beyond `highest offset + window` is ignored, except as resync evidence (R2). Once the FIN offset is known, the limit is one higher, so the ACK of the FIN counts even with a window of 0. The window is the one from before the ACK's segment (S3) (user decision, 2026-10-11).
   - An ACK beyond the highest offset turns the uncaptured bytes up to it into a hole.
   - An ACK never moves the ACKed offset past the FIN offset and never adds holes after it.
-- **K2** The implied ACK is `highest offset − k × window`, saturating at 0. It applies only while `hole_give_up_window_factor` is `Some(k)`.
+- **K2** The implied ACK is `highest offset − k × window`, saturating at 0. It applies only while `hole_give_up_window_factor` is `Some(k)`. It is updated after every packet of the connection, and the checks inside a packet use its value from before that packet.
+  - The window is the largest window the receiver has advertised, as the sender can have sent bytes into a larger window before the window shrank, e.g. to 0 when the receiver's buffer is full. The fallback window applies only while no window is known (S3). With the last window, an ACK that advertises window 0 would make the hole it adds overdue at once, without waiting for `ack_reorder_tolerance` (user decision, 2026-10-11).
+  - The implied ACK never moves back, e.g. when the window grows: bytes sent earlier still prove what the receiver had ACKed then (user decision, 2026-10-11).
 - **K3** The ACKed offset is `max(seen ACK, implied ACK)`. `read_acked()` returns contiguous bytes up to it.
 - **K4** A hole is **overdue** once its end lies at or before either:
   - (a) the implied ACK, or
-  - (b) the seen ACK as it was `ack_reorder_tolerance` packets ago. Every packet applied to the connection counts, in either direction, as for `last_seen` (P7). The packet whose ACK covers the hole doesn't count, so the hole is overdue on the N-th packet after it.
+  - (b) the seen ACK as it was `ack_reorder_tolerance` packets ago. Every packet applied to the connection counts, in either direction, as for `last_seen` (P7). The packet whose ACK covers the hole doesn't count, so the hole is overdue after the N-th packet after it. The bytes of a packet are stored before the packet's overdue check, so the N-th packet still fills the hole (user decision, 2026-10-11).
 
   A hole is overdue as a whole, never in parts: a hole that is only partly before these offsets is not overdue. One lost range thus gives one gap (user decision, 2026-10-11).
 

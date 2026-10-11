@@ -111,3 +111,8 @@ Implementation notes:
   - the docs of `acked_offset()` and `ack_reorder_tolerance` explain the implied ACK and the memory cost to users;
   - the `(u64, u64)` tuple in `recent_acks` is private and documented;
   - `first_hole()` in the reference model came with the behaviour commit that needed it.
+
+**2026-10-11 — user decisions on the points above.** All three follow the recommendation:
+1. The implied ACK never moves back. Confirmed, and now in K2.
+2. A hole is overdue *after* the N-th packet, and that packet's bytes still fill it. Confirmed; K4's wording is fixed.
+3. Zero or shrinking windows: the implied ACK uses the **largest window the receiver advertised**. The fallback window applies only while no window is known: if it counted towards the maximum, the 4 MiB assumed before the SYN-ACK would stick for the whole connection. This is implemented in `ed0ac57` and recorded in K2 and ADR-0002. The regression test in `read_received()` covers an ACK with window 0 that arrives before its data.
