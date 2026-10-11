@@ -44,3 +44,8 @@ F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see tic
 **2026-10-11 — carry-over from ticket 09:**
 - F5 at eviction is `TcpStream::connection_ended(TcpStreamEnd::Evicted)`, which replaced `give_up_all_holes()`. It also makes reads return `End(Evicted)` away from the FIN. `Evicted` needs an arm in the `TcpConnectionEnd → TcpStreamEnd` match in `TcpConnection::add_segment`, or a shared mapping.
 - Ignored RSTs update `last_seen` (user decision), so injected RSTs keep a connection from being evicted, like any other packet of it.
+
+**2026-10-11 — carry-over from ticket 10:**
+- `TcpStream::is_fin_acked()` is the variant of F3 that P6 needs: all holes lie before the FIN, so an ACKed FIN covers them all. `TcpConnection::end_replaced` already ends a connection replaced by a reconnect as `Finished` when both FINs are ACKed (user decision 8 of ticket 10, the same rule as P6).
+- Tombstones now keep the ISNs of their streams (`TcpStream::tombstone`) and the kept SYN of a reconnect (`ReconnectSyn`). Evicting a connection or a tombstone should return that SYN's buffer to the free list, as the pool does when a reconnect starts.
+- The kept SYN's buffer goes to the unbounded free list; a mutant that drops this push survives until the counting-allocator test exists.

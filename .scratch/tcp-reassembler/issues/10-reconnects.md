@@ -16,12 +16,12 @@ Rules: C1–C4, F5, F6 (`End(Reconnect)`).
 
 **Status:** ready-for-agent
 
-- [ ] SYN on a tombstone: new connection with a new id
-- [ ] Regression test (old branch): a new-ISN SYN plus the confirming SYN-ACK always hands over the old connection as `Reconnect` and starts a new id, even when the caller drained everything eagerly
-- [ ] A new-ISN SYN without a SYN-ACK has no effect (a spoofed SYN can't split a live connection)
-- [ ] A retransmitted SYN changes nothing; a SYN on a mid-stream pickup follows C4
-- [ ] The reference model is extended with reconnects on the same key
-- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+- [x] SYN on a tombstone: new connection with a new id
+- [x] Regression test (old branch): a new-ISN SYN plus the confirming SYN-ACK always hands over the old connection as `Reconnect` and starts a new id, even when the caller drained everything eagerly
+- [x] A new-ISN SYN without a SYN-ACK has no effect (a spoofed SYN can't split a live connection)
+- [x] A retransmitted SYN changes nothing; a SYN on a mid-stream pickup follows C4
+- [x] The reference model is extended with reconnects on the same key
+- [x] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
 
 ## Comments
 
@@ -66,3 +66,31 @@ spec.md C1, C2 and C4 are updated.
 11. **Late segments of a replaced connection count as out-of-window in the reconnect**, as no tombstone is left after a confirmed reconnect; they map far away from its ISNs and store nothing. Rejected: absorbing them silently (extra state per reconnect).
 
 spec.md C1, C2 and C4 are updated.
+
+**2026-10-11 — implemented** (commits `b92333a` through `8ed51fb`, decisions in `6aa508d` and `9c74b73`):
+- `b92333a` (refactor): the pool picks the initiator of a new connection (`new_connection_initiator`, `handshake_initiator`) and creates connections (`new_connection`) in one function each; `TcpConnection` gets `end_with` and `role`; the reference model gets `end_with` and `range`.
+- `f5bb559`: C1. Streams remember the ISN of their observed start (`TcpStream::isn`), and tombstones keep it (`TcpStream::tombstone`). `TcpConnection::is_own_handshake` tells late segments of the old handshake (decisions 4 and 9).
+- `810247d`: C2/C3 with decisions 3 and 5–11. `TcpConnection` keeps a SYN that is not its stream's own (`ReconnectSyn`, a copy of the segment); `confirms_reconnect` decides on SYN-ACKs; the pool starts the reconnect (replaying the kept SYN if the SYN-ACK ACKs it) on tombstones and in place of open connections in one path; `end_replaced` ends the old one as `Finished` or `Reconnect`. New variants `TcpConnectionEnd::Reconnect` and `TcpStreamEnd::Reconnect`.
+- `692a4c7`: C4 with decisions 1 and 2 (`TcpStream::is_own_syn` by position, for SYNs and SYN-ACKs). The reference model keeps SYNs, confirms reconnects and starts again as the new connection; the harness checks the connection a reconnect hands over.
+- `8ed51fb`: `ConnectionScript::incarnation` and the proptest `reconnects` (old connection open, finished or reset, captured or picked up, with loss; reconnect from either endpoint with TCP Fast Open bytes; retransmitted and spoofed SYNs). Green at 3000 cases.
+
+The module is fully covered (merged view of `cargo cov`). Manual mutants of every new condition are killed by the module tests, apart from these equivalent or not yet observable ones:
+- `false` → `true` for the roles of the reconnect in `new_connection(.., false, ..)`: the SYN or SYN-ACK it starts with gives a stream an observed start from the role A7 expects, so the roles are confirmed anyway.
+- `observe_start` returning `true` instead of `false` for a sequence number it can't map: SYNs that can't be mapped no longer reach it (C4 keeps them), and the SYN-ACK path ignores the result. The test that such an ACK gives no observed start kills a mutant that maps it anyway.
+- Dropping the push of the kept SYN's buffer to the free list: not observable until the allocation test of ticket 12.
+
+Review (standards and spec, both axes):
+- The spec review led to decisions 5–8 (asked, see above) and to the confirmation of 9–11. A model bug it didn't name was found by the new proptest: `predicts` accepted a data segment that "ACKed" the kept SYN.
+- The standards review's commit findings are fixed: the refactors moved into `b92333a`, the fixups are squashed, and long lines are wrapped. `initiator` is renamed `new_connection_initiator` (it was shadowed by a local), the model builds its next connection in one function, and `ReconnectSyn` hides its fields behind `is_acked_by`, `timestamp` and `into_buffer`.
+- Judgement calls left as they are: the `(initiator, roles_guessed)` and `(next_id, free_buffers)` pairs (three call sites, borrows of different pool fields); `ReconnectSyn` parses its copy again (`.ok()` can't fail; a parsed copy would duplicate `TcpSlice`); the repeated TCP flag checks; the reference model's own `TcpConnectionEnd → TcpStreamEnd` match (it is the oracle); the proptest in its own commit after the behaviour commits (as in tickets 03–09).
+
+Decisions taken while implementing, confirmed by the user on 2026-10-11 via illustrated questions (C2 in spec.md now names 1):
+1. **Ids and timestamps of a reconnect:** its id is assigned when it starts (C1 or a confirming SYN-ACK), so SYNs that are never confirmed use no ids. Its `first_seen` is the replayed SYN's timestamp, otherwise the starting segment's. The replaced connection's `last_seen` is its last packet, which can be the kept SYN; the confirming SYN-ACK is a packet of the reconnect only.
+2. **A retransmission of the kept SYN keeps the first one**, so `first_seen` is the first SYN's timestamp.
+3. **The kept SYN is a copy of its segment:** one allocation per connection that keeps one, re-used for later SYNs, and returned to the free list when the reconnect starts. It is replayed through `TcpSlice::from_slice` and `add_segment`.
+
+Known limits (documentation for ticket 16):
+- A reconnect whose SYN and SYN-ACK were both not captured continues the old connection behind a resync, once the ACKs confirm the jump (R2).
+- A reconnect SYN whose ISN lies by chance within k windows before a pickup's first byte, or before the kept ACK of a stream without a start, is taken as the stream's late SYN (probability about k × window / 2^32, 0.2 % with the defaults).
+- Late segments of a replaced connection count as out-of-window in the reconnect (decision 11).
+- A kept SYN that no SYN-ACK confirms stays until the connection ends; it has no timeout.

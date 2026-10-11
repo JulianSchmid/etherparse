@@ -25,3 +25,5 @@ Rules: P1, P2, D6.
 **2026-10-11 — carry-over from ticket 07:** the start rules of a pickup look at `tcp.payload()`. With truncated payload (D6), a segment with 1 captured byte can look like a keep-alive, and the ignored FIN of a truncated segment must not start a stream at its FIN either.
 
 **2026-10-11 — carry-over from ticket 08:** with truncated payload (D6), a resync candidate's end is computed from the captured bytes (`ResyncCandidate::new(seq, data.len(), tcp.fin())` in `TcpStream::add_segment`). An ACK-confirmed resync would then continue in the middle of the truncated segment, and its FIN would count. Use the segment's real length for the candidate when it is known, and ignore the FIN of a truncated candidate as D6 does.
+
+**2026-10-11 — carry-over from ticket 10:** a kept SYN is replayed from a copy of its raw bytes (`ReconnectSyn::tcp` parses them with `TcpSlice::from_slice`). If lax input marks truncated segments (D6), a kept SYN has to keep that mark, or its replay applies a FIN that D6 would ignore.

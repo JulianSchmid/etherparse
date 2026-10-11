@@ -46,3 +46,5 @@ Rules: D4, P3 (tombstones count), Q1.
 - A resync gives up all holes before the resync point. Once bytes arrive after it, `add_data` zero-fills the buffer from the end of the received bytes to the resync point (e.g. an ACK hole of up to k windows before the jump). `max_stream_buffer` has to bound that, as it does for other placeholders.
 - Bytes that reach the stream at a resync (R3/R4, or an ACK that arrived first) are stored like any other bytes and count towards the limits. Candidates are not stored, so they need nothing.
 - If D4 rejects the bytes of a segment that becomes the new start, the resync still happened (gap, counter). Decide whether that is fine or whether the resync should wait for bytes that fit.
+
+**2026-10-11 — carry-over from ticket 10:** a connection (or its tombstone) can keep a copy of one SYN for a reconnect (`ReconnectSyn` in `tcp_connection.rs`, up to one segment with TCP Fast Open bytes). It counts towards no limit yet; decide whether `max_total_buffered` covers it.

@@ -38,3 +38,9 @@ The reference model's expected delivered bytes, gaps, status counters and end re
 - The proptest `resets` shows how to place an endpoint's RST at a point in time: its sequence number and ACK come from the segments before it.
 - The combined proptest should include real and injected RSTs. Random windows rarely hit the exact boundaries; the unit tests in `TcpConnection::end()` pin them.
 - The regression test "an injected RST closing the connection" is in `TcpConnection::end()`.
+
+**2026-10-11 — carry-over from ticket 10:**
+- The model handles several connections on one key: segments carry `ConnectionScript::incarnation`, and the model starts again as a new connection on C1 and on a confirmed reconnect (`ReferenceModel::apply` returns the replaced one). ISNs of different scripts must lie far apart per endpoint (the `reconnects` proptest adds 2^30 to the old ISN of the same endpoint), as the model assumes they never map into each other's streams.
+- `ReferenceModel::predicts` leaves out segments it can't predict: segments of another script on an open connection apart from SYNs and SYN-ACKs, and those too while a stream has neither a start nor a kept ACK (its role in the old connection is unknown to the model). The combined proptest should feed through `feed_and_check`, which applies this filter.
+- The regression test "an invisible reconnect" is the drained-reader block in `TcpReassemblyPool::process_segment`.
+- The final check of `reconnects` only holds without spoofed SYNs and old SYN retransmissions: those can start connections on tombstones of pickups (decision 4).

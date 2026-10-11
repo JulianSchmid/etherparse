@@ -44,3 +44,5 @@ Parent: ../spec.md
 - the known limits on ticket 09 (a blind RST inside the window resets the connection).
 
 The code now cites RFC 9293 3.10.7.4 for the RST check, and the spec cites RFC 9293 3.5.3 and RFC 1122 4.2.2.12 for RST data. The changelog entry should name the new variants `TcpConnectionEnd::Reset` and `TcpStreamEnd::Reset`.
+
+**2026-10-11 — carry-over from ticket 10:** the changelog needs `TcpConnectionEnd::Reconnect` and `TcpStreamEnd::Reconnect`. Known limits to document are listed on ticket 10 (a reconnect without a captured SYN and SYN-ACK resyncs the old connection, a reconnect SYN that lands within k windows before a pickup is taken as its late SYN, late segments of a replaced connection count as out-of-window in the reconnect, kept SYNs have no timeout).
