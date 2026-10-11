@@ -13,7 +13,8 @@ use std::{collections::VecDeque, vec::Vec};
 /// a large capture loss, the stream continues at the new position once an
 /// ACK of the other side confirms the jump, or enough segments agree on it
 /// (see [`TcpReassemblyConfig::resync_after_segments`]). A gap of unknown
-/// length lies in between (see [`TcpStreamStatus::resyncs`]).
+/// length lies in between (see [`TcpStreamStatus::resyncs`] and
+/// [`TcpStream::force_resync`]).
 #[derive(Clone, Debug)]
 pub struct TcpStream {
     /// Sequence number of the byte at offset 0 (`None` while the start of
@@ -108,6 +109,10 @@ pub struct TcpStream {
     /// jump.
     resync_offset: u64,
 
+    /// Whether the next data segment is the stream's new start (see
+    /// [`TcpStream::force_resync`]).
+    resync_forced: bool,
+
     status: TcpStreamStatus,
 }
 
@@ -137,6 +142,7 @@ impl TcpStream {
             resync_candidate: None,
             resync_ack: None,
             resync_offset: 0,
+            resync_forced: false,
             status: TcpStreamStatus {
                 start: TcpStreamStart::MidStreamPickup,
                 gaps: 0,
@@ -274,6 +280,21 @@ impl TcpStream {
     /// Works like [`TcpStream::discard_until`] with the highest offset.
     pub fn discard_all(&mut self) {
         self.discard_until(self.highest_offset);
+    }
+
+    /// Makes the next segment with bytes the stream's new start: the stream
+    /// continues with these bytes at the highest offset, behind a gap of
+    /// unknown length ([`TcpRead::Gap`] with `len: None`).
+    ///
+    /// Use it if you know that the stream jumped, e.g. to a new initial
+    /// sequence number that lies before the stream's bytes, which a resync
+    /// doesn't detect (see [`TcpStreamStatus::resyncs`]). Does nothing
+    /// before the stream started, as its first bytes start it anyway (see
+    /// [`TcpStreamStart`]), or after the stream's FIN.
+    pub fn force_resync(&mut self) {
+        if self.start_seq.is_some() && self.fin_offset.is_none() {
+            self.resync_forced = true;
+        }
     }
 
     /// Turns the parts of the holes before `offset` into gaps.
@@ -576,8 +597,9 @@ impl TcpStream {
                 self.resync_candidate = None;
                 false
             };
-            // the other side confirms the jump, the segment is the new start
-            if confirmed {
+            // the user or the other side confirm the jump, the segment is
+            // the new start
+            if self.resync_forced || confirmed {
                 jump_ack = confirming_ack;
                 let start_seq = self.resync(seq);
                 start = self.offset(start_seq, seq);
@@ -724,6 +746,7 @@ impl TcpStream {
             && 0 == self.read_offset
             && Some(0) != self.fin_offset
             && 0 == self.status.resyncs
+            && false == self.resync_forced
     }
 
     /// Moves offset 0 of the mid-stream pickup `len` bytes back, these
@@ -919,6 +942,7 @@ impl TcpStream {
         self.resync_offset = offset;
         self.resync_candidate = None;
         self.resync_ack = None;
+        self.resync_forced = false;
         self.status.resyncs += 1;
         start_seq
     }
@@ -3087,6 +3111,187 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             stream.discard_all();
             assert_eq!(expected, stream.read_received());
+        }
+    }
+
+    #[test]
+    fn force_resync() {
+        // the next segment with bytes is the new start, behind a gap of
+        // unknown length, also if it lies in the window
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.status().resyncs);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+        }
+
+        // ... such as one with a new initial sequence number before the
+        // stream's bytes, which isn't detected otherwise
+        for forced in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let jumped = script.seq(Initiator, 0).wrapping_sub(1_000_000);
+            for (seq, payload) in [(jumped, b"new"), (jumped.wrapping_add(3), b"er!")] {
+                let mut segment = script.injected(|s| {
+                    s.send(Initiator, payload);
+                });
+                segment.header.sequence_number = seq;
+                script.segments.push(segment);
+            }
+            {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                if forced {
+                    connection.stream_mut(Initiator).force_resync();
+                }
+            }
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            if forced {
+                assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+                stream.consume_gap();
+                assert_eq!(TcpRead::Data(b"newer!"), stream.read_received());
+            } else {
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+        }
+
+        // segments without bytes and SYNs are no new start
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc").ack(Initiator);
+            let mut syn = script.segments[0].clone();
+            syn.payload = b"abc".to_vec();
+            script.segments.push(syn);
+            script.send(Initiator, b"def");
+            {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            script.feed(&mut pool, 4..6);
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.status().resyncs);
+            stream.read_received();
+            stream.consume(3);
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+        }
+
+        // does nothing before the stream started (its first bytes start it
+        // anyway), after its FIN, or if its FIN arrives before the next bytes
+        let cases: [(fn(&mut ConnectionScript), fn(&mut ConnectionScript)); 3] = [
+            (
+                |s| {
+                    s.handshake().send(Initiator, b"abc");
+                    s.segments.drain(..3);
+                },
+                |s| {
+                    s.send(Responder, b"def");
+                },
+            ),
+            (
+                |s| {
+                    s.handshake().send(Initiator, b"abc").fin(Responder);
+                },
+                |s| {
+                    s.send(Responder, b"def");
+                },
+            ),
+            (
+                |s| {
+                    s.handshake().send(Initiator, b"abc");
+                },
+                |s| {
+                    s.fin(Responder).send(Responder, b"def");
+                },
+            ),
+        ];
+        for (before, after) in cases {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            before(&mut script);
+            let fed = script.segments.len();
+            after(&mut script);
+            {
+                let (connection, _) = script.feed(&mut pool, ..fed).active.unwrap();
+                connection.stream_mut(Responder).force_resync();
+            }
+            let (connection, _) = script.feed(&mut pool, fed..).active.unwrap();
+            assert_eq!(0, connection.stream(Responder).status().resyncs);
+        }
+
+        // ... so after the FIN, earlier bytes are still put in front of a
+        // mid-stream pickup
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_with_data(Initiator, b"def");
+            let earlier = script.segments[3].clone();
+            script.segments.drain(..4);
+            script.segments.push(earlier);
+            {
+                let (connection, _) = script.feed(&mut pool, ..1).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            let (connection, _) = script.feed(&mut pool, 1..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().resyncs);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
+
+        // ends putting earlier bytes or a late SYN in front of a mid-stream
+        // pickup: the next bytes are the new start, a late SYN counts as
+        // out-of-window
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            let syn = script.segments[0].clone();
+            let earlier = script.segments[3].clone();
+            script.segments.drain(..4);
+            script.segments.extend([syn, earlier]);
+            {
+                let (connection, _) = script.feed(&mut pool, ..1).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            {
+                let (connection, _) = script.feed(&mut pool, 1..2).active.unwrap();
+                let status = connection.stream(Initiator).status();
+                assert_eq!(TcpStreamStart::MidStreamPickup, status.start);
+                assert_eq!(1, status.out_of_window_segments);
+            }
+            let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
         }
     }
 

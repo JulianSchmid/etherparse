@@ -20,7 +20,8 @@ pub struct TcpStreamStatus {
     /// Number of times the stream continued at a new position behind a gap
     /// of unknown length ([`crate::tcp_reassembly::TcpRead::Gap`] with
     /// `len: None`), as its sequence numbers jumped far after the
-    /// receiver's window.
+    /// receiver's window, or as
+    /// [`crate::tcp_reassembly::TcpStream::force_resync`] forced it.
     pub resyncs: u64,
 
     /// Number of retransmitted segments whose bytes differ from the bytes
