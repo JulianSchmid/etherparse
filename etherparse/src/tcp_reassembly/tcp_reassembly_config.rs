@@ -56,11 +56,13 @@ pub struct TcpReassemblyConfig {
     /// up to this many packets.
     pub ack_reorder_tolerance: u32,
 
-    /// Number of consecutive out-of-window segments agreeing on a new
-    /// position after which a stream continues there, even without an ACK
-    /// confirming the jump (default `None`, off).
+    /// Number of consecutive segments after the receiver's window, each
+    /// within one window of the one before it, after which a stream
+    /// continues at the last of them, even without an ACK confirming the
+    /// jump (default `None`, off).
     ///
-    /// Useful for captures that contain only one direction.
+    /// Useful for captures that contain only one direction. `Some(0)` works
+    /// like `Some(1)`.
     pub resync_after_segments: Option<u32>,
 
     /// Maximum number of connections in the pool (default `None`, no limit).

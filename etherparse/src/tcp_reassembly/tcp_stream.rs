@@ -11,8 +11,9 @@ use std::{collections::VecDeque, vec::Vec};
 ///
 /// If the sequence numbers jump far after the receiver's window, e.g. after
 /// a large capture loss, the stream continues at the new position once an
-/// ACK of the other side confirms the jump. A gap of unknown length lies in
-/// between (see [`TcpStreamStatus::resyncs`]).
+/// ACK of the other side confirms the jump, or enough segments agree on it
+/// (see [`TcpReassemblyConfig::resync_after_segments`]). A gap of unknown
+/// length lies in between (see [`TcpStreamStatus::resyncs`]).
 #[derive(Clone, Debug)]
 pub struct TcpStream {
     /// Sequence number of the byte at offset 0 (`None` while the start of
@@ -569,8 +570,8 @@ impl TcpStream {
                 .resync_ack
                 .filter(|ack| candidate.is_within_window(*ack, window));
             let confirmed = if after_window {
-                self.resync_candidate = Some(candidate);
-                confirming_ack.is_some()
+                // so do enough consecutive segments that agree
+                self.add_resync_candidate(candidate, window, config) || confirming_ack.is_some()
             } else {
                 self.resync_candidate = None;
                 false
@@ -827,7 +828,8 @@ impl TcpStream {
             self.add_resync_ack(ack_seq, window, packet);
             return;
         }
-        if ack <= self.seen_ack as i64 {
+        // ACKs before a jump don't count after it
+        if ack <= self.seen_ack as i64 || ack < self.resync_offset as i64 {
             return;
         }
         self.seen_ack = ack as u64;
@@ -842,6 +844,31 @@ impl TcpStream {
         if false == self.holes.is_empty() || self.can_prepend() {
             self.recent_acks.push_back((packet, self.seen_ack));
         }
+    }
+
+    /// Records the data after the receiver's window `candidate` as the latest
+    /// candidate of a resync, where `window` is the receiver's receive
+    /// window. Returns true if enough consecutive candidates agree that the
+    /// stream jumped there (see
+    /// [`TcpReassemblyConfig::resync_after_segments`]).
+    fn add_resync_candidate(
+        &mut self,
+        mut candidate: ResyncCandidate,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        // consecutive segments after the window agree on the new position
+        // if each lies within one window of the one before
+        if let Some(previous) = self
+            .resync_candidate
+            .filter(|previous| previous.is_within_window(candidate.first, window))
+        {
+            candidate.agreeing = previous.agreeing.saturating_add(1);
+        }
+        self.resync_candidate = Some(candidate);
+        config
+            .resync_after_segments
+            .is_some_and(|after| candidate.agreeing >= after)
     }
 
     /// Applies the ACK number `ack_seq` of the receiver that lies more than
@@ -1077,6 +1104,9 @@ struct ResyncCandidate {
     end: u32,
     /// Whether a FIN follows the bytes.
     fin: bool,
+    /// Number of consecutive data segments after the window up to this one,
+    /// each within one window of the one before.
+    agreeing: u32,
 }
 
 impl ResyncCandidate {
@@ -1087,6 +1117,7 @@ impl ResyncCandidate {
             first: seq,
             end: seq.wrapping_add(len as u32),
             fin,
+            agreeing: 1,
         }
     }
 
@@ -1950,6 +1981,36 @@ mod test {
             assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
             stream.consume_gap();
             assert_eq!(TcpRead::Data(b"z"), stream.read_received());
+        }
+
+        // with resync_after_segments = Some(n), n consecutive segments after
+        // the window, each within one window of the one before, continue
+        // the stream at the last of them without an ACK, but n - 1 don't
+        for (after, resynced) in [(3, true), (4, false)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(after),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"x")
+                .send(Initiator, b"y")
+                .send(Initiator, b"z");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            if resynced {
+                assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+                stream.consume_gap();
+                assert_eq!(TcpRead::Data(b"z"), stream.read_received());
+            } else {
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
         }
     }
 
@@ -3383,6 +3444,27 @@ mod test {
             let stream = connection.stream(Initiator);
             assert_eq!(1, stream.status().resyncs);
             assert_eq!(expected, stream.acked_offset());
+        }
+
+        // ACKs before a jump don't count after it (with
+        // resync_after_segments, no ACK confirms the jump)
+        {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(1),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /")
+                .ack_to(Responder, 998);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(1, stream.status().resyncs);
+            assert_eq!(0, stream.acked_offset());
         }
     }
 
@@ -5292,6 +5374,137 @@ mod test {
             assert_eq!(1, stream.status().resyncs);
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(6, stream.highest_offset());
+        }
+
+        // with resync_after_segments, the segments before the one that
+        // resyncs count as out-of-window
+        {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(3),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"x")
+                .send(Initiator, b"y")
+                .send(Initiator, b"z");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!((1, 2), (status.resyncs, status.out_of_window_segments));
+        }
+
+        // ... a segment after the window agrees with the one before if it
+        // starts at most one window before its first byte or after its last
+        // byte (window 100, bytes 1000..1001)
+        for (second, resyncs) in [(900, 1), (899, 0), (1101, 1), (1102, 0)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(2),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"x")
+                .send_at(Initiator, second, b"y");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(resyncs, connection.stream(Initiator).status().resyncs);
+        }
+
+        // ... the count starts again with a segment that doesn't agree, after
+        // other bytes, and after a resync
+        let between: [fn(&mut ConnectionScript); 2] = [
+            |s| {
+                s.send_at(Initiator, 5000, b"w");
+            },
+            |s| {
+                s.send_at(Initiator, 3, b"d");
+            },
+        ];
+        for step in between {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(2),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"x");
+            step(&mut script);
+            script.send_at(Initiator, 1001, b"y");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).status().resyncs);
+        }
+        {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(2),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"w")
+                .send(Initiator, b"x")
+                .send_at(Initiator, 5000, b"y")
+                .send(Initiator, b"z");
+            script.feed(&mut pool, ..4);
+            for (segment, expected) in script.segments[4..].iter().zip([0, 1, 1, 2]) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).status().resyncs);
+            }
+        }
+
+        // ... a resync ends the count, also if the ACK that confirmed it left
+        // the stream at the resync point (with a hole give up window factor
+        // of 0, the window ends at the highest offset)
+        {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: Some(0),
+                resync_after_segments: Some(2),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /")
+                .ack_to(Responder, 1005)
+                .send_at(Initiator, 1010, b"x");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(1, connection.stream(Initiator).status().resyncs);
+        }
+
+        // ... and Some(0) works like Some(1): the first segment after the
+        // window is the new start
+        for after in [0, 1] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(after),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!((1, 0), (status.resyncs, status.out_of_window_segments));
         }
     }
 
