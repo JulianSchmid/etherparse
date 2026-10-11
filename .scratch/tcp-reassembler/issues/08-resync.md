@@ -14,12 +14,12 @@ Rules: R1–R4, S2 (unmappable distances), ADR-0002.
 
 **Status:** ready-for-agent
 
-- [ ] Without confirmation the stream never resyncs; random out-of-window segments are only counted
-- [ ] An ACK-confirmed resync delivers the following bytes exactly, after `Gap { len: None }`
-- [ ] `resync_after_segments` has exact tests at n − 1 and n; the count resets when a segment doesn't fit
-- [ ] `force_resync()` anchors the stream at the next segment
-- [ ] Distances of 2^31 or more are counted as out-of-window, with exact tests at the boundary
-- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+- [x] Without confirmation the stream never resyncs; random out-of-window segments are only counted
+- [x] An ACK-confirmed resync delivers the following bytes exactly, after `Gap { len: None }`
+- [x] `resync_after_segments` has exact tests at n − 1 and n; the count resets when a segment doesn't fit
+- [x] `force_resync()` anchors the stream at the next segment
+- [x] Distances of 2^31 or more are counted as out-of-window, with exact tests at the boundary
+- [x] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
 
 ## Comments
 
@@ -48,3 +48,50 @@ spec.md R1 and R2 are updated.
 5. **The ACK that confirms a jump ACKs the bytes before it:** also when it maps before the resync point (it ACKs bytes that fell into the gap). Otherwise `read_acked()` stalls in front of the gap if no later ACK comes.
 
 spec.md R2 is updated.
+
+**2026-10-11 — implemented** (commits `a98d09f` through `1d47c20`):
+- `a98d09f`: S2, a sequence number exactly 2^31 from the highest offset can't be mapped. Its bytes or FIN count as out-of-window, an ACK there is kept as resync evidence, and a pickup refuses a SYN there. "2^31 or more" is only this one distance, because serial arithmetic maps every other one before or after the highest offset.
+- `7db6015`: `TcpStreamStatus::resyncs`, part of `is_clean()`.
+- `16c6c2c`: R1/R2 with the decisions above:
+  - `Gap { len: None }` is an empty range in `TcpStream::gaps`;
+  - resyncing gives up the holes before the jump;
+  - a floor (`resync_offset`) for bytes and FINs from before the jump;
+  - a resync ends prepending (A5);
+  - the reference model follows R2, because the existing proptests produce such resyncs with their small windows.
+- `58d203c`: R3, plus the ACK floor that a resync without a confirming ACK needs.
+- `8ba954d`: R4, `force_resync()`.
+- `1d47c20`: the model for R3/R4 and the proptest `resyncs`. It covers jumps with and without ACKs, pickups, loss, reordering, injected segments after the window that don't agree, `resync_after_segments` and forced resyncs, and is green at 3000 cases.
+
+The module is fully covered (merged view of `cargo cov`). Manual mutants of every new condition are killed, apart from the equivalent one below. A two-axis review (standards and spec) ran. Its spec review found four real problems; two of them led to the user decisions 4 and 5 above:
+- a lost FIN of the candidate;
+- an ACK that arrived first and was dropped;
+- `read_acked()` stalling in front of the gap;
+- more than one lost segment.
+
+The fixes are folded into the commits above, and so are its standards points (commit structure, glossary, a candidate type instead of a tuple). Each rewritten commit passed the module tests.
+
+Decisions taken while implementing, for the user to confirm (spec.md is unchanged for these):
+1. **The candidate** is the latest data segment after the window: one with bytes that is not a SYN, while the FIN is unknown. Any other data segment clears it, as does any forward move of the highest offset (data, an ACK or a FIN) and a resync. So with reordering, an earlier segment arriving after the jump's first one clears it; the next bytes after the jump (or an ACK that was kept) restore it.
+2. **"Within one window"**: an ACK, or the next segment's first byte (R3), lies at most one receive window before the candidate's first byte or after its last byte. The window is the one S4 uses, i.e. the one advertised before the segment.
+3. **The kept ACK** is the latest ACK more than one window after the bytes sent, or one that can't be mapped. ACKs before offset 0 are old ones and don't replace it. Only a resync or a forward move clears it: plausible ACKs that don't move the stream leave it.
+4. **At a resync, all holes before the resync point become gaps** and are counted in `gaps`/`gap_bytes`, as nothing can fill them anymore (their sequence numbers map elsewhere).
+5. **The resync's gap counts only in `resyncs`**, not in `gaps`/`gap_bytes` (Q4). Resyncs without bytes between them leave one `Gap { len: None }` but count each, unless the reader stepped over the first gap.
+6. **After a resync, bytes and FINs before the resync point are ignored without counting**, and are not compared for conflicts. ACKs before it don't count either; this only matters after R3/R4, since a confirming ACK ACKs everything before the jump.
+7. **The segment that becomes the new start doesn't count as out-of-window** (its bytes are stored); candidates do.
+8. **An ACK that arrived first counts after the new start's bytes**, like the confirming ACK (it ACKs everything before the jump).
+9. **FIN without bytes after the window:** it is the candidate's FIN if it starts at the candidate's end. Otherwise it is only counted: it neither counts towards R3 nor clears the candidate.
+10. **R3:** other bytes reset the count, `Some(0)` works like `Some(1)`, and the n-th segment becomes the new start with its bytes stored.
+11. **`force_resync()`:** the next segment with bytes that isn't a SYN becomes the new start, wherever it lies (in the window, a retransmission, before offset 0). It does nothing before the stream started or after its FIN. While pending, it ends prepending. A keep-alive's filler byte would become data.
+12. **`discard_until(offset)` / `discard_all()` keep a resync's gap at `offset`**; discarding past it removes it.
+13. **A late SYN after its stream resynced doesn't make the window scale known**, as its ISN no longer lies before the stream's first byte; the fallback window applies.
+14. **No resync once the FIN is known**, also not for a candidate recorded before the FIN.
+15. **SYNs are never candidates or new starts** (reconnects are C2, ticket 10).
+
+Equivalent mutant:
+- Sorting the gaps by start only instead of `(start, end)` in `give_up_holes_before`. Holes are given up from the front and always pushed after the existing gaps, so the sort never reorders anything. The key keeps the order right for any sort algorithm.
+
+Known limits (documentation for ticket 16):
+- A jump to a new ISN that maps behind the stream (half of all ISN changes) isn't detected; `force_resync()` recovers it. Streams past 2 GiB can't even tell such a jump from consumed bytes.
+- With the ACK after the data, all out-of-window data before the first confirming ACK is lost, up to about one window.
+- Spoofed ACKs plus data after the window can force a resync (ADR-0002).
+- A FIN without bytes after the window and without a candidate before it is lost.

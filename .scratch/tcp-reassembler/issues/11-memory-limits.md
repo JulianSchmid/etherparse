@@ -41,3 +41,8 @@ Rules: D4, P3 (tombstones count), Q1.
 - `TcpStream::prepend` zero-fills up to k windows (2 × the 4 MiB fallback window on a pickup, user decision on ticket 07) at the front of the buffer, and a pickup takes earlier bytes until its first read. D4's `max_stream_buffer` has to cover bytes put in front too.
 - `prepend` assumes that byte 0 of a pickup was received: there is no gap at the read position, and the new hole doesn't touch a hole at the old offset 0. If D4 rejects the bytes of the segment that starts a pickup, both break. Either shift the gaps and merge the holes, or don't start a pickup with rejected bytes.
 - While a pickup can still prepend, it keeps the K4(b) ACK history also without holes (memory per pickup until its first read).
+
+**2026-10-11 — carry-over from ticket 08:**
+- A resync gives up all holes before the resync point. Once bytes arrive after it, `add_data` zero-fills the buffer from the end of the received bytes to the resync point (e.g. an ACK hole of up to k windows before the jump). `max_stream_buffer` has to bound that, as it does for other placeholders.
+- Bytes that reach the stream at a resync (R3/R4, or an ACK that arrived first) are stored like any other bytes and count towards the limits. Candidates are not stored, so they need nothing.
+- If D4 rejects the bytes of a segment that becomes the new start, the resync still happened (gap, counter). Decide whether that is fine or whether the resync should wait for bytes that fit.

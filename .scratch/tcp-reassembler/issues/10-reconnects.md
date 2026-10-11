@@ -38,3 +38,7 @@ Rules: C1–C4, F5, F6 (`End(Reconnect)`).
 - A SYN with another ISN on a stream with an observed start is still applied as an ordinary segment (its TCP Fast Open bytes are stored at their mapped offset). C2/C3 must catch it first.
 - `observe_start` returns true without a change on streams with an observed start, also for the ACK of a SYN-ACK with a new ISN, so C2's check has to come before it in `TcpConnection::add_segment`.
 - A reconnect of a connection with guessed roles starts with observed roles.
+
+**2026-10-11 — carry-over from ticket 08:**
+- After a resync, `TcpStream::start_seq` no longer belongs to the stream's ISN. C2/C3 must compare a SYN's ISN with the ISN of the observed start, not with `start_seq`, or a retransmitted SYN after a resync looks like a reconnect. A late SYN after a resync doesn't make the window scale known (test in `status()`), which C3 must keep.
+- SYNs are excluded from resyncs (no candidate, no new start, no clearing), so C2 decides alone what a SYN with a new ISN does.

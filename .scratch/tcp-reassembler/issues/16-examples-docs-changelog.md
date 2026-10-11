@@ -28,3 +28,9 @@ Parent: ../spec.md
 - mid-stream pickups, prepending until the first read, and that `consume` after a prepend consumes nothing until the next read;
 - guessed roles and their confirmation by a late handshake;
 - the known limits: a keep-alive as a connection's very first packet starts the stream with its filler byte; TCP Fast Open bytes that a SYN-ACK ACKs are lost if their SYN is captured after the SYN-ACK.
+
+**2026-10-11 — carry-over from ticket 08:** document resyncs (`TcpStream` type docs, `TcpStreamStatus::resyncs`, `force_resync()`, `resync_after_segments`) and the known limits listed on ticket 08:
+- jumps behind a stream aren't detected;
+- up to about one window is lost at an ACK-confirmed resync;
+- spoofed ACKs can force a resync;
+- a FIN without bytes after the window without a candidate before it is lost.

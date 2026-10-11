@@ -30,3 +30,5 @@ The reference model's expected delivered bytes, gaps, status counters and end re
 ## Comments
 
 **2026-10-11 — carry-over from ticket 07:** the reference model handles pickups: a base per stream, prepends, pending ACKs, guessed roles. It assumes ports that make the guess right; wrong guesses are only unit-tested. `mid_stream_pickups` shows how to start a capture at a random segment and capture lost segments later.
+
+**2026-10-11 — carry-over from ticket 08:** the proptest `resyncs` in `reference_model.rs` covers jumps (with and without ACKs, pickups, loss, reordering, injected segments, `resync_after_segments`, forced resyncs). The combined proptest should include jumps too. The model works on true offsets, so it can't express jumps to sequence numbers behind a stream or 2^31 away; unit tests cover these. The spec review noted that the model states the resync rules much like the code does (candidate list, clearing, kept ACK); only its offset mapping is independent of the code.

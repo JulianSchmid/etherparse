@@ -35,3 +35,8 @@ Rules: F4, F5, F6 (`End(Reset)`), P3.
 - F4 accepts an RST "if that stream has never been seen". A stream can now have been seen (pure ACKs) without a start (`start_seq` is `None`). Decide which one F4 means.
 - The `read_received` test block "other segments at the position of a keep-alive" pins that a 1-byte segment with RST starts a stream with its byte as data. Adapt it when RSTs end connections.
 - RSTs of unknown keys start no connection, also with bytes or a SYN (`process_segment` test).
+
+**2026-10-11 — carry-over from ticket 08:**
+- RSTs are still handled like other segments, so an RST with bytes after the window can become a resync candidate or a new start, and an RST with bytes in the window clears the candidate. F4 should keep RSTs out of the resync rules (`TcpStream::add_segment`, the block before the S4 count).
+- After a resync, the sender stream's sequence numbers map relative to the new start (`start_seq`), so an RST from before the jump maps far away and is ignored as out-of-window; that is presumably right.
+- F5 (`give_up_all_holes`) keeps the resync's gap, an empty range in `TcpStream::gaps`, so reads show `Gap { len: None }` before `End(Reset)`.
