@@ -58,6 +58,11 @@ pub struct TcpStream {
     /// are ignored).
     seen_ack: u64,
 
+    /// Offset up to which the receiver must have ACKed the bytes, as the
+    /// sender sends at most one receive window after the ACK (never moves
+    /// back).
+    implied_ack: u64,
+
     status: TcpStreamStatus,
 }
 
@@ -79,6 +84,7 @@ impl TcpStream {
             last_read_len: 0,
             fin_offset: None,
             seen_ack: 0,
+            implied_ack: 0,
             status: TcpStreamStatus {
                 gaps: 0,
                 gap_bytes: 0,
@@ -248,10 +254,14 @@ impl TcpStream {
     /// Offset up to which the receiver ACKed the stream's bytes.
     ///
     /// ACKs of bytes more than one receive window after the highest offset
-    /// are ignored, as the sender can't have sent these bytes.
+    /// are ignored, as the sender can't have sent these bytes. Without a
+    /// higher ACK, it is the implied ACK: the sender sends at most one
+    /// window after the ACK, so the receiver must have ACKed the bytes up
+    /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] windows before
+    /// the highest offset.
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
-        self.seen_ack.min(self.highest_offset)
+        self.seen_ack.max(self.implied_ack).min(self.highest_offset)
     }
 
     /// Offset after the furthest byte the sender is known to have sent, as
@@ -431,6 +441,18 @@ impl TcpStream {
         // the sender sent all bytes before its FIN
         if let Some(fin) = self.fin_offset {
             self.extend_to(fin);
+        }
+    }
+
+    /// Updates what the receiver must have received after a packet of the
+    /// connection, where `window` is the receiver's receive window.
+    pub(crate) fn after_packet(&mut self, window: u64, config: &TcpReassemblyConfig) {
+        if let Some(factor) = config.hole_give_up_window_factor {
+            // allow for several windows, as the window can change
+            let implied_ack = self
+                .highest_offset
+                .saturating_sub(window.saturating_mul(u64::from(factor)));
+            self.implied_ack = self.implied_ack.max(implied_ack);
         }
     }
 
@@ -968,6 +990,23 @@ mod test {
             let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
             assert_eq!(
                 TcpRead::Data(b"ef"),
+                connection.stream_mut(Initiator).read_acked()
+            );
+        }
+
+        // without ACKs (capture of one direction), the bytes up to the
+        // implied ACK are readable
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().send(Initiator, b"abcdef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"ab"),
                 connection.stream_mut(Initiator).read_acked()
             );
         }
@@ -1792,6 +1831,35 @@ mod test {
             }
         }
 
+        // the implied ACK: the sender sends at most one window after the
+        // ACK, so the receiver ACKed the bytes up to the hole give up window
+        // factor times the window before the highest offset (it never moves
+        // back when the window grows, and a higher seen ACK counts)
+        for (factor, expected) in [
+            (Some(2), [0, 50, 50, 200]),
+            (Some(1), [50, 150, 150, 200]),
+            (None, [0, 0, 0, 200]),
+        ] {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, &[b'a'; 150])
+                .send(Initiator, &[b'b'; 100]);
+            script.window_size = 1000;
+            script.ack_to(Responder, 0).ack_to(Responder, 200);
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip(expected) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).acked_offset());
+            }
+        }
+
         // after the FIN, ACKs count up to one window after the FIN (the ACK
         // of the FIN even with a window of 0)
         for (window, ack, expected) in [(0, 4, 3), (100, 104, 3), (100, 105, 0)] {
@@ -2460,6 +2528,24 @@ mod test {
                 .send(Initiator, b"abcdef")
                 .ack_to(Responder, 3)
                 .send_at(Initiator, 1, payload);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(expected, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
+
+        // bytes before the implied ACK are not compared either
+        for (payload, expected) in [(&b"XY"[..], 0), (&b"XYZ"[..], 1)] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .syn()
+                .send(Initiator, b"abcdef")
+                .send_at(Initiator, 0, payload);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Initiator);
             assert_eq!(expected, stream.status().conflicting_retransmissions);

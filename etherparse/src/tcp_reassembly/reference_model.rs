@@ -66,6 +66,9 @@ struct ModelStream {
     out_of_window_segments: u64,
     /// Highest ACK of the other side that was not ignored.
     ack: u64,
+    /// Highest offset minus k windows of the receiver after any packet of
+    /// the connection so far (0 without a hole give up window factor k).
+    implied_ack: u64,
     /// Offset of the next byte to read.
     read_offset: u64,
 }
@@ -258,9 +261,10 @@ impl ModelStream {
         self.extend_received();
     }
 
-    /// Offset up to which the other side ACKed the bytes.
+    /// Offset up to which the other side ACKed the bytes, or must have
+    /// ACKed them.
     fn acked_offset(&self) -> u64 {
-        self.ack.min(self.highest)
+        self.ack.max(self.implied_ack).min(self.highest)
     }
 
     /// Expected result of reading the contiguous received bytes from the
@@ -321,6 +325,14 @@ impl ReferenceModel {
         self.streams[sender].add_segment(segment, window, &self.config);
         self.windows[sender] = Some(segment.header.window_size);
         self.syns[sender] |= segment.header.syn;
+        if let Some(factor) = self.config.hole_give_up_window_factor {
+            for role in [TcpRole::Initiator, TcpRole::Responder] {
+                let window = self.window(role);
+                let stream = &mut self.streams[role_index(role)];
+                let implied_ack = stream.highest.saturating_sub(u64::from(factor) * window);
+                stream.implied_ack = stream.implied_ack.max(implied_ack);
+            }
+        }
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
             self.end = Some(TcpConnectionEnd::Finished);
         }

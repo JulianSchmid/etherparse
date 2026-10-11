@@ -122,6 +122,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
         let window = self.window(sender, config);
         self.stream_mut(sender).add_segment(tcp, window, config);
+        for role in [TcpRole::Initiator, TcpRole::Responder] {
+            let window = self.window(role, config);
+            self.stream_mut(role).after_packet(window, config);
+        }
 
         // finished once all bytes up to both FINs are known and both FINs
         // were ACKed
