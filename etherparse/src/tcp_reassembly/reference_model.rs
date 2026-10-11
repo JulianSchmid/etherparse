@@ -87,6 +87,8 @@ impl ModelStream {
     /// - a segment with bytes or a FIN starting more than k windows after
     ///   the highest or the ACKed offset is counted and not stored (k is the
     ///   hole give up window factor, 2 without one);
+    /// - a keep-alive (one byte ending at the ACK, without SYN, FIN or RST)
+    ///   inside an overdue hole is ignored;
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
     ///   retransmission if ones that are neither read, ACKed nor in a gap
@@ -107,6 +109,17 @@ impl ModelStream {
         let window_end = self.ack.max(self.highest) + u64::from(factor) * window;
         if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
             self.out_of_window_segments += 1;
+            return;
+        }
+        let header = &segment.header;
+        if 1 == segment.payload.len()
+            && false == (header.syn || header.fin || header.rst)
+            && end == self.ack
+            && self
+                .holes()
+                .iter()
+                .any(|hole| hole.contains(&start) && hole.end <= self.overdue_end())
+        {
             return;
         }
         if segment.header.fin && self.fin_offset.is_none() && end >= self.bytes.len() as u64 {

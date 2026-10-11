@@ -261,6 +261,14 @@ impl TcpStream {
         self.implied_ack.max(self.settled_ack)
     }
 
+    /// Returns true if the byte at `offset` lies in an overdue hole.
+    fn in_overdue_hole(&self, offset: u64) -> bool {
+        let index = self.holes.partition_point(|hole| hole.end <= offset);
+        self.holes
+            .get(index)
+            .is_some_and(|hole| hole.start <= offset && hole.end <= self.overdue_end())
+    }
+
     /// Hole starting at the read position, if any.
     fn hole_at_read_offset(&self) -> Option<Range<u64>> {
         self.holes
@@ -478,6 +486,16 @@ impl TcpStream {
             && u64::try_from(start).is_ok_and(|start| start > self.window_end(window, config))
         {
             self.status.out_of_window_segments += 1;
+            return;
+        }
+
+        // a keep-alive probe repeats the last ACKed byte with a filler byte
+        // (RFC 1122 4.2.3.6), which must not fill an overdue hole
+        if 1 == data.len()
+            && false == (tcp.syn() || tcp.fin() || tcp.rst())
+            && end == self.seen_ack as i64
+            && u64::try_from(start).is_ok_and(|start| self.in_overdue_hole(start))
+        {
             return;
         }
 
@@ -2489,6 +2507,54 @@ mod test {
             stream.read_received();
             stream.consume(3);
             assert_eq!(0, stream.holes().count());
+        }
+
+        // a keep-alive probe (one byte ending at the seen ACK, without SYN,
+        // FIN or RST) doesn't fill an overdue hole, other segments do, and
+        // so does a keep-alive before the hole is overdue
+        for (packets, offset, payload, [syn, fin, rst], expected) in [
+            // keep-alive
+            (2, 5, &[0][..], [false; 3], &[3..6][..]),
+            // keep-alive before the hole is overdue
+            (1, 5, &[0], [false; 3], &[3..5]),
+            // two bytes
+            (2, 4, b"ef", [false; 3], &[3..4]),
+            // one byte that doesn't end at the seen ACK
+            (2, 4, b"e", [false; 3], &[3..4, 5..6]),
+            // SYN, FIN or RST
+            (2, 5, &[0], [true, false, false], &[3..5]),
+            (2, 5, &[0], [false, true, false], &[3..5]),
+            (2, 5, &[0], [false, false, true], &[3..5]),
+        ] {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 6);
+            for _ in 0..packets {
+                script.ack(Initiator);
+            }
+            let mut probe = script.injected(|s| {
+                s.send_at(Initiator, offset, payload);
+            });
+            probe.header.syn = syn;
+            probe.header.fin = fin;
+            probe.header.rst = rst;
+            if syn {
+                // the SYN occupies the sequence number before the byte
+                probe.header.sequence_number -= 1;
+            }
+            script.segments.push(probe);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                expected,
+                connection.stream(Initiator).holes().collect::<Vec<_>>()
+            );
         }
     }
 
