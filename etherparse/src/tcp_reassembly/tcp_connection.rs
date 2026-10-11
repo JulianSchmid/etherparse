@@ -19,9 +19,9 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
-    /// Creates a connection whose first packet, sent by `initiator`, was
-    /// seen at `timestamp`. Its streams store their bytes in the empty
-    /// `buffers`.
+    /// Creates a connection whose initiator is the endpoint `initiator` and
+    /// whose first packet was seen at `timestamp`. Its streams store their
+    /// bytes in the empty `buffers`.
     pub(crate) fn new(
         id: TcpConnectionId,
         key: TcpConnectionKey<CustomChannelId>,
@@ -117,6 +117,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             TcpRole::Responder
         };
+        // the SYN-ACK ACKs the other side's SYN, so the other stream starts
+        // there, even if its SYN was not seen
+        if tcp.syn() && tcp.ack() {
+            self.stream_mut(sender.other())
+                .observe_start(tcp.acknowledgment_number());
+        }
         // the window the sender advertised before this segment limits what
         // the other side could send, so the ACK is applied first
         if tcp.ack() {

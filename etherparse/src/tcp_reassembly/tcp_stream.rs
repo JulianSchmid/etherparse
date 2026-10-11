@@ -481,10 +481,13 @@ impl TcpStream {
         } else {
             tcp.sequence_number()
         };
-        if tcp.syn() && self.start_seq.is_none() {
-            self.start_seq = Some(seq);
-            self.window_scale = Some(window_scale(tcp));
-            self.status.start = TcpStreamStart::Observed;
+        if tcp.syn() {
+            self.observe_start(seq);
+            // the window scale is only known from the sender's SYN, which
+            // can arrive after the SYN-ACK that started the stream
+            if self.window_scale.is_none() && Some(seq) == self.start_seq {
+                self.window_scale = Some(window_scale(tcp));
+            }
         }
         let Some(start_seq) = self.start_seq else {
             return;
@@ -535,6 +538,15 @@ impl TcpStream {
         // the sender sent all bytes before its FIN
         if let Some(fin) = self.fin_offset {
             self.extend_to(fin);
+        }
+    }
+
+    /// Gives the stream an observed start at `seq`, the sequence number
+    /// after its SYN, unless it has a start already.
+    pub(crate) fn observe_start(&mut self, seq: u32) {
+        if self.start_seq.is_none() {
+            self.start_seq = Some(seq);
+            self.status.start = TcpStreamStart::Observed;
         }
     }
 
@@ -908,6 +920,27 @@ mod test {
                 TcpRead::Data(b"def"),
                 connection.stream_mut(Responder).read_received()
             );
+        }
+
+        // without its SYN, the SYN-ACK starts both streams (the initiator's
+        // at the ACK of the SYN, also when it is the first packet)
+        for syn_ack_first in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Responder, b"def");
+            let syn = script.segments.remove(0);
+            if false == syn_ack_first {
+                script.segments.insert(0, syn);
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            for (role, data) in [(Initiator, b"abc"), (Responder, b"def")] {
+                let stream = connection.stream_mut(role);
+                assert_eq!(TcpRead::Data(data), stream.read_received());
+                assert_eq!(0, stream.read_offset());
+            }
         }
 
         // retransmitted bytes are delivered once (also across a
@@ -2934,11 +2967,15 @@ mod test {
             );
         }
 
-        // the SYN-ACK gives the responder's stream an observed start
-        {
+        // the SYN-ACK gives the responder's stream an observed start, and
+        // the initiator's too if its SYN was not seen
+        for syn in [true, false] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.syn().syn_ack();
+            if false == syn {
+                script.segments.remove(0);
+            }
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             for role in [Initiator, Responder] {
                 assert_eq!(
@@ -3255,7 +3292,8 @@ mod test {
         }
 
         // the fallback window is used while the window scale is unknown
-        {
+        // (without the SYN-ACK or without the SYN)
+        for missing in [1, 0] {
             let config = TcpReassemblyConfig {
                 fallback_window: 50,
                 ..Default::default()
@@ -3263,8 +3301,50 @@ mod test {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_size = 100;
             script.handshake().ack(Responder);
-            // remove the SYN-ACK
-            script.segments.remove(1);
+            script.segments.remove(missing);
+            assert_window_end(config, &script, 100);
+        }
+
+        // a SYN after its SYN-ACK makes the window scale known
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script.handshake().ack(Responder);
+            script.segments.swap(0, 1);
+            assert_window_end(Default::default(), &script, 2 * (100 << 3));
+        }
+
+        // only the first SYN with the stream's ISN sets its window scale: a
+        // retransmitted SYN-ACK with another option doesn't
+        {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script.handshake();
+            let mut syn_ack = script.segments[1].clone();
+            syn_ack
+                .header
+                .set_options(&[TcpOptionElement::WindowScale(5), TcpOptionElement::Noop])
+                .unwrap();
+            script.segments.push(syn_ack);
+            script.ack(Responder);
+            assert_window_end(Default::default(), &script, 2 * (100 << 3));
+        }
+
+        // ... and neither does a SYN with another ISN after the SYN-ACK
+        // started the stream
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 50,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script.handshake().ack(Responder);
+            script.segments[0].header.sequence_number += 7;
+            script.segments.swap(0, 1);
             assert_window_end(config, &script, 100);
         }
 

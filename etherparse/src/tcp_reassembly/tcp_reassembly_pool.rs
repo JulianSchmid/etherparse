@@ -102,8 +102,8 @@ where
 
     /// Applies a TCP segment to its connection.
     ///
-    /// A SYN of an unknown connection starts a new one. Other segments of
-    /// unknown connections are ignored with
+    /// A SYN or SYN-ACK of an unknown connection starts a new one. Other
+    /// segments of unknown connections are ignored with
     /// [`TcpIgnoreReason::NoConnection`].
     ///
     /// A connection that ends is handed over in [`TcpProcessed::ended`].
@@ -122,14 +122,16 @@ where
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => entry.into_mut(),
             Entry::Vacant(entry) => {
-                // only a SYN starts a connection
-                if false == tcp.syn() || tcp.ack() {
+                // only a SYN or SYN-ACK starts a connection
+                if false == tcp.syn() {
                     return TcpProcessed {
                         active: None,
                         ended: None,
                         ignored: Some(TcpIgnoreReason::NoConnection),
                     };
                 }
+                // the SYN-ACK is sent by the responder
+                let initiator = if tcp.ack() { destination } else { source };
                 let id = self.next_id;
                 self.next_id = TcpConnectionId(id.0.wrapping_add(1));
                 let key = entry.key().clone();
@@ -140,7 +142,7 @@ where
                 entry.insert(TcpConnection::new(
                     id,
                     key,
-                    source,
+                    initiator,
                     timestamp.clone(),
                     buffers,
                 ))
@@ -248,7 +250,8 @@ mod test {
 
     #[test]
     fn process_segment() {
-        // segments of an unknown connection that are not a SYN
+        // segments of an unknown connection that are neither a SYN nor a
+        // SYN-ACK
         {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut script =
@@ -257,11 +260,27 @@ mod test {
                 .handshake()
                 .send(Initiator, b"abc")
                 .send(Responder, b"def");
-            for segment in &script.segments[1..] {
+            for segment in &script.segments[2..] {
                 let processed = segment.feed(&mut pool, 0);
                 assert!(processed.active.is_none());
                 assert_eq!(Some(TcpIgnoreReason::NoConnection), processed.ignored);
             }
+        }
+
+        // a SYN-ACK starts a connection, its sender is the responder
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script =
+                ConnectionScript::new(addr("10.0.0.1:50000"), addr("10.0.0.2:80"), 1000, 2000);
+            script.syn().syn_ack();
+            let processed = script.segments[1].feed(&mut pool, 7);
+            assert_eq!(None, processed.ignored);
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Responder, sender);
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(addr("10.0.0.1:50000"), connection.endpoint(Initiator));
+            assert_eq!(addr("10.0.0.2:80"), connection.endpoint(Responder));
+            assert_eq!(&7, connection.first_seen());
         }
 
         // a SYN starts a connection
