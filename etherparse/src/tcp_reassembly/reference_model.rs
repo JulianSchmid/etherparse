@@ -722,6 +722,7 @@ impl ReferenceModel {
                 },
                 gaps: expected.gap_count,
                 gap_bytes: expected.gap_bytes,
+                resyncs: 0,
                 conflicting_retransmissions: expected.conflicting_retransmissions,
                 out_of_window_segments: expected.out_of_window_segments,
             },

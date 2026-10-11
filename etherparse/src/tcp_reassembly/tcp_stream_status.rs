@@ -17,6 +17,12 @@ pub struct TcpStreamStatus {
     /// Number of bytes in the holes that were given up.
     pub gap_bytes: u64,
 
+    /// Number of times the stream continued at a new position behind a gap
+    /// of unknown length ([`crate::tcp_reassembly::TcpRead::Gap`] with
+    /// `len: None`), as its sequence numbers jumped far after the
+    /// receiver's window.
+    pub resyncs: u64,
+
     /// Number of retransmitted segments whose bytes differ from the bytes
     /// received first at the same positions.
     ///
@@ -51,10 +57,11 @@ mod test {
             // debug
             assert_eq!(
                 format!(
-                    "TcpStreamStatus {{ start: {:?}, gaps: {}, gap_bytes: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    "TcpStreamStatus {{ start: {:?}, gaps: {}, gap_bytes: {}, resyncs: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
                     status.start,
                     status.gaps,
                     status.gap_bytes,
+                    status.resyncs,
                     status.conflicting_retransmissions,
                     status.out_of_window_segments
                 ),

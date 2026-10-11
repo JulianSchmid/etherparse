@@ -115,6 +115,7 @@ impl TcpStream {
                 start: TcpStreamStart::MidStreamPickup,
                 gaps: 0,
                 gap_bytes: 0,
+                resyncs: 0,
                 conflicting_retransmissions: 0,
                 out_of_window_segments: 0,
             },
@@ -377,13 +378,16 @@ impl TcpStream {
         &self.status
     }
 
-    /// Returns true if the stream has no defects so far: no gaps and no
-    /// retransmission with differing bytes (see [`TcpStreamStatus`]).
+    /// Returns true if the stream has no defects so far: no gaps, no
+    /// resyncs and no retransmission with differing bytes (see
+    /// [`TcpStreamStatus`]).
     ///
     /// Holes don't count, as retransmissions can still fill them, and
     /// neither do discarded bytes (see [`TcpStream::discard_until`]).
     pub fn is_clean(&self) -> bool {
-        0 == self.status.gaps && 0 == self.status.conflicting_retransmissions
+        0 == self.status.gaps
+            && 0 == self.status.resyncs
+            && 0 == self.status.conflicting_retransmissions
     }
 
     /// Returns true if the stream's FIN was seen and all bytes before it
@@ -3604,6 +3608,7 @@ mod test {
                     start: TcpStreamStart::Observed,
                     gaps: 0,
                     gap_bytes: 0,
+                    resyncs: 0,
                     conflicting_retransmissions: 0,
                     out_of_window_segments: 0,
                 },

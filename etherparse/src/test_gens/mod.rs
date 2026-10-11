@@ -1078,6 +1078,7 @@ prop_compose! {
             start in tcp_stream_start_any(),
             gaps in any::<u64>(),
             gap_bytes in any::<u64>(),
+            resyncs in any::<u64>(),
             conflicting_retransmissions in any::<u64>(),
             out_of_window_segments in any::<u64>(),
         )
@@ -1087,6 +1088,7 @@ prop_compose! {
             start,
             gaps,
             gap_bytes,
+            resyncs,
             conflicting_retransmissions,
             out_of_window_segments,
         }
