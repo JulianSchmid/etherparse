@@ -114,6 +114,14 @@ where
     /// [`TcpIgnoreReason::AfterEnd`], also retransmissions of its SYN and
     /// SYN-ACK. A SYN or SYN-ACK with a new ISN starts a new connection with
     /// a new id (a reconnect).
+    ///
+    /// A SYN with a new ISN on an open connection is kept until a SYN-ACK of
+    /// the other endpoint with a new ISN, or one that ACKs the SYN, confirms
+    /// the reconnect. That SYN-ACK hands the connection over in
+    /// [`TcpProcessed::ended`] (see [`TcpConnectionEnd::Reconnect`]), and
+    /// the reconnect, which starts with the SYN if the SYN-ACK ACKs it, is
+    /// [`TcpProcessed::active`]. Without such a SYN-ACK, the SYN changes
+    /// nothing, so a spoofed SYN can't end a connection.
     pub fn process_segment(
         &mut self,
         segment: TcpSegment<'_, CustomChannelId>,
@@ -124,32 +132,52 @@ where
         let destination = SocketAddr::new(segment.destination, tcp.destination_port());
         let key = TcpConnectionKey::new(segment.vlan_ids, source, destination, segment.channel_id);
 
+        let mut replaced = None;
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => {
                 let connection = entry.into_mut();
-                if connection.end().is_some() {
+                let reconnect = if connection.end().is_some() {
                     // the tombstone of an ended connection absorbs its late
                     // segments (also of its handshake), but a SYN or SYN-ACK
                     // with a new ISN starts a reconnect
-                    let reconnect =
-                        new_connection_initiator(&tcp, source, destination).filter(|_| {
-                            tcp.syn() && false == connection.is_own_handshake(source, &tcp)
-                        });
-                    let Some((initiator, roles_guessed)) = reconnect else {
-                        return TcpProcessed {
-                            active: None,
-                            ended: None,
-                            ignored: Some(TcpIgnoreReason::AfterEnd),
-                        };
-                    };
-                    *connection = new_connection(
+                    tcp.syn()
+                        && false == tcp.rst()
+                        && false == connection.is_own_handshake(source, &tcp)
+                } else {
+                    connection.confirms_reconnect(source, &tcp)
+                };
+                if reconnect {
+                    // the reconnect starts with the kept SYN if the SYN-ACK
+                    // ACKs it, otherwise with the segment
+                    let kept = connection.take_reconnect_syn();
+                    let syn = kept.as_ref().filter(|syn| syn.is_acked_by(source, &tcp));
+                    let first_seen =
+                        syn.map_or_else(|| timestamp.clone(), |syn| syn.timestamp().clone());
+                    let mut reconnect = new_connection(
                         &mut self.next_id,
                         &mut self.free_buffers,
                         connection.key().clone(),
-                        initiator,
-                        roles_guessed,
-                        timestamp.clone(),
+                        handshake_initiator(&tcp, source, destination),
+                        false,
+                        first_seen,
                     );
+                    if let Some(syn) = syn {
+                        reconnect.add_reconnect_syn(syn, &self.config);
+                    }
+                    if let Some(kept) = kept {
+                        self.free_buffers.push(kept.into_buffer());
+                    }
+                    let mut ended = core::mem::replace(connection, reconnect);
+                    if ended.end().is_none() {
+                        ended.end_replaced();
+                        replaced = Some(ended);
+                    }
+                } else if connection.end().is_some() {
+                    return TcpProcessed {
+                        active: None,
+                        ended: None,
+                        ignored: Some(TcpIgnoreReason::AfterEnd),
+                    };
                 }
                 connection
             }
@@ -175,6 +203,8 @@ where
             }
         };
         let sender = connection.add_segment(source, &tcp, timestamp, &self.config);
+        // the SYN or SYN-ACK that starts a reconnect doesn't end it: it has
+        // no RST, and nothing ACKed a FIN of its sender yet
         if connection.end().is_some() {
             return TcpProcessed {
                 active: None,
@@ -184,7 +214,7 @@ where
         }
         TcpProcessed {
             active: Some((connection, sender)),
-            ended: None,
+            ended: replaced,
             ignored: None,
         }
     }
@@ -601,6 +631,412 @@ mod test {
             let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
             assert_eq!(TcpConnectionId(1), connection.id());
             assert_eq!(None, connection.end());
+        }
+
+        // a SYN with a new ISN on an open connection is kept until the
+        // SYN-ACK of the other endpoint ACKs it: the SYN-ACK hands the
+        // connection over as `Reconnect`, and the reconnect, which starts
+        // with the SYN, is active with a new id, also if the old responder
+        // sends the SYN (regression test: the old tcp-reassembly branch
+        // handed the old connection over only if bytes were left, so a
+        // caller that read everything didn't see the reconnect)
+        for (initiator, responder) in [
+            ("10.0.0.1:50000", "10.0.0.2:80"),
+            ("10.0.0.2:80", "10.0.0.1:50000"),
+        ] {
+            for drained in [false, true] {
+                let mut pool = TcpReassemblyPool::<u32, ()>::default();
+                let mut old = ConnectionScript::with_isns(1000, 2000);
+                old.handshake()
+                    .send(Initiator, b"abc")
+                    .send(Responder, b"def");
+                {
+                    let (connection, _) = old.feed_all(&mut pool).active.unwrap();
+                    if drained {
+                        for role in [Initiator, Responder] {
+                            let stream = connection.stream_mut(role);
+                            stream.read_received();
+                            stream.consume(3);
+                        }
+                    }
+                }
+                let mut script =
+                    ConnectionScript::new(addr(initiator), addr(responder), 5000, 6000);
+                script.handshake().send(Initiator, b"ghi");
+                {
+                    let processed = script.segments[0].feed(&mut pool, 7);
+                    assert!(processed.ended.is_none());
+                    assert_eq!(None, processed.ignored);
+                    let (connection, _) = processed.active.unwrap();
+                    assert_eq!(TcpConnectionId(0), connection.id());
+                    assert_eq!(None, connection.end());
+                }
+                let processed = script.segments[1].feed(&mut pool, 8);
+                assert_eq!(None, processed.ignored);
+                let mut ended = processed.ended.unwrap();
+                assert_eq!(TcpConnectionId(0), ended.id());
+                assert_eq!(Some(TcpConnectionEnd::Reconnect), ended.end());
+                assert_eq!(&7, ended.last_seen());
+                let expected = if drained {
+                    TcpRead::End(TcpStreamEnd::Reconnect)
+                } else {
+                    TcpRead::Data(b"abc")
+                };
+                assert_eq!(expected, ended.stream_mut(Initiator).read_received());
+                let (connection, sender) = processed.active.unwrap();
+                assert_eq!(Responder, sender);
+                assert_eq!(TcpConnectionId(1), connection.id());
+                assert_eq!(None, connection.end());
+                assert!(false == connection.roles_guessed());
+                assert_eq!(addr(initiator), connection.endpoint(Initiator));
+                assert_eq!(&7, connection.first_seen());
+                assert_eq!(&8, connection.last_seen());
+                for role in [Initiator, Responder] {
+                    let start = connection.stream(role).status().start;
+                    assert_eq!(TcpStreamStart::Observed, start);
+                }
+                let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+                assert_eq!(TcpConnectionId(1), connection.id());
+                assert_eq!(
+                    TcpRead::Data(b"ghi"),
+                    connection.stream_mut(Initiator).read_received()
+                );
+            }
+        }
+
+        // without its SYN-ACK, a SYN with a new ISN has no effect, so a
+        // spoofed SYN can't split a live connection (its bytes would lie at
+        // offset 3 of the initiator's stream)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let mut syn = script.segments[0].clone();
+            syn.header.sequence_number = script.seq(Initiator, 2);
+            syn.payload = b"xyz".to_vec();
+            script.segments.push(syn);
+            script
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let before = {
+                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                connection.stream(Initiator).status().clone()
+            };
+            {
+                let (connection, sender) = script.feed(&mut pool, 4..5).active.unwrap();
+                assert_eq!(Initiator, sender);
+                let stream = connection.stream(Initiator);
+                assert_eq!(3, stream.highest_offset());
+                assert_eq!(&before, stream.status());
+            }
+            let mut connection = script.feed(&mut pool, 5..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.is_complete());
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
+
+        // a kept SYN waits for a SYN-ACK that confirms it: SYN-ACKs from the
+        // endpoint that sent it, with the ISN of their sender's stream (a
+        // retransmission, also if it ACKs the kept SYN), or with an RST
+        // don't, and the kept SYN stays
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET").syn_ack();
+            let syn_ack = &script.segments[1];
+            let mut others = Vec::new();
+            // from the endpoint that sent the SYN
+            let mut reversed =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 5000, 6000);
+            reversed.syn().syn_ack();
+            others.push(reversed.segments[1].clone());
+            // ISN of the responder's stream (retransmissions of the old
+            // SYN-ACK and with the ACK of the kept SYN)
+            others.push(old.segments[1].clone());
+            let mut retransmission = syn_ack.clone();
+            retransmission.header.sequence_number = 2000;
+            others.push(retransmission);
+            // RST (outside of the window, so it doesn't reset the connection)
+            let mut rst = syn_ack.clone();
+            rst.header.rst = true;
+            rst.header.sequence_number = 6000 + (1 << 30);
+            others.push(rst);
+            old.feed_all(&mut pool);
+            script.segments[0].feed(&mut pool, ());
+            for other in &others {
+                let (connection, _) = other.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(TcpConnectionId(0), connection.id());
+                assert_eq!(None, connection.end());
+            }
+            let processed = syn_ack.feed(&mut pool, ());
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"GET"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // a SYN-ACK of the other endpoint with a new ISN confirms the
+        // reconnect also if it doesn't ACK the kept SYN (e.g. after another
+        // SYN replaced the real one): the reconnect then starts at the
+        // SYN-ACK, without the bytes of the SYN
+        for (ack, spoofed) in [(5000, false), (5005, false), (5004, true)] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET").syn_ack();
+            script.segments[1].header.acknowledgment_number = ack;
+            script.segments[0].feed(&mut pool, 7);
+            if spoofed {
+                let mut spoofed = ConnectionScript::with_isns(7777, 0);
+                spoofed.syn();
+                spoofed.segments[0].feed(&mut pool, 8);
+            }
+            let processed = script.segments[1].feed(&mut pool, 9);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Responder, sender);
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&9, connection.first_seen());
+            assert_eq!(addr("10.0.0.1:50000"), connection.endpoint(Initiator));
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
+        // a SYN-ACK with a new ISN that confirms no reconnect changes
+        // nothing: neither its bytes (they would lie at offset 1 of the
+        // responder's stream), nor its ACK or window
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"abc");
+            let mut syn_ack = script.segments[1].clone();
+            syn_ack.header.sequence_number = 2001;
+            syn_ack.header.acknowledgment_number = 1 << 30;
+            syn_ack.header.window_size = 0;
+            syn_ack.payload = b"x".to_vec();
+            let before = {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                [Initiator, Responder].map(|role| {
+                    let stream = connection.stream(role);
+                    (
+                        stream.status().clone(),
+                        stream.highest_offset(),
+                        stream.acked_offset(),
+                    )
+                })
+            };
+            let (connection, sender) = syn_ack.feed(&mut pool, ()).active.unwrap();
+            assert_eq!(Responder, sender);
+            let after = [Initiator, Responder].map(|role| {
+                let stream = connection.stream(role);
+                (
+                    stream.status().clone(),
+                    stream.highest_offset(),
+                    stream.acked_offset(),
+                )
+            });
+            assert_eq!(before, after);
+            // the window of 0 doesn't count
+            let (connection, _) = script
+                .send_at(Initiator, 10, b"def")
+                .feed(&mut pool, 4..)
+                .active
+                .unwrap();
+            assert_eq!(13, connection.stream(Initiator).highest_offset());
+        }
+
+        // a SYN without the ACK flag doesn't confirm a kept SYN, even if its
+        // ACK number does: it replaces the kept SYN, as a SYN of the other
+        // endpoint
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn();
+            let mut reversed =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 6000, 5000);
+            reversed.syn().syn_ack();
+            reversed.segments[0].header.acknowledgment_number = 5001;
+            old.feed_all(&mut pool);
+            script.segments[0].feed(&mut pool, ());
+            let processed = reversed.segments[0].feed(&mut pool, ());
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(0), processed.active.unwrap().0.id());
+            let processed = reversed.segments[1].feed(&mut pool, ());
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(addr("10.0.0.2:80"), connection.endpoint(Initiator));
+        }
+
+        // the reconnect gets the bytes of its SYN (TCP Fast Open), whether
+        // the SYN-ACK ACKs them or only the SYN, and the buffer that kept
+        // the SYN is re-used without its bytes
+        for ack in [5001, 5004] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET").syn_ack();
+            script.segments[1].header.acknowledgment_number = ack;
+            old.feed_all(&mut pool);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"GET"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            let mut next =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 1000, 2000);
+            next.handshake().send(Initiator, b"x");
+            let (connection, _) = next.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.read_offset());
+            assert_eq!(TcpRead::Data(b"x"), stream.read_received());
+        }
+
+        // a retransmission of the kept SYN changes nothing, and a SYN with
+        // another new ISN replaces it (a SYN-ACK of the replaced SYN starts
+        // the reconnect at the SYN-ACK)
+        for (isns, confirmed, first_seen) in [
+            ([5000, 5000], 5000, 7),
+            ([5000, 9000], 9000, 8),
+            ([5000, 9000], 5000, 9),
+        ] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            for (isn, timestamp) in isns.into_iter().zip([7, 8]) {
+                let mut script = ConnectionScript::with_isns(isn, 6000);
+                script.syn();
+                script.segments[0].feed(&mut pool, timestamp);
+            }
+            let mut script = ConnectionScript::with_isns(confirmed, 6000);
+            script.syn().syn_ack();
+            let processed = script.segments[1].feed(&mut pool, 9);
+            assert!(processed.ended.is_some());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(&first_seen, connection.first_seen());
+        }
+
+        // a connection that ends while a SYN is kept leaves it in its
+        // tombstone: a SYN-ACK that ACKs it starts the reconnect with the SYN
+        // (its bytes and timestamp), and a retransmission of the SYN starts
+        // it right away
+        for retransmitted in [false, true] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake().send(Initiator, b"abc");
+            let rst = old.injected(|s| {
+                s.rst(Initiator);
+            });
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET").syn_ack();
+            old.feed_all(&mut pool);
+            script.segments[0].feed(&mut pool, 7);
+            rst.feed(&mut pool, 8).ended.unwrap();
+            if retransmitted {
+                let (connection, _) = script.segments[0].feed(&mut pool, 9).active.unwrap();
+                assert_eq!(TcpConnectionId(1), connection.id());
+            }
+            let processed = script.segments[1].feed(&mut pool, 10);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&if retransmitted { 9 } else { 7 }, connection.first_seen());
+            assert_eq!(
+                TcpRead::Data(b"GET"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // on a tombstone, a SYN-ACK from the endpoint that sent the kept SYN,
+        // or a SYN without the ACK flag, doesn't ACK the kept SYN: the
+        // reconnect starts at it
+        for syn_ack in [true, false] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            let rst = old.injected(|s| {
+                s.rst(Initiator);
+            });
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn();
+            let mut other =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 6000, 7000);
+            other.syn().syn_ack();
+            let mut segment = other.segments[usize::from(syn_ack)].clone();
+            segment.header.acknowledgment_number = 5001;
+            old.feed_all(&mut pool);
+            script.segments[0].feed(&mut pool, 7);
+            rst.feed(&mut pool, 8).ended.unwrap();
+            let (connection, _) = segment.feed(&mut pool, 9).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&9, connection.first_seen());
+        }
+
+        // ... also if the kept SYN is the packet that finishes the
+        // connection, as it makes the last hole overdue (the ACK of the
+        // responder covered it one packet before)
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder);
+            old.segments[3..].rotate_left(1);
+            old.segments.pop();
+            old.segments
+                .last_mut()
+                .unwrap()
+                .header
+                .acknowledgment_number = old.seq(Initiator, 0);
+            old.ack(Initiator).ack(Responder);
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET").syn_ack();
+            {
+                let (connection, _) = old.feed_all(&mut pool).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let processed = script.segments[0].feed(&mut pool, ());
+            assert!(processed.active.is_none());
+            let ended = processed.ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), ended.end());
+            let processed = script.segments[1].feed(&mut pool, ());
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"GET"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // a connection reset by an RST that the receiver can accept is

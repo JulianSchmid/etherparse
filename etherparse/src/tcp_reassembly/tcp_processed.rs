@@ -9,6 +9,10 @@ pub struct TcpProcessed<'a, Timestamp = (), CustomChannelId = ()> {
 
     /// Connection ended by the packet, handed over with its remaining bytes.
     ///
+    /// If a reconnect replaced it (see
+    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reconnect`]), the
+    /// reconnect is in [`TcpProcessed::active`].
+    ///
     /// Pass it to [`TcpReassemblyPool::recycle`] once you are done with it,
     /// so that its buffers are re-used.
     pub ended: Option<TcpConnection<Timestamp, CustomChannelId>>,

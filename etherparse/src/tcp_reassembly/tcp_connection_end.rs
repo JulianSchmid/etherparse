@@ -18,6 +18,15 @@ pub enum TcpConnectionEnd {
         /// Role of the endpoint that sent the RST.
         by: TcpRole,
     },
+
+    /// An endpoint started a new connection on the same key (a reconnect).
+    ///
+    /// A SYN with a new ISN only counts once a SYN-ACK of the other endpoint
+    /// confirms it, so a spoofed SYN can't end a connection. The reconnect
+    /// gets a new [`crate::tcp_reassembly::TcpConnectionId`]. A connection
+    /// whose FINs were both ACKed ends as [`TcpConnectionEnd::Finished`]
+    /// instead.
+    Reconnect,
 }
 
 #[cfg(test)]
@@ -37,6 +46,7 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
             assert_ne!(TcpConnectionEnd::Finished, a);
+            assert_ne!(TcpConnectionEnd::Reconnect, a);
             assert_ne!(
                 TcpConnectionEnd::Reset {
                     by: TcpRole::Initiator
@@ -48,6 +58,7 @@ mod test {
         // debug
         {
             assert_eq!("Finished", format!("{:?}", TcpConnectionEnd::Finished));
+            assert_eq!("Reconnect", format!("{:?}", TcpConnectionEnd::Reconnect));
             assert_eq!(
                 "Reset { by: Initiator }",
                 format!(

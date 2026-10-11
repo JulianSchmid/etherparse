@@ -484,6 +484,14 @@ impl TcpStream {
         self.isn
     }
 
+    /// Returns true if the SYN or SYN-ACK `tcp` of the stream's sender can
+    /// be the stream's own: it has the ISN of the stream's observed start,
+    /// or the stream has no observed start. Otherwise it belongs to a
+    /// reconnect.
+    pub(crate) fn is_own_syn(&self, tcp: &TcpSlice<'_>) -> bool {
+        self.isn.is_none_or(|isn| isn == tcp.sequence_number())
+    }
+
     /// Stream without buffers for the tombstone of an ended connection: it
     /// keeps the ISN of the observed start, so that a late retransmission
     /// of the SYN can be told from a reconnect.
@@ -504,8 +512,13 @@ impl TcpStream {
     /// Returns true if the receiver ACKed the stream's FIN and all holes
     /// left are overdue, so that the stream can end as finished.
     pub(crate) fn can_finish(&self) -> bool {
+        self.is_fin_acked() && self.holes.last().is_none_or(|hole| self.is_overdue(hole))
+    }
+
+    /// Returns true if the receiver ACKed the stream's FIN (all holes lie
+    /// before it, so the ACK covers them).
+    pub(crate) fn is_fin_acked(&self) -> bool {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
-            && self.holes.last().is_none_or(|hole| self.is_overdue(hole))
     }
 
     /// Gives up all holes, as the connection ended (late segments are
@@ -1615,6 +1628,36 @@ mod test {
                 }
                 assert_eq!(expected, stream.read_received());
             }
+        }
+
+        // the SYN of a reconnect counts as a packet of the connection it may
+        // replace, so after it, a hole that an ACK covered is overdue
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"ghi")
+                .ack(Responder);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(3);
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            let mut syn = script.segments[0].clone();
+            syn.header.sequence_number = 5000;
+            let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
+            assert_eq!(
+                TcpRead::Gap { len: Some(3) },
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // an ACK that shrinks the window to 0 doesn't make the hole it adds
@@ -4173,7 +4216,8 @@ mod test {
 
         // a keep-alive probe (one byte ending at the seen ACK, without SYN
         // or FIN) doesn't fill an overdue hole, other segments do, and so
-        // does a keep-alive before the hole is overdue
+        // does a keep-alive before the hole is overdue (a SYN-ACK with
+        // another ISN changes nothing)
         for (packets, offset, payload, [syn, fin], expected) in [
             // keep-alive
             (2, 5, &[0][..], [false; 2], &[3..6][..]),
@@ -4183,8 +4227,8 @@ mod test {
             (2, 4, b"ef", [false; 2], &[3..4]),
             // one byte that doesn't end at the seen ACK
             (2, 4, b"e", [false; 2], &[3..4, 5..6]),
-            // SYN or FIN
-            (2, 5, &[0], [true, false], &[3..5]),
+            // SYN-ACK with another ISN, or FIN
+            (2, 5, &[0], [true, false], &[3..6]),
             (2, 5, &[0], [false, true], &[3..5]),
         ] {
             let config = TcpReassemblyConfig {
@@ -5637,7 +5681,8 @@ mod test {
             assert_eq!((1, 2), (status.resyncs, status.out_of_window_segments));
         }
 
-        // a SYN with another ISN is a reconnect, not a jump
+        // a SYN with another ISN is kept for a reconnect: it is no jump, and
+        // it doesn't count as out-of-window
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -5651,7 +5696,7 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let status = connection.stream(Initiator).status();
             assert_eq!(0, status.resyncs);
-            assert_eq!(1, status.out_of_window_segments);
+            assert_eq!(0, status.out_of_window_segments);
         }
 
         // nothing follows a FIN, so a stream with a FIN doesn't jump, also

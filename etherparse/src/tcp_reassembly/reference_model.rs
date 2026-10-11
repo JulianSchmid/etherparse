@@ -860,6 +860,7 @@ impl ReferenceModel {
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            TcpConnectionEnd::Reconnect => TcpStreamEnd::Reconnect,
         };
         for stream in &mut self.streams {
             stream.connection_ended(stream_end);

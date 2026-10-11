@@ -17,6 +17,10 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     end: Option<TcpConnectionEnd>,
     /// Number of packets applied to the connection.
     packets: u64,
+    /// SYN with a new ISN, kept until a SYN-ACK of the other endpoint
+    /// confirms the reconnect it starts (`None` without one). A tombstone
+    /// keeps the one its connection kept.
+    reconnect_syn: Option<ReconnectSyn<Timestamp>>,
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
@@ -47,6 +51,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             last_seen: timestamp,
             end: None,
             packets: 0,
+            reconnect_syn: None,
         }
     }
 
@@ -124,12 +129,22 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         tcp: &TcpSlice<'_>,
         timestamp: Timestamp,
         config: &TcpReassemblyConfig,
-    ) -> TcpRole {
+    ) -> TcpRole
+    where
+        Timestamp: Clone,
+    {
         self.last_seen = timestamp;
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
         if tcp.rst() {
             self.add_reset(sender, tcp, config);
+        } else if tcp.syn() && false == self.stream(sender).is_own_syn(tcp) {
+            // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
+            // it, until then it changes nothing, and neither does a SYN-ACK
+            // with a new ISN that confirms none
+            if false == tcp.ack() {
+                self.keep_reconnect_syn(source, tcp);
+            }
         } else {
             self.add_data_segment(sender, tcp, config);
         }
@@ -155,6 +170,20 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         sender
     }
 
+    /// Ends the connection that a reconnect replaces: as finished if both
+    /// FINs were ACKed, as no more packets of it come (so every hole the
+    /// ACKs cover counts as overdue), and as a reconnect otherwise.
+    pub(crate) fn end_replaced(&mut self) {
+        let finished = [&self.initiator_stream, &self.responder_stream]
+            .iter()
+            .all(|stream| stream.is_fin_acked());
+        self.end_with(if finished {
+            TcpConnectionEnd::Finished
+        } else {
+            TcpConnectionEnd::Reconnect
+        });
+    }
+
     /// Ends the connection with `end`: the holes of both streams become
     /// gaps, as late segments can't fill them anymore, and reads return the
     /// end once nothing more is readable.
@@ -163,6 +192,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            TcpConnectionEnd::Reconnect => TcpStreamEnd::Reconnect,
         };
         self.initiator_stream.connection_ended(stream_end);
         self.responder_stream.connection_ended(stream_end);
@@ -222,6 +252,80 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
     }
 
+    /// Keeps the SYN `tcp` of `source`, which has a new ISN, until the
+    /// other endpoint's SYN-ACK confirms the reconnect it starts. A
+    /// retransmission of the kept SYN changes nothing, a SYN with another
+    /// ISN replaces it.
+    fn keep_reconnect_syn(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>)
+    where
+        Timestamp: Clone,
+    {
+        if self
+            .reconnect_syn
+            .as_ref()
+            .is_some_and(|syn| syn.isn() == Some(tcp.sequence_number()))
+        {
+            return;
+        }
+        // re-use the buffer of a replaced SYN
+        let mut segment = self
+            .reconnect_syn
+            .take()
+            .map(|syn| syn.segment)
+            .unwrap_or_default();
+        segment.clear();
+        segment.extend_from_slice(tcp.slice());
+        self.reconnect_syn = Some(ReconnectSyn {
+            source,
+            timestamp: self.last_seen.clone(),
+            segment,
+        });
+    }
+
+    /// Returns true if `tcp`, sent by `source`, is a SYN-ACK that confirms
+    /// a reconnect: a SYN with a new ISN is kept, and the SYN-ACK comes from
+    /// the other endpoint. It ACKs the kept SYN without having the ISN of
+    /// its sender's stream, or it has a new ISN itself.
+    pub(crate) fn confirms_reconnect(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        if false == (tcp.syn() && tcp.ack()) || tcp.rst() {
+            return false;
+        }
+        let Some(syn) = self
+            .reconnect_syn
+            .as_ref()
+            .filter(|syn| syn.source != source)
+        else {
+            return false;
+        };
+        let sender = self.role(source);
+        let stream = self.stream(sender);
+        if syn.is_acked_by(source, tcp) {
+            // a retransmission of the sender's own SYN-ACK confirms nothing
+            Some(tcp.sequence_number()) != stream.isn()
+        } else {
+            false == stream.is_own_syn(tcp)
+        }
+    }
+
+    /// Takes the kept SYN of a reconnect, if there is one.
+    pub(crate) fn take_reconnect_syn(&mut self) -> Option<ReconnectSyn<Timestamp>> {
+        self.reconnect_syn.take()
+    }
+
+    /// Applies the kept SYN `syn` of a reconnect as the connection's first
+    /// packet.
+    pub(crate) fn add_reconnect_syn(
+        &mut self,
+        syn: &ReconnectSyn<Timestamp>,
+        config: &TcpReassemblyConfig,
+    ) where
+        Timestamp: Clone,
+    {
+        if let Some(tcp) = syn.tcp() {
+            self.add_segment(syn.source, &tcp, syn.timestamp.clone(), config);
+        }
+    }
+
     /// Applies the ACK number of a segment sent by `sender` (if it has one)
     /// to the other stream.
     fn add_ack(&mut self, sender: TcpRole, tcp: &TcpSlice<'_>, config: &TcpReassemblyConfig) {
@@ -267,8 +371,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Returns the connection with its streams and leaves a tombstone
-    /// without buffers in its place, which keeps the key, id, timestamps and
-    /// the ISNs of the streams.
+    /// without buffers in its place, which keeps the key, id, timestamps,
+    /// the ISNs of the streams and the kept SYN of a reconnect.
     pub(crate) fn hand_over(&mut self) -> TcpConnection<Timestamp, CustomChannelId>
     where
         Timestamp: Clone,
@@ -285,6 +389,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             last_seen: self.last_seen.clone(),
             end: self.end,
             packets: self.packets,
+            reconnect_syn: self.reconnect_syn.take(),
         };
         core::mem::replace(self, tombstone)
     }
@@ -295,6 +400,56 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.initiator_stream.into_buffer(),
             self.responder_stream.into_buffer(),
         ]
+    }
+}
+
+/// SYN with a new ISN, kept until a SYN-ACK of the other endpoint confirms
+/// the reconnect it starts.
+#[derive(Clone, Debug)]
+pub(crate) struct ReconnectSyn<Timestamp> {
+    /// Endpoint that sent the SYN.
+    source: SocketAddr,
+    /// Timestamp of the SYN.
+    timestamp: Timestamp,
+    /// TCP header and payload of the SYN.
+    segment: Vec<u8>,
+}
+
+impl<Timestamp> ReconnectSyn<Timestamp> {
+    /// Timestamp of the SYN.
+    pub fn timestamp(&self) -> &Timestamp {
+        &self.timestamp
+    }
+
+    /// Returns true if the SYN-ACK `tcp`, sent by `source`, ACKs the SYN: it
+    /// comes from the other endpoint and ACKs from the SYN's ISN + 1 up to
+    /// the end of its bytes (a server ACKs TCP Fast Open bytes it accepts).
+    pub fn is_acked_by(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        source != self.source
+            && tcp.ack()
+            && self.tcp().is_some_and(|syn| {
+                let acked = tcp
+                    .acknowledgment_number()
+                    .wrapping_sub(syn.sequence_number().wrapping_add(1));
+                (acked as usize) <= syn.payload().len()
+            })
+    }
+
+    /// Returns the buffer that kept the SYN, emptied for re-use.
+    pub fn into_buffer(self) -> Vec<u8> {
+        let mut segment = self.segment;
+        segment.clear();
+        segment
+    }
+
+    /// The SYN (`None` can't happen, as its bytes come from a TCP slice).
+    fn tcp(&self) -> Option<TcpSlice<'_>> {
+        TcpSlice::from_slice(&self.segment).ok()
+    }
+
+    /// ISN of the SYN.
+    fn isn(&self) -> Option<u32> {
+        self.tcp().map(|tcp| tcp.sequence_number())
     }
 }
 
@@ -537,11 +692,18 @@ mod test {
         let mut pool = TcpReassemblyPool::<u32, ()>::default();
         let mut script = ConnectionScript::with_isns(1000, 2000);
         script.handshake().send(Initiator, b"abc");
-        // a retransmission updates it too, and so does an RST outside of the
-        // receiver's window
+        // a retransmission updates it too, and so do an RST outside of the
+        // receiver's window, the SYN of a reconnect and a SYN-ACK with
+        // another ISN
         let retransmission = script.segments[3].clone();
         script.segments.push(retransmission);
         script.rst_at(Responder, 1 << 30);
+        let mut syn = script.segments[0].clone();
+        syn.header.sequence_number = 5000;
+        script.segments.push(syn);
+        let mut syn_ack = script.segments[1].clone();
+        syn_ack.header.sequence_number = 6000;
+        script.segments.push(syn_ack);
         for (i, segment) in script.segments.iter().enumerate() {
             let (connection, _) = segment.feed(&mut pool, 10 + i as u32).active.unwrap();
             assert_eq!(&(10 + i as u32), connection.last_seen());
@@ -1191,6 +1353,74 @@ mod test {
                 .rst_at(Initiator, offset);
             let processed = script.feed_all(&mut pool);
             assert_eq!(reset, processed.ended.is_some());
+        }
+
+        // the SYN-ACK of a reconnect ends the connection as `Reconnect`: its
+        // holes become gaps, and its streams end at their FIN, or with
+        // `End(Reconnect)`
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Responder, b"jkl")
+                .fin(Responder);
+            script.segments.remove(4);
+            let mut reconnect = ConnectionScript::with_isns(5000, 6000);
+            reconnect.syn().syn_ack();
+            script.segments.extend(reconnect.segments);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Reconnect), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.holes().count());
+            assert_eq!((1, 3), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"ghi"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(
+                TcpRead::End(TcpStreamEnd::Reconnect),
+                stream.read_received()
+            );
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"jkl"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // a reconnect ends a connection whose FINs were both ACKed as
+        // `Finished`, also before the hole the ACK of the FIN covered is
+        // overdue, as no more packets of it come
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            script.segments.remove(3);
+            let mut reconnect = ConnectionScript::with_isns(5000, 6000);
+            reconnect.syn().syn_ack();
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let mut connection = reconnect.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"def"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         }
 
         // an RST from a direction never seen resets the connection, e.g.
