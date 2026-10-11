@@ -14,6 +14,8 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     first_seen: Timestamp,
     last_seen: Timestamp,
     end: Option<TcpConnectionEnd>,
+    /// Number of packets applied to the connection.
+    packets: u64,
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
@@ -40,6 +42,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             first_seen: timestamp.clone(),
             last_seen: timestamp,
             end: None,
+            packets: 0,
         }
     }
 
@@ -108,6 +111,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         config: &TcpReassemblyConfig,
     ) -> TcpRole {
         self.last_seen = timestamp;
+        self.packets = self.packets.saturating_add(1);
         let sender = if source == self.initiator {
             TcpRole::Initiator
         } else {
@@ -117,14 +121,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // the other side could send, so the ACK is applied first
         if tcp.ack() {
             let window = self.window(sender.other(), config);
+            let packet = self.packets;
             self.stream_mut(sender.other())
-                .add_ack(tcp.acknowledgment_number(), window);
+                .add_ack(tcp.acknowledgment_number(), window, packet);
         }
         let window = self.window(sender, config);
         self.stream_mut(sender).add_segment(tcp, window, config);
         for role in [TcpRole::Initiator, TcpRole::Responder] {
-            let window = self.window(role, config);
-            self.stream_mut(role).after_packet(window, config);
+            let (window, packet) = (self.window(role, config), self.packets);
+            self.stream_mut(role).after_packet(window, packet, config);
         }
 
         // finished once all bytes up to both FINs are known and both FINs
@@ -162,6 +167,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             first_seen: self.first_seen.clone(),
             last_seen: self.last_seen.clone(),
             end: self.end,
+            packets: self.packets,
         };
         core::mem::replace(self, tombstone)
     }

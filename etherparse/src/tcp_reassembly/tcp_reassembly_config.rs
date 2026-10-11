@@ -42,8 +42,14 @@ pub struct TcpReassemblyConfig {
     /// captured.
     pub fallback_window: u32,
 
-    /// Number of further packets of a connection during which a hole that
-    /// an ACK already covers can still be filled (default 16).
+    /// Number of further packets of a connection after which a hole that an
+    /// ACK covers is overdue (default 16).
+    ///
+    /// This tolerates captures in which the ACK arrives before the bytes it
+    /// ACKs, e.g. when both directions were captured separately and merged.
+    /// An overdue hole is given up once the read position reaches it, and
+    /// late segments fill it until then. While a stream has holes, it keeps
+    /// the ACKs of up to this many packets.
     pub ack_reorder_tolerance: u32,
 
     /// Number of consecutive out-of-window segments agreeing on a new

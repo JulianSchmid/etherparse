@@ -19,6 +19,8 @@ pub(crate) struct ReferenceModel {
     syns: [bool; 2],
     /// End of the connection.
     end: Option<TcpConnectionEnd>,
+    /// Number of packets applied so far.
+    packets: u64,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -68,6 +70,10 @@ struct ModelStream {
     out_of_window_segments: u64,
     /// Highest ACK of the other side that was not ignored.
     ack: u64,
+    /// Number of each packet that moved `ack` forward, and `ack` after it.
+    ack_history: Vec<(u64, u64)>,
+    /// `ack` as it was `ack_reorder_tolerance` packets ago.
+    settled_ack: u64,
     /// Highest offset minus k windows of the receiver after any packet of
     /// the connection so far (0 without a hole give up window factor k).
     implied_ack: u64,
@@ -181,16 +187,19 @@ impl ModelStream {
         offset < self.read_offset || self.in_gap(offset)
     }
 
-    /// Applies an ACK of the other side, whose receive window before it was
-    /// `window`: ACKs more than one window after the highest offset (plus
-    /// the FIN) are ignored, others mark the bytes up to them as sent (but
-    /// none after the FIN).
-    fn add_ack(&mut self, ack: u64, window: u64) {
+    /// Applies an ACK of the other side in the packet with the number
+    /// `packet`, whose receive window before it was `window`: ACKs more than
+    /// one window after the highest offset (plus the FIN) are ignored,
+    /// others mark the bytes up to them as sent (but none after the FIN).
+    fn add_ack(&mut self, ack: u64, window: u64, packet: u64) {
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         if ack > sent_end + window {
             return;
         }
-        self.ack = self.ack.max(ack);
+        if ack > self.ack {
+            self.ack = ack;
+            self.ack_history.push((packet, ack));
+        }
         let end = self.fin_offset.map_or(self.ack, |fin| fin.min(self.ack));
         self.highest = self.highest.max(end);
     }
@@ -228,7 +237,7 @@ impl ModelStream {
 
     /// Offset up to which holes are overdue.
     fn overdue_end(&self) -> u64 {
-        self.implied_ack
+        self.implied_ack.max(self.settled_ack)
     }
 
     /// Gives up the hole at the read offset if all of it is overdue.
@@ -352,10 +361,11 @@ impl ReferenceModel {
         if self.end.is_some() {
             return;
         }
+        self.packets += 1;
         let sender = role_index(segment.sender);
         if let Some(ack) = segment.ack {
             let window = self.window(segment.sender.other());
-            self.streams[role_index(segment.sender.other())].add_ack(ack, window);
+            self.streams[role_index(segment.sender.other())].add_ack(ack, window, self.packets);
         }
         let window = self.window(segment.sender);
         self.streams[sender].add_segment(segment, window, &self.config);
@@ -369,7 +379,14 @@ impl ReferenceModel {
                 stream.implied_ack = stream.implied_ack.max(implied_ack);
             }
         }
+        let tolerance = u64::from(self.config.ack_reorder_tolerance);
         for stream in &mut self.streams {
+            stream.settled_ack = stream
+                .ack_history
+                .iter()
+                .rev()
+                .find(|(packet, _)| packet + tolerance <= self.packets)
+                .map_or(0, |(_, ack)| *ack);
             stream.give_up_overdue_hole();
         }
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
@@ -812,7 +829,13 @@ mod test {
             keyed.sort_by_key(|(key, _)| *key);
             script.segments.extend(keyed.into_iter().map(|(_, segment)| segment));
 
-            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            // the retransmissions and duplicates can ACK bytes that are sent
+            // much later, which would make holes overdue (the windows are too
+            // large for the implied ACK to do so)
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                ack_reorder_tolerance: u32::MAX,
+                ..Default::default()
+            });
             let (model, ended) = feed_and_check(
                 &mut pool,
                 &script.segments,

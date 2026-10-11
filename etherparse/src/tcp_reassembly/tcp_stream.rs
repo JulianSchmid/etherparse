@@ -1,6 +1,6 @@
 use crate::{tcp_reassembly::*, *};
 use core::ops::Range;
-use std::vec::Vec;
+use std::{collections::VecDeque, vec::Vec};
 
 /// Bytes sent in one direction of a TCP connection.
 ///
@@ -63,6 +63,15 @@ pub struct TcpStream {
     /// back).
     implied_ack: u64,
 
+    /// Number of the connection's packet that moved the seen ACK forward
+    /// and the seen ACK after it, for the packets of the last
+    /// `ack_reorder_tolerance` ones that did so while there were holes.
+    recent_acks: VecDeque<(u64, u64)>,
+
+    /// Seen ACK as it was `ack_reorder_tolerance` packets ago (holes before
+    /// it were covered long enough to be overdue).
+    settled_ack: u64,
+
     status: TcpStreamStatus,
 }
 
@@ -85,6 +94,8 @@ impl TcpStream {
             fin_offset: None,
             seen_ack: 0,
             implied_ack: 0,
+            recent_acks: VecDeque::new(),
+            settled_ack: 0,
             status: TcpStreamStatus {
                 gaps: 0,
                 gap_bytes: 0,
@@ -237,10 +248,17 @@ impl TcpStream {
     /// position hasn't reached).
     fn give_up_overdue_hole(&mut self) {
         if let Some(hole) = self.hole_at_read_offset() {
-            if hole.end <= self.implied_ack {
+            if hole.end <= self.overdue_end() {
                 self.give_up_holes_before(hole.end);
             }
         }
+    }
+
+    /// Offset up to which holes are overdue: they lie before the implied
+    /// ACK, or the seen ACK has covered them for `ack_reorder_tolerance`
+    /// packets.
+    fn overdue_end(&self) -> u64 {
+        self.implied_ack.max(self.settled_ack)
     }
 
     /// Hole starting at the read position, if any.
@@ -312,9 +330,10 @@ impl TcpStream {
     /// it is given up (see [`TcpStream::give_up_hole`]). A hole is also
     /// given up once it is overdue and the read position reaches it. A hole
     /// is overdue if it lies before the implied ACK (see
-    /// [`TcpStream::acked_offset`]), as the receiver must have received its
-    /// bytes. Late segments still fill overdue holes the read position
-    /// hasn't reached.
+    /// [`TcpStream::acked_offset`]), or if a seen ACK has covered it for
+    /// [`TcpReassemblyConfig::ack_reorder_tolerance`] packets, as the
+    /// receiver must have received its bytes. Late segments still fill
+    /// overdue holes the read position hasn't reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
         self.holes.iter().cloned()
     }
@@ -478,9 +497,10 @@ impl TcpStream {
         }
     }
 
-    /// Updates what the receiver must have received after a packet of the
-    /// connection, where `window` is the receiver's receive window.
-    pub(crate) fn after_packet(&mut self, window: u64, config: &TcpReassemblyConfig) {
+    /// Updates what the receiver must have received after the packet with
+    /// the number `packet` of the connection, where `window` is the
+    /// receiver's receive window.
+    pub(crate) fn after_packet(&mut self, window: u64, packet: u64, config: &TcpReassemblyConfig) {
         if let Some(factor) = config.hole_give_up_window_factor {
             // allow for several windows, as the window can change
             let implied_ack = self
@@ -488,12 +508,28 @@ impl TcpStream {
                 .saturating_sub(window.saturating_mul(u64::from(factor)));
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
+        // ACKs reordered against the data in a capture can come first, so
+        // a covered hole stays fillable for some packets
+        let tolerance = u64::from(config.ack_reorder_tolerance);
+        while let Some(&(ack_packet, ack)) = self.recent_acks.front() {
+            if ack_packet.saturating_add(tolerance) > packet {
+                break;
+            }
+            self.settled_ack = ack;
+            self.recent_acks.pop_front();
+        }
+        if self.holes.is_empty() {
+            // later holes lie after the seen ACK, so they can't be overdue
+            // by the ACKs so far
+            self.recent_acks.clear();
+        }
         self.give_up_overdue_hole();
     }
 
     /// Applies the ACK number of a segment sent by the stream's receiver,
-    /// whose receive window before that segment was `window`.
-    pub(crate) fn add_ack(&mut self, ack: u32, window: u64) {
+    /// whose receive window before that segment was `window`, in the packet
+    /// with the number `packet` of the connection.
+    pub(crate) fn add_ack(&mut self, ack: u32, window: u64, packet: u64) {
         let Some(start_seq) = self.start_seq else {
             return;
         };
@@ -511,6 +547,10 @@ impl TcpStream {
             .fin_offset
             .map_or(self.seen_ack, |fin| fin.min(self.seen_ack));
         self.extend_to(end);
+        // only holes can become overdue by the ACK
+        if false == self.holes.is_empty() {
+            self.recent_acks.push_back((packet, self.seen_ack));
+        }
     }
 
     /// Stores the bytes of `data` (starting at offset `start`) that were not
@@ -917,6 +957,110 @@ mod test {
             // the implied ACK (8) lies after the hole
             let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
             assert_eq!(expected, connection.stream_mut(Initiator).read_received());
+        }
+
+        // a hole that the seen ACK covers is overdue on the N-th further
+        // packet of the connection after the ACK (N is the ACK reorder
+        // tolerance, every packet of both directions counts), also without a
+        // hole give up window factor
+        for (factor, tolerance, packets, expected) in [
+            (Some(2), 3, 2, TcpRead::Pending),
+            (Some(2), 3, 3, TcpRead::Gap { len: Some(3) }),
+            (None, 3, 2, TcpRead::Pending),
+            (None, 3, 3, TcpRead::Gap { len: Some(3) }),
+            (None, 0, 0, TcpRead::Gap { len: Some(3) }),
+        ] {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
+                ack_reorder_tolerance: tolerance,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .ack(Responder);
+            script.segments.remove(4);
+            for packet in 0..packets {
+                match packet % 3 {
+                    0 => script.ack(Initiator),
+                    1 => script.send(Responder, b"x"),
+                    // a retransmission
+                    _ => script.send_at(Initiator, 0, b"a"),
+                };
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(expected, stream.read_received());
+        }
+
+        // a hole that the seen ACK covers stays fillable within the ACK
+        // reorder tolerance
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 3,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .ack(Responder)
+                .ack(Initiator);
+            let late = script.segments.remove(4);
+            script.segments.push(late);
+            script.ack(Initiator).ack(Initiator).ack(Initiator);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abcdefghi"), stream.read_received());
+            assert!(stream.is_clean());
+        }
+
+        // a hole is overdue once the seen ACK, as it was N packets ago,
+        // covered all of it (also after a segment cut it from a larger hole)
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 3,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 9, b"jkl")
+                // covers a part of the hole 3..9
+                .ack_to(Responder, 5)
+                .ack_to(Responder, 12)
+                // leaves the hole 3..4, covered since the first ACK
+                .send_at(Initiator, 4, b"efghi")
+                .ack(Initiator);
+            script.feed(&mut pool, ..3);
+            let expected = [
+                TcpRead::Pending,
+                TcpRead::Pending,
+                TcpRead::Pending,
+                TcpRead::Pending,
+                TcpRead::Pending,
+                TcpRead::Gap { len: Some(1) },
+            ];
+            for (segment, expected) in script.segments[3..].iter().zip(expected) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                if 0 == stream.read_offset() {
+                    stream.read_received();
+                    stream.consume(3);
+                }
+                assert_eq!(expected, stream.read_received());
+            }
         }
 
         // late segments still fill an overdue hole that the read position
