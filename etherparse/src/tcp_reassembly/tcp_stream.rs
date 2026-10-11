@@ -60,8 +60,9 @@ pub struct TcpStream {
 
     /// Offset up to which the receiver must have ACKed the bytes, as the
     /// sender sends at most one receive window after the ACK (never moves
-    /// back).
-    implied_ack: u64,
+    /// back). It is not cut off at offset 0, so it stays exact if offset 0
+    /// moves (`None` while no packet implied it).
+    implied_ack: Option<i64>,
 
     /// Largest receive window the receiver advertised (`None` while its
     /// window is unknown).
@@ -97,7 +98,7 @@ impl TcpStream {
             last_read_len: 0,
             fin_offset: None,
             seen_ack: 0,
-            implied_ack: 0,
+            implied_ack: None,
             largest_window: None,
             recent_acks: VecDeque::new(),
             settled_ack: 0,
@@ -259,10 +260,17 @@ impl TcpStream {
         }
     }
 
+    /// Offset up to which the receiver must have ACKed the bytes (0 while no
+    /// bytes are implied).
+    fn implied_ack(&self) -> u64 {
+        self.implied_ack
+            .map_or(0, |ack| u64::try_from(ack).unwrap_or(0))
+    }
+
     /// Returns true if all of `hole` lies before the implied ACK, or if the
     /// seen ACK has covered all of it for `ack_reorder_tolerance` packets.
     fn is_overdue(&self, hole: &Range<u64>) -> bool {
-        hole.end <= self.implied_ack.max(self.settled_ack)
+        hole.end <= self.implied_ack().max(self.settled_ack)
     }
 
     /// Returns true if the byte at `offset` lies in an overdue hole.
@@ -317,7 +325,9 @@ impl TcpStream {
     /// largest window before the highest offset.
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
-        self.seen_ack.max(self.implied_ack).min(self.highest_offset)
+        self.seen_ack
+            .max(self.implied_ack())
+            .min(self.highest_offset)
     }
 
     /// Offset after the furthest byte the sender is known to have sent, as
@@ -543,10 +553,12 @@ impl TcpStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            let implied_ack = self
-                .highest_offset
-                .saturating_sub(window.saturating_mul(u64::from(factor)));
-            self.implied_ack = self.implied_ack.max(implied_ack);
+            let implied_ack = i64::try_from(self.highest_offset)
+                .unwrap_or(i64::MAX)
+                .saturating_sub(
+                    i64::try_from(window.saturating_mul(u64::from(factor))).unwrap_or(i64::MAX),
+                );
+            self.implied_ack = self.implied_ack.max(Some(implied_ack));
         }
         // ACKs reordered against the data in a capture can come first, so
         // a covered hole stays fillable for some packets
