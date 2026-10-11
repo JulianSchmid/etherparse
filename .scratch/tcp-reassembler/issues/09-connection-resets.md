@@ -40,3 +40,11 @@ Rules: F4, F5, F6 (`End(Reset)`), P3.
 - RSTs are still handled like other segments, so an RST with bytes after the window can become a resync candidate or a new start, and an RST with bytes in the window clears the candidate. F4 should keep RSTs out of the resync rules (`TcpStream::add_segment`, the block before the S4 count).
 - After a resync, the sender stream's sequence numbers map relative to the new start (`start_seq`), so an RST from before the jump maps far away and is ignored as out-of-window; that is presumably right.
 - F5 (`give_up_all_holes`) keeps the resync's gap, an empty range in `TcpStream::gaps`, so reads show `Gap { len: None }` before `End(Reset)`.
+
+**2026-10-11 — user decisions (asked before implementing):**
+1. **Which RSTs are in the window:** from the seen ACK of the sender's stream up to one window after the bytes it is known to have sent (highest offset, plus 1 once the FIN is known), with the receiver's last window (S3). These are exactly the RSTs the receiver can accept (RFC 9293: RCV.NXT ≤ seq ≤ RCV.NXT + RCV.WND, where RCV.NXT lies between the receiver's ACK and the bytes sent). It works with a window of 0: Linux then sends its RST at SND.UNA, which is the receiver's ACK. Rejected: the highest offset ± one window, the literal F4. It accepts RSTs before the receiver's ACK, which the receiver rejects, and with a window of 0 it ignores an RST at SND.UNA or at the ACK of the FIN. Also rejected: the union of both ranges.
+2. **"Never seen" means no reference point:** a stream without a start is checked against the last ACK the other side sent for it (the pending ACK), from that ACK up to one window after it. Only without a start and without such an ACK is any RST accepted, e.g. SYN → RST/ACK on a closed port. Rejected: any RST on a stream without a start (a pickup whose client only ACKs could be reset by a blind RST), and "no packet from that direction".
+3. **Ignored RSTs count in `out_of_window_segments`** of the sender's stream, like injected FINs and data after the window.
+4. **End reason after a reset:** `End(Fin)` once the read position reaches the FIN, otherwise `End(Reset)`, also when `read_acked()` stops before un-ACKed bytes (F6). Streams without a FIN end with `End(Reset)`. Rejected: always `End(Reset)`, and `End(Fin)` whenever the FIN was seen.
+
+spec.md F4 and F6 are updated.
