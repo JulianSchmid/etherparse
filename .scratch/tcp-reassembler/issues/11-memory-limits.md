@@ -1,0 +1,34 @@
+# 11: Memory limits
+
+Parent: ../spec.md
+
+**What to build:** Memory use stays bounded:
+- Bytes beyond `max_stream_buffer` are rejected and counted as `rejected_bytes`, but the segment's position still moves the implied ACK forward, so the stream doesn't stall.
+- A segment that would exceed `max_holes_per_stream` is rejected entirely.
+- The optional pool-wide `max_total_buffered` rejects in the same way.
+- The optional `max_connections` rejects new connections with `TooManyConnections`. Tombstones count towards it.
+- Data the user hasn't consumed is never thrown away automatically.
+
+Rules: D4, P3 (tombstones count), Q1.
+
+**Blocked by:** 02, 06
+
+**Status:** ready-for-agent
+
+- [ ] Per-stream buffer limit: rejected bytes are counted, a segment that only partly fits is tested, and the stream keeps moving
+- [ ] Regression test (old branch): a flood of 1-byte holes keeps memory bounded, and segments that would create an extra hole are rejected
+- [ ] `max_total_buffered` is enforced pool-wide
+- [ ] `max_connections` rejects with `TooManyConnections`, and tombstones count
+- [ ] Unconsumed data is never discarded by any limit
+- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+
+## Comments
+
+**2026-10-10 — carry-over from ticket 04:**
+- ACK holes (K1) move the highest offset without allocating, but a later segment behind such a hole zero-fills the buffer up to it, up to `k × window` (about 2 GiB with window scale 14) ahead. D4's `max_stream_buffer` must bound that. A hole added by an ACK also counts towards `max_holes_per_stream`.
+- The test "a segment far after the receiver's window doesn't move it" in `tcp_stream.rs` only shows "allocates nothing" implicitly. If ticket 11 or 12 adds a way to observe allocations, make it explicit.
+
+**2026-10-11 — carry-over from ticket 05:**
+- `discard_until()` and `discard_all()` move the read position, and `max_stream_buffer` counts from it, so discarding makes room in the buffer.
+- Bytes that arrive in a gap at the read position, or after they were consumed or discarded, are not stored.
+- Holes created by rejected bytes must stay holes that the user can give up.
