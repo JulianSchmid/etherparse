@@ -380,9 +380,19 @@ impl TcpStream {
         buf
     }
 
-    /// Returns true if the receiver ACKed the stream's FIN.
-    pub(crate) fn is_fin_acked(&self) -> bool {
+    /// Returns true if the receiver ACKed the stream's FIN and all holes
+    /// left are overdue, so that the stream can end as finished.
+    pub(crate) fn can_finish(&self) -> bool {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
+            && self
+                .holes
+                .last()
+                .is_none_or(|hole| hole.end <= self.overdue_end())
+    }
+
+    /// Gives up all holes, as the connection ended.
+    pub(crate) fn give_up_all_holes(&mut self) {
+        self.give_up_holes_before(self.highest_offset);
     }
 
     /// Receive window in bytes that the stream's sender advertised for the

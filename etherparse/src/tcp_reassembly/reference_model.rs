@@ -338,9 +338,25 @@ impl ModelStream {
         Some(self.received.len() as u64) == self.fin_offset
     }
 
-    /// Returns true if the stream is finished and its FIN was ACKed.
-    fn is_finished_and_acked(&self) -> bool {
-        self.is_finished() && self.fin_offset.is_some_and(|fin| fin < self.ack)
+    /// Returns true if the FIN was ACKed and all holes are overdue.
+    fn can_finish(&self) -> bool {
+        self.fin_offset.is_some_and(|fin| fin < self.ack)
+            && self
+                .holes()
+                .iter()
+                .all(|hole| hole.end <= self.overdue_end())
+    }
+
+    /// Gives up all holes.
+    fn give_up_all_holes(&mut self) {
+        for hole in self.holes() {
+            self.given_up.push(hole.clone());
+            self.gap_count += 1;
+            self.gap_bytes += hole.end - hole.start;
+            self.gaps.push(hole);
+        }
+        self.gaps.sort_by_key(|gap| gap.start);
+        self.extend_received();
     }
 }
 
@@ -354,9 +370,9 @@ impl ReferenceModel {
     }
 
     /// Applies the ACK of a segment to the other stream and the segment to
-    /// the stream of its sender. The connection is finished once both
-    /// streams are finished and both FINs are ACKed; later segments change
-    /// nothing.
+    /// the stream of its sender. The connection is finished once both FINs
+    /// are ACKed and all holes left are overdue, which gives up these holes;
+    /// later segments change nothing.
     pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
         if self.end.is_some() {
             return;
@@ -389,8 +405,11 @@ impl ReferenceModel {
                 .map_or(0, |(_, ack)| *ack);
             stream.give_up_overdue_hole();
         }
-        if self.streams.iter().all(ModelStream::is_finished_and_acked) {
+        if self.streams.iter().all(ModelStream::can_finish) {
             self.end = Some(TcpConnectionEnd::Finished);
+            for stream in &mut self.streams {
+                stream.give_up_all_holes();
+            }
         }
     }
 

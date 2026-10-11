@@ -132,13 +132,16 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.stream_mut(role).after_packet(window, packet, config);
         }
 
-        // finished once all bytes up to both FINs are known and both FINs
-        // were ACKed
+        // finished once both FINs were ACKed and the holes left are overdue
         if [&self.initiator_stream, &self.responder_stream]
             .iter()
-            .all(|stream| stream.is_finished() && stream.is_fin_acked())
+            .all(|stream| stream.can_finish())
         {
             self.end = Some(TcpConnectionEnd::Finished);
+            // late segments are ignored after the end, so they can't fill
+            // the holes anymore
+            self.initiator_stream.give_up_all_holes();
+            self.responder_stream.give_up_all_holes();
         }
         sender
     }
@@ -547,6 +550,106 @@ mod test {
                 TcpRead::Data(&[&b"abcdef"[..], fin_data].concat()[..]),
                 connection.stream_mut(Initiator).read_received()
             );
+        }
+
+        // both FINs are ACKed and the hole left before a FIN is overdue (the
+        // ACK of the FIN covered it for the ACK reorder tolerance): the
+        // connection finishes and hands the hole over as a counted gap
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator)
+                .ack(Initiator);
+            script.segments.remove(4);
+            {
+                let (connection, _) = script.feed(&mut pool, ..7).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let mut connection = script.feed(&mut pool, 7..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.is_finished());
+            assert_eq!(0, stream.holes().count());
+            assert_eq!((1, 3), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // a hole is overdue once the ACK of N packets ago reaches its end,
+        // in the streams of both roles
+        for (sender, receiver) in [(Initiator, Responder), (Responder, Initiator)] {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(sender, b"abc")
+                .send(sender, b"def")
+                .send(sender, b"ghi")
+                .send(sender, b"jkl")
+                .fin_with_data(sender, b"mno")
+                .ack_to(receiver, 12)
+                .fin(receiver)
+                .ack(sender);
+            script.segments.remove(6);
+            script.segments.remove(4);
+            {
+                let (connection, _) = script.feed(&mut pool, ..8).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let connection = script.feed(&mut pool, 8..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let status = connection.stream(sender).status();
+            assert_eq!((2, 6), (status.gaps, status.gap_bytes));
+        }
+
+        // all holes left have to be overdue, not only the first one
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .send(Initiator, b"ghi")
+                .send(Initiator, b"jkl")
+                .fin_with_data(Initiator, b"mno")
+                // the first hole is overdue two packets later
+                .ack_to(Responder, 6)
+                .ack(Initiator)
+                .ack(Initiator)
+                // the second hole is overdue two packets later
+                .fin(Responder)
+                .ack(Initiator)
+                .ack(Initiator);
+            script.segments.remove(6);
+            script.segments.remove(4);
+            {
+                let (connection, _) = script.feed(&mut pool, ..11).active.unwrap();
+                assert_eq!(None, connection.end());
+            }
+            let connection = script.feed(&mut pool, 11..).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
     }
 }
