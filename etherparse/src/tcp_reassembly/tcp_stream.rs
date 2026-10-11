@@ -103,6 +103,7 @@ impl TcpStream {
             recent_acks: VecDeque::new(),
             settled_ack: 0,
             status: TcpStreamStatus {
+                start: TcpStreamStart::MidStreamPickup,
                 gaps: 0,
                 gap_bytes: 0,
                 conflicting_retransmissions: 0,
@@ -483,6 +484,7 @@ impl TcpStream {
         if tcp.syn() && self.start_seq.is_none() {
             self.start_seq = Some(seq);
             self.window_scale = Some(window_scale(tcp));
+            self.status.start = TcpStreamStart::Observed;
         }
         let Some(start_seq) = self.start_seq else {
             return;
@@ -2909,7 +2911,8 @@ mod test {
 
     #[test]
     fn status() {
-        // new stream
+        // new stream, whose SYN gives it an observed start (the other
+        // stream's SYN was not seen yet)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -2917,6 +2920,7 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(
                 &TcpStreamStatus {
+                    start: TcpStreamStart::Observed,
                     gaps: 0,
                     gap_bytes: 0,
                     conflicting_retransmissions: 0,
@@ -2924,6 +2928,24 @@ mod test {
                 },
                 connection.stream(Initiator).status()
             );
+            assert_eq!(
+                TcpStreamStart::MidStreamPickup,
+                connection.stream(Responder).status().start
+            );
+        }
+
+        // the SYN-ACK gives the responder's stream an observed start
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().syn_ack();
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            for role in [Initiator, Responder] {
+                assert_eq!(
+                    TcpStreamStart::Observed,
+                    connection.stream(role).status().start
+                );
+            }
         }
 
         // every given up hole counts as a gap with its missing bytes

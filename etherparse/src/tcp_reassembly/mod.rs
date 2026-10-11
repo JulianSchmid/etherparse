@@ -37,6 +37,9 @@ pub use tcp_stream::*;
 mod tcp_stream_end;
 pub use tcp_stream_end::*;
 
+mod tcp_stream_start;
+pub use tcp_stream_start::*;
+
 mod tcp_stream_status;
 pub use tcp_stream_status::*;
 

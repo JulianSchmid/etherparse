@@ -1063,9 +1063,19 @@ prop_compose! {
 }
 
 #[cfg(feature = "std")]
+pub fn tcp_stream_start_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpStreamStart> {
+    use crate::tcp_reassembly::TcpStreamStart;
+    prop_oneof![
+        Just(TcpStreamStart::Observed),
+        Just(TcpStreamStart::MidStreamPickup)
+    ]
+}
+
+#[cfg(feature = "std")]
 prop_compose! {
     pub fn tcp_stream_status_any()
         (
+            start in tcp_stream_start_any(),
             gaps in any::<u64>(),
             gap_bytes in any::<u64>(),
             conflicting_retransmissions in any::<u64>(),
@@ -1074,6 +1084,7 @@ prop_compose! {
         -> crate::tcp_reassembly::TcpStreamStatus
     {
         crate::tcp_reassembly::TcpStreamStatus {
+            start,
             gaps,
             gap_bytes,
             conflicting_retransmissions,

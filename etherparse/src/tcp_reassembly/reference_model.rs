@@ -536,9 +536,15 @@ impl ReferenceModel {
         prop_assert_eq!(expected.is_finished(), stream.is_finished());
         let clean = 0 == expected.gap_count && 0 == expected.conflicting_retransmissions;
         prop_assert_eq!(clean, stream.is_clean());
+        let observed = self.syns[role_index(role)];
         prop_assert_eq!(clean && expected.is_finished(), stream.is_complete());
         prop_assert_eq!(
             &TcpStreamStatus {
+                start: if observed {
+                    TcpStreamStart::Observed
+                } else {
+                    TcpStreamStart::MidStreamPickup
+                },
                 gaps: expected.gap_count,
                 gap_bytes: expected.gap_bytes,
                 conflicting_retransmissions: expected.conflicting_retransmissions,

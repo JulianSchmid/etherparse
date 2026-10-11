@@ -1,7 +1,12 @@
-/// Counters that describe the quality of a
-/// [`crate::tcp_reassembly::TcpStream`].
+use crate::tcp_reassembly::*;
+
+/// How a [`crate::tcp_reassembly::TcpStream`] started, and counters that
+/// describe its quality.
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpStreamStatus {
+    /// Whether the stream's first byte is known from the handshake.
+    pub start: TcpStreamStart,
+
     /// Number of gaps: holes that were given up, e.g. with
     /// [`crate::tcp_reassembly::TcpStream::give_up_hole`].
     ///
@@ -44,7 +49,8 @@ mod test {
             // debug
             assert_eq!(
                 format!(
-                    "TcpStreamStatus {{ gaps: {}, gap_bytes: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    "TcpStreamStatus {{ start: {:?}, gaps: {}, gap_bytes: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    status.start,
                     status.gaps,
                     status.gap_bytes,
                     status.conflicting_retransmissions,
