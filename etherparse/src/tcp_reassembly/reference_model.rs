@@ -6,10 +6,11 @@ use std::vec::Vec;
 ///
 /// It works on the true stream offsets that a [`ConnectionScript`] records
 /// in its segments, so it is independent of the sequence number handling
-/// it checks. It expects the default configuration and segments without
-/// window scale options.
+/// it checks. It expects segments without window scale options.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ReferenceModel {
+    /// Configuration of the pool the model is compared with.
+    config: TcpReassemblyConfig,
     /// Streams indexed by role.
     streams: [ModelStream; 2],
     /// "window" field of the last segment of each role.
@@ -72,8 +73,9 @@ struct ModelStream {
 impl ModelStream {
     /// Applies a segment of the stream's sender, whose receiver has the
     /// receive window `window`:
-    /// - a segment with bytes or a FIN starting more than two windows after
-    ///   the highest or the ACKed offset is counted and not stored;
+    /// - a segment with bytes or a FIN starting more than k windows after
+    ///   the highest or the ACKed offset is counted and not stored (k is the
+    ///   hole give up window factor, 2 without one);
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
     ///   retransmission if ones that are neither read, ACKed nor in a gap
@@ -86,10 +88,12 @@ impl ModelStream {
         &mut self,
         segment: &TestSegment<CustomChannelId>,
         window: u64,
+        config: &TcpReassemblyConfig,
     ) {
         let start = segment.offset;
         let end = start + segment.payload.len() as u64;
-        let window_end = self.ack.max(self.highest) + 2 * window;
+        let factor = config.hole_give_up_window_factor.unwrap_or(2);
+        let window_end = self.ack.max(self.highest) + u64::from(factor) * window;
         if (false == segment.payload.is_empty() || segment.header.fin) && start > window_end {
             self.out_of_window_segments += 1;
             return;
@@ -292,6 +296,14 @@ impl ModelStream {
 }
 
 impl ReferenceModel {
+    /// Model of a connection in a pool with the configuration `config`.
+    pub fn new(config: TcpReassemblyConfig) -> ReferenceModel {
+        ReferenceModel {
+            config,
+            ..Default::default()
+        }
+    }
+
     /// Applies the ACK of a segment to the other stream and the segment to
     /// the stream of its sender. The connection is finished once both
     /// streams are finished and both FINs are ACKed; later segments change
@@ -306,7 +318,7 @@ impl ReferenceModel {
             self.streams[role_index(segment.sender.other())].add_ack(ack, window);
         }
         let window = self.window(segment.sender);
-        self.streams[sender].add_segment(segment, window);
+        self.streams[sender].add_segment(segment, window, &self.config);
         self.windows[sender] = Some(segment.header.window_size);
         self.syns[sender] |= segment.header.syn;
         if self.streams.iter().all(ModelStream::is_finished_and_acked) {
@@ -320,7 +332,7 @@ impl ReferenceModel {
     fn window(&self, role: TcpRole) -> u64 {
         match self.windows[role_index(role.other())] {
             Some(window) if self.syns == [true, true] => u64::from(window),
-            _ => u64::from(TcpReassemblyConfig::default().fallback_window),
+            _ => u64::from(self.config.fallback_window),
         }
     }
 
@@ -491,7 +503,7 @@ mod test {
         acked_reads: &[bool],
         actions: &[Option<ReaderAction>],
     ) -> Result<(ReferenceModel, Option<TcpConnection>), TestCaseError> {
-        let mut model = ReferenceModel::default();
+        let mut model = ReferenceModel::new(pool.config().clone());
         let mut ended = None;
         for (step, segment) in segments.iter().enumerate() {
             let after_end = model.end().is_some();
