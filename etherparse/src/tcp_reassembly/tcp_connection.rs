@@ -128,7 +128,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let window = self.window(sender, config);
         self.stream_mut(sender).add_segment(tcp, window, config);
         for role in [TcpRole::Initiator, TcpRole::Responder] {
-            let (window, packet) = (self.window(role, config), self.packets);
+            let window = self
+                .stream(role.other())
+                .advertised_window(self.stream(role));
+            let packet = self.packets;
             self.stream_mut(role).after_packet(window, packet, config);
         }
 

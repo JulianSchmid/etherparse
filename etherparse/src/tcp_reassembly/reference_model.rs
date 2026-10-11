@@ -74,9 +74,12 @@ struct ModelStream {
     ack_history: Vec<(u64, u64)>,
     /// `ack` as it was `ack_reorder_tolerance` packets ago.
     settled_ack: u64,
-    /// Highest offset minus k windows of the receiver after any packet of
-    /// the connection so far (0 without a hole give up window factor k).
+    /// Highest offset minus k times the largest window of the receiver,
+    /// after any packet of the connection so far (0 without a hole give up
+    /// window factor k).
     implied_ack: u64,
+    /// Largest window the receiver advertised while its window was known.
+    largest_window: Option<u64>,
     /// Offset of the next byte to read.
     read_offset: u64,
 }
@@ -254,16 +257,22 @@ impl ModelStream {
         hole.end <= self.implied_ack.max(self.settled_ack)
     }
 
-    /// Updates the implied ACK (with the hole give up window factor
-    /// `factor`) and the ACK of `tolerance` packets ago after the packet
-    /// with the number `packet`, where `window` is the receive window of
-    /// the stream's receiver, and gives up an overdue hole at the read
-    /// offset.
-    fn after_packet(&mut self, window: u64, factor: Option<u32>, tolerance: u64, packet: u64) {
-        if let Some(factor) = factor {
+    /// Updates the implied ACK and the ACK of `ack_reorder_tolerance`
+    /// packets ago after the packet with the number `packet`, where `window`
+    /// is the receive window of the stream's receiver (`None` while it is
+    /// unknown), and gives up an overdue hole at the read offset.
+    fn after_packet(&mut self, window: Option<u64>, packet: u64, config: &TcpReassemblyConfig) {
+        if let Some(window) = window {
+            self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
+        }
+        if let Some(factor) = config.hole_give_up_window_factor {
+            let window = self
+                .largest_window
+                .unwrap_or(u64::from(config.fallback_window));
             let implied_ack = self.highest.saturating_sub(u64::from(factor) * window);
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
+        let tolerance = u64::from(config.ack_reorder_tolerance);
         self.settled_ack = self
             .ack_history
             .iter()
@@ -415,11 +424,9 @@ impl ReferenceModel {
         self.streams[sender].add_segment(segment, window, &self.config);
         self.windows[sender] = Some(segment.header.window_size);
         self.syns[sender] |= segment.header.syn;
-        let factor = self.config.hole_give_up_window_factor;
-        let tolerance = u64::from(self.config.ack_reorder_tolerance);
         for role in [TcpRole::Initiator, TcpRole::Responder] {
-            let window = self.window(role);
-            self.streams[role_index(role)].after_packet(window, factor, tolerance, self.packets);
+            let window = self.known_window(role);
+            self.streams[role_index(role)].after_packet(window, self.packets, &self.config);
         }
         if self.streams.iter().all(ModelStream::can_finish) {
             self.end = Some(TcpConnectionEnd::Finished);
@@ -433,9 +440,16 @@ impl ReferenceModel {
     /// advertised (never scaled, as there are no window scale options), or
     /// the fallback window until both SYNs were seen.
     fn window(&self, role: TcpRole) -> u64 {
+        self.known_window(role)
+            .unwrap_or(u64::from(self.config.fallback_window))
+    }
+
+    /// Last window the receiver of the stream of `role` advertised, `None`
+    /// until both SYNs were seen.
+    fn known_window(&self, role: TcpRole) -> Option<u64> {
         match self.windows[role_index(role.other())] {
-            Some(window) if self.syns == [true, true] => u64::from(window),
-            _ => u64::from(self.config.fallback_window),
+            Some(window) if self.syns == [true, true] => Some(u64::from(window)),
+            _ => None,
         }
     }
 

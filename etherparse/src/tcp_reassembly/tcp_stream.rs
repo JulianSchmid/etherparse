@@ -63,6 +63,10 @@ pub struct TcpStream {
     /// back).
     implied_ack: u64,
 
+    /// Largest receive window the receiver advertised (`None` while its
+    /// window is unknown).
+    largest_window: Option<u64>,
+
     /// Number of the connection's packet that moved the seen ACK forward
     /// and the seen ACK after it, for the packets of the last
     /// `ack_reorder_tolerance` ones that did so while there were holes.
@@ -94,6 +98,7 @@ impl TcpStream {
             fin_offset: None,
             seen_ack: 0,
             implied_ack: 0,
+            largest_window: None,
             recent_acks: VecDeque::new(),
             settled_ack: 0,
             status: TcpStreamStatus {
@@ -308,8 +313,8 @@ impl TcpStream {
     /// are ignored, as the sender can't have sent these bytes. Without a
     /// higher ACK, it is the implied ACK: the sender sends at most one
     /// window after the ACK, so the receiver must have ACKed the bytes up
-    /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] windows before
-    /// the highest offset.
+    /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] times its
+    /// largest window before the highest offset.
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
         self.seen_ack.max(self.implied_ack).min(self.highest_offset)
@@ -523,10 +528,21 @@ impl TcpStream {
 
     /// Updates what the receiver must have received after the packet with
     /// the number `packet` of the connection, where `window` is the
-    /// receiver's receive window.
-    pub(crate) fn after_packet(&mut self, window: u64, packet: u64, config: &TcpReassemblyConfig) {
+    /// receiver's receive window (`None` while it is unknown).
+    pub(crate) fn after_packet(
+        &mut self,
+        window: Option<u64>,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        // the sender can have sent bytes into a larger window before the
+        // window shrank (e.g. to 0 when the receiver's buffer is full)
+        self.largest_window = self.largest_window.max(window);
         if let Some(factor) = config.hole_give_up_window_factor {
             // allow for several windows, as the window can change
+            let window = self
+                .largest_window
+                .unwrap_or(u64::from(config.fallback_window));
             let implied_ack = self
                 .highest_offset
                 .saturating_sub(window.saturating_mul(u64::from(factor)));
@@ -1085,6 +1101,30 @@ mod test {
                 }
                 assert_eq!(expected, stream.read_received());
             }
+        }
+
+        // an ACK that shrinks the window to 0 doesn't make the hole it adds
+        // overdue, so the bytes still arrive after it (ACK captured before
+        // the data it ACKs)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 10;
+            script.handshake().send(Initiator, b"abc");
+            script.window_size = 0;
+            script.ack_to(Responder, 6).send_at(Initiator, 3, b"def");
+            {
+                let (connection, _) = script.feed(&mut pool, ..5).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            let (connection, _) = script.feed(&mut pool, 5..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"def"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // late segments still fill an overdue hole that the read position
@@ -2258,6 +2298,25 @@ mod test {
             script.ack_to(Responder, 0).ack_to(Responder, 200);
             script.feed(&mut pool, ..3);
             for (segment, expected) in script.segments[3..].iter().zip(expected) {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                assert_eq!(expected, connection.stream(Initiator).acked_offset());
+            }
+        }
+
+        // the implied ACK uses the largest window the receiver advertised, so
+        // a window that shrinks (e.g. to 0) doesn't move it forward
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, &[b'a'; 150])
+                .send(Initiator, &[b'b'; 100]);
+            script.window_size = 0;
+            script.ack_to(Responder, 0);
+            script.feed(&mut pool, ..3);
+            for (segment, expected) in script.segments[3..].iter().zip([0, 50, 50]) {
                 let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
                 assert_eq!(expected, connection.stream(Initiator).acked_offset());
             }

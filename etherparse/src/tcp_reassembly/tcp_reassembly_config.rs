@@ -25,7 +25,8 @@ pub struct TcpReassemblyConfig {
     pub max_holes_per_stream: usize,
 
     /// Number of receiver windows of later data after which a hole is
-    /// overdue (default `Some(2)`).
+    /// overdue, counting the largest window the receiver advertised
+    /// (default `Some(2)`).
     ///
     /// The receiver must have acknowledged the missing bytes by then. An
     /// overdue hole is given up once the read position reaches it, and late
