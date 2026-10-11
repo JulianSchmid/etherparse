@@ -124,6 +124,9 @@ struct ModelStream {
     resync_ack: Option<u64>,
     /// Whether the next data segment is the stream's new start.
     forced: bool,
+    /// What reading returns away from the FIN once nothing more is
+    /// readable, as the connection ended.
+    end: Option<TcpStreamEnd>,
 }
 
 /// Data segment after the window that a stream may have jumped to.
@@ -162,7 +165,7 @@ impl ModelStream {
     /// - other bytes show that the stream didn't jump, so there is no
     ///   candidate anymore, and after `force_resync` the next bytes are the
     ///   stream's new start wherever they lie;
-    /// - a keep-alive (one byte ending at the ACK, without SYN, FIN or RST)
+    /// - a keep-alive (one byte ending at the ACK, without SYN or FIN)
     ///   inside an overdue hole is ignored;
     /// - bytes received for the first time are stored, bytes received before
     ///   keep their first content, and the segment counts as a conflicting
@@ -191,7 +194,7 @@ impl ModelStream {
             }
         } else if self.base.is_none() {
             let keep_alive = 1 == payload.len()
-                && false == (header.fin || header.rst)
+                && false == header.fin
                 && Some(segment.offset + 1) == self.pending_ack;
             if (payload.is_empty() && false == header.fin) || keep_alive {
                 return;
@@ -264,7 +267,7 @@ impl ModelStream {
         let end = start + payload.len() as i64;
 
         if 1 == payload.len()
-            && false == (header.syn || header.fin || header.rst)
+            && false == (header.syn || header.fin)
             && end == self.ack as i64
             && self
                 .holes()
@@ -678,6 +681,8 @@ impl ModelStream {
             TcpRead::Data(&self.received[start..end])
         } else if Some(self.read_offset) == self.fin_offset {
             TcpRead::End(TcpStreamEnd::Fin)
+        } else if let Some(end) = self.end {
+            TcpRead::End(end)
         } else {
             TcpRead::Pending
         }
@@ -695,10 +700,43 @@ impl ModelStream {
             && self.holes().iter().all(|hole| self.is_overdue(hole))
     }
 
-    /// Gives up all holes.
-    fn give_up_all_holes(&mut self) {
+    /// Gives up all holes, as the connection ended, and makes reading
+    /// return `end` once nothing more is readable away from the FIN.
+    fn connection_ended(&mut self, end: TcpStreamEnd) {
         for hole in self.holes() {
             self.give_up(hole);
+        }
+        self.end = Some(end);
+    }
+
+    /// Returns true if the receiver, whose receive window is `window`, can
+    /// accept an RST of the stream's sender at the true offset `offset`: it
+    /// lies from the receiver's ACK up to one window after the bytes known to
+    /// be sent and the FIN. The receiver's ACK is the lower one of the ACK
+    /// that counted (at least the stream's first byte) and an ACK kept before
+    /// the first byte, but at most the end of the received bytes, and after
+    /// a resync at least the resync point. Without a start, the RST lies up
+    /// to one window after the receiver's last ACK, or anywhere without such
+    /// an ACK.
+    fn accepts_reset(&self, offset: u64, window: u64) -> bool {
+        match self.base {
+            Some(base) => {
+                let offset = offset as i64 - self.shift;
+                let sent_end = self.highest + u64::from(self.fin_offset.is_some());
+                let mut ack = self.ack.max(base) as i64;
+                if let Some(pending) = self.pending_ack {
+                    ack = ack.min(pending as i64 - self.shift);
+                }
+                let received_end = (self.bytes.len() as u64).max(base);
+                let mut first = ack.min(received_end as i64);
+                if false == self.resyncs.is_empty() {
+                    first = first.max(self.resync_offset() as i64);
+                }
+                first <= offset && offset <= (sent_end + window) as i64
+            }
+            None => self
+                .pending_ack
+                .is_none_or(|ack| ack <= offset && offset <= ack + window),
         }
     }
 }
@@ -724,11 +762,15 @@ impl ReferenceModel {
     ///   guessed roles without a SYN;
     /// - the ACK of a SYN-ACK gives the other stream an observed start;
     /// - a SYN or SYN-ACK of the role it belongs to confirms guessed roles
-    ///   if it gives a stream an observed start.
+    ///   if it gives a stream an observed start;
+    /// - an RST that the receiver can accept (see
+    ///   [`ModelStream::accepts_reset`]) resets the connection, and its ACK
+    ///   counts. Other RSTs count as out-of-window. Neither stores anything
+    ///   else of the RST.
     ///
     /// The connection is finished once both FINs are ACKed and all holes
-    /// left are overdue, which gives up these holes; later segments change
-    /// nothing.
+    /// left are overdue, unless it was reset. Ending it gives up all holes;
+    /// later segments change nothing.
     pub fn apply<CustomChannelId>(&mut self, segment: &TestSegment<CustomChannelId>) {
         let header = &segment.header;
         if self.end.is_some() {
@@ -744,39 +786,58 @@ impl ReferenceModel {
         self.packets += 1;
         let sender = role_index(segment.sender);
         let other = role_index(segment.sender.other());
-        let observed = self.streams.each_ref().map(|stream| stream.observed);
-        if let (true, Some(ack)) = (header.syn, segment.ack) {
-            let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
-            let range = u64::from(factor) * self.window(segment.sender.other());
-            self.streams[other].observe_start(ack, range);
-        }
-        if let Some(ack) = segment.ack {
-            let window = self.window(segment.sender.other());
-            self.streams[other].add_ack(ack, window, self.packets);
-        }
-        let window = self.window(segment.sender);
-        self.streams[sender].add_segment(segment, window, self.packets, &self.config);
-        self.windows[sender] = Some(header.window_size);
-        self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);
-        let syn_role = if header.ack {
-            TcpRole::Responder
+        if header.rst {
+            let window = self.window(segment.sender);
+            if self.streams[sender].accepts_reset(segment.offset, window) {
+                if let Some(ack) = segment.ack {
+                    let window = self.window(segment.sender.other());
+                    self.streams[other].add_ack(ack, window, self.packets);
+                }
+                self.end = Some(TcpConnectionEnd::Reset { by: segment.sender });
+            } else {
+                self.streams[sender].out_of_window_segments += 1;
+            }
         } else {
-            TcpRole::Initiator
-        };
-        if header.syn
-            && syn_role == segment.sender
-            && observed != self.streams.each_ref().map(|stream| stream.observed)
-        {
-            self.roles_guessed = false;
+            let observed = self.streams.each_ref().map(|stream| stream.observed);
+            if let (true, Some(ack)) = (header.syn, segment.ack) {
+                let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
+                let range = u64::from(factor) * self.window(segment.sender.other());
+                self.streams[other].observe_start(ack, range);
+            }
+            if let Some(ack) = segment.ack {
+                let window = self.window(segment.sender.other());
+                self.streams[other].add_ack(ack, window, self.packets);
+            }
+            let window = self.window(segment.sender);
+            self.streams[sender].add_segment(segment, window, self.packets, &self.config);
+            self.windows[sender] = Some(header.window_size);
+            self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);
+            let syn_role = if header.ack {
+                TcpRole::Responder
+            } else {
+                TcpRole::Initiator
+            };
+            if header.syn
+                && syn_role == segment.sender
+                && observed != self.streams.each_ref().map(|stream| stream.observed)
+            {
+                self.roles_guessed = false;
+            }
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self.known_window(role);
             self.streams[role_index(role)].after_packet(window, self.packets, &self.config);
         }
-        if self.streams.iter().all(ModelStream::can_finish) {
+        if self.end.is_none() && self.streams.iter().all(ModelStream::can_finish) {
             self.end = Some(TcpConnectionEnd::Finished);
+        }
+        if let Some(end) = self.end {
+            let stream_end = match end {
+                TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
+                TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            };
             for stream in &mut self.streams {
-                stream.give_up_all_holes();
+                stream.connection_ended(stream_end);
             }
         }
     }
@@ -1843,6 +1904,196 @@ mod test {
                 if jumped && false == disturbed {
                     prop_assert!(model.resyncs(role) > 0);
                 }
+            }
+        }
+
+        #[test]
+        fn resets(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(4 * 1024),
+            responder_data in stream_data_any(4 * 1024),
+            segment_lens in vec(1usize..500, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            rst in proptest::option::of((tcp_role_any(), any::<Index>(), any::<bool>())),
+            injected in vec(
+                (
+                    tcp_role_any(),
+                    any::<Index>(),
+                    any::<bool>(),
+                    prop_oneof![0u64..64, 0u64..8192, 0u64..(1 << 30)],
+                    any::<bool>(),
+                ),
+                0..4
+            ),
+            lost in vec(any::<Index>(), 0..4),
+            one_direction in any::<bool>(),
+            pickup in any::<bool>(),
+            windows in vec(
+                prop_oneof![1 => 0u16..64, 1 => 64u16..2048, 1 => Just(u16::MAX)],
+                1..16
+            ),
+            fallback_window in prop_oneof![Just(4 * 1024 * 1024), 64u32..4096],
+            config in tcp_overdue_config_any(),
+            consume_lens in vec(0usize..1000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs and their ACKs
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &[0], &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+
+            // an RST of an endpoint after the SYN (e.g. of a closed port), at
+            // the next byte it would send and ACKing what the other side sent
+            // so far (or without an ACK), followed by the segments sent after
+            // it, whose late arrival is ignored
+            if let Some((role, position, with_ack)) = &rst {
+                let position = 1 + position.index(script.segments.len());
+                let next = |role| {
+                    script.segments[..position]
+                        .iter()
+                        .filter(|segment| role == segment.sender)
+                        .map(|segment| {
+                            segment.offset
+                                + segment.payload.len() as u64
+                                + u64::from(segment.header.fin)
+                        })
+                        .max()
+                        .unwrap_or(0)
+                };
+                let mut segment = script.injected(|script| {
+                    script.rst_at(*role, next(*role));
+                });
+                if *with_ack {
+                    let ack = next(role.other());
+                    segment.ack = Some(ack);
+                    segment.header.acknowledgment_number = script.seq(role.other(), ack);
+                } else {
+                    segment.ack = None;
+                    segment.header.ack = false;
+                }
+                script.segments.insert(position, segment);
+            }
+
+            // RSTs the endpoints didn't send, before or after the end of the
+            // stream of their sender (with an ACK of everything the other
+            // side sent, or without one)
+            for (role, position, before, distance, with_ack) in &injected {
+                let len = data[role_index(*role)].len() as u64;
+                let offset = if *before {
+                    len.saturating_sub(*distance)
+                } else {
+                    len + distance
+                };
+                let mut segment = script.injected(|script| {
+                    script.rst_at(*role, offset);
+                });
+                if false == *with_ack {
+                    segment.ack = None;
+                    segment.header.ack = false;
+                }
+                let position = 3 + position.index(script.segments.len() - 2);
+                script.segments.insert(position, segment);
+            }
+
+            // segments lost in the capture (but no RSTs)
+            for index in &lost {
+                let i = 3 + index.index(script.segments.len() - 3);
+                if false == script.segments[i].header.rst {
+                    script.segments.remove(i);
+                }
+            }
+
+            // a capture of the initiator's direction only (and the SYN-ACK),
+            // plus the RSTs
+            if one_direction {
+                script.segments.retain(|segment| {
+                    segment.header.syn || Initiator == segment.sender || segment.header.rst
+                });
+            }
+
+            // the capture starts after the handshake (but with the RSTs)
+            if pickup {
+                let mut removed = 0;
+                script.segments.retain(|segment| {
+                    let remove = removed < 3 && false == segment.header.rst;
+                    removed += usize::from(remove);
+                    false == remove
+                });
+            }
+
+            // random receive windows, and RSTs with a window of 0 (which
+            // doesn't count)
+            for (segment, window) in script.segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = if segment.header.rst { 0 } else { *window };
+            }
+
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                fallback_window,
+                ..config
+            });
+            let (model, ended) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+                &[None],
+            )?;
+
+            // the received bytes are the ones that were sent, apart from the
+            // ones that were given up or lie before the first byte captured
+            for (i, role) in [Initiator, Responder].into_iter().enumerate() {
+                prop_assert!(model.received_matches(role, data[i]));
+            }
+
+            // in a complete capture without injected RSTs, the receiver
+            // accepts the endpoint's RST, unless the connection finished
+            // before it
+            let undisturbed = false == pickup
+                && false == one_direction
+                && lost.is_empty()
+                && injected.is_empty();
+            if let (true, Some((role, _, _))) = (undisturbed, &rst) {
+                let end = model.end();
+                let reset = TcpConnectionEnd::Reset { by: *role };
+                prop_assert!(Some(TcpConnectionEnd::Finished) == end || Some(reset) == end);
+            }
+
+            // an ended connection can be read to its end, stepping over the
+            // gaps: the FIN ends a stream whose FIN was seen, the reset the
+            // others
+            if let Some(mut connection) = ended {
+                prop_assert_eq!(model.end(), connection.end());
+                for role in [Initiator, Responder] {
+                    let stream = connection.stream_mut(role);
+                    prop_assert_eq!(0, stream.holes().count());
+                    for _ in 0..10_000 {
+                        match stream.read_received() {
+                            TcpRead::Data(data) => {
+                                let len = data.len();
+                                stream.consume(len);
+                            }
+                            TcpRead::Gap { .. } => stream.consume_gap(),
+                            _ => break,
+                        }
+                    }
+                    let end = if model.fin_offset(role).is_some() {
+                        TcpStreamEnd::Fin
+                    } else {
+                        TcpStreamEnd::Reset
+                    };
+                    prop_assert_eq!(TcpRead::End(end), stream.read_received());
+                }
+                pool.recycle(connection);
             }
         }
 
