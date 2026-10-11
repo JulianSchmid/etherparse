@@ -35,3 +35,10 @@ Rules: R1–R4, S2 (unmappable distances), ADR-0002.
 - A resync before the first read of a mid-stream pickup: prepending afterwards would move the offsets under the resync's gap. A resync (R2, R4) should end prepending (`TcpStream::can_prepend`), or `prepend` has to move the resync gap too. The same goes for `force_resync()` before the first read.
 - Bytes before offset 0 of a pickup that can't take them count as out-of-window (ticket 07, decision 5). Decide whether only S4's forward out-of-window data records a resync candidate (R1), not bytes before offset 0 or after the FIN.
 - `pending_ack` is applied again after every packet. If R2 keeps implausible ACKs as evidence, a pending ACK must not count as new evidence each time.
+
+**2026-10-11 — user decisions (asked before implementing):**
+1. **Where an ACK-confirmed resync continues:** right after the candidate's bytes. They are not stored (S4) and are part of `Gap { len: None }`, so reading doesn't stall and no extra memory is needed. That one segment is lost. Rejected: continuing at the candidate's first byte (its bytes become a hole that stalls reading until it is overdue, then a second gap), and keeping a copy of the candidate's bytes (a copy of every out-of-window segment, plus one segment of memory per stream).
+2. **An ACK before the data confirms it too:** the last ACK beyond the window is kept as evidence. Out-of-window data within one window of it resyncs at once, and that segment becomes the stream's new start, with its bytes stored. A resync, or the stream moving forward, clears the kept ACK.
+3. **Forward jumps only:** only data after the window (S4) or at an unmappable distance (S2) becomes a candidate. A new ISN that maps behind the stream (half of all ISN changes) is not detected: bytes before offset 0 stay ignored on an observed start (counted on a pickup), and ACKs behind the seen ACK stay ignored. `force_resync()` recovers such streams. Known limit for the docs (ticket 16).
+
+spec.md R1 and R2 are updated.

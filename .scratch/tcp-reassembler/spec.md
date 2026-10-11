@@ -277,8 +277,9 @@ The rule ids are for referencing from tickets and test names.
   - at eviction (P6), no more packets come, so every hole that the seen ACK covers counts as overdue.
 
 **Resync (R)**
-- **R1** Out-of-window data records the latest candidate sequence number.
-- **R2** An ACK from the other direction within one window of the candidate triggers a resync. The stream continues at the candidate position, mapped right after the highest offset, behind a `Gap { len: None }`. `resyncs` is incremented.
+- **R1** Out-of-window data records the latest candidate: data after the window (S4) or at a distance that can't be mapped (S2). Bytes before offset 0 (A5) or after the FIN (D5) are no candidates. So a jump to a new ISN that maps behind the stream, half of all ISN changes, is not detected; `force_resync()` recovers such a stream (user decision, 2026-10-11).
+- **R2** An ACK from the other direction within one window of the candidate triggers a resync. The stream continues right after the candidate's bytes, mapped to the highest offset, behind a `Gap { len: None }`. The candidate's bytes are not stored (S4) and are part of that gap, so reading doesn't stall and no extra memory is needed (user decision, 2026-10-11). `resyncs` is incremented.
+  - An ACK beyond the window that arrives before the data counts too. The last such ACK is kept until a resync or until the stream moves forward. Out-of-window data within one window of it triggers the resync at once and becomes the new start, with its bytes stored (user decision, 2026-10-11).
 - **R3** With `resync_after_segments = Some(n)`, n consecutive out-of-window segments that each lie within one window of the previous one also trigger a resync.
 - **R4** `force_resync()` makes the next data segment the new anchor, the same as R2.
 
