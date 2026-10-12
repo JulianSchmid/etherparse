@@ -31,6 +31,13 @@ pub struct TcpStreamStatus {
     /// nor consumed are compared, so keep-alive probes don't count.
     pub conflicting_retransmissions: u64,
 
+    /// Number of received bytes that were not stored, as a memory limit was
+    /// reached (see [`crate::tcp_reassembly::TcpReassemblyConfig`]).
+    ///
+    /// Bytes are counted each time they arrive. Rejected bytes are holes
+    /// that a retransmission can still fill once there is room again.
+    pub rejected_bytes: u64,
+
     /// Number of segments with bytes that lie outside of the stream: they
     /// start after the receiver's window, lie after the stream's FIN, or lie
     /// before the first byte of a mid-stream pickup that can't take them
@@ -60,12 +67,13 @@ mod test {
             // debug
             assert_eq!(
                 format!(
-                    "TcpStreamStatus {{ start: {:?}, gaps: {}, gap_bytes: {}, resyncs: {}, conflicting_retransmissions: {}, out_of_window_segments: {} }}",
+                    "TcpStreamStatus {{ start: {:?}, gaps: {}, gap_bytes: {}, resyncs: {}, conflicting_retransmissions: {}, rejected_bytes: {}, out_of_window_segments: {} }}",
                     status.start,
                     status.gaps,
                     status.gap_bytes,
                     status.resyncs,
                     status.conflicting_retransmissions,
+                    status.rejected_bytes,
                     status.out_of_window_segments
                 ),
                 format!("{:?}", status)

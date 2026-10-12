@@ -14,9 +14,13 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct TcpReassemblyConfig {
     /// Maximum number of bytes a stream buffers, counted from its read
-    /// position to its furthest buffered byte (default 8 MiB).
+    /// position to its furthest stored byte, with placeholders for the
+    /// missing bytes in between (default 8 MiB).
     ///
-    /// Bytes beyond it are rejected.
+    /// Bytes beyond it are rejected (see
+    /// [`crate::tcp_reassembly::TcpStreamStatus::rejected_bytes`]), and
+    /// consuming bytes makes room. A stream's buffer can take up to about
+    /// twice as much memory.
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes per stream (default 256).

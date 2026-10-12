@@ -1080,6 +1080,7 @@ prop_compose! {
             gap_bytes in any::<u64>(),
             resyncs in any::<u64>(),
             conflicting_retransmissions in any::<u64>(),
+            rejected_bytes in any::<u64>(),
             out_of_window_segments in any::<u64>(),
         )
         -> crate::tcp_reassembly::TcpStreamStatus
@@ -1090,6 +1091,7 @@ prop_compose! {
             gap_bytes,
             resyncs,
             conflicting_retransmissions,
+            rejected_bytes,
             out_of_window_segments,
         }
     }

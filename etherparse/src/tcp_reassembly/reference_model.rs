@@ -106,6 +106,9 @@ struct ModelStream {
     /// Number of segments with bytes that differ from the bytes received
     /// first (from the read and ACKed offsets on).
     conflicting_retransmissions: u64,
+    /// Number of bytes that were not stored as they didn't fit the memory
+    /// limits.
+    rejected_bytes: u64,
     /// Number of segments with bytes or a FIN after the window, or with
     /// bytes after the FIN.
     out_of_window_segments: u64,
@@ -1221,6 +1224,7 @@ impl ReferenceModel {
                 gap_bytes: expected.gap_bytes,
                 resyncs: expected.resyncs.len() as u64,
                 conflicting_retransmissions: expected.conflicting_retransmissions,
+                rejected_bytes: expected.rejected_bytes,
                 out_of_window_segments: expected.out_of_window_segments,
             },
             stream.status()
