@@ -52,4 +52,7 @@ mod connection_script;
 pub(crate) use connection_script::*;
 
 #[cfg(test)]
+mod counting_allocator;
+
+#[cfg(test)]
 mod reference_model;

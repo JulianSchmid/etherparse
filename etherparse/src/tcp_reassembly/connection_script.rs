@@ -33,16 +33,32 @@ where
         pool: &'p mut TcpReassemblyPool<Timestamp, CustomChannelId>,
         timestamp: Timestamp,
     ) -> TcpProcessed<'p, Timestamp, CustomChannelId> {
+        self.feed_bytes(&self.to_bytes(), pool, timestamp)
+    }
+
+    /// TCP header and payload of the segment.
+    pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(self.header.header_len() + self.payload.len());
         bytes.extend_from_slice(&self.header.to_bytes());
         bytes.extend_from_slice(&self.payload);
+        bytes
+    }
+
+    /// Passes the segment, serialized as `bytes` (see
+    /// [`TestSegment::to_bytes`]), to the pool without allocating.
+    pub fn feed_bytes<'p, Timestamp: Clone>(
+        &self,
+        bytes: &[u8],
+        pool: &'p mut TcpReassemblyPool<Timestamp, CustomChannelId>,
+        timestamp: Timestamp,
+    ) -> TcpProcessed<'p, Timestamp, CustomChannelId> {
         pool.process_segment(
             TcpSegment {
                 vlan_ids: self.vlan_ids.clone(),
                 source: self.source.ip(),
                 destination: self.destination.ip(),
                 channel_id: self.channel_id.clone(),
-                tcp: TcpSlice::from_slice(&bytes).unwrap(),
+                tcp: TcpSlice::from_slice(bytes).unwrap(),
             },
             timestamp,
         )
