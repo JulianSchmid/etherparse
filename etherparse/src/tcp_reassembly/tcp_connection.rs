@@ -28,27 +28,25 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Creates a connection whose initiator is the endpoint `initiator`
     /// (guessed from the ports if `roles_guessed`) and whose first packet
-    /// was seen at `timestamp`. Its streams store their bytes in the empty
-    /// `buffers`.
+    /// was seen at `timestamp`. Its streams take their buffers from `free`.
     pub(crate) fn new(
         id: TcpConnectionId,
         key: TcpConnectionKey<CustomChannelId>,
         initiator: SocketAddr,
         roles_guessed: bool,
         timestamp: Timestamp,
-        buffers: [Vec<u8>; 2],
+        free: &mut FreeBuffers,
     ) -> TcpConnection<Timestamp, CustomChannelId>
     where
         Timestamp: Clone,
     {
-        let [initiator_buffer, responder_buffer] = buffers;
         TcpConnection {
             id,
             key,
             initiator,
             roles_guessed,
-            initiator_stream: TcpStream::new(initiator_buffer),
-            responder_stream: TcpStream::new(responder_buffer),
+            initiator_stream: TcpStream::new(free),
+            responder_stream: TcpStream::new(free),
             first_seen: timestamp.clone(),
             last_seen: timestamp,
             end: None,
@@ -439,12 +437,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.accounted = 0;
     }
 
-    /// Returns the buffers of both streams, emptied for re-use.
-    pub(crate) fn into_buffers(self) -> [Vec<u8>; 2] {
-        [
-            self.initiator_stream.into_buffer(),
-            self.responder_stream.into_buffer(),
-        ]
+    /// Puts the buffers of both streams into `free` for re-use.
+    pub(crate) fn recycle(self, free: &mut FreeBuffers) {
+        self.initiator_stream.recycle(free);
+        self.responder_stream.recycle(free);
     }
 }
 
@@ -480,11 +476,9 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
             })
     }
 
-    /// Returns the buffer that kept the SYN, emptied for re-use.
-    pub fn into_buffer(self) -> Vec<u8> {
-        let mut segment = self.segment;
-        segment.clear();
-        segment
+    /// Puts the buffer that kept the SYN into `free` for re-use.
+    pub fn recycle(self, free: &mut FreeBuffers) {
+        free.bytes.put(self.segment);
     }
 
     /// The SYN (`None` can't happen, as its bytes come from a TCP slice).

@@ -1,9 +1,6 @@
 use crate::{tcp_reassembly::*, *};
 use core::net::SocketAddr;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    vec::Vec,
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 /// Reassembles the byte streams of TCP connections from captured segments.
 ///
@@ -74,8 +71,8 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// buffers) that absorb their late segments.
     connections:
         HashMap<TcpConnectionKey<CustomChannelId>, TcpConnection<Timestamp, CustomChannelId>>,
-    /// Emptied buffers of recycled connections, re-used by new connections.
-    free_buffers: Vec<Vec<u8>>,
+    /// Buffers of recycled connections, re-used by new connections.
+    free: FreeBuffers,
     /// Id of the next connection.
     next_id: TcpConnectionId,
     /// Bytes buffered by the streams of the connections, as last accounted
@@ -96,7 +93,7 @@ where
         TcpReassemblyPool {
             config,
             connections: HashMap::new(),
-            free_buffers: Vec::new(),
+            free: FreeBuffers::default(),
             next_id: TcpConnectionId(0),
             buffered: 0,
             handed_out: None,
@@ -182,7 +179,7 @@ where
                     };
                     let reconnect = new_connection(
                         &mut self.next_id,
-                        &mut self.free_buffers,
+                        &mut self.free,
                         connection.key().clone(),
                         handshake_initiator(&tcp, source, destination),
                         false,
@@ -190,7 +187,7 @@ where
                     );
                     match kept {
                         Some(syn) if kept_syn_acked => replayed_syn = Some(syn),
-                        Some(syn) => self.free_buffers.push(syn.into_buffer()),
+                        Some(syn) => syn.recycle(&mut self.free),
                         None => {}
                     }
                     let mut ended = core::mem::replace(connection, reconnect);
@@ -228,7 +225,7 @@ where
                 let key = entry.key().clone();
                 entry.insert(new_connection(
                     &mut self.next_id,
-                    &mut self.free_buffers,
+                    &mut self.free,
                     key,
                     initiator,
                     roles_guessed,
@@ -244,7 +241,7 @@ where
             .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
         if let Some(syn) = replayed_syn {
             connection.add_reconnect_syn(&syn, &self.config, &mut available);
-            self.free_buffers.push(syn.into_buffer());
+            syn.recycle(&mut self.free);
         }
         let sender = connection.add_segment(source, &tcp, timestamp, &self.config, &mut available);
         // the SYN or SYN-ACK that starts a reconnect doesn't end it: it has
@@ -273,7 +270,7 @@ where
     /// Takes back an ended connection, so that its buffers are re-used by
     /// new connections.
     pub fn recycle(&mut self, connection: TcpConnection<Timestamp, CustomChannelId>) {
-        self.free_buffers.extend(connection.into_buffers());
+        connection.recycle(&mut self.free);
     }
 }
 
@@ -332,10 +329,10 @@ fn handshake_initiator(
 }
 
 /// Creates a connection with the id `next_id` (and moves `next_id` on),
-/// whose streams store their bytes in buffers taken from `free_buffers`.
+/// whose streams take their buffers from `free`.
 fn new_connection<Timestamp: Clone, CustomChannelId>(
     next_id: &mut TcpConnectionId,
-    free_buffers: &mut Vec<Vec<u8>>,
+    free: &mut FreeBuffers,
     key: TcpConnectionKey<CustomChannelId>,
     initiator: SocketAddr,
     roles_guessed: bool,
@@ -343,11 +340,7 @@ fn new_connection<Timestamp: Clone, CustomChannelId>(
 ) -> TcpConnection<Timestamp, CustomChannelId> {
     let id = *next_id;
     *next_id = TcpConnectionId(id.0.wrapping_add(1));
-    let buffers = [
-        free_buffers.pop().unwrap_or_default(),
-        free_buffers.pop().unwrap_or_default(),
-    ];
-    TcpConnection::new(id, key, initiator, roles_guessed, timestamp, buffers)
+    TcpConnection::new(id, key, initiator, roles_guessed, timestamp, free)
 }
 
 #[cfg(test)]

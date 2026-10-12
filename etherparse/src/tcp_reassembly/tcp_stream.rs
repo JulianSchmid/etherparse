@@ -132,8 +132,8 @@ pub struct TcpStream {
 
 impl TcpStream {
     /// Creates a stream whose start is not known yet, storing its bytes in
-    /// the empty buffer `buf`.
-    pub(crate) fn new(buf: Vec<u8>) -> TcpStream {
+    /// a buffer taken from `free`.
+    pub(crate) fn new(free: &mut FreeBuffers) -> TcpStream {
         TcpStream {
             start_seq: None,
             isn: None,
@@ -142,7 +142,7 @@ impl TcpStream {
             window: None,
             read_offset: 0,
             highest_offset: 0,
-            buf,
+            buf: free.bytes.take(),
             head: 0,
             received_end: 0,
             holes: Vec::new(),
@@ -535,15 +535,13 @@ impl TcpStream {
     pub(crate) fn tombstone(&self) -> TcpStream {
         TcpStream {
             isn: self.isn,
-            ..TcpStream::new(Vec::new())
+            ..TcpStream::new(&mut FreeBuffers::default())
         }
     }
 
-    /// Returns the stream's buffer, emptied for re-use.
-    pub(crate) fn into_buffer(self) -> Vec<u8> {
-        let mut buf = self.buf;
-        buf.clear();
-        buf
+    /// Puts the stream's buffer into `free` for re-use.
+    pub(crate) fn recycle(self, free: &mut FreeBuffers) {
+        free.bytes.put(self.buf);
     }
 
     /// Returns true if the receiver ACKed the stream's FIN and all holes
