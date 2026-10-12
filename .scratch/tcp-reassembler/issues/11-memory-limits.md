@@ -48,3 +48,19 @@ Rules: D4, P3 (tombstones count), Q1.
 - If D4 rejects the bytes of a segment that becomes the new start, the resync still happened (gap, counter). Decide whether that is fine or whether the resync should wait for bytes that fit.
 
 **2026-10-11 — carry-over from ticket 10:** a connection (or its tombstone) can keep a copy of one SYN for a reconnect (`ReconnectSyn` in `tcp_connection.rs`, up to one segment with TCP Fast Open bytes). It counts towards no limit yet; decide whether `max_total_buffered` covers it.
+
+**2026-10-12 — user decisions (asked before implementing):**
+1. **One extra hole at the end:** a segment that would leave more than `max_holes_per_stream` holes is rejected, and its position still moves the highest offset. That can add one hole after the furthest stored byte, as can an ACK or a FIN, so `holes()` lists at most the limit + 1. The implied ACK keeps moving, so the reader gets gaps and holes are freed. Rejected: a strict limit, under which rejected segments don't move the highest offset, so a stream without captured ACKs stalls at its first hole until the user gives it up.
+2. **Bytes that don't fit in front of a pickup are rejected:** they count in `rejected_bytes` and offset 0 stays. A late SYN (or the ACK of a late SYN-ACK) that would need the room is ignored like one A5 can't take: the SYN counts as out-of-window, and the stream stays a pickup. Rejected: counting both as out-of-window.
+3. **A pickup's first segment none of whose bytes fit doesn't start the stream** (like a keep-alive, also with a FIN); its bytes count as rejected, the next segment that fits starts the stream, and a retransmission of the rejected bytes can still be put in front. Byte 0 of a pickup is thus always stored, and `prepend` keeps its assumptions. Rejected: starting the stream with a hole at offset 0 and no prepends while it is missing.
+4. **A resync happens even if the bytes of its new start are rejected:** they become a hole right after the `Gap { len: None }`. Rejected: the resync waits for a segment that fits.
+5. **The kept SYN of a reconnect doesn't count towards `max_total_buffered`:** each connection and tombstone keeps at most one, so `max_connections` bounds them, and detecting reconnects never depends on the budget. Rejected: counting it, so that a SYN that doesn't fit isn't kept and its reconnect continues the old connection behind a resync.
+6. **The K4(b) ACK history stays bounded by `ack_reorder_tolerance` only** (16 bytes per packet and stream), and the config doc says so. Rejected: also capping it at `max_holes_per_stream` entries, which would make holes overdue early under ACK floods.
+7. **Resyncs wait while a stream has more than `max_holes_per_stream` unread gaps:** the candidate stays (its bytes count as out-of-window) and a forced resync stays pending until the reader steps over gaps, so a stream has fewer than about 2 × the limit + 2 gaps. Rejected: no limit, under which forged resync sequences add about 2 gaps per 3 packets while the reader doesn't read.
+
+spec.md D4, A4, A5, R2 and the config table are updated.
+
+**2026-10-12 — user decision (asked while implementing):**
+8. **Holes up to the end of the furthest rejected bytes are overdue (K4(c)):** rejected bytes at the end of a stream join one hole that each rejected segment extends to the highest offset, so the implied ACK never passes it, and in a continuous flow the reader would stall there (e.g. a reader that fell behind by more than `max_stream_buffer`, or a window larger than the buffer). Late segments still fill such holes until the reader reaches them; capture-loss holes before the rejected bytes are overdue too, as waiting is futile once the stream overflowed. Rejected: only holes made entirely of rejected bytes (rejected bytes would become their own hole next to missing bytes, with state per hole), and no change (stalls until the flow pauses).
+
+spec.md K4 is updated.
