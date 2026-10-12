@@ -34,8 +34,10 @@ pub struct TcpStreamStatus {
     /// Number of received bytes that were not stored, as a memory limit was
     /// reached (see [`crate::tcp_reassembly::TcpReassemblyConfig`]).
     ///
-    /// Bytes are counted each time they arrive. Rejected bytes are holes
-    /// that a retransmission can still fill once there is room again.
+    /// Bytes are counted each time they arrive. Rejected bytes are holes,
+    /// which are overdue (see [`crate::tcp_reassembly::TcpStream::holes`]):
+    /// a retransmission still fills them once there is room again, until the
+    /// read position reaches them.
     pub rejected_bytes: u64,
 
     /// Number of segments with bytes that lie outside of the stream: they

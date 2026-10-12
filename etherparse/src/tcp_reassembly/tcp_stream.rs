@@ -90,6 +90,10 @@ pub struct TcpStream {
     /// window is unknown).
     largest_window: Option<u64>,
 
+    /// Offset after the furthest byte the stream rejected as it didn't fit
+    /// the memory limits (0 without one). Holes before it are overdue.
+    rejected_end: u64,
+
     /// Number of the connection's packet that moved the seen ACK forward
     /// and the seen ACK after it, for the packets of the last
     /// `ack_reorder_tolerance` ones that did so while there were holes.
@@ -148,6 +152,7 @@ impl TcpStream {
             seen_ack: 0,
             implied_ack: None,
             largest_window: None,
+            rejected_end: 0,
             recent_acks: VecDeque::new(),
             settled_ack: 0,
             resync_candidate: None,
@@ -349,10 +354,17 @@ impl TcpStream {
             .map_or(0, |ack| u64::try_from(ack).unwrap_or(0))
     }
 
-    /// Returns true if all of `hole` lies before the implied ACK, or if the
-    /// seen ACK has covered all of it for `ack_reorder_tolerance` packets.
+    /// Returns true if all of `hole` lies before the implied ACK, if the
+    /// seen ACK has covered all of it for `ack_reorder_tolerance` packets, or
+    /// if it lies before rejected bytes.
     fn is_overdue(&self, hole: &Range<u64>) -> bool {
-        hole.end <= self.implied_ack().max(self.settled_ack)
+        // once bytes are rejected, the hole they end in grows with every
+        // rejected segment, so the implied ACK never passes it
+        hole.end
+            <= self
+                .implied_ack()
+                .max(self.settled_ack)
+                .max(self.rejected_end)
     }
 
     /// Returns true if the byte at `offset` lies in an overdue hole.
@@ -436,8 +448,10 @@ impl TcpStream {
     /// is overdue if it lies before the implied ACK (see
     /// [`TcpStream::acked_offset`]), or if a seen ACK has covered it for
     /// [`TcpReassemblyConfig::ack_reorder_tolerance`] packets, as the
-    /// receiver must have received its bytes. Late segments still fill
-    /// overdue holes the read position hasn't reached.
+    /// receiver must have received its bytes. Holes before bytes that the
+    /// stream rejected (see [`TcpStreamStatus::rejected_bytes`]) are overdue
+    /// too. Late segments still fill overdue holes the read position hasn't
+    /// reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
         self.holes.iter().cloned()
     }
@@ -739,10 +753,15 @@ impl TcpStream {
         }
 
         // the first FIN wins, but it can't lie before received bytes (even
-        // if bytes before it are missing or were given up) or before a jump
+        // if bytes before it are missing or were given up, or the bytes were
+        // rejected) or before a jump
         if tcp.fin()
             && self.fin_offset.is_none()
-            && end >= self.received_end.max(self.resync_offset) as i64
+            && end
+                >= self
+                    .received_end
+                    .max(self.rejected_end)
+                    .max(self.resync_offset) as i64
         {
             self.fin_offset = Some(end as u64);
             // an ACK of the FIN that arrived before it marked the FIN's
@@ -903,6 +922,9 @@ impl TcpStream {
         }
         if 0 < self.settled_ack {
             self.settled_ack += len;
+        }
+        if 0 < self.rejected_end {
+            self.rejected_end += len;
         }
         for (_, ack) in &mut self.recent_acks {
             *ack += len;
@@ -1114,6 +1136,7 @@ impl TcpStream {
         let stored_end = end.min(limit).max(start);
         if stored_end < end {
             self.status.rejected_bytes += end - stored_end;
+            self.rejected_end = self.rejected_end.max(end);
         }
 
         // fill the holes in the buffer
@@ -1580,6 +1603,118 @@ mod test {
             // the implied ACK (8) lies after the hole
             let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
             assert_eq!(expected, connection.stream_mut(Initiator).read_received());
+        }
+
+        // the stream keeps moving after it rejected bytes: their hole, which
+        // every further rejected segment extends to the highest offset (so
+        // the implied ACK never passes it), is overdue, and later bytes are
+        // stored once the read position is past it
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 4,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efgh")
+                .send(Initiator, b"ijkl")
+                .send(Initiator, b"mnop");
+            {
+                let (connection, _) = script.feed(&mut pool, ..6).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abcd"), stream.read_received());
+                stream.consume(4);
+                assert_eq!(TcpRead::Gap { len: Some(8) }, stream.read_received());
+                stream.consume_gap();
+            }
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"mnop"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // holes that end at or before the end of the furthest rejected bytes
+        // are overdue, also ones of bytes that were not captured, but late
+        // segments still fill them until the read position reaches them
+        // (bytes 8..11 don't fit the buffer of 7 bytes)
+        for (late, holes, data, gap) in [
+            (false, vec![3..5, 7..11], &b"abc"[..], 2),
+            (true, vec![7..11], b"abcdefg", 4),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 7,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"de")
+                .send(Initiator, b"fg")
+                .send_at(Initiator, 8, b"xyz");
+            let missing = script.segments.remove(4);
+            if late {
+                script.segments.push(missing);
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(holes, stream.holes().collect::<Vec<_>>());
+            assert_eq!(TcpRead::Data(data), stream.read_received());
+            stream.consume(data.len());
+            assert_eq!(TcpRead::Gap { len: Some(gap) }, stream.read_received());
+        }
+
+        // a prepend moves the end of the rejected bytes with the offsets (the
+        // pickup starts with 2 bytes at 5, bytes at 25 don't fit, 5 bytes at
+        // 0 are put in front)
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 10,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcde")
+                .send(Initiator, b"fg")
+                .send_at(Initiator, 25, b"xy");
+            script.segments.drain(..3);
+            let earlier = script.segments.remove(0);
+            script.segments.push(earlier);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(vec![7..27], stream.holes().collect::<Vec<_>>());
+            assert_eq!(TcpRead::Data(b"abcdefg"), stream.read_received());
+            stream.consume(7);
+            assert_eq!(TcpRead::Gap { len: Some(20) }, stream.read_received());
+        }
+
+        // ... but a hole that an ACK extended after the rejected bytes is not
+        // (the ACK covers it only for fewer than N packets)
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 4,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efgh")
+                .ack_to(Responder, 20);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(vec![4..20], stream.holes().collect::<Vec<_>>());
+            assert_eq!(TcpRead::Data(b"abcd"), stream.read_received());
+            stream.consume(4);
+            assert_eq!(TcpRead::Pending, stream.read_received());
         }
 
         // a hole that the seen ACK covers is overdue on the N-th further
@@ -4508,6 +4643,30 @@ mod test {
             );
         }
 
+        // a FIN before bytes that were rejected is ignored too, so a FIN
+        // inside them can't cut the stream short while it is full, while the
+        // FIN after them counts
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 4,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efgh")
+                .fin_at(Initiator, 6, &[]);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                assert_eq!(None, connection.stream(Initiator).fin_offset());
+            }
+            script.fin_at(Initiator, 4, b"efgh");
+            let (connection, _) = script.feed(&mut pool, 6..).active.unwrap();
+            assert_eq!(Some(8), connection.stream(Initiator).fin_offset());
+        }
+
         // a FIN before bytes that were ACKed, but not received
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -5433,8 +5592,12 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(6, stream.status().rejected_bytes);
             assert_eq!(Some(6), stream.fin_offset());
-            assert_eq!(vec![0..6], stream.holes().collect::<Vec<_>>());
-            assert_eq!(TcpRead::Pending, stream.read_received());
+            // the hole of the first bytes was given up at once
+            for _ in 0..2 {
+                assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+                stream.consume_gap();
+            }
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         }
 
         // ... while bytes none of which fit don't start a mid-stream pickup,
@@ -5552,7 +5715,7 @@ mod test {
             stream.consume(4);
             assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
             stream.consume_gap();
-            assert_eq!(TcpRead::Pending, stream.read_received());
+            assert_eq!(TcpRead::Gap { len: Some(2) }, stream.read_received());
         }
 
         // bytes starting more than two windows of the receiver after the
