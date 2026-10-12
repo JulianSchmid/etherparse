@@ -123,6 +123,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.end
     }
 
+    /// Updates the timestamp of the last packet, for a late packet that the
+    /// tombstone of an ended connection absorbs.
+    pub(crate) fn set_last_seen(&mut self, timestamp: Timestamp) {
+        self.last_seen = timestamp;
+    }
+
     /// Applies a segment sent by `source`, storing at most `available` more
     /// bytes (the pool's budget, reduced by the bytes stored), and returns
     /// the role of the sender. A SYN that is kept takes its buffer from

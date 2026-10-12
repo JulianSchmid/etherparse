@@ -204,6 +204,8 @@ where
                         replaced = Some(ended);
                     }
                 } else if connection.end().is_some() {
+                    // the tombstone stays while late segments come
+                    connection.set_last_seen(timestamp);
                     return TcpProcessed {
                         active: None,
                         ended: None,
@@ -319,9 +321,9 @@ where
     /// connections in the order of their ids.
     ///
     /// The pool also forgets the connections that ended before (see
-    /// [`TcpIgnoreReason::AfterEnd`]) and whose last packet is older than
-    /// `cutoff`, without counting them, so their later packets can start
-    /// new connections.
+    /// [`TcpIgnoreReason::AfterEnd`]) and whose last packet, also a late one
+    /// after their end, is older than `cutoff`, without counting them, so
+    /// their later packets can start new connections.
     pub fn evict_older_than<F>(&mut self, cutoff: Timestamp, callback: F) -> usize
     where
         Timestamp: PartialOrd,
@@ -1796,6 +1798,23 @@ mod test {
             assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             let (connection, _) = scripts[0].segments[5].feed(&mut pool, 3).active.unwrap();
             assert_eq!(TcpConnectionId(2), connection.id());
+        }
+
+        // a late segment that an ended connection absorbs keeps it from
+        // being forgotten
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"ab").rst(Initiator);
+            for segment in &script.segments {
+                segment.feed(&mut pool, 1);
+            }
+            script.send(Initiator, b"c");
+            for timestamp in [3, 4] {
+                let processed = script.segments[5].feed(&mut pool, timestamp);
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+                assert_eq!(0, pool.evict_older_than(2, |_| panic!()));
+            }
         }
 
         // evicted connections leave the pool's budget (the ACK makes the
