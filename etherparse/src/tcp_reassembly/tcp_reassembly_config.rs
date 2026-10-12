@@ -84,8 +84,15 @@ pub struct TcpReassemblyConfig {
     /// towards it.
     pub max_connections: Option<usize>,
 
-    /// Maximum number of bytes buffered by all streams of the pool together
+    /// Maximum number of bytes buffered by all streams of the pool together,
+    /// each counted as for [`TcpReassemblyConfig::max_stream_buffer`]
     /// (default `None`, no limit).
+    ///
+    /// Bytes beyond it are rejected, and reading makes room at once.
+    /// Connections handed over as ended don't count, and neither do the
+    /// SYNs kept for reconnects (see
+    /// [`crate::tcp_reassembly::TcpReassemblyPool::process_segment`]), of
+    /// which each connection keeps at most one.
     pub max_total_buffered: Option<usize>,
 
     /// Maximum number of unused buffers per kind that the pool keeps for

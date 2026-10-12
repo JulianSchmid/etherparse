@@ -595,7 +595,7 @@ impl TcpStream {
 
     /// Number of bytes buffered from the read position to the furthest
     /// stored byte, with the placeholders of holes.
-    fn buffered(&self) -> usize {
+    pub(crate) fn buffered(&self) -> usize {
         self.buf.len() - self.head
     }
 
@@ -623,13 +623,15 @@ impl TcpStream {
 
     /// Applies a segment sent by the stream's sender, whose receiver has the
     /// receive window `window`, in the packet with the number `packet` of
-    /// the connection.
+    /// the connection, storing at most `available` more bytes (the pool's
+    /// budget, reduced by the bytes stored).
     pub(crate) fn add_segment(
         &mut self,
         tcp: &TcpSlice<'_>,
         window: u64,
         packet: u64,
         config: &TcpReassemblyConfig,
+        available: &mut usize,
     ) {
         // the window the sender advertises for the other stream
         self.window = Some((tcp.window_size(), tcp.syn()));
@@ -644,7 +646,7 @@ impl TcpStream {
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
             // stream's own one
-            if false == self.observe_start(seq, data.len(), window, config) {
+            if false == self.observe_start(seq, data.len(), window, config, available) {
                 self.status.out_of_window_segments += 1;
                 return;
             }
@@ -662,7 +664,7 @@ impl TcpStream {
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
                 // bytes that don't fit start no stream, so that byte 0 of a
                 // pickup is always stored (and bytes can be put in front)
-                if false == data.is_empty() && 0 == config.max_stream_buffer {
+                if false == data.is_empty() && 0 == config.max_stream_buffer.min(*available) {
                     self.status.rejected_bytes += data.len() as u64;
                     return;
                 }
@@ -733,8 +735,8 @@ impl TcpStream {
         {
             if false == self.can_move_start_back(start, window, config) {
                 out_of_window = true;
-            } else if self.fits_in_front(start.unsigned_abs(), data.len(), config) {
-                self.move_start_back(seq, start);
+            } else if self.fits_in_front(start.unsigned_abs(), data.len(), config, *available) {
+                self.move_start_back(seq, start, available);
                 start = 0;
             } else {
                 // the bytes from offset 0 on are stored as usual
@@ -781,7 +783,7 @@ impl TcpStream {
         if out_of_window {
             self.status.out_of_window_segments += 1;
         }
-        self.add_data(start, data, config);
+        self.add_data(start, data, config, available);
 
         // the sender sent all bytes before its FIN
         if let Some(fin) = self.fin_offset {
@@ -836,7 +838,7 @@ impl TcpStream {
 
     /// Gives the stream an observed start at `seq`, the sequence number
     /// after its SYN, which carries `data_len` bytes, where `window` is the
-    /// receiver's receive window.
+    /// receiver's receive window and `available` the pool's budget.
     ///
     /// A mid-stream pickup moves its start back to `seq`. Returns false if
     /// it can't, and true if the stream has an observed start afterwards.
@@ -846,6 +848,7 @@ impl TcpStream {
         data_len: usize,
         window: u64,
         config: &TcpReassemblyConfig,
+        available: &mut usize,
     ) -> bool {
         match self.start_seq {
             None => self.start_seq = Some(seq),
@@ -856,11 +859,12 @@ impl TcpStream {
                     return false;
                 };
                 if false == self.can_move_start_back(start, window, config)
-                    || false == self.fits_in_front(start.unsigned_abs(), data_len, config)
+                    || false
+                        == self.fits_in_front(start.unsigned_abs(), data_len, config, *available)
                 {
                     return false;
                 }
-                self.move_start_back(seq, start);
+                self.move_start_back(seq, start, available);
             }
         }
         self.isn = Some(seq.wrapping_sub(1));
@@ -876,21 +880,33 @@ impl TcpStream {
     }
 
     /// Returns true if `len` bytes fit in front of the stream, the first
-    /// `data_len` of which are received.
-    fn fits_in_front(&self, len: u64, data_len: usize, config: &TcpReassemblyConfig) -> bool {
+    /// `data_len` of which are received, with the pool's budget
+    /// `available`.
+    fn fits_in_front(
+        &self,
+        len: u64,
+        data_len: usize,
+        config: &TcpReassemblyConfig,
+        available: usize,
+    ) -> bool {
         // the read position is at offset 0, so all buffered bytes count, and
         // the missing bytes before the old offset 0 are a new hole (byte 0
         // of a pickup is always stored)
         let holes = self.counted_holes() + usize::from((data_len as u64) < len);
         len.saturating_add(self.buffered() as u64) <= config.max_stream_buffer as u64
+            && len <= available as u64
             && holes <= config.max_holes_per_stream
     }
 
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
-    /// `seq` at offset `start` (see [`TcpStream::can_move_start_back`]).
-    fn move_start_back(&mut self, seq: u32, start: i64) {
+    /// `seq` at offset `start` (see [`TcpStream::can_move_start_back`]),
+    /// taking the placeholders of the bytes before it from the pool's
+    /// budget `available`.
+    fn move_start_back(&mut self, seq: u32, start: i64, available: &mut usize) {
         if start < 0 {
-            self.prepend(start.unsigned_abs());
+            let len = start.unsigned_abs();
+            self.prepend(len);
+            *available = available.saturating_sub(len as usize);
         }
         self.start_seq = Some(seq);
     }
@@ -1138,9 +1154,16 @@ impl TcpStream {
     }
 
     /// Stores the bytes of `data` (starting at offset `start`) that were not
-    /// received before, as far as they fit the memory limits. The bytes that
-    /// don't fit are rejected and become a hole.
-    fn add_data(&mut self, start: i64, data: &[u8], config: &TcpReassemblyConfig) {
+    /// received before, as far as they fit the memory limits and the pool's
+    /// budget `available`, which they reduce. The bytes that don't fit are
+    /// rejected and become a hole.
+    fn add_data(
+        &mut self,
+        start: i64,
+        data: &[u8],
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+    ) {
         // skip the bytes before the read position (consumed, or before the
         // stream's first byte), in a gap at it (given up) and before a jump
         let skip_end = self
@@ -1161,12 +1184,13 @@ impl TcpStream {
         }
 
         // bytes after the end of the buffer (and the placeholders before
-        // them) must fit the buffer, the bytes before it fill holes (the
-        // buffer never holds more than its limit)
+        // them) must fit the buffer and the pool's budget, the bytes before
+        // it fill holes (the buffer never holds more than its limit)
         let buf_end = self.buf_end();
         let limit = self
             .read_offset
-            .saturating_add(config.max_stream_buffer as u64);
+            .saturating_add(config.max_stream_buffer as u64)
+            .min(buf_end.saturating_add(*available as u64));
         let mut stored_end = end.min(limit).max(start);
         // a segment that would leave too many holes is rejected entirely
         if self.holes_after_storing(start..stored_end) > config.max_holes_per_stream {
@@ -1204,6 +1228,7 @@ impl TcpStream {
             self.buf
                 .extend_from_slice(&data[(from - start) as usize..(stored_end - start) as usize]);
             self.received_end = stored_end;
+            *available = available.saturating_sub((stored_end - buf_end) as usize);
         }
         // the sender sent the rejected bytes too, so the implied ACK moves on
         self.extend_to(end);
@@ -1682,6 +1707,37 @@ mod test {
             // the implied ACK (8) lies after the hole
             let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
             assert_eq!(expected, connection.stream_mut(Initiator).read_received());
+        }
+
+        // no limit throws away bytes that were not consumed: the bytes that
+        // don't fit are rejected, and the bytes stored before stay readable
+        for config in [
+            TcpReassemblyConfig {
+                max_stream_buffer: 6,
+                ..Default::default()
+            },
+            TcpReassemblyConfig {
+                max_holes_per_stream: 0,
+                ..Default::default()
+            },
+            TcpReassemblyConfig {
+                max_total_buffered: Some(6),
+                ..Default::default()
+            },
+        ] {
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def");
+            for offset in [8, 20] {
+                script.send_at(Initiator, offset, b"XY");
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert!(0 < stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
         }
 
         // the stream keeps moving after it rejected bytes: their hole, which

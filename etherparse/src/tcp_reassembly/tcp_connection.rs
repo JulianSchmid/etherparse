@@ -21,6 +21,8 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// confirms the reconnect it starts (`None` without one). A tombstone
     /// keeps the one its connection kept.
     reconnect_syn: Option<ReconnectSyn<Timestamp>>,
+    /// Bytes the streams buffered when the pool last accounted for them.
+    accounted: usize,
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
@@ -52,6 +54,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             end: None,
             packets: 0,
             reconnect_syn: None,
+            accounted: 0,
         }
     }
 
@@ -122,13 +125,16 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.end
     }
 
-    /// Applies a segment sent by `source` and returns the role of the sender.
+    /// Applies a segment sent by `source`, storing at most `available` more
+    /// bytes (the pool's budget, reduced by the bytes stored), and returns
+    /// the role of the sender.
     pub(crate) fn add_segment(
         &mut self,
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         timestamp: Timestamp,
         config: &TcpReassemblyConfig,
+        available: &mut usize,
     ) -> TcpRole
     where
         Timestamp: Clone,
@@ -151,7 +157,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 self.keep_reconnect_syn(source, tcp);
             }
         } else {
-            self.add_data_segment(sender, tcp, config);
+            self.add_data_segment(sender, tcp, config, available);
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
@@ -203,12 +209,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.responder_stream.connection_ended(stream_end);
     }
 
-    /// Applies a segment without RST sent by `sender`.
+    /// Applies a segment without RST sent by `sender`, storing at most
+    /// `available` more bytes.
     fn add_data_segment(
         &mut self,
         sender: TcpRole,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
+        available: &mut usize,
     ) {
         let starts = self.starts();
         // the SYN-ACK ACKs the other side's SYN, so the other stream starts
@@ -221,6 +229,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 0,
                 window,
                 config,
+                available,
             );
         }
         // the window the sender advertised before this segment limits what
@@ -229,7 +238,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let window = self.window(sender, config);
         let packet = self.packets;
         self.stream_mut(sender)
-            .add_segment(tcp, window, packet, config);
+            .add_segment(tcp, window, packet, config, available);
 
         // a late SYN or SYN-ACK that gave a stream an observed start
         // confirms guessed roles if its sender has the role the guess gave it
@@ -325,16 +334,17 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Applies the kept SYN `syn` of a reconnect as the connection's first
-    /// packet.
+    /// packet, storing at most `available` more bytes.
     pub(crate) fn add_reconnect_syn(
         &mut self,
         syn: &ReconnectSyn<Timestamp>,
         config: &TcpReassemblyConfig,
+        available: &mut usize,
     ) where
         Timestamp: Clone,
     {
         if let Some(tcp) = syn.tcp() {
-            self.add_segment(syn.source, &tcp, syn.timestamp.clone(), config);
+            self.add_segment(syn.source, &tcp, syn.timestamp.clone(), config, available);
         }
     }
 
@@ -406,8 +416,27 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             end: self.end,
             packets: self.packets,
             reconnect_syn: self.reconnect_syn.take(),
+            accounted: 0,
         };
         core::mem::replace(self, tombstone)
+    }
+
+    /// Updates `total`, the bytes buffered by the pool's connections, with
+    /// the bytes the streams buffer now (reading them makes room).
+    pub(crate) fn account_buffered(&mut self, total: &mut usize) {
+        let buffered = self.initiator_stream.buffered() + self.responder_stream.buffered();
+        *total = total
+            .saturating_sub(self.accounted)
+            .saturating_add(buffered);
+        self.accounted = buffered;
+    }
+
+    /// Takes the bytes the streams buffered out of `total`, the bytes
+    /// buffered by the pool's connections, as the connection leaves the
+    /// pool.
+    pub(crate) fn release_buffered(&mut self, total: &mut usize) {
+        *total = total.saturating_sub(self.accounted);
+        self.accounted = 0;
     }
 
     /// Returns the buffers of both streams, emptied for re-use.

@@ -78,6 +78,12 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     free_buffers: Vec<Vec<u8>>,
     /// Id of the next connection.
     next_id: TcpConnectionId,
+    /// Bytes buffered by the streams of the connections, as last accounted
+    /// for.
+    buffered: usize,
+    /// Key of the connection handed out by the last call, whose streams
+    /// can have been read since (only kept with a `max_total_buffered`).
+    handed_out: Option<TcpConnectionKey<CustomChannelId>>,
 }
 
 impl<Timestamp, CustomChannelId> TcpReassemblyPool<Timestamp, CustomChannelId>
@@ -92,6 +98,8 @@ where
             connections: HashMap::new(),
             free_buffers: Vec::new(),
             next_id: TcpConnectionId(0),
+            buffered: 0,
+            handed_out: None,
         }
     }
 
@@ -127,12 +135,20 @@ where
         segment: TcpSegment<'_, CustomChannelId>,
         timestamp: Timestamp,
     ) -> TcpProcessed<'_, Timestamp, CustomChannelId> {
+        // reading the connection handed out last made room
+        if let Some(key) = self.handed_out.take() {
+            if let Some(connection) = self.connections.get_mut(&key) {
+                connection.account_buffered(&mut self.buffered);
+            }
+        }
+
         let tcp = segment.tcp;
         let source = SocketAddr::new(segment.source, tcp.source_port());
         let destination = SocketAddr::new(segment.destination, tcp.destination_port());
         let key = TcpConnectionKey::new(segment.vlan_ids, source, destination, segment.channel_id);
 
         let mut replaced = None;
+        let mut replayed_syn = None;
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => {
                 let connection = entry.into_mut();
@@ -150,10 +166,14 @@ where
                     // the reconnect starts with the kept SYN if the SYN-ACK
                     // ACKs it, otherwise with the segment
                     let kept = connection.take_reconnect_syn();
-                    let syn = kept.as_ref().filter(|syn| syn.is_acked_by(source, &tcp));
-                    let first_seen =
-                        syn.map_or_else(|| timestamp.clone(), |syn| syn.timestamp().clone());
-                    let mut reconnect = new_connection(
+                    let kept_syn_acked = kept
+                        .as_ref()
+                        .is_some_and(|syn| syn.is_acked_by(source, &tcp));
+                    let first_seen = match &kept {
+                        Some(syn) if kept_syn_acked => syn.timestamp().clone(),
+                        _ => timestamp.clone(),
+                    };
+                    let reconnect = new_connection(
                         &mut self.next_id,
                         &mut self.free_buffers,
                         connection.key().clone(),
@@ -161,13 +181,13 @@ where
                         false,
                         first_seen,
                     );
-                    if let Some(syn) = syn {
-                        reconnect.add_reconnect_syn(syn, &self.config);
-                    }
-                    if let Some(kept) = kept {
-                        self.free_buffers.push(kept.into_buffer());
+                    match kept {
+                        Some(syn) if kept_syn_acked => replayed_syn = Some(syn),
+                        Some(syn) => self.free_buffers.push(syn.into_buffer()),
+                        None => {}
                     }
                     let mut ended = core::mem::replace(connection, reconnect);
+                    ended.release_buffered(&mut self.buffered);
                     if ended.end().is_none() {
                         ended.end_replaced();
                         replaced = Some(ended);
@@ -202,15 +222,32 @@ where
                 ))
             }
         };
-        let sender = connection.add_segment(source, &tcp, timestamp, &self.config);
+        // the bytes that would make the pool buffer more than its limit are
+        // rejected
+        let mut available = self
+            .config
+            .max_total_buffered
+            .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
+        if let Some(syn) = replayed_syn {
+            connection.add_reconnect_syn(&syn, &self.config, &mut available);
+            self.free_buffers.push(syn.into_buffer());
+        }
+        let sender = connection.add_segment(source, &tcp, timestamp, &self.config, &mut available);
         // the SYN or SYN-ACK that starts a reconnect doesn't end it: it has
         // no RST, and nothing ACKed a FIN of its sender yet
         if connection.end().is_some() {
+            let mut ended = connection.hand_over();
+            ended.release_buffered(&mut self.buffered);
             return TcpProcessed {
                 active: None,
-                ended: Some(connection.hand_over()),
+                ended: Some(ended),
                 ignored: None,
             };
+        }
+        // the next call accounts for the bytes the connection buffers now,
+        // and for the ones the user reads until then
+        if self.config.max_total_buffered.is_some() {
+            self.handed_out = Some(connection.key().clone());
         }
         TcpProcessed {
             active: Some((connection, sender)),
@@ -1251,6 +1288,190 @@ mod test {
                     }
                 }
             }
+        }
+
+        // all streams of the pool together buffer at most
+        // max_total_buffered bytes, counted as for max_stream_buffer: bytes
+        // beyond it are rejected, and reading the connection that was
+        // handed out makes room at once
+        {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(10),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first = ConnectionScript::with_isns(1000, 2000);
+            first.handshake().send(Initiator, b"abcdefgh");
+            let mut second =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+            second
+                .handshake()
+                .send(Initiator, b"12345678")
+                .send(Responder, b"xyz");
+            {
+                let (connection, _) = first.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abcdefgh"), stream.read_received());
+                stream.consume(4);
+            }
+            let (connection, _) = second.feed_all(&mut pool).active.unwrap();
+            // 6 bytes fit after the 4 unread bytes of the first connection
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(2, stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"123456"), stream.read_received());
+            assert_eq!(3, connection.stream(Responder).status().rejected_bytes);
+        }
+
+        // connections handed over as ended don't count, also with unread
+        // bytes: ones that ended (e.g. by an RST) and ones a reconnect
+        // replaced
+        for reconnect in [false, true] {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(10),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first = ConnectionScript::with_isns(1000, 2000);
+            first.handshake().send(Initiator, b"abcdefgh");
+            if false == reconnect {
+                first.rst(Responder);
+            }
+            let mut second = if reconnect {
+                ConnectionScript::with_isns(5000, 6000)
+            } else {
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000)
+            };
+            second.handshake().send(Initiator, b"12345678");
+            first.feed_all(&mut pool);
+            let (connection, _) = second.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).status().rejected_bytes);
+        }
+
+        // a mid-stream pickup none of whose bytes fit doesn't start: the next
+        // bytes that fit start it, and the rejected bytes can still be put in
+        // front
+        {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(8),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first = ConnectionScript::with_isns(1000, 2000);
+            first
+                .handshake()
+                .send(Initiator, b"abcdefgh")
+                .ack(Responder);
+            let mut second =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+            second
+                .handshake()
+                .send(Initiator, b"xyz")
+                .send(Initiator, b"uvw");
+            second.segments.drain(..3);
+            first.feed(&mut pool, ..4);
+            {
+                let (connection, _) = second.segments[0].feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(3, stream.status().rejected_bytes);
+                assert_eq!(0, stream.highest_offset());
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            {
+                let (connection, _) = first.feed(&mut pool, 4..).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(8);
+            }
+            second.feed(&mut pool, 1..);
+            let (connection, _) = second.segments[0].feed(&mut pool, ()).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(3, stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"xyzuvw"), stream.read_received());
+        }
+
+        // putting bytes in front of a mid-stream pickup, or the start of its
+        // late SYN or the ACK of its late SYN-ACK, needs room in the pool for
+        // the bytes in front (the pickup starts with 2 bytes at 4, another
+        // connection buffers 6 bytes)
+        for (max_total_buffered, late, start, rejected) in [
+            (12, 0, TcpStreamStart::Observed, 0),
+            (11, 0, TcpStreamStart::MidStreamPickup, 0),
+            (12, 1, TcpStreamStart::Observed, 0),
+            (11, 1, TcpStreamStart::MidStreamPickup, 0),
+            (12, 3, TcpStreamStart::MidStreamPickup, 0),
+            (11, 3, TcpStreamStart::MidStreamPickup, 2),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(max_total_buffered),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+            first.handshake().send(Initiator, b"123456");
+            let mut second = ConnectionScript::with_isns(1000, 2000);
+            second
+                .handshake()
+                .send(Initiator, b"ab")
+                .send_at(Initiator, 4, b"ef");
+            let late = second.segments[late].clone();
+            second.segments.drain(..4);
+            second.feed_all(&mut pool);
+            first.feed_all(&mut pool);
+            let (connection, _) = late.feed(&mut pool, ()).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!(start, status.start);
+            assert_eq!(rejected, status.rejected_bytes);
+        }
+
+        // the bytes of a kept SYN that a reconnect replays need room in the
+        // pool too, and the bytes of the SYN-ACK get the room that is left
+        // (another connection buffers 3 bytes)
+        {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(7),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+            first.handshake().send(Initiator, b"123");
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            let mut new = ConnectionScript::with_isns(5000, 6000);
+            new.syn_with_data(b"abc").syn_ack();
+            new.segments[1].payload = b"xyz".to_vec();
+            first.feed_all(&mut pool);
+            old.feed_all(&mut pool);
+            let (connection, _) = new.feed_all(&mut pool).active.unwrap();
+            let [initiator, responder] =
+                [Initiator, Responder].map(|role| connection.stream(role).status().rejected_bytes);
+            assert_eq!((0, 2), (initiator, responder));
+            assert_eq!(
+                TcpRead::Data(b"abc"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // the bytes in front of a mid-stream pickup take room from the pool,
+        // so less is left for the bytes of the same segment after the
+        // pickup's bytes (the pickup starts with 2 bytes at 4)
+        {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(8),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 4, b"ef")
+                .send_at(Initiator, 0, b"abcdefghij");
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(2, stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"abcdefgh"), stream.read_received());
         }
     }
 
