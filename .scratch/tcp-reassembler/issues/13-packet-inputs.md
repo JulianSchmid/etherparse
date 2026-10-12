@@ -27,3 +27,5 @@ Rules: P1, P2, D6.
 **2026-10-11 — carry-over from ticket 08:** with truncated payload (D6), a resync candidate's end is computed from the captured bytes (`ResyncCandidate::new(seq, data.len(), tcp.fin())` in `TcpStream::add_segment`). An ACK-confirmed resync would then continue in the middle of the truncated segment, and its FIN would count. Use the segment's real length for the candidate when it is known, and ignore the FIN of a truncated candidate as D6 does.
 
 **2026-10-11 — carry-over from ticket 10:** a kept SYN is replayed from a copy of its raw bytes (`ReconnectSyn::tcp` parses them with `TcpSlice::from_slice`). If lax input marks truncated segments (D6), a kept SYN has to keep that mark, or its replay applies a FIN that D6 would ignore.
+
+**2026-10-12 — carry-over from ticket 12:** `stats().ignored_packets` counts every packet with `TcpProcessed::ignored` set (user decision 4 of ticket 12). Packets that `process_sliced_packet` / `process_lax_sliced_packet` ignore with `NotTcp` must count too. Return them through the pool's helper `ignore(reason, &mut self.ignored_packets)` in `tcp_reassembly_pool.rs`, and extend the `stats` test.

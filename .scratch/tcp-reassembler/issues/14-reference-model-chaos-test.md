@@ -46,3 +46,8 @@ The reference model's expected delivered bytes, gaps, status counters and end re
 - The final check of `reconnects` only holds without spoofed SYNs and old SYN retransmissions: those can start connections on tombstones of pickups (decision 4).
 
 **2026-10-12 — carry-over from ticket 11:** the model applies all memory limits (proptest `memory_limits`), so the combined proptest can draw small limits too. The harness asserts the bounds at every step. Proptest wrote no failure seeds for the failures found in ticket 11; check whether the seed persistence still works.
+
+**2026-10-12 — carry-over from ticket 12:**
+- The harness can evict. `feed_and_check` takes `evictions: &[bool]` (evict all before a segment), and `evict_and_check` checks the evicted connection against `ReferenceModel::evict` and reads it to its end with `check_to_end`. The model then starts again as a new connection on the key.
+- The chaos test should evict at random points, and evict once more at the end, then check that `stats()` shows an empty pool (as the proptest `evictions` does).
+- The harness uses `()` timestamps, so only `evict_all` is model-checked. `evict_older_than`'s strict `<` and the tombstone refresh of late segments are unit-tested.

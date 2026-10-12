@@ -54,3 +54,11 @@ The code now cites RFC 9293 3.10.7.4 for the RST check, and the spec cites RFC 9
   - a forged segment far ahead can block the real FIN while the stream is full, as stored bytes can;
   - a stream's buffer can take up to about twice `max_stream_buffer`;
   - `max_total_buffered` doesn't count the SYN a connection keeps for a reconnect (one segment each), nor the ACKs kept for K4(b) (16 bytes per packet of `ack_reorder_tolerance` and stream).
+
+**2026-10-12 — carry-over from ticket 12:**
+- Changelog:
+  - eviction: `evict_older_than`, `evict_all`, `TcpConnectionEnd::Evicted` and `TcpStreamEnd::Evicted`;
+  - `get_mut` and `iter_mut`;
+  - `stats()` and `TcpPoolStats`;
+  - buffer recycling with `max_pooled_buffers` / `max_pooled_buffer_capacity`.
+- The pcap example should flush with `evict_all` at the end of the capture. Its callbacks come in id order, so the output is the same in every run. It can also evict by capture time with `evict_older_than` and recycle the connections it gets in `ended`.

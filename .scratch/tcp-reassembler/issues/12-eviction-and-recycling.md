@@ -15,11 +15,11 @@ Rules: P5, P6, F5, F6 (`End(Evicted)`).
 
 **Status:** ready-for-agent
 
-- [ ] `evict_older_than`: strict `<`; the callback sees `End(Evicted)` and the gaps; the count excludes tombstones; old tombstones are removed
-- [ ] `evict_all` flushes every connection
-- [ ] A counting-allocator test: after warm-up, steady-state processing with `recycle` allocates no new buffers; the free-list count and capacity limits hold
-- [ ] `stats()` reports connections, tombstones, buffered bytes, rejected connections and ignored packets exactly
-- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+- [x] `evict_older_than`: strict `<`; the callback sees `End(Evicted)` and the gaps; the count excludes tombstones; old tombstones are removed
+- [x] `evict_all` flushes every connection
+- [x] A counting-allocator test: after warm-up, steady-state processing with `recycle` allocates no new buffers; the free-list count and capacity limits hold
+- [x] `stats()` reports connections, tombstones, buffered bytes, rejected connections and ignored packets exactly
+- [x] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
 
 ## Comments
 
@@ -66,3 +66,50 @@ F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see tic
 4. **`ignored_packets` counts every packet with `TcpProcessed::ignored` set**, and `rejected_connections` the `TooManyConnections` ones among them. Rejected: disjoint counters.
 
 spec.md P3, P6 and the `stats()` API are updated.
+
+**2026-10-12 — implemented:**
+- `fc44419` (refactor): the free list moves into `FreeBuffers`, one `FreeList` per kind. Streams, connections and kept SYNs (`ReconnectSyn::recycle`) take their buffers from it and put them back.
+- `3babf47` (test groundwork): a counting allocator for the unit-test binary counts the allocations of the current thread (`count_allocations`), and `TestSegment::to_bytes` / `feed_bytes` feed pre-serialized segments without allocating.
+- `1306081`: holes, gaps and kept ACKs get free lists of their own kinds, and a kept SYN takes its buffer from the list for bytes. The `recycle` test runs rounds of a steady state with every kind of buffer and end, including both kinds of reconnect, and every round after the first allocates nothing.
+- `bfb1fa1`: P5. Each list keeps at most `max_pooled_buffers` buffers, shrunk to `max_pooled_buffer_capacity` bytes. It takes both limits from the configuration when the pool is created.
+- `3ec2b42` (refactor): `TcpConnection::end_unless_finished(end)` replaces `end_replaced()`, also in the model.
+- `c09e24b`: `TcpConnectionEnd::Evicted`, `TcpStreamEnd::Evicted`, `evict_older_than` and `evict_all` (P6, F5, F6):
+  - callbacks come in id order, from a reused key list (`evicted_keys`);
+  - the buffers of evicted connections and kept SYNs are recycled, also a tombstone's;
+  - evicted connections leave `max_total_buffered`;
+  - old tombstones are forgotten without being counted.
+- `987f095`: late segments refresh a tombstone's `last_seen` (decision 1).
+- `9126a37`: `get_mut` and `iter_mut` return open connections only. The next call accounts for what they handed out: `HandedOut::Connection(key)`, or `HandedOut::All` after `iter_mut`. `get_mut` first accounts for the connection handed out before it.
+- `539f7cc`: `TcpPoolStats` and `stats()` (decisions 3 and 4). The pool counts ignored packets in one helper, `ignore()`.
+- `802f79b`: `ReferenceModel::evict`, `check_to_end`, the harness parameter `evictions` with `evict_and_check`, and the proptest `evictions`. That proptest evicts at random points of connections with capture loss, an RST and a budget, and is green at 3000 cases. A seed from a mutant run is committed.
+
+Implementation decisions (not asked):
+- Free-list kinds are by purpose: bytes (stream buffers and kept SYNs), holes, gaps and kept ACKs. A first version shared one kind for holes and gaps, and a stream's unused gaps slot then took the buffer its holes needed.
+- Buffers without capacity are not kept, as they would take the place of buffers that save an allocation.
+- Every stream that stores bytes uses its holes buffer, because `extend_to` pushes a hole that `remove_from_holes` takes out again. So even in-order streams need one; it is recycled.
+- `evict_older_than` takes the cutoff by value, like `process_segment` takes its timestamp. The callback is `FnMut(&mut TcpConnection)`.
+- The return value of both evictions counts every connection passed to the callback, also those that end as `Finished` (spec P6 now says so).
+- `iter_mut` hands out connections in hash-map order. Users who need an order can collect the references and sort them by id. Only the eviction callbacks are sorted (decision 2).
+
+Review (standards and spec, both axes):
+- The spec review traced finishing at eviction, kept SYNs in connections and tombstones, budget accounting through `get_mut`/`iter_mut`/eviction, tombstone refresh and late segments after forgetting, and found no bug. Its findings are fixed:
+  - P6 now states what the return value counts;
+  - the `stats()` doc mentions tombstones;
+  - the `evict_all` test covers `Finished` with a gap;
+  - the seed is committed;
+  - ticket 13 has a carry-over for `NotTcp`.
+- The standards review's findings are fixed:
+  - the free list is `FreeList` from the first commit, the test groundwork is its own commit, and the model's rename sits in the refactor commit;
+  - `ReconnectSyn::recycle` replaces four copies of `put(syn.into_buffer())`;
+  - the free list keeps its limits itself, so `config` no longer travels with `free`;
+  - the field is now `evicted_keys`;
+  - the test helpers `with_port`, `late_bytes`, `budget_scripts` and `key_of` replace duplicated scripts;
+  - the counting allocator has its own test.
+- Judgement calls left as they are:
+  - `feed_and_check` takes a sixth slice (`evictions`) rather than a schedule type (ticket 14 may restructure it);
+  - the model keeps its own `TcpConnectionEnd` → `TcpStreamEnd` match (an independent oracle);
+  - `free_buffers.rs` has no tests of its own, as the free list is tested through the pool (the spec's single seam);
+  - the eviction docs say the callback comes before the buffers are re-used, as users need to know that the connection is gone afterwards.
+
+The library code of the module is fully covered (merged view of `cargo cov`). Manual mutants of every new condition are killed, apart from these equivalent ones: `if self.config.max_total_buffered.is_some()` → `if true` in `get_mut` and `iter_mut` (it only skips the accounting without a budget). The `set_last_seen` mutant survives the model proptest, which uses `evict_all`, but the `evict_older_than` unit test kills it.
+
