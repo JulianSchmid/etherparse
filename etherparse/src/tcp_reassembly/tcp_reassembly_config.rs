@@ -31,6 +31,10 @@ pub struct TcpReassemblyConfig {
     /// the furthest stored byte, e.g. rejected bytes or ACKed bytes that
     /// were not captured, don't count, so a stream has at most one more
     /// hole.
+    ///
+    /// While a stream has more gaps than this that the reader didn't step
+    /// over (see [`crate::tcp_reassembly::TcpRead::Gap`]), it doesn't resync
+    /// (see [`crate::tcp_reassembly::TcpStreamStatus::resyncs`]).
     pub max_holes_per_stream: usize,
 
     /// Number of receiver windows of later data after which a hole is

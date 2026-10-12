@@ -699,7 +699,7 @@ impl TcpStream {
             };
             // the user or the other side confirm the jump, the segment is
             // the new start
-            if self.resync_forced || confirmed {
+            if (self.resync_forced || confirmed) && self.can_resync(config) {
                 jump_ack = confirming_ack;
                 let start_seq = self.resync(seq);
                 start = self.offset(start_seq, seq);
@@ -1080,7 +1080,9 @@ impl TcpStream {
     ) {
         match self.resync_candidate {
             Some(candidate)
-                if self.fin_offset.is_none() && candidate.is_within_window(ack_seq, window) =>
+                if self.fin_offset.is_none()
+                    && candidate.is_within_window(ack_seq, window)
+                    && self.can_resync(config) =>
             {
                 // the FIN after the candidate's bytes ends the stream there
                 self.resync(candidate.end);
@@ -1105,6 +1107,13 @@ impl TcpStream {
     ) {
         self.add_ack(ack_seq, window, packet, config);
         self.seen_ack = self.seen_ack.max(self.resync_offset);
+    }
+
+    /// Returns true if the stream can resync: it has at most
+    /// `max_holes_per_stream` gaps the read position didn't step over, as
+    /// each resync turns the holes before it into gaps.
+    fn can_resync(&self, config: &TcpReassemblyConfig) -> bool {
+        self.gaps.len() <= config.max_holes_per_stream
     }
 
     /// Continues the stream with the byte that has the sequence number
@@ -3671,6 +3680,48 @@ mod test {
             } else {
                 assert_eq!(TcpRead::Pending, stream.read_received());
             }
+        }
+
+        // it stays pending while the stream has more gaps the read position
+        // didn't step over than the hole limit, and bytes in the window are
+        // stored as usual until then (the first resync gives up the hole
+        // 3..4, so there are two gaps)
+        {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 4, b"e")
+                .send(Initiator, b"fg")
+                .send(Initiator, b"hi")
+                .send(Initiator, b"jk");
+            for range in [0..5, 5..6] {
+                let (connection, _) = script.feed(&mut pool, range).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            {
+                let (connection, _) = script.feed(&mut pool, 6..7).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(1, stream.status().resyncs);
+                for len in [3, 1] {
+                    stream.read_received();
+                    stream.consume(len);
+                    stream.consume_gap();
+                }
+                assert_eq!(TcpRead::Data(b"fghi"), stream.read_received());
+                stream.consume(4);
+            }
+            let (connection, _) = script.feed(&mut pool, 7..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(2, stream.status().resyncs);
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"jk"), stream.read_received());
         }
 
         // segments without bytes and SYNs are no new start
@@ -6660,6 +6711,43 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let status = connection.stream(Initiator).status();
             assert_eq!((1, 0), (status.resyncs, status.out_of_window_segments));
+        }
+
+        // a stream doesn't resync while it has more gaps the read position
+        // didn't step over than the hole limit (each resync turns the holes
+        // before it into gaps): the data after the window counts as
+        // out-of-window and the ACK is kept until the reader steps over
+        // enough gaps (window 100)
+        {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 6, b"ghi")
+                .send_at(Initiator, 1000, b"GET /")
+                .ack(Responder)
+                .send_at(Initiator, 3000, b"POST")
+                .ack(Responder);
+            {
+                let (connection, _) = script.feed(&mut pool, ..9).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                let status = stream.status();
+                assert_eq!((1, 2), (status.resyncs, status.out_of_window_segments));
+                // two gaps: the hole 3..6 and the gap of the resync, one is
+                // left after this
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+                stream.consume_gap();
+            }
+            let (connection, _) = script.feed(&mut pool, 8..).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!((2, 2), (status.resyncs, status.out_of_window_segments));
         }
 
         // a reset gives up all holes, they count as gaps
