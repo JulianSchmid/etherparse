@@ -1240,24 +1240,30 @@ impl TcpStream {
 
     /// Removes the bytes in `range` from the holes.
     fn remove_from_holes(&mut self, range: Range<u64>) {
-        // holes overlapping the range (an empty range overlaps none)
-        let first = self.holes.partition_point(|hole| hole.end <= range.start);
-        let last = self.holes.partition_point(|hole| hole.start < range.end);
-        if first >= last || range.is_empty() {
-            return;
-        }
-
-        // the parts of these holes before and after the range stay missing
-        let before = self.holes[first].start..range.start;
-        let after = range.end..self.holes[last - 1].end;
-        self.holes.drain(first..last);
-        let mut index = first;
+        // the parts of the holes before and after the range stay missing
+        let (cut, before, after) = self.cut_holes(&range);
+        let mut index = cut.start;
+        self.holes.drain(cut);
         for part in [before, after] {
             if false == part.is_empty() {
                 self.holes.insert(index, part);
                 index += 1;
             }
         }
+    }
+
+    /// Indices of the holes that overlap `range`, and the parts of them
+    /// before and after the range (empty if there are none).
+    fn cut_holes(&self, range: &Range<u64>) -> (Range<usize>, Range<u64>, Range<u64>) {
+        let first = self.holes.partition_point(|hole| hole.end <= range.start);
+        let last = self.holes.partition_point(|hole| hole.start < range.end);
+        // an empty range overlaps none
+        if first >= last || range.is_empty() {
+            return (first..first, 0..0, 0..0);
+        }
+        let before = self.holes[first].start..range.start;
+        let after = range.end..self.holes[last - 1].end;
+        (first..last, before, after)
     }
 }
 
