@@ -131,8 +131,8 @@ pub struct TcpStream {
 }
 
 impl TcpStream {
-    /// Creates a stream whose start is not known yet, storing its bytes in
-    /// a buffer taken from `free`.
+    /// Creates a stream whose start is not known yet, with buffers taken
+    /// from `free`.
     pub(crate) fn new(free: &mut FreeBuffers) -> TcpStream {
         TcpStream {
             start_seq: None,
@@ -145,15 +145,15 @@ impl TcpStream {
             buf: free.bytes.take(),
             head: 0,
             received_end: 0,
-            holes: Vec::new(),
-            gaps: Vec::new(),
+            holes: free.holes.take(),
+            gaps: free.gaps.take(),
             last_read_len: 0,
             fin_offset: None,
             seen_ack: 0,
             implied_ack: None,
             largest_window: None,
             rejected_end: 0,
-            recent_acks: VecDeque::new(),
+            recent_acks: free.acks.take(),
             settled_ack: 0,
             resync_candidate: None,
             resync_ack: None,
@@ -539,9 +539,12 @@ impl TcpStream {
         }
     }
 
-    /// Puts the stream's buffer into `free` for re-use.
+    /// Puts the stream's buffers into `free` for re-use.
     pub(crate) fn recycle(self, free: &mut FreeBuffers) {
         free.bytes.put(self.buf);
+        free.holes.put(self.holes);
+        free.gaps.put(self.gaps);
+        free.acks.put(self.recent_acks);
     }
 
     /// Returns true if the receiver ACKed the stream's FIN and all holes

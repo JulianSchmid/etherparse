@@ -125,7 +125,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Applies a segment sent by `source`, storing at most `available` more
     /// bytes (the pool's budget, reduced by the bytes stored), and returns
-    /// the role of the sender.
+    /// the role of the sender. A SYN that is kept takes its buffer from
+    /// `free`.
     pub(crate) fn add_segment(
         &mut self,
         source: SocketAddr,
@@ -133,6 +134,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         timestamp: Timestamp,
         config: &TcpReassemblyConfig,
         available: &mut usize,
+        free: &mut FreeBuffers,
     ) -> TcpRole
     where
         Timestamp: Clone,
@@ -152,7 +154,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             // it, until then it changes nothing, and neither does a SYN-ACK
             // with a new ISN that confirms none
             if false == tcp.ack() {
-                self.keep_reconnect_syn(source, tcp);
+                self.keep_reconnect_syn(source, tcp, free);
             }
         } else {
             self.add_data_segment(sender, tcp, config, available);
@@ -266,11 +268,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
     }
 
-    /// Keeps the SYN `tcp` of `source`, which has a new ISN, until the
-    /// other endpoint's SYN-ACK confirms the reconnect it starts. A
-    /// retransmission of the kept SYN changes nothing, a SYN with another
-    /// ISN replaces it.
-    fn keep_reconnect_syn(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>)
+    /// Keeps the SYN `tcp` of `source`, which has a new ISN, in a buffer
+    /// from `free` until the other endpoint's SYN-ACK confirms the
+    /// reconnect it starts. A retransmission of the kept SYN changes
+    /// nothing, a SYN with another ISN replaces it.
+    fn keep_reconnect_syn(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>, free: &mut FreeBuffers)
     where
         Timestamp: Clone,
     {
@@ -285,8 +287,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let mut segment = self
             .reconnect_syn
             .take()
-            .map(|syn| syn.segment)
-            .unwrap_or_default();
+            .map_or_else(|| free.bytes.take(), |syn| syn.segment);
         segment.clear();
         segment.extend_from_slice(tcp.slice());
         self.reconnect_syn = Some(ReconnectSyn {
@@ -338,11 +339,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         syn: &ReconnectSyn<Timestamp>,
         config: &TcpReassemblyConfig,
         available: &mut usize,
+        free: &mut FreeBuffers,
     ) where
         Timestamp: Clone,
     {
         if let Some(tcp) = syn.tcp() {
-            self.add_segment(syn.source, &tcp, syn.timestamp.clone(), config, available);
+            let timestamp = syn.timestamp.clone();
+            self.add_segment(syn.source, &tcp, timestamp, config, available, free);
         }
     }
 

@@ -148,6 +148,16 @@ impl ConnectionScript<()> {
         )
     }
 
+    /// Connection from 10.0.0.1:`port` to 10.0.0.2:80 with the given ISNs.
+    pub fn with_port(port: u16, initiator_isn: u32, responder_isn: u32) -> ConnectionScript<()> {
+        ConnectionScript::new(
+            SocketAddr::from(([10, 0, 0, 1], port)),
+            addr("10.0.0.2:80"),
+            initiator_isn,
+            responder_isn,
+        )
+    }
+
     pub fn new(
         initiator: SocketAddr,
         responder: SocketAddr,

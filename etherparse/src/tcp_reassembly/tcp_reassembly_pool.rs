@@ -240,10 +240,17 @@ where
             .max_total_buffered
             .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
         if let Some(syn) = replayed_syn {
-            connection.add_reconnect_syn(&syn, &self.config, &mut available);
+            connection.add_reconnect_syn(&syn, &self.config, &mut available, &mut self.free);
             syn.recycle(&mut self.free);
         }
-        let sender = connection.add_segment(source, &tcp, timestamp, &self.config, &mut available);
+        let sender = connection.add_segment(
+            source,
+            &tcp,
+            timestamp,
+            &self.config,
+            &mut available,
+            &mut self.free,
+        );
         // the SYN or SYN-ACK that starts a reconnect doesn't end it: it has
         // no RST, and nothing ACKed a FIN of its sender yet
         if connection.end().is_some() {
@@ -1553,6 +1560,140 @@ mod test {
             let stream = connection.stream_mut(role);
             assert_eq!(0, stream.read_offset());
             assert_eq!(TcpRead::Data(data), stream.read_received());
+        }
+
+        // after the first round, new connections re-use the buffers of
+        // recycled ones: for their bytes, holes, gaps and the ACKs they keep,
+        // and for kept SYNs, so processing allocates nothing
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let rounds: Vec<_> = (0..8).map(steady_state_round).collect();
+            for (round, segments) in rounds.iter().enumerate() {
+                let (allocations, ends) =
+                    count_allocations(|| feed_and_recycle(&mut pool, segments, round as u32));
+                assert_eq!(
+                    [
+                        Some(TcpConnectionEnd::Finished),
+                        Some(TcpConnectionEnd::Reset { by: Responder }),
+                        Some(TcpConnectionEnd::Reconnect),
+                        Some(TcpConnectionEnd::Finished),
+                        Some(TcpConnectionEnd::Reconnect),
+                        Some(TcpConnectionEnd::Finished),
+                    ],
+                    ends
+                );
+                if 0 < round {
+                    assert_eq!(0, allocations, "round {}", round);
+                }
+            }
+        }
+    }
+
+    /// Connection on `port` that finishes after the initiator's bytes 16..32
+    /// arrived after the responder ACKed them, so that it uses buffers for
+    /// bytes, holes and kept ACKs (each stream sends 48 bytes).
+    fn late_bytes(port: u16, isn: u32) -> ConnectionScript {
+        let mut script = ConnectionScript::with_port(port, isn, isn + 1000);
+        script
+            .handshake()
+            .send(Initiator, &[1; 16])
+            .send(Initiator, &[2; 16])
+            .send(Initiator, &[3; 16])
+            .send(Responder, &[4; 48])
+            .fin(Initiator)
+            .fin(Responder)
+            .ack(Initiator);
+        let late = script.segments.remove(4);
+        script.segments.insert(6, late);
+        script
+    }
+
+    /// Serialized segments of connections that use every kind of buffer and
+    /// end in every way that hands them over: one that finishes after a
+    /// hole was filled, one reset with a gap, and two replaced by reconnects
+    /// that finish, after a SYN was kept: one starts with the SYN, the other
+    /// one at a SYN-ACK that doesn't ACK it. Each stream sends 48 bytes. The
+    /// ISNs depend on `round`, so the SYNs of a round start new connections
+    /// on the tombstones of the round before.
+    fn steady_state_round(round: u32) -> Vec<(TestSegment, Vec<u8>)> {
+        let isn = round.wrapping_mul(1_000_000);
+        let finished = late_bytes(50000, isn);
+
+        // the initiator's bytes 16..32 are lost
+        let mut reset = ConnectionScript::with_port(50001, isn + 2000, isn + 3000);
+        reset
+            .handshake()
+            .send(Initiator, &[1; 16])
+            .send(Initiator, &[2; 16])
+            .send(Initiator, &[3; 16])
+            .send(Responder, &[4; 48])
+            .rst(Responder);
+        reset.segments.remove(4);
+
+        let reconnects = [50002, 50003].map(|port| {
+            let mut replaced = ConnectionScript::with_port(port, isn + 4000, isn + 5000);
+            replaced
+                .handshake()
+                .send(Initiator, &[1; 48])
+                .send(Responder, &[2; 48]);
+            let mut reconnect = ConnectionScript::with_port(port, isn + 6000, isn + 7000);
+            reconnect
+                .handshake()
+                .send(Initiator, &[3; 48])
+                .send(Responder, &[4; 48])
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            if 50003 == port {
+                // the kept SYN is another one than the SYN-ACK ACKs
+                reconnect.segments[0].header.sequence_number = isn + 8000;
+            }
+            replaced.segments.append(&mut reconnect.segments);
+            replaced
+        });
+
+        [finished, reset]
+            .iter()
+            .chain(&reconnects)
+            .flat_map(|script| &script.segments)
+            .map(|segment| (segment.clone(), segment.to_bytes()))
+            .collect()
+    }
+
+    /// Feeds the serialized `segments` to `pool`, reads every connection
+    /// handed over to its end and recycles it, and returns their ends.
+    fn feed_and_recycle(
+        pool: &mut TcpReassemblyPool<u32, ()>,
+        segments: &[(TestSegment, Vec<u8>)],
+        timestamp: u32,
+    ) -> [Option<TcpConnectionEnd>; 6] {
+        let mut ends = [None; 6];
+        let mut count = 0;
+        for (segment, bytes) in segments {
+            let processed = segment.feed_bytes(bytes, pool, timestamp);
+            if let Some(mut connection) = processed.ended {
+                for role in [Initiator, Responder] {
+                    read_to_end(connection.stream_mut(role));
+                }
+                ends[count] = connection.end();
+                count += 1;
+                pool.recycle(connection);
+            }
+        }
+        ends
+    }
+
+    /// Reads all bytes of `stream`, stepping over gaps.
+    fn read_to_end(stream: &mut TcpStream) {
+        loop {
+            match stream.read_received() {
+                TcpRead::Data(data) => {
+                    let len = data.len();
+                    stream.consume(len);
+                }
+                TcpRead::Gap { .. } => stream.consume_gap(),
+                _ => break,
+            }
         }
     }
 }

@@ -53,6 +53,8 @@ pub(crate) use connection_script::*;
 
 #[cfg(test)]
 mod counting_allocator;
+#[cfg(test)]
+pub(crate) use counting_allocator::*;
 
 #[cfg(test)]
 mod reference_model;
