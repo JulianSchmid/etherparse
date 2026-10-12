@@ -81,9 +81,9 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// Bytes buffered by the streams of the connections, as last accounted
     /// for.
     buffered: usize,
-    /// Key of the connection handed out by the last call, whose streams
-    /// can have been read since (only kept with a `max_total_buffered`).
-    handed_out: Option<TcpConnectionKey<CustomChannelId>>,
+    /// Connections handed out by the last call, whose streams can have
+    /// been read since (only kept with a `max_total_buffered`).
+    handed_out: Option<HandedOut<CustomChannelId>>,
     /// Ids and keys of the connections an eviction ends, empty between
     /// evictions (kept to re-use its memory).
     evicted_keys: Vec<(TcpConnectionId, TcpConnectionKey<CustomChannelId>)>,
@@ -142,12 +142,7 @@ where
         segment: TcpSegment<'_, CustomChannelId>,
         timestamp: Timestamp,
     ) -> TcpProcessed<'_, Timestamp, CustomChannelId> {
-        // reading the connection handed out last made room
-        if let Some(key) = self.handed_out.take() {
-            if let Some(connection) = self.connections.get_mut(&key) {
-                connection.account_buffered(&mut self.buffered);
-            }
-        }
+        self.account_handed_out();
 
         let tcp = segment.tcp;
         let source = SocketAddr::new(segment.source, tcp.source_port());
@@ -274,13 +269,44 @@ where
         // the next call accounts for the bytes the connection buffers now,
         // and for the ones the user reads until then
         if self.config.max_total_buffered.is_some() {
-            self.handed_out = Some(connection.key().clone());
+            self.handed_out = Some(HandedOut::Connection(connection.key().clone()));
         }
         TcpProcessed {
             active: Some((connection, sender)),
             ended: replaced,
             ignored: None,
         }
+    }
+
+    /// Open connection with the key `key`, if any.
+    pub fn get_mut(
+        &mut self,
+        key: &TcpConnectionKey<CustomChannelId>,
+    ) -> Option<&mut TcpConnection<Timestamp, CustomChannelId>> {
+        self.account_handed_out();
+        let connection = self
+            .connections
+            .get_mut(key)
+            .filter(|connection| connection.end().is_none())?;
+        // the next call accounts for the bytes the user reads until then
+        if self.config.max_total_buffered.is_some() {
+            self.handed_out = Some(HandedOut::Connection(key.clone()));
+        }
+        Some(connection)
+    }
+
+    /// All open connections, in no particular order (sort them by
+    /// [`TcpConnection::id`] if needed).
+    pub fn iter_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut TcpConnection<Timestamp, CustomChannelId>> + '_ {
+        // the next call accounts for the bytes the user reads until then
+        if self.config.max_total_buffered.is_some() {
+            self.handed_out = Some(HandedOut::All);
+        }
+        self.connections
+            .values_mut()
+            .filter(|connection| connection.end().is_none())
     }
 
     /// Ends the connections whose last packet is older than `cutoff` and
@@ -352,6 +378,24 @@ where
         connection.recycle(&mut self.free);
     }
 
+    /// Accounts for the bytes buffered by the connections handed out by the
+    /// last call, as reading them made room.
+    fn account_handed_out(&mut self) {
+        match self.handed_out.take() {
+            Some(HandedOut::Connection(key)) => {
+                if let Some(connection) = self.connections.get_mut(&key) {
+                    connection.account_buffered(&mut self.buffered);
+                }
+            }
+            Some(HandedOut::All) => {
+                for connection in self.connections.values_mut() {
+                    connection.account_buffered(&mut self.buffered);
+                }
+            }
+            None => {}
+        }
+    }
+
     /// Ends the open connections for which `is_old` returns true and passes
     /// them to `callback` in the order of their ids, then re-uses their
     /// buffers. Forgets the ended connections for which `is_old` returns
@@ -404,6 +448,15 @@ where
     fn default() -> Self {
         Self::new(TcpReassemblyConfig::default())
     }
+}
+
+/// Connections a pool handed out, whose streams can have been read since.
+#[derive(Clone, Debug)]
+enum HandedOut<CustomChannelId> {
+    /// The connection with the key.
+    Connection(TcpConnectionKey<CustomChannelId>),
+    /// All connections.
+    All,
 }
 
 /// Initiator of the connection that the segment `tcp` from `source` to
@@ -1649,6 +1702,97 @@ mod test {
     }
 
     #[test]
+    fn get_mut() {
+        // the open connection with the key, None for unknown keys and ended
+        // connections
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut open = ConnectionScript::with_isns(1000, 2000);
+            open.handshake().send(Initiator, b"abc");
+            open.feed_all(&mut pool);
+            let mut ended = ConnectionScript::with_port(50001, 3000, 4000);
+            ended.handshake().rst(Initiator);
+            ended.feed_all(&mut pool);
+            let connection = pool.get_mut(&key_of(&open)).unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"abc"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert!(pool.get_mut(&key_of(&ended)).is_none());
+            let unknown = ConnectionScript::with_port(50002, 0, 0);
+            assert!(pool.get_mut(&key_of(&unknown)).is_none());
+        }
+
+        // reading the connection makes room in the pool's budget at once,
+        // also reading the connection handed out before it
+        for read_before in [false, true] {
+            let (mut pool, first, second) = budget_scripts();
+            second.feed(&mut pool, ..3);
+            {
+                let (connection, _) = first.feed_all(&mut pool).active.unwrap();
+                if read_before {
+                    let stream = connection.stream_mut(Initiator);
+                    stream.read_received();
+                    stream.consume(8);
+                }
+            }
+            let read = if read_before { &second } else { &first };
+            let stream = pool.get_mut(&key_of(read)).unwrap().stream_mut(Initiator);
+            if false == read_before {
+                stream.read_received();
+                stream.consume(8);
+            }
+            let (connection, _) = second.feed(&mut pool, 3..).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).status().rejected_bytes);
+        }
+    }
+
+    #[test]
+    fn iter_mut() {
+        // all open connections, each once
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            for i in 0..10 {
+                let mut script = ConnectionScript::with_port(50000 + i, 1000, 2000);
+                script.handshake().send(Initiator, b"ab");
+                if 0 == i % 4 {
+                    script.rst(Initiator);
+                }
+                script.feed_all(&mut pool);
+            }
+            let mut ids: Vec<_> = pool
+                .iter_mut()
+                .map(|connection| {
+                    assert_eq!(
+                        TcpRead::Data(b"ab"),
+                        connection.stream_mut(Initiator).read_received()
+                    );
+                    connection.id().0
+                })
+                .collect();
+            ids.sort_unstable();
+            assert_eq!(vec![1, 2, 3, 5, 6, 7, 9], ids);
+        }
+
+        // reading the connections makes room in the pool's budget at once
+        {
+            let (mut pool, first, second) = budget_scripts();
+            first.feed_all(&mut pool);
+            second.feed(&mut pool, ..3);
+            for connection in pool.iter_mut() {
+                let stream = connection.stream_mut(Initiator);
+                if let TcpRead::Data(data) = stream.read_received() {
+                    let len = data.len();
+                    stream.consume(len);
+                }
+            }
+            let (connection, _) = second.feed(&mut pool, 3..).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).status().rejected_bytes);
+        }
+    }
+
+    #[test]
     fn evict_older_than() {
         // connections whose last packet is older than the cutoff end as
         // evicted: the callback gets them in the order of their ids, their
@@ -2067,6 +2211,16 @@ mod test {
                 }
             }
         }
+    }
+
+    /// Key of the connection that `script` writes.
+    fn key_of(script: &ConnectionScript) -> TcpConnectionKey {
+        TcpConnectionKey::new(
+            Default::default(),
+            script.endpoint(Initiator),
+            script.endpoint(Responder),
+            (),
+        )
     }
 
     /// Pool whose streams buffer at most 10 bytes together, a connection
