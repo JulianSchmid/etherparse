@@ -1123,6 +1123,23 @@ impl ReferenceModel {
         });
     }
 
+    /// Evicts the connection (see [`TcpReassemblyPool::evict_all`]): an open
+    /// one ends as finished if both FINs were ACKed, as evicted otherwise,
+    /// and is returned. The model then starts again as the next connection
+    /// on the key, which a later segment starts as on an unknown key.
+    pub fn evict(&mut self) -> Option<ReferenceModel> {
+        if false == self.created {
+            return None;
+        }
+        let next = self.next_connection();
+        let mut evicted = core::mem::replace(self, next);
+        if evicted.end.is_some() {
+            return None;
+        }
+        evicted.end_unless_finished(TcpConnectionEnd::Evicted);
+        Some(evicted)
+    }
+
     /// Model of the next connection on the same key.
     fn next_connection(&self) -> ReferenceModel {
         ReferenceModel {
@@ -1334,6 +1351,31 @@ impl ReferenceModel {
         Ok(())
     }
 
+    /// Checks `stream` against the stream of `role` as
+    /// [`ReferenceModel::check_and_consume`] does, reading both to their
+    /// end and stepping over gaps.
+    pub fn check_to_end(
+        &mut self,
+        role: TcpRole,
+        stream: &mut TcpStream,
+    ) -> Result<(), proptest::test_runner::TestCaseError> {
+        use proptest::prelude::*;
+
+        for _ in 0..10_000 {
+            self.check_and_consume(role, stream, usize::MAX, false)?;
+            match stream.read_received() {
+                TcpRead::Data(_) => {}
+                TcpRead::Gap { .. } => self.apply_action(role, stream, ReaderAction::ConsumeGap)?,
+                read => {
+                    prop_assert!(matches!(read, TcpRead::End(_)));
+                    return Ok(());
+                }
+            }
+        }
+        prop_assert!(false, "stream not read to its end");
+        Ok(())
+    }
+
     /// Checks that `stream` matches the stream of `role`, then consumes
     /// `consume_len` bytes of both after reading them with `read_acked` (if
     /// `acked`) or `read_received`.
@@ -1487,9 +1529,10 @@ mod test {
     /// reference model after each segment, reading partially from the pool
     /// or from the ended connection it handed over. `acked_reads` decides
     /// whether the bytes are consumed after reading them with `read_acked`
-    /// or `read_received`, and `actions` what the reader does before
-    /// reading. Segments whose effect the model can't predict are left out
-    /// (see [`ReferenceModel::predicts`]).
+    /// or `read_received`, `actions` what the reader does before reading,
+    /// and `evictions` whether all connections are evicted before a segment
+    /// (see [`evict_and_check`]). Segments whose effect the model can't
+    /// predict are left out (see [`ReferenceModel::predicts`]).
     ///
     /// Returns the model and the ended connection, if any.
     fn feed_and_check(
@@ -1498,10 +1541,14 @@ mod test {
         consume_lens: &[usize],
         acked_reads: &[bool],
         actions: &[Option<ReaderAction>],
+        evictions: &[bool],
     ) -> Result<(ReferenceModel, Option<TcpConnection>), TestCaseError> {
         let mut model = ReferenceModel::new(pool.config().clone());
         let mut ended = None;
         for (step, segment) in segments.iter().enumerate() {
+            if evictions[step % evictions.len()] {
+                evict_and_check(pool, &mut model)?;
+            }
             if false == model.predicts(segment) {
                 continue;
             }
@@ -1557,6 +1604,35 @@ mod test {
             }
         }
         Ok((model, ended))
+    }
+
+    /// Evicts all connections of `pool` and checks that the callback gets
+    /// the one the model expects, if any (see [`ReferenceModel::evict`]),
+    /// reading it to its end.
+    fn evict_and_check(
+        pool: &mut TcpReassemblyPool<(), ()>,
+        model: &mut ReferenceModel,
+    ) -> Result<(), TestCaseError> {
+        let mut expected = model.evict();
+        let mut checked = Ok(());
+        let mut calls = 0;
+        let count = pool.evict_all(|connection| {
+            calls += 1;
+            if let Some(expected) = expected.as_mut() {
+                checked = (|| {
+                    prop_assert_eq!(expected.id(), connection.id());
+                    prop_assert_eq!(expected.end(), connection.end());
+                    for role in [Initiator, Responder] {
+                        expected.check_to_end(role, connection.stream_mut(role))?;
+                    }
+                    Ok(())
+                })();
+            }
+        });
+        checked?;
+        prop_assert_eq!(usize::from(expected.is_some()), count);
+        prop_assert_eq!(count, calls);
+        Ok(())
     }
 
     proptest! {
@@ -1649,6 +1725,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the model received everything that was sent, and the FINs end
@@ -1778,6 +1855,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // every byte arrived, so the streams were delivered byte-exact
@@ -1844,6 +1922,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the ACKs don't change the received bytes, but they can make
@@ -1920,6 +1999,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the injected segments after the window are only counted: the
@@ -2055,6 +2135,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the received bytes are the ones that were sent, apart from the
@@ -2172,6 +2253,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the received bytes are the ones that were sent, apart from the
@@ -2292,6 +2374,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &actions,
+                &[false],
             )?;
 
             // the bytes after a resync are the ones sent after the jump (the
@@ -2462,6 +2545,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the received bytes are the ones that were sent, apart from the
@@ -2638,6 +2722,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &[None],
+                &[false],
             )?;
 
             // the received bytes are the ones that were sent, apart from the
@@ -2768,6 +2853,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &actions,
+                &[false],
             )?;
 
             // the received bytes are the ones that were sent, apart from the
@@ -2851,6 +2937,7 @@ mod test {
                 &consume_lens,
                 &acked_reads,
                 &actions,
+                &[false],
             )?;
 
             // giving up every hole lets both streams be read to their end, a
@@ -2897,6 +2984,91 @@ mod test {
                     prop_assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
                 }
             }
+        }
+
+        #[test]
+        fn evictions(
+            initiator_isn in tcp_isn_any(),
+            responder_isn in tcp_isn_any(),
+            initiator_data in stream_data_any(4 * 1024),
+            responder_data in stream_data_any(4 * 1024),
+            segment_lens in vec(1usize..600, 1..32),
+            resent_lens in vec(0usize..300, 1..32),
+            directions in vec(any::<bool>(), 1..64),
+            fins in [any::<bool>(), any::<bool>()],
+            extra_acks in 0usize..32,
+            lost in vec((any::<Index>(), proptest::option::of(any::<Index>())), 0..16),
+            rst in proptest::option::of((tcp_role_any(), any::<Index>())),
+            max_total_buffered in proptest::option::of(0usize..8192),
+            config in tcp_overdue_config_any(),
+            evictions in vec(proptest::bool::weighted(0.05), 1..64),
+            consume_lens in vec(0usize..1000, 1..32),
+            acked_reads in vec(any::<bool>(), 1..32),
+        ) {
+            // write the connection with randomly cut and interleaved segments,
+            // followed by the FINs, their ACKs and more ACKs (so that the ACK
+            // reorder tolerance can pass)
+            let mut script = ConnectionScript::with_isns(initiator_isn, responder_isn);
+            script.handshake();
+            let data = [&initiator_data[..], &responder_data[..]];
+            send_interleaved(&mut script, data, &segment_lens, &resent_lens, &directions);
+            for role in [Initiator, Responder] {
+                if fins[role_index(role)] {
+                    script.fin(role);
+                }
+            }
+            script.ack(Initiator).ack(Responder);
+            for i in 0..extra_acks {
+                script.ack(if 0 == i % 2 { Initiator } else { Responder });
+            }
+
+            // segments lost in the capture, or captured later
+            for (index, later) in &lost {
+                if script.segments.len() > 3 {
+                    let i = 3 + index.index(script.segments.len() - 3);
+                    let segment = script.segments.remove(i);
+                    if let Some(later) = later {
+                        let position = i + later.index(script.segments.len() - i + 1);
+                        script.segments.insert(position, segment);
+                    }
+                }
+            }
+
+            // an RST at the end of the bytes sent, at a random position after
+            // the handshake (outside of the window before most of them)
+            if let Some((role, position)) = &rst {
+                let rst = script.injected(|script| {
+                    script.rst(*role);
+                });
+                let position = 3 + position.index(script.segments.len() - 2);
+                script.segments.insert(position, rst);
+            }
+
+            // the connection is evicted before random segments, so later
+            // segments start new connections (mid-stream pickups), and once
+            // more at the end
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                max_total_buffered,
+                ..config
+            });
+            let (mut model, _) = feed_and_check(
+                &mut pool,
+                &script.segments,
+                &consume_lens,
+                &acked_reads,
+                &[None],
+                &evictions,
+            )?;
+            evict_and_check(&mut pool, &mut model)?;
+            prop_assert_eq!(
+                TcpPoolStats {
+                    connections: 0,
+                    tombstones: 0,
+                    buffered_bytes: 0,
+                    ..pool.stats()
+                },
+                pool.stats()
+            );
         }
     }
 }
