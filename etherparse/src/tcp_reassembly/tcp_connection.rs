@@ -344,8 +344,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if tcp.ack() {
             let window = self.window(sender.other(), config);
             let packet = self.packets;
-            self.stream_mut(sender.other())
-                .add_ack(tcp.acknowledgment_number(), window, packet);
+            self.stream_mut(sender.other()).add_ack(
+                tcp.acknowledgment_number(),
+                window,
+                packet,
+                config,
+            );
         }
     }
 

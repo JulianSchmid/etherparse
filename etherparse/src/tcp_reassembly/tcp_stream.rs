@@ -790,7 +790,7 @@ impl TcpStream {
 
         // an ACK that confirmed the jump before the bytes arrived counts now
         if let Some(ack) = jump_ack {
-            self.add_jump_ack(ack, window, packet);
+            self.add_jump_ack(ack, window, packet, config);
         }
     }
 
@@ -954,7 +954,7 @@ impl TcpStream {
         // or its offsets moved (until then, it stays pending)
         if let Some(ack) = self.pending_ack.take() {
             let ack_window = window.unwrap_or(u64::from(config.fallback_window));
-            self.add_ack(ack, ack_window, packet);
+            self.add_ack(ack, ack_window, packet, config);
         }
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
@@ -992,14 +992,20 @@ impl TcpStream {
     /// Applies the ACK number of a segment sent by the stream's receiver,
     /// whose receive window before that segment was `window`, in the packet
     /// with the number `packet` of the connection.
-    pub(crate) fn add_ack(&mut self, ack_seq: u32, window: u64, packet: u64) {
+    pub(crate) fn add_ack(
+        &mut self,
+        ack_seq: u32,
+        window: u64,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
         let Some(start_seq) = self.start_seq else {
             self.pending_ack = Some(ack_seq);
             return;
         };
         // the receiver can only ACK bytes that can't be mapped after a jump
         let Some(ack) = self.offset(start_seq, ack_seq) else {
-            self.add_resync_ack(ack_seq, window, packet);
+            self.add_resync_ack(ack_seq, window, packet, config);
             return;
         };
         // an ACK of offset 0 or before it can ACK bytes prepended later
@@ -1011,7 +1017,7 @@ impl TcpStream {
         // it is known to have sent (and its FIN), unless the stream jumped
         let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
         if 0 < ack && ack as u64 > sent_end.saturating_add(window) {
-            self.add_resync_ack(ack_seq, window, packet);
+            self.add_resync_ack(ack_seq, window, packet, config);
             return;
         }
         // ACKs before a jump don't count after it
@@ -1065,7 +1071,13 @@ impl TcpStream {
     /// If it lies within one window of the latest data after the window,
     /// the stream jumped there and continues after these bytes. Otherwise
     /// it is kept, as such data can still follow.
-    fn add_resync_ack(&mut self, ack_seq: u32, window: u64, packet: u64) {
+    fn add_resync_ack(
+        &mut self,
+        ack_seq: u32,
+        window: u64,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
         match self.resync_candidate {
             Some(candidate)
                 if self.fin_offset.is_none() && candidate.is_within_window(ack_seq, window) =>
@@ -1075,7 +1087,7 @@ impl TcpStream {
                 if candidate.fin {
                     self.fin_offset = Some(self.highest_offset);
                 }
-                self.add_jump_ack(ack_seq, window, packet);
+                self.add_jump_ack(ack_seq, window, packet, config);
             }
             _ => self.resync_ack = Some(ack_seq),
         }
@@ -1084,8 +1096,14 @@ impl TcpStream {
     /// Applies the ACK number `ack_seq` that confirmed a jump after the
     /// resync, like the ACK of [`TcpStream::add_ack`]. It also ACKs all bytes
     /// before the jump, as the receiver ACKed bytes after it.
-    fn add_jump_ack(&mut self, ack_seq: u32, window: u64, packet: u64) {
-        self.add_ack(ack_seq, window, packet);
+    fn add_jump_ack(
+        &mut self,
+        ack_seq: u32,
+        window: u64,
+        packet: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        self.add_ack(ack_seq, window, packet, config);
         self.seen_ack = self.seen_ack.max(self.resync_offset);
     }
 
