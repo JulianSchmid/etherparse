@@ -64,3 +64,9 @@ spec.md D4, A4, A5, R2 and the config table are updated.
 8. **Holes up to the end of the furthest rejected bytes are overdue (K4(c)):** rejected bytes at the end of a stream join one hole that each rejected segment extends to the highest offset, so the implied ACK never passes it, and in a continuous flow the reader would stall there (e.g. a reader that fell behind by more than `max_stream_buffer`, or a window larger than the buffer). Late segments still fill such holes until the reader reaches them; capture-loss holes before the rejected bytes are overdue too, as waiting is futile once the stream overflowed. Rejected: only holes made entirely of rejected bytes (rejected bytes would become their own hole next to missing bytes, with state per hole), and no change (stalls until the flow pauses).
 
 spec.md K4 is updated.
+
+**2026-10-12 — user decisions after the review (asked before fixing):**
+9. **Rejected bytes count as received for F1:** a FIN before the end of the furthest rejected bytes is ignored, as one before stored bytes is, so a forged FIN inside them can't cut a full stream short; the real FIN after them counts. A forged segment far ahead can block the real FIN, as it already can with stored bytes. Rejected: accepting such a FIN (the spec review found that it brought back the old branch's "an injected FIN blocks the real one" while a stream is full).
+10. **Only holes before the furthest stored byte count towards `max_holes_per_stream`:** the hole after it (rejected bytes, or bytes an ACK or a FIN shows were sent) doesn't, so in-order bytes that fill it from its start are stored, and so are late SYNs and bytes in front of a pickup that add no hole. `holes()` still lists at most the limit + 1. Rejected: counting all holes literally, under which such stores were rejected whenever that hole existed, and with a limit of 0 every ACK that arrived before its data lost the ACKed range.
+
+spec.md D4 and F1 are updated.
