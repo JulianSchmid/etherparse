@@ -91,9 +91,9 @@ where
     /// Creates a pool with the given configuration.
     pub fn new(config: TcpReassemblyConfig) -> TcpReassemblyPool<Timestamp, CustomChannelId> {
         TcpReassemblyPool {
+            free: FreeBuffers::new(&config),
             config,
             connections: HashMap::new(),
-            free: FreeBuffers::default(),
             next_id: TcpConnectionId(0),
             buffered: 0,
             handed_out: None,
@@ -1560,6 +1560,93 @@ mod test {
             let stream = connection.stream_mut(role);
             assert_eq!(0, stream.read_offset());
             assert_eq!(TcpRead::Data(data), stream.read_received());
+        }
+
+        // recycled buffers are shrunk to max_pooled_buffer_capacity bytes:
+        // 32 bytes, or 2 holes of 16 bytes
+        {
+            let config = TcpReassemblyConfig {
+                max_pooled_buffer_capacity: 32,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut first = ConnectionScript::with_isns(1000, 2000);
+            first
+                .handshake()
+                .send(Initiator, &[1; 100])
+                .send(Responder, &[2; 100]);
+            // 8 holes in the responder's stream
+            for i in 0..8 {
+                first.send_at(Responder, 101 + 2 * i, &[3]);
+            }
+            first.rst(Responder);
+            let ended = first.feed_all(&mut pool).ended.unwrap();
+            pool.recycle(ended);
+
+            // 32 bytes fit into the initiator's buffer of the next
+            // connection, and 2 holes into the responder's buffer for holes,
+            // one more byte or hole makes them grow
+            let mut next = ConnectionScript::with_isns(3000, 4000);
+            next.handshake()
+                .send(Initiator, &[4; 32])
+                .send(Initiator, &[5])
+                .send_at(Responder, 0, &[6])
+                .send_at(Responder, 2, &[6])
+                .send_at(Responder, 4, &[6])
+                .send_at(Responder, 6, &[6]);
+            let bytes: Vec<_> = next.segments.iter().map(TestSegment::to_bytes).collect();
+            let mut feed = |range: core::ops::Range<usize>| {
+                count_allocations(|| {
+                    for i in range {
+                        next.segments[i].feed_bytes(&bytes[i], &mut pool, ());
+                    }
+                })
+                .0
+            };
+            assert_eq!(0, feed(0..4));
+            assert_eq!(1, feed(4..5));
+            assert_eq!(0, feed(5..8));
+            assert_eq!(1, feed(8..9));
+        }
+
+        // the pool keeps at most max_pooled_buffers buffers per kind, and
+        // only buffers with capacity: buffers without one would take the
+        // place of buffers with one
+        {
+            let config = TcpReassemblyConfig {
+                max_pooled_buffers: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let first = late_bytes(50000, 10_000);
+            let mut other = ConnectionScript::with_port(50001, 3000, 4000);
+            other
+                .handshake()
+                .send(Initiator, &[5; 48])
+                .send(Responder, &[6; 48])
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            // the other connection, whose buffers for holes, gaps and ACKs
+            // have no capacity, is recycled first
+            first.feed(&mut pool, ..7);
+            let ended = other.feed_all(&mut pool).ended.unwrap();
+            pool.recycle(ended);
+            let ended = first.feed(&mut pool, 7..).ended.unwrap();
+            pool.recycle(ended);
+
+            // the next connection on the key gets the initiator's buffers for
+            // bytes and holes of the other connection, and the buffer for
+            // ACKs of the first one, so only the responder's buffers for
+            // bytes and holes are new (storing bytes uses the one for holes)
+            let next = late_bytes(50000, 20_000);
+            let bytes: Vec<_> = next.segments.iter().map(TestSegment::to_bytes).collect();
+            let (allocations, ()) = count_allocations(|| {
+                for (segment, bytes) in next.segments.iter().zip(&bytes).take(7) {
+                    segment.feed_bytes(bytes, &mut pool, ());
+                }
+            });
+            assert_eq!(2, allocations);
         }
 
         // after the first round, new connections re-use the buffers of
