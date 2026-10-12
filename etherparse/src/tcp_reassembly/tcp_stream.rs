@@ -1165,10 +1165,15 @@ impl TcpStream {
         available: &mut usize,
     ) {
         // skip the bytes before the read position (consumed, or before the
-        // stream's first byte), in a gap at it (given up) and before a jump
+        // stream's first byte), before a jump, and in the gaps (given up),
+        // which all lie at the read position or before a jump (holes are
+        // given up only there, and by a resync), also behind the gap of a
+        // resync
         let skip_end = self
-            .gap_at_read_offset()
-            .map_or(self.read_offset, |gap| gap.end)
+            .gaps
+            .last()
+            .map_or(0, |gap| gap.end)
+            .max(self.read_offset)
             .max(self.resync_offset);
         let skipped = (skip_end as i64).saturating_sub(start).max(0) as usize;
         let data = match data.get(skipped..) {
@@ -5131,6 +5136,39 @@ mod test {
             assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
             stream.consume_gap();
             assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // after a jump, bytes that arrive in a hole that was given up behind
+        // the gap of the resync are ignored, so a FIN in it is accepted (the
+        // ACK of 1010 makes the hole 3..8 overdue at once)
+        {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 0,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 1000, b"GET /")
+                .ack(Responder)
+                .ack_to(Responder, 1010)
+                .send_at(Initiator, 1005, b"a.js/")
+                .fin_at(Initiator, 1007, &[]);
+            {
+                let (connection, _) = script.feed(&mut pool, ..7).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+            }
+            let (connection, _) = script.feed(&mut pool, 7..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(Some(5), stream.fin_offset());
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Gap { len: Some(2) }, stream.read_received());
         }
     }
 
