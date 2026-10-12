@@ -702,7 +702,8 @@ impl TcpStream {
             && false == data.is_empty()
             && TcpStreamStart::MidStreamPickup == self.status.start
         {
-            if self.move_start_back(seq, start, window, config) {
+            if self.can_move_start_back(start, window, config) {
+                self.move_start_back(seq, start);
                 start = 0;
             } else {
                 out_of_window = true;
@@ -814,9 +815,10 @@ impl TcpStream {
                 let Some(start) = self.offset(start_seq, seq) else {
                     return false;
                 };
-                if false == self.move_start_back(seq, start, window, config) {
+                if false == self.can_move_start_back(start, window, config) {
                     return false;
                 }
+                self.move_start_back(seq, start);
             }
         }
         self.isn = Some(seq.wrapping_sub(1));
@@ -824,28 +826,20 @@ impl TcpStream {
         true
     }
 
+    /// Returns true if offset 0 of a mid-stream pickup can move back to
+    /// `start`: bytes can still be prepended, and `start` lies within the
+    /// range of the receiver's receive window `window` before offset 0.
+    fn can_move_start_back(&self, start: i64, window: u64, config: &TcpReassemblyConfig) -> bool {
+        0 >= start && start.unsigned_abs() <= window_range(window, config) && self.can_prepend()
+    }
+
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
-    /// `seq` at offset `start`, if bytes can still be prepended and `seq`
-    /// lies within the range of the receiver's receive window `window`
-    /// before offset 0. Returns false otherwise.
-    fn move_start_back(
-        &mut self,
-        seq: u32,
-        start: i64,
-        window: u64,
-        config: &TcpReassemblyConfig,
-    ) -> bool {
-        if 0 < start
-            || start.unsigned_abs() > window_range(window, config)
-            || false == self.can_prepend()
-        {
-            return false;
-        }
+    /// `seq` at offset `start` (see [`TcpStream::can_move_start_back`]).
+    fn move_start_back(&mut self, seq: u32, start: i64) {
         if start < 0 {
             self.prepend(start.unsigned_abs());
         }
         self.start_seq = Some(seq);
-        true
     }
 
     /// Returns true if bytes can still be prepended to the stream, as it is
