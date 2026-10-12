@@ -46,3 +46,11 @@ Parent: ../spec.md
 The code now cites RFC 9293 3.10.7.4 for the RST check, and the spec cites RFC 9293 3.5.3 and RFC 1122 4.2.2.12 for RST data. The changelog entry should name the new variants `TcpConnectionEnd::Reset` and `TcpStreamEnd::Reset`.
 
 **2026-10-11 — carry-over from ticket 10:** the changelog needs `TcpConnectionEnd::Reconnect` and `TcpStreamEnd::Reconnect`. Known limits to document are listed on ticket 10 (a reconnect without a captured SYN and SYN-ACK resyncs the old connection, a reconnect SYN that lands within k windows before a pickup is taken as its late SYN, late segments of a replaced connection count as out-of-window in the reconnect, kept SYNs have no timeout).
+
+**2026-10-12 — carry-over from ticket 11:**
+- The changelog needs `TcpStreamStatus::rejected_bytes` and `TcpIgnoreReason::TooManyConnections`, and the limits `max_stream_buffer`, `max_holes_per_stream`, `max_total_buffered` and `max_connections`.
+- Known limits to document:
+  - once a stream rejected bytes, the holes before them are given up when the reader reaches them (K4(c)), even capture-loss holes that a reordered segment would still fill;
+  - a forged segment far ahead can block the real FIN while the stream is full, as stored bytes can;
+  - a stream's buffer can take up to about twice `max_stream_buffer`;
+  - `max_total_buffered` doesn't count the SYN a connection keeps for a reconnect (one segment each), nor the ACKs kept for K4(b) (16 bytes per packet of `ack_reorder_tolerance` and stream).

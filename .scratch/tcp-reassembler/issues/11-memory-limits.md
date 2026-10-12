@@ -15,12 +15,12 @@ Rules: D4, P3 (tombstones count), Q1.
 
 **Status:** ready-for-agent
 
-- [ ] Per-stream buffer limit: rejected bytes are counted, a segment that only partly fits is tested, and the stream keeps moving
-- [ ] Regression test (old branch): a flood of 1-byte holes keeps memory bounded, and segments that would create an extra hole are rejected
-- [ ] `max_total_buffered` is enforced pool-wide
-- [ ] `max_connections` rejects with `TooManyConnections`, and tombstones count
-- [ ] Unconsumed data is never discarded by any limit
-- [ ] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
+- [x] Per-stream buffer limit: rejected bytes are counted, a segment that only partly fits is tested, and the stream keeps moving
+- [x] Regression test (old branch): a flood of 1-byte holes keeps memory bounded, and segments that would create an extra hole are rejected
+- [x] `max_total_buffered` is enforced pool-wide
+- [x] `max_connections` rejects with `TooManyConnections`, and tombstones count
+- [x] Unconsumed data is never discarded by any limit
+- [x] All new behaviour is tested through the pool's public API (value types directly), with every branch covered; `cargo test`, `cargo test --no-default-features` and the bare-metal no_std build pass
 
 ## Comments
 
@@ -70,3 +70,45 @@ spec.md K4 is updated.
 10. **Only holes before the furthest stored byte count towards `max_holes_per_stream`:** the hole after it (rejected bytes, or bytes an ACK or a FIN shows were sent) doesn't, so in-order bytes that fill it from its start are stored, and so are late SYNs and bytes in front of a pickup that add no hole. `holes()` still lists at most the limit + 1. Rejected: counting all holes literally, under which such stores were rejected whenever that hole existed, and with a limit of 0 every ACK that arrived before its data lost the ACKed range.
 
 spec.md D4 and F1 are updated.
+
+**2026-10-12 — implemented** (decisions in `addc5fe` and `caa05de`):
+- `c22684c` (refactor): `TcpStream::can_move_start_back` checks a prepend before `move_start_back` does it.
+- `fa5b9ed`: `max_stream_buffer` in `TcpStream::add_data`, the new counter `TcpStreamStatus::rejected_bytes` (Q1), and rejected bytes that still move the highest offset.
+- `15640cd`: prepends, late SYNs and the ACK of a late SYN-ACK must fit (`fits_in_front`, decision 2); a first segment without room starts no pickup (decision 3).
+- `5564b47`: K4(c) with `TcpStream::rejected_end` (decision 8), and FINs before rejected bytes are ignored (decision 9).
+- `da388cd` (refactor): `cut_holes`, which `remove_from_holes` and the hole count share.
+- `c6d59b3`: `max_holes_per_stream`, counting the holes before the furthest stored byte (`holes_after_storing`, `counted_holes`, decisions 1 and 10). Regression test "a flood of 1-byte holes" in `TcpStream::holes`.
+- `4ec1904` (refactor): the ACK functions of a stream get the configuration.
+- `b0d0657`: resyncs wait while a stream has more unread gaps than the hole limit (`can_resync`, decision 7).
+- `aaace6d`: `max_total_buffered`. The pool keeps the accounted total (`buffered`) and the key of the connection it handed out last (`handed_out`), and accounts for that connection again at the next call, so reading makes room at once. Ended and replaced connections leave the total (`TcpConnection::account_buffered` / `release_buffered`). The budget travels as `available: &mut usize`. Kept SYNs don't count (decision 5).
+- `ad88d35`: the docs of `ack_reorder_tolerance` state what it keeps (decision 6).
+- `1f10387`: `max_connections` and `TcpIgnoreReason::TooManyConnections` (P3: tombstones count; reconnects on known keys don't).
+- `304c678`: a bug fix of ticket 08 that the new proptest found. Bytes in a hole given up right behind the empty gap of a resync were stored, because the skip stopped at the first gap at the read position; a FIN before them was then ignored. Bytes are now skipped up to the end of the last gap, as all gaps lie at the read position or before a jump.
+- `20fa538`: the reference model applies all limits, the harness asserts the bounds at every step (holes at most limit + 1, holes before the furthest stored byte at most the limit, the buffer, and unread gaps at most 2 × limit + 2 while open), `received_matches` skips discarded bytes, and the proptest `memory_limits` (small limits, jumps, loss, pickups, a slow reader with actions) is green at 3000 cases.
+
+The library code of the module is fully covered (merged view of `cargo cov`). Manual mutants of every new condition are killed by the module tests, apart from these equivalent ones:
+- In the fill loop of `add_data`, `.min(stored_end)` → `.min(end)`: a rejected segment then writes into placeholders whose hole stays, which nothing can observe.
+- `if self.config.max_total_buffered.is_some()` → `if true` for `handed_out`: it only skips the extra lookup when the pool has no budget.
+
+Implementation decisions (not asked):
+- `max_total_buffered` counts each stream as `max_stream_buffer` does, from the read position to the furthest stored byte.
+- Rejected bytes are counted each time they arrive.
+- Bytes filling a hole before the furthest stored byte always fit, as their placeholders exist.
+- With the hole rule of decision 10, a rejected segment never overlaps stored bytes, so its rejected bytes are `end − stored_end`. The model counts only missing bytes, so the proptest checks this.
+
+Review (standards and spec, both axes):
+- The spec review led to decisions 9 and 10 (asked, see above).
+- The standards review's findings are fixed:
+  - the constant comes first in `0 >= start`;
+  - the old buffer-limit commit is split three ways (limit, pickups, K4(c));
+  - the tolerance doc has its own commit;
+  - the docs leave out the implementation;
+  - `buf_end` uses `buffered`, and `missing_bytes` is gone;
+  - the pool names `kept_syn_acked` / `replayed_syn`, and the bare `0` has a comment.
+- Judgement calls left as they are:
+  - `config` and `available` travel together (the budget is per call, the config per pool);
+  - the check, fit and move sequence of prepends appears twice (each failure counts differently);
+  - `cut_holes` returns a tuple;
+  - the model commit follows the behaviour commits, as in tickets 03–10.
+
+Note: proptest wrote no failure seeds to `proptest-regressions/` for the failures found here. The cases are covered by unit tests (`fin_offset`, `holes`).

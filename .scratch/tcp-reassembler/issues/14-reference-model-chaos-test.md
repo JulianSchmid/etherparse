@@ -44,3 +44,5 @@ The reference model's expected delivered bytes, gaps, status counters and end re
 - `ReferenceModel::predicts` leaves out segments it can't predict: segments of another script on an open connection apart from SYNs and SYN-ACKs, and those too while a stream has neither a start nor a kept ACK (its role in the old connection is unknown to the model). The combined proptest should feed through `feed_and_check`, which applies this filter.
 - The regression test "an invisible reconnect" is the drained-reader block in `TcpReassemblyPool::process_segment`.
 - The final check of `reconnects` only holds without spoofed SYNs and old SYN retransmissions: those can start connections on tombstones of pickups (decision 4).
+
+**2026-10-12 — carry-over from ticket 11:** the model applies all memory limits (proptest `memory_limits`), so the combined proptest can draw small limits too. The harness asserts the bounds at every step. Proptest wrote no failure seeds for the failures found in ticket 11; check whether the seed persistence still works.

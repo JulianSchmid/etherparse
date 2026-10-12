@@ -49,3 +49,12 @@ F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see tic
 - `TcpStream::is_fin_acked()` is the variant of F3 that P6 needs: all holes lie before the FIN, so an ACKed FIN covers them all. `TcpConnection::end_replaced` already ends a connection replaced by a reconnect as `Finished` when both FINs are ACKed (user decision 8 of ticket 10, the same rule as P6).
 - Tombstones now keep the ISNs of their streams (`TcpStream::tombstone`) and the kept SYN of a reconnect (`ReconnectSyn`). Evicting a connection or a tombstone should return that SYN's buffer to the free list, as the pool does when a reconnect starts.
 - The kept SYN's buffer goes to the unbounded free list; a mutant that drops this push survives until the counting-allocator test exists.
+
+**2026-10-12 — carry-over from ticket 11:**
+- The pool keeps the bytes all streams buffer as `TcpReassemblyPool::buffered`, accounted for per connection (`TcpConnection::account_buffered` / `release_buffered`), and the key of the connection the last call handed out (`handed_out`), which it accounts for again at the next call. Both are kept only while `max_total_buffered` is set.
+  - `get_mut` and `iter_mut` hand out connections whose streams the user can read, so they must account for them too (set `handed_out`, or account for all connections after `iter_mut`).
+  - Eviction must release every evicted connection, or the budget stays used.
+  - `stats()` needs the accounting without a limit too, or a sum over the connections.
+- `TooManyConnections` is returned in the `Entry::Vacant` branch of `process_segment`; the rejected-connections counter of `stats()` belongs there.
+- Tombstones count towards `max_connections`, so without eviction a pool full of tombstones rejects every new connection.
+- A stream's buffer can take up to about twice `max_stream_buffer`, as consumed bytes are drained once they make up half of it. The allocation test and `max_pooled_buffer_capacity` should allow for that.

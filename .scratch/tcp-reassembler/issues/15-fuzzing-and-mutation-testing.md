@@ -17,3 +17,7 @@ Parent: ../spec.md
 ## Equivalent mutants
 
 (to be filled in)
+
+**2026-10-12 — carry-over from ticket 11:**
+- Equivalent mutants: in the fill loop of `TcpStream::add_data`, `.min(stored_end)` → `.min(end)` (a rejected segment then writes into placeholders whose hole stays, which nothing can observe); `if self.config.max_total_buffered.is_some()` → `if true` before `handed_out` in `TcpReassemblyPool::process_segment` (it only skips a lookup without a budget).
+- The fuzzer can assert that `holes()` lists at most `max_holes_per_stream` + 1 holes, and that a stream never has more than about 2 × `max_holes_per_stream` + 2 unread gaps while open.
