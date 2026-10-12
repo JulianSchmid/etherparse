@@ -203,6 +203,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            TcpConnectionEnd::Evicted => TcpStreamEnd::Evicted,
             TcpConnectionEnd::Reconnect => TcpStreamEnd::Reconnect,
         };
         self.initiator_stream.connection_ended(stream_end);
@@ -440,10 +441,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.accounted = 0;
     }
 
-    /// Puts the buffers of both streams into `free` for re-use.
+    /// Puts the buffers of both streams and of the kept SYN into `free` for
+    /// re-use.
     pub(crate) fn recycle(self, free: &mut FreeBuffers) {
         self.initiator_stream.recycle(free);
         self.responder_stream.recycle(free);
+        if let Some(syn) = self.reconnect_syn {
+            syn.recycle(free);
+        }
     }
 }
 

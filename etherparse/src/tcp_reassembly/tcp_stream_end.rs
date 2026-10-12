@@ -9,6 +9,10 @@ pub enum TcpStreamEnd {
     /// (see [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]).
     Reset,
 
+    /// The connection was evicted before the read position reached a FIN
+    /// (see [`crate::tcp_reassembly::TcpConnectionEnd::Evicted`]).
+    Evicted,
+
     /// A reconnect replaced the connection before the read position reached
     /// a FIN (see [`crate::tcp_reassembly::TcpConnectionEnd::Reconnect`]).
     Reconnect,
@@ -29,6 +33,7 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
             assert_ne!(TcpStreamEnd::Reset, a);
+            assert_ne!(TcpStreamEnd::Evicted, a);
             assert_ne!(TcpStreamEnd::Reconnect, a);
         }
 
@@ -36,6 +41,7 @@ mod test {
         {
             assert_eq!("Fin", format!("{:?}", TcpStreamEnd::Fin));
             assert_eq!("Reset", format!("{:?}", TcpStreamEnd::Reset));
+            assert_eq!("Evicted", format!("{:?}", TcpStreamEnd::Evicted));
             assert_eq!("Reconnect", format!("{:?}", TcpStreamEnd::Reconnect));
         }
 

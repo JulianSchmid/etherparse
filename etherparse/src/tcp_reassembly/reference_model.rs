@@ -1104,6 +1104,7 @@ impl ReferenceModel {
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
+            TcpConnectionEnd::Evicted => TcpStreamEnd::Evicted,
             TcpConnectionEnd::Reconnect => TcpStreamEnd::Reconnect,
         };
         for stream in &mut self.streams {

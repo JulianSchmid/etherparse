@@ -1,6 +1,9 @@
 use crate::{tcp_reassembly::*, *};
 use core::net::SocketAddr;
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    vec::Vec,
+};
 
 /// Reassembles the byte streams of TCP connections from captured segments.
 ///
@@ -81,6 +84,9 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// Key of the connection handed out by the last call, whose streams
     /// can have been read since (only kept with a `max_total_buffered`).
     handed_out: Option<TcpConnectionKey<CustomChannelId>>,
+    /// Ids and keys of the connections an eviction ends, empty between
+    /// evictions (kept to re-use its memory).
+    evicted_keys: Vec<(TcpConnectionId, TcpConnectionKey<CustomChannelId>)>,
 }
 
 impl<Timestamp, CustomChannelId> TcpReassemblyPool<Timestamp, CustomChannelId>
@@ -97,6 +103,7 @@ where
             next_id: TcpConnectionId(0),
             buffered: 0,
             handed_out: None,
+            evicted_keys: Vec::new(),
         }
     }
 
@@ -274,10 +281,116 @@ where
         }
     }
 
+    /// Ends the connections whose last packet is older than `cutoff` and
+    /// passes each of them to `callback`, before their buffers are re-used.
+    /// Returns the number of connections ended.
+    ///
+    /// ```
+    /// use etherparse::{tcp_reassembly::*, TcpHeader, TcpSlice};
+    /// use std::net::IpAddr;
+    ///
+    /// // timestamps in seconds
+    /// let mut pool = TcpReassemblyPool::<u64>::default();
+    ///
+    /// // a SYN at second 5 starts a connection
+    /// let mut syn = TcpHeader::new(50000, 80, 1000, 1024);
+    /// syn.syn = true;
+    /// let bytes = syn.to_bytes();
+    /// let segment = TcpSegment {
+    ///     vlan_ids: Default::default(),
+    ///     source: IpAddr::from([10, 0, 0, 1]),
+    ///     destination: IpAddr::from([10, 0, 0, 2]),
+    ///     channel_id: (),
+    ///     tcp: TcpSlice::from_slice(&bytes).unwrap(),
+    /// };
+    /// pool.process_segment(segment, 5);
+    ///
+    /// // at second 70, end the connections idle for a minute
+    /// let evicted = pool.evict_older_than(70 - 60, |connection| {
+    ///     assert_eq!(Some(TcpConnectionEnd::Evicted), connection.end());
+    ///     // read the bytes left in the streams here
+    /// });
+    /// assert_eq!(1, evicted);
+    /// ```
+    ///
+    /// A connection ends as [`TcpConnectionEnd::Evicted`], or as
+    /// [`TcpConnectionEnd::Finished`] if both its FINs were ACKed. Its holes
+    /// become gaps, so all its bytes can be read. The callback gets the
+    /// connections in the order of their ids.
+    ///
+    /// The pool also forgets the connections that ended before (see
+    /// [`TcpIgnoreReason::AfterEnd`]) and whose last packet is older than
+    /// `cutoff`, without counting them, so their later packets can start
+    /// new connections.
+    pub fn evict_older_than<F>(&mut self, cutoff: Timestamp, callback: F) -> usize
+    where
+        Timestamp: PartialOrd,
+        F: FnMut(&mut TcpConnection<Timestamp, CustomChannelId>),
+    {
+        self.evict(|connection| connection.last_seen() < &cutoff, callback)
+    }
+
+    /// Ends all connections and passes each of them to `callback`, before
+    /// their buffers are re-used, e.g. at the end of a capture. Returns the
+    /// number of connections ended.
+    ///
+    /// It works like [`TcpReassemblyPool::evict_older_than`] with a cutoff
+    /// after every packet, so the pool also forgets all connections that
+    /// ended before.
+    pub fn evict_all<F>(&mut self, callback: F) -> usize
+    where
+        F: FnMut(&mut TcpConnection<Timestamp, CustomChannelId>),
+    {
+        self.evict(|_| true, callback)
+    }
+
     /// Takes back an ended connection, so that its buffers are re-used by
     /// new connections.
     pub fn recycle(&mut self, connection: TcpConnection<Timestamp, CustomChannelId>) {
         connection.recycle(&mut self.free);
+    }
+
+    /// Ends the open connections for which `is_old` returns true and passes
+    /// them to `callback` in the order of their ids, then re-uses their
+    /// buffers. Forgets the ended connections for which `is_old` returns
+    /// true. Returns the number of open connections ended.
+    fn evict(
+        &mut self,
+        is_old: impl Fn(&TcpConnection<Timestamp, CustomChannelId>) -> bool,
+        mut callback: impl FnMut(&mut TcpConnection<Timestamp, CustomChannelId>),
+    ) -> usize {
+        // forget the old tombstones, and collect the keys of the old
+        // connections, so they can be ended in the order of their ids
+        let mut keys = core::mem::take(&mut self.evicted_keys);
+        let free = &mut self.free;
+        self.connections.retain(|key, connection| {
+            if false == is_old(connection) {
+                true
+            } else if connection.end().is_some() {
+                if let Some(syn) = connection.take_reconnect_syn() {
+                    syn.recycle(free);
+                }
+                false
+            } else {
+                keys.push((connection.id(), key.clone()));
+                true
+            }
+        });
+        keys.sort_unstable_by_key(|(id, _)| *id);
+
+        let count = keys.len();
+        let connections = &mut self.connections;
+        for mut connection in keys
+            .drain(..)
+            .filter_map(|(_, key)| connections.remove(&key))
+        {
+            connection.release_buffered(&mut self.buffered);
+            connection.end_unless_finished(TcpConnectionEnd::Evicted);
+            callback(&mut connection);
+            connection.recycle(&mut self.free);
+        }
+        self.evicted_keys = keys;
+        count
     }
 }
 
@@ -355,7 +468,7 @@ mod test {
     use super::*;
     use crate::{tcp_reassembly::TcpRole::*, test_gens::*, VlanId};
     use proptest::prelude::*;
-    use std::{format, vec::Vec};
+    use std::{format, vec, vec::Vec};
 
     #[test]
     fn derived_traits() {
@@ -1534,6 +1647,267 @@ mod test {
     }
 
     #[test]
+    fn evict_older_than() {
+        // connections whose last packet is older than the cutoff end as
+        // evicted: the callback gets them in the order of their ids, their
+        // holes are gaps (here the initiator's byte 2), and reads end with
+        // End(Evicted). Connections seen at the cutoff or later stay, and a
+        // later segment of an evicted connection starts a new one
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let scripts: Vec<_> = (0..10)
+                .map(|i| {
+                    let mut script = ConnectionScript::with_port(50000 + i, 1000, 2000);
+                    script
+                        .handshake()
+                        .send(Initiator, b"ab")
+                        .send_at(Initiator, 3, b"d")
+                        .ack(Responder)
+                        .send(Initiator, b"e");
+                    script
+                })
+                .collect();
+            // connection i is seen last at i % 3
+            for (i, script) in scripts.iter().enumerate() {
+                for segment in &script.segments[..6] {
+                    segment.feed(&mut pool, (i % 3) as u32);
+                }
+            }
+            let mut evicted = Vec::new();
+            let count = pool.evict_older_than(2, |connection| {
+                evicted.push(connection.id().0);
+                assert_eq!(Some(TcpConnectionEnd::Evicted), connection.end());
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"ab"), stream.read_received());
+                stream.consume(2);
+                assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+                stream.consume_gap();
+                assert_eq!(TcpRead::Data(b"d"), stream.read_received());
+                stream.consume(1);
+                assert_eq!(TcpRead::End(TcpStreamEnd::Evicted), stream.read_received());
+                assert_eq!(
+                    TcpRead::End(TcpStreamEnd::Evicted),
+                    connection.stream_mut(Responder).read_received()
+                );
+            });
+            assert_eq!(7, count);
+            assert_eq!(vec![0, 1, 3, 4, 6, 7, 9], evicted);
+            {
+                let (connection, _) = scripts[2].segments[6].feed(&mut pool, 3).active.unwrap();
+                assert_eq!(TcpConnectionId(2), connection.id());
+                assert_eq!(
+                    TcpRead::Data(b"ab"),
+                    connection.stream_mut(Initiator).read_received()
+                );
+            }
+            let (connection, _) = scripts[0].segments[6].feed(&mut pool, 3).active.unwrap();
+            assert_eq!(TcpConnectionId(10), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"e"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // a connection whose FINs were both ACKed ends as finished, as no
+        // more packets come, so every hole the ACKs cover is overdue: also
+        // with fewer than ack_reorder_tolerance packets after the ACK that
+        // covered its last hole, and also once the user gave up that hole.
+        // The hole is a gap (unless given up before), and reads end with
+        // End(Fin)
+        for give_up in [false, true] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .send_at(Initiator, 3, b"d")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                if give_up {
+                    let stream = connection.stream_mut(Initiator);
+                    stream.read_received();
+                    stream.consume(2);
+                    assert!(stream.give_up_hole());
+                }
+            }
+            let count = pool.evict_older_than(1, |connection| {
+                assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!((1, 1), (stream.status().gaps, stream.status().gap_bytes));
+                if false == give_up {
+                    assert_eq!(TcpRead::Data(b"ab"), stream.read_received());
+                    stream.consume(2);
+                }
+                assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+                stream.consume_gap();
+                assert_eq!(TcpRead::Data(b"d"), stream.read_received());
+                stream.consume(1);
+                assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+                assert!(stream.is_finished());
+                assert!(false == stream.is_complete());
+                assert_eq!(
+                    TcpRead::End(TcpStreamEnd::Fin),
+                    connection.stream_mut(Responder).read_received()
+                );
+            });
+            assert_eq!(1, count);
+        }
+
+        // a connection whose FINs were not both ACKed ends as evicted, also
+        // without holes (reads at its FINs still end with End(Fin))
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .fin(Initiator)
+                .fin(Responder);
+            script.feed_all(&mut pool);
+            let count = pool.evict_older_than(1, |connection| {
+                assert_eq!(Some(TcpConnectionEnd::Evicted), connection.end());
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(2);
+                assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            });
+            assert_eq!(1, count);
+        }
+
+        // ended connections older than the cutoff are forgotten without
+        // being counted, so a later segment with bytes starts a new
+        // connection, while younger ones still absorb their late segments
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let scripts = [(50000, 1), (50001, 2)].map(|(port, timestamp)| {
+                let mut script = ConnectionScript::with_port(port, 1000, 2000);
+                script.handshake().send(Initiator, b"ab").rst(Initiator);
+                for segment in &script.segments {
+                    segment.feed(&mut pool, timestamp);
+                }
+                script.send(Initiator, b"c");
+                script
+            });
+            assert_eq!(0, pool.evict_older_than(2, |_| panic!()));
+            let processed = scripts[1].segments[5].feed(&mut pool, 3);
+            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            let (connection, _) = scripts[0].segments[5].feed(&mut pool, 3).active.unwrap();
+            assert_eq!(TcpConnectionId(2), connection.id());
+        }
+
+        // evicted connections leave the pool's budget (the ACK makes the
+        // pool account for the bytes of the first connection)
+        {
+            let (mut pool, first, second) = budget_scripts();
+            first.feed_all(&mut pool);
+            assert_eq!(1, pool.evict_older_than(1, |_| {}));
+            let (connection, _) = second.feed_all(&mut pool).active.unwrap();
+            assert_eq!(0, connection.stream(Initiator).status().rejected_bytes);
+        }
+
+        // evicted connections and tombstones give their buffers to the
+        // pool, also the ones of their kept SYNs, so connections like them
+        // allocate nothing afterwards (every buffer for bytes takes the 20
+        // bytes of a SYN)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let with_kept_syn = |isn| {
+                let mut connections = Vec::new();
+                for (port, reset) in [(50000, false), (50001, true)] {
+                    let mut script = ConnectionScript::with_port(port, isn, isn + 1000);
+                    script
+                        .handshake()
+                        .send(Initiator, &[1; 20])
+                        .send(Responder, &[2; 20]);
+                    let mut reconnect = ConnectionScript::with_port(port, isn + 2000, isn + 3000);
+                    reconnect.syn();
+                    script.segments.append(&mut reconnect.segments);
+                    if reset {
+                        script.rst(Responder);
+                    }
+                    connections.extend(script.segments);
+                }
+                connections
+            };
+            let feed = |pool: &mut TcpReassemblyPool<u32, ()>, segments: &[TestSegment]| {
+                let bytes: Vec<_> = segments.iter().map(TestSegment::to_bytes).collect();
+                count_allocations(|| {
+                    for (segment, bytes) in segments.iter().zip(&bytes) {
+                        if let Some(ended) = segment.feed_bytes(bytes, pool, 0).ended {
+                            pool.recycle(ended);
+                        }
+                    }
+                    pool.evict_older_than(1, |_| {})
+                })
+            };
+            assert_eq!(1, feed(&mut pool, &with_kept_syn(10_000)).1);
+            assert_eq!((0, 1), feed(&mut pool, &with_kept_syn(20_000)));
+        }
+    }
+
+    #[test]
+    fn evict_all() {
+        // all connections end, whatever their last packet, in the order of
+        // their ids, and all ended connections are forgotten
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let scripts: Vec<_> = (0..10)
+                .map(|i| {
+                    let mut script = ConnectionScript::with_port(50000 + i, 1000, 2000);
+                    script.handshake().send(Initiator, b"ab");
+                    if 0 == i % 4 {
+                        script.rst(Initiator);
+                    }
+                    for segment in &script.segments {
+                        segment.feed(&mut pool, u32::from(i));
+                    }
+                    script.send(Initiator, b"c");
+                    script
+                })
+                .collect();
+            let mut evicted = Vec::new();
+            let count = pool.evict_all(|connection| {
+                assert_eq!(Some(TcpConnectionEnd::Evicted), connection.end());
+                evicted.push(connection.id().0);
+            });
+            assert_eq!(7, count);
+            assert_eq!(vec![1, 2, 3, 5, 6, 7, 9], evicted);
+            let (connection, _) = scripts[0]
+                .segments
+                .last()
+                .unwrap()
+                .feed(&mut pool, 10)
+                .active
+                .unwrap();
+            assert_eq!(TcpConnectionId(10), connection.id());
+            assert_eq!(1, pool.evict_all(|_| {}));
+        }
+
+        // as with evict_older_than, a connection whose FINs were both ACKed
+        // ends as finished, and its hole is a gap
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .send_at(Initiator, 3, b"d")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            script.feed_all(&mut pool);
+            let count = pool.evict_all(|connection| {
+                assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+                assert_eq!(1, connection.stream(Initiator).status().gaps);
+            });
+            assert_eq!(1, count);
+        }
+    }
+
+    #[test]
     fn recycle() {
         let mut pool = TcpReassemblyPool::<(), ()>::default();
         let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -1674,6 +2048,29 @@ mod test {
                 }
             }
         }
+    }
+
+    /// Pool whose streams buffer at most 10 bytes together, a connection
+    /// whose initiator sends 8 bytes, followed by an ACK (so the pool
+    /// accounts for the bytes), and a second connection whose initiator
+    /// sends 10 bytes after the handshake.
+    fn budget_scripts() -> (
+        TcpReassemblyPool<u32, ()>,
+        ConnectionScript,
+        ConnectionScript,
+    ) {
+        let config = TcpReassemblyConfig {
+            max_total_buffered: Some(10),
+            ..Default::default()
+        };
+        let mut first = ConnectionScript::with_isns(1000, 2000);
+        first
+            .handshake()
+            .send(Initiator, b"abcdefgh")
+            .ack(Responder);
+        let mut second = ConnectionScript::with_port(50001, 3000, 4000);
+        second.handshake().send(Initiator, b"0123456789");
+        (TcpReassemblyPool::new(config), first, second)
     }
 
     /// Connection on `port` that finishes after the initiator's bytes 16..32

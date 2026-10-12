@@ -19,6 +19,13 @@ pub enum TcpConnectionEnd {
         by: TcpRole,
     },
 
+    /// The user evicted the connection, e.g. as it was idle (see
+    /// [`crate::tcp_reassembly::TcpReassemblyPool::evict_older_than`]).
+    ///
+    /// A connection whose FINs were both ACKed ends as
+    /// [`TcpConnectionEnd::Finished`] instead.
+    Evicted,
+
     /// An endpoint started a new connection on the same key (a reconnect).
     ///
     /// A SYN with a new ISN only counts once a SYN-ACK of the other endpoint
@@ -46,6 +53,7 @@ mod test {
             assert_eq!(a, b);
             assert_eq!(a.clone(), a);
             assert_ne!(TcpConnectionEnd::Finished, a);
+            assert_ne!(TcpConnectionEnd::Evicted, a);
             assert_ne!(TcpConnectionEnd::Reconnect, a);
             assert_ne!(
                 TcpConnectionEnd::Reset {
@@ -58,6 +66,7 @@ mod test {
         // debug
         {
             assert_eq!("Finished", format!("{:?}", TcpConnectionEnd::Finished));
+            assert_eq!("Evicted", format!("{:?}", TcpConnectionEnd::Evicted));
             assert_eq!("Reconnect", format!("{:?}", TcpConnectionEnd::Reconnect));
             assert_eq!(
                 "Reset { by: Initiator }",
