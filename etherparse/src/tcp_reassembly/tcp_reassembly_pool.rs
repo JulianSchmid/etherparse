@@ -87,6 +87,11 @@ pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     /// Ids and keys of the connections an eviction ends, empty between
     /// evictions (kept to re-use its memory).
     evicted_keys: Vec<(TcpConnectionId, TcpConnectionKey<CustomChannelId>)>,
+    /// Number of packets ignored as they would have started a connection in
+    /// a full pool.
+    rejected_connections: u64,
+    /// Number of packets applied to no connection.
+    ignored_packets: u64,
 }
 
 impl<Timestamp, CustomChannelId> TcpReassemblyPool<Timestamp, CustomChannelId>
@@ -104,6 +109,8 @@ where
             buffered: 0,
             handed_out: None,
             evicted_keys: Vec::new(),
+            rejected_connections: 0,
+            ignored_packets: 0,
         }
     }
 
@@ -201,11 +208,7 @@ where
                 } else if connection.end().is_some() {
                     // the tombstone stays while late segments come
                     connection.set_last_seen(timestamp);
-                    return TcpProcessed {
-                        active: None,
-                        ended: None,
-                        ignored: Some(TcpIgnoreReason::AfterEnd),
-                    };
+                    return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
                 }
                 connection
             }
@@ -213,18 +216,14 @@ where
                 let Some((initiator, roles_guessed)) =
                     new_connection_initiator(&tcp, source, destination)
                 else {
-                    return TcpProcessed {
-                        active: None,
-                        ended: None,
-                        ignored: Some(TcpIgnoreReason::NoConnection),
-                    };
+                    return ignore(TcpIgnoreReason::NoConnection, &mut self.ignored_packets);
                 };
                 if full {
-                    return TcpProcessed {
-                        active: None,
-                        ended: None,
-                        ignored: Some(TcpIgnoreReason::TooManyConnections),
-                    };
+                    self.rejected_connections += 1;
+                    return ignore(
+                        TcpIgnoreReason::TooManyConnections,
+                        &mut self.ignored_packets,
+                    );
                 }
                 let key = entry.key().clone();
                 entry.insert(new_connection(
@@ -378,6 +377,28 @@ where
         connection.recycle(&mut self.free);
     }
 
+    /// Statistics of the pool.
+    ///
+    /// It walks all connections the pool keeps, also the ended ones (see
+    /// [`TcpPoolStats::tombstones`]), so it takes time proportional to their
+    /// number.
+    pub fn stats(&self) -> TcpPoolStats {
+        let mut stats = TcpPoolStats {
+            rejected_connections: self.rejected_connections,
+            ignored_packets: self.ignored_packets,
+            ..Default::default()
+        };
+        for connection in self.connections.values() {
+            if connection.end().is_some() {
+                stats.tombstones += 1;
+            } else {
+                stats.connections += 1;
+                stats.buffered_bytes += connection.buffered();
+            }
+        }
+        stats
+    }
+
     /// Accounts for the bytes buffered by the connections handed out by the
     /// last call, as reading them made room.
     fn account_handed_out(&mut self) {
@@ -457,6 +478,20 @@ enum HandedOut<CustomChannelId> {
     Connection(TcpConnectionKey<CustomChannelId>),
     /// All connections.
     All,
+}
+
+/// Result for a packet that was applied to no connection for `reason`,
+/// counted in `ignored_packets`.
+fn ignore<'a, Timestamp, CustomChannelId>(
+    reason: TcpIgnoreReason,
+    ignored_packets: &mut u64,
+) -> TcpProcessed<'a, Timestamp, CustomChannelId> {
+    *ignored_packets += 1;
+    TcpProcessed {
+        active: None,
+        ended: None,
+        ignored: Some(reason),
+    }
 }
 
 /// Initiator of the connection that the segment `tcp` from `source` to
@@ -2210,6 +2245,79 @@ mod test {
                     assert_eq!(0, allocations, "round {}", round);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn stats() {
+        // an empty pool
+        assert_eq!(
+            TcpPoolStats::default(),
+            TcpReassemblyPool::<(), ()>::default().stats()
+        );
+
+        // open connections and tombstones are counted apart, the bytes the
+        // streams buffer as for max_total_buffered (also right after
+        // reading them), and ignored packets whatever the reason, the ones
+        // that would start a connection in a full pool also as rejected
+        // connections
+        {
+            let config = TcpReassemblyConfig {
+                max_connections: Some(3),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+            let script = |port| ConnectionScript::with_port(port, 1000, 2000);
+            // 6 bytes (with 2 placeholders) and 2 bytes
+            let mut open = script(50000);
+            open.handshake()
+                .send(Initiator, b"abc")
+                .send_at(Initiator, 5, b"f")
+                .send(Responder, b"xy");
+            open.feed_all(&mut pool);
+            let mut other = script(50001);
+            other.handshake().send(Initiator, b"0123");
+            other.feed_all(&mut pool);
+            let mut ended = script(50002);
+            ended.handshake().send(Initiator, b"x").rst(Initiator);
+            ended.feed_all(&mut pool);
+            // NoConnection, AfterEnd and TooManyConnections twice
+            let mut ignored = script(50003);
+            ignored.handshake();
+            ignored.segments[2].feed(&mut pool, 0);
+            ended.segments[3].feed(&mut pool, 0);
+            ignored.segments[0].feed(&mut pool, 0);
+            ignored.segments[1].feed(&mut pool, 0);
+            assert_eq!(
+                TcpPoolStats {
+                    connections: 2,
+                    tombstones: 1,
+                    buffered_bytes: 12,
+                    rejected_connections: 2,
+                    ignored_packets: 4,
+                },
+                pool.stats()
+            );
+            {
+                let (connection, _) = open.segments[4].feed(&mut pool, 0).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                stream.read_received();
+                stream.consume(2);
+            }
+            assert_eq!(10, pool.stats().buffered_bytes);
+
+            // eviction leaves only the counters
+            pool.evict_all(|_| {});
+            assert_eq!(
+                TcpPoolStats {
+                    connections: 0,
+                    tombstones: 0,
+                    buffered_bytes: 0,
+                    rejected_connections: 2,
+                    ignored_packets: 4,
+                },
+                pool.stats()
+            );
         }
     }
 

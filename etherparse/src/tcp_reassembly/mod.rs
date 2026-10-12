@@ -16,6 +16,9 @@ pub use tcp_connection_key::*;
 mod tcp_ignore_reason;
 pub use tcp_ignore_reason::*;
 
+mod tcp_pool_stats;
+pub use tcp_pool_stats::*;
+
 mod tcp_processed;
 pub use tcp_processed::*;
 

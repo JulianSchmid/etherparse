@@ -1063,6 +1063,28 @@ prop_compose! {
 }
 
 #[cfg(feature = "std")]
+prop_compose! {
+    pub fn tcp_pool_stats_any()
+        (
+            connections in any::<usize>(),
+            tombstones in any::<usize>(),
+            buffered_bytes in any::<usize>(),
+            rejected_connections in any::<u64>(),
+            ignored_packets in any::<u64>(),
+        )
+        -> crate::tcp_reassembly::TcpPoolStats
+    {
+        crate::tcp_reassembly::TcpPoolStats {
+            connections,
+            tombstones,
+            buffered_bytes,
+            rejected_connections,
+            ignored_packets,
+        }
+    }
+}
+
+#[cfg(feature = "std")]
 pub fn tcp_stream_start_any() -> impl Strategy<Value = crate::tcp_reassembly::TcpStreamStart> {
     use crate::tcp_reassembly::TcpStreamStart;
     prop_oneof![

@@ -429,10 +429,16 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         core::mem::replace(self, tombstone)
     }
 
+    /// Number of bytes both streams buffer, each from its read position to
+    /// its furthest stored byte, with the placeholders of holes.
+    pub(crate) fn buffered(&self) -> usize {
+        self.initiator_stream.buffered() + self.responder_stream.buffered()
+    }
+
     /// Updates `total`, the bytes buffered by the pool's connections, with
     /// the bytes the streams buffer now (reading them makes room).
     pub(crate) fn account_buffered(&mut self, total: &mut usize) {
-        let buffered = self.initiator_stream.buffered() + self.responder_stream.buffered();
+        let buffered = self.buffered();
         *total = total
             .saturating_sub(self.accounted)
             .saturating_add(buffered);
