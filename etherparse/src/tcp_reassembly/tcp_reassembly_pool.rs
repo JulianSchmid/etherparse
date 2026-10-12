@@ -114,7 +114,10 @@ where
     /// starts a new one. Without a SYN or SYN-ACK, the roles of the
     /// endpoints are guessed (see [`TcpConnection::roles_guessed`]). Other
     /// segments of unknown connections (pure ACKs, FINs without bytes and
-    /// RSTs) are ignored with [`TcpIgnoreReason::NoConnection`].
+    /// RSTs) are ignored with [`TcpIgnoreReason::NoConnection`]. A segment
+    /// that would start a connection while the pool has
+    /// [`TcpReassemblyConfig::max_connections`] connections is ignored with
+    /// [`TcpIgnoreReason::TooManyConnections`].
     ///
     /// A connection that ends, e.g. by an RST (see
     /// [`TcpConnectionEnd::Reset`]), is handed over in
@@ -149,6 +152,10 @@ where
 
         let mut replaced = None;
         let mut replayed_syn = None;
+        let full = self
+            .config
+            .max_connections
+            .is_some_and(|max| self.connections.len() >= max);
         let connection = match self.connections.entry(key) {
             Entry::Occupied(entry) => {
                 let connection = entry.into_mut();
@@ -211,6 +218,13 @@ where
                         ignored: Some(TcpIgnoreReason::NoConnection),
                     };
                 };
+                if full {
+                    return TcpProcessed {
+                        active: None,
+                        ended: None,
+                        ignored: Some(TcpIgnoreReason::TooManyConnections),
+                    };
+                }
                 let key = entry.key().clone();
                 entry.insert(new_connection(
                     &mut self.next_id,
@@ -1288,6 +1302,50 @@ mod test {
                     }
                 }
             }
+        }
+
+        // a pool with max_connections connections, tombstones included,
+        // ignores segments that would start another one, while segments of
+        // its connections and reconnects on their keys are applied (segments
+        // that would start no connection stay NoConnection)
+        {
+            let config = TcpReassemblyConfig {
+                max_connections: Some(2),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut open = ConnectionScript::with_isns(1000, 2000);
+            open.handshake().send(Initiator, b"abc");
+            let mut ended =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 3000, 4000);
+            ended.handshake().rst(Initiator);
+            let mut other =
+                ConnectionScript::new(addr("10.0.0.1:50002"), addr("10.0.0.2:80"), 5000, 6000);
+            other.handshake().send(Initiator, b"x");
+            open.feed(&mut pool, ..3);
+            ended.feed_all(&mut pool).ended.unwrap();
+            for (segment, expected) in [
+                (0, TcpIgnoreReason::TooManyConnections),
+                (2, TcpIgnoreReason::NoConnection),
+                (3, TcpIgnoreReason::TooManyConnections),
+            ] {
+                let processed = other.segments[segment].feed(&mut pool, ());
+                assert!(processed.active.is_none());
+                assert!(processed.ended.is_none());
+                assert_eq!(Some(expected), processed.ignored);
+            }
+            {
+                let (connection, _) = open.segments[3].feed(&mut pool, ()).active.unwrap();
+                assert_eq!(
+                    TcpRead::Data(b"abc"),
+                    connection.stream_mut(Initiator).read_received()
+                );
+            }
+            let mut reconnect =
+                ConnectionScript::new(addr("10.0.0.1:50001"), addr("10.0.0.2:80"), 7000, 8000);
+            reconnect.syn();
+            let (connection, _) = reconnect.feed_all(&mut pool).active.unwrap();
+            assert_eq!(TcpConnectionId(2), connection.id());
         }
 
         // all streams of the pool together buffer at most

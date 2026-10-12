@@ -81,7 +81,10 @@ pub struct TcpReassemblyConfig {
     /// Maximum number of connections in the pool (default `None`, no limit).
     ///
     /// Ended connections whose late packets are still absorbed count
-    /// towards it.
+    /// towards it. Segments that would start a connection beyond it are
+    /// ignored (see
+    /// [`crate::tcp_reassembly::TcpIgnoreReason::TooManyConnections`]), while
+    /// reconnects that reuse the key of a connection in the pool are not.
     pub max_connections: Option<usize>,
 
     /// Maximum number of bytes buffered by all streams of the pool together,

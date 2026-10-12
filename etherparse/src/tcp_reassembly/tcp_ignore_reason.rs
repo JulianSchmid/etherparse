@@ -7,6 +7,11 @@ pub enum TcpIgnoreReason {
 
     /// The packet belongs to a connection that already ended.
     AfterEnd,
+
+    /// The packet would start a connection, but the pool already has
+    /// [`crate::tcp_reassembly::TcpReassemblyConfig::max_connections`]
+    /// connections.
+    TooManyConnections,
 }
 
 #[cfg(test)]
@@ -33,6 +38,10 @@ mod test {
                 format!("{:?}", TcpIgnoreReason::NoConnection)
             );
             assert_eq!("AfterEnd", format!("{:?}", TcpIgnoreReason::AfterEnd));
+            assert_eq!(
+                "TooManyConnections",
+                format!("{:?}", TcpIgnoreReason::TooManyConnections)
+            );
         }
 
         // hash
