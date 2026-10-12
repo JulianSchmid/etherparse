@@ -646,6 +646,12 @@ impl TcpStream {
             let keep_alive =
                 is_keep_alive_shaped(tcp) && Some(seq.wrapping_add(1)) == self.pending_ack;
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
+                // bytes that don't fit start no stream, so that byte 0 of a
+                // pickup is always stored (and bytes can be put in front)
+                if false == data.is_empty() && 0 == config.max_stream_buffer {
+                    self.status.rejected_bytes += data.len() as u64;
+                    return;
+                }
                 self.start_seq = Some(seq);
             }
         }
@@ -704,17 +710,22 @@ impl TcpStream {
         };
 
         // bytes before offset 0 of a mid-stream pickup are prepended until
-        // it is read from, and are outside of the stream after that
+        // it is read from (if they fit), and are outside of the stream after
+        // that
         let mut out_of_window = false;
         if start < 0
             && false == data.is_empty()
             && TcpStreamStart::MidStreamPickup == self.status.start
         {
-            if self.can_move_start_back(start, window, config) {
+            if false == self.can_move_start_back(start, window, config) {
+                out_of_window = true;
+            } else if self.fits_in_front(start.unsigned_abs(), config) {
                 self.move_start_back(seq, start);
                 start = 0;
             } else {
-                out_of_window = true;
+                // the bytes from offset 0 on are stored as usual
+                let before = (data.len() as u64).min(start.unsigned_abs());
+                self.status.rejected_bytes += before;
             }
         }
         let end = start + data.len() as i64;
@@ -823,7 +834,9 @@ impl TcpStream {
                 let Some(start) = self.offset(start_seq, seq) else {
                     return false;
                 };
-                if false == self.can_move_start_back(start, window, config) {
+                if false == self.can_move_start_back(start, window, config)
+                    || false == self.fits_in_front(start.unsigned_abs(), config)
+                {
                     return false;
                 }
                 self.move_start_back(seq, start);
@@ -839,6 +852,12 @@ impl TcpStream {
     /// range of the receiver's receive window `window` before offset 0.
     fn can_move_start_back(&self, start: i64, window: u64, config: &TcpReassemblyConfig) -> bool {
         0 >= start && start.unsigned_abs() <= window_range(window, config) && self.can_prepend()
+    }
+
+    /// Returns true if `len` bytes fit in front of the stream.
+    fn fits_in_front(&self, len: u64, config: &TcpReassemblyConfig) -> bool {
+        // the read position is at offset 0, so all buffered bytes count
+        len.saturating_add(self.buffered() as u64) <= config.max_stream_buffer as u64
     }
 
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
@@ -1086,7 +1105,8 @@ impl TcpStream {
         }
 
         // bytes after the end of the buffer (and the placeholders before
-        // them) must fit the buffer, the bytes before it fill holes
+        // them) must fit the buffer, the bytes before it fill holes (the
+        // buffer never holds more than its limit)
         let buf_end = self.buf_end();
         let limit = self
             .read_offset
@@ -5415,6 +5435,92 @@ mod test {
             assert_eq!(Some(6), stream.fin_offset());
             assert_eq!(vec![0..6], stream.holes().collect::<Vec<_>>());
             assert_eq!(TcpRead::Pending, stream.read_received());
+        }
+
+        // ... while bytes none of which fit don't start a mid-stream pickup,
+        // also with a FIN, and a FIN without bytes does
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 0,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .fin_with_data(Initiator, b"def")
+                .fin_at(Initiator, 6, &[]);
+            script.segments.drain(..3);
+            {
+                let (connection, _) = script.feed(&mut pool, ..2).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(6, stream.status().rejected_bytes);
+                assert_eq!(None, stream.fin_offset());
+                assert_eq!(TcpRead::Pending, stream.read_received());
+            }
+            let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(Some(0), stream.fin_offset());
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+        }
+
+        // bytes put in front of a mid-stream pickup have to fit the buffer
+        // from the new offset 0 on, otherwise the bytes before offset 0 are
+        // rejected and offset 0 stays, while the bytes from offset 0 on are
+        // stored (the pickup starts with 6 bytes at 4, the bytes in front
+        // start at 0 or 2)
+        for (max_stream_buffer, offset, data, rejected, expected) in [
+            (10, 0, &b"ab"[..], 0, &b"ab"[..]),
+            (9, 0, b"ab", 2, b"efghij"),
+            (7, 2, b"cdefghijk", 2, b"efghijk"),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efghij")
+                .send_at(Initiator, offset, data);
+            script.segments.drain(..4);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(rejected, stream.status().rejected_bytes);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(expected), stream.read_received());
+        }
+
+        // a late SYN that would need more room than the buffer has counts as
+        // out-of-window, and so does the ACK of a late SYN-ACK, so the
+        // stream stays a mid-stream pickup (the pickup starts with 6 bytes
+        // at 4)
+        for (max_stream_buffer, syn, start, out_of_window) in [
+            (10, 0, TcpStreamStart::Observed, 0),
+            (9, 0, TcpStreamStart::MidStreamPickup, 1),
+            (10, 1, TcpStreamStart::Observed, 0),
+            (9, 1, TcpStreamStart::MidStreamPickup, 0),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efghij");
+            let syn = script.segments[syn].clone();
+            script.segments.drain(..4);
+            script.segments.push(syn);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!(start, status.start);
+            assert_eq!(out_of_window, status.out_of_window_segments);
         }
 
         // a resync happens even if the bytes of its new start don't fit:
