@@ -644,7 +644,7 @@ impl TcpStream {
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
             // stream's own one
-            if false == self.observe_start(seq, window, config) {
+            if false == self.observe_start(seq, data.len(), window, config) {
                 self.status.out_of_window_segments += 1;
                 return;
             }
@@ -733,7 +733,7 @@ impl TcpStream {
         {
             if false == self.can_move_start_back(start, window, config) {
                 out_of_window = true;
-            } else if self.fits_in_front(start.unsigned_abs(), config) {
+            } else if self.fits_in_front(start.unsigned_abs(), data.len(), config) {
                 self.move_start_back(seq, start);
                 start = 0;
             } else {
@@ -835,13 +835,15 @@ impl TcpStream {
     }
 
     /// Gives the stream an observed start at `seq`, the sequence number
-    /// after its SYN, where `window` is the receiver's receive window.
+    /// after its SYN, which carries `data_len` bytes, where `window` is the
+    /// receiver's receive window.
     ///
     /// A mid-stream pickup moves its start back to `seq`. Returns false if
     /// it can't, and true if the stream has an observed start afterwards.
     pub(crate) fn observe_start(
         &mut self,
         seq: u32,
+        data_len: usize,
         window: u64,
         config: &TcpReassemblyConfig,
     ) -> bool {
@@ -854,7 +856,7 @@ impl TcpStream {
                     return false;
                 };
                 if false == self.can_move_start_back(start, window, config)
-                    || false == self.fits_in_front(start.unsigned_abs(), config)
+                    || false == self.fits_in_front(start.unsigned_abs(), data_len, config)
                 {
                     return false;
                 }
@@ -873,10 +875,15 @@ impl TcpStream {
         0 >= start && start.unsigned_abs() <= window_range(window, config) && self.can_prepend()
     }
 
-    /// Returns true if `len` bytes fit in front of the stream.
-    fn fits_in_front(&self, len: u64, config: &TcpReassemblyConfig) -> bool {
-        // the read position is at offset 0, so all buffered bytes count
+    /// Returns true if `len` bytes fit in front of the stream, the first
+    /// `data_len` of which are received.
+    fn fits_in_front(&self, len: u64, data_len: usize, config: &TcpReassemblyConfig) -> bool {
+        // the read position is at offset 0, so all buffered bytes count, and
+        // the missing bytes before the old offset 0 are a new hole (byte 0
+        // of a pickup is always stored)
+        let holes = self.counted_holes() + usize::from((data_len as u64) < len);
         len.saturating_add(self.buffered() as u64) <= config.max_stream_buffer as u64
+            && holes <= config.max_holes_per_stream
     }
 
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
@@ -1133,7 +1140,14 @@ impl TcpStream {
         let limit = self
             .read_offset
             .saturating_add(config.max_stream_buffer as u64);
-        let stored_end = end.min(limit).max(start);
+        let mut stored_end = end.min(limit).max(start);
+        // a segment that would leave too many holes is rejected entirely
+        if self.holes_after_storing(start..stored_end) > config.max_holes_per_stream {
+            stored_end = start;
+        }
+        // the bytes after the stored ones are rejected, they are all
+        // missing (a segment that would leave too many holes lies in
+        // missing bytes, as it adds a hole before stored bytes)
         if stored_end < end {
             self.status.rejected_bytes += end - stored_end;
             self.rejected_end = self.rejected_end.max(end);
@@ -1250,6 +1264,38 @@ impl TcpStream {
                 index += 1;
             }
         }
+    }
+
+    /// Number of holes before the furthest stored byte (the ones the hole
+    /// limit counts) after storing the bytes in `range`.
+    fn holes_after_storing(&self, range: Range<u64>) -> usize {
+        // the missing bytes before bytes after the highest offset are a
+        // hole, a new one unless they extend the hole at the end
+        if range.start > self.highest_offset {
+            return self.holes.len() + usize::from(false == self.ends_with_hole());
+        }
+        let (cut, before, after) = self.cut_holes(&range);
+        let holes = self.holes.len() - cut.len()
+            + usize::from(false == before.is_empty())
+            + usize::from(false == after.is_empty());
+        // a part of the hole at the end stays unless the bytes reach the
+        // highest offset
+        holes - usize::from(range.end < self.highest_offset && self.ends_with_hole())
+    }
+
+    /// Number of holes before the furthest stored byte, the ones the hole
+    /// limit counts.
+    fn counted_holes(&self) -> usize {
+        self.holes.len() - usize::from(self.ends_with_hole())
+    }
+
+    /// Returns true if the missing bytes after the furthest stored byte
+    /// (e.g. rejected ones, or ones that were ACKed but not captured) are a
+    /// hole.
+    fn ends_with_hole(&self) -> bool {
+        self.holes
+            .last()
+            .is_some_and(|hole| hole.end == self.highest_offset)
     }
 
     /// Indices of the holes that overlap `range`, and the parts of them
@@ -4483,6 +4529,139 @@ mod test {
             assert_eq!(0, stream.holes().count());
             assert_eq!((1, 3), (stream.status().gaps, stream.status().gap_bytes));
         }
+
+        // a flood of 1-byte holes is bounded: a segment that would leave
+        // more holes than the limit is rejected, its bytes join one more
+        // hole at the end, and so do the bytes of every later segment that
+        // would leave more holes (regression test: the old tcp-reassembly
+        // branch kept every hole)
+        {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 3,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            for offset in (0..2000).step_by(2) {
+                script.send_at(Initiator, offset, b"x");
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(
+                vec![1..2, 3..4, 5..6, 7..1999],
+                stream.holes().collect::<Vec<_>>()
+            );
+            assert_eq!(996, stream.status().rejected_bytes);
+        }
+
+        // at the limit, a segment that would split a hole or leave a new one
+        // before it is rejected, while segments that fill a hole, cut it at
+        // its start or end, or follow the highest offset are stored (2
+        // holes, bytes at 0, 4 and 7)
+        for (offset, data, expected, rejected) in [
+            (2, &b"c"[..], vec![1..4, 5..7], 1),
+            (9, b"j", vec![1..4, 5..7, 8..10], 1),
+            (1, b"bcd", vec![5..7], 0),
+            (1, b"b", vec![2..4, 5..7], 0),
+            (3, b"d", vec![1..3, 5..7], 0),
+            (8, b"i", vec![1..4, 5..7], 0),
+        ] {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"a")
+                .send_at(Initiator, 4, b"e")
+                .send_at(Initiator, 7, b"h")
+                .send_at(Initiator, offset, data);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(expected, stream.holes().collect::<Vec<_>>());
+            assert_eq!(rejected, stream.status().rejected_bytes);
+        }
+
+        // at the limit, bytes after a hole that ends at the highest offset
+        // extend it, so they leave no new hole
+        {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"a")
+                .ack_to(Responder, 3)
+                .send_at(Initiator, 4, b"e");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(vec![1..4], stream.holes().collect::<Vec<_>>());
+            assert_eq!(0, stream.status().rejected_bytes);
+        }
+
+        // the hole at the end, which an ACK or a FIN that moves the highest
+        // offset adds, doesn't count: bytes that fill it from its start are
+        // stored at the limit, bytes after a loss that would put it before
+        // stored bytes are not (a retransmission changes nothing)
+        for fin in [false, true] {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 1,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_at(Initiator, 0, b"a")
+                .send_at(Initiator, 2, b"c");
+            if fin {
+                script.fin_at(Initiator, 5, &[]);
+            } else {
+                script.ack_to(Responder, 5);
+            }
+            script
+                .send_at(Initiator, 0, b"a")
+                .send_at(Initiator, 3, b"d");
+            if false == fin {
+                script.send_at(Initiator, 6, b"x");
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            let (holes, rejected) = if fin {
+                (vec![1..2, 4..5], 0)
+            } else {
+                (vec![1..2, 4..7], 1)
+            };
+            assert_eq!(holes, stream.holes().collect::<Vec<_>>());
+            assert_eq!(rejected, stream.status().rejected_bytes);
+        }
+
+        // ... so without any holes allowed, in-order bytes after an ACK that
+        // was captured before them are stored
+        {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 0,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"ab")
+                .ack_to(Responder, 6)
+                .send_at(Initiator, 2, b"cd")
+                .send_at(Initiator, 4, b"ef");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
+        }
     }
 
     #[test]
@@ -5635,17 +5814,21 @@ mod test {
         }
 
         // bytes put in front of a mid-stream pickup have to fit the buffer
-        // from the new offset 0 on, otherwise the bytes before offset 0 are
+        // from the new offset 0 on, and the hole they leave before the old
+        // offset 0 the hole limit, otherwise the bytes before offset 0 are
         // rejected and offset 0 stays, while the bytes from offset 0 on are
         // stored (the pickup starts with 6 bytes at 4, the bytes in front
         // start at 0 or 2)
-        for (max_stream_buffer, offset, data, rejected, expected) in [
-            (10, 0, &b"ab"[..], 0, &b"ab"[..]),
-            (9, 0, b"ab", 2, b"efghij"),
-            (7, 2, b"cdefghijk", 2, b"efghijk"),
+        for (max_stream_buffer, max_holes_per_stream, offset, data, rejected, expected) in [
+            (10, 1, 0, &b"ab"[..], 0, &b"ab"[..]),
+            (9, 1, 0, b"ab", 2, b"efghij"),
+            (7, 1, 2, b"cdefghijk", 2, b"efghijk"),
+            (10, 0, 0, b"ab", 2, b"efghij"),
+            (10, 0, 0, b"abcd", 0, b"abcdefghij"),
         ] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer,
+                max_holes_per_stream,
                 ..Default::default()
             };
             let mut pool = TcpReassemblyPool::<(), ()>::new(config);
@@ -5663,18 +5846,23 @@ mod test {
             assert_eq!(TcpRead::Data(expected), stream.read_received());
         }
 
-        // a late SYN that would need more room than the buffer has counts as
-        // out-of-window, and so does the ACK of a late SYN-ACK, so the
+        // a late SYN that would need more room than the limits allow counts
+        // as out-of-window (its bytes fill the hole up to the old offset 0),
+        // and the ACK of a late SYN-ACK gives no observed start then, so the
         // stream stays a mid-stream pickup (the pickup starts with 6 bytes
         // at 4)
-        for (max_stream_buffer, syn, start, out_of_window) in [
-            (10, 0, TcpStreamStart::Observed, 0),
-            (9, 0, TcpStreamStart::MidStreamPickup, 1),
-            (10, 1, TcpStreamStart::Observed, 0),
-            (9, 1, TcpStreamStart::MidStreamPickup, 0),
+        for (max_stream_buffer, max_holes_per_stream, syn, tfo, start, out_of_window) in [
+            (10, 1, 0, &b""[..], TcpStreamStart::Observed, 0),
+            (9, 1, 0, b"", TcpStreamStart::MidStreamPickup, 1),
+            (10, 0, 0, b"", TcpStreamStart::MidStreamPickup, 1),
+            (10, 0, 0, b"abcd", TcpStreamStart::Observed, 0),
+            (10, 1, 1, b"", TcpStreamStart::Observed, 0),
+            (9, 1, 1, b"", TcpStreamStart::MidStreamPickup, 0),
+            (10, 0, 1, b"", TcpStreamStart::MidStreamPickup, 0),
         ] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer,
+                max_holes_per_stream,
                 ..Default::default()
             };
             let mut pool = TcpReassemblyPool::<(), ()>::new(config);
@@ -5683,13 +5871,48 @@ mod test {
                 .handshake()
                 .send(Initiator, b"abcd")
                 .send(Initiator, b"efghij");
-            let syn = script.segments[syn].clone();
+            let mut syn = script.segments[syn].clone();
+            syn.payload = tfo.to_vec();
             script.segments.drain(..4);
             script.segments.push(syn);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let status = connection.stream(Initiator).status();
             assert_eq!(start, status.start);
             assert_eq!(out_of_window, status.out_of_window_segments);
+        }
+
+        // the hole at the end doesn't count for the hole limit either: a late
+        // SYN, or bytes put in front, that leave no new hole are taken (the
+        // pickup starts with 4 bytes at 4, bytes at 12 don't fit as they
+        // would leave a hole before them)
+        for syn in [false, true] {
+            let config = TcpReassemblyConfig {
+                max_holes_per_stream: 0,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abcd")
+                .send(Initiator, b"efgh")
+                .send_at(Initiator, 12, b"xy");
+            let mut late = script.segments[if syn { 0 } else { 3 }].clone();
+            if syn {
+                late.payload = b"abcd".to_vec();
+            }
+            script.segments.drain(..4);
+            script.segments.push(late);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            let expected = if syn {
+                TcpStreamStart::Observed
+            } else {
+                TcpStreamStart::MidStreamPickup
+            };
+            assert_eq!(expected, stream.status().start);
+            assert_eq!(2, stream.status().rejected_bytes);
+            assert_eq!(TcpRead::Data(b"abcdefgh"), stream.read_received());
         }
 
         // a resync happens even if the bytes of its new start don't fit:

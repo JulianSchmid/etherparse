@@ -217,6 +217,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             let window = self.window(sender.other(), config);
             self.stream_mut(sender.other()).observe_start(
                 tcp.acknowledgment_number(),
+                // the SYN-ACK carries none of the SYN's bytes
+                0,
                 window,
                 config,
             );

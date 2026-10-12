@@ -23,9 +23,14 @@ pub struct TcpReassemblyConfig {
     /// twice as much memory.
     pub max_stream_buffer: usize,
 
-    /// Maximum number of holes per stream (default 256).
+    /// Maximum number of holes before the furthest stored byte of a stream
+    /// (default 256).
     ///
-    /// A segment that would create more holes is rejected.
+    /// A segment that would leave more is rejected entirely (see
+    /// [`crate::tcp_reassembly::TcpStream::holes`]). The missing bytes after
+    /// the furthest stored byte, e.g. rejected bytes or ACKed bytes that
+    /// were not captured, don't count, so a stream has at most one more
+    /// hole.
     pub max_holes_per_stream: usize,
 
     /// Number of receiver windows of later data after which a hole is
