@@ -1013,7 +1013,7 @@ impl ReferenceModel {
             if replaced.end.is_some() {
                 return None;
             }
-            replaced.end_replaced();
+            replaced.end_unless_finished(TcpConnectionEnd::Reconnect);
             return Some(replaced);
         }
         if false == self.created {
@@ -1111,14 +1111,14 @@ impl ReferenceModel {
         }
     }
 
-    /// Ends the connection that a reconnect replaces: as finished if both
-    /// FINs were ACKed, as a reconnect otherwise.
-    fn end_replaced(&mut self) {
+    /// Ends the connection, of which no more packets come: as finished if
+    /// both FINs were ACKed, with `end` otherwise.
+    fn end_unless_finished(&mut self, end: TcpConnectionEnd) {
         let finished = self.streams.iter().all(ModelStream::is_fin_acked);
         self.end_with(if finished {
             TcpConnectionEnd::Finished
         } else {
-            TcpConnectionEnd::Reconnect
+            end
         });
     }
 

@@ -193,7 +193,7 @@ where
                     let mut ended = core::mem::replace(connection, reconnect);
                     ended.release_buffered(&mut self.buffered);
                     if ended.end().is_none() {
-                        ended.end_replaced();
+                        ended.end_unless_finished(TcpConnectionEnd::Reconnect);
                         replaced = Some(ended);
                     }
                 } else if connection.end().is_some() {

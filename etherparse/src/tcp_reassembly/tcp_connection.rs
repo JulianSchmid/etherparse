@@ -181,17 +181,17 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         sender
     }
 
-    /// Ends the connection that a reconnect replaces: as finished if both
-    /// FINs were ACKed, as no more packets of it come (so every hole the
-    /// ACKs cover counts as overdue), and as a reconnect otherwise.
-    pub(crate) fn end_replaced(&mut self) {
+    /// Ends the connection, of which no more packets come (e.g. as a
+    /// reconnect replaces it): as finished if both FINs were ACKed, as every
+    /// hole the ACKs cover counts as overdue, and with `end` otherwise.
+    pub(crate) fn end_unless_finished(&mut self, end: TcpConnectionEnd) {
         let finished = [&self.initiator_stream, &self.responder_stream]
             .iter()
             .all(|stream| stream.is_fin_acked());
         self.end_with(if finished {
             TcpConnectionEnd::Finished
         } else {
-            TcpConnectionEnd::Reconnect
+            end
         });
     }
 
