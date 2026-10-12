@@ -148,7 +148,7 @@ The generic parameters are named `Timestamp` and `CustomChannelId`, as in `IpDef
 - `get_mut(key)` and `iter_mut()`.
 - `evict_older_than(cutoff, callback)` (requires `Timestamp: PartialOrd`) and `evict_all(callback)` both return the number of evicted connections. The callback gets `&mut TcpConnection` before the pool recycles the buffers.
 - `recycle(connection)` returns an ended connection's buffers to the pool.
-- `stats()` returns `TcpPoolStats`.
+- `stats()` returns `TcpPoolStats`. It walks the connection table, so it takes time proportional to the number of connections and tombstones, and costs nothing per packet (user decision, 2026-10-12).
 
 **Processing results**
 - `TcpProcessed` has three public fields:
@@ -156,7 +156,7 @@ The generic parameters are named `Timestamp` and `CustomChannelId`, as in `IpDef
   - `ended`: an owned connection ended by this packet;
   - `ignored`: a `TcpIgnoreReason`, set when the packet was applied to no connection.
 - `TcpIgnoreReason` is one of `NotTcp`, `NoConnection`, `AfterEnd` or `TooManyConnections`.
-- `TcpPoolStats` contains connections, tombstones, buffered bytes, rejected connections and ignored packets.
+- `TcpPoolStats` contains connections, tombstones, buffered bytes, rejected connections and ignored packets. Ignored packets are all packets with `ignored` set, and rejected connections the `TooManyConnections` ones among them (user decision, 2026-10-12).
 
 **Inputs and identity**
 - `TcpSegment<CustomChannelId>` has the fields VLAN IDs (up to 3), source and destination `IpAddr`, channel id, and the `TcpSlice`.
@@ -320,11 +320,11 @@ The rule ids are for referencing from tickets and test names.
 **Pool (P)**
 - **P1** The key comes from the packet's VLAN IDs, IP addresses and ports, plus the channel id. The endpoints are sorted.
 - **P2** Non-TCP packets and IP-fragmented TCP are ignored with `NotTcp`.
-- **P3** A connection that ends other than by eviction leaves a tombstone with its key, id and last-seen time. Late segments are ignored with `AfterEnd`. A SYN (C1) or eviction removes the tombstone. Tombstones count towards `max_connections`.
+- **P3** A connection that ends other than by eviction leaves a tombstone with its key, id and last-seen time. Late segments are ignored with `AfterEnd` and update the tombstone's last-seen time (P7), so eviction removes a tombstone only once no late segment came since the cutoff, and late segments that keep coming never start a ghost pickup (user decision, 2026-10-12). A SYN (C1) or eviction removes the tombstone. Tombstones count towards `max_connections`.
 - **P4** Connection ids start at 0 and increase by one for each new connection.
 - **P5** The free list keeps at most `max_pooled_buffers` buffers per kind. Recycled buffers are shrunk to `max_pooled_buffer_capacity`.
-- **P6** `evict_older_than` ends connections with `last_seen < cutoff` as `Evicted` (F5). A connection that is already finished (F3), e.g. because the user gave up its last hole after both FINs were ACKed, ends as `Finished` instead; `evict_all` does the same (user decision, 2026-10-11). For this check, every hole that the seen ACK covers counts as overdue (K4). Otherwise a connection that closed cleanly, with fewer than `ack_reorder_tolerance` packets after the ACK that covered its last hole, would end as `Evicted` (user decision, 2026-10-11). It calls the callback and then recycles their buffers. It also removes tombstones older than the cutoff. The return value counts evicted connections only, not tombstones.
-- **P7** Every processed packet of a connection updates `last_seen`. `first_seen` is the timestamp of its first packet.
+- **P6** `evict_older_than` ends connections with `last_seen < cutoff` as `Evicted` (F5). A connection that is already finished (F3), e.g. because the user gave up its last hole after both FINs were ACKed, ends as `Finished` instead; `evict_all` does the same (user decision, 2026-10-11). For this check, every hole that the seen ACK covers counts as overdue (K4). Otherwise a connection that closed cleanly, with fewer than `ack_reorder_tolerance` packets after the ACK that covered its last hole, would end as `Evicted` (user decision, 2026-10-11). It calls the callback in the order of the connection ids, so the output is the same in every run (user decision, 2026-10-12), and then recycles their buffers. It also removes tombstones older than the cutoff. The return value counts evicted connections only, not tombstones.
+- **P7** Every processed packet of a connection updates `last_seen`, also a late one that its tombstone absorbs (P3). `first_seen` is the timestamp of its first packet.
 
 **Status (Q)**
 - **Q1** `is_clean()` holds when there are no gaps, resyncs, conflicting retransmissions or rejected bytes.

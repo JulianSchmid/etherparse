@@ -58,3 +58,11 @@ F5 for `Evicted` uses `TcpStream::give_up_holes_before(highest_offset)` (see tic
 - `TooManyConnections` is returned in the `Entry::Vacant` branch of `process_segment`; the rejected-connections counter of `stats()` belongs there.
 - Tombstones count towards `max_connections`, so without eviction a pool full of tombstones rejects every new connection.
 - A stream's buffer can take up to about twice `max_stream_buffer`, as consumed bytes are drained once they make up half of it. The allocation test and `max_pooled_buffer_capacity` should allow for that.
+
+**2026-10-12 — user decisions (asked before implementing):**
+1. **Late segments refresh a tombstone's `last_seen`** (P7 holds for tombstones too): eviction removes a tombstone only once no late segment came since the cutoff, so late packets that keep coming never start a ghost pickup. Rejected: keeping the last-seen time of the connection's last packet, under which a tombstone goes one timeout after the end, and a late segment with bytes after that starts a ghost mid-stream pickup.
+2. **The callback is called in the order of the connection ids** (creation order), so output at `evict_all` is the same in every run. The pool keeps a reusable list of the keys to evict and sorts it. Rejected: the hash map's order, which changes from run to run.
+3. **`stats()` walks the connection table** at each call: O(connections), always exact, no cost per packet. Rejected: counters, under which the buffered-byte accounting of `max_total_buffered` would run for every packet also without the limit.
+4. **`ignored_packets` counts every packet with `TcpProcessed::ignored` set**, and `rejected_connections` the `TooManyConnections` ones among them. Rejected: disjoint counters.
+
+spec.md P3, P6 and the `stats()` API are updated.
