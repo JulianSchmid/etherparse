@@ -19,6 +19,7 @@ Currently supported are:
 * TCP
 * ICMP & ICMPv6 (not all message types are supported)
 * IGMP (v1, v2 & v3)
+* MLD (v1 & v2)
 
 Reconstruction of fragmented IP packets is also supported, but requires allocations.
 
@@ -117,6 +118,7 @@ It is also possible to only slice one packet layer:
 * [`Icmpv4Slice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Icmpv4Slice.html#method.from_slice)
 * [`Icmpv6Slice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Icmpv6Slice.html#method.from_slice)
 * [`IgmpSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.IgmpSlice.html#method.from_slice)
+* [`MldSlice::from_slice`](https://docs.rs/etherparse/0.21.0/etherparse/enum.MldSlice.html#method.from_slice) (decoded from an already parsed [`Icmpv6Slice`](https://docs.rs/etherparse/0.21.0/etherparse/struct.Icmpv6Slice.html), as MLD is carried within ICMPv6)
 
 The resulting data types allow access to both the header(s) and the payload of the layer
 and will automatically limit the length of payload if the layer has a length field limiting the
@@ -257,6 +259,7 @@ Read the documentations of the different methods for a more details:
 * Host Extensions for IP Multicasting (IGMPv1) [RFC 1112](https://tools.ietf.org/html/rfc1112)
 * Internet Group Management Protocol, Version 2 [RFC 2236](https://tools.ietf.org/html/rfc2236)
 * Internet Group Management Protocol, Version 3 [RFC 9776](https://tools.ietf.org/html/rfc9776)
+* Multicast Listener Discovery Version 2 (MLDv2) for IPv6 [RFC 9777](https://tools.ietf.org/html/rfc9777)
 
 ## License
 Licensed under either of Apache License, Version 2.0 or MIT license at your option. The corresponding license texts can be found in the LICENSE-APACHE file and the LICENSE-MIT file.

@@ -7,6 +7,9 @@ pub mod icmpv6;
 /// Module containing IGMP related types and constants.
 pub mod igmp;
 
+/// Module containing MLD (Multicast Listener Discovery) related types and constants.
+pub mod mld;
+
 mod icmp_echo_header;
 pub use icmp_echo_header::*;
 
@@ -36,6 +39,12 @@ pub use igmp_header::*;
 
 mod igmp_slice;
 pub use igmp_slice::*;
+
+mod mld_type;
+pub use mld_type::*;
+
+mod mld_slice;
+pub use mld_slice::*;
 
 mod tcp_header;
 pub use tcp_header::*;
