@@ -1,5 +1,4 @@
 use crate::*;
-use core::slice::from_raw_parts;
 
 /// Allows iterating over the IPv6 extension headers present in an [Ipv6ExtensionsSlice].
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -26,48 +25,37 @@ impl<'a> Iterator for Ipv6ExtensionSliceIter<'a> {
         use ip_number::*;
         use Ipv6ExtensionSlice::*;
 
+        // Note: The lengths must be re-checked here. `Ipv6ExtensionsSlice`
+        // can be created by `Ipv6ExtensionsSlice::from_slice_lax`, which
+        // stops at the first error and leaves the "next header" of the last
+        // parsed extension header pointing at a header that is not (or only
+        // partially) present in the slice.
         match self.next_header {
-            // Note on the unsafe calls:
-            //
-            // As the slice contents & length were previously checked by
-            // Ipv6ExtensionsSlice::from_slice the content does not have to be
-            // rechecked.
-            IPV6_HOP_BY_HOP => unsafe {
-                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
+            IPV6_HOP_BY_HOP | IPV6_ROUTE | IPV6_DEST_OPTIONS => {
+                let slice = Ipv6RawExtHeaderSlice::from_slice(self.rest).ok()?;
                 let len = slice.slice().len();
-                self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
+                let next_header = slice.next_header();
+                let result = match self.next_header {
+                    IPV6_HOP_BY_HOP => HopByHop(slice),
+                    IPV6_ROUTE => Routing(slice),
+                    _ => DestinationOptions(slice),
+                };
+                self.rest = &self.rest[len..];
+                self.next_header = next_header;
+                Some(result)
+            }
+            IPV6_FRAG => {
+                let slice = Ipv6FragmentHeaderSlice::from_slice(self.rest).ok()?;
+                self.rest = &self.rest[slice.slice().len()..];
                 self.next_header = slice.next_header();
-                Some(HopByHop(slice))
-            },
-            IPV6_ROUTE => unsafe {
-                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
-                let len = slice.slice().len();
-                self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
-                self.next_header = slice.next_header();
-                Some(Routing(slice))
-            },
-            IPV6_DEST_OPTIONS => unsafe {
-                let slice = Ipv6RawExtHeaderSlice::from_slice_unchecked(self.rest);
-                let len = slice.slice().len();
-                self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
-                self.next_header = slice.next_header();
-                Some(DestinationOptions(slice))
-            },
-            IPV6_FRAG => unsafe {
-                let slice = Ipv6FragmentHeaderSlice::from_slice_unchecked(self.rest);
-                let len = slice.slice().len();
-                self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
-                self.next_header = slice.next_header();
-
                 Some(Fragment(slice))
-            },
-            AUTH => unsafe {
-                let slice = IpAuthHeaderSlice::from_slice_unchecked(self.rest);
-                let len = slice.slice().len();
-                self.rest = from_raw_parts(self.rest.as_ptr().add(len), self.rest.len() - len);
+            }
+            AUTH => {
+                let slice = IpAuthHeaderSlice::from_slice(self.rest).ok()?;
+                self.rest = &self.rest[slice.slice().len()..];
                 self.next_header = slice.next_header();
                 Some(Authentication(slice))
-            },
+            }
             // done parsing, the next header is not a known/supported header extension
             _ => None,
         }
@@ -182,6 +170,24 @@ mod test {
                 }
             }
         }
+    }
+
+    /// An `Ipv6ExtensionsSlice` from `from_slice_lax` can end with a "next
+    /// header" pointing outside the slice, the iterator must stop there.
+    #[test]
+    fn next_stops_at_end_of_lax_slice() {
+        // 8 zero bytes form a complete hop-by-hop header whose "next header"
+        // is again hop-by-hop (ip number 0), so lax parsing accepts the
+        // header and then stops with a `HopByHopNotAtStart` error.
+        let data = [0u8; 8];
+        let (exts, _, _, err) =
+            Ipv6ExtensionsSlice::from_slice_lax(IpNumber::IPV6_HEADER_HOP_BY_HOP, &data);
+        assert!(err.is_some());
+        assert_eq!(exts.slice().len(), 8);
+
+        let mut iter = exts.into_iter();
+        assert!(matches!(iter.next(), Some(Ipv6ExtensionSlice::HopByHop(_))));
+        assert_eq!(iter.next(), None);
     }
 
     #[test]
