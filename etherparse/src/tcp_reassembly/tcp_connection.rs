@@ -278,7 +278,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Keeps the SYN `tcp` of `source`, which has a new ISN, in a buffer
     /// from `free` until the other endpoint's SYN-ACK confirms the
     /// reconnect it starts. A retransmission of the kept SYN changes
-    /// nothing, a SYN with another ISN replaces it.
+    /// nothing, a SYN with another ISN or from the other endpoint replaces
+    /// it.
     fn keep_reconnect_syn(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>, free: &mut FreeBuffers)
     where
         Timestamp: Clone,
@@ -286,7 +287,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if self
             .reconnect_syn
             .as_ref()
-            .is_some_and(|syn| syn.isn() == Some(tcp.sequence_number()))
+            .is_some_and(|syn| syn.source == source && syn.isn() == Some(tcp.sequence_number()))
         {
             return;
         }

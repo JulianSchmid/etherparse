@@ -1213,6 +1213,33 @@ mod test {
             assert_eq!(&first_seen, connection.first_seen());
         }
 
+        // a SYN of the other endpoint with the same ISN as the kept SYN is
+        // not a retransmission of it: it replaces the kept SYN, so the
+        // SYN-ACK that answers it starts the reconnect (the responder of the
+        // old connection initiates the new one)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut forward = ConnectionScript::with_isns(5000, 6000);
+            forward.syn();
+            forward.segments[0].feed(&mut pool, 7);
+            let mut backward =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 5000, 6000);
+            backward.syn().syn_ack();
+            backward.segments[0].feed(&mut pool, 8);
+            let processed = backward.segments[1].feed(&mut pool, 9);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, sender) = processed.active.unwrap();
+            assert_eq!(Responder, sender);
+            assert_eq!(addr("10.0.0.2:80"), connection.endpoint(Initiator));
+            assert_eq!(&8, connection.first_seen());
+        }
+
         // a SYN on a mid-stream pickup is its own late SYN if it lies at
         // most k windows before the stream's first byte: it gives the stream
         // an observed start, or counts as out-of-window once the read
