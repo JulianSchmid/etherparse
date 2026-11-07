@@ -2032,10 +2032,11 @@ mod test {
         }
 
         // the kept ACK that the second segment overrules is dropped, so it
-        // neither counts as the seen ACK of the started stream (it lies one
+        // neither counts as the seen ACK of the started stream (an ACK one
         // window after the segment's 6 bytes, but k windows after its first
-        // byte) nor as evidence of a jump
-        {
+        // byte) nor as evidence of a jump (an ACK further after them, which
+        // a blind segment within one window of it would otherwise confirm)
+        for (ack, blind) in [(105, false), (110, true)] {
             let config = TcpReassemblyConfig {
                 hole_give_up_window_factor: Some(1),
                 fallback_window: 100,
@@ -2049,12 +2050,17 @@ mod test {
                 .send(Responder, b"aaa")
                 .send(Responder, b"bbbbbb");
             script.segments.drain(..3);
-            script.segments[0].header.acknowledgment_number = 2001 + 105;
+            script.segments[0].header.acknowledgment_number = 2001 + ack;
+            if blind {
+                script.send_at(Responder, ack as u64, b"blind");
+            }
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream(Responder);
             assert_eq!(0, stream.acked_offset());
             assert_eq!(6, stream.highest_offset());
             assert_eq!(0, stream.holes().count());
+            assert_eq!(0, stream.status().resyncs);
+            assert_eq!(1 + u64::from(blind), stream.status().out_of_window_segments);
         }
 
         // the SYN of a reconnect counts as a packet of the connection it may
@@ -7270,6 +7276,36 @@ mod test {
             script.segments.push(ack);
             script.segments.extend(handshake);
             assert_window_end(config, &script, end);
+        }
+
+        // the same holds for the segment that starts the stream after a
+        // refused one (A4): its window doesn't count either, so the late
+        // SYN-ACK's window does (the responder's segments advertise 1 byte,
+        // the SYN-ACK 60000, and the initiator's byte 30000 after its first
+        // ones fits the latter)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 60000;
+            script.handshake();
+            let handshake: Vec<_> = script.segments.drain(..2).collect();
+            script.segments.clear();
+            script.window_size = 1;
+            script
+                .send(Initiator, b"request")
+                .send(Responder, b"aaa")
+                .send(Responder, b"bbb");
+            script.segments[0].header.acknowledgment_number = 2001 + (1 << 30);
+            script.segments.extend(handshake);
+            script.send_at(Initiator, 7 + 30000, b"x");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(30008, stream.highest_offset());
+            assert_eq!(0, stream.status().out_of_window_segments);
         }
 
         // the same holds for the segment that starts the stream: the
