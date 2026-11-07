@@ -1,4 +1,5 @@
 use crate::tcp_reassembly::*;
+use core::net::SocketAddr;
 use core::ops::Range;
 use std::vec::Vec;
 
@@ -27,6 +28,10 @@ pub(crate) struct ReferenceModel {
     id: u64,
     /// Whether a segment started the connection.
     created: bool,
+    /// Endpoint of the initiator, once the connection was created (the
+    /// roles of a segment follow its endpoints, as in the pool, not the
+    /// roles of its script).
+    initiator: Option<SocketAddr>,
     /// Incarnation of the script whose segment started the connection.
     incarnation: Option<u32>,
     /// Whether the roles are guessed, as a segment without a SYN started
@@ -1114,7 +1119,7 @@ impl ReferenceModel {
             if header.rst || false == header.syn || self.is_own_handshake(segment) {
                 // a retransmitted SYN can carry more Fast Open bytes
                 if header.syn && self.has_isn_of_sender(segment) {
-                    let stream = &mut self.streams[role_index(segment.sender)];
+                    let stream = &mut self.streams[role_index(self.sender_role(segment))];
                     stream.syn_len = stream.syn_len.max(segment.payload.len() as u64);
                 }
                 return None;
@@ -1149,19 +1154,25 @@ impl ReferenceModel {
                 return None;
             }
             self.created = true;
+            self.initiator = Some(if TcpRole::Initiator == segment.sender {
+                segment.source
+            } else {
+                segment.destination
+            });
             self.incarnation = Some(segment.incarnation);
             self.roles_guessed = false == header.syn;
         }
         self.packets += 1;
-        let sender = role_index(segment.sender);
-        let other = role_index(segment.sender.other());
+        let sender_role = self.sender_role(segment);
+        let sender = role_index(sender_role);
+        let other = role_index(sender_role.other());
         // the streams of the connection are the only ones in the pool
         let buffered: u64 = self.streams.iter().map(ModelStream::buffered).sum();
         let mut available = self
             .config
             .max_total_buffered
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
-        let range = self.range(segment.sender.other());
+        let range = self.range(sender_role.other());
         let dropped = self.streams[other].drops_before_syn_acked(segment, range);
         if false == dropped {
             self.streams[sender].moves_on(segment);
@@ -1169,13 +1180,13 @@ impl ReferenceModel {
         if dropped {
             self.streams[sender].out_of_window_segments += 1;
         } else if header.rst {
-            let window = self.window(segment.sender);
+            let window = self.window(sender_role);
             if self.streams[sender].accepts_reset(segment.offset, window) {
                 if let Some(ack) = segment.ack {
-                    let window = self.window(segment.sender.other());
+                    let window = self.window(sender_role.other());
                     self.streams[other].add_ack(ack, window, self.packets, &self.config);
                 }
-                self.end = Some(TcpConnectionEnd::Reset { by: segment.sender });
+                self.end = Some(TcpConnectionEnd::Reset { by: sender_role });
             } else {
                 self.streams[sender].out_of_window_segments += 1;
             }
@@ -1209,17 +1220,17 @@ impl ReferenceModel {
             // as its start is not kept either
             let mut ack_counts = true;
             if let (true, Some(ack)) = (header.syn, segment.ack) {
-                let range = self.range(segment.sender.other());
+                let range = self.range(sender_role.other());
                 let had_base = self.streams[other].base.is_some();
                 let started =
                     self.streams[other].observe_start(ack, 0, range, &self.config, &mut available);
                 ack_counts = started || had_base;
             }
             if let (true, Some(ack)) = (ack_counts, segment.ack) {
-                let window = self.window(segment.sender.other());
+                let window = self.window(sender_role.other());
                 self.streams[other].add_ack(ack, window, self.packets, &self.config);
             }
-            let window = self.window(segment.sender);
+            let window = self.window(sender_role);
             let plausible = self.streams[sender].add_segment(
                 segment,
                 window,
@@ -1238,7 +1249,7 @@ impl ReferenceModel {
                 TcpRole::Initiator
             };
             if header.syn
-                && syn_role == segment.sender
+                && syn_role == sender_role
                 && observed != self.streams.each_ref().map(|stream| stream.observed)
             {
                 self.roles_guessed = false;
@@ -1300,6 +1311,17 @@ impl ReferenceModel {
     }
 
     /// Model of the next connection on the same key.
+    /// Role of the sender of `segment` in this connection: the pool tells
+    /// the roles by the endpoints, so a segment of a reconnect script with
+    /// swapped roles has the other role in the connection it hits.
+    fn sender_role(&self, segment: &TestSegment) -> TcpRole {
+        match self.initiator {
+            Some(initiator) if initiator != segment.source => TcpRole::Responder,
+            Some(_) => TcpRole::Initiator,
+            None => segment.sender,
+        }
+    }
+
     fn next_connection(&self) -> ReferenceModel {
         ReferenceModel {
             id: self.id + 1,
@@ -1344,7 +1366,7 @@ impl ReferenceModel {
     /// the ISN of its sender's stream, or it is a SYN-ACK that ACKs the
     /// observed start of the other stream.
     fn is_own_handshake(&self, segment: &TestSegment) -> bool {
-        let other = &self.streams[role_index(segment.sender.other())];
+        let other = &self.streams[role_index(self.sender_role(segment).other())];
         // the SYN-ACK can ACK the SYN's TCP Fast Open bytes too
         let acks_syn = match (other.base, segment.ack) {
             (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
@@ -1359,7 +1381,7 @@ impl ReferenceModel {
     /// [`ModelStream::has_isn_of`]).
     fn has_isn_of_sender(&self, segment: &TestSegment) -> bool {
         Some(segment.incarnation) == self.incarnation
-            && self.streams[role_index(segment.sender)].has_isn_of(segment)
+            && self.streams[role_index(self.sender_role(segment))].has_isn_of(segment)
     }
 
     /// Returns true if the SYN `segment` can be the own SYN of its sender's
@@ -1367,8 +1389,8 @@ impl ReferenceModel {
     /// far away from the streams, so they never are.
     fn is_own_syn(&self, segment: &TestSegment) -> bool {
         Some(segment.incarnation) == self.incarnation
-            && self.streams[role_index(segment.sender)]
-                .is_own_syn(segment, self.range(segment.sender))
+            && self.streams[role_index(self.sender_role(segment))]
+                .is_own_syn(segment, self.range(self.sender_role(segment)))
     }
 
     /// Returns true if the model predicts what the pool does with
