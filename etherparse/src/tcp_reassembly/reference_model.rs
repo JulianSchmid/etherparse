@@ -1242,7 +1242,11 @@ impl ReferenceModel {
             if plausible && false == (header.syn && self.windows[sender].is_some()) {
                 self.windows[sender] = Some(header.window_size);
             }
-            self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);
+            // a SYN after a resync gives no window (A3), also after one that
+            // kept the mapping
+            self.syns[sender] |= header.syn
+                && self.streams[sender].starts_at(segment.offset)
+                && self.streams[sender].resyncs.is_empty();
             let syn_role = if header.ack {
                 TcpRole::Responder
             } else {
