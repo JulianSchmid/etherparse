@@ -223,7 +223,7 @@ impl ModelStream {
         let payload = &segment.payload[..];
         let header = &segment.header;
         // the receiver accepts k windows before and after the stream's bytes
-        let factor = config.hole_give_up_window_factor.unwrap_or(2);
+        let factor = config.hole_give_up_window_factor.unwrap_or(2).max(1);
         let range = u64::from(factor) * window;
         // the sender can have sent into a larger window before it shrank
         let sent_into = window.max(self.largest_window.unwrap_or(0));
@@ -779,6 +779,7 @@ impl ModelStream {
             self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
         }
         if let Some(factor) = config.hole_give_up_window_factor {
+            let factor = factor.max(1);
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
@@ -1247,7 +1248,7 @@ impl ReferenceModel {
     /// receiver accepts: k windows (k is the hole give up window factor, 2
     /// without one).
     fn range(&self, role: TcpRole) -> u64 {
-        let factor = self.config.hole_give_up_window_factor.unwrap_or(2);
+        let factor = self.config.hole_give_up_window_factor.unwrap_or(2).max(1);
         u64::from(factor) * self.window(role)
     }
 

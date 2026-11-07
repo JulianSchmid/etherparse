@@ -1086,7 +1086,7 @@ impl TcpStream {
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
             let distance = window
-                .saturating_mul(u64::from(factor))
+                .saturating_mul(u64::from(factor.max(1)))
                 .min(config.max_stream_buffer as u64 / 2)
                 .max(known);
             let implied_ack = i64::try_from(self.highest_offset())
@@ -1271,8 +1271,14 @@ impl TcpStream {
 /// the receive window `window` accepts: several windows, as the window can
 /// change and not all ACKs are captured.
 fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
-    let factor = config.hole_give_up_window_factor.unwrap_or(2);
-    window.saturating_mul(u64::from(factor))
+    window.saturating_mul(u64::from(window_factor(config)))
+}
+
+/// Number of windows the receiver accepts around the stream's bytes
+/// (`hole_give_up_window_factor`, 2 without one, and at least 1: with 0, a
+/// stream would take no bytes after a hole).
+fn window_factor(config: &TcpReassemblyConfig) -> u32 {
+    config.hole_give_up_window_factor.unwrap_or(2).max(1)
 }
 
 /// SYN before the first byte of a stream with an observed start.
@@ -6242,6 +6248,19 @@ mod test {
             script.ack(Responder);
             script.segments[1].header.set_options(options).unwrap();
             assert_window_end(Default::default(), &script, 2 * (100 << 3));
+        }
+
+        // a hole give up window factor of 0 works like 1 (with 0, no bytes
+        // after a hole would fit the window)
+        for factor in [Some(1), Some(0)] {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: factor,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            assert_window_end(config, &script, 103);
         }
 
         // the fallback window is used while the window scale is unknown
