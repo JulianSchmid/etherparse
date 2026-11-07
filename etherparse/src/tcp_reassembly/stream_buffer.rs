@@ -223,14 +223,21 @@ impl StreamBuffer {
 
     /// Moves offset 0 of a mid-stream pickup `len` bytes back, so all
     /// offsets grow by `len`. The new bytes are a hole until they arrive.
-    pub fn prepend(&mut self, len: u64) {
+    /// If `more` prepends can follow, room for them is made at once.
+    pub fn prepend(&mut self, len: u64, more: bool) {
         // nothing was consumed yet, and there are no gaps, as the read
         // position is at the first byte received, so the bytes before `head`
         // are room for the placeholders: make room for as many bytes as the
         // stream holds at once, so that a prepend costs little on average
+        // (the room stays smaller than the bytes buffered, so the buffer
+        // never holds more room than bytes)
         let placeholders = len as usize;
         if self.head < placeholders {
-            let room = placeholders.max(self.buffered()) - self.head;
+            let room = if more {
+                placeholders.max(self.buffered())
+            } else {
+                placeholders
+            } - self.head;
             // without reserving, the splice doubles the capacity
             self.buf.reserve_exact(room);
             self.buf.splice(..0, core::iter::repeat_n(0, room));
@@ -246,6 +253,16 @@ impl StreamBuffer {
         self.holes.insert(0, 0..len);
         // a read before returned other bytes at the read position
         self.last_read_len = 0;
+    }
+
+    /// Drops the room for prepends before the first byte, as no more bytes
+    /// are put in front (nothing else lies before `head` while the read
+    /// position is at offset 0).
+    pub fn drop_room(&mut self) {
+        if 0 == self.read_offset && 0 < self.head {
+            self.buf.drain(..self.head);
+            self.head = 0;
+        }
     }
 
     /// Returns true if `len` bytes fit in front of the stream, the first

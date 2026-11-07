@@ -817,7 +817,7 @@ impl TcpStream {
             .buffer
             .fits_in_front(start.unsigned_abs(), data_len, config, *available)
         {
-            self.move_start_back(seq, start, available);
+            self.move_start_back(seq, start, available, true);
             (0, false)
         } else {
             // the bytes from offset 0 on are stored as usual
@@ -991,9 +991,11 @@ impl TcpStream {
                 {
                     return false;
                 }
-                self.move_start_back(seq, start, available);
+                self.move_start_back(seq, start, available, false);
             }
         }
+        // no more bytes are put in front of an observed start
+        self.buffer.drop_room();
         self.syn = Some(ObservedSyn {
             isn: seq.wrapping_sub(1),
             len: data_len as u32,
@@ -1012,11 +1014,12 @@ impl TcpStream {
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
     /// `seq` at offset `start` (see [`TcpStream::can_move_start_back`]),
     /// taking the placeholders of the bytes before it from the pool's
-    /// budget `available`.
-    fn move_start_back(&mut self, seq: u32, start: i64, available: &mut usize) {
+    /// budget `available`. `more` bytes can be put in front afterwards,
+    /// unless the start is the stream's SYN.
+    fn move_start_back(&mut self, seq: u32, start: i64, available: &mut usize, more: bool) {
         if start < 0 {
             let len = start.unsigned_abs();
-            self.prepend(len);
+            self.prepend(len, more);
             *available = available.saturating_sub(len as usize);
         }
         self.start_seq = Some(seq);
@@ -1038,8 +1041,8 @@ impl TcpStream {
 
     /// Moves offset 0 of the mid-stream pickup `len` bytes back, these
     /// bytes are a hole until they arrive, and all offsets grow by `len`.
-    fn prepend(&mut self, len: u64) {
-        self.buffer.prepend(len);
+    fn prepend(&mut self, len: u64, more: bool) {
+        self.buffer.prepend(len, more);
         self.fin_offset = self.fin_offset.map(|fin| fin + len);
         // ACKs of offset 0 or before it were ignored, so 0 means none
         if 0 < self.seen_ack {
