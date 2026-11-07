@@ -215,7 +215,7 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
     }
 
     /// Segment sent by `sender` with `payload` starting at `offset`, ACKing
-    /// everything the other side sent so far (once its SYN was sent).
+    /// everything the other side sent so far.
     fn segment(
         &self,
         sender: TcpRole,
@@ -232,13 +232,13 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         // drops segments without ACK), also in a pickup whose SYNs the
         // script never sent
         let other = role_index(sender.other());
-        let ack = Some(self.next_offsets[other]);
+        let ack = self.next_offsets[other];
         header.ack = true;
-        header.acknowledgment_number = self.seq(sender.other(), ack.unwrap_or(0));
+        header.acknowledgment_number = self.seq(sender.other(), ack);
         TestSegment {
             sender,
             offset,
-            ack,
+            ack: Some(ack),
             incarnation: self.incarnation,
             vlan_ids: self.vlan_ids.clone(),
             source: self.endpoint(sender),

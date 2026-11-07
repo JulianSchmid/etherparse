@@ -125,11 +125,12 @@ where
 
     /// Applies a TCP segment to its connection.
     ///
-    /// A SYN, a SYN-ACK or a segment with bytes of an unknown connection
-    /// starts a new one. Without a SYN or SYN-ACK, the roles of the
-    /// endpoints are guessed (see [`TcpConnection::roles_guessed`]). Other
-    /// segments of unknown connections (pure ACKs, FINs without bytes and
-    /// RSTs) are ignored with [`TcpIgnoreReason::NoConnection`]. A segment
+    /// A SYN, a SYN-ACK or a segment with bytes and the ACK flag of an
+    /// unknown connection starts a new one. Without a SYN or SYN-ACK, the
+    /// roles of the endpoints are guessed (see
+    /// [`TcpConnection::roles_guessed`]). Other segments of unknown
+    /// connections (pure ACKs, FINs without bytes, RSTs and segments without
+    /// the ACK flag) are ignored with [`TcpIgnoreReason::NoConnection`]. A segment
     /// that would start a connection while the pool has
     /// [`TcpReassemblyConfig::max_connections`] connections is ignored with
     /// [`TcpIgnoreReason::TooManyConnections`].

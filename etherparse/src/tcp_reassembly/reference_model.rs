@@ -588,7 +588,7 @@ impl ModelStream {
             return (base..=base + self.syn_len).contains(&ack);
         }
         (base..=base + range).contains(&ack)
-            || (false == (segment.header.rst || segment.header.fin)
+            || (false == segment.header.fin
                 && self.candidates.last().is_some_and(|candidate| {
                     false == candidate.fin && within_window(&candidate.bytes, ack, window)
                 }))
@@ -1239,8 +1239,9 @@ impl ReferenceModel {
                 .is_some_and(|syn| acks_syn(segment, syn));
         // every receiver drops a segment without ACK that is no SYN or RST
         // (S6)
+        let without_ack = false == (header.ack || header.syn || header.rst);
         let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
-        let dropped = false == (header.ack || header.syn || header.rst)
+        let dropped = without_ack
             || (false == (header.rst && self.streams[sender].base.is_some())
                 && false == acks_kept_syn
                 && self.streams[other].drops_before_syn_acked(segment, range, other_window, bare));
@@ -1258,9 +1259,11 @@ impl ReferenceModel {
         if dropped {
             self.streams[sender].out_of_window_segments += 1;
             // the dropped segments agree within the window of their own
-            // stream (R3)
-            let window = self.window(sender_role);
-            self.streams[other].record_dropped(segment, window, &self.config);
+            // stream (R3); a segment without ACK changes nothing else (S6)
+            if false == without_ack {
+                let window = self.window(sender_role);
+                self.streams[other].record_dropped(segment, window, &self.config);
+            }
         } else if header.rst {
             let window = self.window(sender_role);
             if self.streams[sender].accepts_reset(segment.offset, window) {

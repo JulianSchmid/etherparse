@@ -50,8 +50,9 @@ pub struct TcpStreamStatus {
     /// do SYNs that a mid-stream pickup can't take, RSTs that the receiver
     /// can't accept (see [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]),
     /// the first segment of a pickup that lies far from the ACK the receiver
-    /// sent for it, and segments the receiver drops while its own SYN is
-    /// unanswered, e.g. a blind RST, FIN or SYN-ACK in the handshake. A
+    /// sent for it, segments without the ACK flag that are no SYN or RST,
+    /// and segments the receiver drops while its own SYN is unanswered, e.g.
+    /// a blind RST, FIN or SYN-ACK in the handshake. A
     /// count that keeps growing on a clean pickup can mean that blind
     /// segments anchored it elsewhere, which
     /// [`crate::tcp_reassembly::TcpStream::force_resync`] recovers, unless a
