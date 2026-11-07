@@ -244,7 +244,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // SYN is unanswered may be blind: a simultaneous open's SYN-ACK
         // repeats its ISN and anchors the stream, so the SYN is only kept
         let maybe_blind = tcp.syn()
-            && false == tcp.ack()
             && false == self.stream(sender).has_start()
             && self.stream(sender.other()).awaits_syn_ack();
         if tcp.syn()
@@ -437,13 +436,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         config: &TcpReassemblyConfig,
     ) -> bool {
         let sender = self.role(source);
+        if false == (tcp.syn() && tcp.ack()) || tcp.rst() || tcp.fin() {
+            return false;
+        }
         // a SYN-ACK the receiver drops confirms nothing (S5)
         let window = self.window(sender.other(), config);
-        if false == (tcp.syn() && tcp.ack())
-            || tcp.rst()
-            || tcp.fin()
-            || self.drops_before_syn_acked(sender, tcp, window, config)
-        {
+        if self.drops_before_syn_acked(sender, tcp, window, config) {
             return false;
         }
         let Some(syn) = self
@@ -2031,6 +2029,37 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // a SYN-ACK with a FIN confirms no reconnect on an established
+        // connection either
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            let mut kept = script.injected(|s| {
+                s.syn();
+            });
+            kept.header.sequence_number = 0x7000_0000;
+            kept.header.ack = false;
+            kept.ack = None;
+            script.segments.push(kept);
+            let mut syn_ack_fin = script.injected(|s| {
+                s.syn_ack();
+            });
+            syn_ack_fin.header.fin = true;
+            syn_ack_fin.header.sequence_number = 0x4000_0000;
+            syn_ack_fin.header.acknowledgment_number = 0x7000_0001;
+            script.segments.push(syn_ack_fin);
+            script.send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"response"),
+                connection.stream_mut(Responder).read_received()
+            );
         }
     }
 

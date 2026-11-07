@@ -1473,8 +1473,7 @@ impl ReferenceModel {
     /// blind, so it is only kept (S5).
     fn maybe_blind_syn(&self, segment: &TestSegment) -> bool {
         let sender = self.sender_role(segment);
-        false == segment.header.ack
-            && self.streams[role_index(sender)].base.is_none()
+        self.streams[role_index(sender)].base.is_none()
             && self.streams[role_index(sender.other())].syn_unacked
     }
 
