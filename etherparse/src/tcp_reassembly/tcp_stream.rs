@@ -732,8 +732,12 @@ impl TcpStream {
         let data = tcp.payload();
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
-            // stream's own one
-            if false == self.observe_start(seq, data.len(), window, config, available) {
+            // stream's own one, and a SYN with a FIN that the receiver drops
+            // starts nothing either (see `accepts_without_start`)
+            let dropped_fin = tcp.fin() && self.start_seq.is_none() && false == accepted;
+            if dropped_fin
+                || false == self.observe_start(seq, data.len(), window, config, available)
+            {
                 self.status.out_of_window_segments += 1;
                 return None;
             }
@@ -2098,9 +2102,15 @@ mod test {
 
         // before the SYN-ACK, the initiator drops everything but the SYN-ACK,
         // and no ACK of its own is kept yet: a blind FIN of the responder,
-        // with or without bytes, doesn't start the responder stream (the FIN
-        // has no ACK, as a blind one before the SYN-ACK can't have one)
-        for bytes in [&b""[..], &b"x"[..]] {
+        // with or without bytes and also with a SYN, doesn't start the
+        // responder stream (the FIN has no ACK, as a blind one before the
+        // SYN-ACK can't have one)
+        for (bytes, syn) in [
+            (&b""[..], false),
+            (&b"x"[..], false),
+            (&b""[..], true),
+            (&b"x"[..], true),
+        ] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.syn();
@@ -2108,6 +2118,7 @@ mod test {
                 s.fin_at(Responder, 1 << 30, bytes);
             });
             fin.header.ack = false;
+            fin.header.syn = syn;
             fin.ack = None;
             script.segments.push(fin);
             script

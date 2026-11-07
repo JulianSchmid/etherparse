@@ -243,7 +243,11 @@ impl ModelStream {
             .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range)
             && false == (header.fin && other_syn_seen && self.kept_ack.is_none());
         if header.syn {
-            if false == self.observe_start(segment.offset, payload.len(), range, config, available)
+            // a SYN with a FIN that the receiver drops starts nothing either
+            let dropped_fin = header.fin && self.base.is_none() && false == accepted_without_base;
+            if dropped_fin
+                || false
+                    == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
                 self.out_of_window_segments += 1;
                 return false;
