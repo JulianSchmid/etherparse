@@ -557,9 +557,18 @@ impl ModelStream {
     /// yet, drops the `segment` of the other side (S5): it accepts only a
     /// segment that ACKs the SYN (see [`ModelStream::acks_unacked_syn`]) and
     /// a SYN without ACK, FIN and RST.
-    fn drops_before_syn_acked(&self, segment: &TestSegment, range: u64, window: u64) -> bool {
+    fn drops_before_syn_acked(
+        &self,
+        segment: &TestSegment,
+        range: u64,
+        window: u64,
+        other_bare: bool,
+    ) -> bool {
         let header = &segment.header;
-        self.syn_unacked
+        // an RST or FIN towards a side with neither a start nor a kept ACK
+        // has to ACK the SYN also after the wait
+        let waits = self.syn_unacked || (other_bare && self.observed && (header.rst || header.fin));
+        waits
             && false == self.acks_unacked_syn(segment, range, window)
             && false == (header.syn && false == (header.ack || header.fin || header.rst))
     }
@@ -1230,10 +1239,11 @@ impl ReferenceModel {
                 .is_some_and(|syn| acks_syn(segment, syn));
         // every receiver drops a segment without ACK that is no SYN or RST
         // (S6)
+        let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
         let dropped = false == (header.ack || header.syn || header.rst)
             || (false == (header.rst && self.streams[sender].base.is_some())
                 && false == acks_kept_syn
-                && self.streams[other].drops_before_syn_acked(segment, range, other_window));
+                && self.streams[other].drops_before_syn_acked(segment, range, other_window, bare));
         if false == dropped {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
@@ -1463,7 +1473,9 @@ impl ReferenceModel {
         let other_role = self.sender_role(segment).other();
         let other = role_index(other_role);
         let (range, window) = (self.range(other_role), self.window(other_role));
-        if self.streams[other].drops_before_syn_acked(segment, range, window) {
+        let sender = role_index(self.sender_role(segment));
+        let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
+        if self.streams[other].drops_before_syn_acked(segment, range, window, bare) {
             return false;
         }
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,

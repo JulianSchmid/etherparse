@@ -85,7 +85,10 @@ pub struct TcpReassemblyConfig {
     /// jump (default `None`, off).
     ///
     /// Useful for captures that contain only one direction. `Some(0)` works
-    /// like `Some(1)`.
+    /// like `Some(1)`. The same count of segments that a side drops while
+    /// its SYN is unanswered (see
+    /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`])
+    /// ends that wait for segments with bytes or an ACK.
     pub resync_after_segments: Option<u32>,
 
     /// Maximum number of connections in the pool (default `None`, no limit).

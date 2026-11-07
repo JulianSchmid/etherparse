@@ -498,8 +498,14 @@ impl TcpStream {
         tcp: &TcpSlice<'_>,
         window: u64,
         config: &TcpReassemblyConfig,
+        other_bare: bool,
     ) -> bool {
-        self.syn_unacked
+        // a wait that dropped segments ended leaves the other side with
+        // neither a start nor a kept ACK (`other_bare`), and F4 and A4 would
+        // take any RST or FIN there, so those still have to ACK the SYN
+        let waits =
+            self.syn_unacked || (other_bare && self.syn.is_some() && (tcp.rst() || tcp.fin()));
+        waits
             && false == self.acks_unacked_syn(tcp, window, config)
             && false == (tcp.syn() && false == (tcp.ack() || tcp.fin() || tcp.rst()))
     }
@@ -571,6 +577,12 @@ impl TcpStream {
     /// Returns true if the sender's SYN was seen but not answered yet (S5).
     pub(crate) fn awaits_syn_ack(&self) -> bool {
         self.syn_unacked
+    }
+
+    /// Returns true if an ACK of the other side is kept for the stream
+    /// (K1).
+    pub(crate) fn has_kept_ack(&self) -> bool {
+        self.kept_ack.is_some()
     }
 
     /// Ends the wait for the ACK of the stream's SYN if the segment `tcp` of

@@ -315,12 +315,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Returns true if the receiver of the segment `tcp` sent by `sender`
     /// drops it, as its own SYN is unanswered and the segment doesn't ACK
-    /// it (S5, see [`TcpStream::drops_before_syn_acked`]). A receiver in
-    /// SYN-RECEIVED, whose other side has a start, checks an RST by its
-    /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK
-    /// without RST and FIN that ACKs the kept SYN of a reconnect answers
-    /// that SYN and confirms the reconnect (C2). `window` is the receive
-    /// window of the receiver's stream.
+    /// it (S5, see [`TcpStream::drops_before_syn_acked`]); an RST or FIN of
+    /// a side with neither a start nor a kept ACK has to ACK the SYN also
+    /// after the wait. A receiver in SYN-RECEIVED, whose other side has a
+    /// start, checks an RST by its sequence number instead (RFC 9293
+    /// 3.10.7.4, F4), and a SYN-ACK without RST and FIN that ACKs the kept
+    /// SYN of a reconnect answers that SYN and confirms the reconnect (C2).
+    /// `window` is the receive window of the receiver's stream.
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
@@ -340,8 +341,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         {
             return false;
         }
+        let bare =
+            false == self.stream(sender).has_start() && false == self.stream(sender).has_kept_ack();
         self.stream(sender.other())
-            .drops_before_syn_acked(tcp, window, config)
+            .drops_before_syn_acked(tcp, window, config, bare)
     }
 
     /// Applies a segment without RST sent by `sender`, storing at most
@@ -1859,6 +1862,45 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(0, stream.status().gaps);
             assert_eq!(TcpRead::Data(b"12345z"), stream.read_received());
+        }
+
+        // the wait that dropped segments ended leaves the other side with
+        // neither a start nor a kept ACK, and an RST or FIN of that side
+        // still has to ACK the SYN: with resync_after_segments = Some(1), a
+        // blind data segment ends the wait, and a blind RST or FIN after it
+        // is dropped, so the real handshake and response arrive
+        for (rst, fin) in [(true, false), (false, true)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(1),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind_data = script.injected(|s| {
+                s.send_at(Responder, 0, b"zz");
+            });
+            blind_data.header.sequence_number = 0x3000_0000;
+            blind_data.header.acknowledgment_number = 0x6000_0000;
+            script.segments.push(blind_data);
+            let mut blind = script.injected(|s| {
+                s.fin_at(Responder, 0, b"");
+            });
+            blind.header.rst = rst;
+            blind.header.fin = fin;
+            blind.header.sequence_number = 0x4000_0000;
+            blind.header.acknowledgment_number = 0x6000_0000;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(2, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
 
         // a resync candidate with a FIN gives no exit either: a blind data
