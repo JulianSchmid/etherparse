@@ -231,6 +231,8 @@ impl StreamBuffer {
         let placeholders = len as usize;
         if self.head < placeholders {
             let room = placeholders.max(self.buffered()) - self.head;
+            // without reserving, the splice doubles the capacity
+            self.buf.reserve_exact(room);
             self.buf.splice(..0, core::iter::repeat_n(0, room));
             self.head += room;
         }

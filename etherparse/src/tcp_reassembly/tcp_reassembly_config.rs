@@ -20,7 +20,8 @@ pub struct TcpReassemblyConfig {
     /// Bytes beyond it are rejected (see
     /// [`crate::tcp_reassembly::TcpStreamStatus::rejected_bytes`]), and
     /// consuming bytes makes room. A stream's buffer can take up to about
-    /// twice as much memory.
+    /// four times as much memory (see
+    /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`]).
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes before the furthest stored byte of a stream

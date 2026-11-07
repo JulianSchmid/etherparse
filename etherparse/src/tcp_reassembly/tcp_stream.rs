@@ -537,8 +537,8 @@ impl TcpStream {
     /// - the largest window, what the sender can have sent into: k windows
     ///   for which segments and their windows count (S3) and for
     ///   out-of-window data (S4), one window for the ACK check (K1), and k
-    ///   windows, at most half of the stream's buffer, for the implied ACK
-    ///   (K2).
+    ///   windows, at most half of the stream's buffer but at least one
+    ///   window, for the implied ACK (K2).
     fn sent_into(&self, window: u64) -> u64 {
         window.max(self.largest_window.unwrap_or(0))
     }
