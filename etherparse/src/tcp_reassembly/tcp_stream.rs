@@ -711,6 +711,14 @@ impl TcpStream {
             let keep_alive = is_keep_alive_shaped(tcp)
                 && Some(seq.wrapping_add(1)) == self.pending_ack.map(|pending| pending.seq);
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
+                // a segment far from the ACK the receiver kept for the stream
+                // is forged, or the ACK is: it doesn't start the stream, and
+                // the ACK is dropped, so that the next segment can
+                if false == self.accepted_by_kept_ack(seq, window, config) {
+                    self.status.out_of_window_segments += 1;
+                    self.pending_ack = None;
+                    return None;
+                }
                 // bytes that don't fit start no stream, so that byte 0 of a
                 // pickup is always stored (and bytes can be put in front)
                 if false == data.is_empty() && 0 == config.max_stream_buffer.min(*available) {
@@ -1918,6 +1926,45 @@ mod test {
             assert_eq!(TcpRead::Data(b"b"), stream.read_received());
             stream.consume(1);
             assert_eq!(expected, stream.read_received());
+        }
+
+        // a segment far from the ACK the receiver kept for a stream without a
+        // start doesn't start it (a blind segment would anchor the stream
+        // elsewhere, and a blind FIN would end it), and the kept ACK is
+        // dropped, so that the next segment starts the stream whether the
+        // ACK or the segment was forged (the capture starts at the
+        // initiator's request, which ACKs the responder's first byte)
+        for forged_fin in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            script.segments.drain(..3);
+            if forged_fin {
+                script.fin_at(Responder, 1 << 30, &[]);
+            } else {
+                script.send_at(Responder, 1 << 30, b"EVIL!");
+            }
+            script.send_at(Responder, 0, b"real");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"real"), stream.read_received());
+            assert!(false == stream.is_finished());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            // the initiator's ACK is forged
+            script.segments[3].header.acknowledgment_number = 2001 + (1 << 30);
+            script.segments.drain(..3);
+            script
+                .send_at(Responder, 0, b"aaa")
+                .send_at(Responder, 3, b"bbb");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"bbb"), stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
         }
 
         // the SYN of a reconnect counts as a packet of the connection it may

@@ -247,6 +247,13 @@ impl ModelStream {
             if (payload.is_empty() && false == header.fin) || keep_alive {
                 return accepted_without_base;
             }
+            // a segment far from the kept ACK doesn't start the stream, and
+            // drops the ACK
+            if false == accepted_without_base {
+                self.out_of_window_segments += 1;
+                self.pending_ack = None;
+                return false;
+            }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
             {
                 self.rejected_bytes += payload.len() as u64;
