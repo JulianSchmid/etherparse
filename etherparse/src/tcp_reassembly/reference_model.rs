@@ -1376,14 +1376,19 @@ impl ReferenceModel {
                     .base
                     .is_some()
             });
-            if let Some(syn) = self
-                .reconnect_syn
-                .take_if(|syn| false == kept_stream_has_start && acks_syn(segment, syn))
-            {
+            // the stream's own SYN-ACK, repeating the kept SYN's ISN,
+            // confirms it as well
+            if let Some(syn) = self.reconnect_syn.take_if(|syn| {
+                false == kept_stream_has_start
+                    && (acks_syn(segment, syn)
+                        || (syn.sender == segment.sender
+                            && syn.incarnation == segment.incarnation
+                            && syn.offset == segment.offset))
+            }) {
                 let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
-                self.apply_own_segment(&syn, available);
                 let syn_role = self.sender_role(&syn);
                 let syn_sender = role_index(syn_role);
+                self.apply_own_segment(&syn, available);
                 self.streams[syn_sender].conflicting_retransmissions += conflicting;
                 // the SYN-ACK ACKs the SYN it just applied
                 let (range, window) = (self.range(syn_role), self.window(syn_role));
