@@ -944,7 +944,17 @@ impl TcpStream {
     ) -> bool {
         match self.start_seq {
             None => self.start_seq = Some(seq),
-            Some(_) if TcpStreamStart::Observed == self.status.start => return true,
+            Some(_) if TcpStreamStart::Observed == self.status.start => {
+                // a retransmitted SYN can carry more TCP Fast Open bytes
+                if let Some(syn) = self
+                    .syn
+                    .as_mut()
+                    .filter(|syn| syn.isn == seq.wrapping_sub(1))
+                {
+                    syn.len = syn.len.max(data_len as u32);
+                }
+                return true;
+            }
             Some(start_seq) => {
                 // a late SYN lies at or before the first byte received
                 let Some(start) = self.offset(start_seq, seq) else {

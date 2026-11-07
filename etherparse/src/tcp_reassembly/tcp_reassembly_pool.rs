@@ -1240,13 +1240,21 @@ mod test {
         // a late SYN-ACK of an ended connection that ACKs the TCP Fast Open
         // bytes of the SYN belongs to its handshake, also if the responder's
         // ISN was never seen (the initiator resets the connection right
-        // after its SYN)
-        {
+        // after its SYN), and also if a retransmission of the SYN carried
+        // the bytes
+        for payloads in [&[&b"GET"[..]][..], &[&b"G"[..], &b"GET"[..]][..]] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.syn_with_data(b"GET").rst_at(Initiator, 3).syn_ack();
-            assert!(script.feed(&mut pool, ..2).ended.is_some());
-            let processed = script.feed(&mut pool, 2..);
+            script.syn_with_data(payloads[0]);
+            for payload in &payloads[1..] {
+                let mut syn = script.segments[0].clone();
+                syn.payload = payload.to_vec();
+                script.segments.push(syn);
+            }
+            script.rst_at(Initiator, 3).syn_ack();
+            let syns = payloads.len();
+            assert!(script.feed(&mut pool, ..syns + 1).ended.is_some());
+            let processed = script.feed(&mut pool, syns + 1..);
             assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
             assert_eq!((0, 1), (pool.stats().connections, pool.stats().tombstones));
         }

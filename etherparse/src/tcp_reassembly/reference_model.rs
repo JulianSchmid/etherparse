@@ -74,6 +74,8 @@ struct ModelStream {
     /// Whether the start is known from the stream's SYN or the ACK of the
     /// SYN-ACK.
     observed: bool,
+    /// Most bytes a SYN of the stream carried (TCP Fast Open).
+    syn_len: u64,
     /// Whether the stream was picked up at a FIN without bytes.
     started_at_fin: bool,
     /// Whether the read offset moved forward.
@@ -523,7 +525,10 @@ impl ModelStream {
         // a stream that can prepend didn't resync, its offsets are the true
         // ones
         match self.base {
-            Some(_) if self.observed => return true,
+            Some(_) if self.observed => {
+                self.syn_len = self.syn_len.max(len as u64);
+                return true;
+            }
             Some(_) if false == self.can_prepend() => return false,
             Some(base) if start > base || base - start > range => return false,
             Some(_) if false == self.fits_in_front(start, len, config, *available) => return false,
@@ -532,6 +537,7 @@ impl ModelStream {
         }
         self.start_at(start);
         self.observed = true;
+        self.syn_len = len as u64;
         true
     }
 
@@ -1209,10 +1215,13 @@ impl ReferenceModel {
     /// observed start of the other stream.
     fn is_own_handshake(&self, segment: &TestSegment) -> bool {
         let other = &self.streams[role_index(segment.sender.other())];
+        // the SYN-ACK can ACK the SYN's TCP Fast Open bytes too
+        let acks_syn = match (other.base, segment.ack) {
+            (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
+            _ => false,
+        };
         self.has_isn_of_sender(segment)
-            || (Some(segment.incarnation) == self.incarnation
-                && other.observed
-                && segment.ack == other.base)
+            || (Some(segment.incarnation) == self.incarnation && other.observed && acks_syn)
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` comes from the
