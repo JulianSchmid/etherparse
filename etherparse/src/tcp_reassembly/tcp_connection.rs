@@ -2015,6 +2015,35 @@ mod test {
             assert_eq!(TcpRead::Data(b"abcnext"), stream.read_received());
         }
 
+        // ... and a retransmission of the kept SYN with differing bytes
+        // counts as a conflicting retransmission once the SYN is applied
+        // (D2), the bytes received first winning (D1)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            for payload in [&b"abc"[..], b"xbcd"] {
+                let mut responder_syn = script.injected(|s| {
+                    s.syn_ack();
+                });
+                responder_syn.header.ack = false;
+                responder_syn.ack = None;
+                responder_syn.payload = payload.to_vec();
+                script.segments.push(responder_syn);
+            }
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(1, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abcd"), stream.read_received());
+        }
+
         // ... and the confirmation outweighs an ACK a blind segment with the
         // initiator's address left kept for the responder stream, so the
         // kept SYN still starts it
