@@ -723,11 +723,14 @@ impl TcpStream {
                 && Some(seq.wrapping_add(1)) == self.kept_ack.map(|kept| kept.seq);
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
                 // a segment far from the ACK the receiver kept for the stream
-                // is forged, or the ACK is: the first such segment doesn't
-                // start the stream, the next one does wherever it lies (an
-                // ACK before every segment would otherwise keep a stream
-                // with more in flight than the fallback window from starting)
-                if false == accepted && false == self.start_disputed {
+                // is forged, or the ACK is, or the receiver's window is
+                // larger than assumed: the first such segment doesn't start
+                // the stream, the next one with bytes does wherever it lies
+                // (an ACK before every segment would otherwise keep a stream
+                // with more in flight than k fallback windows from starting);
+                // a FIN without bytes never does, as nothing could recover
+                // a stream that a blind FIN ended
+                if false == accepted && (data.is_empty() || false == self.start_disputed) {
                     self.status.out_of_window_segments += 1;
                     self.start_disputed = true;
                     return None;
@@ -1983,9 +1986,27 @@ mod test {
             assert_eq!(1, stream.status().out_of_window_segments);
         }
 
+        // a FIN without bytes far from the kept ACK never starts the stream,
+        // as nothing could recover a stream that a blind FIN ended
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            script.segments.drain(..3);
+            script
+                .fin_at(Responder, 1 << 30, &[])
+                .fin_at(Responder, 1 << 30, &[])
+                .send_at(Responder, 0, b"real");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"real"), stream.read_received());
+            assert!(false == stream.is_finished());
+            assert_eq!(2, stream.status().out_of_window_segments);
+        }
+
         // only the first segment far from the kept ACK is refused: with an
         // ACK before every segment of a stream that has more in flight than
-        // the fallback window allows, the second segment starts the stream
+        // k fallback windows allow, the second segment starts the stream
         // (the capture starts at the initiator's request, the responder's
         // segments lie 1000 bytes after the initiator's ACKs)
         {

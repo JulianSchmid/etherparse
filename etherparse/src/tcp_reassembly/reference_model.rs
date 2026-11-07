@@ -250,8 +250,10 @@ impl ModelStream {
                 return accepted_without_base;
             }
             // the first segment far from the kept ACK doesn't start the
-            // stream, the next one does
-            if false == accepted_without_base && false == self.start_disputed {
+            // stream, the next one with bytes does, a FIN never
+            if false == accepted_without_base
+                && (payload.is_empty() || false == self.start_disputed)
+            {
                 self.out_of_window_segments += 1;
                 self.start_disputed = true;
                 return false;
