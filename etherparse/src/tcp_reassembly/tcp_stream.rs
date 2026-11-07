@@ -2946,11 +2946,12 @@ mod test {
             assert_eq!(3, stream.read_offset());
         }
 
-        // a stream gives back the room of consumed bytes: once all its bytes
-        // are consumed, it keeps at most the pooled buffer capacity, so the
-        // next bytes need new room (and allocate), while a stream with bytes
-        // left keeps the room the next bytes fit in
-        for (consume, allocates) in [(1000, true), (999, false)] {
+        // a stream gives back the room of consumed bytes once they make up
+        // half of its buffer: it keeps at most twice the room its bytes
+        // need, but at least the pooled buffer capacity, so the next bytes
+        // need new room (and allocate); a stream with more bytes left keeps
+        // the room the next bytes fit in
+        for (consume, allocates) in [(1000, true), (999, true), (400, false)] {
             let config = TcpReassemblyConfig {
                 max_pooled_buffer_capacity: 100,
                 ..Default::default()
@@ -2960,7 +2961,7 @@ mod test {
             script
                 .handshake()
                 .send(Initiator, &[7; 1000])
-                .send(Initiator, &[8; 999]);
+                .send(Initiator, &[8; 400]);
             {
                 let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
                 let stream = connection.stream_mut(Initiator);

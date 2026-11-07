@@ -109,7 +109,11 @@ pub struct TcpReassemblyConfig {
     pub max_pooled_buffers: usize,
 
     /// Capacity in bytes that buffers are shrunk to when the pool keeps them
-    /// for re-use (default 64 KiB).
+    /// for re-use, and that a stream keeps for its bytes once most of them
+    /// are consumed (default 64 KiB).
+    ///
+    /// A stream whose bytes are read as they come gives the room of a burst
+    /// back down to this capacity, and takes it again for the next burst.
     pub max_pooled_buffer_capacity: usize,
 }
 

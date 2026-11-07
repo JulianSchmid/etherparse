@@ -47,8 +47,8 @@ pub(crate) struct StreamBuffer {
     /// Number of bytes the last read returned that are not consumed yet.
     last_read_len: usize,
 
-    /// Capacity that `buf` keeps when it has few or no bytes left, so that
-    /// the memory of the pool's streams follows the bytes they buffer.
+    /// Capacity that `buf` keeps however few bytes it has left, so that the
+    /// memory of the pool's streams follows the bytes they buffer.
     keep_capacity: usize,
 }
 
@@ -168,7 +168,7 @@ impl StreamBuffer {
         self.head += len;
         self.read_offset += len as u64;
         self.last_read_len -= len;
-        self.restart_if_empty();
+        self.shrink_if_sparse();
     }
 
     /// Moves the read position over the gap at the read position. Returns
@@ -375,7 +375,6 @@ impl StreamBuffer {
             if self.head >= live || (grows && self.head >= live / 8) {
                 self.buf.drain(..self.head);
                 self.head = 0;
-                self.trim((stored_end - self.read_offset) as usize);
             }
             // placeholders for missing bytes before the segment
             let from = start.max(buf_end);
@@ -406,24 +405,19 @@ impl StreamBuffer {
         self.head = self.index(offset.min(self.buf_end()));
         self.read_offset = offset;
         self.last_read_len = 0;
-        self.restart_if_empty();
+        self.shrink_if_sparse();
     }
 
-    /// Starts the buffer over once all its bytes are consumed, giving back
-    /// the room it doesn't need anymore.
-    fn restart_if_empty(&mut self) {
-        if self.head == self.buf.len() {
-            self.buf.clear();
+    /// Gives back the room the buffer doesn't need once the consumed bytes
+    /// make up half of it: drops them and keeps at most twice the capacity
+    /// its bytes need, but at least `keep_capacity`. Moving the bytes costs
+    /// at most as much as consuming them did.
+    fn shrink_if_sparse(&mut self) {
+        let live = self.buffered();
+        let keep = live.saturating_mul(2).max(self.keep_capacity);
+        if self.head >= live && self.buf.capacity() > keep {
+            self.buf.drain(..self.head);
             self.head = 0;
-            self.trim(0);
-        }
-    }
-
-    /// Gives back the room the buffer doesn't need for `len` bytes: it keeps
-    /// at most twice the capacity for them, but at least `keep_capacity`.
-    fn trim(&mut self, len: usize) {
-        let keep = len.saturating_mul(2).max(self.keep_capacity);
-        if self.buf.capacity() > keep {
             self.buf.shrink_to(keep);
         }
     }

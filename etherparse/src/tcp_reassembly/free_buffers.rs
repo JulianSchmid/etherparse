@@ -47,9 +47,7 @@ impl<B> FreeList<B> {
             max_capacity: config.max_pooled_buffer_capacity,
         }
     }
-}
 
-impl<B> FreeList<B> {
     /// Capacity that buffers in the list are shrunk to.
     pub fn max_capacity(&self) -> usize {
         self.max_capacity
