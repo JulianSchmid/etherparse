@@ -343,7 +343,10 @@ impl ModelStream {
             } else if start < base as i64 && false == payload.is_empty() {
                 // only the filler byte of a keep-alive before an observed
                 // start doesn't count
-                out_of_window = false == (start == base as i64 - 1 && 1 == payload.len());
+                out_of_window = false
+                    == (start == base as i64 - 1
+                        && 1 == payload.len()
+                        && false == (header.syn || header.fin));
             }
         }
         let end = start + payload.len() as i64;

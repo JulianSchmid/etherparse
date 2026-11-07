@@ -659,8 +659,15 @@ impl TcpStream {
         };
 
         // 3. put in front
-        let (start, mut out_of_window) =
-            self.take_in_front(start, seq, data.len(), window, config, available);
+        let (start, mut out_of_window) = self.take_in_front(
+            start,
+            seq,
+            data.len(),
+            is_keep_alive_shaped(tcp),
+            window,
+            config,
+            available,
+        );
         let end = start + data.len() as i64;
 
         // 4. keep-alive
@@ -837,13 +844,15 @@ impl TcpStream {
     /// its first byte and fit, until it is read from. Returns the offset
     /// the bytes are stored at, and whether the segment counts as
     /// out-of-window, as its bytes before offset 0 are outside the stream
-    /// (only the filler byte of a keep-alive, which lies right before the
-    /// first byte of an observed start, doesn't count).
+    /// (only the filler byte of a keep-alive, a segment that `is_keep_alive_shaped`
+    /// and lies right before the first byte of an observed start, doesn't
+    /// count).
     fn take_in_front(
         &mut self,
         start: i64,
         seq: u32,
         data_len: usize,
+        keep_alive_shaped: bool,
         window: u64,
         config: &TcpReassemblyConfig,
         available: &mut usize,
@@ -852,7 +861,7 @@ impl TcpStream {
             return (start, false);
         }
         if TcpStreamStart::Observed == self.status.start {
-            let keep_alive_filler = -1 == start && 1 == data_len;
+            let keep_alive_filler = -1 == start && keep_alive_shaped;
             return (start, false == keep_alive_filler);
         }
         if false == self.can_move_start_back(start, window, config) {
@@ -6023,8 +6032,14 @@ mod test {
 
         // on a stream with an observed start, bytes before offset 0 count as
         // out-of-window, except the filler byte of a keep-alive right before
-        // it (a byte at the ISN, when no bytes were sent yet)
-        for (position, len, expected, highest) in [(-1, 1, 0, 0), (-1, 2, 1, 1), (-2, 1, 1, 0)] {
+        // it (a byte at the ISN, when no bytes were sent yet); the same byte
+        // with a FIN is no keep-alive and counts
+        for (position, len, fin, expected, highest) in [
+            (-1, 1, false, 0, 0),
+            (-1, 2, false, 1, 1),
+            (-2, 1, false, 1, 0),
+            (-1, 1, true, 1, 0),
+        ] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.handshake();
@@ -6032,11 +6047,13 @@ mod test {
                 s.send(Initiator, &[7; 2][..len]);
             });
             segment.header.sequence_number = script.seq(Initiator, 0).wrapping_add_signed(position);
+            segment.header.fin = fin;
             script.segments.push(segment);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream(Initiator);
             assert_eq!(expected, stream.status().out_of_window_segments);
             assert_eq!(highest, stream.highest_offset());
+            assert_eq!(fin.then_some(0), stream.fin_offset());
         }
 
         // ... while a segment without bytes there changes nothing
