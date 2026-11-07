@@ -92,6 +92,10 @@ struct ModelStream {
     /// Whether the stream's SYN was seen but not ACKed by the other side
     /// yet (S5).
     syn_unacked: bool,
+    /// Last segment of the other side dropped while the SYN was unanswered
+    /// (true offsets of its bytes) and the number of consecutive ones that
+    /// agree (S5).
+    dropped: Option<(Range<u64>, u32)>,
     /// Whether the read offset moved forward.
     read_moved: bool,
     /// Last ACK of the other side that couldn't be applied yet: before the
@@ -553,26 +557,54 @@ impl ModelStream {
     /// yet, drops the `segment` of the other side (S5): it accepts only a
     /// segment that ACKs the SYN (see [`ModelStream::acks_unacked_syn`]) and
     /// a SYN without ACK, FIN and RST.
-    fn drops_before_syn_acked(&self, segment: &TestSegment, range: u64) -> bool {
+    fn drops_before_syn_acked(&self, segment: &TestSegment, range: u64, window: u64) -> bool {
         let header = &segment.header;
         self.syn_unacked
-            && false == self.acks_unacked_syn(segment, range)
+            && false == self.acks_unacked_syn(segment, range, window)
             && false == (header.syn && false == (header.ack || header.fin || header.rst))
     }
 
     /// Returns true if the `segment` of the other side ACKs the stream's SYN
-    /// that waits for its ACK, or bytes up to `range` after it.
-    fn acks_unacked_syn(&self, segment: &TestSegment, range: u64) -> bool {
-        match (self.base, segment.ack) {
-            (Some(base), Some(ack)) if self.syn_unacked => (base..=base + range).contains(&ack),
-            _ => false,
+    /// that waits for its ACK: the SYN or bytes up to `range` after it, or
+    /// the resync candidate within `window`.
+    fn acks_unacked_syn(&self, segment: &TestSegment, range: u64, window: u64) -> bool {
+        let (Some(base), Some(ack)) = (self.base, segment.ack) else {
+            return false;
+        };
+        if false == self.syn_unacked {
+            return false;
         }
+        (base..=base + range).contains(&ack)
+            || self
+                .candidates
+                .last()
+                .is_some_and(|candidate| within_window(&candidate.bytes, ack, window))
     }
 
     /// Ends the wait for the ACK of the stream's SYN if the `segment` of the
     /// other side ACKs it (S5).
-    fn answer_syn(&mut self, segment: &TestSegment, range: u64) {
-        if self.acks_unacked_syn(segment, range) {
+    fn answer_syn(&mut self, segment: &TestSegment, range: u64, window: u64) {
+        if self.acks_unacked_syn(segment, range, window) {
+            self.syn_unacked = false;
+        }
+    }
+
+    /// Records a `segment` of the other side dropped while the SYN is
+    /// unanswered: `resync_after_segments` consecutive ones, each within
+    /// `window` of the one before, end the wait (S5).
+    fn record_dropped(&mut self, segment: &TestSegment, window: u64, config: &TcpReassemblyConfig) {
+        let bytes = segment.offset..segment.offset + segment.payload.len() as u64;
+        let agreeing = match &self.dropped {
+            Some((previous, agreeing)) if within_window(previous, bytes.start, window) => {
+                agreeing + 1
+            }
+            _ => 1,
+        };
+        self.dropped = Some((bytes, agreeing));
+        if config
+            .resync_after_segments
+            .is_some_and(|after| agreeing >= after)
+        {
             self.syn_unacked = false;
         }
     }
@@ -1172,12 +1204,14 @@ impl ReferenceModel {
             .max_total_buffered
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
         let range = self.range(sender_role.other());
-        let dropped = self.streams[other].drops_before_syn_acked(segment, range);
+        let other_window = self.window(sender_role.other());
+        let dropped = self.streams[other].drops_before_syn_acked(segment, range, other_window);
         if false == dropped {
-            self.streams[other].answer_syn(segment, range);
+            self.streams[other].answer_syn(segment, range, other_window);
         }
         if dropped {
             self.streams[sender].out_of_window_segments += 1;
+            self.streams[other].record_dropped(segment, other_window, &self.config);
         } else if header.rst {
             let window = self.window(sender_role);
             if self.streams[sender].accepts_reset(segment.offset, window) {
@@ -1353,11 +1387,12 @@ impl ReferenceModel {
             return false;
         };
         // a SYN-ACK the receiver drops confirms nothing (S5)
-        let other = role_index(self.sender_role(segment).other());
-        let range = self.range(self.sender_role(segment).other());
+        let other_role = self.sender_role(segment).other();
+        let other = role_index(other_role);
+        let (range, window) = (self.range(other_role), self.window(other_role));
         if false == (header.syn && header.ack)
             || header.rst
-            || self.streams[other].drops_before_syn_acked(segment, range)
+            || self.streams[other].drops_before_syn_acked(segment, range, window)
         {
             return false;
         }

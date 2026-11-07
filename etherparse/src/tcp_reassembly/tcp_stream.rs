@@ -50,11 +50,17 @@ pub struct TcpStream {
     /// lies.
     start_disputed: bool,
 
-    /// Whether the sender's SYN was seen but no segment of the other side
-    /// ACKed it yet: the sender is in SYN-SENT or SYN-RECEIVED and drops
-    /// every segment of the other side that doesn't ACK the SYN, apart from
-    /// a SYN (S5).
+    /// Whether the sender's SYN was seen but not answered yet: the sender
+    /// is in SYN-SENT or SYN-RECEIVED and drops every segment of the other
+    /// side that doesn't ACK the SYN (S5). Answered by such an ACK, by a
+    /// segment of the sender that its stream accepts or a SYN of the sender
+    /// with a new ISN, or by enough consecutive dropped segments.
     syn_unacked: bool,
+
+    /// Last segment of the other side dropped while the SYN was unanswered,
+    /// with the number of consecutive ones that agree, which end the wait
+    /// (S5, R3).
+    dropped: Option<ResyncCandidate>,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
     /// not seen, `Some(None)` for a SYN without the option).
@@ -137,6 +143,7 @@ impl TcpStream {
             kept_ack: None,
             start_disputed: false,
             syn_unacked: false,
+            dropped: None,
             window_scale: None,
             window: None,
             buffer: StreamBuffer::new(free),
@@ -496,10 +503,11 @@ impl TcpStream {
     }
 
     /// Returns true if the segment `tcp` of the other side ACKs the stream's
-    /// SYN that waits for its ACK, or bytes up to k windows after it in case
-    /// the SYN-ACK or the ACK was not captured, where `window` is the
-    /// receive window of the other side.
-    fn acks_unacked_syn(
+    /// SYN that waits for its ACK (S5): the SYN or bytes up to k windows
+    /// after it, in case the SYN-ACK or the ACK was not captured, or the
+    /// bytes the stream jumped to (its resync candidate, R2), where `window`
+    /// is the receive window of the other side.
+    pub(crate) fn acks_unacked_syn(
         &self,
         tcp: &TcpSlice<'_>,
         window: u64,
@@ -508,10 +516,36 @@ impl TcpStream {
         let Some(syn) = self.syn.filter(|_| self.syn_unacked && tcp.ack()) else {
             return false;
         };
-        let acked = tcp
-            .acknowledgment_number()
-            .wrapping_sub(syn.isn.wrapping_add(1)) as i32;
+        let ack = tcp.acknowledgment_number();
+        if self
+            .resync_candidate
+            .is_some_and(|candidate| candidate.is_within_window(ack, window))
+        {
+            return true;
+        }
+        let acked = ack.wrapping_sub(syn.isn.wrapping_add(1)) as i32;
         u64::try_from(acked).is_ok_and(|acked| acked <= window_range(window, config))
+    }
+
+    /// Records a segment `tcp` of the other side that the stream's sender
+    /// dropped while its SYN is unanswered (S5): with `resync_after_segments`
+    /// set, that many consecutive dropped segments, each within one window
+    /// of the one before, end the wait, as the other side moved on (R3).
+    pub(crate) fn record_dropped(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        let dropped = ResyncCandidate::new(tcp.sequence_number(), tcp.payload().len(), tcp.fin())
+            .following(self.dropped, window);
+        self.dropped = Some(dropped);
+        if config
+            .resync_after_segments
+            .is_some_and(|after| dropped.agreeing >= after)
+        {
+            self.syn_unacked = false;
+        }
     }
 
     /// Ends the wait for the ACK of the stream's SYN if the segment `tcp` of
@@ -1334,18 +1368,13 @@ impl TcpStream {
     /// [`TcpReassemblyConfig::resync_after_segments`]).
     fn add_resync_candidate(
         &mut self,
-        mut candidate: ResyncCandidate,
+        candidate: ResyncCandidate,
         window: u64,
         config: &TcpReassemblyConfig,
     ) -> bool {
         // consecutive segments after the window agree on the new position
         // if each lies within one window of the one before
-        if let Some(previous) = self
-            .resync_candidate
-            .filter(|previous| previous.is_within_window(candidate.first, window))
-        {
-            candidate.agreeing = previous.agreeing.saturating_add(1);
-        }
+        let candidate = candidate.following(self.resync_candidate, window);
         self.resync_candidate = Some(candidate);
         config
             .resync_after_segments
@@ -1505,6 +1534,17 @@ impl ResyncCandidate {
             fin,
             agreeing: 1,
         }
+    }
+
+    /// The candidate as the one after `previous`: it agrees with it if it
+    /// lies within one window of it, and counts the agreeing ones.
+    fn following(mut self, previous: Option<ResyncCandidate>, window: u64) -> ResyncCandidate {
+        if let Some(previous) =
+            previous.filter(|previous| previous.is_within_window(self.first, window))
+        {
+            self.agreeing = previous.agreeing.saturating_add(1);
+        }
+        self
     }
 
     /// Returns true if the sequence number `seq` lies at most `window` bytes

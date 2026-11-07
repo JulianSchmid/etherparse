@@ -146,6 +146,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // that doesn't ACK that SYN, with its window and ACK (S5)
         if self.drops_before_syn_acked(sender, tcp, config) {
             self.stream_mut(sender).count_out_of_window();
+            let window = self.window(sender.other(), config);
+            self.stream_mut(sender.other())
+                .record_dropped(tcp, window, config);
         } else {
             self.add_accepted_segment(sender, source, tcp, config, available, free);
         }
@@ -1259,6 +1262,64 @@ mod test {
             let stream = connection.stream(Initiator);
             assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
             assert_eq!(3, stream.acked_offset());
+        }
+    }
+
+    #[test]
+    fn syn_answered() {
+        // the wait for the ACK of a SYN ends with an ACK of the bytes the
+        // stream jumped to (R2): with the handshake ACK and 300 bytes of the
+        // response lost, the rest of the response lies after the window and
+        // the initiator's ACK confirms the jump, so it answers the SYN-ACK
+        // and resyncs the stream instead of being dropped
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send_uncaptured(Responder, 300)
+                .send(Responder, b"response")
+                .ack(Initiator)
+                .send(Responder, b"more");
+            script.segments.remove(2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(
+                0,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(1, stream.status().resyncs);
+            assert_eq!(TcpRead::Gap { len: None }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"more"), stream.read_received());
+        }
+
+        // with resync_after_segments, that many consecutive dropped segments
+        // of the other side, each within one window of the one before, end
+        // the wait too (the capture misses the responder's direction after
+        // the SYN-ACK, so the initiator's ACKs lie beyond k windows)
+        for (after, expected) in [(Some(3), 3), (None, 4)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: after,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send_uncaptured(Responder, 500)
+                .ack(Initiator)
+                .ack(Initiator)
+                .ack(Initiator)
+                .send(Initiator, b"request");
+            script.segments.remove(2);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(expected, stream.status().out_of_window_segments);
+            let read = stream.read_received();
+            assert_eq!(after.is_some(), TcpRead::Data(b"request") == read);
         }
     }
 
