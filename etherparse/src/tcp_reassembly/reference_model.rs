@@ -568,16 +568,6 @@ impl ModelStream {
         false == (header.syn && false == (header.ack || header.fin))
     }
 
-    /// Ends the wait for the ACK of the stream's SYN when its sender sends
-    /// `segment`, anything but a retransmission of that SYN: it received an
-    /// answer that was not captured, or gave up (S5).
-    fn moves_on(&mut self, segment: &TestSegment) {
-        let retransmitted_syn = segment.header.syn && self.has_isn_of(segment);
-        if false == retransmitted_syn {
-            self.syn_unacked = false;
-        }
-    }
-
     /// Gives the stream an observed start at the true offset `start`, where
     /// the SYN carries `len` bytes. A mid-stream pickup takes it if it is at
     /// or before its first byte, at most `range` bytes before it, bytes can
@@ -1174,9 +1164,6 @@ impl ReferenceModel {
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
         let range = self.range(sender_role.other());
         let dropped = self.streams[other].drops_before_syn_acked(segment, range);
-        if false == dropped {
-            self.streams[sender].moves_on(segment);
-        }
         if dropped {
             self.streams[sender].out_of_window_segments += 1;
         } else if header.rst {
@@ -1193,7 +1180,9 @@ impl ReferenceModel {
         } else if header.syn && false == self.is_own_syn(segment) {
             // the SYNs of a script all have the same ISN; a retransmission
             // adds the Fast Open bytes beyond the kept ones, the first win
+            // the SYN ends the wait for the ACK of the sender's SYN (S5)
             if false == header.ack {
+                self.streams[sender].syn_unacked = false;
                 match self
                     .reconnect_syn
                     .as_mut()
@@ -1241,6 +1230,10 @@ impl ReferenceModel {
             // a retransmitted or late SYN carries the window from the start
             if plausible && false == (header.syn && self.windows[sender].is_some()) {
                 self.windows[sender] = Some(header.window_size);
+            }
+            // the sender moved past its SYN (S5)
+            if plausible && false == header.syn {
+                self.streams[sender].syn_unacked = false;
             }
             // a SYN after a resync gives no window (A3), also after one that
             // kept the mapping

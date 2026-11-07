@@ -483,8 +483,9 @@ impl TcpStream {
     /// SYN-RECEIVED (RFC 9293 3.10.7.3) it accepts only a segment that ACKs
     /// its SYN, or bytes up to k windows after it in case the SYN-ACK or
     /// the ACK was not captured, where `window` is the receive window of
-    /// the other side; and a SYN without ACK and FIN (a simultaneous open).
-    /// The first segment that ACKs the SYN answers it.
+    /// the other side; and a SYN without ACK and FIN (a simultaneous open;
+    /// one with a FIN is dropped like a blind FIN, as nothing could recover
+    /// a stream it ended). The first segment that ACKs the SYN answers it.
     pub(crate) fn drops_before_syn_acked(
         &mut self,
         tcp: &TcpSlice<'_>,
@@ -506,15 +507,10 @@ impl TcpStream {
         false == (tcp.syn() && false == (tcp.ack() || tcp.fin()))
     }
 
-    /// Ends the wait for the ACK of the stream's SYN when its sender sends
-    /// `tcp`, anything but a retransmission of that SYN: it received an
-    /// answer that was not captured, or gave up (S5).
-    pub(crate) fn moves_on(&mut self, tcp: &TcpSlice<'_>) {
-        let retransmitted_syn =
-            tcp.syn() && self.syn.is_some_and(|syn| syn.isn == tcp.sequence_number());
-        if false == retransmitted_syn {
-            self.syn_unacked = false;
-        }
+    /// Ends the wait for the ACK of the stream's SYN, as its sender gave the
+    /// handshake up with a SYN with a new ISN (S5).
+    pub(crate) fn gives_up_syn(&mut self) {
+        self.syn_unacked = false;
     }
 
     /// Counts a segment of the stream's sender that lies outside of the
@@ -708,6 +704,11 @@ impl TcpStream {
         };
         if accepted {
             self.record_window(tcp);
+            // the sender moved past its SYN (S5): it received an answer that
+            // was not captured
+            if false == tcp.syn() {
+                self.syn_unacked = false;
+            }
         }
         if (false == data.is_empty() || tcp.fin()) && placed.after_window {
             // a FIN right after the bytes the stream may have jumped to ends

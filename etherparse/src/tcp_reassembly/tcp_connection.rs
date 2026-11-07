@@ -148,9 +148,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let dropped = self
             .stream_mut(sender.other())
             .drops_before_syn_acked(tcp, window, config);
-        if false == dropped {
-            self.stream_mut(sender).moves_on(tcp);
-        }
         if dropped {
             self.stream_mut(sender).count_out_of_window();
         } else if tcp.rst() {
@@ -162,9 +159,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                     .is_own_syn(tcp, self.window(sender, config), config)
         {
             // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
-            // it, until then it changes nothing, and neither does a SYN-ACK
-            // with a new ISN that confirms none
+            // it, until then it changes nothing but ends the wait for the
+            // ACK of the sender's SYN (S5), and neither does a SYN-ACK with a
+            // new ISN that confirms none
             if false == tcp.ack() {
+                self.stream_mut(sender).gives_up_syn();
                 self.keep_reconnect_syn(source, tcp, free);
             }
         } else {
@@ -1018,6 +1017,40 @@ mod test {
             assert_eq!(0, stream.status().out_of_window_segments);
         }
 
+        // ... but a segment of the SYN's sender that its own stream ignores
+        // doesn't answer the SYN, e.g. an RST outside of its window spoofed
+        // with its address: the blind RST without ACK after it is still
+        // dropped
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let spoofed = script.injected(|s| {
+                s.rst_at(Initiator, 1000);
+            });
+            script.segments.push(spoofed);
+            let mut blind = script.injected(|s| {
+                s.rst_at(Responder, 1 << 30);
+            });
+            blind.header.ack = false;
+            blind.ack = None;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            assert_eq!(
+                1,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
         // ... and a side that gives up its SYN-ACK with a new SYN of its own
         // (a reconnect from the former responder) lets the other side's
         // SYN-ACK through, which confirms the reconnect
@@ -1043,6 +1076,33 @@ mod test {
             assert_eq!(
                 TcpRead::Data(b"request"),
                 connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // ... also when the SYN-ACK confirms no reconnect, as a SYN of its
+        // own sender replaced the kept one: the old SYN-ACK's sender gave it
+        // up, so the SYN-ACK is ignored like any with a new ISN that
+        // confirms nothing instead of counted
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.syn().syn_ack();
+            old.feed_all(&mut pool);
+            let mut from_responder =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 1 << 30, 9000);
+            from_responder.syn().syn_ack();
+            let mut from_initiator = ConnectionScript::with_isns(7500, 9500);
+            from_initiator.syn();
+            from_responder.segments[0].feed(&mut pool, ());
+            from_initiator.segments[0].feed(&mut pool, ());
+            let (connection, _) = from_responder.segments[1]
+                .feed(&mut pool, ())
+                .active
+                .unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                0,
+                connection.stream(Initiator).status().out_of_window_segments
             );
         }
 
