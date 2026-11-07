@@ -52,7 +52,8 @@ pub struct TcpStream {
     /// the bytes in holes are placeholders.
     buf: Vec<u8>,
 
-    /// Number of consumed bytes at the start of `buf`.
+    /// Index in `buf` of the byte at `read_offset`. The bytes before it are
+    /// consumed, or room for bytes put in front of a mid-stream pickup.
     head: usize,
 
     /// Offset after the furthest received byte that was stored (the read
@@ -948,8 +949,16 @@ impl TcpStream {
     /// bytes are a hole until they arrive.
     fn prepend(&mut self, len: u64) {
         // nothing was consumed yet, and there are no gaps, as the read
-        // position is at the first byte received
-        self.buf.splice(..0, core::iter::repeat_n(0, len as usize));
+        // position is at the first byte received, so the bytes before `head`
+        // are room for the placeholders: make room for as many bytes as the
+        // stream holds at once, so that a prepend costs little on average
+        let placeholders = len as usize;
+        if self.head < placeholders {
+            let room = placeholders.max(self.buffered());
+            self.buf.splice(..0, core::iter::repeat_n(0, room));
+            self.head += room;
+        }
+        self.head -= placeholders;
         self.highest_offset += len;
         self.received_end += len;
         for hole in &mut self.holes {
