@@ -82,6 +82,8 @@ struct ModelStream {
     syn_len: u64,
     /// Whether the stream was picked up at a FIN without bytes.
     started_at_fin: bool,
+    /// Whether a segment far from the kept ACK was refused as the start.
+    start_disputed: bool,
     /// Whether the read offset moved forward.
     read_moved: bool,
     /// Last ACK of the other side that couldn't be applied yet: before the
@@ -247,11 +249,11 @@ impl ModelStream {
             if (payload.is_empty() && false == header.fin) || keep_alive {
                 return accepted_without_base;
             }
-            // a segment far from the kept ACK doesn't start the stream, and
-            // drops the ACK
-            if false == accepted_without_base {
+            // the first segment far from the kept ACK doesn't start the
+            // stream, the next one does
+            if false == accepted_without_base && false == self.start_disputed {
                 self.out_of_window_segments += 1;
-                self.pending_ack = None;
+                self.start_disputed = true;
                 return false;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)

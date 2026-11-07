@@ -34,6 +34,11 @@ pub struct TcpStream {
     /// and is dropped once a later ACK counted.
     pending_ack: Option<PendingAck>,
 
+    /// Whether a segment that lay far from the kept ACK was refused as the
+    /// stream's start: one of them is forged, so the next segment starts
+    /// the stream wherever it lies.
+    start_disputed: bool,
+
     /// Window scale option in the sender's SYN (`None` while the SYN was
     /// not seen, `Some(None)` for a SYN without the option).
     window_scale: Option<Option<u8>>,
@@ -113,6 +118,7 @@ impl TcpStream {
             start_seq: None,
             syn: None,
             pending_ack: None,
+            start_disputed: false,
             window_scale: None,
             window: None,
             buffer: StreamBuffer::new(free),
@@ -605,7 +611,9 @@ impl TcpStream {
         let had_start = self.start_seq.is_some();
         let accepted_without_start =
             false == had_start && self.accepted_by_kept_ack(seq, window, config);
-        let Some(start_seq) = self.start_from(tcp, seq, window, config, available) else {
+        let Some(start_seq) =
+            self.start_from(tcp, seq, accepted_without_start, window, config, available)
+        else {
             if accepted_without_start {
                 self.record_window(tcp);
             }
@@ -680,14 +688,16 @@ impl TcpStream {
     }
 
     /// Gives the stream a start if it has none and the segment `tcp`, whose
-    /// first byte has the sequence number `seq`, can start it. Returns the
-    /// sequence number of offset 0, or `None` if the segment is done: a SYN
-    /// the stream can't take, or a segment of a stream that still has no
-    /// start.
+    /// first byte has the sequence number `seq`, can start it, where
+    /// `accepted` tells whether the receiver's kept ACK allows the segment.
+    /// Returns the sequence number of offset 0, or `None` if the segment is
+    /// done: a SYN the stream can't take, or a segment of a stream that
+    /// still has no start.
     fn start_from(
         &mut self,
         tcp: &TcpSlice<'_>,
         seq: u32,
+        accepted: bool,
         window: u64,
         config: &TcpReassemblyConfig,
         available: &mut usize,
@@ -713,11 +723,13 @@ impl TcpStream {
                 && Some(seq.wrapping_add(1)) == self.pending_ack.map(|pending| pending.seq);
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
                 // a segment far from the ACK the receiver kept for the stream
-                // is forged, or the ACK is: it doesn't start the stream, and
-                // the ACK is dropped, so that the next segment can
-                if false == self.accepted_by_kept_ack(seq, window, config) {
+                // is forged, or the ACK is: the first such segment doesn't
+                // start the stream, the next one does wherever it lies (an
+                // ACK before every segment would otherwise keep a stream
+                // with more in flight than the fallback window from starting)
+                if false == accepted && false == self.start_disputed {
                     self.status.out_of_window_segments += 1;
-                    self.pending_ack = None;
+                    self.start_disputed = true;
                     return None;
                 }
                 // bytes that don't fit start no stream, so that byte 0 of a
@@ -1929,12 +1941,12 @@ mod test {
             assert_eq!(expected, stream.read_received());
         }
 
-        // a segment far from the ACK the receiver kept for a stream without a
-        // start doesn't start it (a blind segment would anchor the stream
-        // elsewhere, and a blind FIN would end it), and the kept ACK is
-        // dropped, so that the next segment starts the stream whether the
-        // ACK or the segment was forged (the capture starts at the
-        // initiator's request, which ACKs the responder's first byte)
+        // the first segment far from the ACK the receiver kept for a stream
+        // without a start doesn't start it (a blind segment would anchor the
+        // stream elsewhere, and a blind FIN would end it); the next segment
+        // starts the stream wherever it lies, as the ACK or the segment was
+        // forged (the capture starts at the initiator's request, which ACKs
+        // the responder's first byte)
         for forged_fin in [false, true] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -1965,6 +1977,33 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Responder);
             assert_eq!(TcpRead::Data(b"bbb"), stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
+        // only the first segment far from the kept ACK is refused: with an
+        // ACK before every segment of a stream that has more in flight than
+        // the fallback window allows, the second segment starts the stream
+        // (the capture starts at the initiator's request, the responder's
+        // segments lie 1000 bytes after the initiator's ACKs)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"request")
+                .send_at(Responder, 1000, b"aaa")
+                .ack_to(Initiator, 0)
+                .send_at(Responder, 1003, b"bbb")
+                .ack_to(Initiator, 0)
+                .send_at(Responder, 1006, b"ccc");
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"bbbccc"), stream.read_received());
             assert_eq!(1, stream.status().out_of_window_segments);
         }
 
