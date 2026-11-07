@@ -10,3 +10,5 @@ The TCP reassembly pool stores the bytes of each stream in a single contiguous b
 ## Consequences
 
 Compacting a buffer costs a memmove, and a single stream can grow up to its per-stream limit, so memory is bounded by limits rather than by page accounting.
+
+Missing bytes take placeholders, so a few bytes far apart cost as much memory as the bytes between them. A stream gives the room of consumed bytes back once they make up half of its buffer, so the memory of all streams follows the bytes they hold (about twice `max_total_buffered`, plus the pooled buffer capacity per stream). The price is that a stream whose reader keeps up takes the room for a burst again at the next one: tiny segments far apart with an eager reader cost a buffer's worth of fresh pages each, far more than a normal segment.
