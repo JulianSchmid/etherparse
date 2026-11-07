@@ -691,7 +691,7 @@ impl ModelStream {
         // far
         if offset <= base as i64 && self.can_prepend() && self.ack <= base {
             let factor = config.hole_give_up_window_factor.unwrap_or(2).max(1);
-            let range = u64::from(factor) * window.max(self.largest_window.unwrap_or(0));
+            let range = u64::from(factor) * window;
             if (base as i64 - offset) as u64 <= range {
                 self.pending_ack = Some((ack, packet));
             }

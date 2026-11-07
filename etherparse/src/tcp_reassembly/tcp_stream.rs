@@ -28,9 +28,10 @@ pub struct TcpStream {
 
     /// Last ACK of the receiver that the stream couldn't apply yet, as it
     /// had no start or the ACK lies at or before offset 0 while bytes can
-    /// still be prepended. It is applied after every packet until it counts
-    /// (a keep-alive ending there doesn't start the stream), and dropped
-    /// once a later ACK counted.
+    /// still be prepended (at most as far before it as bytes can be put in
+    /// front). It is applied after every packet until it counts, tells
+    /// which segments the receiver accepts while the stream has no start,
+    /// and is dropped once a later ACK counted.
     pending_ack: Option<PendingAck>,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
@@ -1149,7 +1150,7 @@ impl TcpStream {
         // one further before than bytes can be put in front is forged, and
         // would widen the RST check (F4)
         if ack <= 0 && self.can_prepend() && 0 == self.seen_ack {
-            if ack.unsigned_abs() <= window_range(self.sent_into(window), config) {
+            if ack.unsigned_abs() <= window_range(window, config) {
                 self.pending_ack = Some(PendingAck {
                     seq: ack_seq,
                     packet,
