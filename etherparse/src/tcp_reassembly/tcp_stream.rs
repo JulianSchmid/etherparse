@@ -742,8 +742,12 @@ impl TcpStream {
                 return None;
             }
             // the window scale is only known from the sender's SYN, which
-            // can arrive after the SYN-ACK that started the stream
-            if self.window_scale.is_none() && Some(seq) == self.start_seq {
+            // can arrive after the SYN-ACK that started the stream, but not
+            // after a resync (A3), even one that kept the mapping
+            if self.window_scale.is_none()
+                && Some(seq) == self.start_seq
+                && 0 == self.status.resyncs
+            {
                 self.window_scale = Some(window_scale(tcp));
             }
         } else if self.start_seq.is_none() {
@@ -6790,6 +6794,37 @@ mod test {
             let (connection, _) = probe.feed(&mut pool, ()).active.unwrap();
             let status = connection.stream(Initiator).status();
             assert_eq!((1, 2), (status.resyncs, status.out_of_window_segments));
+        }
+
+        // ... also after a forced resync that kept the mapping, as the next
+        // bytes were in order (window 50 instead of 100 << 3)
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 50,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_scales = [Some(3), Some(3)];
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .ack(Responder);
+            let syn = script.segments.remove(0);
+            script.segments.push(syn);
+            let probe = script.injected(|s| {
+                s.send_at(Initiator, 6 + 101, b"y");
+            });
+            {
+                let (connection, _) = script.feed(&mut pool, ..3).active.unwrap();
+                connection.stream_mut(Initiator).force_resync();
+            }
+            script.feed(&mut pool, 3..);
+            let (connection, _) = probe.feed(&mut pool, ()).active.unwrap();
+            let status = connection.stream(Initiator).status();
+            assert_eq!((1, 1), (status.resyncs, status.out_of_window_segments));
         }
 
         // the number of windows is the hole give up window factor
