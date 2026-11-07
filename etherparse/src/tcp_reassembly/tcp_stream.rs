@@ -738,9 +738,9 @@ impl TcpStream {
                 // the stream, the next one with bytes does wherever it lies
                 // (an ACK before every segment would otherwise keep a stream
                 // with more in flight than k fallback windows from starting);
-                // a FIN without bytes never does, as nothing could recover
-                // a stream that a blind FIN ended
-                if false == accepted && (data.is_empty() || false == self.start_disputed) {
+                // a FIN never does, as nothing could recover a stream that a
+                // blind FIN ended
+                if false == accepted && (tcp.fin() || false == self.start_disputed) {
                     self.status.out_of_window_segments += 1;
                     self.start_disputed = true;
                     return None;
@@ -750,8 +750,9 @@ impl TcpStream {
                 if false == data.is_empty() && 0 == config.max_stream_buffer.min(*available) {
                     self.status.rejected_bytes += data.len() as u64;
                 } else {
-                    // a kept ACK that the start overrules is forged, and
-                    // would count as the seen ACK or as resync evidence
+                    // a kept ACK that the start overrules doesn't fit the
+                    // stream, and would otherwise count as the seen ACK or
+                    // as resync evidence
                     if false == accepted {
                         self.kept_ack = None;
                     }
@@ -1996,16 +1997,17 @@ mod test {
             assert_eq!(1, stream.status().out_of_window_segments);
         }
 
-        // a FIN without bytes far from the kept ACK never starts the stream,
-        // as nothing could recover a stream that a blind FIN ended
-        {
+        // a FIN far from the kept ACK never starts the stream, with or
+        // without bytes, as nothing could recover a stream that a blind FIN
+        // ended
+        for bytes in [&b""[..], &b"x"[..]] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.handshake().send(Initiator, b"request");
             script.segments.drain(..3);
             script
                 .fin_at(Responder, 1 << 30, &[])
-                .fin_at(Responder, 1 << 30, &[])
+                .fin_at(Responder, 1 << 30, bytes)
                 .send_at(Responder, 0, b"real");
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Responder);
