@@ -220,6 +220,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         available: &mut usize,
     ) {
         let starts = self.starts();
+        let other_syn_seen = self.stream(sender.other()).syn().is_some();
         // the SYN-ACK ACKs the other side's SYN, so the other stream starts
         // there, even if its SYN was not seen
         if tcp.syn() && tcp.ack() {
@@ -239,7 +240,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let window = self.window(sender, config);
         let packet = self.packets;
         self.stream_mut(sender)
-            .add_segment(tcp, window, packet, config, available);
+            .add_segment(tcp, window, packet, other_syn_seen, config, available);
 
         // a late SYN or SYN-ACK that gave a stream an observed start
         // confirms guessed roles if its sender has the role the guess gave it

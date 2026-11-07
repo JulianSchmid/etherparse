@@ -602,6 +602,7 @@ impl TcpStream {
         tcp: &TcpSlice<'_>,
         window: u64,
         packet: u64,
+        other_syn_seen: bool,
         config: &TcpReassemblyConfig,
         available: &mut usize,
     ) {
@@ -619,8 +620,8 @@ impl TcpStream {
         // (before the stream has a start, only the receiver's kept ACK tells
         // which sequence numbers it accepts, also for the starting segment)
         let had_start = self.start_seq.is_some();
-        let accepted_without_start =
-            false == had_start && self.accepted_by_kept_ack(seq, window, config);
+        let accepted_without_start = false == had_start
+            && self.accepts_without_start(tcp, seq, other_syn_seen, window, config);
         let Some(start_seq) =
             self.start_from(tcp, seq, accepted_without_start, window, config, available)
         else {
@@ -699,10 +700,10 @@ impl TcpStream {
 
     /// Gives the stream a start if it has none and the segment `tcp`, whose
     /// first byte has the sequence number `seq`, can start it, where
-    /// `accepted` tells whether the receiver's kept ACK allows the segment.
-    /// Returns the sequence number of offset 0, or `None` if the segment is
-    /// done: a SYN the stream can't take, or a segment of a stream that
-    /// still has no start.
+    /// `accepted` tells whether the receiver accepts the segment. Returns
+    /// the sequence number of offset 0, or `None` if the segment is done: a
+    /// SYN the stream can't take, or a segment of a stream that still has
+    /// no start.
     fn start_from(
         &mut self,
         tcp: &TcpSlice<'_>,
@@ -739,10 +740,11 @@ impl TcpStream {
                 // (an ACK before every segment would otherwise keep a stream
                 // with more in flight than k fallback windows from starting);
                 // a FIN never does, as nothing could recover a stream that a
-                // blind FIN ended
+                // blind FIN ended (a FIN refused without a kept ACK disputes
+                // nothing)
                 if false == accepted && (tcp.fin() || false == self.start_disputed) {
                     self.status.out_of_window_segments += 1;
-                    self.start_disputed = true;
+                    self.start_disputed = self.kept_ack.is_some();
                     return None;
                 }
                 // bytes that don't fit start no stream, so that byte 0 of a
@@ -761,6 +763,27 @@ impl TcpStream {
             }
         }
         self.start_seq
+    }
+
+    /// Returns true if the receiver with the receive window `window` accepts
+    /// the segment `tcp` starting at the sequence number `seq` while the
+    /// stream has no start, where `other_syn_seen` tells whether the
+    /// receiver's SYN was seen: it accepts a segment at most k windows from
+    /// the ACK it kept for the stream, if there is one, but no FIN while its
+    /// SYN is unanswered, as it drops everything but the SYN-ACK then and no
+    /// ACK of its own is kept yet that could tell a blind FIN apart.
+    fn accepts_without_start(
+        &self,
+        tcp: &TcpSlice<'_>,
+        seq: u32,
+        other_syn_seen: bool,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        if tcp.fin() && other_syn_seen && self.kept_ack.is_none() {
+            return false;
+        }
+        self.accepted_by_kept_ack(seq, window, config)
     }
 
     /// Returns true if the receiver with the receive window `window` accepts
@@ -2048,6 +2071,58 @@ mod test {
             assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
             assert_eq!(TcpRead::Data(b"bbb"), stream.read_received());
             assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
+        // before the SYN-ACK, the initiator drops everything but the SYN-ACK,
+        // and no ACK of its own is kept yet: a blind FIN of the responder,
+        // with or without bytes, doesn't start the responder stream (the FIN
+        // has no ACK, as a blind one before the SYN-ACK can't have one)
+        for bytes in [&b""[..], &b"x"[..]] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut fin = script.injected(|s| {
+                s.fin_at(Responder, 1 << 30, bytes);
+            });
+            fin.header.ack = false;
+            fin.ack = None;
+            script.segments.push(fin);
+            script
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"request")
+                .send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+            assert!(false == stream.is_finished());
+            assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
+        // ... and such a FIN disputes nothing: with the SYN-ACK not captured,
+        // the initiator's ACK is kept, and the first segment far from it is
+        // still refused
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut fin = script.injected(|s| {
+                s.fin_at(Responder, 1 << 30, b"");
+            });
+            fin.header.ack = false;
+            fin.ack = None;
+            script.segments.push(fin);
+            script.syn_ack().ack(Initiator);
+            script.segments.remove(2);
+            script
+                .send_at(Responder, 1 << 30, b"zz")
+                .send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+            assert_eq!(2, stream.status().out_of_window_segments);
         }
 
         // only the first segment far from the kept ACK is refused: with an

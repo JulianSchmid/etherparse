@@ -223,6 +223,7 @@ impl ModelStream {
         segment: &TestSegment<CustomChannelId>,
         window: u64,
         packet: u64,
+        other_syn_seen: bool,
         config: &TcpReassemblyConfig,
         available: &mut u64,
     ) -> bool {
@@ -234,11 +235,13 @@ impl ModelStream {
         // the sender can have sent into a larger window before it shrank
         let sent_into = window.max(self.largest_window.unwrap_or(0));
         // without a base, the kept ACK tells what the receiver accepts, also
-        // for the segment that starts the stream
+        // for the segment that starts the stream; while the receiver's SYN
+        // is unanswered it drops every FIN
         let had_base = self.base.is_some();
         let accepted_without_base = self
             .kept_ack
-            .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range);
+            .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range)
+            && false == (header.fin && other_syn_seen && self.kept_ack.is_none());
         if header.syn {
             if false == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
@@ -253,10 +256,11 @@ impl ModelStream {
                 return accepted_without_base;
             }
             // the first segment far from the kept ACK doesn't start the
-            // stream, the next one with bytes does, a FIN never
+            // stream, the next one with bytes does, a FIN never (a FIN
+            // refused without a kept ACK disputes nothing)
             if false == accepted_without_base && (header.fin || false == self.start_disputed) {
                 self.out_of_window_segments += 1;
-                self.start_disputed = true;
+                self.start_disputed = self.kept_ack.is_some();
                 return false;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
@@ -1173,6 +1177,7 @@ impl ReferenceModel {
                 segment,
                 window,
                 self.packets,
+                observed[other],
                 &self.config,
                 &mut available,
             );
