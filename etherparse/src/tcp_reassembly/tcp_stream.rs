@@ -537,6 +537,17 @@ impl TcpStream {
     /// receive window `window`, in the packet with the number `packet` of
     /// the connection, storing at most `available` more bytes (the pool's
     /// budget, reduced by the bytes stored).
+    ///
+    /// The segment goes through these steps, each of which can be its last:
+    ///
+    /// 1. the stream gets a start if it has none yet (A1, A2, A4);
+    /// 2. the segment is placed in the stream's offsets, which detects a
+    ///    jump (S2, S4, R1 to R4), and its window is recorded (S3);
+    /// 3. bytes before the first byte of a mid-stream pickup are put in
+    ///    front of it (A5);
+    /// 4. the filler byte of a keep-alive is dropped (D3);
+    /// 5. the FIN ends the stream, and bytes after it are cut off (F1, D5);
+    /// 6. the bytes are stored (D1, D2, D4).
     pub(crate) fn add_segment(
         &mut self,
         tcp: &TcpSlice<'_>,
@@ -552,12 +563,96 @@ impl TcpStream {
             tcp.sequence_number()
         };
         let data = tcp.payload();
+
+        // 1. start
+        let Some(start_seq) = self.start_from(tcp, seq, window, config, available) else {
+            return;
+        };
+
+        // 2. place
+        let placed = self.place(tcp, seq, start_seq, window, config);
+        // the receiver drops segments outside of its window, with their
+        // window, so a blind segment can't set the window the checks rely on
+        let range = i64::try_from(window_range(window, config)).unwrap_or(i64::MAX);
+        if false == placed.after_window && placed.start.is_some_and(|start| -range <= start) {
+            self.record_window(tcp);
+        }
+        if (false == data.is_empty() || tcp.fin()) && placed.after_window {
+            // a FIN right after the bytes the stream may have jumped to ends
+            // it there
+            if let Some(candidate) = self
+                .resync_candidate
+                .as_mut()
+                .filter(|candidate| data.is_empty() && seq == candidate.end)
+            {
+                candidate.fin = true;
+            }
+            self.status.out_of_window_segments += 1;
+            return;
+        }
+        let Some(start) = placed.start else {
+            return;
+        };
+
+        // 3. put in front
+        let (start, mut out_of_window) =
+            self.take_in_front(start, seq, data.len(), window, config, available);
+        let end = start + data.len() as i64;
+
+        // 4. keep-alive
+        if self.is_keep_alive_filler(tcp, start, end) {
+            return;
+        }
+
+        // 5. FIN
+        if tcp.fin() {
+            self.apply_fin(end);
+        }
+        // bytes after the FIN are not part of the stream
+        let data = match self.fin_offset {
+            Some(fin) if false == data.is_empty() && end > fin as i64 => {
+                out_of_window = true;
+                let len = (fin as i64 - start).max(0) as usize;
+                data.get(..len).unwrap_or_default()
+            }
+            _ => data,
+        };
+        if out_of_window {
+            self.status.out_of_window_segments += 1;
+        }
+
+        // 6. store
+        self.store(start, data, config, available);
+        // the sender sent all bytes before its FIN
+        if let Some(fin) = self.fin_offset {
+            self.extend_to(fin);
+        }
+        // an ACK that confirmed the jump before the bytes arrived counts now
+        if let Some(ack) = placed.jump_ack {
+            self.add_jump_ack(ack, window, packet, config);
+        }
+    }
+
+    /// Gives the stream a start if it has none and the segment `tcp`, whose
+    /// first byte has the sequence number `seq`, can start it. Returns the
+    /// sequence number of offset 0, or `None` if the segment is done: a SYN
+    /// the stream can't take, or a segment of a stream that still has no
+    /// start.
+    fn start_from(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        seq: u32,
+        window: u64,
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+    ) -> Option<u32> {
+        let data = tcp.payload();
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
             // stream's own one
             if false == self.observe_start(seq, data.len(), window, config, available) {
                 self.status.out_of_window_segments += 1;
-                return;
+                return None;
             }
             // the window scale is only known from the sender's SYN, which
             // can arrive after the SYN-ACK that started the stream
@@ -580,147 +675,134 @@ impl TcpStream {
                 }
             }
         }
-        let Some(start_seq) = self.start_seq else {
+        if self.start_seq.is_none() {
             // nothing tells which sequence numbers the receiver accepts
             self.record_window(tcp);
-            return;
+        }
+        self.start_seq
+    }
+
+    /// Maps the first byte of the segment `tcp`, with the sequence number
+    /// `seq`, to an offset in a stream whose offset 0 has the sequence
+    /// number `start_seq`, and checks it against the receiver's window.
+    /// Data after the window may be where the stream jumped to: if the
+    /// other side or the user confirm the jump, the stream resyncs and the
+    /// segment is placed at its new start.
+    fn place(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        seq: u32,
+        start_seq: u32,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> Placed {
+        let data = tcp.payload();
+        let mut placed = Placed {
+            start: self.offset(start_seq, seq),
+            after_window: false,
+            jump_ack: None,
         };
-        let mut start = self.offset(start_seq, seq);
         // the receiver doesn't accept bytes or a FIN starting after its
         // window (or that can't be mapped)
-        let mut after_window = start.is_none_or(|start| {
+        placed.after_window = placed.start.is_none_or(|start| {
             u64::try_from(start).is_ok_and(|start| start > self.window_end(window, config))
         });
-
         // data after the window can be where the stream jumped to, other
         // data shows that it didn't (a SYN with another ISN is a reconnect,
         // and nothing follows a FIN)
-        let mut jump_ack = None;
-        if false == data.is_empty() && false == tcp.syn() && self.fin_offset.is_none() {
-            let candidate = ResyncCandidate::new(seq, data.len(), tcp.fin());
-            // an ACK beyond the window that arrived before confirms a jump
-            // to bytes within one window of it
-            let confirming_ack = self
-                .resync_ack
-                .filter(|ack| candidate.is_within_window(*ack, window));
-            let confirmed = if after_window {
-                // so do enough consecutive segments that agree
-                self.add_resync_candidate(candidate, window, config) || confirming_ack.is_some()
-            } else {
-                self.resync_candidate = None;
-                false
-            };
-            // the user or the other side confirm the jump, the segment is
-            // the new start
-            if (self.resync_forced || confirmed) && self.can_resync(config) {
-                jump_ack = confirming_ack;
-                let start_seq = self.resync(seq);
-                start = self.offset(start_seq, seq);
-                after_window = false;
-            }
+        if data.is_empty() || tcp.syn() || self.fin_offset.is_some() {
+            return placed;
         }
-        // the receiver drops segments outside of its window, with their
-        // window, so a blind segment can't set the window the checks rely on
-        let range = i64::try_from(window_range(window, config)).unwrap_or(i64::MAX);
-        if false == after_window && start.is_some_and(|start| -range <= start) {
-            self.record_window(tcp);
-        }
-        if (false == data.is_empty() || tcp.fin()) && after_window {
-            // a FIN right after the bytes the stream may have jumped to ends
-            // it there
-            if let Some(candidate) = self
-                .resync_candidate
-                .as_mut()
-                .filter(|candidate| data.is_empty() && seq == candidate.end)
-            {
-                candidate.fin = true;
-            }
-            self.status.out_of_window_segments += 1;
-            return;
-        }
-        let Some(mut start) = start else {
-            return;
+        let candidate = ResyncCandidate::new(seq, data.len(), tcp.fin());
+        // an ACK beyond the window that arrived before confirms a jump to
+        // bytes within one window of it
+        let confirming_ack = self
+            .resync_ack
+            .filter(|ack| candidate.is_within_window(*ack, window));
+        let confirmed = if placed.after_window {
+            // so do enough consecutive segments that agree
+            self.add_resync_candidate(candidate, window, config) || confirming_ack.is_some()
+        } else {
+            self.resync_candidate = None;
+            false
         };
-
-        // bytes before offset 0 of a mid-stream pickup are prepended until
-        // it is read from (if they fit), and are outside of the stream after
-        // that
-        let mut out_of_window = false;
-        if start < 0
-            && false == data.is_empty()
-            && TcpStreamStart::MidStreamPickup == self.status.start
-        {
-            if false == self.can_move_start_back(start, window, config) {
-                out_of_window = true;
-            } else if self.buffer.fits_in_front(
-                start.unsigned_abs(),
-                data.len(),
-                config,
-                *available,
-            ) {
-                self.move_start_back(seq, start, available);
-                start = 0;
-            } else {
-                // the bytes from offset 0 on are stored as usual
-                let before = (data.len() as u64).min(start.unsigned_abs());
-                self.status.rejected_bytes += before;
-            }
+        // the user or the other side confirm the jump, the segment is the
+        // new start
+        if (self.resync_forced || confirmed) && self.can_resync(config) {
+            let start_seq = self.resync(seq);
+            placed = Placed {
+                start: self.offset(start_seq, seq),
+                after_window: false,
+                jump_ack: confirming_ack,
+            };
         }
-        let end = start + data.len() as i64;
+        placed
+    }
 
-        // the filler byte of a keep-alive must not fill an overdue hole
-        if is_keep_alive_shaped(tcp)
+    /// Puts the `data_len` bytes at the offset `start` (with the sequence
+    /// number `seq`) in front of a mid-stream pickup if they begin before
+    /// its first byte and fit, until it is read from. Returns the offset
+    /// the bytes are stored at, and whether the segment counts as
+    /// out-of-window, as its bytes before offset 0 are outside the stream.
+    fn take_in_front(
+        &mut self,
+        start: i64,
+        seq: u32,
+        data_len: usize,
+        window: u64,
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+    ) -> (i64, bool) {
+        if 0 <= start || 0 == data_len || TcpStreamStart::Observed == self.status.start {
+            return (start, false);
+        }
+        if false == self.can_move_start_back(start, window, config) {
+            (start, true)
+        } else if self
+            .buffer
+            .fits_in_front(start.unsigned_abs(), data_len, config, *available)
+        {
+            self.move_start_back(seq, start, available);
+            (0, false)
+        } else {
+            // the bytes from offset 0 on are stored as usual
+            let before = (data_len as u64).min(start.unsigned_abs());
+            self.status.rejected_bytes += before;
+            (start, false)
+        }
+    }
+
+    /// Returns true if the segment `tcp`, with its byte at the offset
+    /// `start` and ending at `end`, is a keep-alive probe whose filler byte
+    /// would fill an overdue hole (the receiver drops it too).
+    fn is_keep_alive_filler(&self, tcp: &TcpSlice<'_>, start: i64, end: i64) -> bool {
+        is_keep_alive_shaped(tcp)
             && end == self.seen_ack as i64
             && u64::try_from(start).is_ok_and(|start| {
                 self.buffer
                     .hole_at(start)
                     .is_some_and(|hole| self.is_overdue(&hole))
             })
-        {
-            return;
-        }
+    }
 
-        // the first FIN wins, but it can't lie before received bytes (even
-        // if bytes before it are missing or were given up, or the bytes were
-        // rejected) or before a jump
-        if tcp.fin()
-            && self.fin_offset.is_none()
-            && end
-                >= self
+    /// Records the FIN after the byte at `end` if it is the first one: it
+    /// can't lie before received bytes (even if bytes before it are missing
+    /// or were given up, or the bytes were rejected) or before a jump.
+    fn apply_fin(&mut self, end: i64) {
+        if self.fin_offset.is_some()
+            || end
+                < self
                     .buffer
                     .received_end()
                     .max(self.rejected_end)
                     .max(self.resync_offset) as i64
         {
-            self.fin_offset = Some(end as u64);
-            // an ACK of the FIN that arrived before it marked the FIN's
-            // position as a missing byte
-            self.buffer.truncate_to(end as u64);
+            return;
         }
-
-        // bytes after the FIN are not part of the stream
-        let data = match self.fin_offset {
-            Some(fin) if false == data.is_empty() && end > fin as i64 => {
-                out_of_window = true;
-                let len = (fin as i64 - start).max(0) as usize;
-                data.get(..len).unwrap_or_default()
-            }
-            _ => data,
-        };
-        if out_of_window {
-            self.status.out_of_window_segments += 1;
-        }
-        self.store(start, data, config, available);
-
-        // the sender sent all bytes before its FIN
-        if let Some(fin) = self.fin_offset {
-            self.extend_to(fin);
-        }
-
-        // an ACK that confirmed the jump before the bytes arrived counts now
-        if let Some(ack) = jump_ack {
-            self.add_jump_ack(ack, window, packet, config);
-        }
+        self.fin_offset = Some(end as u64);
+        // an ACK of the FIN that arrived before it marked the FIN's position
+        // as a missing byte
+        self.buffer.truncate_to(end as u64);
     }
 
     /// Stores the bytes of `data` (starting at offset `start`) that were not
@@ -1116,6 +1198,20 @@ impl TcpStream {
 fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
     let factor = config.hole_give_up_window_factor.unwrap_or(2);
     window.saturating_mul(u64::from(factor))
+}
+
+/// Where a segment lies in a stream (see [`TcpStream::place`]).
+#[derive(Copy, Clone, Debug)]
+struct Placed {
+    /// Offset of the segment's first byte (`None` if its sequence number
+    /// can't be mapped).
+    start: Option<i64>,
+    /// Whether the receiver doesn't accept the segment, as it starts after
+    /// the window.
+    after_window: bool,
+    /// ACK that confirmed the jump the segment is the new start of, before
+    /// the segment arrived.
+    jump_ack: Option<u32>,
 }
 
 /// ACK of the receiver that the stream couldn't apply yet (see
