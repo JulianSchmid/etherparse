@@ -257,6 +257,19 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             }
         } else {
             self.add_data_segment(sender, tcp, config, available);
+            // the SYN-ACK of a simultaneous open confirms the kept SYN of the
+            // other side as that stream's own (C2 found no reconnect): it
+            // is applied now, so that its window scale and window count
+            if tcp.syn() {
+                if let Some(syn) = self
+                    .reconnect_syn
+                    .take_if(|syn| syn.is_acked_by(source, tcp))
+                {
+                    let timestamp = self.last_seen.clone();
+                    self.add_reconnect_syn(&syn, timestamp, config, available, free);
+                    syn.recycle(free);
+                }
+            }
         }
     }
 
@@ -451,11 +464,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.reconnect_syn.take()
     }
 
-    /// Applies the kept SYN `syn` of a reconnect as the connection's first
-    /// packet, storing at most `available` more bytes.
+    /// Applies the kept SYN `syn` of a reconnect (or of a simultaneous open)
+    /// as a packet with the timestamp `timestamp`, storing at most
+    /// `available` more bytes.
     pub(crate) fn add_reconnect_syn(
         &mut self,
         syn: &ReconnectSyn<Timestamp>,
+        timestamp: Timestamp,
         config: &TcpReassemblyConfig,
         available: &mut usize,
         free: &mut FreeBuffers,
@@ -463,7 +478,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         Timestamp: Clone,
     {
         if let Some(tcp) = syn.tcp() {
-            let timestamp = syn.timestamp.clone();
             let sender = self.add_segment(syn.source, &tcp, timestamp, config, available, free);
             // retransmissions of the SYN carried differing bytes
             self.stream_mut(sender)
@@ -1085,8 +1099,8 @@ mod test {
             assert_eq!(2, stream.status().out_of_window_segments);
         }
 
-        // a SYN without ACK is a simultaneous open and anchors the responder
-        // stream, but a FIN after it still has to ACK the initiator's SYN
+        // a SYN without ACK of the responder may be a simultaneous open and
+        // is kept, and a FIN after it still has to ACK the initiator's SYN
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -1702,6 +1716,50 @@ mod test {
                 TcpRead::Data(b"response"),
                 connection.stream_mut(Responder).read_received()
             );
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
+        // ... also when the responder's SYN-ACK is not captured: the
+        // initiator's SYN-ACK confirms the kept SYN as the responder's own,
+        // so its window counts (an RST 10000 bytes after the response lies
+        // outside of the 100-byte window)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            script.segments.push(responder_syn);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.ack = true;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            script
+                .syn_ack()
+                .send(Responder, b"response")
+                .send(Initiator, b"request")
+                .rst_at(Responder, 10000);
+            script.segments.remove(3);
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
             assert_eq!(
                 TcpRead::Data(b"request"),
                 connection.stream_mut(Initiator).read_received()

@@ -245,7 +245,14 @@ where
             .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
         let connection = entry.get_mut();
         if let Some(syn) = replayed_syn {
-            connection.add_reconnect_syn(&syn, &self.config, &mut available, &mut self.free);
+            let timestamp = syn.timestamp().clone();
+            connection.add_reconnect_syn(
+                &syn,
+                timestamp,
+                &self.config,
+                &mut available,
+                &mut self.free,
+            );
             syn.recycle(&mut self.free);
         }
         let sender = connection.add_segment(

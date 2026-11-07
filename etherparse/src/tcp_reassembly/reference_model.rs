@@ -1314,6 +1314,16 @@ impl ReferenceModel {
             if plausible && false == header.syn {
                 self.streams[sender].syn_unacked = false;
             }
+            // the SYN-ACK of a simultaneous open confirms the kept SYN of the
+            // other side as that stream's own: it is applied now
+            if header.syn {
+                if let Some(syn) = self.reconnect_syn.take_if(|syn| acks_syn(segment, syn)) {
+                    let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
+                    self.apply(&syn);
+                    let syn_sender = role_index(self.sender_role(&syn));
+                    self.streams[syn_sender].conflicting_retransmissions += conflicting;
+                }
+            }
             // a SYN after a resync gives no window (A3), also after one that
             // kept the mapping
             self.syns[sender] |= header.syn
