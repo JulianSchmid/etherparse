@@ -49,6 +49,13 @@ impl<B> FreeList<B> {
     }
 }
 
+impl<B> FreeList<B> {
+    /// Capacity that buffers in the list are shrunk to.
+    pub fn max_capacity(&self) -> usize {
+        self.max_capacity
+    }
+}
+
 impl<B: Buffer + Default> FreeList<B> {
     /// Takes a buffer, an empty one if none is left.
     pub fn take(&mut self) -> B {

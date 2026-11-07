@@ -97,7 +97,10 @@ pub struct TcpReassemblyConfig {
     /// Connections handed over as ended don't count, and neither do the
     /// SYNs kept for reconnects (see
     /// [`crate::tcp_reassembly::TcpReassemblyPool::process_segment`]), of
-    /// which each connection keeps at most one.
+    /// which each connection keeps at most one. The memory of the streams
+    /// stays within about twice this limit, plus
+    /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`] per stream, as a
+    /// stream gives back the room of consumed bytes.
     pub max_total_buffered: Option<usize>,
 
     /// Maximum number of unused buffers per kind that the pool keeps for
