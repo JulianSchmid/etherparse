@@ -1385,6 +1385,22 @@ impl ReferenceModel {
         Some(evicted)
     }
 
+    /// Applies the kept SYN `syn` to its stream as the stream's own (or late)
+    /// SYN: an ACK kept for the stream that doesn't allow the SYN is dropped
+    /// first, and the SYN's conflicts count only if the SYN was taken.
+    fn apply_kept_syn(&mut self, syn: TestSegment, available: &mut u64) {
+        let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
+        let syn_role = self.sender_role(&syn);
+        let syn_sender = role_index(syn_role);
+        if self.streams[syn_sender].base.is_none() && false == self.is_own_syn(&syn) {
+            self.streams[syn_sender].kept_ack = None;
+        }
+        self.apply_own_segment(&syn, available);
+        if self.streams[syn_sender].has_isn_of(&syn) {
+            self.streams[syn_sender].conflicting_retransmissions += conflicting;
+        }
+    }
+
     /// Applies `segment`, which the receiver accepts in its handshake state
     /// (S5, S6) and which is no RST or kept SYN, to the connection's streams,
     /// with the pool's budget `available`.
@@ -1407,19 +1423,7 @@ impl ReferenceModel {
                             && syn.incarnation == segment.incarnation
                             && syn.offset == segment.offset))
             }) {
-                let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
-                let syn_role = self.sender_role(&syn);
-                let syn_sender = role_index(syn_role);
-                // the confirmation outweighs an ACK kept for the stream that
-                // doesn't allow the SYN
-                if self.streams[syn_sender].base.is_none() && false == self.is_own_syn(&syn) {
-                    self.streams[syn_sender].kept_ack = None;
-                }
-                self.apply_own_segment(&syn, available);
-                // the conflicts count only if the SYN was taken
-                if self.streams[syn_sender].has_isn_of(&syn) {
-                    self.streams[syn_sender].conflicting_retransmissions += conflicting;
-                }
+                self.apply_kept_syn(syn, available);
                 // the SYN-ACK answers the SYN of its receiver, which is the
                 // applied SYN if the other side confirmed it
                 let receiver = self.sender_role(segment).other();
@@ -1443,6 +1447,20 @@ impl ReferenceModel {
             self.streams[other].add_ack(ack, window, self.packets, &self.config);
         }
         let had_base = self.streams[sender].base.is_some();
+        // a SYN kept as possibly blind whose stream starts from these bytes
+        // is applied first if they lie within k windows after it (D1)
+        if false == had_base && false == header.syn {
+            let range = self.range(sender_role);
+            let first = self.reconnect_syn.as_ref().is_some_and(|syn| {
+                self.reconnect_syn_maybe_blind
+                    && self.sender_role(syn) == sender_role
+                    && segment.offset >= syn.offset
+                    && segment.offset - syn.offset <= range
+            });
+            if let Some(syn) = self.reconnect_syn.take_if(|_| first) {
+                self.apply_kept_syn(syn, available);
+            }
+        }
         let window = self.window(sender_role);
         let plausible = self.streams[sender].add_segment(
             segment,
@@ -1466,11 +1484,7 @@ impl ReferenceModel {
                 self.reconnect_syn_maybe_blind && self.sender_role(syn) == sender_role
             });
             if let Some(syn) = self.reconnect_syn.take_if(|_| own) {
-                let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
-                self.apply_own_segment(&syn, available);
-                if self.streams[sender].has_isn_of(&syn) {
-                    self.streams[sender].conflicting_retransmissions += conflicting;
-                }
+                self.apply_kept_syn(syn, available);
             }
         }
         // a SYN after a resync gives no window (A3), also after one that

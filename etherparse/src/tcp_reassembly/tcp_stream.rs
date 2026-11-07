@@ -1495,7 +1495,7 @@ impl TcpStream {
 /// Number of bytes before or after the stream's bytes that a receiver with
 /// the receive window `window` accepts: several windows, as the window can
 /// change and not all ACKs are captured.
-fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
+pub(crate) fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
     window.saturating_mul(u64::from(window_factor(config)))
 }
 

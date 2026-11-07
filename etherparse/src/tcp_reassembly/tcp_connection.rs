@@ -180,11 +180,25 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 if tcp.syn() {
                     self.confirm_kept_syn(sender, source, tcp, window, config, available, free);
                 }
+                // a SYN kept as possibly blind whose stream starts from these
+                // bytes is applied first if the bytes lie within k windows
+                // after it, so that its bytes were received first (D1), and
+                // as a late SYN of the started stream otherwise (A5), or
+                // dropped if it lies too far before them: it is kept no longer
                 let had_start = self.stream(sender).has_start();
+                if false == had_start && false == tcp.syn() {
+                    let range = window_range(self.window(sender, config), config);
+                    if let Some(syn) = self.reconnect_syn.take_if(|syn| {
+                        syn.maybe_blind
+                            && syn.source == source
+                            && u64::from(
+                                tcp.sequence_number().wrapping_sub(syn.isn.wrapping_add(1)),
+                            ) <= range
+                    }) {
+                        self.apply_kept_syn(syn, config, available, free);
+                    }
+                }
                 self.add_data_segment(sender, tcp, config, available);
-                // a SYN kept as possibly blind whose stream starts from bytes
-                // is a late SYN of that stream (A5), or dropped if it lies
-                // too far before them: it is kept no longer
                 if false == had_start && self.stream(sender).has_start() {
                     if let Some(syn) = self
                         .reconnect_syn
@@ -2414,6 +2428,35 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(TcpRead::Data(b"tfoworld"), stream.read_received());
+        }
+
+        // ... and if the bytes that start the stream lie within k windows
+        // after the kept SYN, the SYN is applied before them, so that its
+        // bytes were received first (D1): data at the SYN's first byte with
+        // a differing byte conflicts and loses, data after it joins
+        for (offset, data, expected, conflicts) in
+            [(0, &b"abd"[..], &b"abc"[..], 1), (2, b"cd", b"abcd", 0)]
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            responder_syn.payload = b"abc".to_vec();
+            script.segments.push(responder_syn);
+            let mut later = script.injected(|s| {
+                s.send_at(Responder, offset, data);
+            });
+            later.header.acknowledgment_number = 1001;
+            script.segments.push(later);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(conflicts, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(expected), stream.read_received());
         }
 
         // ... and while it is kept, it confirms a reconnect only by being
