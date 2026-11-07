@@ -481,30 +481,50 @@ impl TcpStream {
     /// Returns true if the stream's sender, whose SYN was seen but not ACKed
     /// yet, drops the segment `tcp` of the other side (S5): in SYN-SENT or
     /// SYN-RECEIVED (RFC 9293 3.10.7.3) it accepts only a segment that ACKs
-    /// its SYN, or bytes up to k windows after it in case the SYN-ACK or
-    /// the ACK was not captured, where `window` is the receive window of
-    /// the other side; and a SYN without ACK and FIN (a simultaneous open;
-    /// one with a FIN is dropped like a blind FIN, as nothing could recover
-    /// a stream it ended). The first segment that ACKs the SYN answers it.
+    /// its SYN (see [`TcpStream::acks_unacked_syn`]), and a SYN without
+    /// ACK, FIN and RST (a simultaneous open; one with a FIN is dropped like
+    /// a blind FIN, as nothing could recover a stream it ended).
     pub(crate) fn drops_before_syn_acked(
-        &mut self,
+        &self,
         tcp: &TcpSlice<'_>,
         window: u64,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        let Some(syn) = self.syn.filter(|_| self.syn_unacked) else {
+        self.syn_unacked
+            && false == self.acks_unacked_syn(tcp, window, config)
+            && false == (tcp.syn() && false == (tcp.ack() || tcp.fin() || tcp.rst()))
+    }
+
+    /// Returns true if the segment `tcp` of the other side ACKs the stream's
+    /// SYN that waits for its ACK, or bytes up to k windows after it in case
+    /// the SYN-ACK or the ACK was not captured, where `window` is the
+    /// receive window of the other side.
+    fn acks_unacked_syn(
+        &self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        let Some(syn) = self.syn.filter(|_| self.syn_unacked && tcp.ack()) else {
             return false;
         };
-        if tcp.ack() {
-            let acked = tcp
-                .acknowledgment_number()
-                .wrapping_sub(syn.isn.wrapping_add(1)) as i32;
-            if u64::try_from(acked).is_ok_and(|acked| acked <= window_range(window, config)) {
-                self.syn_unacked = false;
-                return false;
-            }
+        let acked = tcp
+            .acknowledgment_number()
+            .wrapping_sub(syn.isn.wrapping_add(1)) as i32;
+        u64::try_from(acked).is_ok_and(|acked| acked <= window_range(window, config))
+    }
+
+    /// Ends the wait for the ACK of the stream's SYN if the segment `tcp` of
+    /// the other side ACKs it (S5).
+    pub(crate) fn answer_syn(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) {
+        if self.acks_unacked_syn(tcp, window, config) {
+            self.syn_unacked = false;
         }
-        false == (tcp.syn() && false == (tcp.ack() || tcp.fin()))
     }
 
     /// Ends the wait for the ACK of the stream's SYN, as its sender gave the

@@ -144,30 +144,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let sender = self.role(source);
         // while the receiver's SYN is unanswered, it drops every segment
         // that doesn't ACK that SYN, with its window and ACK (S5)
-        let window = self.window(sender.other(), config);
-        let dropped = self
-            .stream_mut(sender.other())
-            .drops_before_syn_acked(tcp, window, config);
-        if dropped {
+        if self.drops_before_syn_acked(sender, tcp, config) {
             self.stream_mut(sender).count_out_of_window();
-        } else if tcp.rst() {
-            self.add_reset(sender, tcp, config);
-        } else if tcp.syn()
-            && false
-                == self
-                    .stream(sender)
-                    .is_own_syn(tcp, self.window(sender, config), config)
-        {
-            // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
-            // it, until then it changes nothing but ends the wait for the
-            // ACK of the sender's SYN (S5), and neither does a SYN-ACK with a
-            // new ISN that confirms none
-            if false == tcp.ack() {
-                self.stream_mut(sender).gives_up_syn();
-                self.keep_reconnect_syn(source, tcp, free);
-            }
         } else {
-            self.add_data_segment(sender, tcp, config, available);
+            self.add_accepted_segment(sender, source, tcp, config, available, free);
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
@@ -218,6 +198,59 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         };
         self.initiator_stream.connection_ended(stream_end);
         self.responder_stream.connection_ended(stream_end);
+    }
+
+    /// Applies a segment sent by `sender` from `source` that the receiver
+    /// accepts in its handshake state (S5): its ACK answers the receiver's
+    /// SYN, and it is an RST, a SYN of a reconnect or a segment of the
+    /// sender's stream.
+    fn add_accepted_segment(
+        &mut self,
+        sender: TcpRole,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+        free: &mut FreeBuffers,
+    ) where
+        Timestamp: Clone,
+    {
+        let window = self.window(sender.other(), config);
+        self.stream_mut(sender.other())
+            .answer_syn(tcp, window, config);
+        if tcp.rst() {
+            self.add_reset(sender, tcp, config);
+        } else if tcp.syn()
+            && false
+                == self
+                    .stream(sender)
+                    .is_own_syn(tcp, self.window(sender, config), config)
+        {
+            // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
+            // it, until then it changes nothing but ends the wait for the
+            // ACK of the sender's SYN (S5), and neither does a SYN-ACK with a
+            // new ISN that confirms none
+            if false == tcp.ack() {
+                self.stream_mut(sender).gives_up_syn();
+                self.keep_reconnect_syn(source, tcp, free);
+            }
+        } else {
+            self.add_data_segment(sender, tcp, config, available);
+        }
+    }
+
+    /// Returns true if the receiver of the segment `tcp` sent by `sender`
+    /// drops it, as its own SYN is unanswered and the segment doesn't ACK
+    /// it (S5, see [`TcpStream::drops_before_syn_acked`]).
+    fn drops_before_syn_acked(
+        &self,
+        sender: TcpRole,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        let window = self.window(sender.other(), config);
+        self.stream(sender.other())
+            .drops_before_syn_acked(tcp, window, config)
     }
 
     /// Applies a segment without RST sent by `sender`, storing at most
@@ -333,7 +366,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        if false == (tcp.syn() && tcp.ack()) || tcp.rst() {
+        let sender = self.role(source);
+        // a SYN-ACK the receiver drops confirms nothing (S5)
+        if false == (tcp.syn() && tcp.ack())
+            || tcp.rst()
+            || self.drops_before_syn_acked(sender, tcp, config)
+        {
             return false;
         }
         let Some(syn) = self
@@ -343,7 +381,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         else {
             return false;
         };
-        let sender = self.role(source);
         let stream = self.stream(sender);
         if syn.is_acked_by(source, tcp) {
             // a retransmission of the sender's own SYN-ACK confirms nothing
@@ -876,6 +913,69 @@ mod test {
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
             assert!(false == stream.is_finished());
             assert_eq!(5, stream.status().out_of_window_segments);
+        }
+
+        // a SYN with an RST and no ACK is no simultaneous open and dropped
+        // too, with any sequence number
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind = script.injected(|s| {
+                s.rst_at(Responder, 1 << 30);
+            });
+            blind.header.syn = true;
+            blind.header.ack = false;
+            blind.ack = None;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // a SYN-ACK the receiver drops confirms no reconnect either: a
+        // pickup keeps a SYN of the responder with a new ISN, then the
+        // responder's own SYN starts its stream and awaits its ACK, and a
+        // blind SYN-ACK of the initiator that ACKs neither SYN is dropped
+        // instead of replacing the connection
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"data");
+            let own_syn = script.segments.remove(1);
+            script.segments.drain(..2);
+            let mut reconnect_syn = own_syn.clone();
+            reconnect_syn.header.sequence_number = 10000;
+            reconnect_syn.header.ack = false;
+            reconnect_syn.ack = None;
+            script.segments.push(reconnect_syn);
+            let mut own_syn = own_syn;
+            own_syn.header.ack = false;
+            own_syn.ack = None;
+            script.segments.push(own_syn);
+            let mut forged = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            forged.header.syn = true;
+            forged.header.sequence_number = 30000;
+            forged.header.acknowledgment_number = 50000;
+            script.segments.push(forged);
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                1,
+                connection.stream(Initiator).status().out_of_window_segments
+            );
+            assert_eq!(Some(2000), connection.stream(Responder).isn());
         }
 
         // an RST that ACKs the SYN resets the connection, e.g. from a closed
