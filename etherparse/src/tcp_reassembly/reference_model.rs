@@ -1232,12 +1232,7 @@ impl ReferenceModel {
         if false == dropped {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
-            if (header.syn || header.rst)
-                && self.streams[sender].base.is_none()
-                && segment
-                    .ack
-                    .is_some_and(|ack| self.streams[other].acks_syn_of(ack))
-            {
+            if (header.syn || header.rst) && self.answers_observed_syn(segment) {
                 self.streams[sender].kept_ack = None;
             }
             // an RST that F4 ignores is dropped with its ACK
@@ -1437,7 +1432,19 @@ impl ReferenceModel {
         if self.streams[other].drops_before_syn_acked(segment, range, window) {
             return false;
         }
-        false == self.is_own_syn(segment)
+        // a SYN-ACK that ACKs the other stream's SYN is the own one too,
+        // whatever ACK a blind segment left kept for its stream (S5)
+        false == (self.is_own_syn(segment) || self.answers_observed_syn(segment))
+    }
+
+    /// Returns true if `segment`, whose sender's stream has no start, ACKs
+    /// the observed SYN of the other stream (S5).
+    fn answers_observed_syn(&self, segment: &TestSegment) -> bool {
+        let sender = self.sender_role(segment);
+        self.streams[role_index(sender)].base.is_none()
+            && segment
+                .ack
+                .is_some_and(|ack| self.streams[role_index(sender.other())].acks_syn_of(ack))
     }
 
     /// Returns true if the SYN `segment` without ACK comes from a side

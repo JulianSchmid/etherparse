@@ -222,14 +222,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     {
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
-        if (tcp.syn() || tcp.rst())
-            && tcp.ack()
-            && false == self.stream(sender).has_start()
-            && self
-                .stream(sender.other())
-                .syn()
-                .is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
-        {
+        if (tcp.syn() || tcp.rst()) && self.answers_observed_syn(sender, tcp) {
             self.stream_mut(sender).drop_kept_ack();
         }
         if tcp.rst() {
@@ -262,6 +255,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         } else {
             self.add_data_segment(sender, tcp, config, available);
         }
+    }
+
+    /// Returns true if the segment `tcp` sent by `sender`, whose stream has
+    /// no start, ACKs the observed SYN of the other stream: its sender
+    /// knows that ISN (S5).
+    fn answers_observed_syn(&self, sender: TcpRole, tcp: &TcpSlice<'_>) -> bool {
+        tcp.ack()
+            && false == self.stream(sender).has_start()
+            && self
+                .stream(sender.other())
+                .syn()
+                .is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
     }
 
     /// Returns true if the receiver of the segment `tcp` sent by `sender`
@@ -428,7 +433,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             // a retransmission of the sender's own SYN-ACK confirms nothing
             Some(tcp.sequence_number()) != stream.isn()
         } else {
-            false == stream.is_own_syn(tcp, self.window(sender, config), config)
+            // a SYN-ACK that ACKs the other stream's SYN is the own one too,
+            // whatever ACK a blind segment left kept for its stream (S5)
+            false
+                == (stream.is_own_syn(tcp, self.window(sender, config), config)
+                    || self.answers_observed_syn(sender, tcp))
         }
     }
 
@@ -1756,6 +1765,36 @@ mod test {
             assert_eq!(None, stream.fin_offset());
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // a blind ACK kept for the responder stream doesn't turn the real
+        // SYN-ACK into a reconnect either: the SYN-ACK ACKs the initiator's
+        // SYN, so it is the responder's own, kept SYN or not
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn_with_data(b"fastopen");
+            let mut blind_ack = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind_ack.header.ack = true;
+            blind_ack.header.acknowledgment_number = 1001 + (1 << 30);
+            script.segments.push(blind_ack);
+            let mut blind_syn = script.injected(|s| {
+                s.syn();
+            });
+            blind_syn.header.sequence_number = 0x7000_0000;
+            script.segments.push(blind_syn);
+            script.syn_ack().ack(Initiator).send(Initiator, b"request");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(Some(2000), connection.stream(Responder).isn());
+            assert_eq!(
+                TcpRead::Data(b"fastopenrequest"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
     }
 
