@@ -2641,9 +2641,14 @@ mod test {
             // an RST of an endpoint after the SYN (e.g. of a closed port), at
             // the next byte it would send and ACKing what the other side sent
             // so far (or without an ACK), followed by the segments sent after
-            // it, whose late arrival is ignored
+            // it, whose late arrival is ignored; one without ACK while the
+            // receiver's SYN is unanswered is dropped (S5)
+            let mut rst_dropped = false;
             if let Some((role, position, with_ack)) = &rst {
                 let position = 1 + position.index(script.segments.len());
+                rst_dropped = false == *with_ack
+                    && ((1 == position && Responder == *role)
+                        || (2 == position && Initiator == *role));
                 let next = |role| {
                     script.segments[..position]
                         .iter()
@@ -2749,7 +2754,7 @@ mod test {
                 && false == one_direction
                 && lost.is_empty()
                 && injected.is_empty();
-            if let (true, Some((role, _, _))) = (undisturbed, &rst) {
+            if let (true, false, Some((role, _, _))) = (undisturbed, rst_dropped, &rst) {
                 let end = model.end();
                 let reset = TcpConnectionEnd::Reset { by: *role };
                 prop_assert!(Some(TcpConnectionEnd::Finished) == end || Some(reset) == end);
