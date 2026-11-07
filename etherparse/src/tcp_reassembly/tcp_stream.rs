@@ -3165,18 +3165,21 @@ mod test {
             assert!(allocations < 20, "{} allocations", allocations);
         }
 
-        // a late SYN takes exactly the room its placeholders need and drops
-        // the room left for prepends, so the bytes that follow fit in the
-        // room the buffer has (1000 bytes, a byte put in front, the SYN,
-        // then 900 bytes)
-        {
+        // a late SYN takes exactly the room its placeholder needs, so the
+        // bytes that follow need new room (1000 bytes, then the SYN one
+        // byte before them, then 900 bytes), and it drops the room left by
+        // a prepend before it, so the bytes that follow fit in that room
+        // (1000 bytes, a byte put in front, then the SYN, then 900 bytes)
+        for (before, prepended, allocations_after) in [(1, false, 1), (2, true, 0)] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
-                .send_uncaptured(Initiator, 1)
-                .send(Initiator, &[7; 1000])
-                .send_at(Initiator, 0, b"x");
+                .send_uncaptured(Initiator, before)
+                .send(Initiator, &[7; 1000]);
+            if prepended {
+                script.send_at(Initiator, 1, b"x");
+            }
             let syn = script.segments.remove(0);
             script.segments.drain(..2);
             script.segments.push(syn);
@@ -3187,7 +3190,7 @@ mod test {
             let (allocations, _) = count_allocations(|| {
                 last.feed_bytes(&bytes, &mut pool, ());
             });
-            assert_eq!(0, allocations);
+            assert_eq!(allocations_after, allocations);
         }
     }
 
