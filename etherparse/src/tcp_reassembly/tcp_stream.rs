@@ -565,6 +565,11 @@ impl TcpStream {
         self.kept_ack = None;
     }
 
+    /// Returns true if the sender's SYN was seen but not answered yet (S5).
+    pub(crate) fn awaits_syn_ack(&self) -> bool {
+        self.syn_unacked
+    }
+
     /// Ends the wait for the ACK of the stream's SYN if the segment `tcp` of
     /// the other side ACKs it (S5).
     pub(crate) fn answer_syn(

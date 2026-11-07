@@ -239,11 +239,19 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let window = self.window(sender.other(), config);
         self.stream_mut(sender.other())
             .answer_syn(tcp, window, config);
+        // a SYN without ACK of a side without a start while the other side's
+        // SYN is unanswered may be blind: a simultaneous open's SYN-ACK
+        // repeats its ISN and anchors the stream, so the SYN is only kept
+        let maybe_blind = tcp.syn()
+            && false == tcp.ack()
+            && false == self.stream(sender).has_start()
+            && self.stream(sender.other()).awaits_syn_ack();
         if tcp.syn()
-            && false
-                == self
-                    .stream(sender)
-                    .is_own_syn(tcp, self.window(sender, config), config)
+            && (maybe_blind
+                || false
+                    == self
+                        .stream(sender)
+                        .is_own_syn(tcp, self.window(sender, config), config))
         {
             // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
             // it, until then it changes nothing, and neither does a SYN-ACK
@@ -1605,6 +1613,84 @@ mod test {
                 stream.status().out_of_window_segments
             );
             assert_eq!(agree, TcpRead::Data(b"request") == stream.read_received());
+        }
+    }
+
+    #[test]
+    fn syn_kept_and_answered() {
+        // a SYN without ACK of the responder while the initiator's SYN is
+        // unanswered may be blind, so it is kept instead of anchoring the
+        // responder stream (a simultaneous open's SYN-ACK repeats its ISN):
+        // the real SYN-ACK anchors, and both streams are read in full
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind = script.injected(|s| {
+                s.syn_ack();
+            });
+            blind.header.ack = false;
+            blind.ack = None;
+            blind.header.sequence_number = 0x4000_0000;
+            script.segments.push(blind);
+            script
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"request")
+                .send(Responder, b"response")
+                .send(Initiator, b"more")
+                .send(Responder, b"more");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(TcpRead::Data(b"responsemore"), stream.read_received());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"requestmore"), stream.read_received());
+        }
+
+        // ... and a simultaneous open still anchors both streams: the
+        // responder's SYN is kept, the initiator's SYN-ACK ACKs it and gives
+        // the responder stream its start, and the responder's SYN-ACK is
+        // its own
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            script.segments.push(responder_syn);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.ack = true;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            script
+                .syn_ack()
+                .send(Initiator, b"request")
+                .send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(Some(2000), connection.stream(Responder).isn());
+            assert_eq!(Some(1000), connection.stream(Initiator).isn());
+            assert_eq!(
+                TcpRead::Data(b"response"),
+                connection.stream_mut(Responder).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
     }
 

@@ -1263,7 +1263,8 @@ impl ReferenceModel {
             } else {
                 self.streams[sender].out_of_window_segments += 1;
             }
-        } else if header.syn && false == self.is_own_syn(segment) {
+        } else if header.syn && (self.maybe_blind_syn(segment) || false == self.is_own_syn(segment))
+        {
             // the SYNs of a script all have the same ISN; a retransmission
             // adds the Fast Open bytes beyond the kept ones, the first win
             if false == header.ack {
@@ -1438,6 +1439,16 @@ impl ReferenceModel {
             return false;
         }
         false == self.is_own_syn(segment)
+    }
+
+    /// Returns true if the SYN `segment` without ACK comes from a side
+    /// without a start while the other side's SYN is unanswered: it may be
+    /// blind, so it is only kept (S5).
+    fn maybe_blind_syn(&self, segment: &TestSegment) -> bool {
+        let sender = self.sender_role(segment);
+        false == segment.header.ack
+            && self.streams[role_index(sender)].base.is_none()
+            && self.streams[role_index(sender.other())].syn_unacked
     }
 
     /// Range before and after the bytes of the stream of `role` that its
