@@ -46,7 +46,10 @@ pub struct TcpReassemblyConfig {
     /// segments fill it until then. `None` switches this off. The distance
     /// is at most half of [`TcpReassemblyConfig::max_stream_buffer`], so a
     /// reader of the ACKed bytes keeps up before the buffer is full, but
-    /// never less than the largest window the receiver advertised.
+    /// never less than the largest window the receiver advertised. So such
+    /// a reader only keeps up without captured ACKs if the buffer is
+    /// clearly larger than that window; otherwise the bytes that don't fit
+    /// show up in [`crate::tcp_reassembly::TcpStreamStatus::rejected_bytes`].
     ///
     /// The same number of windows limits how far after the furthest received
     /// or ACKed byte new bytes are accepted, and how far before the first
