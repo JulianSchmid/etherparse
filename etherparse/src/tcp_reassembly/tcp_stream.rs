@@ -319,7 +319,9 @@ impl TcpStream {
     /// higher ACK, it is the implied ACK: the sender sends at most one
     /// window after the ACK, so the receiver must have ACKed the bytes up
     /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] times its
-    /// largest window before the highest offset.
+    /// largest window before the highest offset (at most half of
+    /// [`TcpReassemblyConfig::max_stream_buffer`], but never less than the
+    /// largest window).
     pub fn acked_offset(&self) -> u64 {
         // the ACK of the FIN lies after the highest offset
         self.seen_ack
@@ -1056,15 +1058,18 @@ impl TcpStream {
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);
         if let Some(factor) = config.hole_give_up_window_factor {
-            // allow for several windows, as the window can change, but never
-            // more than half of the stream's buffer: a reader of the ACKed
-            // bytes has to be able to keep up before the buffer is full
+            // allow for several windows, as the window can change, but not
+            // more than half of the stream's buffer, so that a reader of the
+            // ACKed bytes keeps up before the buffer is full; never less than
+            // a known window though, as the sender can have sent that far
+            // past the ACK
+            let known = self.largest_window.unwrap_or(0);
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
             let distance = window
                 .saturating_mul(u64::from(factor))
-                .min(config.max_stream_buffer as u64 / 2);
+                .min((config.max_stream_buffer as u64 / 2).max(known));
             let implied_ack = i64::try_from(self.highest_offset())
                 .unwrap_or(i64::MAX)
                 .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
@@ -4029,9 +4034,10 @@ mod test {
         }
 
         // the implied ACK lies at most half of the stream's buffer before the
-        // highest offset, whatever the window (here 2 * 65535 bytes), so a
-        // reader of the ACKed bytes keeps up before the buffer is full and
-        // no bytes are rejected (20 segments of 100 bytes, nothing ACKed)
+        // highest offset while the window is unknown (the fallback window is
+        // 4 MiB), so a reader of the ACKed bytes keeps up before the buffer
+        // is full and no bytes are rejected (a pickup of 20 segments of 100
+        // bytes, nothing ACKed)
         for (max_stream_buffer, expected) in [(1000, 1500), (3000, 500), (8 << 20, 0)] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer,
@@ -4043,6 +4049,7 @@ mod test {
             for _ in 0..20 {
                 script.send(Initiator, &[7; 100]);
             }
+            script.segments.drain(..3);
             for segment in &script.segments {
                 let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
                 let stream = connection.stream_mut(Initiator);
@@ -4057,6 +4064,28 @@ mod test {
             assert_eq!(expected, stream.read_offset());
             assert_eq!(2000, stream.highest_offset());
             assert_eq!(0, stream.status().rejected_bytes);
+        }
+
+        // but the implied ACK never lies less than a known window before the
+        // highest offset, as the sender can have sent that far past the
+        // ACK: the window is 65535 bytes, the buffer 64 KiB, and only the
+        // first 4 KiB of 60 KiB are ACKed
+        {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer: 64 * 1024,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, &[7; 4096])
+                .ack(Responder);
+            for _ in 0..14 {
+                script.send(Initiator, &[7; 4096]);
+            }
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(4096, connection.stream(Initiator).acked_offset());
         }
 
         // follows the highest ACK, older ACKs arriving later change nothing

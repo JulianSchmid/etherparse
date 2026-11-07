@@ -779,8 +779,10 @@ impl ModelStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            // at most half of the stream's buffer
-            let distance = (u64::from(factor) * window).min(config.max_stream_buffer as u64 / 2);
+            // at most half of the stream's buffer, but never less than a
+            // known window
+            let cap = (config.max_stream_buffer as u64 / 2).max(self.largest_window.unwrap_or(0));
+            let distance = (u64::from(factor) * window).min(cap);
             let implied_ack = self.highest.saturating_sub(distance);
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
