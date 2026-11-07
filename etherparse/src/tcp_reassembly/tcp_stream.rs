@@ -524,7 +524,7 @@ impl TcpStream {
     /// FIN or the candidate carries a FIN (which a blind pair of segments
     /// could land), the bytes the stream jumped to (its resync candidate,
     /// R2), where `window` is the receive window of the other side.
-    fn acks_unacked_syn(
+    pub(crate) fn acks_unacked_syn(
         &self,
         tcp: &TcpSlice<'_>,
         window: u64,

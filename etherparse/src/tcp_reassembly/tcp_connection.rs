@@ -143,22 +143,44 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.last_seen = timestamp;
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
-        // every receiver drops a segment without ACK that is no SYN or RST
-        // (RFC 9293 3.10.7.4, S6), and while the receiver's SYN is
-        // unanswered, it drops every segment that doesn't ACK that SYN, with
-        // its window and ACK (S5)
+        let verdict = self.verdict(sender, tcp, config);
+        // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
+        // outweighs an ACK kept for the sender's stream without a start
+        if Verdict::Dropped != verdict
+            && (tcp.syn() || tcp.rst())
+            && self.answers_observed_syn(sender, tcp)
+        {
+            self.stream_mut(sender).drop_kept_ack();
+        }
         let window = self.window(sender.other(), config);
-        if false == (tcp.ack() || tcp.syn() || tcp.rst()) {
-            self.stream_mut(sender).count_out_of_window();
-        } else if self.drops_before_syn_acked(sender, tcp, window, config) {
-            self.stream_mut(sender).count_out_of_window();
-            // the dropped segments agree within the window of their own
-            // stream (R3)
-            let window = self.window(sender, config);
-            self.stream_mut(sender.other())
-                .record_dropped(tcp, window, config);
-        } else {
-            self.add_accepted_segment(sender, source, tcp, window, config, available, free);
+        match verdict {
+            Verdict::Dropped => {
+                self.stream_mut(sender).count_out_of_window();
+                // the dropped segments agree within the window of their own
+                // stream (R3), and may end the wait for the ACK of the SYN
+                if tcp.ack() || tcp.syn() || tcp.rst() {
+                    let window = self.window(sender, config);
+                    self.stream_mut(sender.other())
+                        .record_dropped(tcp, window, config);
+                }
+            }
+            Verdict::Reset => self.add_reset(sender, tcp, config),
+            Verdict::KeepSyn { maybe_blind } => {
+                self.keep_reconnect_syn(source, tcp, maybe_blind, free);
+            }
+            // the pool replaced the connection on `ConfirmsReconnect` before
+            Verdict::ForeignSynAck | Verdict::ConfirmsReconnect => {
+                self.stream_mut(sender.other())
+                    .answer_syn(tcp, window, config);
+            }
+            Verdict::Applied => {
+                self.stream_mut(sender.other())
+                    .answer_syn(tcp, window, config);
+                if tcp.syn() {
+                    self.confirm_kept_syn(sender, source, tcp, window, config, available, free);
+                }
+                self.add_data_segment(sender, tcp, config, available);
+            }
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
@@ -211,60 +233,76 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.responder_stream.connection_ended(stream_end);
     }
 
-    /// Applies a segment sent by `sender` from `source` that the receiver
-    /// accepts in its handshake state (S5), where `window` is the receive
-    /// window of the receiver's stream: an RST, which F4 checks (an ignored
-    /// one is dropped with its ACK), or a SYN of a reconnect or a segment of
-    /// the sender's stream, whose ACK answers the receiver's SYN.
-    #[allow(clippy::too_many_arguments)]
-    fn add_accepted_segment(
-        &mut self,
+    /// Decides what the connection does with the segment `tcp` sent by
+    /// `sender`, by the state of its handshake (S5, S6) and the SYN it
+    /// keeps (C2, C3); see [`Verdict`]. The decision changes nothing.
+    fn verdict(
+        &self,
         sender: TcpRole,
-        source: SocketAddr,
         tcp: &TcpSlice<'_>,
-        window: u64,
         config: &TcpReassemblyConfig,
-        available: &mut usize,
-        free: &mut FreeBuffers,
-    ) where
-        Timestamp: Clone,
-    {
-        // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
-        // outweighs an ACK kept for the sender's stream without a start
-        if (tcp.syn() || tcp.rst()) && self.answers_observed_syn(sender, tcp) {
-            self.stream_mut(sender).drop_kept_ack();
+    ) -> Verdict {
+        // every receiver drops a segment without ACK that is no SYN or RST
+        // (RFC 9293 3.10.7.4, S6), and while the receiver's SYN is
+        // unanswered, it drops every segment that doesn't ACK that SYN (S5)
+        let window = self.window(sender.other(), config);
+        if false == (tcp.ack() || tcp.syn() || tcp.rst())
+            || self.drops_before_syn_acked(sender, tcp, window, config)
+        {
+            return Verdict::Dropped;
         }
         if tcp.rst() {
-            self.add_reset(sender, tcp, config);
-            return;
+            return Verdict::Reset;
         }
-        self.stream_mut(sender.other())
-            .answer_syn(tcp, window, config);
-        // a SYN without ACK of a side without a start while the other side's
-        // SYN is unanswered may be blind: a simultaneous open's SYN-ACK
-        // repeats its ISN and anchors the stream, so the SYN is only kept
-        let maybe_blind = tcp.syn()
-            && false == self.stream(sender).has_start()
-            && self.stream(sender.other()).awaits_syn_ack();
-        if tcp.syn()
-            && (maybe_blind
-                || false
-                    == self
-                        .stream(sender)
-                        .is_own_syn(tcp, self.window(sender, config), config))
-        {
-            // a SYN that is not the stream's own starts a reconnect once a
-            // SYN-ACK confirms it (or completes a simultaneous open), until
-            // then it changes nothing, and neither does a SYN-ACK with a new
-            // ISN that confirms none
-            if false == tcp.ack() {
-                self.keep_reconnect_syn(source, tcp, maybe_blind, free);
+        if false == tcp.syn() {
+            return Verdict::Applied;
+        }
+        // a SYN of a side without a start while the other side's SYN is
+        // unanswered may be blind, unless it is the SYN-ACK that answers it:
+        // a simultaneous open's SYN-ACK repeats its ISN and anchors the
+        // stream, so the SYN is only kept
+        let stream = self.stream(sender);
+        let other = self.stream(sender.other());
+        let maybe_blind = false == stream.has_start()
+            && other.awaits_syn_ack()
+            && false == other.acks_unacked_syn(tcp, window, config);
+        // a SYN-ACK that ACKs the other stream's SYN is the own one too,
+        // whatever ACK a blind segment left kept for its stream (S5)
+        let own = stream.is_own_syn(tcp, self.window(sender, config), config)
+            || self.answers_observed_syn(sender, tcp);
+        if false == tcp.ack() {
+            return if maybe_blind || false == own {
+                Verdict::KeepSyn { maybe_blind }
+            } else {
+                Verdict::Applied
+            };
+        }
+        // a SYN-ACK confirms a reconnect if a SYN of the other endpoint is
+        // kept and it ACKs that SYN without having the ISN of its sender's
+        // stream, or has a new ISN itself while its sender's SYN is answered
+        // (a side whose own SYN is unanswered confirms one only by ACKing
+        // the kept SYN, S5)
+        let kept = self
+            .reconnect_syn
+            .as_ref()
+            .filter(|syn| syn.source != self.endpoint(sender));
+        let confirms = match kept {
+            None => false,
+            Some(_) if tcp.fin() => false,
+            // a retransmission of the sender's own SYN-ACK confirms nothing
+            Some(syn) if syn.is_acked_by(self.endpoint(sender), tcp) => {
+                Some(tcp.sequence_number()) != stream.isn()
             }
+            Some(_) => false == (stream.awaits_syn_ack() || own),
+        };
+        if confirms {
+            Verdict::ConfirmsReconnect
+        } else if maybe_blind || false == own {
+            // a SYN-ACK with a new ISN that confirms no reconnect changes
+            // nothing (C3)
+            Verdict::ForeignSynAck
         } else {
-            if tcp.syn() {
-                self.confirm_kept_syn(sender, source, tcp, window, config, available, free);
-            }
-            self.add_data_segment(sender, tcp, config, available);
+            Verdict::Applied
         }
     }
 
@@ -476,46 +514,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Returns true if `tcp`, sent by `source`, is a SYN-ACK that confirms
-    /// a reconnect: a SYN is kept, and the SYN-ACK comes from the other
-    /// endpoint. It ACKs the kept SYN without having the ISN of its sender's
-    /// stream, or it has a new ISN itself while its sender's SYN is
-    /// answered.
+    /// a reconnect (see [`Verdict::ConfirmsReconnect`]): the pool replaces
+    /// the connection then.
     pub(crate) fn confirms_reconnect(
         &self,
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        let sender = self.role(source);
-        if false == (tcp.syn() && tcp.ack()) || tcp.rst() || tcp.fin() {
-            return false;
-        }
-        // a SYN-ACK the receiver drops confirms nothing (S5)
-        let window = self.window(sender.other(), config);
-        if self.drops_before_syn_acked(sender, tcp, window, config) {
-            return false;
-        }
-        let Some(syn) = self
-            .reconnect_syn
-            .as_ref()
-            .filter(|syn| syn.source != source)
-        else {
-            return false;
-        };
-        let stream = self.stream(sender);
-        if syn.is_acked_by(source, tcp) {
-            // a retransmission of the sender's own SYN-ACK confirms nothing
-            Some(tcp.sequence_number()) != stream.isn()
-        } else {
-            // a SYN-ACK that ACKs the other stream's SYN is the own one too,
-            // whatever ACK a blind segment left kept for its stream, and a
-            // side whose own SYN is unanswered confirms a reconnect only by
-            // ACKing the kept SYN (S5)
-            false
-                == (stream.awaits_syn_ack()
-                    || stream.is_own_syn(tcp, self.window(sender, config), config)
-                    || self.answers_observed_syn(sender, tcp))
-        }
+        Verdict::ConfirmsReconnect == self.verdict(self.role(source), tcp, config)
     }
 
     /// Takes the kept SYN of a reconnect, if there is one.
@@ -668,6 +675,35 @@ impl<Timestamp> Tombstone<Timestamp> {
         tcp.ack()
             && self.syns[other].is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
     }
+}
+
+/// What a connection does with a segment, decided by the state of its
+/// handshake and the SYN it keeps before anything else looks at the
+/// segment (S5, S6, C2, C3; the decision table in the spec's S5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Verdict {
+    /// The receiver drops the segment: it has no ACK flag and is no SYN or
+    /// RST (S6), or the receiver's SYN is unanswered and the segment doesn't
+    /// ACK it (S5). It counts as out-of-window and changes nothing else,
+    /// apart from ending the wait after enough agreeing dropped segments.
+    Dropped,
+    /// An RST, which F4 checks by its sequence number (the ACK of an ignored
+    /// one is dropped with it).
+    Reset,
+    /// A SYN without ACK that is not its stream's own, or that may be blind
+    /// (`maybe_blind`): kept until a SYN-ACK confirms the reconnect it
+    /// starts or the simultaneous open it is part of (C2).
+    KeepSyn { maybe_blind: bool },
+    /// A SYN-ACK with a new ISN that confirms no reconnect: it changes
+    /// nothing but what its ACK answers (C3).
+    ForeignSynAck,
+    /// A SYN-ACK that confirms a reconnect (C2): the pool replaces the
+    /// connection with one that starts at the kept SYN.
+    ConfirmsReconnect,
+    /// A segment of the sender's stream, the stream's own SYN or SYN-ACK
+    /// included: applied, after the kept SYN of a simultaneous open that
+    /// the SYN-ACK confirms.
+    Applied,
 }
 
 /// SYN that is not its stream's own, kept until a SYN-ACK of the other
