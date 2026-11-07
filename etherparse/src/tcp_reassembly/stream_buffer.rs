@@ -224,7 +224,7 @@ impl StreamBuffer {
         // stream holds at once, so that a prepend costs little on average
         let placeholders = len as usize;
         if self.head < placeholders {
-            let room = placeholders.max(self.buffered());
+            let room = placeholders.max(self.buffered()) - self.head;
             self.buf.splice(..0, core::iter::repeat_n(0, room));
             self.head += room;
         }
@@ -360,11 +360,13 @@ impl StreamBuffer {
         // append the bytes after the end of the buffer (all missing so far)
         if buf_end < stored_end && start < stored_end {
             // drop the consumed bytes once they make up half of the buffer,
-            // or before the buffer has to grow for the new bytes, so that
-            // the buffer never reallocates to make room for consumed bytes
-            if self.head >= self.buf.len() - self.head
-                || self.index(stored_end) > self.buf.capacity()
-            {
+            // or before the buffer has to grow for the new bytes if that
+            // frees a useful share of it (always dropping a few consumed
+            // bytes would keep the buffer at its capacity and shift the live
+            // bytes for every segment)
+            let live = self.buf.len() - self.head;
+            let grows = self.index(stored_end) > self.buf.capacity();
+            if self.head >= live || (grows && self.head >= live / 8) {
                 self.buf.drain(..self.head);
                 self.head = 0;
             }
