@@ -47,8 +47,9 @@ pub(crate) struct ReferenceModel {
     /// SYN-ACK of the other endpoint ACKs it and starts a reconnect, with
     /// the bytes its retransmissions added.
     reconnect_syn: Option<TestSegment>,
-    /// Whether a retransmission of the kept SYN carried differing bytes.
-    reconnect_syn_conflicting: bool,
+    /// Number of retransmissions of the kept SYN that carried differing
+    /// bytes.
+    reconnect_syn_conflicting: u64,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -1019,13 +1020,15 @@ impl ReferenceModel {
     ///
     /// A SYN or SYN-ACK that is not the own one of its sender's stream (see
     /// [`ReferenceModel::is_own_syn`]) changes nothing but the packet count.
-    /// Such a SYN is kept (a retransmission of it changes nothing, another
-    /// one replaces it), also by the tombstone, until a SYN-ACK confirms a
+    /// Such a SYN is kept (a retransmission of it adds the bytes it carries
+    /// beyond the kept ones and counts if its bytes differ, another SYN
+    /// replaces it), also by the tombstone, until a SYN-ACK confirms a
     /// reconnect (see [`ReferenceModel::confirms_reconnect`]). That SYN-ACK
     /// ends the connection, as finished if both FINs were ACKed and as a
     /// reconnect otherwise, and the model starts again as a new connection
-    /// with the kept SYN (if the SYN-ACK ACKs it) and the SYN-ACK. The ended
-    /// connection is returned.
+    /// with the kept SYN (if the SYN-ACK ACKs it, or on a tombstone, if the
+    /// segment retransmits it) and the segment. The ended connection is
+    /// returned.
     ///
     /// The connection is finished once both FINs are ACKed and all holes
     /// left are overdue, unless it was reset. Ending it gives up all holes;
@@ -1059,9 +1062,7 @@ impl ReferenceModel {
             let mut replaced = core::mem::replace(self, next);
             if let Some(syn) = syn {
                 self.apply(&syn);
-                if conflicting {
-                    self.streams[role_index(syn.sender)].conflicting_retransmissions += 1;
-                }
+                self.streams[role_index(syn.sender)].conflicting_retransmissions += conflicting;
             }
             self.apply(segment);
             if replaced.end.is_some() {
@@ -1110,7 +1111,7 @@ impl ReferenceModel {
                     Some(syn) => {
                         let overlap = syn.payload.len().min(segment.payload.len());
                         if syn.payload[..overlap] != segment.payload[..overlap] {
-                            self.reconnect_syn_conflicting = true;
+                            self.reconnect_syn_conflicting += 1;
                         }
                         if let Some(added) = segment.payload.get(overlap..) {
                             syn.payload.extend_from_slice(added);
@@ -1118,7 +1119,7 @@ impl ReferenceModel {
                     }
                     None => {
                         self.reconnect_syn = Some(segment.clone());
-                        self.reconnect_syn_conflicting = false;
+                        self.reconnect_syn_conflicting = 0;
                     }
                 }
             }

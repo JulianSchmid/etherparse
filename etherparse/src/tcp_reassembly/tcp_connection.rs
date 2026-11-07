@@ -300,7 +300,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             timestamp: self.last_seen.clone(),
             isn: tcp.sequence_number(),
             payload_len: tcp.payload().len(),
-            conflicting: false,
+            conflicting: 0,
             segment,
         });
     }
@@ -354,10 +354,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if let Some(tcp) = syn.tcp() {
             let timestamp = syn.timestamp.clone();
             let sender = self.add_segment(syn.source, &tcp, timestamp, config, available, free);
-            // a retransmission of the SYN carried differing bytes
-            if syn.conflicting {
-                self.stream_mut(sender).count_conflicting_retransmission();
-            }
+            // retransmissions of the SYN carried differing bytes
+            self.stream_mut(sender)
+                .count_conflicting_retransmissions(syn.conflicting);
         }
     }
 
@@ -501,9 +500,9 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     /// Number of bytes the SYN carries (TCP Fast Open), with the ones its
     /// retransmissions added.
     payload_len: usize,
-    /// Whether a retransmission of the SYN carried bytes that differ from
-    /// the ones received first.
-    conflicting: bool,
+    /// Number of retransmissions of the SYN that carried bytes differing
+    /// from the ones received first.
+    conflicting: u64,
     /// TCP header and payload of the SYN, replayed if it starts a reconnect.
     segment: Vec<u8>,
 }
@@ -535,12 +534,12 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
 
     /// Takes the TCP Fast Open bytes that the `payload` of a retransmission
     /// of the SYN adds beyond the kept ones. The bytes received first stay,
-    /// and differing bytes mark the SYN as conflicting.
+    /// and differing bytes count as a conflicting retransmission.
     fn add_retransmission(&mut self, payload: &[u8]) {
         let kept = &self.segment[self.segment.len() - self.payload_len..];
         let overlap = kept.len().min(payload.len());
         if kept[..overlap] != payload[..overlap] {
-            self.conflicting = true;
+            self.conflicting += 1;
         }
         if let Some(added) = payload.get(overlap..) {
             self.segment.extend_from_slice(added);

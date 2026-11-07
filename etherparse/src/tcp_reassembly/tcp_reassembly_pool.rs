@@ -1215,24 +1215,29 @@ mod test {
             assert_eq!(TcpRead::Data(b"x"), stream.read_received());
         }
 
-        // a retransmission of the kept SYN adds the TCP Fast Open bytes it
-        // carries beyond the kept ones, the bytes received first win, and
-        // differing bytes count as a conflicting retransmission once the
-        // reconnect starts; the reconnect's first packet is the first SYN
-        for (retransmitted, read, conflicting) in
-            [(&b"GET"[..], &b"GET"[..], 0), (&b"XYZ"[..], &b"GYZ"[..], 1)]
-        {
+        // retransmissions of the kept SYN add the TCP Fast Open bytes they
+        // carry beyond the kept ones, the bytes received first win, and each
+        // one with differing bytes counts as a conflicting retransmission
+        // once the reconnect starts; the reconnect's first packet is the
+        // first SYN
+        for (retransmitted, read, conflicting) in [
+            (&[&b"GET"[..]][..], &b"GET"[..], 0),
+            (&[&b"XYZ"[..]][..], &b"GYZ"[..], 1),
+            (&[&b"X"[..], &b"Q"[..]][..], &b"G"[..], 2),
+        ] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 2000);
             old.handshake();
             old.feed_all(&mut pool);
             let mut new = ConnectionScript::with_isns(5000, 6000);
             new.syn_with_data(b"G").syn_ack();
-            new.segments[1].header.acknowledgment_number = 5004;
+            new.segments[1].header.acknowledgment_number = 5001 + read.len() as u32;
             new.segments[0].feed(&mut pool, 7);
-            let mut longer = new.segments[0].clone();
-            longer.payload = retransmitted.to_vec();
-            longer.feed(&mut pool, 8);
+            for payload in retransmitted {
+                let mut again = new.segments[0].clone();
+                again.payload = payload.to_vec();
+                again.feed(&mut pool, 8);
+            }
             let (connection, _) = new.segments[1].feed(&mut pool, 9).active.unwrap();
             assert_eq!(&7, connection.first_seen());
             let stream = connection.stream_mut(Initiator);
