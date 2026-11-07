@@ -1,6 +1,9 @@
 mod free_buffers;
 pub(crate) use free_buffers::*;
 
+mod stream_buffer;
+pub(crate) use stream_buffer::*;
+
 mod tcp_connection;
 pub use tcp_connection::*;
 

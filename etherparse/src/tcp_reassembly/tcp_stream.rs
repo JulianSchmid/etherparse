@@ -1,6 +1,6 @@
 use crate::{tcp_reassembly::*, *};
 use core::ops::Range;
-use std::{collections::VecDeque, vec::Vec};
+use std::collections::VecDeque;
 
 /// Bytes sent in one direction of a TCP connection.
 ///
@@ -41,38 +41,8 @@ pub struct TcpStream {
     /// was a SYN (`None` before the sender's first segment).
     window: Option<(u16, bool)>,
 
-    /// Offset of the byte at `buf[head]`.
-    read_offset: u64,
-
-    /// Offset after the furthest byte the sender is known to have sent.
-    highest_offset: u64,
-
-    /// Received bytes up to the furthest one, where `buf[head]` is the byte
-    /// at `read_offset`. The bytes before `head` are already consumed, and
-    /// the bytes in holes are placeholders.
-    buf: Vec<u8>,
-
-    /// Index in `buf` of the byte at `read_offset`. The bytes before it are
-    /// consumed, or room for bytes put in front of a mid-stream pickup.
-    head: usize,
-
-    /// Offset after the furthest received byte that was stored (the read
-    /// position can lie after it once the bytes after it were given up).
-    received_end: u64,
-
-    /// Missing bytes between `read_offset` and `highest_offset`, sorted and
-    /// without overlaps. Together with `gaps`, they cover all bytes after
-    /// the end of `buf`.
-    holes: Vec<Range<u64>>,
-
-    /// Holes that were given up, sorted and without overlaps. They lie
-    /// between `read_offset` and `highest_offset`, apart from `holes`. An
-    /// empty range is the gap of unknown length that a resync left in front
-    /// of the byte at its offset.
-    gaps: Vec<Range<u64>>,
-
-    /// Number of bytes the last read returned that are not consumed yet.
-    last_read_len: usize,
+    /// The received bytes and the missing ones between them.
+    buffer: StreamBuffer,
 
     /// Offset of the FIN (`None` until the first FIN was seen).
     fin_offset: Option<u64>,
@@ -142,14 +112,7 @@ impl TcpStream {
             pending_ack: None,
             window_scale: None,
             window: None,
-            read_offset: 0,
-            highest_offset: 0,
-            buf: free.bytes.take(),
-            head: 0,
-            received_end: 0,
-            holes: free.holes.take(),
-            gaps: free.gaps.take(),
-            last_read_len: 0,
+            buffer: StreamBuffer::new(free),
             fin_offset: None,
             seen_ack: 0,
             implied_ack: None,
@@ -211,29 +174,18 @@ impl TcpStream {
     /// Returns the received bytes from the read position up to the first
     /// missing byte, but not after `limit`, or the gap at the read position.
     fn read_until(&mut self, limit: u64) -> TcpRead<'_> {
-        if let Some(gap) = self.gap_at_read_offset() {
-            self.last_read_len = 0;
+        let at_fin = Some(self.buffer.read_offset()) == self.fin_offset;
+        match self.buffer.read(limit) {
             // the gap of a resync takes no offsets, its length is unknown
-            let len = (false == gap.is_empty()).then_some(gap.end - gap.start);
-            return TcpRead::Gap { len };
-        }
-        // all bytes before the first hole or gap were received
-        let end = self
-            .missing()
-            .next()
-            .map_or(self.highest_offset, |range| range.start)
-            .min(limit)
-            .max(self.read_offset);
-        let data = &self.buf[self.head..self.index(end)];
-        self.last_read_len = data.len();
-        if false == data.is_empty() {
-            TcpRead::Data(data)
-        } else if Some(self.read_offset) == self.fin_offset {
-            TcpRead::End(TcpStreamEnd::Fin)
-        } else if let Some(end) = self.connection_end {
-            TcpRead::End(end)
-        } else {
-            TcpRead::Pending
+            Readable::Gap(gap) => TcpRead::Gap {
+                len: (false == gap.is_empty()).then_some(gap.end - gap.start),
+            },
+            Readable::Bytes(bytes) if false == bytes.is_empty() => TcpRead::Data(bytes),
+            Readable::Bytes(_) if at_fin => TcpRead::End(TcpStreamEnd::Fin),
+            Readable::Bytes(_) => match self.connection_end {
+                Some(end) => TcpRead::End(end),
+                None => TcpRead::Pending,
+            },
         }
     }
 
@@ -244,10 +196,7 @@ impl TcpStream {
     /// front of a mid-stream pickup since the read, nothing is consumed (see
     /// [`TcpStreamStart::MidStreamPickup`]).
     pub fn consume(&mut self, len: usize) {
-        let len = len.min(self.last_read_len);
-        self.head += len;
-        self.read_offset += len as u64;
-        self.last_read_len -= len;
+        self.buffer.consume(len);
         self.give_up_overdue_hole();
     }
 
@@ -259,7 +208,7 @@ impl TcpStream {
     /// position is not at a hole (an overdue hole at the read position is a
     /// gap already).
     pub fn give_up_hole(&mut self) -> bool {
-        match self.hole_at_read_offset() {
+        match self.buffer.hole_at_read_offset() {
             Some(hole) => {
                 self.give_up_holes_before(hole.end);
                 true
@@ -273,9 +222,7 @@ impl TcpStream {
     ///
     /// Does nothing if the read position is not at a gap.
     pub fn consume_gap(&mut self) {
-        if let Some(gap) = self.gap_at_read_offset() {
-            self.gaps.remove(0);
-            self.advance_to(gap.end);
+        if self.buffer.consume_gap() {
             self.give_up_overdue_hole();
         }
     }
@@ -290,13 +237,7 @@ impl TcpStream {
     /// arrive. A gap of unknown length at `offset` stays (see
     /// [`TcpStreamStatus::resyncs`]).
     pub fn discard_until(&mut self, offset: u64) {
-        let offset = offset.min(self.highest_offset);
-        if offset <= self.read_offset {
-            return;
-        }
-        remove_before(&mut self.holes, offset);
-        remove_before(&mut self.gaps, offset);
-        self.advance_to(offset);
+        self.buffer.discard_until(offset);
         self.give_up_overdue_hole();
     }
 
@@ -305,7 +246,7 @@ impl TcpStream {
     ///
     /// Works like [`TcpStream::discard_until`] with the highest offset.
     pub fn discard_all(&mut self) {
-        self.discard_until(self.highest_offset);
+        self.discard_until(self.highest_offset());
     }
 
     /// Makes the next segment with bytes the stream's new start: the stream
@@ -325,16 +266,7 @@ impl TcpStream {
 
     /// Turns the parts of the holes before `offset` into gaps.
     fn give_up_holes_before(&mut self, offset: u64) {
-        for hole in self.holes.iter_mut().take_while(|hole| hole.start < offset) {
-            let given_up = hole.start..hole.end.min(offset);
-            self.status.gaps += 1;
-            self.status.gap_bytes += given_up.end - given_up.start;
-            hole.start = given_up.end;
-            self.gaps.push(given_up);
-        }
-        self.holes.retain(|hole| false == hole.is_empty());
-        // the gap of a resync comes before a hole given up at its offset
-        self.gaps.sort_unstable_by_key(|gap| (gap.start, gap.end));
+        self.buffer.give_up_holes_before(offset, &mut self.status);
     }
 
     /// Gives up the hole at the read position if it is overdue: the
@@ -342,7 +274,7 @@ impl TcpStream {
     /// be captured anymore (late segments still fill overdue holes the read
     /// position hasn't reached).
     fn give_up_overdue_hole(&mut self) {
-        if let Some(hole) = self.hole_at_read_offset() {
+        if let Some(hole) = self.buffer.hole_at_read_offset() {
             if self.is_overdue(&hole) {
                 self.give_up_holes_before(hole.end);
             }
@@ -369,46 +301,13 @@ impl TcpStream {
                 .max(self.rejected_end)
     }
 
-    /// Returns true if the byte at `offset` lies in an overdue hole.
-    fn in_overdue_hole(&self, offset: u64) -> bool {
-        let index = self.holes.partition_point(|hole| hole.end <= offset);
-        self.holes
-            .get(index)
-            .is_some_and(|hole| hole.start <= offset && self.is_overdue(hole))
-    }
-
-    /// Hole starting at the read position, if any.
-    fn hole_at_read_offset(&self) -> Option<Range<u64>> {
-        self.holes
-            .first()
-            .filter(|hole| hole.start == self.read_offset)
-            .cloned()
-    }
-
-    /// Gap starting at the read position, if any.
-    fn gap_at_read_offset(&self) -> Option<Range<u64>> {
-        self.gaps
-            .first()
-            .filter(|gap| gap.start == self.read_offset)
-            .cloned()
-    }
-
-    /// Moves the read position forward to `offset` (at most the highest
-    /// offset), discarding the bytes before it.
-    fn advance_to(&mut self, offset: u64) {
-        // the buffer ends at the furthest received byte
-        self.head = self.index(offset.min(self.buf_end()));
-        self.read_offset = offset;
-        self.last_read_len = 0;
-    }
-
     /// Offset of the next byte to read.
     ///
     /// It moves back to the FIN offset when a FIN arrives before it, inside
     /// bytes up to an ACK that were given up (see
     /// [`TcpStream::highest_offset`]).
     pub fn read_offset(&self) -> u64 {
-        self.read_offset
+        self.buffer.read_offset()
     }
 
     /// Offset up to which the receiver ACKed the stream's bytes.
@@ -423,7 +322,7 @@ impl TcpStream {
         // the ACK of the FIN lies after the highest offset
         self.seen_ack
             .max(self.implied_ack())
-            .min(self.highest_offset)
+            .min(self.highest_offset())
     }
 
     /// Offset after the furthest byte the sender is known to have sent, as
@@ -432,7 +331,7 @@ impl TcpStream {
     /// It moves back to the FIN offset, and [`TcpStream::acked_offset`] with
     /// it, when a FIN arrives inside bytes that an earlier ACK covered.
     pub fn highest_offset(&self) -> u64 {
-        self.highest_offset
+        self.buffer.highest_offset()
     }
 
     /// Offset of the stream's FIN, which is the number of bytes in the
@@ -455,7 +354,7 @@ impl TcpStream {
     /// too. Late segments still fill overdue holes the read position hasn't
     /// reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
-        self.holes.iter().cloned()
+        self.buffer.holes().iter().cloned()
     }
 
     /// Counters that describe the quality of the stream.
@@ -483,7 +382,7 @@ impl TcpStream {
     /// segments can still fill them.
     pub fn is_finished(&self) -> bool {
         // the FIN moves the highest offset to it, so all holes lie before it
-        self.fin_offset.is_some() && self.holes.is_empty()
+        self.fin_offset.is_some() && self.buffer.holes().is_empty()
     }
 
     /// Returns true if the stream is complete: it is clean (see
@@ -542,16 +441,19 @@ impl TcpStream {
 
     /// Puts the stream's buffers into `free` for re-use.
     pub(crate) fn recycle(self, free: &mut FreeBuffers) {
-        free.bytes.put(self.buf);
-        free.holes.put(self.holes);
-        free.gaps.put(self.gaps);
+        self.buffer.recycle(free);
         free.acks.put(self.recent_acks);
     }
 
     /// Returns true if the receiver ACKed the stream's FIN and all holes
     /// left are overdue, so that the stream can end as finished.
     pub(crate) fn can_finish(&self) -> bool {
-        self.is_fin_acked() && self.holes.last().is_none_or(|hole| self.is_overdue(hole))
+        self.is_fin_acked()
+            && self
+                .buffer
+                .holes()
+                .last()
+                .is_none_or(|hole| self.is_overdue(hole))
     }
 
     /// Returns true if the receiver ACKed the stream's FIN (all holes lie
@@ -565,7 +467,7 @@ impl TcpStream {
     /// more is readable, reads return `end` (or [`TcpStreamEnd::Fin`] at
     /// the FIN).
     pub(crate) fn connection_ended(&mut self, end: TcpStreamEnd) {
-        self.give_up_holes_before(self.highest_offset);
+        self.give_up_holes_before(self.highest_offset());
         self.connection_end = Some(end);
     }
 
@@ -597,7 +499,7 @@ impl TcpStream {
     /// doesn't accept bytes.
     fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
         self.seen_ack
-            .max(self.highest_offset)
+            .max(self.highest_offset())
             .saturating_add(window_range(self.sent_into(window), config))
     }
 
@@ -612,17 +514,7 @@ impl TcpStream {
     /// Number of bytes buffered from the read position to the furthest
     /// stored byte, with the placeholders of holes.
     pub(crate) fn buffered(&self) -> usize {
-        self.buf.len() - self.head
-    }
-
-    /// Offset after the last byte in `buf`.
-    fn buf_end(&self) -> u64 {
-        self.read_offset + self.buffered() as u64
-    }
-
-    /// Index in `buf` of the byte at `offset` (at or after `read_offset`).
-    fn index(&self, offset: u64) -> usize {
-        self.head + (offset - self.read_offset) as usize
+        self.buffer.buffered()
     }
 
     /// Maps the sequence number `seq` to a stream offset, relative to the
@@ -632,7 +524,7 @@ impl TcpStream {
     /// number 2^31 away from the highest offset lies neither before nor
     /// after it, so it can't be mapped (`None`).
     fn offset(&self, start_seq: u32, seq: u32) -> Option<i64> {
-        let highest = self.highest_offset;
+        let highest = self.highest_offset();
         let distance = seq.wrapping_sub(start_seq.wrapping_add(highest as u32)) as i32;
         (i32::MIN != distance).then(|| {
             i64::try_from(highest)
@@ -760,7 +652,12 @@ impl TcpStream {
         {
             if false == self.can_move_start_back(start, window, config) {
                 out_of_window = true;
-            } else if self.fits_in_front(start.unsigned_abs(), data.len(), config, *available) {
+            } else if self.buffer.fits_in_front(
+                start.unsigned_abs(),
+                data.len(),
+                config,
+                *available,
+            ) {
                 self.move_start_back(seq, start, available);
                 start = 0;
             } else {
@@ -774,7 +671,11 @@ impl TcpStream {
         // the filler byte of a keep-alive must not fill an overdue hole
         if is_keep_alive_shaped(tcp)
             && end == self.seen_ack as i64
-            && u64::try_from(start).is_ok_and(|start| self.in_overdue_hole(start))
+            && u64::try_from(start).is_ok_and(|start| {
+                self.buffer
+                    .hole_at(start)
+                    .is_some_and(|hole| self.is_overdue(&hole))
+            })
         {
             return;
         }
@@ -786,14 +687,15 @@ impl TcpStream {
             && self.fin_offset.is_none()
             && end
                 >= self
-                    .received_end
+                    .buffer
+                    .received_end()
                     .max(self.rejected_end)
                     .max(self.resync_offset) as i64
         {
             self.fin_offset = Some(end as u64);
             // an ACK of the FIN that arrived before it marked the FIN's
             // position as a missing byte
-            self.truncate_to(end as u64);
+            self.buffer.truncate_to(end as u64);
         }
 
         // bytes after the FIN are not part of the stream
@@ -808,7 +710,7 @@ impl TcpStream {
         if out_of_window {
             self.status.out_of_window_segments += 1;
         }
-        self.add_data(start, data, config, available);
+        self.store(start, data, config, available);
 
         // the sender sent all bytes before its FIN
         if let Some(fin) = self.fin_offset {
@@ -819,6 +721,55 @@ impl TcpStream {
         if let Some(ack) = jump_ack {
             self.add_jump_ack(ack, window, packet, config);
         }
+    }
+
+    /// Stores the bytes of `data` (starting at offset `start`) that were not
+    /// received before, as far as they fit the memory limits and the pool's
+    /// budget `available`, and counts what didn't fit or differed.
+    fn store(
+        &mut self,
+        start: i64,
+        data: &[u8],
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+    ) {
+        let highest = self.highest_offset();
+        // bytes before a jump are ignored, and the receiver ignores
+        // retransmissions of ACKed bytes (e.g. keep-alive probes), so they
+        // don't conflict
+        let stored = self.buffer.store(
+            start,
+            data,
+            self.resync_offset,
+            self.acked_offset(),
+            config,
+            available,
+        );
+        if stored.conflicting {
+            self.status.conflicting_retransmissions += 1;
+        }
+        if false == stored.rejected.is_empty() {
+            self.status.rejected_bytes += stored.rejected.end - stored.rejected.start;
+            self.rejected_end = self.rejected_end.max(stored.rejected.end);
+        }
+        // the sender sent the rejected bytes too, so the implied ACK moves on
+        if self.highest_offset() > highest {
+            self.moved_forward();
+        }
+    }
+
+    /// Moves the highest offset forward to `offset`, the bytes in between
+    /// are missing.
+    fn extend_to(&mut self, offset: u64) {
+        if self.buffer.extend_to(offset) {
+            self.moved_forward();
+        }
+    }
+
+    /// The highest offset moved forward, so the stream didn't jump.
+    fn moved_forward(&mut self) {
+        self.resync_candidate = None;
+        self.resync_ack = None;
     }
 
     /// Applies an RST of the stream's sender with the sequence number `seq`,
@@ -837,12 +788,12 @@ impl TcpStream {
                 let ack = pending_ack
                     .and_then(|pending| self.offset(start_seq, pending.seq))
                     .unwrap_or(self.seen_ack as i64);
-                let mut first = ack.min(self.received_end as i64);
+                let mut first = ack.min(self.buffer.received_end() as i64);
                 // nothing before a jump counts
                 if 0 < self.status.resyncs {
                     first = first.max(self.resync_offset as i64);
                 }
-                let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
+                let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
                 let last = i64::try_from(sent_end.saturating_add(window)).unwrap_or(i64::MAX);
                 self.offset(start_seq, seq)
                     .is_some_and(|offset| first <= offset && offset <= last)
@@ -884,7 +835,12 @@ impl TcpStream {
                 };
                 if false == self.can_move_start_back(start, window, config)
                     || false
-                        == self.fits_in_front(start.unsigned_abs(), data_len, config, *available)
+                        == self.buffer.fits_in_front(
+                            start.unsigned_abs(),
+                            data_len,
+                            config,
+                            *available,
+                        )
                 {
                     return false;
                 }
@@ -901,25 +857,6 @@ impl TcpStream {
     /// range of the receiver's receive window `window` before offset 0.
     fn can_move_start_back(&self, start: i64, window: u64, config: &TcpReassemblyConfig) -> bool {
         0 >= start && start.unsigned_abs() <= window_range(window, config) && self.can_prepend()
-    }
-
-    /// Returns true if `len` bytes fit in front of the stream, the first
-    /// `data_len` of which are received, with the pool's budget
-    /// `available`.
-    fn fits_in_front(
-        &self,
-        len: u64,
-        data_len: usize,
-        config: &TcpReassemblyConfig,
-        available: usize,
-    ) -> bool {
-        // the read position is at offset 0, so all buffered bytes count, and
-        // the missing bytes before the old offset 0 are a new hole (byte 0
-        // of a pickup is always stored)
-        let holes = self.counted_holes() + usize::from((data_len as u64) < len);
-        len.saturating_add(self.buffered() as u64) <= config.max_stream_buffer as u64
-            && len <= available as u64
-            && holes <= config.max_holes_per_stream
     }
 
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
@@ -943,33 +880,16 @@ impl TcpStream {
         // end of a pickup that starts at its FIN, and prepending would move
         // the gap of a resync
         TcpStreamStart::MidStreamPickup == self.status.start
-            && 0 == self.read_offset
+            && 0 == self.read_offset()
             && Some(0) != self.fin_offset
             && 0 == self.status.resyncs
             && false == self.resync_forced
     }
 
     /// Moves offset 0 of the mid-stream pickup `len` bytes back, these
-    /// bytes are a hole until they arrive.
+    /// bytes are a hole until they arrive, and all offsets grow by `len`.
     fn prepend(&mut self, len: u64) {
-        // nothing was consumed yet, and there are no gaps, as the read
-        // position is at the first byte received, so the bytes before `head`
-        // are room for the placeholders: make room for as many bytes as the
-        // stream holds at once, so that a prepend costs little on average
-        let placeholders = len as usize;
-        if self.head < placeholders {
-            let room = placeholders.max(self.buffered());
-            self.buf.splice(..0, core::iter::repeat_n(0, room));
-            self.head += room;
-        }
-        self.head -= placeholders;
-        self.highest_offset += len;
-        self.received_end += len;
-        for hole in &mut self.holes {
-            hole.start += len;
-            hole.end += len;
-        }
-        self.holes.insert(0, 0..len);
+        self.buffer.prepend(len);
         self.fin_offset = self.fin_offset.map(|fin| fin + len);
         // ACKs of offset 0 or before it were ignored, so 0 means none
         if 0 < self.seen_ack {
@@ -985,8 +905,6 @@ impl TcpStream {
             *ack += len;
         }
         self.implied_ack = self.implied_ack.map(|ack| ack.saturating_add(len as i64));
-        // a read before returned other bytes at the read position
-        self.last_read_len = 0;
     }
 
     /// Updates what the receiver must have received after the packet with
@@ -1012,7 +930,7 @@ impl TcpStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            let implied_ack = i64::try_from(self.highest_offset)
+            let implied_ack = i64::try_from(self.highest_offset())
                 .unwrap_or(i64::MAX)
                 .saturating_sub(
                     i64::try_from(window.saturating_mul(u64::from(factor))).unwrap_or(i64::MAX),
@@ -1029,7 +947,7 @@ impl TcpStream {
             self.settled_ack = ack;
             self.recent_acks.pop_front();
         }
-        if self.holes.is_empty() && false == self.can_prepend() {
+        if self.buffer.holes().is_empty() && false == self.can_prepend() {
             // later holes lie after the seen ACK, so they can't be overdue
             // by the ACKs so far (a prepend adds a hole before it)
             self.recent_acks.clear();
@@ -1070,7 +988,7 @@ impl TcpStream {
         }
         // the sender can't have sent more than one window after the bytes
         // it is known to have sent (and its FIN), unless the stream jumped
-        let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
+        let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
         if 0 < ack && ack as u64 > sent_end.saturating_add(self.sent_into(window)) {
             self.add_resync_ack(ack_seq, window, packet, config);
             return;
@@ -1090,7 +1008,7 @@ impl TcpStream {
         self.extend_to(end);
         // only holes can become overdue by the ACK, also ones that a
         // prepend adds before it
-        if false == self.holes.is_empty() || self.can_prepend() {
+        if false == self.buffer.holes().is_empty() || self.can_prepend() {
             self.recent_acks.push_back((packet, self.seen_ack));
         }
     }
@@ -1144,7 +1062,7 @@ impl TcpStream {
                 // the FIN after the candidate's bytes ends the stream there
                 self.resync(candidate.end);
                 if candidate.fin {
-                    self.fin_offset = Some(self.highest_offset);
+                    self.fin_offset = Some(self.highest_offset());
                 }
                 self.add_jump_ack(ack_seq, window, packet, config);
             }
@@ -1170,7 +1088,7 @@ impl TcpStream {
     /// `max_holes_per_stream` gaps the read position didn't step over, as
     /// each resync turns the holes before it into gaps.
     fn can_resync(&self, config: &TcpReassemblyConfig) -> bool {
-        self.gaps.len() <= config.max_holes_per_stream
+        self.buffer.gaps().len() <= config.max_holes_per_stream
     }
 
     /// Continues the stream with the byte that has the sequence number
@@ -1178,12 +1096,9 @@ impl TcpStream {
     /// returns the new sequence number of offset 0.
     fn resync(&mut self, seq: u32) -> u32 {
         // the missing bytes now map elsewhere, so nothing can fill the holes
-        self.give_up_holes_before(self.highest_offset);
-        let offset = self.highest_offset;
-        // resyncs without bytes between them leave one gap
-        if Some(&(offset..offset)) != self.gaps.last() {
-            self.gaps.push(offset..offset);
-        }
+        let offset = self.highest_offset();
+        self.give_up_holes_before(offset);
+        self.buffer.add_gap_of_unknown_len();
         let start_seq = seq.wrapping_sub(offset as u32);
         self.start_seq = Some(start_seq);
         self.resync_offset = offset;
@@ -1192,252 +1107,6 @@ impl TcpStream {
         self.resync_forced = false;
         self.status.resyncs += 1;
         start_seq
-    }
-
-    /// Stores the bytes of `data` (starting at offset `start`) that were not
-    /// received before, as far as they fit the memory limits and the pool's
-    /// budget `available`, which they reduce. The bytes that don't fit are
-    /// rejected and become a hole.
-    fn add_data(
-        &mut self,
-        start: i64,
-        data: &[u8],
-        config: &TcpReassemblyConfig,
-        available: &mut usize,
-    ) {
-        // skip the bytes before the read position (consumed, or before the
-        // stream's first byte), before a jump, and in the gaps (given up),
-        // which all lie at the read position or before a jump (holes are
-        // given up only there, and by a resync), also behind the gap of a
-        // resync
-        let skip_end = self
-            .gaps
-            .last()
-            .map_or(0, |gap| gap.end)
-            .max(self.read_offset)
-            .max(self.resync_offset);
-        let skipped = (skip_end as i64).saturating_sub(start).max(0) as usize;
-        let data = match data.get(skipped..) {
-            Some(data) if false == data.is_empty() => data,
-            _ => return,
-        };
-        let start = (start + skipped as i64) as u64;
-        let end = start + data.len() as u64;
-
-        // bytes received before keep their content
-        if self.differs_from_received(start, data) {
-            self.status.conflicting_retransmissions += 1;
-        }
-
-        // bytes after the end of the buffer (and the placeholders before
-        // them) must fit the buffer and the pool's budget, the bytes before
-        // it fill holes (the buffer never holds more than its limit)
-        let buf_end = self.buf_end();
-        let limit = self
-            .read_offset
-            .saturating_add(config.max_stream_buffer as u64)
-            .min(buf_end.saturating_add(*available as u64));
-        let mut stored_end = end.min(limit).max(start);
-        // a segment that would leave too many holes is rejected entirely
-        if self.holes_after_storing(start..stored_end) > config.max_holes_per_stream {
-            stored_end = start;
-        }
-        // the bytes after the stored ones are rejected, they are all
-        // missing (a segment that would leave too many holes lies in
-        // missing bytes, as it adds a hole before stored bytes)
-        if stored_end < end {
-            self.status.rejected_bytes += end - stored_end;
-            self.rejected_end = self.rejected_end.max(end);
-        }
-
-        // fill the holes in the buffer (the ones that overlap the bytes)
-        let filled_end = stored_end.min(buf_end);
-        let first = self.holes.partition_point(|hole| hole.end <= start);
-        for hole in self.holes[first..]
-            .iter()
-            .take_while(|hole| hole.start < filled_end)
-        {
-            let from = hole.start.max(start);
-            let to = hole.end.min(filled_end);
-            if from < to {
-                let (buf_from, buf_to) = (self.index(from), self.index(to));
-                self.buf[buf_from..buf_to]
-                    .copy_from_slice(&data[(from - start) as usize..(to - start) as usize]);
-            }
-        }
-
-        // append the bytes after the end of the buffer (all missing so far)
-        if buf_end < stored_end && start < stored_end {
-            // drop the consumed bytes once they make up half of the buffer,
-            // or before the buffer has to grow for the new bytes, so that
-            // the buffer never reallocates to make room for consumed bytes
-            if self.head >= self.buf.len() - self.head
-                || self.index(stored_end) > self.buf.capacity()
-            {
-                self.buf.drain(..self.head);
-                self.head = 0;
-            }
-            // placeholders for missing bytes before the segment
-            let from = start.max(buf_end);
-            self.buf.resize(self.index(from), 0);
-            self.buf
-                .extend_from_slice(&data[(from - start) as usize..(stored_end - start) as usize]);
-            self.received_end = stored_end;
-            *available = available.saturating_sub((stored_end - buf_end) as usize);
-        }
-        // the sender sent the rejected bytes too, so the implied ACK moves on
-        self.extend_to(end);
-        self.remove_from_holes(start..stored_end);
-    }
-
-    /// Returns true if bytes of `data` (starting at offset `start`, at or
-    /// after the read position) differ from the bytes received for the same
-    /// offsets, ignoring ACKed bytes.
-    fn differs_from_received(&self, start: u64, data: &[u8]) -> bool {
-        // the receiver ignores retransmissions of ACKed bytes (e.g. keep-alive
-        // probes), so they don't conflict, and nothing is received after the
-        // end of the buffer
-        let compared_start = start.max(self.acked_offset());
-        let end = (start + data.len() as u64).min(self.buf_end());
-        if compared_start >= end {
-            return false;
-        }
-        // the received bytes lie before each hole or gap and before the end
-        // of the buffer (an empty range at the end)
-        let mut received_start = self.read_offset;
-        let missing = self
-            .missing()
-            .take_while(|range| range.start < end)
-            .chain(core::iter::once(end..end));
-        for range in missing {
-            let from = received_start.max(compared_start);
-            let to = range.start.min(end);
-            if from < to
-                && self.buf[self.index(from)..self.index(to)]
-                    != data[(from - start) as usize..(to - start) as usize]
-            {
-                return true;
-            }
-            received_start = range.end;
-        }
-        false
-    }
-
-    /// Ranges of missing bytes (holes and gaps) in order.
-    fn missing(&self) -> impl Iterator<Item = Range<u64>> + '_ {
-        let mut holes = self.holes.iter().peekable();
-        let mut gaps = self.gaps.iter().peekable();
-        core::iter::from_fn(move || match (holes.peek(), gaps.peek()) {
-            // the gap of a resync comes before a hole at its offset
-            (Some(hole), Some(gap)) if gap.start <= hole.start => gaps.next(),
-            (Some(_), _) => holes.next(),
-            (None, _) => gaps.next(),
-        })
-        .cloned()
-    }
-
-    /// Moves the highest offset forward to `offset`, the bytes in between
-    /// are missing.
-    fn extend_to(&mut self, offset: u64) {
-        if offset > self.highest_offset {
-            match self.holes.last_mut() {
-                Some(hole) if hole.end == self.highest_offset => hole.end = offset,
-                _ => self.holes.push(self.highest_offset..offset),
-            }
-            self.highest_offset = offset;
-            // the stream moved forward, so it didn't jump
-            self.resync_candidate = None;
-            self.resync_ack = None;
-        }
-    }
-
-    /// Moves the highest offset back to `offset` (at or after the furthest
-    /// received byte), the missing bytes after it don't exist.
-    fn truncate_to(&mut self, offset: u64) {
-        if offset < self.highest_offset {
-            truncate_ranges(&mut self.holes, offset);
-            truncate_ranges(&mut self.gaps, offset);
-            self.highest_offset = offset;
-            // the read position can lie after it, in bytes that were given
-            // up (no bytes are buffered there)
-            self.read_offset = self.read_offset.min(offset);
-        }
-    }
-
-    /// Removes the bytes in `range` from the holes.
-    fn remove_from_holes(&mut self, range: Range<u64>) {
-        // the parts of the holes before and after the range stay missing
-        let (cut, before, after) = self.cut_holes(&range);
-        let parts = [before, after]
-            .into_iter()
-            .filter(|part| false == part.is_empty());
-        self.holes.splice(cut, parts);
-    }
-
-    /// Number of holes before the furthest stored byte (the ones the hole
-    /// limit counts) after storing the bytes in `range`.
-    fn holes_after_storing(&self, range: Range<u64>) -> usize {
-        // the missing bytes before bytes after the highest offset are a
-        // hole, a new one unless they extend the hole at the end
-        if range.start > self.highest_offset {
-            return self.holes.len() + usize::from(false == self.ends_with_hole());
-        }
-        let (cut, before, after) = self.cut_holes(&range);
-        let holes = self.holes.len() - cut.len()
-            + usize::from(false == before.is_empty())
-            + usize::from(false == after.is_empty());
-        // a part of the hole at the end stays unless the bytes reach the
-        // highest offset
-        holes - usize::from(range.end < self.highest_offset && self.ends_with_hole())
-    }
-
-    /// Number of holes before the furthest stored byte, the ones the hole
-    /// limit counts.
-    fn counted_holes(&self) -> usize {
-        self.holes.len() - usize::from(self.ends_with_hole())
-    }
-
-    /// Returns true if the missing bytes after the furthest stored byte
-    /// (e.g. rejected ones, or ones that were ACKed but not captured) are a
-    /// hole.
-    fn ends_with_hole(&self) -> bool {
-        self.holes
-            .last()
-            .is_some_and(|hole| hole.end == self.highest_offset)
-    }
-
-    /// Indices of the holes that overlap `range`, and the parts of them
-    /// before and after the range (empty if there are none).
-    fn cut_holes(&self, range: &Range<u64>) -> (Range<usize>, Range<u64>, Range<u64>) {
-        let first = self.holes.partition_point(|hole| hole.end <= range.start);
-        let last = self.holes.partition_point(|hole| hole.start < range.end);
-        // an empty range overlaps none
-        if first >= last || range.is_empty() {
-            return (first..first, 0..0, 0..0);
-        }
-        let before = self.holes[first].start..range.start;
-        let after = range.end..self.holes[last - 1].end;
-        (first..last, before, after)
-    }
-}
-
-/// Removes the parts of the sorted `ranges` before `offset`. The empty gap of
-/// a resync at `offset` takes no offsets, so it stays.
-fn remove_before(ranges: &mut Vec<Range<u64>>, offset: u64) {
-    let removed = ranges.partition_point(|range| range.end <= offset && range.start < offset);
-    ranges.drain(..removed);
-    if let Some(range) = ranges.first_mut() {
-        range.start = range.start.max(offset);
-    }
-}
-
-/// Removes the parts of the sorted `ranges` at or after `offset`. The empty
-/// gap of a resync at `offset` takes no offsets, so it stays.
-fn truncate_ranges(ranges: &mut Vec<Range<u64>>, offset: u64) {
-    let kept = ranges.partition_point(|range| range.start < offset || range.end <= offset);
-    ranges.truncate(kept);
-    if let Some(range) = ranges.last_mut() {
-        range.end = range.end.min(offset);
     }
 }
 
@@ -1518,7 +1187,7 @@ fn window_scale(tcp: &TcpSlice<'_>) -> Option<u8> {
 mod test {
     use super::*;
     use crate::tcp_reassembly::TcpRole::*;
-    use std::{format, vec};
+    use std::{format, vec, vec::Vec};
 
     #[test]
     fn derived_traits() {
