@@ -1237,10 +1237,15 @@ impl TcpStream {
             self.rejected_end = self.rejected_end.max(end);
         }
 
-        // fill the holes in the buffer
-        for hole in &self.holes {
+        // fill the holes in the buffer (the ones that overlap the bytes)
+        let filled_end = stored_end.min(buf_end);
+        let first = self.holes.partition_point(|hole| hole.end <= start);
+        for hole in self.holes[first..]
+            .iter()
+            .take_while(|hole| hole.start < filled_end)
+        {
             let from = hole.start.max(start);
-            let to = hole.end.min(stored_end).min(buf_end);
+            let to = hole.end.min(filled_end);
             if from < to {
                 let (buf_from, buf_to) = (self.index(from), self.index(to));
                 self.buf[buf_from..buf_to]
@@ -1276,16 +1281,21 @@ impl TcpStream {
     /// after the read position) differ from the bytes received for the same
     /// offsets, ignoring ACKed bytes.
     fn differs_from_received(&self, start: u64, data: &[u8]) -> bool {
-        let end = start + data.len() as u64;
         // the receiver ignores retransmissions of ACKed bytes (e.g. keep-alive
-        // probes), so they don't conflict
+        // probes), so they don't conflict, and nothing is received after the
+        // end of the buffer
         let compared_start = start.max(self.acked_offset());
-        // the received bytes lie before each hole or gap and before the
-        // highest offset (an empty range at the end)
+        let end = (start + data.len() as u64).min(self.buf_end());
+        if compared_start >= end {
+            return false;
+        }
+        // the received bytes lie before each hole or gap and before the end
+        // of the buffer (an empty range at the end)
         let mut received_start = self.read_offset;
         let missing = self
             .missing()
-            .chain([self.highest_offset..self.highest_offset]);
+            .take_while(|range| range.start < end)
+            .chain(core::iter::once(end..end));
         for range in missing {
             let from = received_start.max(compared_start);
             let to = range.start.min(end);
@@ -1345,14 +1355,10 @@ impl TcpStream {
     fn remove_from_holes(&mut self, range: Range<u64>) {
         // the parts of the holes before and after the range stay missing
         let (cut, before, after) = self.cut_holes(&range);
-        let mut index = cut.start;
-        self.holes.drain(cut);
-        for part in [before, after] {
-            if false == part.is_empty() {
-                self.holes.insert(index, part);
-                index += 1;
-            }
-        }
+        let parts = [before, after]
+            .into_iter()
+            .filter(|part| false == part.is_empty());
+        self.holes.splice(cut, parts);
     }
 
     /// Number of holes before the furthest stored byte (the ones the hole
