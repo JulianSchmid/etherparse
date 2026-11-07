@@ -1082,9 +1082,12 @@ impl ReferenceModel {
             }
         } else if header.syn && false == self.is_own_syn(segment) {
             // the SYNs of a script all have the same ISN
+            // a retransmission with more Fast Open bytes replaces the kept SYN
             if false == header.ack
                 && self.reconnect_syn.as_ref().is_none_or(|syn| {
-                    syn.incarnation != segment.incarnation || syn.sender != segment.sender
+                    syn.incarnation != segment.incarnation
+                        || syn.sender != segment.sender
+                        || syn.payload.len() < segment.payload.len()
                 })
             {
                 self.reconnect_syn = Some(segment.clone());

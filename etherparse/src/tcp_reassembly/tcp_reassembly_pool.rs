@@ -1212,6 +1212,26 @@ mod test {
             assert_eq!(TcpRead::Data(b"x"), stream.read_received());
         }
 
+        // a retransmission of the kept SYN that carries more TCP Fast Open
+        // bytes replaces it, so the reconnect starts with these bytes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut new = ConnectionScript::with_isns(5000, 6000);
+            new.syn_with_data(b"GET").syn_ack();
+            let mut short = new.segments[0].clone();
+            short.payload = b"G".to_vec();
+            short.feed(&mut pool, ());
+            new.segments[0].feed(&mut pool, ());
+            let (connection, _) = new.segments[1].feed(&mut pool, ()).active.unwrap();
+            assert_eq!(
+                TcpRead::Data(b"GET"),
+                connection.stream_mut(Initiator).read_received()
+            );
+        }
+
         // a retransmission of the kept SYN changes nothing, and a SYN with
         // another new ISN replaces it (a SYN-ACK of the replaced SYN starts
         // the reconnect at the SYN-ACK)
