@@ -1075,7 +1075,7 @@ impl TcpStream {
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);
-        if let Some(factor) = config.hole_give_up_window_factor {
+        if config.hole_give_up_window_factor.is_some() {
             // allow for several windows, as the window can change, but not
             // more than half of the stream's buffer, so that a reader of the
             // ACKed bytes keeps up before the buffer is full; never less than
@@ -1085,8 +1085,7 @@ impl TcpStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            let distance = window
-                .saturating_mul(u64::from(factor.max(1)))
+            let distance = window_range(window, config)
                 .min(config.max_stream_buffer as u64 / 2)
                 .max(known);
             let implied_ack = i64::try_from(self.highest_offset())
@@ -4133,6 +4132,22 @@ mod test {
             assert_eq!(expected, stream.read_offset());
             assert_eq!(2000, stream.highest_offset());
             assert_eq!(0, stream.status().rejected_bytes);
+        }
+
+        // a hole give up window factor of 0 works like 1, also for the
+        // implied ACK (a pickup, so the fallback window of 100 bytes applies)
+        {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: Some(0),
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, &[7; 300]);
+            script.segments.drain(..3);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(200, connection.stream(Initiator).acked_offset());
         }
 
         // but the implied ACK never lies less than a known window before the
