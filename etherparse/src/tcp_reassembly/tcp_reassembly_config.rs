@@ -63,7 +63,9 @@ pub struct TcpReassemblyConfig {
     /// unknown (default 4 MiB).
     ///
     /// This is the case if the handshake or the receiver's packets were not
-    /// captured.
+    /// captured. It also decides how far from the receiver's ACK the first
+    /// segment of a mid-stream pickup may lie (see
+    /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an

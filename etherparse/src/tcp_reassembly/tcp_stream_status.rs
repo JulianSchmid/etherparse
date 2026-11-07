@@ -48,7 +48,10 @@ pub struct TcpStreamStatus {
     /// These bytes are not stored. FINs starting after the receiver's window
     /// count too, and so do SYNs that a mid-stream pickup can't take and
     /// RSTs that the receiver can't accept (see
-    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]).
+    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]). The first
+    /// segment that could start a stream but lies far from the ACK the
+    /// receiver sent for it counts and doesn't start the stream; the next
+    /// one does.
     pub out_of_window_segments: u64,
 }
 

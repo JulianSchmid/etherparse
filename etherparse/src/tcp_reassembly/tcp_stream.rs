@@ -265,8 +265,8 @@ impl TcpStream {
     /// Use it if you know that the stream jumped, e.g. to a new initial
     /// sequence number that lies before the stream's bytes, which a resync
     /// doesn't detect (see [`TcpStreamStatus::resyncs`]). Does nothing
-    /// before the stream started, as its first bytes start it anyway (see
-    /// [`TcpStreamStart`]), or after the stream's FIN.
+    /// before the stream started, as its first accepted bytes start it
+    /// anyway (see [`TcpStreamStart`]), or after the stream's FIN.
     pub fn force_resync(&mut self) {
         if self.start_seq.is_some() && self.fin_offset.is_none() {
             self.resync_forced = true;
