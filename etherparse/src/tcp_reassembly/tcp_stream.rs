@@ -505,8 +505,9 @@ impl TcpStream {
     }
 
     /// Returns true if the segment `tcp` of the other side ACKs the stream's
-    /// SYN that waits for its ACK (S5): a SYN-ACK ACKs the SYN itself, any
-    /// other segment the SYN or bytes up to k windows after it, in case the
+    /// SYN that waits for its ACK (S5): a SYN-ACK or RST ACKs the SYN
+    /// itself, any other segment the SYN or bytes up to k windows after it,
+    /// in case the
     /// SYN-ACK or the ACK was not captured, or, unless it is an RST or FIN
     /// or the candidate carries a FIN (which a blind pair of segments could
     /// land), the bytes the stream jumped to (its resync candidate, R2),
@@ -521,7 +522,9 @@ impl TcpStream {
             return false;
         };
         let ack = tcp.acknowledgment_number();
-        if tcp.syn() {
+        // a SYN-ACK always ACKs the SYN itself, and an RST that answers a
+        // SYN has to (F4)
+        if tcp.syn() || tcp.rst() {
             return syn.is_acked_by(ack);
         }
         if false == (tcp.rst() || tcp.fin())

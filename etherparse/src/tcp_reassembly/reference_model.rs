@@ -575,7 +575,7 @@ impl ModelStream {
         if false == self.syn_unacked {
             return false;
         }
-        if segment.header.syn {
+        if segment.header.syn || segment.header.rst {
             return (base..=base + self.syn_len).contains(&ack);
         }
         (base..=base + range).contains(&ack)

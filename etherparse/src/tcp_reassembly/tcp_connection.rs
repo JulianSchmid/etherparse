@@ -2011,6 +2011,27 @@ mod test {
                 connection.stream_mut(Responder).read_received()
             );
         }
+
+        // an RST answers a SYN only if it ACKs the SYN itself, like a
+        // SYN-ACK: one that ACKs a byte after it is dropped (a receiver in
+        // SYN-SENT accepts only an RST that ACKs its SYN, F4)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut rst = script.injected(|s| {
+                s.rst_at(Responder, 0);
+            });
+            rst.header.sequence_number = 0xdead_beef;
+            rst.header.acknowledgment_number = 1002;
+            script.segments.push(rst);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
     }
 
     #[test]
