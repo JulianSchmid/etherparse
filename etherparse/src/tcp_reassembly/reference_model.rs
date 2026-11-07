@@ -261,6 +261,10 @@ impl ModelStream {
                 self.rejected_bytes += payload.len() as u64;
                 return accepted_without_base;
             }
+            // the start overrules a kept ACK it disagrees with
+            if false == accepted_without_base {
+                self.pending_ack = None;
+            }
             self.start_at(segment.offset);
             self.started_at_fin = payload.is_empty();
         }

@@ -737,6 +737,11 @@ impl TcpStream {
                 if false == data.is_empty() && 0 == config.max_stream_buffer.min(*available) {
                     self.status.rejected_bytes += data.len() as u64;
                 } else {
+                    // a kept ACK that the start overrules is forged, and
+                    // would count as the seen ACK or as resync evidence
+                    if false == accepted {
+                        self.pending_ack = None;
+                    }
                     self.start_seq = Some(seq);
                 }
             }
@@ -2005,6 +2010,32 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(TcpRead::Data(b"bbbccc"), stream.read_received());
             assert_eq!(1, stream.status().out_of_window_segments);
+        }
+
+        // the kept ACK that the second segment overrules is dropped, so it
+        // neither counts as the seen ACK of the started stream (it lies one
+        // window after the segment's 6 bytes, but k windows after its first
+        // byte) nor as evidence of a jump
+        {
+            let config = TcpReassemblyConfig {
+                hole_give_up_window_factor: Some(1),
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"request")
+                .send(Responder, b"aaa")
+                .send(Responder, b"bbbbbb");
+            script.segments.drain(..3);
+            script.segments[0].header.acknowledgment_number = 2001 + 105;
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Responder);
+            assert_eq!(0, stream.acked_offset());
+            assert_eq!(6, stream.highest_offset());
+            assert_eq!(0, stream.holes().count());
         }
 
         // the SYN of a reconnect counts as a packet of the connection it may
