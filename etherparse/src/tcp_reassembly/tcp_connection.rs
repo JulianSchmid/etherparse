@@ -1435,6 +1435,23 @@ mod test {
             assert_eq!(reset, processed.ended.is_some());
         }
 
+        // a retransmitted SYN-ACK doesn't bring the window back from the
+        // start of the connection (the responder's window shrank to 0, so
+        // only an RST at the next byte is accepted)
+        for (offset, reset) in [(53, false), (3, true)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            script.window_size = 0;
+            script.ack(Responder);
+            let syn_ack = script.segments[1].clone();
+            script.segments.push(syn_ack);
+            script.rst_at(Initiator, offset);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
         // RSTs before the point a stream resynced at are ignored, also
         // without an ACK of the jump
         for (offset, reset) in [(998, false), (1000, true)] {

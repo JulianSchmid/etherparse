@@ -232,13 +232,17 @@ impl ModelStream {
             let keep_alive = 1 == payload.len()
                 && false == header.fin
                 && Some(segment.offset + 1) == self.pending_ack.map(|(ack, _)| ack);
+            // without a base, the kept ACK tells what the receiver accepts
+            let accepted = self.pending_ack.is_none_or(|(ack, _)| {
+                (segment.offset as i64 - ack as i64).unsigned_abs() <= range
+            });
             if (payload.is_empty() && false == header.fin) || keep_alive {
-                return true;
+                return accepted;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
             {
                 self.rejected_bytes += payload.len() as u64;
-                return true;
+                return accepted;
             }
             self.start_at(segment.offset);
             self.started_at_fin = payload.is_empty();
@@ -286,9 +290,9 @@ impl ModelStream {
             }
         }
         // the receiver drops segments outside of its window, with their
-        // window (nothing before offset 0 counts without a base)
-        let plausible =
-            false == after_window && self.base.unwrap_or(0) as i64 - range as i64 <= start;
+        // window: k windows before the bytes sent to k windows after them
+        let plausible = false == after_window
+            && self.highest as i64 - (u64::from(factor) * sent_into) as i64 <= start;
         if (false == payload.is_empty() || header.fin) && after_window {
             if let Some(candidate) = self.candidates.last_mut() {
                 if payload.is_empty() && segment.offset == candidate.bytes.end {
@@ -1081,7 +1085,8 @@ impl ReferenceModel {
                 &self.config,
                 &mut available,
             );
-            if plausible {
+            // a retransmitted or late SYN carries the window from the start
+            if plausible && false == (header.syn && self.windows[sender].is_some()) {
                 self.windows[sender] = Some(header.window_size);
             }
             self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);

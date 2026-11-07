@@ -37,7 +37,8 @@ pub struct TcpStream {
     /// not seen, `Some(None)` for a SYN without the option).
     window_scale: Option<Option<u8>>,
 
-    /// "window" field of the sender's last segment and whether that segment
+    /// "window" field of the sender's last segment that the receiver
+    /// accepts (see [`TcpStream::record_window`]) and whether that segment
     /// was a SYN (`None` before the sender's first segment).
     window: Option<(u16, bool)>,
 
@@ -462,9 +463,24 @@ impl TcpStream {
     }
 
     /// Records the window the sender advertises for the other stream in
-    /// `tcp`.
+    /// `tcp`, a segment the receiver accepts. A SYN counts only while no
+    /// window is known, as a retransmitted or late SYN carries the window
+    /// from the start of the connection.
     fn record_window(&mut self, tcp: &TcpSlice<'_>) {
+        if tcp.syn() && self.window.is_some() {
+            return;
+        }
         self.window = Some((tcp.window_size(), tcp.syn()));
+    }
+
+    /// Lowest offset a segment can start at for the receiver with the
+    /// receive window `window` to accept it: the sender retransmits at most
+    /// k windows before the bytes it is known to have sent.
+    fn lowest_accepted(&self, window: u64, config: &TcpReassemblyConfig) -> i64 {
+        let range = window_range(self.sent_into(window), config);
+        i64::try_from(self.highest_offset())
+            .unwrap_or(i64::MAX)
+            .saturating_sub(i64::try_from(range).unwrap_or(i64::MAX))
     }
 
     /// Receive window in bytes that the stream's sender advertised for the
@@ -563,8 +579,8 @@ impl TcpStream {
         let placed = self.place(tcp, seq, start_seq, window, config);
         // the receiver drops segments outside of its window, with their
         // window, so a blind segment can't set the window the checks rely on
-        let range = i64::try_from(window_range(window, config)).unwrap_or(i64::MAX);
-        if false == placed.after_window && placed.start.is_some_and(|start| -range <= start) {
+        let lowest = self.lowest_accepted(window, config);
+        if false == placed.after_window && placed.start.is_some_and(|start| lowest <= start) {
             self.record_window(tcp);
         }
         if (false == data.is_empty() || tcp.fin()) && placed.after_window {
@@ -666,8 +682,18 @@ impl TcpStream {
             }
         }
         if self.start_seq.is_none() {
-            // nothing tells which sequence numbers the receiver accepts
-            self.record_window(tcp);
+            // only the receiver's kept ACK tells which sequence numbers it
+            // accepts: k windows around it
+            let range = window_range(window, config);
+            let accepted = self.pending_ack.is_none_or(|pending| {
+                let distance = seq
+                    .wrapping_sub(pending.seq)
+                    .min(pending.seq.wrapping_sub(seq));
+                u64::from(distance) <= range
+            });
+            if accepted {
+                self.record_window(tcp);
+            }
         }
         self.start_seq
     }
@@ -6743,15 +6769,44 @@ mod test {
         }
 
         // the window of a segment whose sequence number the receiver doesn't
-        // accept (more than k windows after or before the stream's bytes)
-        // doesn't count, so a blind segment can't set it (the responder sent
-        // no bytes yet, so k windows are 200 bytes around its first byte)
+        // accept (more than k windows after or before the bytes its sender
+        // is known to have sent) doesn't count, so a blind segment can't set
+        // it (the responder sent 300 bytes, k windows are 200 bytes)
         for (position, end) in [
-            (201, 203),
-            (-201, 203),
-            (200, 2 * 1000 + 3),
-            (-200, 2 * 1000 + 3),
+            (99, 300 + 200),
+            (100, 300 + 2 * 1000),
+            (500, 300 + 2 * 1000),
+            (501, 300 + 200),
         ] {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script
+                .handshake()
+                .send(Initiator, &[1; 300])
+                .send(Responder, &[2; 300]);
+            let mut ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            ack.header.sequence_number = script.seq(Responder, position);
+            ack.header.window_size = 1000;
+            script.segments.push(ack);
+            assert_window_end(Default::default(), &script, end);
+        }
+
+        // before a stream has a start, the ACK the receiver kept for it tells
+        // which sequence numbers it accepts: k windows around the ACK (the
+        // capture starts at the initiator's bytes, which ACK the responder's
+        // first byte, and the handshake arrives late)
+        for (position, end) in [
+            (200, 2 * 1000 + 3),
+            (201, 203),
+            (-200, 2 * 1000 + 3),
+            (-201, 203),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_size = 100;
             script.handshake().send(Initiator, b"abc");
@@ -6760,8 +6815,10 @@ mod test {
             });
             ack.header.sequence_number = script.seq(Responder, 0).wrapping_add_signed(position);
             ack.header.window_size = 1000;
+            let handshake: Vec<_> = script.segments.drain(..3).collect();
             script.segments.push(ack);
-            assert_window_end(Default::default(), &script, end);
+            script.segments.extend(handshake);
+            assert_window_end(config, &script, end);
         }
     }
 
