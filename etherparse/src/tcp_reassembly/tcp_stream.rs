@@ -876,7 +876,7 @@ impl TcpStream {
     /// the bytes are stored at, and whether the segment counts as
     /// out-of-window, as its bytes before offset 0 are outside the stream
     /// (only the filler byte of a keep-alive right before the first byte of
-    /// an observed start doesn't count).
+    /// an observed start doesn't count, and nothing does after a resync).
     fn take_in_front(
         &mut self,
         tcp: &TcpSlice<'_>,
@@ -887,7 +887,9 @@ impl TcpStream {
         available: &mut usize,
     ) -> (i64, bool) {
         let data_len = tcp.payload().len();
-        if 0 <= start || 0 == data_len {
+        // bytes before a jump are ignored without counting (R2), also ones
+        // that map before offset 0
+        if 0 <= start || 0 == data_len || 0 < self.status.resyncs {
             return (start, false);
         }
         if TcpStreamStart::Observed == self.status.start {
@@ -7155,7 +7157,8 @@ mod test {
         }
 
         // a resync ends putting earlier bytes in front of a mid-stream
-        // pickup: they count as out-of-window
+        // pickup: like other bytes before the jump, they are ignored without
+        // counting (R2)
         {
             let config = TcpReassemblyConfig {
                 fallback_window: 10,
@@ -7175,7 +7178,7 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream(Initiator);
             assert_eq!(1, stream.status().resyncs);
-            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(0, stream.status().out_of_window_segments);
             assert_eq!(6, stream.highest_offset());
         }
 

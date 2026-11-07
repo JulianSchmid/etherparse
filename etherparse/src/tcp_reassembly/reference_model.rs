@@ -336,7 +336,8 @@ impl ModelStream {
         }
 
         let mut out_of_window = false;
-        if let Some(base) = self.base {
+        // bytes before a jump are ignored without counting
+        if let Some(base) = self.base.filter(|_| self.resyncs.is_empty()) {
             if start < base as i64 && false == payload.is_empty() && false == self.observed {
                 if false == self.can_prepend() || base as i64 - start > range as i64 {
                     out_of_window = true;
