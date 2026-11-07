@@ -1468,11 +1468,11 @@ impl ReferenceModel {
             } else {
                 (expected.read(u64::MAX), stream.read_received())
             };
-            prop_assert_eq!(expected_read, read);
             read_len = match read {
                 TcpRead::Data(data) => data.len(),
                 _ => 0,
             };
+            prop_assert_eq!(expected_read, read);
             // read_acked never returns bytes that were not ACKed
             if read_acked && read_len > 0 {
                 prop_assert!(read_offset + read_len as u64 <= acked_offset);

@@ -287,7 +287,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if self
             .reconnect_syn
             .as_ref()
-            .is_some_and(|syn| syn.source == source && syn.isn() == Some(tcp.sequence_number()))
+            .is_some_and(|syn| syn.source == source && syn.isn == tcp.sequence_number())
         {
             return;
         }
@@ -301,6 +301,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.reconnect_syn = Some(ReconnectSyn {
             source,
             timestamp: self.last_seen.clone(),
+            isn: tcp.sequence_number(),
+            payload_len: tcp.payload().len(),
             segment,
         });
     }
@@ -473,7 +475,11 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     source: SocketAddr,
     /// Timestamp of the SYN.
     timestamp: Timestamp,
-    /// TCP header and payload of the SYN.
+    /// ISN of the SYN.
+    isn: u32,
+    /// Number of bytes the SYN carries (TCP Fast Open).
+    payload_len: usize,
+    /// TCP header and payload of the SYN, replayed if it starts a reconnect.
     segment: Vec<u8>,
 }
 
@@ -487,14 +493,10 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
     /// comes from the other endpoint and ACKs from the SYN's ISN + 1 up to
     /// the end of its bytes (a server ACKs TCP Fast Open bytes it accepts).
     pub fn is_acked_by(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
-        source != self.source
-            && tcp.ack()
-            && self.tcp().is_some_and(|syn| {
-                let acked = tcp
-                    .acknowledgment_number()
-                    .wrapping_sub(syn.sequence_number().wrapping_add(1));
-                (acked as usize) <= syn.payload().len()
-            })
+        let acked = tcp
+            .acknowledgment_number()
+            .wrapping_sub(self.isn.wrapping_add(1));
+        source != self.source && tcp.ack() && (acked as usize) <= self.payload_len
     }
 
     /// Puts the buffer that kept the SYN into `free` for re-use.
@@ -505,11 +507,6 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
     /// The SYN (`None` can't happen, as its bytes come from a TCP slice).
     fn tcp(&self) -> Option<TcpSlice<'_>> {
         TcpSlice::from_slice(&self.segment).ok()
-    }
-
-    /// ISN of the SYN.
-    fn isn(&self) -> Option<u32> {
-        self.tcp().map(|tcp| tcp.sequence_number())
     }
 }
 

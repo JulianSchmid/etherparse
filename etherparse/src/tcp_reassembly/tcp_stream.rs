@@ -61,8 +61,8 @@ pub struct TcpStream {
     received_end: u64,
 
     /// Missing bytes between `read_offset` and `highest_offset`, sorted and
-    /// without overlaps. Missing bytes after the end of `buf` always lie in
-    /// a hole.
+    /// without overlaps. Together with `gaps`, they cover all bytes after
+    /// the end of `buf`.
     holes: Vec<Range<u64>>,
 
     /// Holes that were given up, sorted and without overlaps. They lie
@@ -634,7 +634,11 @@ impl TcpStream {
     fn offset(&self, start_seq: u32, seq: u32) -> Option<i64> {
         let highest = self.highest_offset;
         let distance = seq.wrapping_sub(start_seq.wrapping_add(highest as u32)) as i32;
-        (i32::MIN != distance).then(|| highest as i64 + i64::from(distance))
+        (i32::MIN != distance).then(|| {
+            i64::try_from(highest)
+                .unwrap_or(i64::MAX)
+                .saturating_add(i64::from(distance))
+        })
     }
 
     /// Applies a segment sent by the stream's sender, whose receiver has the

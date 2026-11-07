@@ -1,7 +1,7 @@
 use crate::tcp_reassembly::*;
 
 /// Result of reading from a [`crate::tcp_reassembly::TcpStream`].
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum TcpRead<'a> {
     /// Contiguous bytes starting at the read position.
     Data(&'a [u8]),
@@ -32,11 +32,9 @@ mod test {
 
     #[test]
     fn derived_traits() {
-        // copy & clone
+        // clone & eq
         {
             let a = TcpRead::Data(&[1, 2]);
-            let b = a;
-            assert_eq!(a, b);
             assert_eq!(a.clone(), a);
             assert_ne!(TcpRead::Gap { len: Some(2) }, a);
             assert_ne!(TcpRead::Pending, a);
