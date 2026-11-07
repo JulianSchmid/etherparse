@@ -261,20 +261,43 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 self.keep_reconnect_syn(source, tcp, free);
             }
         } else {
-            self.add_data_segment(sender, tcp, config, available);
             // the SYN-ACK of a simultaneous open confirms the kept SYN of the
-            // other side as that stream's own (C2 found no reconnect): it
-            // is applied now, so that its window scale and window count
+            // other side, whose stream has no start yet, as that stream's
+            // own (C2 found no reconnect): it is applied first, so that the
+            // stream starts at the SYN with its bytes, window scale and
+            // window, not at the ACK number (A2); a kept SYN of a stream
+            // with a start is a reconnect's and stays kept
             if tcp.syn() {
+                let kept_stream_has_start = self
+                    .reconnect_syn
+                    .as_ref()
+                    .is_some_and(|syn| self.stream(self.role(syn.source)).has_start());
                 if let Some(syn) = self
                     .reconnect_syn
-                    .take_if(|syn| syn.is_acked_by(source, tcp))
+                    .take_if(|syn| false == kept_stream_has_start && syn.is_acked_by(source, tcp))
                 {
-                    let timestamp = self.last_seen.clone();
-                    self.add_reconnect_syn(&syn, timestamp, config, available, free);
+                    self.apply_kept_syn(&syn, config, available);
                     syn.recycle(free);
                 }
             }
+            self.add_data_segment(sender, tcp, config, available);
+        }
+    }
+
+    /// Applies the kept SYN `syn` to its stream as the stream's own SYN,
+    /// without counting it as a packet again (it counted when it was kept).
+    fn apply_kept_syn(
+        &mut self,
+        syn: &ReconnectSyn<Timestamp>,
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+    ) {
+        if let Some(tcp) = syn.tcp() {
+            let sender = self.role(syn.source);
+            self.add_data_segment(sender, &tcp, config, available);
+            // retransmissions of the SYN carried differing bytes
+            self.stream_mut(sender)
+                .count_conflicting_retransmissions(syn.conflicting);
         }
     }
 
@@ -472,13 +495,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.reconnect_syn.take()
     }
 
-    /// Applies the kept SYN `syn` of a reconnect (or of a simultaneous open)
-    /// as a packet with the timestamp `timestamp`, storing at most
-    /// `available` more bytes.
+    /// Applies the kept SYN `syn` of a reconnect as the connection's first
+    /// packet, storing at most `available` more bytes.
     pub(crate) fn add_reconnect_syn(
         &mut self,
         syn: &ReconnectSyn<Timestamp>,
-        timestamp: Timestamp,
         config: &TcpReassemblyConfig,
         available: &mut usize,
         free: &mut FreeBuffers,
@@ -486,6 +507,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         Timestamp: Clone,
     {
         if let Some(tcp) = syn.tcp() {
+            let timestamp = syn.timestamp.clone();
             let sender = self.add_segment(syn.source, &tcp, timestamp, config, available, free);
             // retransmissions of the SYN carried differing bytes
             self.stream_mut(sender)
@@ -1773,6 +1795,70 @@ mod test {
                 TcpRead::Data(b"request"),
                 connection.stream_mut(Initiator).read_received()
             );
+        }
+
+        // ... and the kept SYN is applied before the SYN-ACK that confirms
+        // it, so the stream starts at the SYN with its TCP Fast Open bytes,
+        // whether the SYN-ACK ACKs none, some or all of them (A2 would put
+        // the start at the ACK number), and the SYN counted as a packet
+        // once: with an ACK reorder tolerance of 2, the hole an ACK covers
+        // is still filled by the second packet after it, the SYN-ACK being
+        // the first
+        for acked in [0, 2, 3] {
+            let config = TcpReassemblyConfig {
+                ack_reorder_tolerance: 2,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            responder_syn.payload = b"abc".to_vec();
+            script.segments.push(responder_syn);
+            // the initiator's byte after a hole, and the responder's ACK of
+            // it, before the initiator's SYN-ACK
+            let mut late = script.injected(|s| {
+                s.send_at(Initiator, 5, b"z");
+            });
+            late.header.acknowledgment_number = 2001;
+            script.segments.push(late);
+            let mut covering_ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            covering_ack.header.sequence_number = 2004;
+            covering_ack.header.acknowledgment_number = 1007;
+            script.segments.push(covering_ack);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2001 + acked;
+            script.segments.push(initiator_syn_ack);
+            let mut filling = script.injected(|s| {
+                s.send(Initiator, b"12345");
+            });
+            filling.header.acknowledgment_number = 2001;
+            script.segments.push(filling);
+            let mut next = script.injected(|s| {
+                s.send_at(Responder, 3, b"next");
+            });
+            next.header.acknowledgment_number = 1007;
+            script.segments.push(next);
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(TcpRead::Data(b"abcnext"), stream.read_received());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().gaps);
+            assert_eq!(TcpRead::Data(b"12345z"), stream.read_received());
         }
 
         // a resync candidate with a FIN gives no exit either: a blind data

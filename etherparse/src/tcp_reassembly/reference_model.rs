@@ -1288,63 +1288,7 @@ impl ReferenceModel {
                 }
             }
         } else {
-            let observed = self.streams.each_ref().map(|stream| stream.observed);
-            // the ACK of a SYN-ACK that the other stream's kept ACK refuses
-            // as its start is not kept either
-            let mut ack_counts = true;
-            if let (true, Some(ack)) = (header.syn, segment.ack) {
-                let range = self.range(sender_role.other());
-                let had_base = self.streams[other].base.is_some();
-                let started =
-                    self.streams[other].observe_start(ack, 0, range, &self.config, &mut available);
-                ack_counts = started || had_base;
-            }
-            if let (true, Some(ack)) = (ack_counts, segment.ack) {
-                let window = self.window(sender_role.other());
-                self.streams[other].add_ack(ack, window, self.packets, &self.config);
-            }
-            let window = self.window(sender_role);
-            let plausible = self.streams[sender].add_segment(
-                segment,
-                window,
-                self.packets,
-                &self.config,
-                &mut available,
-            );
-            // a retransmitted or late SYN carries the window from the start
-            if plausible && false == (header.syn && self.windows[sender].is_some()) {
-                self.windows[sender] = Some(header.window_size);
-            }
-            // the sender moved past its SYN (S5)
-            if plausible && false == header.syn {
-                self.streams[sender].syn_unacked = false;
-            }
-            // the SYN-ACK of a simultaneous open confirms the kept SYN of the
-            // other side as that stream's own: it is applied now
-            if header.syn {
-                if let Some(syn) = self.reconnect_syn.take_if(|syn| acks_syn(segment, syn)) {
-                    let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
-                    self.apply(&syn);
-                    let syn_sender = role_index(self.sender_role(&syn));
-                    self.streams[syn_sender].conflicting_retransmissions += conflicting;
-                }
-            }
-            // a SYN after a resync gives no window (A3), also after one that
-            // kept the mapping
-            self.syns[sender] |= header.syn
-                && self.streams[sender].starts_at(segment.offset)
-                && self.streams[sender].resyncs.is_empty();
-            let syn_role = if header.ack {
-                TcpRole::Responder
-            } else {
-                TcpRole::Initiator
-            };
-            if header.syn
-                && syn_role == sender_role
-                && observed != self.streams.each_ref().map(|stream| stream.observed)
-            {
-                self.roles_guessed = false;
-            }
+            self.apply_own_segment(segment, &mut available);
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self.known_window(role);
@@ -1402,6 +1346,81 @@ impl ReferenceModel {
     }
 
     /// Model of the next connection on the same key.
+    /// Applies `segment`, which the receiver accepts in its handshake state
+    /// (S5, S6) and which is no RST or kept SYN, to the connection's streams,
+    /// with the pool's budget `available`.
+    fn apply_own_segment(&mut self, segment: &TestSegment, available: &mut u64) {
+        let header = &segment.header;
+        let sender_role = self.sender_role(segment);
+        let sender = role_index(sender_role);
+        let other = role_index(sender_role.other());
+        // the SYN-ACK of a simultaneous open confirms the kept SYN of the
+        // other side as that stream's own: it is applied first, so that the
+        // stream starts at the SYN, and counts as no further packet
+        if header.syn {
+            let kept_stream_has_start = self.reconnect_syn.as_ref().is_some_and(|syn| {
+                self.streams[role_index(self.sender_role(syn))]
+                    .base
+                    .is_some()
+            });
+            if let Some(syn) = self
+                .reconnect_syn
+                .take_if(|syn| false == kept_stream_has_start && acks_syn(segment, syn))
+            {
+                let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
+                self.apply_own_segment(&syn, available);
+                let syn_sender = role_index(self.sender_role(&syn));
+                self.streams[syn_sender].conflicting_retransmissions += conflicting;
+            }
+        }
+        let observed = self.streams.each_ref().map(|stream| stream.observed);
+        // the ACK of a SYN-ACK that the other stream's kept ACK refuses
+        // as its start is not kept either
+        let mut ack_counts = true;
+        if let (true, Some(ack)) = (header.syn, segment.ack) {
+            let range = self.range(sender_role.other());
+            let had_base = self.streams[other].base.is_some();
+            let started = self.streams[other].observe_start(ack, 0, range, &self.config, available);
+            ack_counts = started || had_base;
+        }
+        if let (true, Some(ack)) = (ack_counts, segment.ack) {
+            let window = self.window(sender_role.other());
+            self.streams[other].add_ack(ack, window, self.packets, &self.config);
+        }
+        let window = self.window(sender_role);
+        let plausible = self.streams[sender].add_segment(
+            segment,
+            window,
+            self.packets,
+            &self.config,
+            available,
+        );
+        // a retransmitted or late SYN carries the window from the start
+        if plausible && false == (header.syn && self.windows[sender].is_some()) {
+            self.windows[sender] = Some(header.window_size);
+        }
+        // the sender moved past its SYN (S5)
+        if plausible && false == header.syn {
+            self.streams[sender].syn_unacked = false;
+        }
+        // a SYN after a resync gives no window (A3), also after one that
+        // kept the mapping
+        self.syns[sender] |= header.syn
+            && self.streams[sender].starts_at(segment.offset)
+            && self.streams[sender].resyncs.is_empty();
+        let syn_role = if header.ack {
+            TcpRole::Responder
+        } else {
+            TcpRole::Initiator
+        };
+        if header.syn
+            && syn_role == sender_role
+            && observed != self.streams.each_ref().map(|stream| stream.observed)
+        {
+            self.roles_guessed = false;
+        }
+    }
+
     /// Role of the sender of `segment` in this connection: the pool tells
     /// the roles by the endpoints, so a segment of a reconnect script with
     /// swapped roles has the other role in the connection it hits.
