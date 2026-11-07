@@ -416,6 +416,12 @@ impl TcpStream {
         self.is_clean() && TcpStreamStart::Observed == self.status.start && self.is_finished()
     }
 
+    /// Returns true if the stream has a start: an observed one or the first
+    /// bytes of a mid-stream pickup.
+    pub(crate) fn has_start(&self) -> bool {
+        self.start_seq.is_some()
+    }
+
     /// Sequence number of the SYN that gave the stream its observed start,
     /// if it has one.
     pub(crate) fn isn(&self) -> Option<u32> {
@@ -449,10 +455,19 @@ impl TcpStream {
             (None, Some(start_seq), _) => self
                 .offset(start_seq, seq)
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
-            (None, None, Some(kept)) => u64::try_from(kept.seq.wrapping_sub(seq) as i32)
-                .is_ok_and(|distance| distance <= range),
-            (None, None, None) => true,
+            (None, None, _) => self.kept_ack_allows_syn(seq, window, config),
         }
+    }
+
+    /// Returns true if the receiver's kept ACK, if there is one, allows a
+    /// stream without a start to start at `seq` with a SYN: the ACK lies at
+    /// or after the first byte, at most k windows after it, as the receiver
+    /// can't have ACKed bytes before the SYN.
+    fn kept_ack_allows_syn(&self, seq: u32, window: u64, config: &TcpReassemblyConfig) -> bool {
+        self.kept_ack.is_none_or(|kept| {
+            u64::try_from(kept.seq.wrapping_sub(seq) as i32)
+                .is_ok_and(|distance| distance <= window_range(window, config))
+        })
     }
 
     /// Puts the stream's buffers into `free` for re-use.
@@ -1033,7 +1048,7 @@ impl TcpStream {
         match self.start_seq {
             // the ACK number of a SYN-ACK can give the stream its start (A2),
             // which the receiver's kept ACK has to allow like a late SYN (C4)
-            None if false == self.accepted_by_kept_ack(seq, window, config) => return false,
+            None if false == self.kept_ack_allows_syn(seq, window, config) => return false,
             None => self.start_seq = Some(seq),
             Some(_) if TcpStreamStart::Observed == self.status.start => {
                 // a retransmitted SYN can carry more TCP Fast Open bytes
@@ -2050,11 +2065,13 @@ mod test {
         }
 
         // the ACK number of a SYN-ACK gives the other stream its start only
-        // if the ACK kept for that stream allows it, like a late SYN: a
-        // forged SYN-ACK can't anchor the stream elsewhere (the responder's
-        // data ACKs the initiator's first byte, the SYN-ACK a far one, and
-        // the initiator's first segment is then refused once)
-        {
+        // if the ACK kept for that stream allows it, like a late SYN (at or
+        // before the ACK): forged SYN-ACKs can't anchor the stream elsewhere,
+        // and their ACK number is not kept either, so the initiator's bytes
+        // start the stream (the responder's data ACKs the initiator's first
+        // byte, the SYN-ACKs a far one, one 100 bytes after it, or the same
+        // one twice)
+        for (offset, repeat) in [(1 << 30, false), (100, false), (1 << 30, true)] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 5000);
             script
@@ -2062,15 +2079,18 @@ mod test {
                 .send(Responder, b"data")
                 .send(Initiator, b"aaa")
                 .send(Initiator, b"bbb");
-            script.segments[1].header.acknowledgment_number = 1001 + (1 << 30);
+            script.segments[1].header.acknowledgment_number = 1001 + offset;
             let syn_ack = script.segments.remove(1);
             script.segments.drain(..2);
-            script.segments.insert(1, syn_ack);
+            script.segments.insert(1, syn_ack.clone());
+            if repeat {
+                script.segments.insert(2, syn_ack);
+            }
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
-            assert_eq!(TcpRead::Data(b"bbb"), stream.read_received());
-            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"aaabbb"), stream.read_received());
+            assert_eq!(0, stream.status().out_of_window_segments);
         }
 
         // before the SYN-ACK, the initiator drops everything but the SYN-ACK,

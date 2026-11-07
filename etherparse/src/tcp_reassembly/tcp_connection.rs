@@ -222,10 +222,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let starts = self.starts();
         let other_syn_seen = self.stream(sender.other()).syn().is_some();
         // the SYN-ACK ACKs the other side's SYN, so the other stream starts
-        // there, even if its SYN was not seen
+        // there, even if its SYN was not seen; the ACK number of one that
+        // the other stream's kept ACK refuses as its start is not kept
+        // either, as it would replace that ACK (A4)
+        let mut ack_counts = true;
         if tcp.syn() && tcp.ack() {
             let window = self.window(sender.other(), config);
-            self.stream_mut(sender.other()).observe_start(
+            let other = self.stream_mut(sender.other());
+            let had_start = other.has_start();
+            let observed = other.observe_start(
                 tcp.acknowledgment_number(),
                 // the SYN-ACK carries none of the SYN's bytes
                 0,
@@ -233,10 +238,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 config,
                 available,
             );
+            ack_counts = observed || had_start;
         }
         // the window the sender advertised before this segment limits what
         // the other side could send, so the ACK is applied first
-        self.add_ack(sender, tcp, config);
+        if ack_counts {
+            self.add_ack(sender, tcp, config);
+        }
         let window = self.window(sender, config);
         let packet = self.packets;
         self.stream_mut(sender)

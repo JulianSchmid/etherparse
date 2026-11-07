@@ -564,10 +564,11 @@ impl ModelStream {
             Some(base) if start > base || base - start > range => return false,
             Some(_) if false == self.fits_in_front(start, len, config, *available) => return false,
             Some(base) => *available -= base - start,
-            // the kept ACK has to allow the start, as for a late SYN
-            None if self
-                .kept_ack
-                .is_some_and(|(ack, _)| (start as i64 - ack as i64).unsigned_abs() > range) =>
+            // the kept ACK has to allow the start, as for a late SYN: it
+            // lies at or after the first byte, at most `range` after it
+            None if self.kept_ack.is_some_and(|(ack, _)| {
+                false == (0..=range as i64).contains(&(ack as i64 - start as i64))
+            }) =>
             {
                 return false
             }
@@ -1164,11 +1165,17 @@ impl ReferenceModel {
             }
         } else {
             let observed = self.streams.each_ref().map(|stream| stream.observed);
+            // the ACK of a SYN-ACK that the other stream's kept ACK refuses
+            // as its start is not kept either
+            let mut ack_counts = true;
             if let (true, Some(ack)) = (header.syn, segment.ack) {
                 let range = self.range(segment.sender.other());
-                self.streams[other].observe_start(ack, 0, range, &self.config, &mut available);
+                let had_base = self.streams[other].base.is_some();
+                let started =
+                    self.streams[other].observe_start(ack, 0, range, &self.config, &mut available);
+                ack_counts = started || had_base;
             }
-            if let Some(ack) = segment.ack {
+            if let (true, Some(ack)) = (ack_counts, segment.ack) {
                 let window = self.window(segment.sender.other());
                 self.streams[other].add_ack(ack, window, self.packets, &self.config);
             }
