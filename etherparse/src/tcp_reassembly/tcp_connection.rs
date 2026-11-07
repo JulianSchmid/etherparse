@@ -269,8 +269,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// it (S5, see [`TcpStream::drops_before_syn_acked`]). A receiver in
     /// SYN-RECEIVED, whose other side has a start, checks an RST by its
     /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK
-    /// without RST that ACKs the kept SYN of a reconnect answers that SYN
-    /// and confirms the reconnect (C2).
+    /// without RST and FIN that ACKs the kept SYN of a reconnect answers
+    /// that SYN and confirms the reconnect (C2).
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
@@ -281,7 +281,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             return false;
         }
         if tcp.syn()
-            && false == tcp.rst()
+            && false == (tcp.rst() || tcp.fin())
             && self
                 .reconnect_syn
                 .as_ref()
@@ -411,6 +411,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // a SYN-ACK the receiver drops confirms nothing (S5)
         if false == (tcp.syn() && tcp.ack())
             || tcp.rst()
+            || tcp.fin()
             || self.drops_before_syn_acked(sender, tcp, config)
         {
             return false;
@@ -1723,6 +1724,38 @@ mod test {
                 1,
                 connection.stream(Responder).status().out_of_window_segments
             );
+        }
+
+        // a SYN-ACK with a FIN confirms no reconnect and doesn't pass S5
+        // through the kept SYN: a blind SYN from the initiator's address and
+        // a blind SYN/ACK/FIN of it from the responder's address change
+        // nothing but the counts
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut spoofed = script.injected(|s| {
+                s.syn();
+            });
+            spoofed.header.sequence_number = 0x7000_0000;
+            script.segments.push(spoofed);
+            let mut blind = script.injected(|s| {
+                s.syn_ack();
+            });
+            blind.header.fin = true;
+            blind.header.sequence_number = 0x4000_0000;
+            blind.header.acknowledgment_number = 0x7000_0001;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
     }
 
