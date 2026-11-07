@@ -214,7 +214,7 @@ impl ModelStream {
         packet: u64,
         config: &TcpReassemblyConfig,
         available: &mut u64,
-    ) {
+    ) -> bool {
         let payload = &segment.payload[..];
         let header = &segment.header;
         // the receiver accepts k windows before and after the stream's bytes
@@ -224,19 +224,19 @@ impl ModelStream {
             if false == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
                 self.out_of_window_segments += 1;
-                return;
+                return false;
             }
         } else if self.base.is_none() {
             let keep_alive = 1 == payload.len()
                 && false == header.fin
                 && Some(segment.offset + 1) == self.pending_ack.map(|(ack, _)| ack);
             if (payload.is_empty() && false == header.fin) || keep_alive {
-                return;
+                return true;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
             {
                 self.rejected_bytes += payload.len() as u64;
-                return;
+                return true;
             }
             self.start_at(segment.offset);
             self.started_at_fin = payload.is_empty();
@@ -283,6 +283,10 @@ impl ModelStream {
                 after_window = false;
             }
         }
+        // the receiver drops segments outside of its window, with their
+        // window (nothing before offset 0 counts without a base)
+        let plausible =
+            false == after_window && self.base.unwrap_or(0) as i64 - range as i64 <= start;
         if (false == payload.is_empty() || header.fin) && after_window {
             if let Some(candidate) = self.candidates.last_mut() {
                 if payload.is_empty() && segment.offset == candidate.bytes.end {
@@ -290,7 +294,7 @@ impl ModelStream {
                 }
             }
             self.out_of_window_segments += 1;
-            return;
+            return plausible;
         }
 
         let mut out_of_window = false;
@@ -316,7 +320,7 @@ impl ModelStream {
                 .iter()
                 .any(|hole| hole.contains(&(start as u64)) && self.is_overdue(hole))
         {
-            return;
+            return plausible;
         }
         let received_end = (self.bytes.len() as u64)
             .max(self.resync_offset())
@@ -422,6 +426,7 @@ impl ModelStream {
         if let Some(ack) = jump_ack {
             self.add_jump_ack(ack, window, packet, config);
         }
+        plausible
     }
 
     /// Number of bytes from the read offset to the furthest stored byte.
@@ -1066,14 +1071,16 @@ impl ReferenceModel {
                 self.streams[other].add_ack(ack, window, self.packets, &self.config);
             }
             let window = self.window(segment.sender);
-            self.streams[sender].add_segment(
+            let plausible = self.streams[sender].add_segment(
                 segment,
                 window,
                 self.packets,
                 &self.config,
                 &mut available,
             );
-            self.windows[sender] = Some(header.window_size);
+            if plausible {
+                self.windows[sender] = Some(header.window_size);
+            }
             self.syns[sender] |= header.syn && self.streams[sender].starts_at(segment.offset);
             let syn_role = if header.ack {
                 TcpRole::Responder

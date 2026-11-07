@@ -1415,6 +1415,25 @@ mod test {
             assert_eq!(reset, processed.ended.is_some());
         }
 
+        // the window of a segment the receiver doesn't accept (e.g. a blind
+        // pure ACK with a random sequence number) doesn't count for the RSTs
+        // it accepts (the window is 100 bytes, the forged window 1000)
+        for (position, reset) in [(1 << 20, false), (0, true)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            let mut ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            ack.header.sequence_number = ack.header.sequence_number.wrapping_add(position);
+            ack.header.window_size = 1000;
+            script.segments.push(ack);
+            script.rst_at(Initiator, 3 + 500);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
         // RSTs before the point a stream resynced at are ignored, also
         // without an ACK of the jump
         for (offset, reset) in [(998, false), (1000, true)] {

@@ -568,6 +568,12 @@ impl TcpStream {
         self.connection_end = Some(end);
     }
 
+    /// Records the window the sender advertises for the other stream in
+    /// `tcp`.
+    fn record_window(&mut self, tcp: &TcpSlice<'_>) {
+        self.window = Some((tcp.window_size(), tcp.syn()));
+    }
+
     /// Receive window in bytes that the stream's sender advertised for the
     /// other stream `other`, `None` while it is unknown.
     pub(crate) fn advertised_window(&self, other: &TcpStream) -> Option<u64> {
@@ -634,9 +640,6 @@ impl TcpStream {
         config: &TcpReassemblyConfig,
         available: &mut usize,
     ) {
-        // the window the sender advertises for the other stream
-        self.window = Some((tcp.window_size(), tcp.syn()));
-
         // the SYN occupies the sequence number before the first byte
         let seq = if tcp.syn() {
             tcp.sequence_number().wrapping_add(1)
@@ -667,12 +670,14 @@ impl TcpStream {
                 // pickup is always stored (and bytes can be put in front)
                 if false == data.is_empty() && 0 == config.max_stream_buffer.min(*available) {
                     self.status.rejected_bytes += data.len() as u64;
-                    return;
+                } else {
+                    self.start_seq = Some(seq);
                 }
-                self.start_seq = Some(seq);
             }
         }
         let Some(start_seq) = self.start_seq else {
+            // nothing tells which sequence numbers the receiver accepts
+            self.record_window(tcp);
             return;
         };
         let mut start = self.offset(start_seq, seq);
@@ -708,6 +713,12 @@ impl TcpStream {
                 start = self.offset(start_seq, seq);
                 after_window = false;
             }
+        }
+        // the receiver drops segments outside of its window, with their
+        // window, so a blind segment can't set the window the checks rely on
+        let range = i64::try_from(window_range(window, config)).unwrap_or(i64::MAX);
+        if false == after_window && start.is_some_and(|start| -range <= start) {
+            self.record_window(tcp);
         }
         if (false == data.is_empty() || tcp.fin()) && after_window {
             // a FIN right after the bytes the stream may have jumped to ends
@@ -6934,6 +6945,28 @@ mod test {
                 assert_eq!(1, responder.out_of_window_segments);
             }
             assert_window_end(Default::default(), &script, 203);
+        }
+
+        // the window of a segment whose sequence number the receiver doesn't
+        // accept (more than k windows after or before the stream's bytes)
+        // doesn't count, so a blind segment can't set it (the responder sent
+        // no bytes yet, so k windows are 200 bytes around its first byte)
+        for (position, end) in [
+            (201, 203),
+            (-201, 203),
+            (200, 2 * 1000 + 3),
+            (-200, 2 * 1000 + 3),
+        ] {
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            let mut ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            ack.header.sequence_number = script.seq(Responder, 0).wrapping_add_signed(position);
+            ack.header.window_size = 1000;
+            script.segments.push(ack);
+            assert_window_end(Default::default(), &script, end);
         }
     }
 
