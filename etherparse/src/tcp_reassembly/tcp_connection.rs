@@ -123,12 +123,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.end
     }
 
-    /// Updates the timestamp of the last packet, for a late packet that the
-    /// tombstone of an ended connection absorbs.
-    pub(crate) fn set_last_seen(&mut self, timestamp: Timestamp) {
-        self.last_seen = timestamp;
-    }
-
     /// Applies a segment sent by `source`, storing at most `available` more
     /// bytes (the pool's budget, reduced by the bytes stored), and returns
     /// the role of the sender. A SYN that is kept takes its buffer from
@@ -374,17 +368,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
     }
 
-    /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
-    /// to the handshake of the connection: it has the ISN of its sender's
-    /// stream, or it is a SYN-ACK that ACKs the SYN of the other stream.
-    pub(crate) fn is_own_handshake(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
-        let sender = self.role(source);
-        Some(tcp.sequence_number()) == self.stream(sender).isn()
-            || (tcp.ack()
-                && Some(tcp.acknowledgment_number().wrapping_sub(1))
-                    == self.stream(sender.other()).isn())
-    }
-
     /// Role of the endpoint `source`.
     fn role(&self, source: SocketAddr) -> TcpRole {
         if source == self.initiator {
@@ -407,29 +390,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             .unwrap_or(u64::from(config.fallback_window))
     }
 
-    /// Returns the connection with its streams and leaves a tombstone
-    /// without buffers in its place, which keeps the key, id, timestamps,
-    /// the ISNs of the streams and the kept SYN of a reconnect.
-    pub(crate) fn hand_over(&mut self) -> TcpConnection<Timestamp, CustomChannelId>
+    /// What the pool keeps of the connection once it ended, taking the kept
+    /// SYN of a reconnect along.
+    pub(crate) fn tombstone(&mut self) -> Tombstone<Timestamp>
     where
         Timestamp: Clone,
-        CustomChannelId: Clone,
     {
-        let tombstone = TcpConnection {
-            id: self.id,
-            key: self.key.clone(),
+        Tombstone {
             initiator: self.initiator,
-            roles_guessed: self.roles_guessed,
-            initiator_stream: self.initiator_stream.tombstone(),
-            responder_stream: self.responder_stream.tombstone(),
-            first_seen: self.first_seen.clone(),
+            isns: [self.initiator_stream.isn(), self.responder_stream.isn()],
             last_seen: self.last_seen.clone(),
-            end: self.end,
-            packets: self.packets,
             reconnect_syn: self.reconnect_syn.take(),
-            accounted: 0,
-        };
-        core::mem::replace(self, tombstone)
+        }
     }
 
     /// Number of bytes both streams buffer, each from its read position to
@@ -464,6 +436,38 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if let Some(syn) = self.reconnect_syn {
             syn.recycle(free);
         }
+    }
+}
+
+/// What the pool keeps of an ended connection: enough to absorb its late
+/// segments, to tell a late retransmission of its handshake from a
+/// reconnect, and to evict it once no late segment came for long enough.
+#[derive(Clone, Debug)]
+pub(crate) struct Tombstone<Timestamp> {
+    /// Endpoint that initiated the connection.
+    initiator: SocketAddr,
+    /// ISNs of the initiator's and the responder's stream, if observed.
+    isns: [Option<u32>; 2],
+    /// Timestamp of the connection's last packet, also a late one.
+    pub last_seen: Timestamp,
+    /// SYN with a new ISN that the connection kept (see
+    /// [`TcpConnection::confirms_reconnect`]).
+    pub reconnect_syn: Option<ReconnectSyn<Timestamp>>,
+}
+
+impl<Timestamp> Tombstone<Timestamp> {
+    /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
+    /// to the handshake of the ended connection: it has the ISN of its
+    /// sender's stream, or it is a SYN-ACK that ACKs the SYN of the other
+    /// stream.
+    pub fn is_own_handshake(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        let [own_isn, other_isn] = if source == self.initiator {
+            self.isns
+        } else {
+            [self.isns[1], self.isns[0]]
+        };
+        Some(tcp.sequence_number()) == own_isn
+            || (tcp.ack() && Some(tcp.acknowledgment_number().wrapping_sub(1)) == other_isn)
     }
 }
 

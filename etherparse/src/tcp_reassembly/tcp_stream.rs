@@ -429,16 +429,6 @@ impl TcpStream {
         }
     }
 
-    /// Stream without buffers for the tombstone of an ended connection: it
-    /// keeps the ISN of the observed start, so that a late retransmission
-    /// of the SYN can be told from a reconnect.
-    pub(crate) fn tombstone(&self) -> TcpStream {
-        TcpStream {
-            isn: self.isn,
-            ..TcpStream::new(&mut FreeBuffers::default())
-        }
-    }
-
     /// Puts the stream's buffers into `free` for re-use.
     pub(crate) fn recycle(self, free: &mut FreeBuffers) {
         self.buffer.recycle(free);

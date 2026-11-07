@@ -70,10 +70,13 @@ use std::{
 #[derive(Clone, Debug)]
 pub struct TcpReassemblyPool<Timestamp = (), CustomChannelId = ()> {
     config: TcpReassemblyConfig,
-    /// Open connections, plus the tombstones of ended connections (without
-    /// buffers) that absorb their late segments.
+    /// Open connections.
     connections:
         HashMap<TcpConnectionKey<CustomChannelId>, TcpConnection<Timestamp, CustomChannelId>>,
+    /// What is left of ended connections, which absorbs their late segments
+    /// (see [`TcpIgnoreReason::AfterEnd`]). A key is in at most one of the
+    /// two maps.
+    tombstones: HashMap<TcpConnectionKey<CustomChannelId>, Tombstone<Timestamp>>,
     /// Buffers of recycled connections, re-used by new connections.
     free: FreeBuffers,
     /// Id of the next connection.
@@ -105,6 +108,7 @@ where
             free: FreeBuffers::new(&config),
             config,
             connections: HashMap::new(),
+            tombstones: HashMap::new(),
             next_id: TcpConnectionId(0),
             buffered: 0,
             handed_out: None,
@@ -155,93 +159,91 @@ where
         let source = SocketAddr::new(segment.source, tcp.source_port());
         let destination = SocketAddr::new(segment.destination, tcp.destination_port());
         let key = TcpConnectionKey::new(segment.vlan_ids, source, destination, segment.channel_id);
-
-        let mut replaced = None;
-        let mut replayed_syn = None;
         let full = self
             .config
             .max_connections
-            .is_some_and(|max| self.connections.len() >= max);
-        let connection = match self.connections.entry(key) {
-            Entry::Occupied(entry) => {
-                let connection = entry.into_mut();
-                let reconnect = if connection.end().is_some() {
-                    // the tombstone of an ended connection absorbs its late
-                    // segments (also of its handshake), but a SYN or SYN-ACK
-                    // with a new ISN starts a reconnect
-                    tcp.syn()
-                        && false == tcp.rst()
-                        && false == connection.is_own_handshake(source, &tcp)
-                } else {
-                    connection.confirms_reconnect(source, &tcp, &self.config)
-                };
-                if reconnect {
-                    // the reconnect starts with the kept SYN if the SYN-ACK
-                    // ACKs it, otherwise with the segment
+            .is_some_and(|max| self.connections.len() + self.tombstones.len() >= max);
+
+        // the connection replaced by a reconnect, and the kept SYN the
+        // reconnect starts with
+        let mut replaced = None;
+        let mut replayed_syn = None;
+        let mut entry = match self.connections.entry(key) {
+            Entry::Occupied(mut entry) => {
+                let connection = entry.get_mut();
+                if connection.confirms_reconnect(source, &tcp, &self.config) {
                     let kept = connection.take_reconnect_syn();
-                    let kept_syn_acked = kept
-                        .as_ref()
-                        .is_some_and(|syn| syn.is_acked_by(source, &tcp));
-                    let first_seen = match &kept {
-                        Some(syn) if kept_syn_acked => syn.timestamp().clone(),
-                        _ => timestamp.clone(),
-                    };
+                    replayed_syn = replayed_reconnect_syn(kept, source, &tcp, &mut self.free);
                     let reconnect = new_connection(
                         &mut self.next_id,
                         &mut self.free,
-                        connection.key().clone(),
+                        entry.key().clone(),
                         handshake_initiator(&tcp, source, destination),
                         false,
-                        first_seen,
+                        first_seen(&replayed_syn, &timestamp),
                     );
-                    match kept {
-                        Some(syn) if kept_syn_acked => replayed_syn = Some(syn),
-                        Some(syn) => syn.recycle(&mut self.free),
-                        None => {}
-                    }
-                    let mut ended = core::mem::replace(connection, reconnect);
+                    let mut ended = core::mem::replace(entry.get_mut(), reconnect);
                     ended.release_buffered(&mut self.buffered);
-                    if ended.end().is_none() {
-                        ended.end_unless_finished(TcpConnectionEnd::Reconnect);
-                        replaced = Some(ended);
-                    }
-                } else if connection.end().is_some() {
-                    // the tombstone stays while late segments come
-                    connection.set_last_seen(timestamp);
-                    return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
+                    ended.end_unless_finished(TcpConnectionEnd::Reconnect);
+                    replaced = Some(ended);
                 }
-                connection
+                entry
             }
             Entry::Vacant(entry) => {
-                let Some((initiator, roles_guessed)) =
-                    new_connection_initiator(&tcp, source, destination)
-                else {
-                    return ignore(TcpIgnoreReason::NoConnection, &mut self.ignored_packets);
+                let connection = if let Some(tombstone) = self.tombstones.get_mut(entry.key()) {
+                    // the tombstone of an ended connection absorbs its late
+                    // segments (also of its handshake), but a SYN or SYN-ACK
+                    // with a new ISN starts a reconnect
+                    if false == tcp.syn() || tcp.rst() || tombstone.is_own_handshake(source, &tcp) {
+                        tombstone.last_seen = timestamp;
+                        return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
+                    }
+                    let kept = self
+                        .tombstones
+                        .remove(entry.key())
+                        .and_then(|tombstone| tombstone.reconnect_syn);
+                    replayed_syn = replayed_reconnect_syn(kept, source, &tcp, &mut self.free);
+                    new_connection(
+                        &mut self.next_id,
+                        &mut self.free,
+                        entry.key().clone(),
+                        handshake_initiator(&tcp, source, destination),
+                        false,
+                        first_seen(&replayed_syn, &timestamp),
+                    )
+                } else {
+                    let Some((initiator, roles_guessed)) =
+                        new_connection_initiator(&tcp, source, destination)
+                    else {
+                        return ignore(TcpIgnoreReason::NoConnection, &mut self.ignored_packets);
+                    };
+                    if full {
+                        self.rejected_connections += 1;
+                        return ignore(
+                            TcpIgnoreReason::TooManyConnections,
+                            &mut self.ignored_packets,
+                        );
+                    }
+                    new_connection(
+                        &mut self.next_id,
+                        &mut self.free,
+                        entry.key().clone(),
+                        initiator,
+                        roles_guessed,
+                        timestamp.clone(),
+                    )
                 };
-                if full {
-                    self.rejected_connections += 1;
-                    return ignore(
-                        TcpIgnoreReason::TooManyConnections,
-                        &mut self.ignored_packets,
-                    );
-                }
-                let key = entry.key().clone();
-                entry.insert(new_connection(
-                    &mut self.next_id,
-                    &mut self.free,
-                    key,
-                    initiator,
-                    roles_guessed,
-                    timestamp.clone(),
-                ))
+                entry.insert_entry(connection)
             }
         };
+
         // the bytes that would make the pool buffer more than its limit are
         // rejected
         let mut available = self
             .config
             .max_total_buffered
             .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
+        let connection = entry.get_mut();
         if let Some(syn) = replayed_syn {
             connection.add_reconnect_syn(&syn, &self.config, &mut available, &mut self.free);
             syn.recycle(&mut self.free);
@@ -254,11 +256,12 @@ where
             &mut available,
             &mut self.free,
         );
-        // the SYN or SYN-ACK that starts a reconnect doesn't end it: it has
-        // no RST, and nothing ACKed a FIN of its sender yet
         if connection.end().is_some() {
-            let mut ended = connection.hand_over();
+            // the SYN or SYN-ACK that starts a reconnect doesn't end it: it
+            // has no RST, and nothing ACKed a FIN of its sender yet
+            let (key, mut ended) = entry.remove_entry();
             ended.release_buffered(&mut self.buffered);
+            self.tombstones.insert(key, ended.tombstone());
             return TcpProcessed {
                 active: None,
                 ended: Some(ended),
@@ -268,10 +271,10 @@ where
         // the next call accounts for the bytes the connection buffers now,
         // and for the ones the user reads until then
         if self.config.max_total_buffered.is_some() {
-            self.handed_out = Some(HandedOut::Connection(connection.key().clone()));
+            self.handed_out = Some(HandedOut::Connection(entry.key().clone()));
         }
         TcpProcessed {
-            active: Some((connection, sender)),
+            active: Some((entry.into_mut(), sender)),
             ended: replaced,
             ignored: None,
         }
@@ -283,10 +286,7 @@ where
         key: &TcpConnectionKey<CustomChannelId>,
     ) -> Option<&mut TcpConnection<Timestamp, CustomChannelId>> {
         self.account_handed_out();
-        let connection = self
-            .connections
-            .get_mut(key)
-            .filter(|connection| connection.end().is_none())?;
+        let connection = self.connections.get_mut(key)?;
         // the next call accounts for the bytes the user reads until then
         if self.config.max_total_buffered.is_some() {
             self.handed_out = Some(HandedOut::Connection(key.clone()));
@@ -303,9 +303,7 @@ where
         if self.config.max_total_buffered.is_some() {
             self.handed_out = Some(HandedOut::All);
         }
-        self.connections
-            .values_mut()
-            .filter(|connection| connection.end().is_none())
+        self.connections.values_mut()
     }
 
     /// Ends the connections whose last packet is older than `cutoff` and
@@ -354,7 +352,7 @@ where
         Timestamp: PartialOrd,
         F: FnMut(&mut TcpConnection<Timestamp, CustomChannelId>),
     {
-        self.evict(|connection| connection.last_seen() < &cutoff, callback)
+        self.evict(|last_seen| last_seen < &cutoff, callback)
     }
 
     /// Ends all connections and passes each of them to `callback`, before
@@ -379,24 +377,16 @@ where
 
     /// Statistics of the pool.
     ///
-    /// It walks all connections the pool keeps, also the ended ones (see
-    /// [`TcpPoolStats::tombstones`]), so it takes time proportional to their
-    /// number.
+    /// It walks all open connections to sum up their buffered bytes, so it
+    /// takes time proportional to their number.
     pub fn stats(&self) -> TcpPoolStats {
-        let mut stats = TcpPoolStats {
+        TcpPoolStats {
+            connections: self.connections.len(),
+            tombstones: self.tombstones.len(),
+            buffered_bytes: self.connections.values().map(TcpConnection::buffered).sum(),
             rejected_connections: self.rejected_connections,
             ignored_packets: self.ignored_packets,
-            ..Default::default()
-        };
-        for connection in self.connections.values() {
-            if connection.end().is_some() {
-                stats.tombstones += 1;
-            } else {
-                stats.connections += 1;
-                stats.buffered_bytes += connection.buffered();
-            }
         }
-        stats
     }
 
     /// Accounts for the bytes buffered by the connections handed out by the
@@ -417,32 +407,35 @@ where
         }
     }
 
-    /// Ends the open connections for which `is_old` returns true and passes
-    /// them to `callback` in the order of their ids, then re-uses their
-    /// buffers. Forgets the ended connections for which `is_old` returns
-    /// true. Returns the number of open connections ended.
+    /// Ends the open connections whose last packet `is_old` and passes them
+    /// to `callback` in the order of their ids, then re-uses their buffers.
+    /// Forgets the tombstones whose last packet `is_old`. Returns the number
+    /// of open connections ended.
     fn evict(
         &mut self,
-        is_old: impl Fn(&TcpConnection<Timestamp, CustomChannelId>) -> bool,
+        is_old: impl Fn(&Timestamp) -> bool,
         mut callback: impl FnMut(&mut TcpConnection<Timestamp, CustomChannelId>),
     ) -> usize {
-        // forget the old tombstones, and collect the keys of the old
-        // connections, so they can be ended in the order of their ids
-        let mut keys = core::mem::take(&mut self.evicted_keys);
         let free = &mut self.free;
-        self.connections.retain(|key, connection| {
-            if false == is_old(connection) {
-                true
-            } else if connection.end().is_some() {
-                if let Some(syn) = connection.take_reconnect_syn() {
+        self.tombstones.retain(|_, tombstone| {
+            let old = is_old(&tombstone.last_seen);
+            if old {
+                if let Some(syn) = tombstone.reconnect_syn.take() {
                     syn.recycle(free);
                 }
-                false
-            } else {
-                keys.push((connection.id(), key.clone()));
-                true
             }
+            false == old
         });
+
+        // collect the keys of the old connections, so they can be ended in
+        // the order of their ids
+        let mut keys = core::mem::take(&mut self.evicted_keys);
+        keys.extend(
+            self.connections
+                .iter()
+                .filter(|(_, connection)| is_old(connection.last_seen()))
+                .map(|(key, connection)| (connection.id(), key.clone())),
+        );
         keys.sort_unstable_by_key(|(id, _)| *id);
 
         let count = keys.len();
@@ -553,6 +546,37 @@ fn new_connection<Timestamp: Clone, CustomChannelId>(
     TcpConnection::new(id, key, initiator, roles_guessed, timestamp, free)
 }
 
+/// The SYN `kept` by the connection that the SYN-ACK `tcp` from `source`
+/// replaces, if the SYN-ACK ACKs it: the reconnect then starts with the
+/// kept SYN, which is replayed. Otherwise the kept SYN's buffer goes back
+/// to `free`.
+fn replayed_reconnect_syn<Timestamp>(
+    kept: Option<ReconnectSyn<Timestamp>>,
+    source: SocketAddr,
+    tcp: &TcpSlice<'_>,
+    free: &mut FreeBuffers,
+) -> Option<ReconnectSyn<Timestamp>> {
+    match kept {
+        Some(syn) if syn.is_acked_by(source, tcp) => Some(syn),
+        Some(syn) => {
+            syn.recycle(free);
+            None
+        }
+        None => None,
+    }
+}
+
+/// Timestamp of the first packet of a reconnect: the one of the replayed
+/// SYN if there is one, and `timestamp` of the SYN-ACK otherwise.
+fn first_seen<Timestamp: Clone>(
+    replayed_syn: &Option<ReconnectSyn<Timestamp>>,
+    timestamp: &Timestamp,
+) -> Timestamp {
+    replayed_syn
+        .as_ref()
+        .map_or(timestamp, ReconnectSyn::timestamp)
+        .clone()
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -2248,9 +2272,11 @@ mod test {
             assert_eq!(2, allocations);
         }
 
-        // after the first round, new connections re-use the buffers of
+        // after the first rounds, new connections re-use the buffers of
         // recycled ones: for their bytes, holes, gaps and the ACKs they keep,
-        // and for kept SYNs, so processing allocates nothing
+        // and for kept SYNs, so processing allocates nothing (in the second
+        // round, the table of the tombstones grows once more, as entries
+        // move between it and the table of the connections)
         {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let rounds: Vec<_> = (0..8).map(steady_state_round).collect();
@@ -2268,7 +2294,7 @@ mod test {
                     ],
                     ends
                 );
-                if 0 < round {
+                if 1 < round {
                     assert_eq!(0, allocations, "round {}", round);
                 }
             }
