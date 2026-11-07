@@ -521,6 +521,18 @@ impl TcpStream {
     /// receiver's current receive window: the sender can have sent bytes
     /// into a larger window before the window shrank (e.g. to 0 when the
     /// receiver's buffer is full), and their ACKs can still come.
+    ///
+    /// Which window a rule uses:
+    ///
+    /// - the receiver's last window, what it accepts now: k windows for the
+    ///   bytes put in front of a mid-stream pickup and its late SYN (A5,
+    ///   C4), one window for the ACK that confirms a jump (R2) and for the
+    ///   RST check (F4);
+    /// - the largest window, what the sender can have sent into: k windows
+    ///   for which segments and their windows count (S3) and for
+    ///   out-of-window data (S4), one window for the ACK check (K1), and k
+    ///   windows, at most half of the stream's buffer, for the implied ACK
+    ///   (K2).
     fn sent_into(&self, window: u64) -> u64 {
         window.max(self.largest_window.unwrap_or(0))
     }
@@ -1251,16 +1263,6 @@ impl TcpStream {
 /// Number of bytes before or after the stream's bytes that a receiver with
 /// the receive window `window` accepts: several windows, as the window can
 /// change and not all ACKs are captured.
-///
-/// Which window a rule uses:
-///
-/// - the receiver's last window (what it accepts now): the bytes put in
-///   front of a mid-stream pickup and its late SYN (A5, C4), the ACK that
-///   confirms a jump (R2), and the RST check (F4);
-/// - the largest window it advertised (what the sender can have sent into,
-///   see [`TcpStream::sent_into`]): which segments and their windows count
-///   (S3), out-of-window data (S4), the ACK check (K1) and the implied ACK
-///   (K2, at most half of the stream's buffer).
 fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
     let factor = config.hole_give_up_window_factor.unwrap_or(2);
     window.saturating_mul(u64::from(factor))
