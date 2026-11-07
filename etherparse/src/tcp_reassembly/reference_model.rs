@@ -1403,8 +1403,11 @@ impl ReferenceModel {
                 let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
                 let syn_role = self.sender_role(&syn);
                 let syn_sender = role_index(syn_role);
-                // the confirmation outweighs an ACK kept for the stream
-                self.streams[syn_sender].kept_ack = None;
+                // the confirmation outweighs an ACK kept for the stream that
+                // doesn't allow the SYN
+                if self.streams[syn_sender].base.is_none() && false == self.is_own_syn(&syn) {
+                    self.streams[syn_sender].kept_ack = None;
+                }
                 self.apply_own_segment(&syn, available);
                 self.streams[syn_sender].conflicting_retransmissions += conflicting;
                 // the SYN-ACK answers the SYN of its receiver, which is the

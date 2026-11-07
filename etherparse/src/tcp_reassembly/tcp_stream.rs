@@ -478,7 +478,12 @@ impl TcpStream {
     /// stream without a start to start at `seq` with a SYN: the ACK lies at
     /// or after the first byte, at most k windows after it, as the receiver
     /// can't have ACKed bytes before the SYN.
-    fn kept_ack_allows_syn(&self, seq: u32, window: u64, config: &TcpReassemblyConfig) -> bool {
+    pub(crate) fn kept_ack_allows_syn(
+        &self,
+        seq: u32,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
         self.kept_ack.is_none_or(|kept| {
             u64::try_from(kept.seq.wrapping_sub(seq) as i32)
                 .is_ok_and(|distance| distance <= window_range(window, config))

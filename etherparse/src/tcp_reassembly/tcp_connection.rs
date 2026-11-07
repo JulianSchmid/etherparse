@@ -301,7 +301,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         };
         if let Some(syn_tcp) = syn.tcp() {
             let syn_sender = self.role(syn.source);
-            self.stream_mut(syn_sender).drop_kept_ack();
+            // the confirmation outweighs an ACK kept for the stream that
+            // doesn't allow the SYN
+            let syn_window = self.window(syn_sender, config);
+            let stream = self.stream(syn_sender);
+            if false == stream.has_start()
+                && false == stream.kept_ack_allows_syn(syn.isn.wrapping_add(1), syn_window, config)
+            {
+                self.stream_mut(syn_sender).drop_kept_ack();
+            }
             self.add_data_segment(syn_sender, &syn_tcp, config, available);
             // retransmissions of the SYN carried differing bytes
             self.stream_mut(syn_sender)
