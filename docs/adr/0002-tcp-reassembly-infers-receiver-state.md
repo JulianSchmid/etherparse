@@ -15,6 +15,6 @@ Giving up is lazy. An overdue hole (by the implied ACK, or covered by a seen ACK
 
 ## Consequences
 
-If the fallback window is set too small, holes are given up whose retransmission would still have arrived. Spoofed ACKs can force a resync, which a passive observer cannot fully prevent, and a spoofed data segment with a FIN after the window plus a spoofed ACK of it end the stream at that FIN, which `force_resync()` doesn't undo. Both effects are visible in the stream status, so the stream is no longer clean.
+If the fallback window is set too small, holes are given up whose retransmission would still have arrived. Spoofed ACKs can force a resync, which a passive observer cannot fully prevent, and a spoofed data segment with a FIN after the window plus a spoofed ACK of it end the stream at that FIN, which `force_resync()` doesn't undo. A spoofed SYN and a spoofed SYN-ACK that ACKs it replace a live connection as a reconnect (C2). All of these are visible in the stream status or the connection's end, so the stream is no longer clean.
 
 Overdue holes keep counting towards the per-stream hole limit until the reader reaches them. A keep-alive's filler byte, sent at the last ACKed byte, could land in an overdue hole the reader hasn't reached, so a 1-byte segment ending at the seen ACK is ignored there.
