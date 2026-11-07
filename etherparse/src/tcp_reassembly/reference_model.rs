@@ -563,13 +563,14 @@ impl ModelStream {
         range: u64,
         window: u64,
         other_bare: bool,
+        same_script: bool,
     ) -> bool {
         let header = &segment.header;
         // an RST or FIN towards a side with neither a start nor a kept ACK
         // has to ACK the SYN also after the wait
         let waits = self.syn_unacked || (other_bare && self.observed && (header.rst || header.fin));
         waits
-            && false == self.acks_unacked_syn(segment, range, window)
+            && false == self.acks_unacked_syn(segment, range, window, same_script)
             && false == (header.syn && false == (header.ack || header.fin || header.rst))
     }
 
@@ -577,11 +578,18 @@ impl ModelStream {
     /// that waits for its ACK: a SYN-ACK the SYN itself (with its bytes),
     /// another segment the SYN or bytes up to `range` after it, or the
     /// resync candidate within `window`.
-    fn acks_unacked_syn(&self, segment: &TestSegment, range: u64, window: u64) -> bool {
+    fn acks_unacked_syn(
+        &self,
+        segment: &TestSegment,
+        range: u64,
+        window: u64,
+        same_script: bool,
+    ) -> bool {
         let (Some(base), Some(ack)) = (self.base, segment.ack) else {
             return false;
         };
-        if false == self.syn_unacked {
+        // the offsets of another script's segments mean nothing here
+        if false == same_script {
             return false;
         }
         if segment.header.syn || segment.header.rst {
@@ -596,8 +604,9 @@ impl ModelStream {
 
     /// Returns true if the ACK at the true offset `ack` ACKs the stream's
     /// observed SYN (or its TCP Fast Open bytes).
-    fn acks_syn_of(&self, ack: u64) -> bool {
-        self.observed
+    fn acks_syn_of(&self, ack: u64, same_script: bool) -> bool {
+        same_script
+            && self.observed
             && self
                 .base
                 .is_some_and(|base| (base..=base + self.syn_len).contains(&ack))
@@ -605,8 +614,8 @@ impl ModelStream {
 
     /// Ends the wait for the ACK of the stream's SYN if the `segment` of the
     /// other side ACKs it (S5).
-    fn answer_syn(&mut self, segment: &TestSegment, range: u64, window: u64) {
-        if self.acks_unacked_syn(segment, range, window) {
+    fn answer_syn(&mut self, segment: &TestSegment, range: u64, window: u64, same_script: bool) {
+        if self.acks_unacked_syn(segment, range, window, same_script) {
             self.syn_unacked = false;
         }
     }
@@ -1239,12 +1248,19 @@ impl ReferenceModel {
                 .is_some_and(|syn| acks_syn(segment, syn));
         // every receiver drops a segment without ACK that is no SYN or RST
         // (S6)
+        let same_script = Some(segment.incarnation) == self.incarnation;
         let without_ack = false == (header.ack || header.syn || header.rst);
         let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
         let dropped = without_ack
             || (false == (header.rst && self.streams[sender].base.is_some())
                 && false == acks_kept_syn
-                && self.streams[other].drops_before_syn_acked(segment, range, other_window, bare));
+                && self.streams[other].drops_before_syn_acked(
+                    segment,
+                    range,
+                    other_window,
+                    bare,
+                    same_script,
+                ));
         if false == dropped {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
@@ -1253,7 +1269,7 @@ impl ReferenceModel {
             }
             // an RST that F4 ignores is dropped with its ACK
             if false == header.rst {
-                self.streams[other].answer_syn(segment, range, other_window);
+                self.streams[other].answer_syn(segment, range, other_window, same_script);
             }
         }
         if dropped {
@@ -1393,7 +1409,8 @@ impl ReferenceModel {
                 self.streams[syn_sender].conflicting_retransmissions += conflicting;
                 // the SYN-ACK ACKs the SYN it just applied
                 let (range, window) = (self.range(syn_role), self.window(syn_role));
-                self.streams[syn_sender].answer_syn(segment, range, window);
+                let same_script = Some(segment.incarnation) == self.incarnation;
+                self.streams[syn_sender].answer_syn(segment, range, window, same_script);
             }
         }
         let observed = self.streams.each_ref().map(|stream| stream.observed);
@@ -1489,7 +1506,8 @@ impl ReferenceModel {
         let (range, window) = (self.range(other_role), self.window(other_role));
         let sender = role_index(self.sender_role(segment));
         let bare = self.streams[sender].base.is_none() && self.streams[sender].kept_ack.is_none();
-        if self.streams[other].drops_before_syn_acked(segment, range, window, bare) {
+        let same_script = Some(segment.incarnation) == self.incarnation;
+        if self.streams[other].drops_before_syn_acked(segment, range, window, bare, same_script) {
             return false;
         }
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
@@ -1508,9 +1526,10 @@ impl ReferenceModel {
     fn answers_observed_syn(&self, segment: &TestSegment) -> bool {
         let sender = self.sender_role(segment);
         self.streams[role_index(sender)].base.is_none()
-            && segment
-                .ack
-                .is_some_and(|ack| self.streams[role_index(sender.other())].acks_syn_of(ack))
+            && segment.ack.is_some_and(|ack| {
+                let same_script = Some(segment.incarnation) == self.incarnation;
+                self.streams[role_index(sender.other())].acks_syn_of(ack, same_script)
+            })
     }
 
     /// Returns true if the SYN `segment` without ACK comes from a side

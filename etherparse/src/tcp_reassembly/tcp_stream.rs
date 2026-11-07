@@ -492,7 +492,9 @@ impl TcpStream {
     /// (a simultaneous open; one with a FIN is dropped like a blind FIN, as
     /// nothing could recover a stream it ended). In SYN-RECEIVED an RST is
     /// checked by its sequence number instead (F4), which the connection
-    /// tells apart.
+    /// tells apart. With `other_bare`, the other side has neither a start
+    /// nor a kept ACK, so an RST or FIN of it has to ACK the SYN also after
+    /// the wait, as F4 and A4 would take any RST or FIN of such a side.
     pub(crate) fn drops_before_syn_acked(
         &self,
         tcp: &TcpSlice<'_>,

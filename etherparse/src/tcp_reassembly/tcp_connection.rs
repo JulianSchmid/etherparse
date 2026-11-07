@@ -2083,6 +2083,41 @@ mod test {
             assert_eq!(TcpRead::Data(b"abcnext"), stream.read_received());
         }
 
+        // an RST or FIN of a side with neither a start nor a kept ACK that
+        // ACKs the SYN is applied after the wait like before it: after the
+        // responder's pure ACK answered the SYN (its SYN-ACK not captured),
+        // its FIN that ACKs the SYN starts and ends its stream (A4), and its
+        // RST that ACKs the SYN resets the connection (F4)
+        for rst in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut pure_ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            pure_ack.header.acknowledgment_number = 1001;
+            script.segments.push(pure_ack);
+            let mut end = script.injected(|s| {
+                s.fin_at(Responder, 0, b"");
+            });
+            end.header.rst = rst;
+            end.header.fin = false == rst;
+            end.header.acknowledgment_number = 1001;
+            script.segments.push(end);
+            let processed = script.feed_all(&mut pool);
+            if rst {
+                assert_eq!(
+                    Some(TcpConnectionEnd::Reset { by: Responder }),
+                    processed.ended.unwrap().end()
+                );
+            } else {
+                let (connection, _) = processed.active.unwrap();
+                let stream = connection.stream(Responder);
+                assert_eq!(Some(0), stream.fin_offset());
+                assert_eq!(0, stream.status().out_of_window_segments);
+            }
+        }
+
         // a resync candidate with a FIN gives no exit either: a blind data
         // segment with a FIN far away from the initiator's address and a
         // blind ACK of it from the responder's address would end the
