@@ -204,9 +204,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Applies a segment sent by `sender` from `source` that the receiver
-    /// accepts in its handshake state (S5): its ACK answers the receiver's
-    /// SYN, and it is an RST, a SYN of a reconnect or a segment of the
-    /// sender's stream.
+    /// accepts in its handshake state (S5): an RST, which F4 checks (an
+    /// ignored one is dropped with its ACK), or a SYN of a reconnect or a
+    /// segment of the sender's stream, whose ACK answers the receiver's SYN.
     fn add_accepted_segment(
         &mut self,
         sender: TcpRole,
@@ -218,6 +218,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ) where
         Timestamp: Clone,
     {
+        if tcp.rst() {
+            self.add_reset(sender, tcp, config);
+            return;
+        }
         let window = self.window(sender.other(), config);
         // a SYN-ACK that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
@@ -233,9 +237,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
         self.stream_mut(sender.other())
             .answer_syn(tcp, window, config);
-        if tcp.rst() {
-            self.add_reset(sender, tcp, config);
-        } else if tcp.syn()
+        if tcp.syn()
             && false
                 == self
                     .stream(sender)
@@ -1377,6 +1379,41 @@ mod test {
             assert_eq!(TcpStreamStart::Observed, stream.status().start);
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // an RST that F4 ignores is dropped with its ACK (also for the SYN
+        // it would answer): with the handshake ACK not captured, a blind
+        // RST/ACK from the initiator's address outside of its window doesn't
+        // answer the SYN-ACK, so a blind FIN without ACK after it is still
+        // dropped (without the RST it is dropped too)
+        for with_rst in [true, false] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().syn_ack();
+            if with_rst {
+                let rst = script.injected(|s| {
+                    s.rst_at(Initiator, 1 << 30);
+                });
+                script.segments.push(rst);
+            }
+            let mut fin = script.injected(|s| {
+                s.fin(Initiator);
+            });
+            fin.header.ack = false;
+            fin.ack = None;
+            script.segments.push(fin);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(TcpRead::Pending, stream.read_received());
+            assert_eq!(
+                1 + u64::from(with_rst),
+                stream.status().out_of_window_segments
+            );
         }
 
         // a SYN-ACK has to ACK the SYN itself: one that ACKs 50 bytes after

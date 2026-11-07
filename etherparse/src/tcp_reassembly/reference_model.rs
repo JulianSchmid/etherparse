@@ -1221,7 +1221,8 @@ impl ReferenceModel {
         // a side in SYN-RECEIVED checks an RST by its sequence number (F4)
         let dropped = false == (header.rst && self.streams[sender].base.is_some())
             && self.streams[other].drops_before_syn_acked(segment, range, other_window);
-        if false == dropped {
+        // an RST that F4 ignores is dropped with its ACK
+        if false == dropped && false == header.rst {
             // a SYN-ACK that ACKs the receiver's SYN outweighs a kept ACK
             if header.syn
                 && self.streams[sender].base.is_none()
