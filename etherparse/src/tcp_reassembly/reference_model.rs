@@ -1416,7 +1416,10 @@ impl ReferenceModel {
                     self.streams[syn_sender].kept_ack = None;
                 }
                 self.apply_own_segment(&syn, available);
-                self.streams[syn_sender].conflicting_retransmissions += conflicting;
+                // the conflicts count only if the SYN was taken
+                if self.streams[syn_sender].has_isn_of(&syn) {
+                    self.streams[syn_sender].conflicting_retransmissions += conflicting;
+                }
                 // the SYN-ACK answers the SYN of its receiver, which is the
                 // applied SYN if the other side confirmed it
                 let receiver = self.sender_role(segment).other();
@@ -1439,6 +1442,7 @@ impl ReferenceModel {
             let window = self.window(sender_role.other());
             self.streams[other].add_ack(ack, window, self.packets, &self.config);
         }
+        let had_base = self.streams[sender].base.is_some();
         let window = self.window(sender_role);
         let plausible = self.streams[sender].add_segment(
             segment,
@@ -1454,6 +1458,20 @@ impl ReferenceModel {
         // the sender moved past its SYN (S5)
         if plausible && false == header.syn {
             self.streams[sender].syn_unacked = false;
+        }
+        // a SYN kept as possibly blind whose stream starts from bytes is a
+        // late SYN of that stream (A5), or dropped
+        if false == had_base && self.streams[sender].base.is_some() {
+            let own = self.reconnect_syn.as_ref().is_some_and(|syn| {
+                self.reconnect_syn_maybe_blind && self.sender_role(syn) == sender_role
+            });
+            if let Some(syn) = self.reconnect_syn.take_if(|_| own) {
+                let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
+                self.apply_own_segment(&syn, available);
+                if self.streams[sender].has_isn_of(&syn) {
+                    self.streams[sender].conflicting_retransmissions += conflicting;
+                }
+            }
         }
         // a SYN after a resync gives no window (A3), also after one that
         // kept the mapping
@@ -1511,6 +1529,11 @@ impl ReferenceModel {
         }
         if acks_syn(segment, syn) {
             return false == self.has_isn_of_sender(segment);
+        }
+        // a SYN kept as possibly blind confirms a reconnect only by being
+        // ACKed
+        if self.reconnect_syn_maybe_blind {
+            return false;
         }
         // a SYN-ACK the receiver drops confirms nothing (S5)
         let other_role = self.sender_role(segment).other();
