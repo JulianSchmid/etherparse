@@ -1407,10 +1407,12 @@ impl ReferenceModel {
                 self.streams[syn_sender].kept_ack = None;
                 self.apply_own_segment(&syn, available);
                 self.streams[syn_sender].conflicting_retransmissions += conflicting;
-                // the SYN-ACK ACKs the SYN it just applied
-                let (range, window) = (self.range(syn_role), self.window(syn_role));
+                // the SYN-ACK answers the SYN of its receiver, which is the
+                // applied SYN if the other side confirmed it
+                let receiver = self.sender_role(segment).other();
+                let (range, window) = (self.range(receiver), self.window(receiver));
                 let same_script = Some(segment.incarnation) == self.incarnation;
-                self.streams[syn_sender].answer_syn(segment, range, window, same_script);
+                self.streams[role_index(receiver)].answer_syn(segment, range, window, same_script);
             }
         }
         let observed = self.streams.each_ref().map(|stream| stream.observed);
@@ -2969,6 +2971,110 @@ mod test {
                 }
                 pool.recycle(connection);
             }
+        }
+
+        // both SYNs and SYN-ACKs of a simultaneous open in any order, some
+        // not captured, with TCP Fast Open bytes the SYN-ACKs ACK or not,
+        // and blind segments in the handshake (S5, C2, C3, A5)
+        #[test]
+        fn simultaneous_opens(
+            isns in [tcp_isn_any(), tcp_isn_any()],
+            fast_open in [stream_data_any(8), stream_data_any(8)],
+            syn_ack_payload_kind in 0u8..3,
+            acks_fast_open in [any::<bool>(), any::<bool>()],
+            data in [stream_data_any(1024), stream_data_any(1024)],
+            segment_lens in vec(1usize..300, 1..16),
+            directions in vec(any::<bool>(), 1..32),
+            order in Just(std::vec![0usize, 1, 2, 3]).prop_shuffle(),
+            syn_first in any::<bool>(),
+            lost in [any::<bool>(), any::<bool>(), any::<bool>()],
+            blind in vec((tcp_role_any(), any::<Index>(), 0u8..5, (1u64 << 25)..(1 << 30), prop_oneof![Just(0u64), (1u64 << 25)..(1 << 30)]), 0..3),
+            windows in vec(prop_oneof![1 => 1u16..256, 2 => 256u16..8192, 1 => Just(u16::MAX)], 1..8),
+            fallback_window in prop_oneof![Just(4 * 1024 * 1024), 64u32..8192],
+            config in tcp_overdue_config_any(),
+            resync_after_segments in proptest::option::of(1u32..3),
+            consume_lens in vec(0usize..1000, 1..16),
+            acked_reads in vec(any::<bool>(), 1..16),
+        ) {
+            let mut script = ConnectionScript::with_isns(isns[0], isns[1]);
+            script.syn_with_data(&fast_open[0]);
+            script.syn_ack();
+            script.send_uncaptured(Responder, fast_open[1].len() as u64);
+            let i_syn = script.segments[0].clone();
+            let mut r_syn = script.segments[1].clone();
+            r_syn.header.ack = false;
+            r_syn.header.acknowledgment_number = 0;
+            r_syn.ack = None;
+            r_syn.payload = fast_open[1].to_vec();
+            let mut r_syn_ack = script.segments[1].clone();
+            if false == acks_fast_open[0] {
+                r_syn_ack.ack = Some(0);
+                r_syn_ack.header.acknowledgment_number = script.seq(Initiator, 0);
+            }
+            r_syn_ack.payload = match syn_ack_payload_kind {
+                0 => Vec::new(),
+                1 => fast_open[1].to_vec(),
+                _ => fast_open[1].iter().map(|b| b ^ 1).collect(),
+            };
+            let mut i_syn_ack = script.segments[0].clone();
+            i_syn_ack.header.ack = true;
+            let acked = if acks_fast_open[1] { fast_open[1].len() as u64 } else { 0 };
+            i_syn_ack.ack = Some(acked);
+            i_syn_ack.header.acknowledgment_number = script.seq(Responder, acked);
+            send_interleaved(&mut script, [&data[0][..], &data[1][..]], &segment_lens, &[0], &directions);
+            script.fin(Initiator).fin(Responder).ack(Initiator);
+            let rest = script.segments[2..].to_vec();
+
+            let handshake = [i_syn, r_syn, r_syn_ack, i_syn_ack];
+            let mut order = order.clone();
+            if syn_first {
+                order.retain(|i| *i != 0);
+                order.insert(0, 0);
+            }
+            // the model takes the roles from the script, so the first segment
+            // must be the initiator's SYN or the responder's SYN-ACK
+            if false == (order[0] == 0 || (order[0] == 2 && false == lost[1])) {
+                order.retain(|i| *i != 0);
+                order.insert(0, 0);
+            }
+            let mut segments = Vec::new();
+            for i in order {
+                let dropped = match i {
+                    1 => lost[0],
+                    2 => lost[1],
+                    3 => lost[2],
+                    _ => false,
+                };
+                if false == dropped {
+                    segments.push(handshake[i].clone());
+                }
+            }
+            segments.extend(rest);
+            for (role, position, kind, distance, ack_distance) in &blind {
+                let role = *role;
+                let offset = script.next_offset(role) + distance;
+                let mut segment = script.injected(|s| match kind {
+                    0 => { s.send_at(role, offset, b""); }
+                    1 => { s.send_at(role, offset, b"zz"); }
+                    2 => { s.rst_at(role, offset); }
+                    3 => { s.fin_at(role, offset, b""); }
+                    _ => { s.send_at(role, s.next_offset(role), b""); }
+                });
+                let ack = script.next_offset(role.other()) + ack_distance;
+                segment.ack = Some(ack);
+                segment.header.acknowledgment_number = script.seq(role.other(), ack);
+                let position = 1 + position.index(segments.len());
+                segments.insert(position, segment);
+            }
+            for (segment, window) in segments.iter_mut().zip(windows.iter().cycle()) {
+                segment.header.window_size = *window;
+            }
+            let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
+                fallback_window,
+                resync_after_segments,
+                ..config
+            });
+            feed_and_check(&mut pool, &segments, &consume_lens, &acked_reads, &[None], &[false])?;
         }
 
         #[test]
