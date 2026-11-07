@@ -507,10 +507,11 @@ impl TcpStream {
     /// Returns true if the segment `tcp` of the other side ACKs the stream's
     /// SYN that waits for its ACK (S5): a SYN-ACK ACKs the SYN itself, any
     /// other segment the SYN or bytes up to k windows after it, in case the
-    /// SYN-ACK or the ACK was not captured, or the bytes the stream jumped
-    /// to (its resync candidate, R2), where `window` is the receive window
-    /// of the other side.
-    pub(crate) fn acks_unacked_syn(
+    /// SYN-ACK or the ACK was not captured, or, unless it is an RST or FIN
+    /// (which a blind pair of segments could land), the bytes the stream
+    /// jumped to (its resync candidate, R2), where `window` is the receive
+    /// window of the other side.
+    fn acks_unacked_syn(
         &self,
         tcp: &TcpSlice<'_>,
         window: u64,
@@ -523,9 +524,10 @@ impl TcpStream {
         if tcp.syn() {
             return syn.is_acked_by(ack);
         }
-        if self
-            .resync_candidate
-            .is_some_and(|candidate| candidate.is_within_window(ack, window))
+        if false == (tcp.rst() || tcp.fin())
+            && self
+                .resync_candidate
+                .is_some_and(|candidate| candidate.is_within_window(ack, window))
         {
             return true;
         }

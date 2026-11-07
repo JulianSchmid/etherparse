@@ -579,10 +579,11 @@ impl ModelStream {
             return (base..=base + self.syn_len).contains(&ack);
         }
         (base..=base + range).contains(&ack)
-            || self
-                .candidates
-                .last()
-                .is_some_and(|candidate| within_window(&candidate.bytes, ack, window))
+            || (false == (segment.header.rst || segment.header.fin)
+                && self
+                    .candidates
+                    .last()
+                    .is_some_and(|candidate| within_window(&candidate.bytes, ack, window)))
     }
 
     /// Returns true if the ACK at the true offset `ack` ACKs the stream's

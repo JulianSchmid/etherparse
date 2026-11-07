@@ -1438,6 +1438,47 @@ mod test {
     }
 
     #[test]
+    fn syn_not_answered() {
+        // an ACK of the bytes the stream jumped to answers the SYN unless it
+        // comes with an RST or FIN: a blind byte spoofed with the initiator's
+        // address makes a resync candidate, and a blind RST/ACK or FIN/ACK
+        // of it from the responder's address is still dropped
+        for (rst, fin) in [(true, false), (false, true)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let blind_byte = script.injected(|s| {
+                s.send_at(Initiator, 1 << 30, b"x");
+            });
+            script.segments.push(blind_byte);
+            let mut blind = script.injected(|s| {
+                s.fin_at(Responder, 1 << 30, b"");
+            });
+            blind.header.rst = rst;
+            blind.header.fin = fin;
+            blind.header.ack = true;
+            blind.header.acknowledgment_number = 1001 + (1 << 30) + 1;
+            script.segments.push(blind);
+            script
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"request")
+                .send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"request"), stream.read_received());
+        }
+    }
+
+    #[test]
     fn end() {
         // open connection
         {
