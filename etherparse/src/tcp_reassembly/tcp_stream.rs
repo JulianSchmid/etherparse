@@ -1022,8 +1022,8 @@ impl TcpStream {
     /// Moves offset 0 of a mid-stream pickup back to the sequence number
     /// `seq` at offset `start` (see [`TcpStream::can_move_start_back`]),
     /// taking the placeholders of the bytes before it from the pool's
-    /// budget `available`. `more` bytes can be put in front afterwards,
-    /// unless the start is the stream's SYN.
+    /// budget `available`. If `more`, further prepends can follow; none
+    /// follows the stream's SYN.
     fn move_start_back(&mut self, seq: u32, start: i64, available: &mut usize, more: bool) {
         if start < 0 {
             let len = start.unsigned_abs();
@@ -3094,6 +3094,60 @@ mod test {
                 }
             });
             assert!(allocations < 20, "{} allocations", allocations);
+        }
+
+        // prepends alone make room for the next ones, as many bytes as the
+        // stream holds each time, so 200 of them allocate a few times
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 1000)
+                .send(Initiator, b"a");
+            script.segments.drain(..3);
+            let mut prepends = script.clone();
+            prepends.segments.clear();
+            for i in 1..=200u64 {
+                prepends.send_at(Initiator, 1000 - i, b"p");
+            }
+            script.feed_all(&mut pool);
+            let bytes: Vec<_> = prepends
+                .segments
+                .iter()
+                .map(TestSegment::to_bytes)
+                .collect();
+            let (allocations, _) = count_allocations(|| {
+                for (segment, bytes) in prepends.segments.iter().zip(&bytes) {
+                    segment.feed_bytes(bytes, &mut pool, ());
+                }
+            });
+            assert!(allocations < 20, "{} allocations", allocations);
+        }
+
+        // a late SYN takes exactly the room its placeholders need and drops
+        // the room left for prepends, so the bytes that follow fit in the
+        // room the buffer has (1000 bytes, a byte put in front, the SYN,
+        // then 900 bytes)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 1)
+                .send(Initiator, &[7; 1000])
+                .send_at(Initiator, 0, b"x");
+            let syn = script.segments.remove(0);
+            script.segments.drain(..2);
+            script.segments.push(syn);
+            script.send(Initiator, &[8; 900]);
+            let last = script.segments.pop().unwrap();
+            script.feed_all(&mut pool);
+            let bytes = last.to_bytes();
+            let (allocations, _) = count_allocations(|| {
+                last.feed_bytes(&bytes, &mut pool, ());
+            });
+            assert_eq!(0, allocations);
         }
     }
 

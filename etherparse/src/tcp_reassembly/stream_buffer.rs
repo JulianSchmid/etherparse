@@ -256,13 +256,11 @@ impl StreamBuffer {
     }
 
     /// Drops the room for prepends before the first byte, as no more bytes
-    /// are put in front (nothing else lies before `head` while the read
-    /// position is at offset 0).
+    /// are put in front. Nothing else lies before `head`, as the read
+    /// position is at offset 0 while bytes can be put in front.
     pub fn drop_room(&mut self) {
-        if 0 == self.read_offset && 0 < self.head {
-            self.buf.drain(..self.head);
-            self.head = 0;
-        }
+        self.buf.drain(..self.head);
+        self.head = 0;
     }
 
     /// Returns true if `len` bytes fit in front of the stream, the first
