@@ -539,6 +539,8 @@ impl TcpStream {
     /// dropped while its SYN is unanswered (S5): with `resync_after_segments`
     /// set, that many consecutive dropped segments, each within one window
     /// of the one before, end the wait, as the other side moved on (R3).
+    /// `window` is the receive window of the other side's stream, which
+    /// the dropped segments belong to.
     pub(crate) fn record_dropped(
         &mut self,
         tcp: &TcpSlice<'_>,
@@ -1518,8 +1520,10 @@ struct KeptAck {
     packet: u64,
 }
 
-/// Data segment after the receiver's window that a stream may have jumped
-/// to.
+/// Segment outside of what the receiver accepts, and how many consecutive
+/// ones agree with each other: a data segment after the receiver's window
+/// that the stream may have jumped to (R1–R3), or a segment the receiver
+/// dropped while its SYN was unanswered (S5).
 #[derive(Copy, Clone, Debug)]
 struct ResyncCandidate {
     /// Sequence number of the first byte.

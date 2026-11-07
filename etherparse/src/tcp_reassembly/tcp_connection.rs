@@ -146,7 +146,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // that doesn't ACK that SYN, with its window and ACK (S5)
         if self.drops_before_syn_acked(sender, tcp, config) {
             self.stream_mut(sender).count_out_of_window();
-            let window = self.window(sender.other(), config);
+            // the dropped segments agree within the window of their own
+            // stream (R3)
+            let window = self.window(sender, config);
             self.stream_mut(sender.other())
                 .record_dropped(tcp, window, config);
         } else {
@@ -1536,6 +1538,40 @@ mod test {
                 Some(TcpConnectionEnd::Reset { by: Responder }),
                 connection.end()
             );
+        }
+
+        // dropped segments agree within the receive window of their own
+        // stream (the one the responder advertised for the initiator's
+        // segments), not within the window of the other direction
+        for (syn_window, syn_ack_window, agree) in [(100, 60000, true), (60000, 100, false)] {
+            let config = TcpReassemblyConfig {
+                resync_after_segments: Some(3),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().syn_ack();
+            script.segments[0].header.window_size = syn_window;
+            script.segments[1].header.window_size = syn_ack_window;
+            for i in 1..=3 {
+                let mut ack = script.injected(|s| {
+                    s.send_at(Initiator, 5000 * i, b"");
+                });
+                ack.header.acknowledgment_number = 2001 + (1 << 20);
+                script.segments.push(ack);
+            }
+            let mut request = script.injected(|s| {
+                s.send(Initiator, b"request");
+            });
+            request.header.acknowledgment_number = 2001 + (1 << 20);
+            script.segments.push(request);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(
+                3 + u64::from(false == agree),
+                stream.status().out_of_window_segments
+            );
+            assert_eq!(agree, TcpRead::Data(b"request") == stream.read_received());
         }
     }
 

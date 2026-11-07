@@ -1247,7 +1247,10 @@ impl ReferenceModel {
         }
         if dropped {
             self.streams[sender].out_of_window_segments += 1;
-            self.streams[other].record_dropped(segment, other_window, &self.config);
+            // the dropped segments agree within the window of their own
+            // stream (R3)
+            let window = self.window(sender_role);
+            self.streams[other].record_dropped(segment, window, &self.config);
         } else if header.rst {
             let window = self.window(sender_role);
             if self.streams[sender].accepts_reset(segment.offset, window) {
