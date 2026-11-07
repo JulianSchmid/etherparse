@@ -1284,6 +1284,16 @@ impl TcpStream {
         self.implied_ack = self.implied_ack.map(|ack| ack.saturating_add(len as i64));
     }
 
+    /// Applies the kept ACK (K1), which counts once the stream has a start
+    /// or its offsets moved (until then, it stays kept), where `window` is
+    /// the receiver's receive window (`None` while it is unknown).
+    pub(crate) fn apply_kept_ack(&mut self, window: Option<u64>, config: &TcpReassemblyConfig) {
+        if let Some(kept) = self.kept_ack.take() {
+            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
+            self.add_ack(kept.seq, ack_window, kept.packet, config);
+        }
+    }
+
     /// Updates what the receiver must have received after the packet with
     /// the number `packet` of the connection, where `window` is the
     /// receiver's receive window (`None` while it is unknown).
@@ -1293,12 +1303,7 @@ impl TcpStream {
         packet: u64,
         config: &TcpReassemblyConfig,
     ) {
-        // an ACK that couldn't be applied counts once the stream has a start
-        // or its offsets moved (until then, it stays kept)
-        if let Some(kept) = self.kept_ack.take() {
-            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
-            self.add_ack(kept.seq, ack_window, kept.packet, config);
-        }
+        self.apply_kept_ack(window, config);
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);

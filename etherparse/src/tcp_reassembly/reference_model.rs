@@ -913,16 +913,21 @@ impl ModelStream {
                 .max(self.rejected_end)
     }
 
+    /// Applies the kept ACK, which counts once the stream has a start.
+    fn apply_kept_ack(&mut self, window: Option<u64>, config: &TcpReassemblyConfig) {
+        if let Some((ack, ack_packet)) = self.kept_ack.take() {
+            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
+            self.add_ack(ack, ack_window, ack_packet, config);
+        }
+    }
+
     /// Applies the kept ACK, updates the implied ACK and the ACK of
     /// `ack_reorder_tolerance` packets ago after the packet with the number
     /// `packet`, where `window` is the receive window of the stream's
     /// receiver (`None` while it is unknown), and gives up an overdue hole
     /// at the read offset.
     fn after_packet(&mut self, window: Option<u64>, packet: u64, config: &TcpReassemblyConfig) {
-        if let Some((ack, ack_packet)) = self.kept_ack.take() {
-            let ack_window = window.unwrap_or(u64::from(config.fallback_window));
-            self.add_ack(ack, ack_window, ack_packet, config);
-        }
+        self.apply_kept_ack(window, config);
         if let Some(window) = window {
             self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
         }
@@ -1387,7 +1392,8 @@ impl ReferenceModel {
 
     /// Applies the kept SYN `syn` to its stream as the stream's own (or late)
     /// SYN: an ACK kept for the stream that doesn't allow the SYN is dropped
-    /// first, and the SYN's conflicts count only if the SYN was taken.
+    /// first, the SYN's conflicts count only if the SYN was taken, and an
+    /// ACK kept for the stream counts right away then.
     fn apply_kept_syn(&mut self, syn: TestSegment, available: &mut u64) {
         let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
         let syn_role = self.sender_role(&syn);
@@ -1398,6 +1404,8 @@ impl ReferenceModel {
         self.apply_own_segment(&syn, available);
         if self.streams[syn_sender].has_isn_of(&syn) {
             self.streams[syn_sender].conflicting_retransmissions += conflicting;
+            let window = self.known_window(syn_role);
+            self.streams[syn_sender].apply_kept_ack(window, &self.config);
         }
     }
 

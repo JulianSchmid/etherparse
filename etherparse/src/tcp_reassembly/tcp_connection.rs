@@ -395,6 +395,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             if Some(syn.isn) == self.stream(syn_sender).isn() {
                 self.stream_mut(syn_sender)
                     .count_conflicting_retransmissions(syn.conflicting);
+                // an ACK kept for the stream counts now that it has a start,
+                // before the bytes of the confirming segment are compared
+                // (retransmissions of ACKed bytes don't conflict, D2)
+                let window = self
+                    .stream(syn_sender.other())
+                    .advertised_window(self.stream(syn_sender));
+                self.stream_mut(syn_sender).apply_kept_ack(window, config);
             }
         }
         syn.recycle(free);
@@ -2457,6 +2464,38 @@ mod test {
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(conflicts, stream.status().conflicting_retransmissions);
             assert_eq!(TcpRead::Data(expected), stream.read_received());
+        }
+
+        // ... and an ACK kept for the stream counts as soon as the kept SYN
+        // starts it, before the confirming segment's bytes are compared: a
+        // SYN-ACK that retransmits the SYN's bytes differently after the
+        // other side ACKed them conflicts with nothing (D2)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            responder_syn.payload = b"abc".to_vec();
+            script.segments.push(responder_syn);
+            let mut ack = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            ack.header.acknowledgment_number = 2004;
+            script.segments.push(ack);
+            let mut responder_syn_ack = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn_ack.payload = b"abd".to_vec();
+            script.segments.push(responder_syn_ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(3, stream.acked_offset());
+            assert_eq!(0, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
         }
 
         // ... and while it is kept, it confirms a reconnect only by being
