@@ -222,6 +222,12 @@ impl ModelStream {
         let range = u64::from(factor) * window;
         // the sender can have sent into a larger window before it shrank
         let sent_into = window.max(self.largest_window.unwrap_or(0));
+        // without a base, the kept ACK tells what the receiver accepts, also
+        // for the segment that starts the stream
+        let had_base = self.base.is_some();
+        let accepted_without_base = self
+            .pending_ack
+            .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range);
         if header.syn {
             if false == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
@@ -232,17 +238,13 @@ impl ModelStream {
             let keep_alive = 1 == payload.len()
                 && false == header.fin
                 && Some(segment.offset + 1) == self.pending_ack.map(|(ack, _)| ack);
-            // without a base, the kept ACK tells what the receiver accepts
-            let accepted = self.pending_ack.is_none_or(|(ack, _)| {
-                (segment.offset as i64 - ack as i64).unsigned_abs() <= range
-            });
             if (payload.is_empty() && false == header.fin) || keep_alive {
-                return accepted;
+                return accepted_without_base;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
             {
                 self.rejected_bytes += payload.len() as u64;
-                return accepted;
+                return accepted_without_base;
             }
             self.start_at(segment.offset);
             self.started_at_fin = payload.is_empty();
@@ -291,8 +293,12 @@ impl ModelStream {
         }
         // the receiver drops segments outside of its window, with their
         // window: k windows before the bytes sent to k windows after them
-        let plausible = false == after_window
-            && self.highest as i64 - (u64::from(factor) * sent_into) as i64 <= start;
+        let plausible = if had_base {
+            false == after_window
+                && self.highest as i64 - (u64::from(factor) * sent_into) as i64 <= start
+        } else {
+            accepted_without_base
+        };
         if (false == payload.is_empty() || header.fin) && after_window {
             if let Some(candidate) = self.candidates.last_mut() {
                 if payload.is_empty() && segment.offset == candidate.bytes.end {

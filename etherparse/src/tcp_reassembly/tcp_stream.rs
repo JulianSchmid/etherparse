@@ -577,16 +577,29 @@ impl TcpStream {
         let data = tcp.payload();
 
         // 1. start
+        // the receiver drops segments outside of its window, with their
+        // window, so a blind segment can't set the window the checks rely on
+        // (before the stream has a start, only the receiver's kept ACK tells
+        // which sequence numbers it accepts, also for the starting segment)
+        let had_start = self.start_seq.is_some();
+        let accepted_without_start =
+            false == had_start && self.accepted_by_kept_ack(seq, window, config);
         let Some(start_seq) = self.start_from(tcp, seq, window, config, available) else {
+            if accepted_without_start {
+                self.record_window(tcp);
+            }
             return;
         };
 
         // 2. place
         let placed = self.place(tcp, seq, start_seq, window, config);
-        // the receiver drops segments outside of its window, with their
-        // window, so a blind segment can't set the window the checks rely on
         let lowest = self.lowest_accepted(window, config);
-        if false == placed.after_window && placed.start.is_some_and(|start| lowest <= start) {
+        let accepted = if had_start {
+            false == placed.after_window && placed.start.is_some_and(|start| lowest <= start)
+        } else {
+            accepted_without_start
+        };
+        if accepted {
             self.record_window(tcp);
         }
         if (false == data.is_empty() || tcp.fin()) && placed.after_window {
@@ -687,21 +700,21 @@ impl TcpStream {
                 }
             }
         }
-        if self.start_seq.is_none() {
-            // only the receiver's kept ACK tells which sequence numbers it
-            // accepts: k windows around it
-            let range = window_range(window, config);
-            let accepted = self.pending_ack.is_none_or(|pending| {
-                let distance = seq
-                    .wrapping_sub(pending.seq)
-                    .min(pending.seq.wrapping_sub(seq));
-                u64::from(distance) <= range
-            });
-            if accepted {
-                self.record_window(tcp);
-            }
-        }
         self.start_seq
+    }
+
+    /// Returns true if the receiver with the receive window `window` accepts
+    /// a segment starting at the sequence number `seq` while the stream has
+    /// no start: at most k windows from the ACK it kept for the stream, if
+    /// there is one.
+    fn accepted_by_kept_ack(&self, seq: u32, window: u64, config: &TcpReassemblyConfig) -> bool {
+        let range = window_range(window, config);
+        self.pending_ack.is_none_or(|pending| {
+            let distance = seq
+                .wrapping_sub(pending.seq)
+                .min(pending.seq.wrapping_sub(seq));
+            u64::from(distance) <= range
+        })
     }
 
     /// Maps the first byte of the segment `tcp`, with the sequence number
@@ -6846,6 +6859,28 @@ mod test {
             script.segments.push(ack);
             script.segments.extend(handshake);
             assert_window_end(config, &script, end);
+        }
+
+        // the same holds for the segment that starts the stream: the
+        // responder's first bytes lie far from the ACK the initiator sent
+        // for it, so their window doesn't count, and the late SYN-ACK's
+        // window does
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut script = ConnectionScript::with_isns(1000, 12000);
+            script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            // the initiator's bytes ACK a sequence number far from the
+            // responder's ISN
+            script.segments[3].header.acknowledgment_number = 2001;
+            script.window_size = 1000;
+            script.send(Responder, b"x");
+            let handshake: Vec<_> = script.segments.drain(..3).collect();
+            script.segments.extend(handshake);
+            assert_window_end(config, &script, 203);
         }
     }
 
