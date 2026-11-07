@@ -122,8 +122,10 @@ struct ModelStream {
     /// Offset after the furthest byte that didn't fit the memory limits (0
     /// without one).
     rejected_end: u64,
-    /// Number of segments with bytes or a FIN after the window, or with
-    /// bytes after the FIN.
+    /// Number of segments with bytes or a FIN after the window, with bytes
+    /// after the FIN, or with bytes before the first byte that the stream
+    /// doesn't take (except the filler byte of a keep-alive right before an
+    /// observed start), plus the refused first segment of a pickup (A4).
     out_of_window_segments: u64,
     /// Highest ACK of the other side that was not ignored.
     ack: u64,
