@@ -340,6 +340,10 @@ impl ModelStream {
                 } else {
                     self.rejected_bytes += (payload.len() as u64).min(base - start as u64);
                 }
+            } else if start < base as i64 && false == payload.is_empty() {
+                // only the filler byte of a keep-alive before an observed
+                // start doesn't count
+                out_of_window = false == (start == base as i64 - 1 && 1 == payload.len());
             }
         }
         let end = start + payload.len() as i64;

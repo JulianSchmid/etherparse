@@ -836,7 +836,9 @@ impl TcpStream {
     /// number `seq`) in front of a mid-stream pickup if they begin before
     /// its first byte and fit, until it is read from. Returns the offset
     /// the bytes are stored at, and whether the segment counts as
-    /// out-of-window, as its bytes before offset 0 are outside the stream.
+    /// out-of-window, as its bytes before offset 0 are outside the stream
+    /// (only the filler byte of a keep-alive, which lies right before the
+    /// first byte of an observed start, doesn't count).
     fn take_in_front(
         &mut self,
         start: i64,
@@ -846,8 +848,12 @@ impl TcpStream {
         config: &TcpReassemblyConfig,
         available: &mut usize,
     ) -> (i64, bool) {
-        if 0 <= start || 0 == data_len || TcpStreamStart::Observed == self.status.start {
+        if 0 <= start || 0 == data_len {
             return (start, false);
+        }
+        if TcpStreamStart::Observed == self.status.start {
+            let keep_alive_filler = -1 == start && 1 == data_len;
+            return (start, false == keep_alive_filler);
         }
         if false == self.can_move_start_back(start, window, config) {
             (start, true)
@@ -5999,8 +6005,8 @@ mod test {
         // bytes starting 2^31 - 1 after the highest offset lie after the
         // window, ones 2^31 after it can't be mapped and count too, and ones
         // 2^31 + 1 after it lie 2^31 - 1 before it (before the first byte,
-        // which doesn't count)
-        for (distance, expected) in [((1 << 31) - 1, 1), (1 << 31, 1), ((1 << 31) + 1, 0)] {
+        // which counts too)
+        for (distance, expected) in [((1 << 31) - 1, 1), (1 << 31, 1), ((1 << 31) + 1, 1)] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.handshake().send(Initiator, b"abc");
@@ -6013,6 +6019,24 @@ mod test {
             assert_eq!(expected, stream.status().out_of_window_segments);
             assert_eq!(3, stream.highest_offset());
             assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+        }
+
+        // on a stream with an observed start, bytes before offset 0 count as
+        // out-of-window, except the filler byte of a keep-alive right before
+        // it (a byte at the ISN, when no bytes were sent yet)
+        for (position, len, expected, highest) in [(-1, 1, 0, 0), (-1, 2, 1, 1), (-2, 1, 1, 0)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            let mut segment = script.injected(|s| {
+                s.send(Initiator, &[7; 2][..len]);
+            });
+            segment.header.sequence_number = script.seq(Initiator, 0).wrapping_add_signed(position);
+            script.segments.push(segment);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(expected, stream.status().out_of_window_segments);
+            assert_eq!(highest, stream.highest_offset());
         }
 
         // ... while a segment without bytes there changes nothing
