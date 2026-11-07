@@ -99,9 +99,9 @@ pub struct TcpReassemblyConfig {
     /// SYNs kept for reconnects (see
     /// [`crate::tcp_reassembly::TcpReassemblyPool::process_segment`]), of
     /// which each connection keeps at most one. The memory of the streams
-    /// stays within about twice this limit, plus
+    /// stays within about four times this limit, plus
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`] per stream, as a
-    /// stream gives back the room of consumed bytes.
+    /// stream gives back the room of consumed bytes (see there).
     pub max_total_buffered: Option<usize>,
 
     /// Maximum number of unused buffers per kind that the pool keeps for
@@ -109,11 +109,14 @@ pub struct TcpReassemblyConfig {
     pub max_pooled_buffers: usize,
 
     /// Capacity in bytes that buffers are shrunk to when the pool keeps them
-    /// for re-use, and that a stream keeps for its bytes once most of them
-    /// are consumed (default 64 KiB).
+    /// for re-use, and that a stream keeps at least (default 64 KiB).
     ///
-    /// A stream whose bytes are read as they come gives the room of a burst
-    /// back down to this capacity, and takes it again for the next burst.
+    /// Once the consumed bytes make up half of a stream's buffer, the stream
+    /// drops them and keeps at most twice the room its bytes need, but this
+    /// capacity at least. So a stream whose bytes are read as they come
+    /// gives the room of a burst back down to this capacity, and takes it
+    /// again for the next burst, and a stream's buffer takes at most about
+    /// four times the bytes it holds.
     pub max_pooled_buffer_capacity: usize,
 }
 

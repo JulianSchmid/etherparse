@@ -2950,11 +2950,23 @@ mod test {
         }
 
         // a stream gives back the room of consumed bytes once they make up
-        // half of its buffer: it keeps at most twice the room its bytes
-        // need, but at least the pooled buffer capacity, so the next bytes
-        // need new room (and allocate); a stream with more bytes left keeps
-        // the room the next bytes fit in
-        for (consume, allocates) in [(1000, true), (999, true), (400, false)] {
+        // half of its buffer, after a consume or a discard: it keeps at most
+        // twice the room its bytes need, but at least the pooled buffer
+        // capacity, so later bytes beyond that need new room (and allocate);
+        // while less than half is consumed, it keeps all its room (the
+        // buffer holds 1100 bytes in a capacity of 2000, as it grew for the
+        // second segment)
+        for (discard, consumed, next, allocates) in [
+            // all consumed: the room shrinks to the pooled capacity
+            (false, 1100, 400, true),
+            (false, 1099, 400, true),
+            // half consumed: twice the room of the 500 bytes left stays
+            (false, 600, 500, false),
+            (false, 600, 501, true),
+            (true, 600, 501, true),
+            // less than half consumed: all room stays
+            (false, 500, 800, false),
+        ] {
             let config = TcpReassemblyConfig {
                 max_pooled_buffer_capacity: 100,
                 ..Default::default()
@@ -2964,18 +2976,29 @@ mod test {
             script
                 .handshake()
                 .send(Initiator, &[7; 1000])
-                .send(Initiator, &[8; 400]);
+                .send(Initiator, &[8; 100])
+                .send(Initiator, &[9; 1000]);
+            script.segments[5].payload.truncate(next);
             {
-                let (connection, _) = script.feed(&mut pool, ..4).active.unwrap();
+                let (connection, _) = script.feed(&mut pool, ..5).active.unwrap();
                 let stream = connection.stream_mut(Initiator);
-                stream.read_received();
-                stream.consume(consume);
+                if discard {
+                    stream.discard_until(consumed as u64);
+                } else {
+                    stream.read_received();
+                    stream.consume(consumed);
+                }
             }
-            let bytes = script.segments[4].to_bytes();
+            let bytes = script.segments[5].to_bytes();
             let (allocations, _) = count_allocations(|| {
-                script.segments[4].feed_bytes(&bytes, &mut pool, ());
+                script.segments[5].feed_bytes(&bytes, &mut pool, ());
             });
-            assert_eq!(allocates, 0 < allocations);
+            assert_eq!(
+                allocates,
+                0 < allocations,
+                "{:?}",
+                (discard, consumed, next)
+            );
         }
     }
 
