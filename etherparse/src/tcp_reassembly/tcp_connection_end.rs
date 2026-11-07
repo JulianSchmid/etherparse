@@ -10,8 +10,8 @@ pub enum TcpConnectionEnd {
     ///
     /// Only RSTs that the receiver can accept count: their sequence number
     /// lies from the receiver's ACK up to one receive window after the bytes
-    /// sent (RFC 9293), and while the receiver's SYN is unanswered, the RST
-    /// has to ACK it. Other RSTs, e.g. blindly injected ones, are ignored
+    /// sent (RFC 9293), and a receiver in SYN-SENT accepts only an RST that
+    /// ACKs its SYN. Other RSTs, e.g. blindly injected ones, are ignored
     /// and counted in
     /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]
     /// of the sender's stream.

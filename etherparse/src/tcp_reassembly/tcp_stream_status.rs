@@ -41,28 +41,21 @@ pub struct TcpStreamStatus {
     pub rejected_bytes: u64,
 
     /// Number of segments with bytes that lie outside of the stream: they
-    /// start after the receiver's window, lie after the stream's FIN, or lie
-    /// before the first byte of the stream, i.e. before the SYN's sequence
-    /// number plus one (except the filler byte of a keep-alive right before
-    /// it) or before the first byte of a mid-stream pickup that can't take
-    /// them anymore (see [`TcpStreamStart::MidStreamPickup`]). Late segments
-    /// with bytes of a connection that a new one replaced count here, but
-    /// bytes that map before the point of a resync don't.
+    /// start after the receiver's window, lie after the stream's FIN, or
+    /// lie before its first byte (a mid-stream pickup takes bytes in front
+    /// until it is read from, and the filler byte of a keep-alive right
+    /// before an observed start doesn't count).
     ///
-    /// These bytes are not stored. FINs starting after the receiver's window
-    /// count too, and so do SYNs that a mid-stream pickup can't take and
-    /// RSTs that the receiver can't accept (see
-    /// [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]). The first
-    /// segment that could start a stream but lies far from the ACK the
-    /// receiver sent for it counts and doesn't start the stream; the next
-    /// one with bytes does, unless it carries a FIN: no FIN far from that
-    /// ACK starts the stream. Segments the receiver drops while its SYN is
-    /// unanswered count too: until a segment of the other side ACKs the SYN,
-    /// every one has to (RFC 9293), so a blind RST, FIN or SYN-ACK in the
-    /// handshake is ignored. So a count that keeps growing on a clean stream
-    /// that was picked up mid-stream can mean that two blind segments
-    /// anchored it elsewhere; [`crate::tcp_reassembly::TcpStream::force_resync`]
-    /// recovers such a stream, unless a blind FIN after them ended it.
+    /// These bytes are not stored. FINs after the window count too, and so
+    /// do SYNs that a mid-stream pickup can't take, RSTs that the receiver
+    /// can't accept (see [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]),
+    /// the first segment of a pickup that lies far from the ACK the receiver
+    /// sent for it, and segments the receiver drops while its own SYN is
+    /// unanswered, e.g. a blind RST, FIN or SYN-ACK in the handshake. A
+    /// count that keeps growing on a clean pickup can mean that blind
+    /// segments anchored it elsewhere, which
+    /// [`crate::tcp_reassembly::TcpStream::force_resync`] recovers, unless a
+    /// FIN ended it.
     pub out_of_window_segments: u64,
 }
 
