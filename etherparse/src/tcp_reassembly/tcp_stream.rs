@@ -1250,8 +1250,12 @@ impl TcpStream {
 
         // append the bytes after the end of the buffer (all missing so far)
         if buf_end < stored_end && start < stored_end {
-            // drop the consumed bytes once they make up half of the buffer
-            if self.head >= self.buf.len() - self.head {
+            // drop the consumed bytes once they make up half of the buffer,
+            // or before the buffer has to grow for the new bytes, so that
+            // the buffer never reallocates to make room for consumed bytes
+            if self.head >= self.buf.len() - self.head
+                || self.index(stored_end) > self.buf.capacity()
+            {
                 self.buf.drain(..self.head);
                 self.head = 0;
             }
