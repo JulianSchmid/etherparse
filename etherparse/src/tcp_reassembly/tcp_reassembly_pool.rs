@@ -1237,6 +1237,20 @@ mod test {
             assert_eq!(&first_seen, connection.first_seen());
         }
 
+        // a late SYN-ACK of an ended connection that ACKs the TCP Fast Open
+        // bytes of the SYN belongs to its handshake, also if the responder's
+        // ISN was never seen (the initiator resets the connection right
+        // after its SYN)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn_with_data(b"GET").rst_at(Initiator, 3).syn_ack();
+            assert!(script.feed(&mut pool, ..2).ended.is_some());
+            let processed = script.feed(&mut pool, 2..);
+            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            assert_eq!((0, 1), (pool.stats().connections, pool.stats().tombstones));
+        }
+
         // a SYN of the other endpoint with the same ISN as the kept SYN is
         // not a retransmission of it: it replaces the kept SYN, so the
         // SYN-ACK that answers it starts the reconnect (the responder of the

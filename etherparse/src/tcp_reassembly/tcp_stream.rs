@@ -21,10 +21,10 @@ pub struct TcpStream {
     /// the stream is unknown).
     start_seq: Option<u32>,
 
-    /// Sequence number of the SYN before the stream's observed start, known
-    /// from the SYN or from the ACK of the SYN-ACK (`None` without an
-    /// observed start). A resync doesn't change it.
-    isn: Option<u32>,
+    /// SYN before the stream's observed start, known from the SYN or from
+    /// the ACK of the SYN-ACK (`None` without an observed start). A resync
+    /// doesn't change it.
+    syn: Option<ObservedSyn>,
 
     /// Last ACK of the receiver that the stream couldn't apply yet, as it
     /// had no start or the ACK lies at or before offset 0 while bytes can
@@ -109,7 +109,7 @@ impl TcpStream {
     pub(crate) fn new(free: &mut FreeBuffers) -> TcpStream {
         TcpStream {
             start_seq: None,
-            isn: None,
+            syn: None,
             pending_ack: None,
             window_scale: None,
             window: None,
@@ -399,7 +399,12 @@ impl TcpStream {
     /// Sequence number of the SYN that gave the stream its observed start,
     /// if it has one.
     pub(crate) fn isn(&self) -> Option<u32> {
-        self.isn
+        self.syn.map(|syn| syn.isn)
+    }
+
+    /// SYN that gave the stream its observed start, if it has one.
+    pub(crate) fn syn(&self) -> Option<ObservedSyn> {
+        self.syn
     }
 
     /// Returns true if the SYN or SYN-ACK `tcp` of the stream's sender can
@@ -419,7 +424,7 @@ impl TcpStream {
         let isn = tcp.sequence_number();
         let seq = isn.wrapping_add(1);
         let range = window_range(window, config);
-        match (self.isn, self.start_seq, self.pending_ack) {
+        match (self.isn(), self.start_seq, self.pending_ack) {
             (Some(own), _, _) => own == isn,
             (None, Some(start_seq), _) => self
                 .offset(start_seq, seq)
@@ -945,7 +950,10 @@ impl TcpStream {
                 self.move_start_back(seq, start, available);
             }
         }
-        self.isn = Some(seq.wrapping_sub(1));
+        self.syn = Some(ObservedSyn {
+            isn: seq.wrapping_sub(1),
+            len: data_len as u32,
+        });
         self.status.start = TcpStreamStart::Observed;
         true
     }
@@ -1214,6 +1222,24 @@ impl TcpStream {
 fn window_range(window: u64, config: &TcpReassemblyConfig) -> u64 {
     let factor = config.hole_give_up_window_factor.unwrap_or(2);
     window.saturating_mul(u64::from(factor))
+}
+
+/// SYN before the first byte of a stream with an observed start.
+#[derive(Copy, Clone, Debug)]
+pub(crate) struct ObservedSyn {
+    /// Sequence number of the SYN.
+    pub isn: u32,
+    /// Number of bytes the SYN carried (TCP Fast Open).
+    pub len: u32,
+}
+
+impl ObservedSyn {
+    /// Returns true if the ACK number `ack` ACKs the SYN: from its ISN + 1 up
+    /// to the end of its bytes (a server ACKs TCP Fast Open bytes it
+    /// accepts).
+    pub fn is_acked_by(&self, ack: u32) -> bool {
+        ack.wrapping_sub(self.isn.wrapping_add(1)) <= self.len
+    }
 }
 
 /// Where a segment lies in a stream (see [`TcpStream::place`]).

@@ -398,7 +398,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     {
         Tombstone {
             initiator: self.initiator,
-            isns: [self.initiator_stream.isn(), self.responder_stream.isn()],
+            syns: [self.initiator_stream.syn(), self.responder_stream.syn()],
             last_seen: self.last_seen.clone(),
             reconnect_syn: self.reconnect_syn.take(),
         }
@@ -446,8 +446,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 pub(crate) struct Tombstone<Timestamp> {
     /// Endpoint that initiated the connection.
     initiator: SocketAddr,
-    /// ISNs of the initiator's and the responder's stream, if observed.
-    isns: [Option<u32>; 2],
+    /// SYNs of the initiator's and the responder's stream, if observed.
+    syns: [Option<ObservedSyn>; 2],
     /// Timestamp of the connection's last packet, also a late one.
     pub last_seen: Timestamp,
     /// SYN with a new ISN that the connection kept (see
@@ -459,15 +459,15 @@ impl<Timestamp> Tombstone<Timestamp> {
     /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
     /// to the handshake of the ended connection: it has the ISN of its
     /// sender's stream, or it is a SYN-ACK that ACKs the SYN of the other
-    /// stream.
+    /// stream (up to the end of the SYN's TCP Fast Open bytes).
     pub fn is_own_handshake(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
-        let [own_isn, other_isn] = if source == self.initiator {
-            self.isns
+        let [own, other] = if source == self.initiator {
+            self.syns
         } else {
-            [self.isns[1], self.isns[0]]
+            [self.syns[1], self.syns[0]]
         };
-        Some(tcp.sequence_number()) == own_isn
-            || (tcp.ack() && Some(tcp.acknowledgment_number().wrapping_sub(1)) == other_isn)
+        own.is_some_and(|syn| syn.isn == tcp.sequence_number())
+            || (tcp.ack() && other.is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number())))
     }
 }
 
