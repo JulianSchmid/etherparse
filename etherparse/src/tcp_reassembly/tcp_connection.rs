@@ -1378,6 +1378,26 @@ mod test {
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
+
+        // a SYN-ACK has to ACK the SYN itself: one that ACKs 50 bytes after
+        // it is dropped, although other segments may ACK that far
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut forged = script.injected(|s| {
+                s.syn_ack();
+            });
+            forged.header.sequence_number = 7000;
+            forged.header.acknowledgment_number = 1001 + 50;
+            script.segments.push(forged);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
     }
 
     #[test]

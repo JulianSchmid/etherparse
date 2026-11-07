@@ -565,14 +565,18 @@ impl ModelStream {
     }
 
     /// Returns true if the `segment` of the other side ACKs the stream's SYN
-    /// that waits for its ACK: the SYN or bytes up to `range` after it, or
-    /// the resync candidate within `window`.
+    /// that waits for its ACK: a SYN-ACK the SYN itself (with its bytes),
+    /// another segment the SYN or bytes up to `range` after it, or the
+    /// resync candidate within `window`.
     fn acks_unacked_syn(&self, segment: &TestSegment, range: u64, window: u64) -> bool {
         let (Some(base), Some(ack)) = (self.base, segment.ack) else {
             return false;
         };
         if false == self.syn_unacked {
             return false;
+        }
+        if segment.header.syn {
+            return (base..=base + self.syn_len).contains(&ack);
         }
         (base..=base + range).contains(&ack)
             || self
