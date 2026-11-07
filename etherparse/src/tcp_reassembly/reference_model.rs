@@ -1229,10 +1229,10 @@ impl ReferenceModel {
         let dropped = false == (header.rst && self.streams[sender].base.is_some())
             && false == acks_kept_syn
             && self.streams[other].drops_before_syn_acked(segment, range, other_window);
-        // an RST that F4 ignores is dropped with its ACK
-        if false == dropped && false == header.rst {
-            // a SYN-ACK that ACKs the receiver's SYN outweighs a kept ACK
-            if header.syn
+        if false == dropped {
+            // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
+            // ACK
+            if (header.syn || header.rst)
                 && self.streams[sender].base.is_none()
                 && segment
                     .ack
@@ -1240,7 +1240,10 @@ impl ReferenceModel {
             {
                 self.streams[sender].kept_ack = None;
             }
-            self.streams[other].answer_syn(segment, range, other_window);
+            // an RST that F4 ignores is dropped with its ACK
+            if false == header.rst {
+                self.streams[other].answer_syn(segment, range, other_window);
+            }
         }
         if dropped {
             self.streams[sender].out_of_window_segments += 1;

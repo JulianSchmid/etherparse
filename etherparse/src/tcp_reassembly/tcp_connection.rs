@@ -218,14 +218,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ) where
         Timestamp: Clone,
     {
-        if tcp.rst() {
-            self.add_reset(sender, tcp, config);
-            return;
-        }
-        let window = self.window(sender.other(), config);
-        // a SYN-ACK that ACKs the receiver's SYN knows its ISN, which
+        // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
-        if tcp.syn()
+        if (tcp.syn() || tcp.rst())
             && tcp.ack()
             && false == self.stream(sender).has_start()
             && self
@@ -235,6 +230,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         {
             self.stream_mut(sender).drop_kept_ack();
         }
+        if tcp.rst() {
+            self.add_reset(sender, tcp, config);
+            return;
+        }
+        let window = self.window(sender.other(), config);
         self.stream_mut(sender.other())
             .answer_syn(tcp, window, config);
         if tcp.syn()
@@ -1511,6 +1511,31 @@ mod test {
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // an RST/ACK that ACKs the SYN outweighs a kept ACK like a SYN-ACK
+        // does: after a blind ACK from the initiator's address, the RST/ACK
+        // of a closed port still resets the connection
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind.header.ack = true;
+            blind.header.acknowledgment_number = 1001 + (1 << 30);
+            script.segments.push(blind);
+            let mut rst = script.injected(|s| {
+                s.rst_at(Responder, 0);
+            });
+            rst.header.sequence_number = 0;
+            script.segments.push(rst);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Responder }),
+                connection.end()
+            );
         }
     }
 
