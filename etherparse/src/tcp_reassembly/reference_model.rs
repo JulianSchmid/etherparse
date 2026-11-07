@@ -581,6 +581,15 @@ impl ModelStream {
                 .is_some_and(|candidate| within_window(&candidate.bytes, ack, window))
     }
 
+    /// Returns true if the ACK at the true offset `ack` ACKs the stream's
+    /// observed SYN (or its TCP Fast Open bytes).
+    fn acks_syn_of(&self, ack: u64) -> bool {
+        self.observed
+            && self
+                .base
+                .is_some_and(|base| (base..=base + self.syn_len).contains(&ack))
+    }
+
     /// Ends the wait for the ACK of the stream's SYN if the `segment` of the
     /// other side ACKs it (S5).
     fn answer_syn(&mut self, segment: &TestSegment, range: u64, window: u64) {
@@ -1209,6 +1218,15 @@ impl ReferenceModel {
         let dropped = false == (header.rst && self.streams[sender].base.is_some())
             && self.streams[other].drops_before_syn_acked(segment, range, other_window);
         if false == dropped {
+            // a SYN-ACK that ACKs the receiver's SYN outweighs a kept ACK
+            if header.syn
+                && self.streams[sender].base.is_none()
+                && segment
+                    .ack
+                    .is_some_and(|ack| self.streams[other].acks_syn_of(ack))
+            {
+                self.streams[sender].kept_ack = None;
+            }
             self.streams[other].answer_syn(segment, range, other_window);
         }
         if dropped {

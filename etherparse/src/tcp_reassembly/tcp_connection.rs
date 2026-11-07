@@ -219,6 +219,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         Timestamp: Clone,
     {
         let window = self.window(sender.other(), config);
+        // a SYN-ACK that ACKs the receiver's SYN knows its ISN, which
+        // outweighs an ACK kept for the sender's stream without a start
+        if tcp.syn()
+            && tcp.ack()
+            && false == self.stream(sender).has_start()
+            && self
+                .stream(sender.other())
+                .syn()
+                .is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
+        {
+            self.stream_mut(sender).drop_kept_ack();
+        }
         self.stream_mut(sender.other())
             .answer_syn(tcp, window, config);
         if tcp.rst() {
@@ -1344,6 +1356,27 @@ mod test {
                 Some(TcpConnectionEnd::Reset { by: Initiator }),
                 connection.end()
             );
+        }
+
+        // a blind ACK from the initiator's address before the SYN-ACK is
+        // kept for the responder stream, but the SYN-ACK that ACKs the
+        // initiator's SYN outweighs it and starts the responder stream
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind.header.ack = true;
+            blind.header.acknowledgment_number = 1001 + (1 << 30);
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
     }
 
