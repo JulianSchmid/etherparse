@@ -56,7 +56,10 @@ pub struct TcpStreamStatus {
     /// segment that could start a stream but lies far from the ACK the
     /// receiver sent for it counts and doesn't start the stream; the next
     /// one with bytes does, unless it carries a FIN: no FIN far from that
-    /// ACK starts the stream. So a count that keeps growing on a clean stream
+    /// ACK starts the stream. Segments the receiver drops while its SYN is
+    /// unanswered count too: until a segment of the other side ACKs the SYN,
+    /// every one has to (RFC 9293), so a blind RST, FIN or SYN-ACK in the
+    /// handshake is ignored. So a count that keeps growing on a clean stream
     /// that was picked up mid-stream can mean that two blind segments
     /// anchored it elsewhere; [`crate::tcp_reassembly::TcpStream::force_resync`]
     /// recovers such a stream, unless a blind FIN after them ended it.
