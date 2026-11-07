@@ -29,14 +29,24 @@ pub struct TcpStream {
     /// Last ACK of the receiver that the stream couldn't apply yet, as it
     /// had no start or the ACK lies at or before offset 0 while bytes can
     /// still be prepended (at most as far before it as bytes can be put in
-    /// front). It is applied after every packet until it counts, tells
-    /// which segments the receiver accepts while the stream has no start,
-    /// and is dropped once a later ACK counted.
+    /// front, A5). It serves several rules until it counts:
+    ///
+    /// - it is applied after every packet until it counts (K1);
+    /// - it tells which segments the receiver accepts while the stream has
+    ///   no start: which ones start the stream (A4) and which ones set the
+    ///   window (S3);
+    /// - a byte ending at it is a keep-alive, not the stream's start (A4);
+    /// - it bounds the RSTs the receiver accepts (F4) and the SYNs that
+    ///   can be the stream's own (C4).
+    ///
+    /// It is dropped once a later ACK counted, and when a start overrules
+    /// it (A4).
     kept_ack: Option<KeptAck>,
 
     /// Whether a segment that lay far from the kept ACK was refused as the
-    /// stream's start: one of them is forged, so the next segment starts
-    /// the stream wherever it lies.
+    /// stream's start: the segment or the ACK is forged, or the receiver's
+    /// window is larger than the fallback window assumes, so the next
+    /// segment with bytes starts the stream wherever it lies.
     start_disputed: bool,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was

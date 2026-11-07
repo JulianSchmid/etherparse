@@ -51,7 +51,10 @@ pub struct TcpStreamStatus {
     /// [`crate::tcp_reassembly::TcpConnectionEnd::Reset`]). The first
     /// segment that could start a stream but lies far from the ACK the
     /// receiver sent for it counts and doesn't start the stream; the next
-    /// one does.
+    /// one with bytes does. So a count that keeps growing on a clean stream
+    /// that was picked up mid-stream can mean that two blind segments
+    /// anchored it elsewhere; [`crate::tcp_reassembly::TcpStream::force_resync`]
+    /// recovers such a stream.
     pub out_of_window_segments: u64,
 }
 

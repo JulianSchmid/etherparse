@@ -179,7 +179,8 @@ impl ModelStream {
     ///   can't take counts as out-of-window and is ignored;
     /// - without a start, the first bytes or a FIN without bytes start a
     ///   mid-stream pickup, but a byte ending at the last ACK of the other
-    ///   side (a keep-alive) doesn't;
+    ///   side (a keep-alive) doesn't, and neither does the first segment far
+    ///   from that ACK (a FIN never): the next bytes do, and drop the ACK;
     /// - bytes up to k windows before the first byte of a mid-stream pickup
     ///   are put in front (see [`ModelStream::can_prepend`]), other bytes
     ///   before it count as out-of-window (once per segment);
