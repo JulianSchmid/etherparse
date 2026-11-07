@@ -1069,11 +1069,11 @@ mod test {
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
 
-        // a SYN-ACK the receiver drops confirms no reconnect either: a
-        // pickup keeps a SYN of the responder with a new ISN, then the
-        // responder's own SYN starts its stream and awaits its ACK, and a
-        // blind SYN-ACK of the initiator that ACKs neither SYN is dropped
-        // instead of replacing the connection
+        // a pickup keeps a SYN of the responder with a new ISN, then the
+        // responder's own SYN starts its stream, which the kept ACK of the
+        // initiator's bytes answers already, so a blind SYN-ACK of the
+        // initiator with a new ISN confirms the reconnect the kept SYN
+        // started (C2's two-segment limit, the kept SYN being blind too)
         {
             let config = TcpReassemblyConfig {
                 fallback_window: 100,
@@ -1101,14 +1101,12 @@ mod test {
             forged.header.acknowledgment_number = 50000;
             script.segments.push(forged);
             let processed = script.feed_all(&mut pool);
-            assert!(processed.ended.is_none());
-            let (connection, _) = processed.active.unwrap();
-            assert_eq!(TcpConnectionId(0), connection.id());
             assert_eq!(
-                1,
-                connection.stream(Initiator).status().out_of_window_segments
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
             );
-            assert_eq!(Some(2000), connection.stream(Responder).isn());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
         }
 
         // an RST that ACKs the SYN resets the connection, e.g. from a closed
@@ -1545,6 +1543,32 @@ mod test {
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+    }
+
+    #[test]
+    fn syn_answered_before() {
+        // an ACK of the SYN that arrived before the SYN in a reordered
+        // capture answers it already: the responder's bytes ACK the
+        // initiator's SYN, the SYN arrives after them, and the responder's
+        // next segment with an ACK far beyond k windows is stored
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Responder, b"response");
+            let syn = script.segments.remove(0);
+            script.segments.drain(..2);
+            script.segments.push(syn);
+            let mut far = script.injected(|s| {
+                s.send(Responder, b"more");
+            });
+            far.header.acknowledgment_number = 1001 + (1 << 20);
+            script.segments.push(far);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(Some(1000), connection.stream(Initiator).isn());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"responsemore"), stream.read_received());
         }
     }
 

@@ -261,8 +261,12 @@ impl ModelStream {
                 return false;
             }
             // the SYN that starts the stream awaits its ACK
+            // an ACK of the SYN that arrived before it answers it already
             if false == had_base {
-                self.syn_unacked = true;
+                self.syn_unacked = false
+                    == self.kept_ack.is_some_and(|(ack, _)| {
+                        (segment.offset..=segment.offset + range).contains(&ack)
+                    });
             }
         } else if self.base.is_none() {
             let keep_alive = 1 == payload.len()

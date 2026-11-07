@@ -883,8 +883,10 @@ impl TcpStream {
             }
             // the SYN that starts the stream awaits its ACK (S5); a late one
             // arrives after the other side answered
+            // an ACK of the SYN that arrived before it (K1) answers it already
             if false == had_start {
-                self.syn_unacked = true;
+                self.syn_unacked = false
+                    == (self.kept_ack.is_some() && self.kept_ack_allows_syn(seq, window, config));
             }
             // the window scale is only known from the sender's SYN, which
             // can arrive after the SYN-ACK that started the stream, but not
