@@ -55,6 +55,9 @@ pub(crate) struct ReferenceModel {
     /// Number of retransmissions of the kept SYN that carried differing
     /// bytes.
     reconnect_syn_conflicting: u64,
+    /// Whether the kept SYN was kept as a possibly blind one (S5), not as a
+    /// reconnect's.
+    reconnect_syn_maybe_blind: bool,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -1311,6 +1314,7 @@ impl ReferenceModel {
                         }
                     }
                     None => {
+                        self.reconnect_syn_maybe_blind = self.maybe_blind_syn(segment);
                         self.reconnect_syn = Some(segment.clone());
                         self.reconnect_syn_conflicting = 0;
                     }
@@ -1386,15 +1390,11 @@ impl ReferenceModel {
         // other side as that stream's own: it is applied first, so that the
         // stream starts at the SYN, and counts as no further packet
         if header.syn {
-            let kept_stream_has_start = self.reconnect_syn.as_ref().is_some_and(|syn| {
-                self.streams[role_index(self.sender_role(syn))]
-                    .base
-                    .is_some()
-            });
             // the stream's own SYN-ACK, repeating the kept SYN's ISN,
-            // confirms it as well
+            // confirms it as well; a SYN kept as a reconnect's stays kept
+            let maybe_blind = self.reconnect_syn_maybe_blind;
             if let Some(syn) = self.reconnect_syn.take_if(|syn| {
-                false == kept_stream_has_start
+                maybe_blind
                     && (acks_syn(segment, syn)
                         || (syn.sender == segment.sender
                             && syn.incarnation == segment.incarnation
