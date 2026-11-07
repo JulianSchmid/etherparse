@@ -2305,6 +2305,7 @@ mod test {
                         Some(TcpConnectionEnd::Finished),
                         Some(TcpConnectionEnd::Reconnect),
                         Some(TcpConnectionEnd::Finished),
+                        Some(TcpConnectionEnd::Finished),
                     ],
                     ends
                 );
@@ -2444,9 +2445,9 @@ mod test {
     /// end in every way that hands them over: one that finishes after a
     /// hole was filled, one reset with a gap, and two replaced by reconnects
     /// that finish, after a SYN was kept: one starts with the SYN, the other
-    /// one at a SYN-ACK that doesn't ACK it. Each stream sends 48 bytes. The
-    /// ISNs depend on `round`, so the SYNs of a round start new connections
-    /// on the tombstones of the round before.
+    /// one at a SYN-ACK that doesn't ACK it, and one whose holes are split
+    /// and filled. The ISNs depend on `round`, so the SYNs of a round start
+    /// new connections on the tombstones of the round before.
     fn steady_state_round(round: u32) -> Vec<(TestSegment, Vec<u8>)> {
         let isn = round.wrapping_mul(1_000_000);
         let finished = late_bytes(50000, isn);
@@ -2484,9 +2485,27 @@ mod test {
             replaced
         });
 
+        // a segment splits the hole 16..48 into two while a later hole
+        // exists, and all of them are filled later
+        let mut split = ConnectionScript::with_port(50004, isn + 9000, isn + 10000);
+        split
+            .handshake()
+            .send_at(Initiator, 0, &[1; 16])
+            .send_at(Initiator, 48, &[4; 16])
+            .send_at(Initiator, 80, &[6; 16])
+            .send_at(Initiator, 24, &[2; 8])
+            .send_at(Initiator, 16, &[2; 8])
+            .send_at(Initiator, 32, &[3; 16])
+            .send_at(Initiator, 64, &[5; 16])
+            .send(Responder, &[7; 96])
+            .fin(Initiator)
+            .fin(Responder)
+            .ack(Initiator);
+
         [finished, reset]
             .iter()
             .chain(&reconnects)
+            .chain([&split])
             .flat_map(|script| &script.segments)
             .map(|segment| (segment.clone(), segment.to_bytes()))
             .collect()
@@ -2498,8 +2517,8 @@ mod test {
         pool: &mut TcpReassemblyPool<u32, ()>,
         segments: &[(TestSegment, Vec<u8>)],
         timestamp: u32,
-    ) -> [Option<TcpConnectionEnd>; 6] {
-        let mut ends = [None; 6];
+    ) -> [Option<TcpConnectionEnd>; 7] {
+        let mut ends = [None; 7];
         let mut count = 0;
         for (segment, bytes) in segments {
             let processed = segment.feed_bytes(bytes, pool, timestamp);

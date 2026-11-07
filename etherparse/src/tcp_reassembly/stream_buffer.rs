@@ -423,7 +423,7 @@ impl StreamBuffer {
         // of the buffer (an empty range at the end)
         let mut received_start = self.read_offset;
         let missing = self
-            .missing()
+            .missing_from(compared_start)
             .take_while(|range| range.start < end)
             .chain(core::iter::once(end..end));
         for range in missing {
@@ -442,8 +442,16 @@ impl StreamBuffer {
 
     /// Ranges of missing bytes (holes and gaps) in order.
     fn missing(&self) -> impl Iterator<Item = Range<u64>> + '_ {
-        let mut holes = self.holes.iter().peekable();
-        let mut gaps = self.gaps.iter().peekable();
+        self.missing_from(0)
+    }
+
+    /// Ranges of missing bytes (holes and gaps) that end after `offset`, in
+    /// order.
+    fn missing_from(&self, offset: u64) -> impl Iterator<Item = Range<u64>> + '_ {
+        let first_hole = self.holes.partition_point(|hole| hole.end <= offset);
+        let first_gap = self.gaps.partition_point(|gap| gap.end <= offset);
+        let mut holes = self.holes[first_hole..].iter().peekable();
+        let mut gaps = self.gaps[first_gap..].iter().peekable();
         core::iter::from_fn(move || match (holes.peek(), gaps.peek()) {
             // the gap of a resync comes before a hole at its offset
             (Some(hole), Some(gap)) if gap.start <= hole.start => gaps.next(),
@@ -455,12 +463,22 @@ impl StreamBuffer {
 
     /// Removes the bytes in `range` from the holes.
     fn remove_from_holes(&mut self, range: Range<u64>) {
-        // the parts of the holes before and after the range stay missing
+        // the parts of the holes before and after the range stay missing:
+        // they take the place of the cut holes (without allocating)
         let (cut, before, after) = self.cut_holes(&range);
-        let parts = [before, after]
-            .into_iter()
-            .filter(|part| false == part.is_empty());
-        self.holes.splice(cut, parts);
+        let mut kept = cut.start;
+        for part in [before, after] {
+            if part.is_empty() {
+                continue;
+            }
+            if kept < cut.end {
+                self.holes[kept] = part;
+            } else {
+                self.holes.insert(kept, part);
+            }
+            kept += 1;
+        }
+        self.holes.drain(kept..cut.end.max(kept));
     }
 
     /// Number of holes before the furthest stored byte (the ones the hole
