@@ -3012,6 +3012,36 @@ mod test {
                 (discard, consumed, next)
             );
         }
+
+        // the room for prepends before the first byte of a pickup is not
+        // consumed, so storing bytes doesn't drop it: bytes put in front and
+        // appended by turns cost little on average (the pickup holds 2000
+        // bytes with placeholders, then 200 pairs of single bytes come)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 1000)
+                .send(Initiator, b"a")
+                .send_at(Initiator, 2999, b"b");
+            script.segments.drain(..3);
+            let mut pairs = script.clone();
+            pairs.segments.clear();
+            for i in 1..=200u64 {
+                pairs
+                    .send_at(Initiator, 1000 - i, b"p")
+                    .send_at(Initiator, 2999 + i, b"q");
+            }
+            script.feed_all(&mut pool);
+            let bytes: Vec<_> = pairs.segments.iter().map(TestSegment::to_bytes).collect();
+            let (allocations, _) = count_allocations(|| {
+                for (segment, bytes) in pairs.segments.iter().zip(&bytes) {
+                    segment.feed_bytes(bytes, &mut pool, ());
+                }
+            });
+            assert!(allocations < 20, "{} allocations", allocations);
+        }
     }
 
     #[test]
