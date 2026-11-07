@@ -228,12 +228,13 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
             self.seq(sender, offset),
             self.window_size,
         );
+        // every segment but the first SYN ACKs the other side (a receiver
+        // drops segments without ACK), also in a pickup whose SYNs the
+        // script never sent
         let other = role_index(sender.other());
-        let ack = self.syns_sent[other].then_some(self.next_offsets[other]);
-        if let Some(ack) = ack {
-            header.ack = true;
-            header.acknowledgment_number = self.seq(sender.other(), ack);
-        }
+        let ack = Some(self.next_offsets[other]);
+        header.ack = true;
+        header.acknowledgment_number = self.seq(sender.other(), ack.unwrap_or(0));
         TestSegment {
             sender,
             offset,
@@ -283,6 +284,12 @@ impl<CustomChannelId: Clone> ConnectionScript<CustomChannelId> {
         let mut segment = self.segment(sender, 0, data);
         segment.header.syn = true;
         segment.header.sequence_number = self.isns[role_index(sender)];
+        // the SYN of the first side ACKs nothing
+        if false == self.syns_sent[role_index(sender.other())] {
+            segment.header.ack = false;
+            segment.header.acknowledgment_number = 0;
+            segment.ack = None;
+        }
         self.syns_sent[role_index(sender)] = true;
         if let Some(scale) = self.window_scales[role_index(sender)] {
             segment

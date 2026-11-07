@@ -1194,7 +1194,9 @@ impl ReferenceModel {
             return Some(replaced);
         }
         if false == self.created {
-            if header.rst || (false == header.syn && segment.payload.is_empty()) {
+            if header.rst
+                || (false == header.syn && (segment.payload.is_empty() || false == header.ack))
+            {
                 return None;
             }
             self.created = true;
@@ -1226,9 +1228,12 @@ impl ReferenceModel {
                 .reconnect_syn
                 .as_ref()
                 .is_some_and(|syn| acks_syn(segment, syn));
-        let dropped = false == (header.rst && self.streams[sender].base.is_some())
-            && false == acks_kept_syn
-            && self.streams[other].drops_before_syn_acked(segment, range, other_window);
+        // every receiver drops a segment without ACK that is no SYN or RST
+        // (S6)
+        let dropped = false == (header.ack || header.syn || header.rst)
+            || (false == (header.rst && self.streams[sender].base.is_some())
+                && false == acks_kept_syn
+                && self.streams[other].drops_before_syn_acked(segment, range, other_window));
         if false == dropped {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK

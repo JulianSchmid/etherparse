@@ -503,13 +503,14 @@ fn new_connection_initiator(
     destination: SocketAddr,
 ) -> Option<(SocketAddr, bool)> {
     // a SYN or SYN-ACK starts a connection with known roles, and bytes one
-    // with roles guessed from the ports (pure ACKs, FINs without bytes and
-    // RSTs don't start one)
+    // with roles guessed from the ports (pure ACKs, FINs without bytes, RSTs
+    // and segments without ACK, which every receiver drops (S6), don't
+    // start one)
     if tcp.rst() {
         None
     } else if tcp.syn() {
         Some((handshake_initiator(tcp, source, destination), false))
-    } else if false == tcp.payload().is_empty() {
+    } else if false == tcp.payload().is_empty() && tcp.ack() {
         // the lower port is the responder's, with equal ports the sender is
         // the initiator
         let initiator = if source.port() < destination.port() {

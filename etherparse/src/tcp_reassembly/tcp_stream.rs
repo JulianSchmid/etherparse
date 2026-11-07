@@ -559,8 +559,8 @@ impl TcpStream {
     }
 
     /// Drops the ACK kept for the stream without a start (A4/K1), as a
-    /// SYN-ACK that ACKs the receiver's SYN knows its ISN and outweighs it
-    /// (S5).
+    /// SYN-ACK or RST that ACKs the receiver's SYN knows its ISN and
+    /// outweighs it (S5).
     pub(crate) fn drop_kept_ack(&mut self) {
         self.kept_ack = None;
     }
