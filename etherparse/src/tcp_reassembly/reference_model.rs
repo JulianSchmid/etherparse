@@ -1222,6 +1222,7 @@ impl ReferenceModel {
         // a side in SYN-RECEIVED checks an RST by its sequence number (F4),
         // and a SYN-ACK that ACKs the kept SYN confirms the reconnect (C2)
         let acks_kept_syn = header.syn
+            && false == header.rst
             && self
                 .reconnect_syn
                 .as_ref()

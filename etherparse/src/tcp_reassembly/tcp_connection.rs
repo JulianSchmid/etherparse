@@ -260,9 +260,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// drops it, as its own SYN is unanswered and the segment doesn't ACK
     /// it (S5, see [`TcpStream::drops_before_syn_acked`]). A receiver in
     /// SYN-RECEIVED, whose other side has a start, checks an RST by its
-    /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK that
-    /// ACKs the kept SYN of a reconnect answers that SYN and confirms the
-    /// reconnect (C2).
+    /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK
+    /// without RST that ACKs the kept SYN of a reconnect answers that SYN
+    /// and confirms the reconnect (C2).
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
@@ -273,6 +273,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             return false;
         }
         if tcp.syn()
+            && false == tcp.rst()
             && self
                 .reconnect_syn
                 .as_ref()
@@ -1509,6 +1510,38 @@ mod test {
             script.syn_ack().ack(Initiator).send(Responder, b"response");
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+        }
+
+        // ... and neither does a SYN with an RST that ACKs the spoofed SYN
+        // (only the SYN-ACK that confirms the reconnect passes), with or
+        // without a FIN
+        for fin in [false, true] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut spoofed = script.injected(|s| {
+                s.syn();
+            });
+            spoofed.header.sequence_number = 0x7000_0000;
+            script.segments.push(spoofed);
+            let mut blind = script.injected(|s| {
+                s.rst_at(Responder, 0);
+            });
+            blind.header.syn = true;
+            blind.header.fin = fin;
+            blind.header.sequence_number = 0x4000_0000;
+            blind.header.ack = true;
+            blind.header.acknowledgment_number = 0x7000_0001;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
             let stream = connection.stream_mut(Responder);
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(1, stream.status().out_of_window_segments);
