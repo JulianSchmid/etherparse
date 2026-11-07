@@ -145,10 +145,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // while the receiver's SYN is unanswered, it drops every segment
         // that doesn't ACK that SYN, with its window and ACK (S5)
         let window = self.window(sender.other(), config);
-        if self
+        let dropped = self
             .stream_mut(sender.other())
-            .drops_before_syn_acked(tcp, window, config)
-        {
+            .drops_before_syn_acked(tcp, window, config);
+        if false == dropped {
+            self.stream_mut(sender).moves_on(tcp);
+        }
+        if dropped {
             self.stream_mut(sender).count_out_of_window();
         } else if tcp.rst() {
             self.add_reset(sender, tcp, config);
@@ -988,6 +991,59 @@ mod test {
             assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
             assert_eq!(TcpRead::Data(b"response"), stream.read_received());
             assert_eq!(0, stream.status().out_of_window_segments);
+        }
+
+        // the SYN's own sender answers it too with anything but a
+        // retransmission of the SYN: with the SYN-ACK and the responder's
+        // early ACKs not captured, the initiator's ACK answers its SYN, so
+        // the response that ACKs 300 bytes (more than k fallback windows
+        // after the SYN) isn't dropped
+        {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, &[1; 100])
+                .send(Initiator, &[2; 100])
+                .send(Initiator, &[3; 100])
+                .send(Responder, b"response");
+            script.segments.remove(1);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
+            assert_eq!(0, stream.status().out_of_window_segments);
+        }
+
+        // ... and a side that gives up its SYN-ACK with a new SYN of its own
+        // (a reconnect from the former responder) lets the other side's
+        // SYN-ACK through, which confirms the reconnect
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.syn().syn_ack();
+            old.feed_all(&mut pool);
+            let mut new =
+                ConnectionScript::new(addr("10.0.0.2:80"), addr("10.0.0.1:50000"), 7000, 9000);
+            new.syn()
+                .syn_ack()
+                .ack(Initiator)
+                .send(Initiator, b"request");
+            let processed = new.feed(&mut pool, ..2);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = new.feed(&mut pool, 2..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(addr("10.0.0.2:80"), connection.endpoint(Initiator));
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // late segments of a connection that a reconnect replaced don't ACK

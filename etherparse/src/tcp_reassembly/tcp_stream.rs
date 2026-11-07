@@ -506,6 +506,17 @@ impl TcpStream {
         false == (tcp.syn() && false == (tcp.ack() || tcp.fin()))
     }
 
+    /// Ends the wait for the ACK of the stream's SYN when its sender sends
+    /// `tcp`, anything but a retransmission of that SYN: it received an
+    /// answer that was not captured, or gave up (S5).
+    pub(crate) fn moves_on(&mut self, tcp: &TcpSlice<'_>) {
+        let retransmitted_syn =
+            tcp.syn() && self.syn.is_some_and(|syn| syn.isn == tcp.sequence_number());
+        if false == retransmitted_syn {
+            self.syn_unacked = false;
+        }
+    }
+
     /// Counts a segment of the stream's sender that lies outside of the
     /// stream (see [`TcpStreamStatus::out_of_window_segments`]).
     pub(crate) fn count_out_of_window(&mut self) {

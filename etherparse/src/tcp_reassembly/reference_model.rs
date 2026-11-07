@@ -563,6 +563,16 @@ impl ModelStream {
         false == (header.syn && false == (header.ack || header.fin))
     }
 
+    /// Ends the wait for the ACK of the stream's SYN when its sender sends
+    /// `segment`, anything but a retransmission of that SYN: it received an
+    /// answer that was not captured, or gave up (S5).
+    fn moves_on(&mut self, segment: &TestSegment) {
+        let retransmitted_syn = segment.header.syn && self.has_isn_of(segment);
+        if false == retransmitted_syn {
+            self.syn_unacked = false;
+        }
+    }
+
     /// Gives the stream an observed start at the true offset `start`, where
     /// the SYN carries `len` bytes. A mid-stream pickup takes it if it is at
     /// or before its first byte, at most `range` bytes before it, bytes can
@@ -1152,7 +1162,11 @@ impl ReferenceModel {
             .max_total_buffered
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
         let range = self.range(segment.sender.other());
-        if self.streams[other].drops_before_syn_acked(segment, range) {
+        let dropped = self.streams[other].drops_before_syn_acked(segment, range);
+        if false == dropped {
+            self.streams[sender].moves_on(segment);
+        }
+        if dropped {
             self.streams[sender].out_of_window_segments += 1;
         } else if header.rst {
             let window = self.window(segment.sender);
