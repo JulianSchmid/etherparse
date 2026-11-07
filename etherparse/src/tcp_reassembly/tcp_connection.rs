@@ -300,6 +300,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ) {
         if let Some(tcp) = syn.tcp() {
             let sender = self.role(syn.source);
+            // the confirmation outweighs an ACK kept for the stream (S5)
+            self.stream_mut(sender).drop_kept_ack();
             self.add_data_segment(sender, &tcp, config, available);
             // retransmissions of the SYN carried differing bytes
             self.stream_mut(sender)
@@ -2006,6 +2008,45 @@ mod test {
             let stream = connection.stream_mut(Responder);
             assert_eq!(Some(2000), stream.isn());
             assert_eq!(conflicts, stream.status().conflicting_retransmissions);
+            assert_eq!(TcpRead::Data(b"abcnext"), stream.read_received());
+        }
+
+        // ... and the confirmation outweighs an ACK a blind segment with the
+        // initiator's address left kept for the responder stream, so the
+        // kept SYN still starts it
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            responder_syn.payload = b"abc".to_vec();
+            script.segments.push(responder_syn);
+            let mut blind = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind.header.acknowledgment_number = 0x4000_0000;
+            script.segments.push(blind);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2004;
+            script.segments.push(initiator_syn_ack);
+            let mut next = script.injected(|s| {
+                s.send_at(Responder, 3, b"next");
+            });
+            next.header.acknowledgment_number = 1001;
+            script.segments.push(next);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpStreamStart::Observed, stream.status().start);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(0, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"abcnext"), stream.read_received());
         }
 
