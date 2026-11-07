@@ -43,7 +43,9 @@ pub struct TcpReassemblyConfig {
     ///
     /// The receiver must have acknowledged the missing bytes by then. An
     /// overdue hole is given up once the read position reaches it, and late
-    /// segments fill it until then. `None` switches this off.
+    /// segments fill it until then. `None` switches this off. The distance
+    /// is at most half of [`TcpReassemblyConfig::max_stream_buffer`], so a
+    /// reader of the ACKed bytes keeps up before the buffer is full.
     ///
     /// The same number of windows limits how far after the furthest received
     /// or ACKed byte new bytes are accepted, and how far before the first

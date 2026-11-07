@@ -779,7 +779,9 @@ impl ModelStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            let implied_ack = self.highest.saturating_sub(u64::from(factor) * window);
+            // at most half of the stream's buffer
+            let distance = (u64::from(factor) * window).min(config.max_stream_buffer as u64 / 2);
+            let implied_ack = self.highest.saturating_sub(distance);
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
         let tolerance = u64::from(config.ack_reorder_tolerance);

@@ -1056,15 +1056,18 @@ impl TcpStream {
         // window shrank (e.g. to 0 when the receiver's buffer is full)
         self.largest_window = self.largest_window.max(window);
         if let Some(factor) = config.hole_give_up_window_factor {
-            // allow for several windows, as the window can change
+            // allow for several windows, as the window can change, but never
+            // more than half of the stream's buffer: a reader of the ACKed
+            // bytes has to be able to keep up before the buffer is full
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
+            let distance = window
+                .saturating_mul(u64::from(factor))
+                .min(config.max_stream_buffer as u64 / 2);
             let implied_ack = i64::try_from(self.highest_offset())
                 .unwrap_or(i64::MAX)
-                .saturating_sub(
-                    i64::try_from(window.saturating_mul(u64::from(factor))).unwrap_or(i64::MAX),
-                );
+                .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
             self.implied_ack = self.implied_ack.max(Some(implied_ack));
         }
         // ACKs reordered against the data in a capture can come first, so
@@ -3985,6 +3988,37 @@ mod test {
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(0, connection.stream(Initiator).acked_offset());
             assert_eq!(0, connection.stream(Responder).acked_offset());
+        }
+
+        // the implied ACK lies at most half of the stream's buffer before the
+        // highest offset, whatever the window (here 2 * 65535 bytes), so a
+        // reader of the ACKed bytes keeps up before the buffer is full and
+        // no bytes are rejected (20 segments of 100 bytes, nothing ACKed)
+        for (max_stream_buffer, expected) in [(1000, 1500), (3000, 500), (8 << 20, 0)] {
+            let config = TcpReassemblyConfig {
+                max_stream_buffer,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake();
+            for _ in 0..20 {
+                script.send(Initiator, &[7; 100]);
+            }
+            for segment in &script.segments {
+                let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                if let TcpRead::Data(data) = stream.read_acked() {
+                    let len = data.len();
+                    stream.consume(len);
+                }
+            }
+            let connection = pool.iter_mut().next().unwrap();
+            let stream = connection.stream(Initiator);
+            assert_eq!(expected, stream.acked_offset());
+            assert_eq!(expected, stream.read_offset());
+            assert_eq!(2000, stream.highest_offset());
+            assert_eq!(0, stream.status().rejected_bytes);
         }
 
         // follows the highest ACK, older ACKs arriving later change nothing
