@@ -461,6 +461,12 @@ impl TcpStream {
         self.fin_offset.is_some_and(|fin| fin < self.seen_ack)
     }
 
+    /// Counts a retransmission with differing bytes that happened before
+    /// the stream existed (in the SYN kept for a reconnect).
+    pub(crate) fn count_conflicting_retransmission(&mut self) {
+        self.status.conflicting_retransmissions += 1;
+    }
+
     /// Gives up all holes, as the connection ended (late segments are
     /// ignored after the end, so they can't fill them anymore). Once nothing
     /// more is readable, reads return `end` (or [`TcpStreamEnd::Fin`] at

@@ -546,8 +546,9 @@ fn new_connection<Timestamp: Clone, CustomChannelId>(
     TcpConnection::new(id, key, initiator, roles_guessed, timestamp, free)
 }
 
-/// The SYN `kept` by the connection that the SYN-ACK `tcp` from `source`
-/// replaces, if the SYN-ACK ACKs it: the reconnect then starts with the
+/// The SYN `kept` by the connection that the segment `tcp` from `source`
+/// replaces, if the segment is the SYN-ACK that ACKs it, or (on a
+/// tombstone) a retransmission of it: the reconnect then starts with the
 /// kept SYN, which is replayed. Otherwise the kept SYN's buffer goes back
 /// to `free`.
 fn replayed_reconnect_syn<Timestamp>(
@@ -557,7 +558,9 @@ fn replayed_reconnect_syn<Timestamp>(
     free: &mut FreeBuffers,
 ) -> Option<ReconnectSyn<Timestamp>> {
     match kept {
-        Some(syn) if syn.is_acked_by(source, tcp) => Some(syn),
+        Some(syn) if syn.is_acked_by(source, tcp) || syn.is_retransmitted_by(source, tcp) => {
+            Some(syn)
+        }
         Some(syn) => {
             syn.recycle(free);
             None
@@ -1212,20 +1215,49 @@ mod test {
             assert_eq!(TcpRead::Data(b"x"), stream.read_received());
         }
 
-        // a retransmission of the kept SYN that carries more TCP Fast Open
-        // bytes replaces it, so the reconnect starts with these bytes
+        // a retransmission of the kept SYN adds the TCP Fast Open bytes it
+        // carries beyond the kept ones, the bytes received first win, and
+        // differing bytes count as a conflicting retransmission once the
+        // reconnect starts; the reconnect's first packet is the first SYN
+        for (retransmitted, read, conflicting) in
+            [(&b"GET"[..], &b"GET"[..], 0), (&b"XYZ"[..], &b"GYZ"[..], 1)]
         {
-            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 2000);
             old.handshake();
             old.feed_all(&mut pool);
             let mut new = ConnectionScript::with_isns(5000, 6000);
-            new.syn_with_data(b"GET").syn_ack();
-            let mut short = new.segments[0].clone();
-            short.payload = b"G".to_vec();
-            short.feed(&mut pool, ());
-            new.segments[0].feed(&mut pool, ());
-            let (connection, _) = new.segments[1].feed(&mut pool, ()).active.unwrap();
+            new.syn_with_data(b"G").syn_ack();
+            new.segments[1].header.acknowledgment_number = 5004;
+            new.segments[0].feed(&mut pool, 7);
+            let mut longer = new.segments[0].clone();
+            longer.payload = retransmitted.to_vec();
+            longer.feed(&mut pool, 8);
+            let (connection, _) = new.segments[1].feed(&mut pool, 9).active.unwrap();
+            assert_eq!(&7, connection.first_seen());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(read), stream.read_received());
+            assert_eq!(conflicting, stream.status().conflicting_retransmissions);
+        }
+
+        // a retransmission of the kept SYN on the tombstone of its connection
+        // starts the reconnect with the kept SYN, so its bytes and timestamp
+        // stay (the old connection is reset after the SYN was kept, and the
+        // retransmission carries no bytes)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut new = ConnectionScript::with_isns(5000, 6000);
+            new.syn_with_data(b"GET");
+            new.segments[0].feed(&mut pool, 7);
+            old.rst(Responder);
+            assert!(old.segments[3].feed(&mut pool, 8).ended.is_some());
+            let mut empty = new.segments[0].clone();
+            empty.payload.clear();
+            let (connection, _) = empty.feed(&mut pool, 9).active.unwrap();
+            assert_eq!(&7, connection.first_seen());
             assert_eq!(
                 TcpRead::Data(b"GET"),
                 connection.stream_mut(Initiator).read_received()
@@ -1423,8 +1455,8 @@ mod test {
 
         // a connection that ends while a SYN is kept leaves it in its
         // tombstone: a SYN-ACK that ACKs it starts the reconnect with the SYN
-        // (its bytes and timestamp), and a retransmission of the SYN starts
-        // it right away
+        // (its bytes and timestamp), and so does a retransmission of the SYN,
+        // right away
         for retransmitted in [false, true] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 2000);
@@ -1445,7 +1477,7 @@ mod test {
             assert!(processed.ended.is_none());
             let (connection, _) = processed.active.unwrap();
             assert_eq!(TcpConnectionId(1), connection.id());
-            assert_eq!(&if retransmitted { 9 } else { 7 }, connection.first_seen());
+            assert_eq!(&7, connection.first_seen());
             assert_eq!(
                 TcpRead::Data(b"GET"),
                 connection.stream_mut(Initiator).read_received()

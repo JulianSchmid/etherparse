@@ -271,18 +271,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Keeps the SYN `tcp` of `source`, which has a new ISN, in a buffer
     /// from `free` until the other endpoint's SYN-ACK confirms the
-    /// reconnect it starts. A retransmission of the kept SYN changes
-    /// nothing, unless it carries more TCP Fast Open bytes; a SYN with
-    /// another ISN or from the other endpoint replaces it.
+    /// reconnect it starts. A retransmission of the kept SYN only adds the
+    /// TCP Fast Open bytes it carries beyond the kept ones (the bytes
+    /// received first win, and differing bytes count as a conflict once the
+    /// SYN is replayed); a SYN with another ISN or from the other endpoint
+    /// replaces it.
     fn keep_reconnect_syn(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>, free: &mut FreeBuffers)
     where
         Timestamp: Clone,
     {
-        if self.reconnect_syn.as_ref().is_some_and(|syn| {
-            syn.source == source
-                && syn.isn == tcp.sequence_number()
-                && tcp.payload().len() <= syn.payload_len
-        }) {
+        if let Some(syn) = self
+            .reconnect_syn
+            .as_mut()
+            .filter(|syn| syn.is_retransmitted_by(source, tcp))
+        {
+            syn.add_retransmission(tcp.payload());
             return;
         }
         // re-use the buffer of a replaced SYN
@@ -297,6 +300,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             timestamp: self.last_seen.clone(),
             isn: tcp.sequence_number(),
             payload_len: tcp.payload().len(),
+            conflicting: false,
             segment,
         });
     }
@@ -349,7 +353,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     {
         if let Some(tcp) = syn.tcp() {
             let timestamp = syn.timestamp.clone();
-            self.add_segment(syn.source, &tcp, timestamp, config, available, free);
+            let sender = self.add_segment(syn.source, &tcp, timestamp, config, available, free);
+            // a retransmission of the SYN carried differing bytes
+            if syn.conflicting {
+                self.stream_mut(sender).count_conflicting_retransmission();
+            }
         }
     }
 
@@ -490,8 +498,12 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     timestamp: Timestamp,
     /// ISN of the SYN.
     isn: u32,
-    /// Number of bytes the SYN carries (TCP Fast Open).
+    /// Number of bytes the SYN carries (TCP Fast Open), with the ones its
+    /// retransmissions added.
     payload_len: usize,
+    /// Whether a retransmission of the SYN carried bytes that differ from
+    /// the ones received first.
+    conflicting: bool,
     /// TCP header and payload of the SYN, replayed if it starts a reconnect.
     segment: Vec<u8>,
 }
@@ -510,6 +522,30 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
             .acknowledgment_number()
             .wrapping_sub(self.isn.wrapping_add(1));
         source != self.source && tcp.ack() && (acked as usize) <= self.payload_len
+    }
+
+    /// Returns true if the SYN `tcp`, sent by `source`, is a retransmission
+    /// of the kept SYN: it comes from the same endpoint with the same ISN.
+    pub fn is_retransmitted_by(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        source == self.source
+            && tcp.syn()
+            && false == tcp.ack()
+            && tcp.sequence_number() == self.isn
+    }
+
+    /// Takes the TCP Fast Open bytes that the `payload` of a retransmission
+    /// of the SYN adds beyond the kept ones. The bytes received first stay,
+    /// and differing bytes mark the SYN as conflicting.
+    fn add_retransmission(&mut self, payload: &[u8]) {
+        let kept = &self.segment[self.segment.len() - self.payload_len..];
+        let overlap = kept.len().min(payload.len());
+        if kept[..overlap] != payload[..overlap] {
+            self.conflicting = true;
+        }
+        if let Some(added) = payload.get(overlap..) {
+            self.segment.extend_from_slice(added);
+            self.payload_len += added.len();
+        }
     }
 
     /// Puts the buffer that kept the SYN into `free` for re-use.

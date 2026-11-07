@@ -44,8 +44,11 @@ pub(crate) struct ReferenceModel {
     /// Number of packets applied so far.
     packets: u64,
     /// SYN that is not the own SYN of its sender's stream, kept until the
-    /// SYN-ACK of the other endpoint ACKs it and starts a reconnect.
+    /// SYN-ACK of the other endpoint ACKs it and starts a reconnect, with
+    /// the bytes its retransmissions added.
     reconnect_syn: Option<TestSegment>,
+    /// Whether a retransmission of the kept SYN carried differing bytes.
+    reconnect_syn_conflicting: bool,
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -977,6 +980,15 @@ fn acks_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
         && segment.ack.is_some_and(|ack| bytes.contains(&ack))
 }
 
+/// Returns true if the SYN `segment` retransmits the SYN `syn` of the same
+/// script: it comes from the same endpoint, without the ACK flag.
+fn retransmits_syn(segment: &TestSegment, syn: &TestSegment) -> bool {
+    segment.header.syn
+        && false == segment.header.ack
+        && syn.incarnation == segment.incarnation
+        && syn.sender == segment.sender
+}
+
 /// Returns true if the true offset `offset` lies at most `window` bytes
 /// before or after the `bytes`.
 fn within_window(bytes: &Range<u64>, offset: u64, window: u64) -> bool {
@@ -1036,14 +1048,19 @@ impl ReferenceModel {
         };
         if reconnect {
             // the reconnect starts with the kept SYN if the segment ACKs it
+            // or retransmits it
             let syn = self
                 .reconnect_syn
                 .take()
-                .filter(|syn| acks_syn(segment, syn));
+                .filter(|syn| acks_syn(segment, syn) || retransmits_syn(segment, syn));
+            let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
             let next = self.next_connection();
             let mut replaced = core::mem::replace(self, next);
             if let Some(syn) = syn {
                 self.apply(&syn);
+                if conflicting {
+                    self.streams[role_index(syn.sender)].conflicting_retransmissions += 1;
+                }
             }
             self.apply(segment);
             if replaced.end.is_some() {
@@ -1081,16 +1098,28 @@ impl ReferenceModel {
                 self.streams[sender].out_of_window_segments += 1;
             }
         } else if header.syn && false == self.is_own_syn(segment) {
-            // the SYNs of a script all have the same ISN
-            // a retransmission with more Fast Open bytes replaces the kept SYN
-            if false == header.ack
-                && self.reconnect_syn.as_ref().is_none_or(|syn| {
-                    syn.incarnation != segment.incarnation
-                        || syn.sender != segment.sender
-                        || syn.payload.len() < segment.payload.len()
-                })
-            {
-                self.reconnect_syn = Some(segment.clone());
+            // the SYNs of a script all have the same ISN; a retransmission
+            // adds the Fast Open bytes beyond the kept ones, the first win
+            if false == header.ack {
+                match self
+                    .reconnect_syn
+                    .as_mut()
+                    .filter(|syn| retransmits_syn(segment, syn))
+                {
+                    Some(syn) => {
+                        let overlap = syn.payload.len().min(segment.payload.len());
+                        if syn.payload[..overlap] != segment.payload[..overlap] {
+                            self.reconnect_syn_conflicting = true;
+                        }
+                        if let Some(added) = segment.payload.get(overlap..) {
+                            syn.payload.extend_from_slice(added);
+                        }
+                    }
+                    None => {
+                        self.reconnect_syn = Some(segment.clone());
+                        self.reconnect_syn_conflicting = false;
+                    }
+                }
             }
         } else {
             let observed = self.streams.each_ref().map(|stream| stream.observed);
