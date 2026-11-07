@@ -46,7 +46,8 @@ pub struct TcpStreamStatus {
     /// number plus one (except the filler byte of a keep-alive right before
     /// it) or before the first byte of a mid-stream pickup that can't take
     /// them anymore (see [`TcpStreamStart::MidStreamPickup`]). Late segments
-    /// of a connection that a new one replaced count here.
+    /// with bytes of a connection that a new one replaced count here, but
+    /// bytes that map before the point of a resync don't.
     ///
     /// These bytes are not stored. FINs starting after the receiver's window
     /// count too, and so do SYNs that a mid-stream pickup can't take and
@@ -58,7 +59,7 @@ pub struct TcpStreamStatus {
     /// ACK starts the stream. So a count that keeps growing on a clean stream
     /// that was picked up mid-stream can mean that two blind segments
     /// anchored it elsewhere; [`crate::tcp_reassembly::TcpStream::force_resync`]
-    /// recovers such a stream.
+    /// recovers such a stream, unless a blind FIN after them ended it.
     pub out_of_window_segments: u64,
 }
 

@@ -46,7 +46,8 @@ pub struct TcpStream {
     /// Whether a segment that lay far from the kept ACK was refused as the
     /// stream's start: the segment or the ACK is forged, or the receiver's
     /// window is larger than the fallback window assumes, so the next
-    /// segment with bytes starts the stream wherever it lies.
+    /// segment with bytes and without a FIN starts the stream wherever it
+    /// lies.
     start_disputed: bool,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
