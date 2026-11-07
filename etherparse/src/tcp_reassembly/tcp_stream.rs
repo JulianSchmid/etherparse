@@ -69,7 +69,8 @@ pub struct TcpStream {
 
     /// Number of the connection's packet that moved the seen ACK forward
     /// and the seen ACK after it, for the packets of the last
-    /// `ack_reorder_tolerance` ones that did so while there were holes.
+    /// `ack_reorder_tolerance` ones that did so while there were holes, or
+    /// while a prepend could add one.
     recent_acks: VecDeque<(u64, u64)>,
 
     /// Seen ACK as it was `ack_reorder_tolerance` packets ago (holes before
@@ -1243,7 +1244,7 @@ impl ObservedSyn {
 }
 
 /// Where a segment lies in a stream (see [`TcpStream::place`]).
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 struct Placed {
     /// Offset of the segment's first byte (`None` if its sequence number
     /// can't be mapped).
