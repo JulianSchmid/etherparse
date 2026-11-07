@@ -659,15 +659,8 @@ impl TcpStream {
         };
 
         // 3. put in front
-        let (start, mut out_of_window) = self.take_in_front(
-            start,
-            seq,
-            data.len(),
-            is_keep_alive_shaped(tcp),
-            window,
-            config,
-            available,
-        );
+        let (start, mut out_of_window) =
+            self.take_in_front(tcp, start, seq, window, config, available);
         let end = start + data.len() as i64;
 
         // 4. keep-alive
@@ -839,29 +832,28 @@ impl TcpStream {
         placed
     }
 
-    /// Puts the `data_len` bytes at the offset `start` (with the sequence
+    /// Puts the bytes of `tcp` at the offset `start` (with the sequence
     /// number `seq`) in front of a mid-stream pickup if they begin before
     /// its first byte and fit, until it is read from. Returns the offset
     /// the bytes are stored at, and whether the segment counts as
     /// out-of-window, as its bytes before offset 0 are outside the stream
-    /// (only the filler byte of a keep-alive, a segment that `is_keep_alive_shaped`
-    /// and lies right before the first byte of an observed start, doesn't
-    /// count).
+    /// (only the filler byte of a keep-alive right before the first byte of
+    /// an observed start doesn't count).
     fn take_in_front(
         &mut self,
+        tcp: &TcpSlice<'_>,
         start: i64,
         seq: u32,
-        data_len: usize,
-        keep_alive_shaped: bool,
         window: u64,
         config: &TcpReassemblyConfig,
         available: &mut usize,
     ) -> (i64, bool) {
+        let data_len = tcp.payload().len();
         if 0 <= start || 0 == data_len {
             return (start, false);
         }
         if TcpStreamStart::Observed == self.status.start {
-            let keep_alive_filler = -1 == start && keep_alive_shaped;
+            let keep_alive_filler = -1 == start && is_keep_alive_shaped(tcp);
             return (start, false == keep_alive_filler);
         }
         if false == self.can_move_start_back(start, window, config) {
