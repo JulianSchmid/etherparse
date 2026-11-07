@@ -1219,8 +1219,15 @@ impl ReferenceModel {
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
         let range = self.range(sender_role.other());
         let other_window = self.window(sender_role.other());
-        // a side in SYN-RECEIVED checks an RST by its sequence number (F4)
+        // a side in SYN-RECEIVED checks an RST by its sequence number (F4),
+        // and a SYN-ACK that ACKs the kept SYN confirms the reconnect (C2)
+        let acks_kept_syn = header.syn
+            && self
+                .reconnect_syn
+                .as_ref()
+                .is_some_and(|syn| acks_syn(segment, syn));
         let dropped = false == (header.rst && self.streams[sender].base.is_some())
+            && false == acks_kept_syn
             && self.streams[other].drops_before_syn_acked(segment, range, other_window);
         // an RST that F4 ignores is dropped with its ACK
         if false == dropped && false == header.rst {
@@ -1252,9 +1259,7 @@ impl ReferenceModel {
         } else if header.syn && false == self.is_own_syn(segment) {
             // the SYNs of a script all have the same ISN; a retransmission
             // adds the Fast Open bytes beyond the kept ones, the first win
-            // the SYN ends the wait for the ACK of the sender's SYN (S5)
             if false == header.ack {
-                self.streams[sender].syn_unacked = false;
                 match self
                     .reconnect_syn
                     .as_mut()
@@ -1412,21 +1417,20 @@ impl ReferenceModel {
         else {
             return false;
         };
+        if false == (header.syn && header.ack) || header.rst {
+            return false;
+        }
+        if acks_syn(segment, syn) {
+            return false == self.has_isn_of_sender(segment);
+        }
         // a SYN-ACK the receiver drops confirms nothing (S5)
         let other_role = self.sender_role(segment).other();
         let other = role_index(other_role);
         let (range, window) = (self.range(other_role), self.window(other_role));
-        if false == (header.syn && header.ack)
-            || header.rst
-            || self.streams[other].drops_before_syn_acked(segment, range, window)
-        {
+        if self.streams[other].drops_before_syn_acked(segment, range, window) {
             return false;
         }
-        if acks_syn(segment, syn) {
-            false == self.has_isn_of_sender(segment)
-        } else {
-            false == self.is_own_syn(segment)
-        }
+        false == self.is_own_syn(segment)
     }
 
     /// Range before and after the bytes of the stream of `role` that its

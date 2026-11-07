@@ -53,8 +53,8 @@ pub struct TcpStream {
     /// Whether the sender's SYN was seen but not answered yet: the sender
     /// is in SYN-SENT or SYN-RECEIVED and drops every segment of the other
     /// side that doesn't ACK the SYN (S5). Answered by such an ACK, by a
-    /// segment of the sender that its stream accepts or a SYN of the sender
-    /// with a new ISN, or by enough consecutive dropped segments.
+    /// segment of the sender that its stream accepts, or by enough
+    /// consecutive dropped segments.
     syn_unacked: bool,
 
     /// Last segment of the other side dropped while the SYN was unanswered,
@@ -574,12 +574,6 @@ impl TcpStream {
         if self.acks_unacked_syn(tcp, window, config) {
             self.syn_unacked = false;
         }
-    }
-
-    /// Ends the wait for the ACK of the stream's SYN, as its sender gave the
-    /// handshake up with a SYN with a new ISN (S5).
-    pub(crate) fn gives_up_syn(&mut self) {
-        self.syn_unacked = false;
     }
 
     /// Counts a segment of the stream's sender that lies outside of the

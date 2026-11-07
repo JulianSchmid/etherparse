@@ -244,11 +244,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                     .is_own_syn(tcp, self.window(sender, config), config)
         {
             // a SYN with a new ISN starts a reconnect once a SYN-ACK confirms
-            // it, until then it changes nothing but ends the wait for the
-            // ACK of the sender's SYN (S5), and neither does a SYN-ACK with a
-            // new ISN that confirms none
+            // it, until then it changes nothing, and neither does a SYN-ACK
+            // with a new ISN that confirms none
             if false == tcp.ack() {
-                self.stream_mut(sender).gives_up_syn();
                 self.keep_reconnect_syn(source, tcp, free);
             }
         } else {
@@ -260,7 +258,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// drops it, as its own SYN is unanswered and the segment doesn't ACK
     /// it (S5, see [`TcpStream::drops_before_syn_acked`]). A receiver in
     /// SYN-RECEIVED, whose other side has a start, checks an RST by its
-    /// sequence number instead (RFC 9293 3.10.7.4, F4).
+    /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK that
+    /// ACKs the kept SYN of a reconnect answers that SYN and confirms the
+    /// reconnect (C2).
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
@@ -268,6 +268,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         config: &TcpReassemblyConfig,
     ) -> bool {
         if tcp.rst() && self.stream(sender).has_start() {
+            return false;
+        }
+        if tcp.syn()
+            && self
+                .reconnect_syn
+                .as_ref()
+                .is_some_and(|syn| syn.is_acked_by(self.endpoint(sender), tcp))
+        {
             return false;
         }
         let window = self.window(sender.other(), config);
@@ -1201,10 +1209,10 @@ mod test {
             );
         }
 
-        // ... also when the SYN-ACK confirms no reconnect, as a SYN of its
-        // own sender replaced the kept one: the old SYN-ACK's sender gave it
-        // up, so the SYN-ACK is ignored like any with a new ISN that
-        // confirms nothing instead of counted
+        // ... but a SYN-ACK that confirms no reconnect, as a SYN of its own
+        // sender replaced the kept one, ACKs neither the kept SYN nor the
+        // receiver's unanswered SYN-ACK: it is dropped and counted (a SYN
+        // with a new ISN ends no wait, as a blind one could)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut old = ConnectionScript::with_isns(1000, 2000);
@@ -1223,7 +1231,7 @@ mod test {
                 .unwrap();
             assert_eq!(TcpConnectionId(0), connection.id());
             assert_eq!(
-                0,
+                1,
                 connection.stream(Initiator).status().out_of_window_segments
             );
         }
@@ -1475,6 +1483,34 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(1, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"request"), stream.read_received());
+        }
+
+        // a SYN with a new ISN spoofed with the initiator's address doesn't
+        // end the wait for the ACK of the initiator's SYN, so a blind RST
+        // without ACK from the responder's address after it is still
+        // dropped, and the real SYN-ACK anchors
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut spoofed = script.injected(|s| {
+                s.syn();
+            });
+            spoofed.header.sequence_number = 0x7000_0000;
+            script.segments.push(spoofed);
+            let mut blind = script.injected(|s| {
+                s.rst_at(Responder, 1 << 30);
+            });
+            blind.header.ack = false;
+            blind.ack = None;
+            script.segments.push(blind);
+            script.syn_ack().ack(Initiator).send(Responder, b"response");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(1, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"response"), stream.read_received());
         }
     }
 
