@@ -1241,21 +1241,36 @@ mod test {
         // bytes of the SYN belongs to its handshake, also if the responder's
         // ISN was never seen (the initiator resets the connection right
         // after its SYN), and also if a retransmission of the SYN carried
-        // the bytes
-        for payloads in [&[&b"GET"[..]][..], &[&b"G"[..], &b"GET"[..]][..]] {
+        // the bytes, before or after the reset
+        for (before_reset, after_reset) in [
+            (&[&b"GET"[..]][..], &[][..]),
+            (&[&b"G"[..], &b"GET"[..]][..], &[][..]),
+            (&[&b"G"[..]][..], &[&b"GET"[..]][..]),
+        ] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.syn_with_data(payloads[0]);
-            for payload in &payloads[1..] {
+            script.syn_with_data(before_reset[0]);
+            let retransmission = |script: &ConnectionScript, payload: &[u8]| {
                 let mut syn = script.segments[0].clone();
                 syn.payload = payload.to_vec();
+                syn
+            };
+            for payload in &before_reset[1..] {
+                let syn = retransmission(&script, payload);
                 script.segments.push(syn);
             }
-            script.rst_at(Initiator, 3).syn_ack();
-            let syns = payloads.len();
-            assert!(script.feed(&mut pool, ..syns + 1).ended.is_some());
-            let processed = script.feed(&mut pool, syns + 1..);
-            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            script.rst_at(Initiator, 3);
+            for payload in after_reset {
+                let syn = retransmission(&script, payload);
+                script.segments.push(syn);
+            }
+            script.syn_ack();
+            let reset = before_reset.len();
+            assert!(script.feed(&mut pool, ..reset + 1).ended.is_some());
+            for segment in &script.segments[reset + 1..] {
+                let processed = segment.feed(&mut pool, ());
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
             assert_eq!((0, 1), (pool.stats().connections, pool.stats().tombstones));
         }
 

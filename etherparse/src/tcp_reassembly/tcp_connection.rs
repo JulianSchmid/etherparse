@@ -459,15 +459,24 @@ impl<Timestamp> Tombstone<Timestamp> {
     /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
     /// to the handshake of the ended connection: it has the ISN of its
     /// sender's stream, or it is a SYN-ACK that ACKs the SYN of the other
-    /// stream (up to the end of the SYN's TCP Fast Open bytes).
-    pub fn is_own_handshake(&self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+    /// stream (up to the end of the SYN's TCP Fast Open bytes). A
+    /// retransmitted SYN can carry more TCP Fast Open bytes, which a late
+    /// SYN-ACK can ACK.
+    pub fn is_own_handshake(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = if source == self.initiator {
-            self.syns
+            [0, 1]
         } else {
-            [self.syns[1], self.syns[0]]
+            [1, 0]
         };
-        own.is_some_and(|syn| syn.isn == tcp.sequence_number())
-            || (tcp.ack() && other.is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number())))
+        if let Some(syn) = self.syns[own]
+            .as_mut()
+            .filter(|syn| syn.isn == tcp.sequence_number())
+        {
+            syn.len = syn.len.max(tcp.payload().len() as u32);
+            return true;
+        }
+        tcp.ack()
+            && self.syns[other].is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
     }
 }
 

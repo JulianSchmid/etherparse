@@ -1022,6 +1022,11 @@ impl ReferenceModel {
         let header = &segment.header;
         let reconnect = if self.end.is_some() {
             if header.rst || false == header.syn || self.is_own_handshake(segment) {
+                // a retransmitted SYN can carry more Fast Open bytes
+                if header.syn && self.has_isn_of_sender(segment) {
+                    let stream = &mut self.streams[role_index(segment.sender)];
+                    stream.syn_len = stream.syn_len.max(segment.payload.len() as u64);
+                }
                 return None;
             }
             true
