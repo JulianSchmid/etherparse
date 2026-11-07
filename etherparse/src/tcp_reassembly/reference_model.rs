@@ -1358,7 +1358,6 @@ impl ReferenceModel {
         Some(evicted)
     }
 
-    /// Model of the next connection on the same key.
     /// Applies `segment`, which the receiver accepts in its handshake state
     /// (S5, S6) and which is no RST or kept SYN, to the connection's streams,
     /// with the pool's budget `available`.
@@ -1456,6 +1455,7 @@ impl ReferenceModel {
         }
     }
 
+    /// Model of the next connection on the same key.
     fn next_connection(&self) -> ReferenceModel {
         ReferenceModel {
             id: self.id + 1,

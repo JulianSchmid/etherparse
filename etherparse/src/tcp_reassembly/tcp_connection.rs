@@ -261,52 +261,56 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 self.keep_reconnect_syn(source, tcp, free);
             }
         } else {
-            // the SYN-ACK of a simultaneous open confirms the kept SYN of the
-            // other side, whose stream has no start yet, as that stream's
-            // own (C2 found no reconnect): it is applied first, so that the
-            // stream starts at the SYN with its bytes, window scale and
-            // window, not at the ACK number (A2); a kept SYN of a stream
-            // with a start is a reconnect's and stays kept
             if tcp.syn() {
-                let kept_stream_has_start = self
-                    .reconnect_syn
-                    .as_ref()
-                    .is_some_and(|syn| self.stream(self.role(syn.source)).has_start());
-                // the stream's own SYN-ACK, repeating the kept SYN's ISN,
-                // confirms it as well
-                if let Some(syn) = self.reconnect_syn.take_if(|syn| {
-                    false == kept_stream_has_start
-                        && (syn.is_acked_by(source, tcp)
-                            || (syn.source == source && syn.isn == tcp.sequence_number()))
-                }) {
-                    self.apply_kept_syn(&syn, config, available);
-                    syn.recycle(free);
-                    // the SYN-ACK ACKs the SYN it just applied
-                    self.stream_mut(sender.other())
-                        .answer_syn(tcp, window, config);
-                }
+                self.confirm_kept_syn(sender, source, tcp, window, config, available, free);
             }
             self.add_data_segment(sender, tcp, config, available);
         }
     }
 
-    /// Applies the kept SYN `syn` to its stream as the stream's own SYN,
-    /// without counting it as a packet again (it counted when it was kept).
-    fn apply_kept_syn(
+    /// Applies the kept SYN of a simultaneous open if the SYN-ACK `tcp`
+    /// sent by `sender` from `source` confirms it as the own SYN of a stream
+    /// without a start, so that the stream starts at the SYN with its
+    /// bytes, window scale and window, not at the ACK number (A2): the
+    /// other side's SYN-ACK confirms it by ACKing it (C2 found no
+    /// reconnect), the sender's own SYN-ACK by repeating its ISN. The
+    /// confirmation outweighs an ACK kept for the stream (S5), the applied
+    /// SYN counts as no further packet (it counted when it was kept), and
+    /// the SYN-ACK answers it. A kept SYN of a stream with a start is a
+    /// reconnect's and stays kept.
+    #[allow(clippy::too_many_arguments)]
+    fn confirm_kept_syn(
         &mut self,
-        syn: &ReconnectSyn<Timestamp>,
+        sender: TcpRole,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        window: u64,
         config: &TcpReassemblyConfig,
         available: &mut usize,
+        free: &mut FreeBuffers,
     ) {
-        if let Some(tcp) = syn.tcp() {
-            let sender = self.role(syn.source);
-            // the confirmation outweighs an ACK kept for the stream (S5)
-            self.stream_mut(sender).drop_kept_ack();
-            self.add_data_segment(sender, &tcp, config, available);
+        let kept_stream_has_start = self
+            .reconnect_syn
+            .as_ref()
+            .is_some_and(|syn| self.stream(self.role(syn.source)).has_start());
+        let Some(syn) = self.reconnect_syn.take_if(|syn| {
+            false == kept_stream_has_start
+                && (syn.is_acked_by(source, tcp)
+                    || (syn.source == source && syn.isn == tcp.sequence_number()))
+        }) else {
+            return;
+        };
+        if let Some(syn_tcp) = syn.tcp() {
+            let syn_sender = self.role(syn.source);
+            self.stream_mut(syn_sender).drop_kept_ack();
+            self.add_data_segment(syn_sender, &syn_tcp, config, available);
             // retransmissions of the SYN carried differing bytes
-            self.stream_mut(sender)
+            self.stream_mut(syn_sender)
                 .count_conflicting_retransmissions(syn.conflicting);
         }
+        syn.recycle(free);
+        self.stream_mut(sender.other())
+            .answer_syn(tcp, window, config);
     }
 
     /// Returns true if the segment `tcp` sent by `sender`, whose stream has
@@ -328,8 +332,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// after the wait. A receiver in SYN-RECEIVED, whose other side has a
     /// start, checks an RST by its sequence number instead (RFC 9293
     /// 3.10.7.4, F4), and a SYN-ACK without RST and FIN that ACKs the kept
-    /// SYN of a reconnect answers that SYN and confirms the reconnect (C2).
-    /// `window` is the receive window of the receiver's stream.
+    /// SYN (of a reconnect or a simultaneous open) answers that SYN and is
+    /// applied. `window` is the receive window of the receiver's stream.
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
