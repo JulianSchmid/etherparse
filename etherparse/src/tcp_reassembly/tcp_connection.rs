@@ -244,13 +244,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Returns true if the receiver of the segment `tcp` sent by `sender`
     /// drops it, as its own SYN is unanswered and the segment doesn't ACK
-    /// it (S5, see [`TcpStream::drops_before_syn_acked`]).
+    /// it (S5, see [`TcpStream::drops_before_syn_acked`]). A receiver in
+    /// SYN-RECEIVED, whose other side has a start, checks an RST by its
+    /// sequence number instead (RFC 9293 3.10.7.4, F4).
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
+        if tcp.rst() && self.stream(sender).has_start() {
+            return false;
+        }
         let window = self.window(sender.other(), config);
         self.stream(sender.other())
             .drops_before_syn_acked(tcp, window, config)
@@ -1320,6 +1325,25 @@ mod test {
             assert_eq!(expected, stream.status().out_of_window_segments);
             let read = stream.read_received();
             assert_eq!(after.is_some(), TcpRead::Data(b"request") == read);
+        }
+
+        // a side in SYN-RECEIVED checks an RST by its sequence number, not
+        // by its ACK: the RST that answers a SYN-ACK carries none
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().syn_ack();
+            let mut rst = script.injected(|s| {
+                s.rst(Initiator);
+            });
+            rst.header.ack = false;
+            rst.ack = None;
+            script.segments.push(rst);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                connection.end()
+            );
         }
     }
 

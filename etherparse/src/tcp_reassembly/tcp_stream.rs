@@ -486,11 +486,13 @@ impl TcpStream {
     }
 
     /// Returns true if the stream's sender, whose SYN was seen but not ACKed
-    /// yet, drops the segment `tcp` of the other side (S5): in SYN-SENT or
-    /// SYN-RECEIVED (RFC 9293 3.10.7.3) it accepts only a segment that ACKs
-    /// its SYN (see [`TcpStream::acks_unacked_syn`]), and a SYN without
-    /// ACK, FIN and RST (a simultaneous open; one with a FIN is dropped like
-    /// a blind FIN, as nothing could recover a stream it ended).
+    /// yet, drops the segment `tcp` of the other side (S5): in SYN-SENT (RFC
+    /// 9293 3.10.7.3) it accepts only a segment that ACKs its SYN (see
+    /// [`TcpStream::acks_unacked_syn`]), and a SYN without ACK, FIN and RST
+    /// (a simultaneous open; one with a FIN is dropped like a blind FIN, as
+    /// nothing could recover a stream it ended). In SYN-RECEIVED an RST is
+    /// checked by its sequence number instead (F4), which the connection
+    /// tells apart.
     pub(crate) fn drops_before_syn_acked(
         &self,
         tcp: &TcpSlice<'_>,

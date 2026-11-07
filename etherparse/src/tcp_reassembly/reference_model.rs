@@ -1205,7 +1205,9 @@ impl ReferenceModel {
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
         let range = self.range(sender_role.other());
         let other_window = self.window(sender_role.other());
-        let dropped = self.streams[other].drops_before_syn_acked(segment, range, other_window);
+        // a side in SYN-RECEIVED checks an RST by its sequence number (F4)
+        let dropped = false == (header.rst && self.streams[sender].base.is_some())
+            && self.streams[other].drops_before_syn_acked(segment, range, other_window);
         if false == dropped {
             self.streams[other].answer_syn(segment, range, other_window);
         }
@@ -2688,13 +2690,11 @@ mod test {
             // the next byte it would send and ACKing what the other side sent
             // so far (or without an ACK), followed by the segments sent after
             // it, whose late arrival is ignored; one without ACK while the
-            // receiver's SYN is unanswered is dropped (S5)
+            // receiver is in SYN-SENT is dropped (S5)
             let mut rst_dropped = false;
             if let Some((role, position, with_ack)) = &rst {
                 let position = 1 + position.index(script.segments.len());
-                rst_dropped = false == *with_ack
-                    && ((1 == position && Responder == *role)
-                        || (2 == position && Initiator == *role));
+                rst_dropped = false == *with_ack && 1 == position && Responder == *role;
                 let next = |role| {
                     script.segments[..position]
                         .iter()
