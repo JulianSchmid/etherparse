@@ -1692,6 +1692,38 @@ mod test {
                 connection.stream_mut(Initiator).read_received()
             );
         }
+
+        // a resync candidate with a FIN gives no exit either: a blind data
+        // segment with a FIN far away from the initiator's address and a
+        // blind ACK of it from the responder's address would end the
+        // initiator stream for good
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind_fin = script.injected(|s| {
+                s.fin_at(Initiator, 1 << 30, b"x");
+            });
+            blind_fin.header.ack = false;
+            blind_fin.ack = None;
+            script.segments.push(blind_fin);
+            let mut blind_ack = script.injected(|s| {
+                s.ack(Responder);
+            });
+            blind_ack.header.ack = true;
+            blind_ack.header.acknowledgment_number = 1001 + (1 << 30) + 2;
+            script.segments.push(blind_ack);
+            script.syn_ack().ack(Initiator).send(Initiator, b"request");
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(None, stream.fin_offset());
+            assert_eq!(0, stream.status().resyncs);
+            assert_eq!(TcpRead::Data(b"request"), stream.read_received());
+            assert_eq!(
+                1,
+                connection.stream(Responder).status().out_of_window_segments
+            );
+        }
     }
 
     #[test]
