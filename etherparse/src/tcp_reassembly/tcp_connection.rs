@@ -278,6 +278,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 {
                     self.apply_kept_syn(&syn, config, available);
                     syn.recycle(free);
+                    // the SYN-ACK ACKs the SYN it just applied
+                    self.stream_mut(sender.other())
+                        .answer_syn(tcp, window, config);
                 }
             }
             self.add_data_segment(sender, tcp, config, available);
@@ -1862,6 +1865,64 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(0, stream.status().gaps);
             assert_eq!(TcpRead::Data(b"12345z"), stream.read_received());
+        }
+
+        // ... the SYN-ACK answers the SYN it applied, so the responder waits
+        // for nothing and the initiator's bytes with an ACK beyond k windows
+        // of the responder's SYN are stored (window 100)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 100;
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            script.segments.push(responder_syn);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            let mut data = script.injected(|s| {
+                s.send(Initiator, b"request");
+            });
+            data.header.acknowledgment_number = 2001 + 1000;
+            script.segments.push(data);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"request"), stream.read_received());
+        }
+
+        // ... and the applied SYN counts as no packet: the connection's
+        // last packet stays the SYN-ACK and its first the SYN
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            script.segments.push(responder_syn);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            for (i, segment) in script.segments.iter().enumerate() {
+                let (connection, _) = segment.feed(&mut pool, 1 + i as u32).active.unwrap();
+                assert_eq!(&(1 + i as u32), connection.last_seen());
+                assert_eq!(&1, connection.first_seen());
+            }
         }
 
         // the wait that dropped segments ended leaves the other side with

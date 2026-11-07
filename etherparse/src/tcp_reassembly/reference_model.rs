@@ -1379,8 +1379,12 @@ impl ReferenceModel {
             {
                 let conflicting = core::mem::take(&mut self.reconnect_syn_conflicting);
                 self.apply_own_segment(&syn, available);
-                let syn_sender = role_index(self.sender_role(&syn));
+                let syn_role = self.sender_role(&syn);
+                let syn_sender = role_index(syn_role);
                 self.streams[syn_sender].conflicting_retransmissions += conflicting;
+                // the SYN-ACK ACKs the SYN it just applied
+                let (range, window) = (self.range(syn_role), self.window(syn_role));
+                self.streams[syn_sender].answer_syn(segment, range, window);
             }
         }
         let observed = self.streams.each_ref().map(|stream| stream.observed);
