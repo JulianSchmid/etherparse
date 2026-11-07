@@ -1001,6 +1001,9 @@ impl TcpStream {
         available: &mut usize,
     ) -> bool {
         match self.start_seq {
+            // the ACK number of a SYN-ACK can give the stream its start (A2),
+            // which the receiver's kept ACK has to allow like a late SYN (C4)
+            None if false == self.accepted_by_kept_ack(seq, window, config) => return false,
             None => self.start_seq = Some(seq),
             Some(_) if TcpStreamStart::Observed == self.status.start => {
                 // a retransmitted SYN can carry more TCP Fast Open bytes
@@ -2014,6 +2017,30 @@ mod test {
             assert_eq!(TcpRead::Data(b"real"), stream.read_received());
             assert!(false == stream.is_finished());
             assert_eq!(2, stream.status().out_of_window_segments);
+        }
+
+        // the ACK number of a SYN-ACK gives the other stream its start only
+        // if the ACK kept for that stream allows it, like a late SYN: a
+        // forged SYN-ACK can't anchor the stream elsewhere (the responder's
+        // data ACKs the initiator's first byte, the SYN-ACK a far one, and
+        // the initiator's first segment is then refused once)
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 5000);
+            script
+                .handshake()
+                .send(Responder, b"data")
+                .send(Initiator, b"aaa")
+                .send(Initiator, b"bbb");
+            script.segments[1].header.acknowledgment_number = 1001 + (1 << 30);
+            let syn_ack = script.segments.remove(1);
+            script.segments.drain(..2);
+            script.segments.insert(1, syn_ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpStreamStart::MidStreamPickup, stream.status().start);
+            assert_eq!(TcpRead::Data(b"bbb"), stream.read_received());
+            assert_eq!(1, stream.status().out_of_window_segments);
         }
 
         // only the first segment far from the kept ACK is refused: with an

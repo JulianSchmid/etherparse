@@ -551,6 +551,13 @@ impl ModelStream {
             Some(base) if start > base || base - start > range => return false,
             Some(_) if false == self.fits_in_front(start, len, config, *available) => return false,
             Some(base) => *available -= base - start,
+            // the kept ACK has to allow the start, as for a late SYN
+            None if self
+                .kept_ack
+                .is_some_and(|(ack, _)| (start as i64 - ack as i64).unsigned_abs() > range) =>
+            {
+                return false
+            }
             None => {}
         }
         self.start_at(start);
