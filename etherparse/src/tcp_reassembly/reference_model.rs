@@ -84,6 +84,9 @@ struct ModelStream {
     started_at_fin: bool,
     /// Whether a segment far from the kept ACK was refused as the start.
     start_disputed: bool,
+    /// Whether the stream's SYN was seen but not ACKed by the other side
+    /// yet (S5).
+    syn_unacked: bool,
     /// Whether the read offset moved forward.
     read_moved: bool,
     /// Last ACK of the other side that couldn't be applied yet: before the
@@ -223,7 +226,6 @@ impl ModelStream {
         segment: &TestSegment<CustomChannelId>,
         window: u64,
         packet: u64,
-        other_syn_seen: bool,
         config: &TcpReassemblyConfig,
         available: &mut u64,
     ) -> bool {
@@ -235,22 +237,20 @@ impl ModelStream {
         // the sender can have sent into a larger window before it shrank
         let sent_into = window.max(self.largest_window.unwrap_or(0));
         // without a base, the kept ACK tells what the receiver accepts, also
-        // for the segment that starts the stream; while the receiver's SYN
-        // is unanswered it drops every FIN
+        // for the segment that starts the stream
         let had_base = self.base.is_some();
         let accepted_without_base = self
             .kept_ack
-            .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range)
-            && false == (header.fin && other_syn_seen && self.kept_ack.is_none());
+            .is_none_or(|(ack, _)| (segment.offset as i64 - ack as i64).unsigned_abs() <= range);
         if header.syn {
-            // a SYN with a FIN that the receiver drops starts nothing either
-            let dropped_fin = header.fin && self.base.is_none() && false == accepted_without_base;
-            if dropped_fin
-                || false
-                    == self.observe_start(segment.offset, payload.len(), range, config, available)
+            if false == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
                 self.out_of_window_segments += 1;
                 return false;
+            }
+            // the SYN that starts the stream awaits its ACK
+            if false == had_base {
+                self.syn_unacked = true;
             }
         } else if self.base.is_none() {
             let keep_alive = 1 == payload.len()
@@ -260,11 +260,10 @@ impl ModelStream {
                 return accepted_without_base;
             }
             // the first segment far from the kept ACK doesn't start the
-            // stream, the next one with bytes does, a FIN never (a FIN
-            // refused without a kept ACK disputes nothing)
+            // stream, the next one with bytes does, a FIN never
             if false == accepted_without_base && (header.fin || false == self.start_disputed) {
                 self.out_of_window_segments += 1;
-                self.start_disputed = self.kept_ack.is_some();
+                self.start_disputed = true;
                 return false;
             }
             if false == payload.is_empty() && 0 == (config.max_stream_buffer as u64).min(*available)
@@ -543,6 +542,25 @@ impl ModelStream {
     /// the reader didn't step over as the hole limit.
     fn can_resync(&self, config: &TcpReassemblyConfig) -> bool {
         self.gaps.len() + self.resync_gaps.len() <= config.max_holes_per_stream
+    }
+
+    /// Returns true if the stream's sender, whose SYN was seen but not ACKed
+    /// yet, drops the `segment` of the other side (S5): it accepts only a
+    /// segment that ACKs the SYN or bytes up to `range` after it, which
+    /// answers the SYN, and a SYN without ACK and FIN.
+    fn drops_before_syn_acked(&mut self, segment: &TestSegment, range: u64) -> bool {
+        let Some(base) = self.base.filter(|_| self.syn_unacked) else {
+            return false;
+        };
+        if segment
+            .ack
+            .is_some_and(|ack| (base..=base + range).contains(&ack))
+        {
+            self.syn_unacked = false;
+            return false;
+        }
+        let header = &segment.header;
+        false == (header.syn && false == (header.ack || header.fin))
     }
 
     /// Gives the stream an observed start at the true offset `start`, where
@@ -1133,7 +1151,10 @@ impl ReferenceModel {
             .config
             .max_total_buffered
             .map_or(u64::MAX, |max| (max as u64).saturating_sub(buffered));
-        if header.rst {
+        let range = self.range(segment.sender.other());
+        if self.streams[other].drops_before_syn_acked(segment, range) {
+            self.streams[sender].out_of_window_segments += 1;
+        } else if header.rst {
             let window = self.window(segment.sender);
             if self.streams[sender].accepts_reset(segment.offset, window) {
                 if let Some(ack) = segment.ack {
@@ -1189,7 +1210,6 @@ impl ReferenceModel {
                 segment,
                 window,
                 self.packets,
-                observed[other],
                 &self.config,
                 &mut available,
             );

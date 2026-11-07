@@ -46,9 +46,15 @@ pub struct TcpStream {
     /// Whether a segment that lay far from the kept ACK was refused as the
     /// stream's start: the segment or the ACK is forged, or the receiver's
     /// window is larger than the fallback window assumes, so the next
-    /// segment with bytes and without a FIN starts the stream wherever it
+    /// segment with bytes (and without a FIN) starts the stream wherever it
     /// lies.
     start_disputed: bool,
+
+    /// Whether the sender's SYN was seen but no segment of the other side
+    /// ACKed it yet: the sender is in SYN-SENT or SYN-RECEIVED and drops
+    /// every segment of the other side that doesn't ACK the SYN, apart from
+    /// a SYN (S5).
+    syn_unacked: bool,
 
     /// Window scale option in the sender's SYN (`None` while the SYN was
     /// not seen, `Some(None)` for a SYN without the option).
@@ -130,6 +136,7 @@ impl TcpStream {
             syn: None,
             kept_ack: None,
             start_disputed: false,
+            syn_unacked: false,
             window_scale: None,
             window: None,
             buffer: StreamBuffer::new(free),
@@ -451,12 +458,12 @@ impl TcpStream {
         let isn = tcp.sequence_number();
         let seq = isn.wrapping_add(1);
         let range = window_range(window, config);
-        match (self.isn(), self.start_seq, self.kept_ack) {
-            (Some(own), _, _) => own == isn,
-            (None, Some(start_seq), _) => self
+        match (self.isn(), self.start_seq) {
+            (Some(own), _) => own == isn,
+            (None, Some(start_seq)) => self
                 .offset(start_seq, seq)
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
-            (None, None, _) => self.kept_ack_allows_syn(seq, window, config),
+            (None, None) => self.kept_ack_allows_syn(seq, window, config),
         }
     }
 
@@ -469,6 +476,40 @@ impl TcpStream {
             u64::try_from(kept.seq.wrapping_sub(seq) as i32)
                 .is_ok_and(|distance| distance <= window_range(window, config))
         })
+    }
+
+    /// Returns true if the stream's sender, whose SYN was seen but not ACKed
+    /// yet, drops the segment `tcp` of the other side (S5): in SYN-SENT or
+    /// SYN-RECEIVED (RFC 9293 3.10.7.3) it accepts only a segment that ACKs
+    /// its SYN, or bytes up to k windows after it in case the SYN-ACK or
+    /// the ACK was not captured, where `window` is the receive window of
+    /// the other side; and a SYN without ACK and FIN (a simultaneous open).
+    /// The first segment that ACKs the SYN answers it.
+    pub(crate) fn drops_before_syn_acked(
+        &mut self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        let Some(syn) = self.syn.filter(|_| self.syn_unacked) else {
+            return false;
+        };
+        if tcp.ack() {
+            let acked = tcp
+                .acknowledgment_number()
+                .wrapping_sub(syn.isn.wrapping_add(1)) as i32;
+            if u64::try_from(acked).is_ok_and(|acked| acked <= window_range(window, config)) {
+                self.syn_unacked = false;
+                return false;
+            }
+        }
+        false == (tcp.syn() && false == (tcp.ack() || tcp.fin()))
+    }
+
+    /// Counts a segment of the stream's sender that lies outside of the
+    /// stream (see [`TcpStreamStatus::out_of_window_segments`]).
+    pub(crate) fn count_out_of_window(&mut self) {
+        self.status.out_of_window_segments += 1;
     }
 
     /// Puts the stream's buffers into `free` for re-use.
@@ -618,7 +659,6 @@ impl TcpStream {
         tcp: &TcpSlice<'_>,
         window: u64,
         packet: u64,
-        other_syn_seen: bool,
         config: &TcpReassemblyConfig,
         available: &mut usize,
     ) {
@@ -636,8 +676,8 @@ impl TcpStream {
         // (before the stream has a start, only the receiver's kept ACK tells
         // which sequence numbers it accepts, also for the starting segment)
         let had_start = self.start_seq.is_some();
-        let accepted_without_start = false == had_start
-            && self.accepts_without_start(tcp, seq, other_syn_seen, window, config);
+        let accepted_without_start =
+            false == had_start && self.accepted_by_kept_ack(seq, window, config);
         let Some(start_seq) =
             self.start_from(tcp, seq, accepted_without_start, window, config, available)
         else {
@@ -732,14 +772,16 @@ impl TcpStream {
         let data = tcp.payload();
         if tcp.syn() {
             // a SYN whose start a mid-stream pickup can't take is not the
-            // stream's own one, and a SYN with a FIN that the receiver drops
-            // starts nothing either (see `accepts_without_start`)
-            let dropped_fin = tcp.fin() && self.start_seq.is_none() && false == accepted;
-            if dropped_fin
-                || false == self.observe_start(seq, data.len(), window, config, available)
-            {
+            // stream's own one
+            let had_start = self.start_seq.is_some();
+            if false == self.observe_start(seq, data.len(), window, config, available) {
                 self.status.out_of_window_segments += 1;
                 return None;
+            }
+            // the SYN that starts the stream awaits its ACK (S5); a late one
+            // arrives after the other side answered
+            if false == had_start {
+                self.syn_unacked = true;
             }
             // the window scale is only known from the sender's SYN, which
             // can arrive after the SYN-ACK that started the stream, but not
@@ -764,11 +806,10 @@ impl TcpStream {
                 // (an ACK before every segment would otherwise keep a stream
                 // with more in flight than k fallback windows from starting);
                 // a FIN never does, as nothing could recover a stream that a
-                // blind FIN ended (a FIN refused without a kept ACK disputes
-                // nothing)
+                // blind FIN ended
                 if false == accepted && (tcp.fin() || false == self.start_disputed) {
                     self.status.out_of_window_segments += 1;
-                    self.start_disputed = self.kept_ack.is_some();
+                    self.start_disputed = true;
                     return None;
                 }
                 // bytes that don't fit start no stream, so that byte 0 of a
@@ -787,27 +828,6 @@ impl TcpStream {
             }
         }
         self.start_seq
-    }
-
-    /// Returns true if the receiver with the receive window `window` accepts
-    /// the segment `tcp` starting at the sequence number `seq` while the
-    /// stream has no start, where `other_syn_seen` tells whether the
-    /// receiver's SYN was seen: it accepts a segment at most k windows from
-    /// the ACK it kept for the stream, if there is one, but no FIN while its
-    /// SYN is unanswered, as it drops everything but the SYN-ACK then and no
-    /// ACK of its own is kept yet that could tell a blind FIN apart.
-    fn accepts_without_start(
-        &self,
-        tcp: &TcpSlice<'_>,
-        seq: u32,
-        other_syn_seen: bool,
-        window: u64,
-        config: &TcpReassemblyConfig,
-    ) -> bool {
-        if tcp.fin() && other_syn_seen && self.kept_ack.is_none() {
-            return false;
-        }
-        self.accepted_by_kept_ack(seq, window, config)
     }
 
     /// Returns true if the receiver with the receive window `window` accepts
@@ -1046,8 +1066,10 @@ impl TcpStream {
     /// after its SYN, which carries `data_len` bytes, where `window` is the
     /// receiver's receive window and `available` the pool's budget.
     ///
-    /// A mid-stream pickup moves its start back to `seq`. Returns false if
-    /// it can't, and true if the stream has an observed start afterwards.
+    /// A mid-stream pickup moves its start back to `seq`, and a stream
+    /// without a start starts there if the receiver's kept ACK allows it.
+    /// Returns false if it can't, and true if the stream has an observed
+    /// start afterwards.
     pub(crate) fn observe_start(
         &mut self,
         seq: u32,
