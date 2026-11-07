@@ -517,7 +517,7 @@ impl TcpStream {
         window: u64,
         config: &TcpReassemblyConfig,
     ) -> bool {
-        let Some(syn) = self.syn.filter(|_| self.syn_unacked && tcp.ack()) else {
+        let Some(syn) = self.syn.filter(|_| tcp.ack()) else {
             return false;
         };
         let ack = tcp.acknowledgment_number();
@@ -1535,10 +1535,12 @@ struct ResyncCandidate {
     first: u32,
     /// Sequence number after the last byte.
     end: u32,
-    /// Whether a FIN follows the bytes.
+    /// Whether a FIN follows the bytes (a jump to a FIN ends the stream
+    /// there).
     fin: bool,
-    /// Number of consecutive data segments after the window up to this one,
-    /// each within one window of the one before.
+    /// Number of consecutive segments up to this one, each within one window
+    /// of the one before: data segments after the window (R3), or dropped
+    /// segments (S5).
     agreeing: u32,
 }
 

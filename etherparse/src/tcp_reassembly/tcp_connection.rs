@@ -144,7 +144,8 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let sender = self.role(source);
         // while the receiver's SYN is unanswered, it drops every segment
         // that doesn't ACK that SYN, with its window and ACK (S5)
-        if self.drops_before_syn_acked(sender, tcp, config) {
+        let window = self.window(sender.other(), config);
+        if self.drops_before_syn_acked(sender, tcp, window, config) {
             self.stream_mut(sender).count_out_of_window();
             // the dropped segments agree within the window of their own
             // stream (R3)
@@ -152,7 +153,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.stream_mut(sender.other())
                 .record_dropped(tcp, window, config);
         } else {
-            self.add_accepted_segment(sender, source, tcp, config, available, free);
+            self.add_accepted_segment(sender, source, tcp, window, config, available, free);
         }
         for role in [TcpRole::Initiator, TcpRole::Responder] {
             let window = self
@@ -206,14 +207,17 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     }
 
     /// Applies a segment sent by `sender` from `source` that the receiver
-    /// accepts in its handshake state (S5): an RST, which F4 checks (an
-    /// ignored one is dropped with its ACK), or a SYN of a reconnect or a
-    /// segment of the sender's stream, whose ACK answers the receiver's SYN.
+    /// accepts in its handshake state (S5), where `window` is the receive
+    /// window of the receiver's stream: an RST, which F4 checks (an ignored
+    /// one is dropped with its ACK), or a SYN of a reconnect or a segment of
+    /// the sender's stream, whose ACK answers the receiver's SYN.
+    #[allow(clippy::too_many_arguments)]
     fn add_accepted_segment(
         &mut self,
         sender: TcpRole,
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
+        window: u64,
         config: &TcpReassemblyConfig,
         available: &mut usize,
         free: &mut FreeBuffers,
@@ -229,7 +233,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.add_reset(sender, tcp, config);
             return;
         }
-        let window = self.window(sender.other(), config);
         self.stream_mut(sender.other())
             .answer_syn(tcp, window, config);
         // a SYN without ACK of a side without a start while the other side's
@@ -275,11 +278,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// SYN-RECEIVED, whose other side has a start, checks an RST by its
     /// sequence number instead (RFC 9293 3.10.7.4, F4), and a SYN-ACK
     /// without RST and FIN that ACKs the kept SYN of a reconnect answers
-    /// that SYN and confirms the reconnect (C2).
+    /// that SYN and confirms the reconnect (C2). `window` is the receive
+    /// window of the receiver's stream.
     fn drops_before_syn_acked(
         &self,
         sender: TcpRole,
         tcp: &TcpSlice<'_>,
+        window: u64,
         config: &TcpReassemblyConfig,
     ) -> bool {
         if tcp.rst() && self.stream(sender).has_start() {
@@ -294,7 +299,6 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         {
             return false;
         }
-        let window = self.window(sender.other(), config);
         self.stream(sender.other())
             .drops_before_syn_acked(tcp, window, config)
     }
@@ -414,10 +418,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     ) -> bool {
         let sender = self.role(source);
         // a SYN-ACK the receiver drops confirms nothing (S5)
+        let window = self.window(sender.other(), config);
         if false == (tcp.syn() && tcp.ack())
             || tcp.rst()
             || tcp.fin()
-            || self.drops_before_syn_acked(sender, tcp, config)
+            || self.drops_before_syn_acked(sender, tcp, window, config)
         {
             return false;
         }
@@ -1795,6 +1800,62 @@ mod test {
                 TcpRead::Data(b"fastopenrequest"),
                 connection.stream_mut(Initiator).read_received()
             );
+        }
+
+        // only an RST with the ACK flag overrules a kept ACK: one without
+        // the flag whose ACK field happens to hold the right number is
+        // checked against the kept ACK and dropped
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut blind_ack = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            blind_ack.header.ack = true;
+            blind_ack.header.acknowledgment_number = 0x5000_0000;
+            script.segments.push(blind_ack);
+            let mut rst = script.injected(|s| {
+                s.rst_at(Responder, 0);
+            });
+            rst.header.sequence_number = 0x1000_0000;
+            rst.header.ack = false;
+            rst.header.acknowledgment_number = 1001;
+            rst.ack = None;
+            script.segments.push(rst);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            assert_eq!(None, connection.end());
+            assert_eq!(
+                1,
+                connection.stream(Responder).status().out_of_window_segments
+            );
+        }
+
+        // the ACK that answers a SYN is checked with the window of the
+        // SYN's stream: the initiator's ACK 5000 bytes after the SYN-ACK
+        // answers it with a SYN window of 60000, so the initiator's bytes
+        // without ACK after it are stored
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn().syn_ack();
+            script.segments[0].header.window_size = 60000;
+            script.segments[1].header.window_size = 100;
+            let mut ack = script.injected(|s| {
+                s.ack(Initiator);
+            });
+            ack.header.acknowledgment_number = 2001 + 5000;
+            script.segments.push(ack);
+            let mut data = script.injected(|s| {
+                s.send(Initiator, b"request");
+            });
+            data.header.ack = false;
+            data.ack = None;
+            script.segments.push(data);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(0, stream.status().out_of_window_segments);
+            assert_eq!(TcpRead::Data(b"request"), stream.read_received());
         }
     }
 
