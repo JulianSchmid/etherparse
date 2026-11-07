@@ -680,9 +680,14 @@ impl ModelStream {
             return;
         };
         let offset = ack as i64 - self.shift;
-        // kept until a later ACK counts
+        // kept until a later ACK counts, if bytes can be put in front that
+        // far
         if offset <= base as i64 && self.can_prepend() && self.ack <= base {
-            self.pending_ack = Some((ack, packet));
+            let factor = config.hole_give_up_window_factor.unwrap_or(2).max(1);
+            let range = u64::from(factor) * window.max(self.largest_window.unwrap_or(0));
+            if (base as i64 - offset) as u64 <= range {
+                self.pending_ack = Some((ack, packet));
+            }
             return;
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());

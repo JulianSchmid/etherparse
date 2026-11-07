@@ -1134,12 +1134,16 @@ impl TcpStream {
             return;
         };
         // an ACK of offset 0 or before it can ACK bytes prepended later,
-        // unless a later ACK counted already (a seen ACK of 0 means none)
+        // unless a later ACK counted already (a seen ACK of 0 means none);
+        // one further before than bytes can be put in front is forged, and
+        // would widen the RST check (F4)
         if ack <= 0 && self.can_prepend() && 0 == self.seen_ack {
-            self.pending_ack = Some(PendingAck {
-                seq: ack_seq,
-                packet,
-            });
+            if ack.unsigned_abs() <= window_range(self.sent_into(window), config) {
+                self.pending_ack = Some(PendingAck {
+                    seq: ack_seq,
+                    packet,
+                });
+            }
             return;
         }
         // the sender can't have sent more than one window after the bytes

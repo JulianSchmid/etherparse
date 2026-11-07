@@ -1441,6 +1441,27 @@ mod test {
             assert_eq!(reset, processed.ended.is_some());
         }
 
+        // an ACK kept before the first byte of a pickup lies at most as far
+        // before it as bytes can be put in front (k windows of 100 bytes):
+        // a forged one further before doesn't widen the RST check
+        for (ack, reset) in [(-200, true), (-201, false)] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 100,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send_uncaptured(Initiator, 1000)
+                .send(Initiator, b"abc")
+                .ack_to(Responder, (1000 + ack) as u64)
+                .rst_at(Initiator, (1000 + ack) as u64);
+            script.segments.drain(..3);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
         // the ACK kept before the first byte of a pickup doesn't count
         // anymore once a later ACK counted (the responder ACKs byte 0, then
         // byte 3, so RSTs from byte 3 on are accepted)
