@@ -597,7 +597,15 @@ impl TcpStream {
     fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
         self.seen_ack
             .max(self.highest_offset)
-            .saturating_add(window_range(window, config))
+            .saturating_add(window_range(self.sent_into(window), config))
+    }
+
+    /// Largest window the sender can have sent into, where `window` is the
+    /// receiver's current receive window: the sender can have sent bytes
+    /// into a larger window before the window shrank (e.g. to 0 when the
+    /// receiver's buffer is full), and their ACKs can still come.
+    fn sent_into(&self, window: u64) -> u64 {
+        window.max(self.largest_window.unwrap_or(0))
     }
 
     /// Number of bytes buffered from the read position to the furthest
@@ -1050,7 +1058,7 @@ impl TcpStream {
         // the sender can't have sent more than one window after the bytes
         // it is known to have sent (and its FIN), unless the stream jumped
         let sent_end = self.highest_offset + u64::from(self.fin_offset.is_some());
-        if 0 < ack && ack as u64 > sent_end.saturating_add(window) {
+        if 0 < ack && ack as u64 > sent_end.saturating_add(self.sent_into(window)) {
             self.add_resync_ack(ack_seq, window, packet, config);
             return;
         }
@@ -4163,7 +4171,8 @@ mod test {
         }
 
         // ACKs count up to one window after the highest offset, using the
-        // window the receiver advertised before the ACK
+        // largest window the receiver advertised before the ACK: the sender
+        // can have sent into it before the window shrank (e.g. to 0)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -4173,11 +4182,13 @@ mod test {
                 .send(Initiator, b"abc")
                 .ack_to(Responder, 104)
                 .ack_to(Responder, 103);
-            // a window of 0 limits the next ACK, not the one in its segment
             script.window_size = 0;
-            script.ack_to(Responder, 203).ack_to(Responder, 204);
+            script
+                .ack_to(Responder, 203)
+                .ack_to(Responder, 204)
+                .ack_to(Responder, 305);
             script.feed(&mut pool, ..4);
-            for (segment, expected) in script.segments[4..].iter().zip([0, 103, 203, 203]) {
+            for (segment, expected) in script.segments[4..].iter().zip([0, 103, 203, 204, 204]) {
                 let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
                 assert_eq!(expected, connection.stream(Initiator).acked_offset());
             }
@@ -6181,10 +6192,13 @@ mod test {
 
         // later windows of the receiver are scaled by its window scale if
         // both SYNs had the option (shifts above 14 count as 14), and the
-        // last one counts
+        // largest one counts, as the sender can have sent into it before the
+        // window shrank (e.g. to 0)
         for (scales, windows, end) in [
             ([Some(5), Some(3)], &[100][..], 2 * (100 << 3)),
-            ([Some(5), Some(3)], &[200, 100][..], 2 * (100 << 3)),
+            ([Some(5), Some(3)], &[100, 200][..], 2 * (200 << 3)),
+            ([Some(5), Some(3)], &[200, 100][..], 2 * (200 << 3)),
+            ([Some(5), Some(3)], &[100, 0][..], 2 * (100 << 3)),
             ([Some(0), Some(14)], &[1][..], 2 * (1 << 14)),
             ([Some(0), Some(15)], &[1][..], 2 * (1 << 14)),
             // one SYN without the option
@@ -6193,7 +6207,8 @@ mod test {
         ] {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_scales = scales;
-            script.window_size = 1000;
+            // the (unscaled) windows of the SYNs are smaller
+            script.window_size = 1;
             script.handshake();
             for window in windows {
                 script.window_size = *window;
@@ -6206,6 +6221,7 @@ mod test {
         {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_scales = [Some(3), Some(3)];
+            script.window_size = 1;
             script.handshake();
             script.window_size = 100;
             script.ack(Responder);
@@ -6230,6 +6246,7 @@ mod test {
         ] {
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_scales = [Some(0), None];
+            script.window_size = 1;
             script.handshake();
             script.window_size = 100;
             script.ack(Responder);

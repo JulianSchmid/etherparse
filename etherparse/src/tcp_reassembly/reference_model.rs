@@ -220,6 +220,8 @@ impl ModelStream {
         // the receiver accepts k windows before and after the stream's bytes
         let factor = config.hole_give_up_window_factor.unwrap_or(2);
         let range = u64::from(factor) * window;
+        // the sender can have sent into a larger window before it shrank
+        let sent_into = window.max(self.largest_window.unwrap_or(0));
         if header.syn {
             if false == self.observe_start(segment.offset, payload.len(), range, config, available)
             {
@@ -244,7 +246,7 @@ impl ModelStream {
         // offsets leave out the jumps of the resyncs so far
         let mut start = segment.offset as i64 - self.shift;
 
-        let window_end = (self.ack.max(self.highest) + range) as i64;
+        let window_end = (self.ack.max(self.highest) + u64::from(factor) * sent_into) as i64;
         let mut after_window = start > window_end;
         let mut jump_ack = None;
         if false == payload.is_empty() && false == header.syn && self.fin_offset.is_none() {
@@ -664,7 +666,8 @@ impl ModelStream {
             return;
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
-        if offset > (sent_end + window) as i64 {
+        // the sender can have sent into a larger window before it shrank
+        if offset > (sent_end + window.max(self.largest_window.unwrap_or(0))) as i64 {
             match self.candidates.last().cloned() {
                 Some(candidate)
                     if self.fin_offset.is_none()
