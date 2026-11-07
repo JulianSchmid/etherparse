@@ -459,9 +459,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             Some(tcp.sequence_number()) != stream.isn()
         } else {
             // a SYN-ACK that ACKs the other stream's SYN is the own one too,
-            // whatever ACK a blind segment left kept for its stream (S5)
+            // whatever ACK a blind segment left kept for its stream, and a
+            // side whose own SYN is unanswered confirms a reconnect only by
+            // ACKing the kept SYN (S5)
             false
-                == (stream.is_own_syn(tcp, self.window(sender, config), config)
+                == (stream.awaits_syn_ack()
+                    || stream.is_own_syn(tcp, self.window(sender, config), config)
                     || self.answers_observed_syn(sender, tcp))
         }
     }
@@ -1961,6 +1964,52 @@ mod test {
             script.segments[3].header.ack = false;
             let processed = script.segments[3].feed(&mut pool, ());
             assert_eq!(Some(TcpIgnoreReason::NoConnection), processed.ignored);
+        }
+
+        // a side whose own SYN is unanswered confirms a reconnect only by
+        // ACKing the kept SYN: with the responder's SYN kept, a blind SYN-ACK
+        // from the initiator's address with any ISN and ACK number replaces
+        // nothing, and the simultaneous open completes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.syn();
+            let mut responder_syn = script.injected(|s| {
+                s.syn_ack();
+            });
+            responder_syn.header.ack = false;
+            responder_syn.ack = None;
+            script.segments.push(responder_syn);
+            let mut blind = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            blind.header.syn = true;
+            blind.header.sequence_number = 0x5000_0000;
+            blind.header.acknowledgment_number = 0x6000_0000;
+            script.segments.push(blind);
+            let mut initiator_syn_ack = script.injected(|s| {
+                s.send(Initiator, b"");
+            });
+            initiator_syn_ack.header.syn = true;
+            initiator_syn_ack.header.sequence_number = 1000;
+            initiator_syn_ack.header.acknowledgment_number = 2001;
+            script.segments.push(initiator_syn_ack);
+            script
+                .syn_ack()
+                .send(Initiator, b"request")
+                .send(Responder, b"response");
+            let processed = script.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"response"),
+                connection.stream_mut(Responder).read_received()
+            );
         }
     }
 

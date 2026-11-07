@@ -1448,8 +1448,14 @@ impl ReferenceModel {
             return false;
         }
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
-        // whatever ACK a blind segment left kept for its stream (S5)
-        false == (self.is_own_syn(segment) || self.answers_observed_syn(segment))
+        // whatever ACK a blind segment left kept for its stream, and a side
+        // whose own SYN is unanswered confirms a reconnect only by ACKing
+        // the kept SYN (S5)
+        let sender = role_index(self.sender_role(segment));
+        false
+            == (self.streams[sender].syn_unacked
+                || self.is_own_syn(segment)
+                || self.answers_observed_syn(segment))
     }
 
     /// Returns true if `segment`, whose sender's stream has no start, ACKs
