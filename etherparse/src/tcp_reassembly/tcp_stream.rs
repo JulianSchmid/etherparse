@@ -1081,7 +1081,8 @@ impl TcpStream {
                 .unwrap_or(u64::from(config.fallback_window));
             let distance = window
                 .saturating_mul(u64::from(factor))
-                .min((config.max_stream_buffer as u64 / 2).max(known));
+                .min(config.max_stream_buffer as u64 / 2)
+                .max(known);
             let implied_ack = i64::try_from(self.highest_offset())
                 .unwrap_or(i64::MAX)
                 .saturating_sub(i64::try_from(distance).unwrap_or(i64::MAX));
@@ -4071,11 +4072,13 @@ mod test {
 
         // but the implied ACK never lies less than a known window before the
         // highest offset, as the sender can have sent that far past the
-        // ACK: the window is 65535 bytes, the buffer 64 KiB, and only the
-        // first 4 KiB of 60 KiB are ACKed
-        {
+        // ACK, also with a hole give up window factor of 0: the window is
+        // 65535 bytes, the buffer 64 KiB, and only the first 4 KiB of 60 KiB
+        // are ACKed
+        for factor in [Some(2), Some(0)] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer: 64 * 1024,
+                hole_give_up_window_factor: factor,
                 ..Default::default()
             };
             let mut pool = TcpReassemblyPool::<(), ()>::new(config);
