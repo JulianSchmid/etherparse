@@ -389,10 +389,11 @@ impl StreamBuffer {
             // frees a useful share of it (always dropping a few consumed
             // bytes would keep the buffer at its capacity and shift the live
             // bytes for every segment); while nothing was consumed, the bytes
-            // before `head` are room for prepends and stay
+            // before `head` are room for prepends, fewer than the bytes
+            // buffered, and stay
             let live = self.buf.len() - self.head;
             let grows = self.index(stored_end) > self.buf.capacity();
-            if 0 < self.read_offset && (self.head >= live || (grows && self.head >= live / 8)) {
+            if self.head >= live || (grows && 0 < self.read_offset && self.head >= live / 8) {
                 self.buf.drain(..self.head);
                 self.head = 0;
             }
@@ -435,9 +436,7 @@ impl StreamBuffer {
     fn shrink_if_sparse(&mut self) {
         let live = self.buffered();
         let keep = live.saturating_mul(2).max(self.keep_capacity);
-        // while nothing was consumed, the bytes before `head` are room for
-        // prepends
-        if 0 < self.read_offset && self.head >= live && self.buf.capacity() > keep {
+        if self.head >= live && self.buf.capacity() > keep {
             self.buf.drain(..self.head);
             self.head = 0;
             self.buf.shrink_to(keep);
