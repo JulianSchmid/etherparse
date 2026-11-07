@@ -1395,6 +1395,25 @@ mod test {
             assert_eq!(reset, processed.ended.is_some());
         }
 
+        // the ACK kept before the first byte of a pickup doesn't count
+        // anymore once a later ACK counted (the responder ACKs byte 0, then
+        // byte 3, so RSTs from byte 3 on are accepted)
+        for (position, reset) in [(-1, false), (0, false), (3, true)] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .ack_to(Responder, 0)
+                .ack_to(Responder, 3)
+                .rst_at(Initiator, 0);
+            script.segments.drain(..3);
+            let rst = script.segments.last_mut().unwrap();
+            rst.header.sequence_number = rst.header.sequence_number.wrapping_add_signed(position);
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(reset, processed.ended.is_some());
+        }
+
         // RSTs before the point a stream resynced at are ignored, also
         // without an ACK of the jump
         for (offset, reset) in [(998, false), (1000, true)] {

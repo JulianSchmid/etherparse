@@ -81,7 +81,7 @@ struct ModelStream {
     /// Last ACK of the other side that couldn't be applied yet: before the
     /// stream had a start, or at or before its first byte while bytes can
     /// be prepended.
-    pending_ack: Option<u64>,
+    pending_ack: Option<(u64, u64)>,
     /// Received bytes by offset, up to the furthest received byte (bytes
     /// that arrive after they were consumed or given up are ignored).
     bytes: Vec<Option<u8>>,
@@ -229,7 +229,7 @@ impl ModelStream {
         } else if self.base.is_none() {
             let keep_alive = 1 == payload.len()
                 && false == header.fin
-                && Some(segment.offset + 1) == self.pending_ack;
+                && Some(segment.offset + 1) == self.pending_ack.map(|(ack, _)| ack);
             if (payload.is_empty() && false == header.fin) || keep_alive {
                 return;
             }
@@ -531,7 +531,7 @@ impl ModelStream {
             _ if self.observed => self.has_isn_of(segment),
             // offsets of the pool leave out the jumps of the resyncs
             Some(base) => within(base as i64 + self.shift),
-            None => self.pending_ack.is_none_or(|ack| within(ack as i64)),
+            None => self.pending_ack.is_none_or(|(ack, _)| within(ack as i64)),
         }
     }
 
@@ -649,12 +649,13 @@ impl ModelStream {
     /// packet.
     fn add_ack(&mut self, ack: u64, window: u64, packet: u64, config: &TcpReassemblyConfig) {
         let Some(base) = self.base else {
-            self.pending_ack = Some(ack);
+            self.pending_ack = Some((ack, packet));
             return;
         };
         let offset = ack as i64 - self.shift;
-        if offset <= base as i64 && self.can_prepend() {
-            self.pending_ack = Some(ack);
+        // kept until a later ACK counts
+        if offset <= base as i64 && self.can_prepend() && self.ack <= base {
+            self.pending_ack = Some((ack, packet));
             return;
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
@@ -682,6 +683,7 @@ impl ModelStream {
         if offset > self.ack.max(base) {
             self.ack = offset;
             self.ack_history.push((packet, offset));
+            self.pending_ack = None;
         }
         let end = self.fin_offset.map_or(self.ack, |fin| fin.min(self.ack));
         self.set_highest(self.highest.max(end));
@@ -742,9 +744,9 @@ impl ModelStream {
     /// receiver (`None` while it is unknown), and gives up an overdue hole
     /// at the read offset.
     fn after_packet(&mut self, window: Option<u64>, packet: u64, config: &TcpReassemblyConfig) {
-        if let Some(ack) = self.pending_ack.take() {
+        if let Some((ack, ack_packet)) = self.pending_ack.take() {
             let ack_window = window.unwrap_or(u64::from(config.fallback_window));
-            self.add_ack(ack, ack_window, packet, config);
+            self.add_ack(ack, ack_window, ack_packet, config);
         }
         if let Some(window) = window {
             self.largest_window = Some(self.largest_window.unwrap_or(0).max(window));
@@ -919,7 +921,7 @@ impl ModelStream {
                 let offset = offset as i64 - self.shift;
                 let sent_end = self.highest + u64::from(self.fin_offset.is_some());
                 let mut ack = self.ack.max(base) as i64;
-                if let Some(pending) = self.pending_ack {
+                if let Some((pending, _)) = self.pending_ack {
                     ack = ack.min(pending as i64 - self.shift);
                 }
                 let received_end = (self.bytes.len() as u64).max(base);
@@ -931,7 +933,7 @@ impl ModelStream {
             }
             None => self
                 .pending_ack
-                .is_none_or(|ack| ack <= offset && offset <= ack + window),
+                .is_none_or(|(ack, _)| ack <= offset && offset <= ack + window),
         }
     }
 }
