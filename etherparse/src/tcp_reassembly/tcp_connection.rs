@@ -149,6 +149,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if Verdict::Dropped != verdict
             && (tcp.syn() || tcp.rst())
             && self.answers_observed_syn(sender, tcp)
+            && (tcp.rst() || false == self.kept_ack_allows(sender, tcp, config))
         {
             self.stream_mut(sender).drop_kept_ack();
         }
@@ -368,6 +369,22 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 .stream(sender.other())
                 .syn()
                 .is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
+    }
+
+    /// Returns true if the ACK kept for the stream of `sender`, if any,
+    /// allows the SYN or SYN-ACK `tcp` to start the stream (C4).
+    fn kept_ack_allows(
+        &self,
+        sender: TcpRole,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        let window = self.window(sender, config);
+        self.stream(sender).kept_ack_allows_syn(
+            tcp.sequence_number().wrapping_add(1),
+            window,
+            config,
+        )
     }
 
     /// Returns true if the receiver of the segment `tcp` sent by `sender`
@@ -1864,13 +1881,34 @@ mod test {
             let mut far = script.injected(|s| {
                 s.send(Responder, b"more");
             });
-            far.header.acknowledgment_number = 1001 + (1 << 20);
+            far.header.acknowledgment_number = 1001 + (1 << 30);
             script.segments.push(far);
             let (connection, _) = script.feed_all(&mut pool).active.unwrap();
             assert_eq!(Some(1000), connection.stream(Initiator).isn());
             let stream = connection.stream_mut(Responder);
             assert_eq!(0, stream.status().out_of_window_segments);
             assert_eq!(TcpRead::Data(b"responsemore"), stream.read_received());
+        }
+
+        // a SYN-ACK that answers the SYN drops an ACK kept for its stream
+        // only if that ACK doesn't allow the SYN-ACK: in a capture merged
+        // from two taps, the initiator's ACK and request arrive before the
+        // SYN-ACK, and their ACK of the responder's bytes is kept
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"req")
+                .send(Responder, b"resp");
+            let syn_ack = script.segments.remove(1);
+            script.segments[2].header.acknowledgment_number = 2005;
+            script.segments.insert(3, syn_ack);
+            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(2000), stream.isn());
+            assert_eq!(4, stream.acked_offset());
+            assert_eq!(TcpRead::Data(b"resp"), stream.read_acked());
         }
     }
 

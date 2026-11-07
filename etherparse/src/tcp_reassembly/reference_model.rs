@@ -1271,7 +1271,10 @@ impl ReferenceModel {
         if false == dropped {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
-            if (header.syn || header.rst) && self.answers_observed_syn(segment) {
+            if (header.syn || header.rst)
+                && self.answers_observed_syn(segment)
+                && (header.rst || false == self.is_own_syn(segment))
+            {
                 self.streams[sender].kept_ack = None;
             }
             // an RST that F4 ignores is dropped with its ACK
