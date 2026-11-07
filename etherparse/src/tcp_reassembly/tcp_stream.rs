@@ -32,7 +32,7 @@ pub struct TcpStream {
     /// front). It is applied after every packet until it counts, tells
     /// which segments the receiver accepts while the stream has no start,
     /// and is dropped once a later ACK counted.
-    pending_ack: Option<PendingAck>,
+    kept_ack: Option<KeptAck>,
 
     /// Whether a segment that lay far from the kept ACK was refused as the
     /// stream's start: one of them is forged, so the next segment starts
@@ -117,7 +117,7 @@ impl TcpStream {
         TcpStream {
             start_seq: None,
             syn: None,
-            pending_ack: None,
+            kept_ack: None,
             start_disputed: false,
             window_scale: None,
             window: None,
@@ -434,12 +434,12 @@ impl TcpStream {
         let isn = tcp.sequence_number();
         let seq = isn.wrapping_add(1);
         let range = window_range(window, config);
-        match (self.isn(), self.start_seq, self.pending_ack) {
+        match (self.isn(), self.start_seq, self.kept_ack) {
             (Some(own), _, _) => own == isn,
             (None, Some(start_seq), _) => self
                 .offset(start_seq, seq)
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
-            (None, None, Some(pending)) => u64::try_from(pending.seq.wrapping_sub(seq) as i32)
+            (None, None, Some(kept)) => u64::try_from(kept.seq.wrapping_sub(seq) as i32)
                 .is_ok_and(|distance| distance <= range),
             (None, None, None) => true,
         }
@@ -720,7 +720,7 @@ impl TcpStream {
             // a FIN without bytes, but not at the filler byte of a
             // keep-alive, which ends at the receiver's ACK
             let keep_alive = is_keep_alive_shaped(tcp)
-                && Some(seq.wrapping_add(1)) == self.pending_ack.map(|pending| pending.seq);
+                && Some(seq.wrapping_add(1)) == self.kept_ack.map(|kept| kept.seq);
             if (false == data.is_empty() || tcp.fin()) && false == keep_alive {
                 // a segment far from the ACK the receiver kept for the stream
                 // is forged, or the ACK is: the first such segment doesn't
@@ -740,7 +740,7 @@ impl TcpStream {
                     // a kept ACK that the start overrules is forged, and
                     // would count as the seen ACK or as resync evidence
                     if false == accepted {
-                        self.pending_ack = None;
+                        self.kept_ack = None;
                     }
                     self.start_seq = Some(seq);
                 }
@@ -755,10 +755,8 @@ impl TcpStream {
     /// there is one.
     fn accepted_by_kept_ack(&self, seq: u32, window: u64, config: &TcpReassemblyConfig) -> bool {
         let range = window_range(window, config);
-        self.pending_ack.is_none_or(|pending| {
-            let distance = seq
-                .wrapping_sub(pending.seq)
-                .min(pending.seq.wrapping_sub(seq));
+        self.kept_ack.is_none_or(|kept| {
+            let distance = seq.wrapping_sub(kept.seq).min(kept.seq.wrapping_sub(seq));
             u64::from(distance) <= range
         })
     }
@@ -943,13 +941,13 @@ impl TcpStream {
         // the receiver accepts an RST from the next byte it expects up to
         // one window after it (RFC 9293 3.10.7.4), and that byte lies
         // between the receiver's ACK and the bytes sent (and the FIN)
-        let accepted = match (self.start_seq, self.pending_ack) {
-            (Some(start_seq), pending_ack) => {
+        let accepted = match (self.start_seq, self.kept_ack) {
+            (Some(start_seq), kept_ack) => {
                 // the receiver's ACK can be kept at or before offset 0 (see
-                // `pending_ack`), but no ACK blocks an RST at or after the
+                // `kept_ack`), but no ACK blocks an RST at or after the
                 // received bytes (a forged one could)
-                let ack = pending_ack
-                    .and_then(|pending| self.offset(start_seq, pending.seq))
+                let ack = kept_ack
+                    .and_then(|kept| self.offset(start_seq, kept.seq))
                     .unwrap_or(self.seen_ack as i64);
                 let mut first = ack.min(self.buffer.received_end() as i64);
                 // nothing before a jump counts
@@ -963,7 +961,7 @@ impl TcpStream {
             }
             // without a start, the receiver's ACK is the next byte it
             // expects
-            (None, Some(pending)) => u64::try_from(seq.wrapping_sub(pending.seq) as i32)
+            (None, Some(kept)) => u64::try_from(seq.wrapping_sub(kept.seq) as i32)
                 .is_ok_and(|distance| distance <= window),
             // nothing tells which bytes the receiver expects
             (None, None) => true,
@@ -1096,10 +1094,10 @@ impl TcpStream {
         config: &TcpReassemblyConfig,
     ) {
         // an ACK that couldn't be applied counts once the stream has a start
-        // or its offsets moved (until then, it stays pending)
-        if let Some(pending) = self.pending_ack.take() {
+        // or its offsets moved (until then, it stays kept)
+        if let Some(kept) = self.kept_ack.take() {
             let ack_window = window.unwrap_or(u64::from(config.fallback_window));
-            self.add_ack(pending.seq, ack_window, pending.packet, config);
+            self.add_ack(kept.seq, ack_window, kept.packet, config);
         }
         // the sender can have sent bytes into a larger window before the
         // window shrank (e.g. to 0 when the receiver's buffer is full)
@@ -1151,7 +1149,7 @@ impl TcpStream {
         config: &TcpReassemblyConfig,
     ) {
         let Some(start_seq) = self.start_seq else {
-            self.pending_ack = Some(PendingAck {
+            self.kept_ack = Some(KeptAck {
                 seq: ack_seq,
                 packet,
             });
@@ -1168,7 +1166,7 @@ impl TcpStream {
         // would widen the RST check (F4)
         if ack <= 0 && self.can_prepend() && 0 == self.seen_ack {
             if ack.unsigned_abs() <= window_range(window, config) {
-                self.pending_ack = Some(PendingAck {
+                self.kept_ack = Some(KeptAck {
                     seq: ack_seq,
                     packet,
                 });
@@ -1188,7 +1186,7 @@ impl TcpStream {
         }
         self.seen_ack = ack as u64;
         // an ACK kept at or before offset 0 is older than this one
-        self.pending_ack = None;
+        self.kept_ack = None;
         // the receiver got bytes that were not captured, but none after the
         // FIN
         let end = self
@@ -1348,7 +1346,7 @@ struct Placed {
 /// ACK of the receiver that the stream couldn't apply yet (see
 /// [`TcpStream::add_ack`]).
 #[derive(Copy, Clone, Debug)]
-struct PendingAck {
+struct KeptAck {
     /// ACK number.
     seq: u32,
     /// Number of the connection's packet that carried the ACK.
