@@ -1449,9 +1449,17 @@ mod test {
             let reset = before.iter().any(|s| s.header.rst);
             let fin_seen = before.iter().any(|s| s.header.fin);
             let half_next = script.seq(role, 0);
-            let start = of_role(role)
-                .find(|s| false == s.payload.is_empty() || s.header.fin)
-                .map(|s| previous.seq(role, s.offset));
+            // a keep-alive doesn't start a pickup (A4), so the pool keeps the
+            // peer's ACK for its stream instead
+            let start = before
+                .iter()
+                .enumerate()
+                .find(|(i, s)| {
+                    s.sender == role
+                        && (false == s.payload.is_empty() || s.header.fin)
+                        && false == keep_alive_shaped(&before, *i)
+                })
+                .map(|(_, s)| previous.seq(role, s.offset));
             let own = match start {
                 Some(start) => {
                     (false == fin_seen || start == half_next)
@@ -1677,20 +1685,14 @@ mod test {
                 s.sender == half.sender && (false == s.payload.is_empty() || s.header.fin)
             });
             let observed = |role: TcpRole| observed_start(&before, role);
-            // a keep-alive (one byte that ends at the other side's last ACK)
-            // doesn't start a pickup (A4)
+            // a keep-alive doesn't start a pickup (A4)
             let first_byte = before
                 .iter()
                 .enumerate()
-                .filter(|(_, s)| s.sender == half.sender && false == s.payload.is_empty())
                 .find(|(k, s)| {
-                    let acked = before[..*k]
-                        .iter()
-                        .rev()
-                        .find(|o| o.sender != half.sender && o.ack.is_some())
-                        .and_then(|o| o.ack);
-                    let keep_alive = 1 == s.payload.len() && false == s.header.fin;
-                    false == (keep_alive && Some(s.offset + 1) == acked)
+                    s.sender == half.sender
+                        && false == s.payload.is_empty()
+                        && false == keep_alive_shaped(&before, *k)
                 })
                 .map(|(_, s)| s.offset);
             started
@@ -1699,6 +1701,21 @@ mod test {
                 && false == (half.header.ack && observed(half.sender.other()))
                 && Some(0) != first_byte
         })
+    }
+
+    /// Returns true if `segments[i]` of one connection looks like the filler
+    /// byte of a keep-alive: one byte without FIN that ends at the other
+    /// side's last ACK before it, which starts no stream (A4).
+    fn keep_alive_shaped(segments: &[&TestSegment], i: usize) -> bool {
+        let segment = segments[i];
+        let acked = segments[..i]
+            .iter()
+            .rev()
+            .find(|s| s.sender != segment.sender && s.ack.is_some())
+            .and_then(|s| s.ack);
+        1 == segment.payload.len()
+            && false == segment.header.fin
+            && Some(segment.offset + 1) == acked
     }
 
     /// Returns true if the stream of `role` has an observed start after the
