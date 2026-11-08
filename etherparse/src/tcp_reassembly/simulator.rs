@@ -1210,6 +1210,9 @@ mod test {
     ///   half after its sender's first bytes and after a FIN of the
     ///   connection, while no observed SYN tells the pool whose it is (see
     ///   [`late_own_half`]): it starts a reconnect.
+    /// - `C1 coinciding start`: a new stream begins right at the first byte
+    ///   or FIN of an old pickup stream, whose SYN the capture didn't show:
+    ///   the new handshake looks like the old pickup's own late one.
     /// - `C1 coinciding end`: the number a stream of the old connection
     ///   reached is the new ISN + 1 of the same endpoint, so a late segment
     ///   of the other side that ACKs the old end ACKs the new SYN as well.
@@ -1337,6 +1340,23 @@ mod test {
                 });
                 if old_end == script.seq(role, 0) && late_of_other {
                     return Some("C1 coinciding end");
+                }
+            }
+            // a new stream that begins right at the first byte or FIN of an
+            // old pickup stream, whose SYN the pool didn't observe, looks
+            // like that stream's own late handshake
+            let old: Vec<&TestSegment> = captured
+                .iter()
+                .filter(|s| s.incarnation as usize + 1 == k)
+                .collect();
+            for role in [Initiator, Responder] {
+                let pickup_start = old
+                    .iter()
+                    .find(|s| s.sender == role && (false == s.payload.is_empty() || s.header.fin))
+                    .map(|s| previous.seq(role, s.offset));
+                if false == observed_start(&old, role) && Some(script.seq(role, 0)) == pickup_start
+                {
+                    return Some("C1 coinciding start");
                 }
             }
             // the first captured half of the new handshake meets the open
@@ -1716,26 +1736,37 @@ mod test {
         )
     }
 
-    /// The known limits are rare coincidences: few histories of a
-    /// deterministic sample hit one, so the oracle judges almost all.
+    /// A census of a deterministic sample of histories: none fails, and few
+    /// hit a known limit (rare coincidences), so the oracle judges almost
+    /// all. Unlike the proptest, it doesn't stop at the first failure.
     #[test]
-    fn known_limits_are_rare() {
+    fn history_census() {
         use proptest::strategy::ValueTree;
         let mut runner = proptest::test_runner::TestRunner::deterministic();
         let strategy = history_any();
         let cases = 2000;
         let mut hits = std::collections::BTreeMap::new();
-        for _ in 0..cases {
+        let mut failures = Vec::new();
+        for case in 0..cases {
             let (isns, plans, late_positions, capture) =
                 strategy.new_tree(&mut runner).unwrap().current();
-            let world = World::build(isns, &plans, &late_positions);
-            let captured = capture.apply(&world);
-            if let Some(limit) = known_limit(&world, &captured, &config()) {
-                *hits.entry(limit).or_insert(0usize) += 1;
+            match simulate(isns, &plans, &late_positions, &capture, config()) {
+                Ok(None) => {}
+                Ok(Some(limit)) => *hits.entry(limit).or_insert(0usize) += 1,
+                Err(failure) => failures.push(format!(
+                    "case {case}: {}",
+                    failure.lines().next().unwrap_or("")
+                )),
             }
         }
         let total: usize = hits.values().sum();
         std::eprintln!("known limits in {cases} histories: {hits:?}");
+        assert!(
+            failures.is_empty(),
+            "{} of {cases} histories failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
         assert!(
             total * 100 <= cases * 5,
             "{total} of {cases} histories hit a known limit: {hits:?}"
