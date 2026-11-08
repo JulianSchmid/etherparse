@@ -1478,12 +1478,13 @@ mod test {
     /// shows the handshake half of `lost` only after the first other
     /// segments of its stream, or not at all, both new streams begin within
     /// their old spans (or the reach `range` past one whose FIN the capture
-    /// didn't show before `k` started), and a segment of `lost`'s stream
+    /// didn't show before `k` started; only `lost`'s for a segment without
+    /// ACK), and a segment of `lost`'s stream
     /// that the pool checks against the old spans (captured after the kept
     /// half started the new connection, as the connection before takes the
     /// ones before it, and before one of its segments is the new
     /// connection's own by position or ACK) ACKs bytes of the other stream
-    /// the capture doesn't show yet.
+    /// the capture doesn't show yet, or has no ACK.
     fn inside_spans(
         previous: &ConnectionScript,
         script: &ConnectionScript,
@@ -1511,11 +1512,9 @@ mod test {
             }
         };
         // the kept half's new stream begins before the end of its old span
-        // or the reach past it
+        // or the reach past it (what an ACK of it is checked against)
         let kept_end = previous.seq(kept, previous.next_offset(kept) + reach(kept));
-        if 0 < script.seq(kept, 0).wrapping_sub(kept_end) as i32 {
-            return false;
-        }
+        let kept_inside = 0 >= script.seq(kept, 0).wrapping_sub(kept_end) as i32;
         // the lost half's new stream begins within its old span or the
         // reach past it
         let lost_len = u64::from(previous.next_offset(lost) as u32);
@@ -1549,7 +1548,8 @@ mod test {
                 } else {
                     s.ack.is_some_and(|ack| ack <= kept_sent)
                 };
-                return false == own;
+                // one without an ACK (an RST) only by its own numbers
+                return false == own && (kept_inside || s.ack.is_none());
             }
         }
         false
