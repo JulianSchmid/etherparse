@@ -128,6 +128,18 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// bytes (the pool's budget, reduced by the bytes stored), and returns
     /// the role of the sender. A SYN that is kept takes its buffer from
     /// `free`.
+    ///
+    /// The life of a segment: the packet is counted; [`TcpConnection::verdict`]
+    /// decides by the handshake state what happens to it (dropped without
+    /// ACK flag or while the receiver's SYN is unanswered, S6/S5; an RST
+    /// ends the connection, F4; a SYN that is not its stream's own is kept
+    /// for a SYN-ACK that confirms a reconnect or a simultaneous open, C2;
+    /// the rest is applied); an applied segment answers the other side's
+    /// SYN, confirms a kept SYN of a simultaneous open, and goes through
+    /// [`TcpConnection::add_data_segment`] (its ACK first, then its bytes
+    /// into its sender's stream); a kept SYN whose stream started meanwhile
+    /// is settled; last, both streams apply kept ACKs and check for overdue
+    /// holes, and the connection ends if both streams are done.
     pub(crate) fn add_segment(
         &mut self,
         source: SocketAddr,
