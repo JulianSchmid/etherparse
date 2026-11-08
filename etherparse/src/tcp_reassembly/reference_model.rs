@@ -1595,8 +1595,14 @@ impl ReferenceModel {
         let conflicting = core::mem::take(&mut self.kept_syn_conflicting);
         let syn_role = self.sender_role(&syn);
         let syn_sender = role_index(syn_role);
-        // a stream that started at another SYN can't take the kept one
-        if self.streams[syn_sender].observed && false == self.streams[syn_sender].has_isn_of(&syn) {
+        // a stream that started at another SYN can't take the kept one, and
+        // one that started from bytes of another script lies far from the
+        // SYN of this one (the scripts' ISNs lie far apart), so the SYN is
+        // too far before its bytes
+        let other_script = Some(syn.incarnation) != self.incarnation;
+        if (self.streams[syn_sender].observed && false == self.streams[syn_sender].has_isn_of(&syn))
+            || other_script
+        {
             self.streams[syn_sender].out_of_window_segments += 1;
             return;
         }
