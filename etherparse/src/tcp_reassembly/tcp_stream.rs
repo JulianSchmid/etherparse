@@ -515,6 +515,17 @@ impl TcpStream {
         self.start_seq
     }
 
+    /// Returns true if the sequence number `seq` lies within what the
+    /// stream's sender sent, as far as the stream knows: from the stream's
+    /// first byte to the number its sender sends next (an ACK of it comes
+    /// from the receiver of this stream).
+    pub(crate) fn sent_range_covers(&self, seq: u32) -> bool {
+        match (self.first_seq(), self.next_seq()) {
+            (Some(first), Some(next)) => seq.wrapping_sub(first) <= next.wrapping_sub(first),
+            _ => false,
+        }
+    }
+
     /// Returns true if the stream's sender sent nothing yet, apart from its
     /// SYN: the stream has no start, or no bytes and no FIN.
     pub(crate) fn sent_nothing(&self) -> bool {

@@ -627,16 +627,31 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// the replaced connection by its sequence numbers (see
     /// [`SeqNumbers::absorbs_late`]): the ACK of a server in TIME-WAIT to
     /// a new SYN with a lower ISN, the client's RST to that ACK, the old
-    /// close's last ACK captured late, or bytes still in flight.
+    /// close's last ACK captured late, or bytes still in flight. A segment
+    /// at the position the sender's stream expects next, or one that ACKs
+    /// what the other stream sent in this connection, is this connection's
+    /// own, whatever the replaced one's numbers say (after a reset, the new
+    /// ISNs can lie within the old numbers), and an RST without ACK of a
+    /// side in SYN-SENT (its SYN seen, the other side without a start)
+    /// answers an ACK of the replaced connection (RFC 9293 3.10.7.3; no
+    /// stack sends one otherwise), also when that ACK was not captured yet.
     pub(crate) fn absorbs_late_segment(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
-        let sent_nothing = self.stream(self.role(source)).sent_nothing();
+        let sender = self.role(source);
+        let (stream, other) = (self.stream(sender), self.stream(sender.other()));
+        let sent_nothing = stream.sent_nothing();
+        let expected = (stream.isn().is_some() && Some(tcp.sequence_number()) == stream.next_seq())
+            || (tcp.ack() && other.sent_range_covers(tcp.acknowledgment_number()));
+        let syn_sent = stream.isn().is_some() && false == other.has_start();
         let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if tcp.syn() {
             return false == tcp.rst() && replaced.is_own_handshake(source, tcp);
         }
-        sent_nothing && replaced.absorbs_late(source, tcp)
+        if false == sent_nothing || expected {
+            return false;
+        }
+        (tcp.rst() && false == tcp.ack() && syn_sent) || replaced.absorbs_late(source, tcp)
     }
 
     /// What the pool keeps of the connection once it ended.
@@ -765,15 +780,15 @@ impl SeqNumbers {
     }
 
     /// Returns true if `tcp`, sent by `source` and no SYN, is a late segment
-    /// of the ended connection by its sequence numbers: it lies within the
+    /// of the ended connection by its sequence numbers: it has no bytes and
+    /// lies right at the number its sender's stream reached (a late ACK or
+    /// RST, also when the other stream is unknown), or it lies within the
     /// numbers its sender's stream covered (from its first byte to the
     /// number it reached) and its ACK number, if it has one, within the
-    /// other stream's, or it has no bytes and lies right at the number its
-    /// sender's stream reached (a late ACK or RST, also when the other
-    /// stream is unknown). The ACK number of such an ACK moves the number
-    /// the other stream reached forward: the capture may have missed that
-    /// stream's FIN, and the RST that answers the ACK lies at the ACK
-    /// number (RFC 9293 3.10.7.3).
+    /// other stream's. The ACK number of such an ACK moves the number the
+    /// other stream reached forward: the capture may have missed that
+    /// stream's FIN, and the RST that answers the ACK lies at the ACK number
+    /// (RFC 9293 3.10.7.3).
     pub fn absorbs_late(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = self.roles(source);
         let seq = tcp.sequence_number();

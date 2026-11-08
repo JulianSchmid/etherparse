@@ -1403,10 +1403,12 @@ mod test {
         // on with the retransmitted SYN; also when the capture missed the
         // client's FIN and the last ACK (the TIME-WAIT ACK then tells where
         // the client's stream ended), and across a sequence number wrap
-        for (lost_close, client_isn) in [
-            (false, 10_000_000),
-            (true, 10_000_000),
-            (true, u32::MAX - 2),
+        for (lost_close, client_isn, rst_first) in [
+            (false, 10_000_000, false),
+            (true, 10_000_000, false),
+            (true, u32::MAX - 2, false),
+            (false, 10_000_000, true),
+            (true, 10_000_000, true),
         ] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(client_isn, 20_000_000);
@@ -1429,11 +1431,23 @@ mod test {
             let processed = script.segments[0].feed(&mut pool, 7);
             assert_eq!(lost_close, processed.ended.is_some());
             assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
-            // the TIME-WAIT ACK and the client's RST
+            // the TIME-WAIT ACK and the client's RST (<SEQ=SEG.ACK><CTL=RST>,
+            // without ACK flag, RFC 9293 3.10.7.3), in either capture order
             late.ack(Responder).rst(Initiator);
-            for index in [late.segments.len() - 2, late.segments.len() - 1] {
+            let rst = late.segments.last_mut().unwrap();
+            rst.header.ack = false;
+            rst.ack = None;
+            let mut order = [late.segments.len() - 2, late.segments.len() - 1];
+            if rst_first {
+                order.reverse();
+            }
+            for index in order {
                 let processed = late.segments[index].feed(&mut pool, 8);
-                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+                assert_eq!(
+                    Some(TcpIgnoreReason::AfterEnd),
+                    processed.ignored,
+                    "lost_close={lost_close} rst_first={rst_first}"
+                );
             }
             script
                 .syn()
@@ -1561,6 +1575,53 @@ mod test {
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpRead::Data(&[b'n'; 501]), stream.read_received());
             assert!(stream.is_finished());
+        }
+
+        // a reuse after a reset has no TIME-WAIT to keep the ISNs apart: the
+        // new ISNs can fall into the old streams' spans, and the reconnect's
+        // own segments at the positions its streams expect are its own, not
+        // late segments of the replaced connection (C1), with or without
+        // the SYN-ACK captured
+        for lost in ["nothing", "syn-ack", "first request"] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, &[b'o'; 10_000])
+                .send(Responder, &[b'p'; 10_000])
+                .rst(Initiator);
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script
+                .handshake()
+                .send(Initiator, b"new-")
+                .send(Initiator, b"request")
+                .send(Responder, b"new-response");
+            match lost {
+                "syn-ack" => {
+                    script.segments.remove(1);
+                }
+                "first request" => {
+                    script.segments.remove(3);
+                }
+                _ => {}
+            }
+            let processed = script.feed_all(&mut pool);
+            assert_eq!(None, processed.ignored, "{lost}");
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            let stream = connection.stream_mut(Initiator);
+            if "first request" == lost {
+                // the lost bytes are a hole, the rest arrived
+                assert_eq!(11, stream.highest_offset());
+                assert_eq!(TcpRead::Pending, stream.read_received());
+                assert_eq!(1, stream.holes().count());
+            } else {
+                assert_eq!(TcpRead::Data(b"new-request"), stream.read_received());
+            }
+            assert_eq!(
+                TcpRead::Data(b"new-response"),
+                connection.stream_mut(Responder).read_received()
+            );
         }
 
         // the tombstone of a reconnect absorbs late duplicates of the replaced

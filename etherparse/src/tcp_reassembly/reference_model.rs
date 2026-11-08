@@ -1644,27 +1644,44 @@ impl ReferenceModel {
 
     /// Returns true if `segment` is a late segment of the connection this
     /// one replaced (C1), which the pool ignores: a duplicate of its
-    /// handshake, or, while a stream of this connection has no start, a
-    /// segment without SYN and bytes at the offset a replaced stream reached
-    /// (see [`ReferenceModel::is_own_end`]).
+    /// handshake, or, while the sender sent nothing after its SYN in this
+    /// connection (see [`ModelStream::sent_nothing`]), a segment of the
+    /// replaced connection by its offsets (see
+    /// [`ReferenceModel::absorbs_late`]) or an RST without ACK of a side in
+    /// SYN-SENT. A segment at the offset the sender's stream expects next is
+    /// this connection's own.
     pub fn absorbs_late_segment(&mut self, segment: &TestSegment) -> bool {
-        let sent_nothing = self.streams[role_index(self.sender_role(segment))].sent_nothing();
+        let sender = self.sender_role(segment);
+        let stream = &self.streams[role_index(sender)];
+        let other = &self.streams[role_index(sender.other())];
+        let sent_nothing = stream.sent_nothing();
+        // the position the stream expects next (the offset it reached, as
+        // it sent nothing), or an ACK of what the other stream sent here, is
+        // the connection's own
+        let expected = (stream.observed && Some(segment.offset) == stream.end_offset())
+            || segment.ack.is_some_and(|ack| other.covers(ack));
+        let syn_sent = stream.observed && other.base.is_none();
         let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if segment.header.syn {
             return false == segment.header.rst && replaced.is_own_handshake(segment);
         }
-        sent_nothing && replaced.absorbs_late(segment)
+        if false == sent_nothing || expected {
+            return false;
+        }
+        // an RST without ACK of a side in SYN-SENT answers an ACK of the
+        // replaced connection
+        (segment.header.rst && segment.ack.is_none() && syn_sent) || replaced.absorbs_late(segment)
     }
 
     /// Returns true if `segment`, no SYN, comes from the connection's script
-    /// and lies within the offsets its sender's stream covered (from its
-    /// first byte to the offset it reached) with its ACK, if any, within the
-    /// other stream's, or has no bytes and lies at the offset its sender's
-    /// stream reached (see [`ModelStream::end_offset`]): a late segment of
-    /// the connection. The ACK number of such an ACK moves the offset the
-    /// other stream reached forward.
+    /// and has no bytes and lies at the offset its sender's stream reached
+    /// (see [`ModelStream::end_offset`]), or lies within the offsets its
+    /// sender's stream covered (from its first byte to the offset it
+    /// reached) with its ACK, if any, within the other stream's: a late
+    /// segment of the connection. The ACK number of such an ACK moves the
+    /// offset the other stream reached forward.
     fn absorbs_late(&mut self, segment: &TestSegment) -> bool {
         let sender = self.sender_role(segment);
         let stream = &self.streams[role_index(sender)];
