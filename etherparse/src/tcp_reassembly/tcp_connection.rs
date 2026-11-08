@@ -642,20 +642,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Returns true if `tcp`, sent by `source`, is a late segment of the
     /// connection this one replaced (C1), which the pool ignores like a
     /// segment on a tombstone: a duplicate of its handshake; an RST without
-    /// ACK of a side in SYN-SENT (its SYN seen, the other side without a
-    /// start), which answers an ACK of the replaced connection (RFC 9293
-    /// 3.10.7.3; no stack sends one otherwise); or, while the sender sent
-    /// nothing the connection took, a segment that the replaced connection's
-    /// sequence numbers show is its (see [`SeqNumbers::absorbs_late`]): the
-    /// ACK of a server in TIME-WAIT to a new SYN with a lower ISN, the old
-    /// close's last ACK captured late, bytes still in flight, a FIN
-    /// retransmission. On one path, an endpoint's segments of the replaced
-    /// connection can't arrive after its first segment of this one. This
-    /// connection's own segments come first, whatever the replaced one's
-    /// numbers say (after a reset, the new ISNs can lie within the old
-    /// numbers): where it knows where the sender's stream begins, one within
-    /// what that stream is known to have sent, else one that ACKs what the
-    /// other stream sent in this connection.
+    /// ACK of a side in SYN-SENT (its SYN seen, and nothing of the other
+    /// side ACKed yet), which answers an ACK of the replaced connection (RFC
+    /// 9293 3.10.7.3; past SYN-SENT, only a crashed side sends one); or,
+    /// while the sender sent nothing the connection took, a segment that
+    /// the replaced connection's sequence numbers show is its (see
+    /// [`SeqNumbers::absorbs_late`]): the ACK of a server in TIME-WAIT to a
+    /// new SYN with a lower ISN, the old close's last ACK captured late,
+    /// bytes still in flight, a FIN retransmission. On one path, an
+    /// endpoint's segments of the replaced connection can't arrive after
+    /// its first segment of this one. This connection's own segments come
+    /// first, whatever the replaced one's numbers say (after a reset, the
+    /// new ISNs can lie within the old numbers): where it knows where the
+    /// sender's stream begins, one within what that stream is known to have
+    /// sent, else one that ACKs what the other stream sent in this
+    /// connection.
     pub(crate) fn absorbs_late_segment(
         &mut self,
         source: SocketAddr,
@@ -667,11 +668,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         }
         let sender = self.role(source);
         let (stream, other) = (self.stream(sender), self.stream(sender.other()));
-        // an RST without ACK from SYN-SENT is never the connection's own,
-        // wherever it lies (an absorbed ACK may have moved the stream's
-        // expected position onto it)
-        let answers_old_ack =
-            tcp.rst() && false == tcp.ack() && stream.isn().is_some() && false == other.has_start();
+        // an RST without ACK from SYN-SENT (its SYN seen, and nothing of the
+        // other side ACKed yet) is never the connection's own, wherever it
+        // lies (an absorbed ACK may have moved the stream's expected position
+        // onto it)
+        let answers_old_ack = tcp.rst()
+            && false == tcp.ack()
+            && stream.isn().is_some()
+            && false == (other.has_start() || other.has_kept_ack());
         // this connection's own segment: where it knows where the sender's
         // stream begins (its SYN, or the ACK number of the other side's
         // SYN-ACK, A2), one within what that stream is known to have sent

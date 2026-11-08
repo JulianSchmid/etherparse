@@ -1686,8 +1686,11 @@ impl ReferenceModel {
         let sender = self.sender_role(segment);
         let stream = &self.streams[role_index(sender)];
         let other = &self.streams[role_index(sender.other())];
-        let answers_old_ack =
-            segment.header.rst && segment.ack.is_none() && stream.observed && other.base.is_none();
+        let answers_old_ack = segment.header.rst
+            && segment.ack.is_none()
+            && stream.observed
+            && other.base.is_none()
+            && other.kept_ack.is_none();
         // where the sender's stream has a start here, an offset within what
         // it is known to have sent is the connection's own, else an ACK of
         // what the other stream sent here

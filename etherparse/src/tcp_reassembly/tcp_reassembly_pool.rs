@@ -1887,6 +1887,37 @@ mod test {
             );
         }
 
+        // a client that crashed answers the server's next segment from CLOSED
+        // with an RST without ACK at the segment's ACK number (RFC 9293
+        // 3.10.7.1): it ACKed the server's SYN-ACK and sent bytes, so it is
+        // past SYN-SENT, and the RST resets the new connection, also when the
+        // capture lost the SYN-ACK (C1)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake().send(Initiator, b"old").rst(Initiator);
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(900_000, 800_000);
+            script
+                .handshake()
+                .send(Initiator, b"request")
+                .ack(Responder)
+                .rst(Initiator);
+            let rst = script.segments.last_mut().unwrap();
+            rst.header.ack = false;
+            rst.ack = None;
+            // the SYN-ACK lost
+            script.segments.remove(1);
+            let processed = script.feed(&mut pool, ..);
+            assert_eq!(None, processed.ignored);
+            let connection = processed.ended.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                connection.end()
+            );
+        }
+
         // the tombstone of a reconnect absorbs late duplicates of the replaced
         // connection's handshake as well (C1): one that arrives after the
         // reconnect finished is ignored, while a SYN with a third ISN starts
