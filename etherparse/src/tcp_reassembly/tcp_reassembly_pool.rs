@@ -1109,6 +1109,30 @@ mod test {
             assert_eq!(TcpRead::Pending, stream.read_received());
         }
 
+        // a connection that lost a segment shortly before its close still
+        // ends as finished at the ACK of the last FIN: the FIN was captured
+        // after the bytes of its direction, so the hole is capture loss and
+        // becomes a gap (F3), without waiting for `ack_reorder_tolerance`
+        // packets that never come
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, &[b'r'; 100]);
+            for _ in 0..50 {
+                script.send(Responder, &[b'x'; 1000]);
+            }
+            script.fin(Initiator).fin(Responder).ack(Initiator);
+            script.segments.remove(7);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(TcpRead::Data(&[b'x'; 3000]), stream.read_received());
+            stream.consume(3000);
+            assert_eq!(TcpRead::Gap { len: Some(1000) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(&[b'x'; 46000]), stream.read_received());
+        }
+
         // a reconnect whose SYN-ACK is captured before its SYN (two taps
         // merged, the old connection's close not captured) is confirmed by
         // the SYN that the kept SYN-ACK ACKs: the old connection is handed
@@ -1725,9 +1749,9 @@ mod test {
             assert_eq!(&9, connection.first_seen());
         }
 
-        // ... also if the kept SYN is the packet that finishes the
-        // connection, as it makes the last hole overdue (the ACK of the
-        // responder covered it one packet before)
+        // ... and it counts as a packet for the ACK reorder tolerance
+        // (K4(b)): it makes the hole overdue that the responder's ACK
+        // covered one packet before
         {
             let config = TcpReassemblyConfig {
                 ack_reorder_tolerance: 1,
@@ -1738,32 +1762,22 @@ mod test {
             old.handshake()
                 .send(Initiator, b"abc")
                 .send(Initiator, b"def")
-                .fin(Initiator)
-                .fin(Responder);
-            old.segments[3..].rotate_left(1);
-            old.segments.pop();
-            old.segments
-                .last_mut()
-                .unwrap()
-                .header
-                .acknowledgment_number = old.seq(Initiator, 0);
-            old.ack(Initiator).ack(Responder);
-            let mut script = ConnectionScript::with_isns(5000, 6000);
-            script.syn_with_data(b"GET").syn_ack();
+                .send(Initiator, b"ghi")
+                .ack(Responder);
+            old.segments.remove(4);
             {
                 let (connection, _) = old.feed_all(&mut pool).active.unwrap();
-                assert_eq!(None, connection.end());
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+                assert_eq!(TcpRead::Pending, stream.read_received());
             }
-            let processed = script.segments[0].feed(&mut pool, ());
-            assert!(processed.active.is_none());
-            let ended = processed.ended.unwrap();
-            assert_eq!(Some(TcpConnectionEnd::Finished), ended.end());
-            let processed = script.segments[1].feed(&mut pool, ());
-            assert!(processed.ended.is_none());
-            let (connection, _) = processed.active.unwrap();
-            assert_eq!(TcpConnectionId(1), connection.id());
+            let mut script = ConnectionScript::with_isns(5000, 6000);
+            script.syn_with_data(b"GET");
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
             assert_eq!(
-                TcpRead::Data(b"GET"),
+                TcpRead::Gap { len: Some(3) },
                 connection.stream_mut(Initiator).read_received()
             );
         }
@@ -2245,13 +2259,10 @@ mod test {
             );
         }
 
-        // a connection whose FINs were both ACKed ends as finished, as no
-        // more packets come, so every hole the ACKs cover is overdue: also
-        // with fewer than ack_reorder_tolerance packets after the ACK that
-        // covered its last hole, and also once the user gave up that hole.
-        // The hole is a gap (unless given up before), and reads end with
-        // End(Fin)
-        for give_up in [false, true] {
+        // a connection whose FINs were both ACKed is finished at the last
+        // ACK (F3), whatever hole the ACKs cover, so eviction finds nothing
+        // of it; its hole is a gap and reads end with End(Fin)
+        {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
@@ -2261,36 +2272,24 @@ mod test {
                 .fin(Initiator)
                 .fin(Responder)
                 .ack(Initiator);
-            {
-                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-                if give_up {
-                    let stream = connection.stream_mut(Initiator);
-                    stream.read_received();
-                    stream.consume(2);
-                    assert!(stream.give_up_hole());
-                }
-            }
-            let count = pool.evict_older_than(1, |connection| {
-                assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
-                let stream = connection.stream_mut(Initiator);
-                assert_eq!((1, 1), (stream.status().gaps, stream.status().gap_bytes));
-                if false == give_up {
-                    assert_eq!(TcpRead::Data(b"ab"), stream.read_received());
-                    stream.consume(2);
-                }
-                assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
-                stream.consume_gap();
-                assert_eq!(TcpRead::Data(b"d"), stream.read_received());
-                stream.consume(1);
-                assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
-                assert!(stream.is_finished());
-                assert!(false == stream.is_complete());
-                assert_eq!(
-                    TcpRead::End(TcpStreamEnd::Fin),
-                    connection.stream_mut(Responder).read_received()
-                );
-            });
-            assert_eq!(1, count);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!((1, 1), (stream.status().gaps, stream.status().gap_bytes));
+            assert_eq!(TcpRead::Data(b"ab"), stream.read_received());
+            stream.consume(2);
+            assert_eq!(TcpRead::Gap { len: Some(1) }, stream.read_received());
+            stream.consume_gap();
+            assert_eq!(TcpRead::Data(b"d"), stream.read_received());
+            stream.consume(1);
+            assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            assert!(stream.is_finished());
+            assert!(false == stream.is_complete());
+            assert_eq!(
+                TcpRead::End(TcpStreamEnd::Fin),
+                connection.stream_mut(Responder).read_received()
+            );
+            assert_eq!(0, pool.evict_older_than(1, |_| {}));
         }
 
         // a connection whose FINs were not both ACKed ends as evicted, also
@@ -2440,8 +2439,8 @@ mod test {
             assert_eq!(1, pool.evict_all(|_| {}));
         }
 
-        // as with evict_older_than, a connection whose FINs were both ACKed
-        // ends as finished, and its hole is a gap
+        // a connection whose FINs were both ACKed is finished at the last
+        // ACK (F3), so there is nothing to evict
         {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -2452,12 +2451,10 @@ mod test {
                 .fin(Initiator)
                 .fin(Responder)
                 .ack(Initiator);
-            script.feed_all(&mut pool);
-            let count = pool.evict_all(|connection| {
-                assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
-                assert_eq!(1, connection.stream(Initiator).status().gaps);
-            });
-            assert_eq!(1, count);
+            let connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(1, connection.stream(Initiator).status().gaps);
+            assert_eq!(0, pool.evict_all(|_| {}));
         }
     }
 

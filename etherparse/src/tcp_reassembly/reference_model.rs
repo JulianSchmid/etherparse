@@ -1073,9 +1073,9 @@ impl ModelStream {
         Some(self.received.len() as u64) == self.fin_offset
     }
 
-    /// Returns true if the FIN was ACKed and all holes are overdue.
+    /// Returns true if the FIN was ACKed (F3).
     fn can_finish(&self) -> bool {
-        self.is_fin_acked() && self.holes().iter().all(|hole| self.is_overdue(hole))
+        self.is_fin_acked()
     }
 
     /// Returns true if the FIN was ACKed.
@@ -2286,16 +2286,24 @@ mod test {
             }
 
             // move the segments after the handshake by a bounded distance,
-            // the retransmissions and duplicates start at random positions
+            // the retransmissions and duplicates start at random positions;
+            // the FINs and their ACKs (also retransmitted or duplicated ones)
+            // stay behind all data, as a capture shows a direction's data
+            // before its FIN (and the ACK of the FIN comes an RTT later), and
+            // the connection finishes at that ACK whatever holes are left (F3)
+            let closing = originals - fins.iter().filter(|fin| **fin).count() - 2;
             let mut keyed: Vec<_> = script
                 .segments
                 .drain(3..)
                 .enumerate()
                 .map(|(i, segment)| {
-                    let position = if i < originals {
+                    let closes = segment.header.fin || segment.payload.is_empty();
+                    let position = if i < closing {
                         i
+                    } else if i < originals || closes {
+                        originals + 8
                     } else {
-                        positions[i % positions.len()].index(originals + 1)
+                        positions[i % positions.len()].index(closing + 1)
                     };
                     (position + delays[i % delays.len()], segment)
                 })

@@ -232,7 +232,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             self.stream_mut(role).after_packet(window, packet, config);
         }
 
-        // finished once both FINs were ACKed and the holes left are overdue
+        // finished once both FINs were ACKed (F3)
         if self.end.is_none()
             && [&self.initiator_stream, &self.responder_stream]
                 .iter()
@@ -3234,7 +3234,8 @@ mod test {
         }
 
         // both FINs are ACKed, but bytes before a FIN were not captured: the
-        // next segment after the hole was given up finishes the connection
+        // connection finishes at the ACK of the last FIN all the same, and
+        // the hole is a gap (F3)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -3243,16 +3244,18 @@ mod test {
                 .send(Initiator, b"abc")
                 .fin(Initiator)
                 .fin(Responder)
-                .ack(Initiator)
                 .ack(Initiator);
             script.segments.remove(3);
             {
-                let (connection, _) = script.feed(&mut pool, ..6).active.unwrap();
-                assert!(connection.stream_mut(Initiator).give_up_hole());
+                let (connection, _) = script.feed(&mut pool, ..5).active.unwrap();
                 assert_eq!(None, connection.end());
             }
-            let connection = script.feed(&mut pool, 6..).ended.unwrap();
+            let mut connection = script.feed(&mut pool, 5..).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(
+                TcpRead::Gap { len: Some(3) },
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // the ACK of a FIN arrives before the FIN, and its position was
@@ -3316,7 +3319,8 @@ mod test {
         }
 
         // both FINs are ACKed, but bytes before a FIN are missing (with and
-        // without bytes in the FIN)
+        // without bytes in the FIN): the connection finishes at the last ACK
+        // (F3), the missing bytes are a gap, and the late segment is ignored
         for fin_data in [&b""[..], b"gh"] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -3328,27 +3332,30 @@ mod test {
                 .fin(Responder)
                 .ack(Initiator);
             let missing = script.segments.remove(4);
-            {
-                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-                assert_eq!(None, connection.end());
-            }
-            let mut connection = missing.feed(&mut pool, ()).ended.unwrap();
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+            stream.consume(3);
+            assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
+            stream.consume_gap();
+            if fin_data.is_empty() {
+                assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            } else {
+                assert_eq!(TcpRead::Data(fin_data), stream.read_received());
+            }
             assert_eq!(
-                TcpRead::Data(&[&b"abcdef"[..], fin_data].concat()[..]),
-                connection.stream_mut(Initiator).read_received()
+                Some(TcpIgnoreReason::AfterEnd),
+                missing.feed(&mut pool, ()).ignored
             );
         }
 
-        // both FINs are ACKed and the hole left before a FIN is overdue (the
-        // ACK of the FIN covered it for the ACK reorder tolerance): the
-        // connection finishes and hands the hole over as a counted gap
+        // both FINs are ACKed and a hole is left before a FIN that the ACK
+        // reorder tolerance would still wait for: the connection finishes at
+        // the ACK of the last FIN (F3) and hands the hole over as a counted
+        // gap; the ACK after it is ignored
         {
-            let config = TcpReassemblyConfig {
-                ack_reorder_tolerance: 2,
-                ..Default::default()
-            };
-            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
@@ -3360,10 +3367,14 @@ mod test {
                 .ack(Initiator);
             script.segments.remove(4);
             {
-                let (connection, _) = script.feed(&mut pool, ..7).active.unwrap();
+                let (connection, _) = script.feed(&mut pool, ..6).active.unwrap();
                 assert_eq!(None, connection.end());
             }
-            let mut connection = script.feed(&mut pool, 7..).ended.unwrap();
+            let mut connection = script.feed(&mut pool, 6..7).ended.unwrap();
+            assert_eq!(
+                Some(TcpIgnoreReason::AfterEnd),
+                script.feed(&mut pool, 7..).ignored
+            );
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
             let stream = connection.stream_mut(Initiator);
             assert!(stream.is_finished());
@@ -3462,13 +3473,10 @@ mod test {
             assert_eq!(1, connection.stream(Initiator).status().resyncs);
         }
 
-        // all holes left have to be overdue, not only the first one
+        // several holes before an ACKed FIN all become gaps when the
+        // connection finishes at the ACK of the last FIN (F3)
         {
-            let config = TcpReassemblyConfig {
-                ack_reorder_tolerance: 2,
-                ..Default::default()
-            };
-            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script
                 .handshake()
@@ -3477,22 +3485,23 @@ mod test {
                 .send(Initiator, b"ghi")
                 .send(Initiator, b"jkl")
                 .fin_with_data(Initiator, b"mno")
-                // the first hole is overdue two packets later
-                .ack_to(Responder, 6)
-                .ack(Initiator)
-                .ack(Initiator)
-                // the second hole is overdue two packets later
                 .fin(Responder)
                 .ack(Initiator)
                 .ack(Initiator);
             script.segments.remove(6);
             script.segments.remove(4);
             {
-                let (connection, _) = script.feed(&mut pool, ..11).active.unwrap();
+                let (connection, _) = script.feed(&mut pool, ..7).active.unwrap();
                 assert_eq!(None, connection.end());
             }
-            let connection = script.feed(&mut pool, 11..).ended.unwrap();
+            let connection = script.feed(&mut pool, 7..8).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let status = connection.stream(Initiator).status();
+            assert_eq!((2, 6), (status.gaps, status.gap_bytes));
+            assert_eq!(
+                Some(TcpIgnoreReason::AfterEnd),
+                script.feed(&mut pool, 8..).ignored
+            );
         }
 
         // an RST at the sender's next byte resets the connection, sent by
@@ -3879,9 +3888,9 @@ mod test {
             assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
         }
 
-        // a reconnect ends a connection whose FINs were both ACKed as
-        // `Finished`, also before the hole the ACK of the FIN covered is
-        // overdue, as no more packets of it come
+        // a connection whose FINs were both ACKed is finished at the last
+        // ACK whatever hole the ACKs cover (F3), so a reconnect after it
+        // starts on its tombstone right away (C1)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -3893,13 +3902,7 @@ mod test {
                 .fin(Responder)
                 .ack(Initiator);
             script.segments.remove(3);
-            let mut reconnect = ConnectionScript::with_isns(5000, 6000);
-            reconnect.syn().syn_ack();
-            {
-                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-                assert_eq!(None, connection.end());
-            }
-            let mut connection = reconnect.feed_all(&mut pool).ended.unwrap();
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
             let stream = connection.stream_mut(Initiator);
             assert_eq!(TcpRead::Gap { len: Some(3) }, stream.read_received());
@@ -3907,6 +3910,11 @@ mod test {
             assert_eq!(TcpRead::Data(b"def"), stream.read_received());
             stream.consume(3);
             assert_eq!(TcpRead::End(TcpStreamEnd::Fin), stream.read_received());
+            let mut reconnect = ConnectionScript::with_isns(5000, 6000);
+            reconnect.syn().syn_ack();
+            let processed = reconnect.feed_all(&mut pool);
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
         }
 
         // an RST from a direction never seen resets the connection, e.g.

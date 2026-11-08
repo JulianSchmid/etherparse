@@ -632,15 +632,13 @@ impl TcpStream {
         free.acks.put(self.recent_acks);
     }
 
-    /// Returns true if the receiver ACKed the stream's FIN and all holes
-    /// left are overdue, so that the stream can end as finished.
+    /// Returns true if the receiver ACKed the stream's FIN, so that the
+    /// stream can end as finished (F3): the ACK covers every hole left, and
+    /// the FIN was captured after the bytes of its direction, so the holes
+    /// are capture loss, not an ACK that leads its bytes (K4), and become
+    /// gaps when the connection ends.
     pub(crate) fn can_finish(&self) -> bool {
         self.is_fin_acked()
-            && self
-                .buffer
-                .holes()
-                .last()
-                .is_none_or(|hole| self.is_overdue(hole))
     }
 
     /// Returns true if the receiver ACKed the stream's FIN (all holes lie
