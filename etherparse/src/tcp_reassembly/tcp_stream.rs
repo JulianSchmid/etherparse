@@ -580,12 +580,22 @@ impl TcpStream {
     /// Returns true if the sequence number `seq` lies within what the
     /// stream's sender sent, as far as the stream knows: from the stream's
     /// first byte to the number its sender sends next (an ACK of it comes
-    /// from the receiver of this stream).
+    /// from the receiver of this stream), so every number once the sender
+    /// sent a whole cycle of them.
     pub(crate) fn sent_range_covers(&self, seq: u32) -> bool {
-        match (self.first_seq(), self.next_seq()) {
-            (Some(first), Some(next)) => seq.wrapping_sub(first) <= next.wrapping_sub(first),
-            _ => false,
+        self.first_seq()
+            .is_some_and(|first| u64::from(seq.wrapping_sub(first)) <= self.sent_len())
+    }
+
+    /// Number of sequence numbers from the stream's first byte to the one
+    /// its sender sends next (see [`TcpStream::next_seq`]), kept wide, as a
+    /// sender can send more than a whole cycle of them; 0 without a start.
+    pub(crate) fn sent_len(&self) -> u64 {
+        if self.start_seq.is_none() {
+            return 0;
         }
+        let fin = u64::from(self.fin_offset.is_some());
+        (self.highest_offset() + fin).max(self.furthest.unwrap_or(0))
     }
 
     /// Sequence number the stream's sender sends next, as far as the stream
@@ -594,10 +604,8 @@ impl TcpStream {
     /// furthest segment the receiver accepted if that lies further (a pure
     /// ACK after a FIN the capture lost); `None` without either.
     pub(crate) fn next_seq(&self) -> Option<u32> {
-        let fin = u64::from(self.fin_offset.is_some());
-        let reached = (self.highest_offset() + fin).max(self.furthest.unwrap_or(0));
         self.start_seq
-            .map(|start_seq| start_seq.wrapping_add(reached as u32))
+            .map(|start_seq| start_seq.wrapping_add(self.sent_len() as u32))
             .or(self.kept_ack.map(|kept| kept.seq))
     }
 
@@ -5002,6 +5010,13 @@ mod test {
                     other => panic!("unexpected read {:?}", other),
                 }
                 stream.consume(SEGMENT_LEN);
+                // the number before the first byte lies within what the
+                // stream sent once it sent a whole cycle of them (C1)
+                let before_first = script.seq(Initiator, 0).wrapping_sub(1);
+                assert_eq!(
+                    offset + SEGMENT_LEN as u64 >= 1 << 32,
+                    stream.sent_range_covers(before_first)
+                );
                 offset += SEGMENT_LEN as u64;
             }
             assert!(offset > 3 << 32);

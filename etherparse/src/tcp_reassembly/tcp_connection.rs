@@ -726,6 +726,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             syns: streams.map(TcpStream::syn),
             first: streams.map(TcpStream::first_seq),
             next: streams.map(TcpStream::next_seq),
+            len: streams.map(TcpStream::sent_len),
             fin_seen: streams.map(|stream| stream.fin_offset().is_some()),
         }
     }
@@ -813,6 +814,10 @@ pub(crate) struct SeqNumbers {
     /// Sequence number each stream's sender sends next, as far as the stream
     /// knew (see [`TcpStream::next_seq`]).
     next: [Option<u32>; 2],
+    /// Number of sequence numbers each stream covered from its first byte to
+    /// `next`, kept wide, as a sender can send more than a whole cycle of
+    /// them (see [`TcpStream::sent_len`]; 0 without a first byte).
+    len: [u64; 2],
     /// Whether each stream's FIN was seen: its sender sends nothing after
     /// it, so `next` is the stream's end.
     fin_seen: [bool; 2],
@@ -871,6 +876,9 @@ impl SeqNumbers {
         if tcp.ack() && false == tcp.rst() {
             let ack = tcp.acknowledgment_number();
             if self.next[other].is_none_or(|next| 0 < ack.wrapping_sub(next) as i32) {
+                if let (Some(_), Some(next)) = (self.first[other], self.next[other]) {
+                    self.len[other] += u64::from(ack.wrapping_sub(next));
+                }
                 self.next[other] = Some(ack);
             }
         }
@@ -878,8 +886,9 @@ impl SeqNumbers {
     }
 
     /// Returns true if the stream with the index `stream` covered the
-    /// sequence number `seq`: from its first byte to the number it reached,
-    /// both widened by `ahead` for bytes the capture may have missed, but
+    /// sequence number `seq`: from its first byte to the number it reached
+    /// (every number once it sent a whole cycle of them), both widened by
+    /// `ahead` for bytes the capture may have missed, but
     /// not before an observed SYN or after a seen FIN, before and after
     /// which the sender sent nothing (a mid-stream pickup's first byte is
     /// where the capture started, so the other side's ACKs can lie before
@@ -894,12 +903,11 @@ impl SeqNumbers {
         };
         let after = if self.fin_seen[stream] { 0 } else { ahead };
         match (self.first[stream], self.next[stream]) {
-            (Some(first), Some(next)) => {
-                // the length is kept wide: a span plus the slack can reach a
-                // whole cycle of the sequence numbers, which then covers
-                // every number
-                let len =
-                    u64::from(next.wrapping_sub(first)) + u64::from(before) + u64::from(after);
+            (Some(first), Some(_)) => {
+                // the length is kept wide: a stream can send more than a
+                // whole cycle of the sequence numbers, and a span plus the
+                // slack can reach one, which then covers every number
+                let len = self.len[stream] + u64::from(before) + u64::from(after);
                 u64::from(seq.wrapping_sub(first.wrapping_sub(before))) <= len
             }
             (None, Some(next)) => 0 <= next.wrapping_add(after).wrapping_sub(seq) as i32,
@@ -1030,6 +1038,7 @@ mod test {
             syns: [None, Some(syn)],
             first: [Some(1000), Some(2000)],
             next: [Some(1000u32.wrapping_add(u32::MAX - 32_767)), Some(2005)],
+            len: [u64::from(u32::MAX - 32_767), 5],
             fin_seen: [false; 2],
         };
         let ahead = 8 * 1024 * 1024;
@@ -1054,6 +1063,12 @@ mod test {
         assert!(false == seqs.covers(1, 1999u32.wrapping_sub(ahead), ahead));
         assert!(seqs.covers(1, 2005 + ahead, ahead));
         seqs.syns[1] = Some(syn);
+        // a stream that sent more than a whole cycle covers every number,
+        // also without slack (regression test: the span kept only 32 bits)
+        seqs.len[1] = (1 << 32) + 5;
+        assert!(seqs.covers(1, 1999, 0));
+        assert!(seqs.covers(1, 2000u32.wrapping_add(1 << 31), 0));
+        seqs.len[1] = 5;
         // an unknown stream covers nothing, a stream without a first byte
         // everything up to the number its peer's ACKs showed plus the slack
         seqs.first[1] = None;
@@ -1061,6 +1076,35 @@ mod test {
         assert!(false == seqs.covers(1, 2006 + ahead, ahead));
         seqs.next[1] = None;
         assert!(false == seqs.covers(1, 2000, ahead));
+    }
+
+    #[test]
+    fn seq_numbers_absorb_late() {
+        // an absorbed ACK that moves a stream's span past a whole cycle of
+        // the sequence numbers keeps its length wide, so the span then
+        // covers every number (regression test: the span kept only 32 bits)
+        let mut script = ConnectionScript::with_isns(1000, 2000);
+        script.handshake();
+        let mut seqs = SeqNumbers {
+            initiator: script.segments[0].source,
+            syns: [
+                Some(ObservedSyn { isn: 1000, len: 0 }),
+                Some(ObservedSyn { isn: 2000, len: 0 }),
+            ],
+            first: [Some(1001), Some(2001)],
+            next: [Some(1001), Some(1001)],
+            len: [0, u64::from(u32::MAX) - 999],
+            fin_seen: [false; 2],
+        };
+        assert!(false == seqs.covers(1, 2000, 0));
+        // the client's late ACK of 2,000 more of the server's numbers
+        script.ack_to(Initiator, 1000);
+        let bytes = script.segments.last().unwrap().to_bytes();
+        let tcp = TcpSlice::from_slice(&bytes).unwrap();
+        assert!(seqs.absorbs_late(script.segments[0].source, &tcp, [65536; 2]));
+        assert_eq!(Some(3001), seqs.next[1]);
+        assert_eq!(u64::from(u32::MAX) + 1001, seqs.len[1]);
+        assert!(seqs.covers(1, 2000, 0));
     }
 
     #[test]

@@ -1476,6 +1476,59 @@ mod test {
             assert_eq!(3, stream.highest_offset());
         }
 
+        // a stream that sent more than a whole cycle of sequence numbers
+        // covers every number: a late segment of the replaced connection
+        // that lies before the old stream's first byte by its 32 bits, but
+        // within what that stream sent, is the old connection's (C1), while
+        // its sender sent nothing of the reconnect (regression test: the
+        // span kept only 32 bits, and the old bytes went to the reconnect)
+        {
+            const SEGMENT_LEN: usize = 1 << 20;
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, &[b'c'; 1024])
+                .send(Responder, &[b'x'; SEGMENT_LEN]);
+            old.feed(&mut pool, ..4);
+            // the server's bytes: one cycle and one more segment, read as
+            // they come, from the bytes of one segment with the sequence
+            // number changed
+            let data = &old.segments[4];
+            let mut bytes = data.header.to_bytes().to_vec();
+            bytes.extend_from_slice(&data.payload);
+            for i in 0..=(1u64 << 32) / SEGMENT_LEN as u64 {
+                let offset = i * SEGMENT_LEN as u64;
+                bytes[4..8].copy_from_slice(&old.seq(Responder, offset).to_be_bytes());
+                let segment = TcpSegment {
+                    vlan_ids: Default::default(),
+                    source: data.source.ip(),
+                    destination: data.destination.ip(),
+                    channel_id: (),
+                    tcp: TcpSlice::from_slice(&bytes).unwrap(),
+                };
+                let (connection, _) = pool.process_segment(segment, ()).active.unwrap();
+                let stream = connection.stream_mut(Responder);
+                assert_eq!(TcpRead::Data(&data.payload[..]), stream.read_received());
+                stream.consume(SEGMENT_LEN);
+            }
+            // the client resets (its ACK of the server's bytes is right in
+            // 32 bits: the server sent a cycle and one segment)
+            old.rst(Initiator);
+            let processed = old.segments.last().unwrap().feed(&mut pool, ());
+            let end = processed.ended.map(|connection| connection.end());
+            assert_eq!(Some(Some(TcpConnectionEnd::Reset { by: Initiator })), end);
+            // a reconnect with the client's ISN inside its old span
+            let mut script = ConnectionScript::with_isns(1525, 0x5000_0000);
+            script.syn();
+            let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            // a late segment of the server's old stream, 100 bytes before
+            // the cycle's end
+            old.send_at(Responder, (1 << 32) - 100, b"late bytes");
+            let processed = old.segments.last().unwrap().feed(&mut pool, ());
+            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+        }
+
         // in a capture merged from two taps, the old close's last ACK can
         // arrive after the reconnect's SYN with a near ISN: it is a late
         // segment of the replaced connection (C1) and fakes no hole; once
