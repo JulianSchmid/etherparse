@@ -118,11 +118,13 @@ pub struct TcpStream {
     /// (`None` once the stream moved forward).
     resync_ack: Option<u32>,
 
-    /// Highest ACK number of the receiver that lay more than one window
-    /// after the bytes the sender is known to have sent, which counts once
-    /// they reach within one window of it: a capture merged from two taps
-    /// can show an ACK long before the bytes it ACKs (K1).
-    leading_ack: Option<u32>,
+    /// Highest ACK of the receiver that lay more than one window after the
+    /// bytes the sender is known to have sent, which counts once they reach
+    /// within one window of it: a capture merged from two taps can show an
+    /// ACK long before the bytes it ACKs (K1). Once the stream moved forward
+    /// since, it didn't jump there (R2), and the window the receiver
+    /// accepts reaches past the ACK (S4).
+    leading_ack: Option<LeadingAck>,
 
     /// Offset at which the stream continued after its last resync (0
     /// without one). Bytes, FINs and ACKs before it were sent before the
@@ -783,10 +785,21 @@ impl TcpStream {
     }
 
     /// Offset after which the receiver with the receive window `window`
-    /// doesn't accept bytes.
+    /// doesn't accept bytes: k windows after the seen ACK, the highest
+    /// offset, or a leading ACK the stream moved forward after (the sender
+    /// sent that far, a lagging tap holds the bytes back).
     fn window_end(&self, window: u64, config: &TcpReassemblyConfig) -> u64 {
+        let leading = self
+            .leading_ack
+            .filter(|leading| leading.moved)
+            .and_then(|leading| {
+                let start_seq = self.start_seq?;
+                u64::try_from(self.offset(start_seq, leading.seq)?).ok()
+            })
+            .unwrap_or(0);
         self.seen_ack
             .max(self.highest_offset())
+            .max(leading)
             .saturating_add(window_range(self.sent_into(window), config))
     }
 
@@ -1219,10 +1232,14 @@ impl TcpStream {
         }
     }
 
-    /// The highest offset moved forward, so the stream didn't jump.
+    /// The highest offset moved forward, so the stream didn't jump, also not
+    /// to a leading ACK.
     fn moved_forward(&mut self) {
         self.resync_candidate = None;
         self.resync_ack = None;
+        if let Some(leading) = self.leading_ack.as_mut() {
+            leading.moved = true;
+        }
     }
 
     /// Applies an RST of the stream's sender with the sequence number `seq`,
@@ -1410,7 +1427,7 @@ impl TcpStream {
         };
         let Some(ack) = self
             .start_seq
-            .and_then(|start_seq| self.offset(start_seq, leading))
+            .and_then(|start_seq| self.offset(start_seq, leading.seq))
         else {
             return;
         };
@@ -1596,12 +1613,17 @@ impl TcpStream {
             }
             _ => {
                 self.resync_ack = Some(ack_seq);
-                // the highest ACK counts later, a capture can reorder them
+                // the highest ACK counts later, a capture can reorder them;
+                // once the stream moved forward after a leading ACK, the
+                // later ones of a lagging tap lead it the same way
                 if self
                     .leading_ack
-                    .is_none_or(|leading| 0 < ack_seq.wrapping_sub(leading) as i32)
+                    .is_none_or(|leading| 0 < ack_seq.wrapping_sub(leading.seq) as i32)
                 {
-                    self.leading_ack = Some(ack_seq);
+                    self.leading_ack = Some(LeadingAck {
+                        seq: ack_seq,
+                        moved: self.leading_ack.is_some_and(|leading| leading.moved),
+                    });
                 }
             }
         }
@@ -1699,6 +1721,18 @@ struct Placed {
     /// ACK that confirmed the jump the segment is the new start of, before
     /// the segment arrived.
     jump_ack: Option<u32>,
+}
+
+/// ACK of the receiver more than one window after the bytes the sender is
+/// known to have sent (see [`TcpStream::add_ack`], K1).
+#[derive(Copy, Clone, Debug)]
+struct LeadingAck {
+    /// ACK number.
+    seq: u32,
+    /// Whether the stream moved forward since the ACK arrived: then it
+    /// didn't jump there (R2), and the window the receiver accepts reaches
+    /// past it (S4).
+    moved: bool,
 }
 
 /// ACK of the receiver that the stream couldn't apply yet (see

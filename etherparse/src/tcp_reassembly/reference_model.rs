@@ -178,8 +178,9 @@ struct ModelStream {
     resync_ack: Option<u64>,
     /// True offset of the highest ACK more than one window after the bytes
     /// known to be sent, which counts once they reach within one window of
-    /// it (K1).
-    leading_ack: Option<u64>,
+    /// it (K1), and whether the stream moved forward since: then the window
+    /// the receiver accepts reaches past it (S4).
+    leading_ack: Option<(u64, bool)>,
     /// Whether the next data segment is the stream's new start.
     forced: bool,
     /// What reading returns away from the FIN once nothing more is
@@ -307,7 +308,16 @@ impl ModelStream {
         // offsets leave out the jumps of the resyncs so far
         let mut start = segment.offset as i64 - self.shift;
 
-        let window_end = (self.ack.max(self.highest) + u64::from(factor) * sent_into) as i64;
+        // a leading ACK the stream moved forward after shows the sender sent
+        // that far
+        let leading = self
+            .leading_ack
+            .filter(|(_, moved)| *moved)
+            .map_or(0, |(ack, _)| {
+                u64::try_from(ack as i64 - self.shift).unwrap_or(0)
+            });
+        let window_end =
+            (self.ack.max(self.highest).max(leading) + u64::from(factor) * sent_into) as i64;
         let mut after_window = start > window_end;
         let mut jump_ack = None;
         if false == payload.is_empty() && false == header.syn && self.fin_offset.is_none() {
@@ -879,11 +889,14 @@ impl ModelStream {
 
     /// Moves the highest offset to `offset`. If that moves the stream
     /// forward, it didn't jump: there is no candidate or ACK of a jump
-    /// anymore.
+    /// anymore, and the window reaches past a leading ACK.
     fn set_highest(&mut self, offset: u64) {
         if offset > self.highest {
             self.candidates.clear();
             self.resync_ack = None;
+            if let Some((_, moved)) = self.leading_ack.as_mut() {
+                *moved = true;
+            }
         }
         self.highest = offset;
     }
@@ -950,9 +963,11 @@ impl ModelStream {
                 }
                 _ => {
                     self.resync_ack = Some(ack);
-                    // the highest ACK counts later, a capture can reorder them
-                    if self.leading_ack.is_none_or(|leading| leading < ack) {
-                        self.leading_ack = Some(ack);
+                    // the highest ACK counts later, a capture can reorder them;
+                    // the later ones of a lagging tap lead it the same way
+                    if self.leading_ack.is_none_or(|(leading, _)| leading < ack) {
+                        let moved = self.leading_ack.is_some_and(|(_, moved)| moved);
+                        self.leading_ack = Some((ack, moved));
                     }
                 }
             }
@@ -1048,7 +1063,7 @@ impl ModelStream {
         let window = window.unwrap_or(u64::from(config.fallback_window));
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         let reach = sent_end + window.max(self.largest_window.unwrap_or(0));
-        let Some(ack) = self.leading_ack else {
+        let Some((ack, _)) = self.leading_ack else {
             return;
         };
         let offset = ack as i64 - self.shift;

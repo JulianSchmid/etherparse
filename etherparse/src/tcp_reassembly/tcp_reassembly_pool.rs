@@ -2083,6 +2083,79 @@ mod test {
             assert!(sent == got);
         }
 
+        // the same with a burst of loss on the lagging tap: the client's ACKs
+        // lead the bytes by more than a window all the time, so none counts
+        // before the close, but the stream moved forward after them, so the
+        // window the client accepts reaches past them (S4), and the bytes
+        // after the burst land behind a hole of its length, which K2 gives
+        // up in time; an eager reader gets every captured byte and one gap
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            let mut captured = Vec::new();
+            let mut lost = Vec::new();
+            for i in 0..600u32 {
+                let data = [(i % 251) as u8; 1460];
+                let lost_by_capture = (200..300).contains(&i);
+                if false == lost_by_capture {
+                    captured.extend_from_slice(&data);
+                }
+                script.send(Responder, &data);
+                lost.push(lost_by_capture);
+                if 1 == i % 2 {
+                    script.ack(Initiator);
+                    lost.push(false);
+                }
+            }
+            script
+                .fin(Responder)
+                .ack(Initiator)
+                .fin(Initiator)
+                .ack(Responder);
+            // the handshake and the request first
+            let mut order: Vec<(usize, usize)> = script
+                .segments
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i < 4 || false == lost.get(i - 4).copied().unwrap_or(false))
+                .map(|(i, segment)| (i + usize::from(Responder == segment.sender) * 75, i))
+                .collect();
+            order.sort();
+            let (mut got, mut gaps) = (Vec::new(), Vec::new());
+            let mut ended = None;
+            for (_, index) in order {
+                let processed = script.segments[index].feed(&mut pool, 1);
+                let mut connection = processed.ended;
+                let stream = match (connection.as_mut(), processed.active) {
+                    (Some(ended), _) => ended.stream_mut(Responder),
+                    (None, Some((active, _))) => active.stream_mut(Responder),
+                    _ => continue,
+                };
+                loop {
+                    match stream.read_received() {
+                        TcpRead::Data(data) => {
+                            got.extend_from_slice(data);
+                            let len = data.len();
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            gaps.push(len);
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+                if connection.is_some() {
+                    ended = connection;
+                }
+            }
+            assert_eq!(Some(TcpConnectionEnd::Finished), ended.unwrap().end());
+            assert_eq!(vec![Some(146_000)], gaps);
+            assert_eq!(captured.len(), got.len());
+            assert!(captured == got);
+        }
+
         // a capture that lost the SYN-ACK, with the client's tap lagging,
         // shows the server's RST before the client's ACK and request: the
         // RST ACKs the request, so the client got past SYN-SENT, and the RST
