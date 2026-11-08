@@ -826,7 +826,11 @@ impl TcpStream {
         let leading_data = self
             .leading_data
             .and_then(offset)
-            .filter(|end| *end <= self.read_offset() + config.max_stream_buffer as u64)
+            .filter(|end| {
+                *end <= self
+                    .read_offset()
+                    .saturating_add(config.max_stream_buffer as u64)
+            })
             .unwrap_or(0);
         self.seen_ack
             .max(self.highest_offset())
@@ -7620,23 +7624,35 @@ mod test {
         // is the leading data, which the window reaches past (S4), as a
         // lagging tap holds the ACKs back, but only if the stream's buffer
         // can hold it: further away, it is a jump, and the bytes after it
-        // are data after the window again, which an ACK confirms
-        for (max_stream_buffer, resyncs) in [(10_000, 0), (1000, 1)] {
+        // are data after the window again, which an ACK confirms; a stream
+        // limit of `usize::MAX` under a pool budget doesn't overflow the
+        // bound once bytes were read (regression test: it panicked)
+        for (max_stream_buffer, max_total_buffered, resyncs) in [
+            (10_000, None, 0),
+            (1000, None, 1),
+            (usize::MAX, Some(16 * 1024), 0),
+        ] {
             let config = TcpReassemblyConfig {
                 max_stream_buffer,
+                max_total_buffered,
                 ..Default::default()
             };
             let mut pool = TcpReassemblyPool::<(), ()>::new(config);
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_size = 100;
+            script.handshake().send(Initiator, b"abc");
+            {
+                let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+                let stream = connection.stream_mut(Initiator);
+                assert_eq!(TcpRead::Data(b"abc"), stream.read_received());
+                stream.consume(3);
+            }
             script
-                .handshake()
-                .send(Initiator, b"abc")
                 .send_at(Initiator, 5000, b"GET /")
                 .ack_to(Responder, 50)
                 .send_at(Initiator, 5005, b"xyz")
                 .ack_to(Responder, 5008);
-            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
+            let (connection, _) = script.feed(&mut pool, 4..).active.unwrap();
             let stream = connection.stream(Initiator);
             assert_eq!(resyncs, stream.status().resyncs);
             assert_eq!(0, stream.status().rejected_bytes);

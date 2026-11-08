@@ -330,7 +330,11 @@ impl ModelStream {
         let leading_data = self
             .leading_data
             .and_then(|end| u64::try_from(end as i64 - self.shift).ok())
-            .filter(|end| *end <= self.read_offset + config.max_stream_buffer as u64)
+            .filter(|end| {
+                *end <= self
+                    .read_offset
+                    .saturating_add(config.max_stream_buffer as u64)
+            })
             .unwrap_or(0);
         let window_end = (self.ack.max(self.highest).max(leading).max(leading_data)
             + u64::from(factor) * sent_into) as i64;
