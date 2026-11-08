@@ -1661,6 +1661,60 @@ mod test {
             assert_eq!((0, 1), (pool.stats().tombstones, pool.stats().connections));
         }
 
+        // a capture merged from two taps can show a handshake half after the
+        // other side's FIN when it lost the other half: the client tap behind
+        // and the SYN-ACK lost, or the server tap behind and the SYN lost
+        // after the client half-closed; the stream of the half has no start
+        // yet, so the half is its own late SYN or SYN-ACK, no reconnect (C4)
+        for (closes_first, order) in [
+            (Responder, [4, 5, 0, 2, 3, 6, 7]),
+            (Initiator, [2, 3, 4, 1, 5, 6, 7]),
+        ] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, b"request");
+            if Initiator == closes_first {
+                script
+                    .fin(Initiator)
+                    .send(Responder, b"response")
+                    .fin(Responder)
+                    .ack(Initiator);
+            } else {
+                script
+                    .send(Responder, b"response")
+                    .fin(Responder)
+                    .fin(Initiator)
+                    .ack(Responder);
+            }
+            let mut ended = None;
+            for (i, index) in order.into_iter().enumerate() {
+                let segment = &script.segments[index];
+                // a bare ACK starts no connection
+                let ignored =
+                    (0 == i && segment.payload.is_empty()).then_some(TcpIgnoreReason::NoConnection);
+                let processed = segment.feed(&mut pool, i as u32);
+                assert_eq!(
+                    ignored, processed.ignored,
+                    "{closes_first:?}, segment {index}"
+                );
+                if let Some(connection) = processed.ended {
+                    assert!(ended.is_none(), "{closes_first:?}, segment {index}");
+                    ended = Some(connection);
+                }
+            }
+            let mut connection = ended.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            assert_eq!(
+                TcpRead::Data(b"request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"response"),
+                connection.stream_mut(Responder).read_received()
+            );
+        }
+
         // a capture merged from two taps can show the last ACK of a close
         // before the FIN it ACKs: the ACK marks the FIN's number as a
         // missing byte, which the FIN then takes back, so an eager reader

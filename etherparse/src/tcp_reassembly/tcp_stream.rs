@@ -515,12 +515,10 @@ impl TcpStream {
         self.start_seq
     }
 
-    /// Returns true if the SYN or SYN-ACK `tcp` lies right where the stream
-    /// starts: its ISN + 1 is the stream's first byte, or, without a start,
-    /// the number the other side's kept ACK puts the sender at (K1).
-    pub(crate) fn syn_at_start(&self, tcp: &TcpSlice<'_>) -> bool {
-        let seq = tcp.sequence_number().wrapping_add(1);
-        self.start_seq.or(self.kept_ack.map(|kept| kept.seq)) == Some(seq)
+    /// Returns true if the SYN or SYN-ACK `tcp` lies right at the stream's
+    /// first byte: its ISN + 1 is the sequence number of offset 0.
+    pub(crate) fn syn_at_first_byte(&self, tcp: &TcpSlice<'_>) -> bool {
+        Some(tcp.sequence_number().wrapping_add(1)) == self.start_seq
     }
 
     /// Returns true if the sequence number `seq` lies within what the

@@ -304,20 +304,21 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             && other
                 .syn()
                 .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
-        // a pickup's own late SYN arrives among its first segments, never
-        // after a FIN of the connection: a SYN in its range after a FIN is a
-        // reconnect's (C4), unless it lies right where the stream starts (a
-        // SYN-ACK a merged capture shows after the client's request and
-        // FIN)
+        // a pickup's own late SYN arrives among its stream's first segments:
+        // once the stream started from its sender's bytes or FIN and a FIN of
+        // the connection was seen, a SYN in its A5 range is a reconnect's
+        // (C4), unless it lies right at the stream's first byte (a stream
+        // without a start has no A5 range, and a merged capture can show its
+        // own late SYN after the other side's FIN)
         let closing = self.initiator_stream.fin_offset().is_some()
             || self.responder_stream.fin_offset().is_some();
-        let own_late_syn_of_pickup =
-            stream.isn().is_none() && closing && false == stream.syn_at_start(tcp);
+        let after_close = stream.isn().is_none()
+            && stream.has_start()
+            && closing
+            && false == stream.syn_at_first_byte(tcp);
         let window = self.window(sender, config);
         if false == self.answers_observed_syn(sender, tcp)
-            && (answers_other_syn
-                || own_late_syn_of_pickup
-                || false == stream.is_own_syn(tcp, window, config))
+            && (answers_other_syn || after_close || false == stream.is_own_syn(tcp, window, config))
         {
             // a SYN or SYN-ACK with a new ISN starts a reconnect (C2)
             Verdict::StartsReconnect

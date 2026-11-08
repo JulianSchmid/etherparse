@@ -1730,24 +1730,21 @@ impl ReferenceModel {
             && other.observed
             && false == acks_observed_syn
             && false == self.streams[sender].observed;
-        // a pickup's own late SYN arrives among its first segments, never
-        // after a FIN of the connection (C4)
+        // a pickup's own late SYN arrives among its stream's first segments:
+        // once the stream started and a FIN of the connection was seen, a SYN
+        // in its A5 range is a reconnect's (C4), unless it lies right at the
+        // stream's first byte
         let closing = self
             .streams
             .iter()
             .any(|stream| stream.fin_offset.is_some());
         let stream = &self.streams[sender];
-        // unless the half lies right where the stream starts
-        let at_start = stream.base == Some(segment.offset)
-            || (stream.base.is_none()
-                && stream
-                    .kept_ack
-                    .is_some_and(|(ack, _)| ack == segment.offset));
-        let late_syn_of_closing_pickup = false == stream.observed && closing && false == at_start;
+        let after_close = false == stream.observed
+            && stream.base.is_some()
+            && closing
+            && stream.first_offset() != Some(segment.offset as i64);
         self.answers_observed_syn(segment)
-            || (false == answers_other_syn
-                && false == late_syn_of_closing_pickup
-                && self.is_own_syn(segment))
+            || (false == answers_other_syn && false == after_close && self.is_own_syn(segment))
     }
 
     /// Range before and after the bytes of the stream of `role` that its
