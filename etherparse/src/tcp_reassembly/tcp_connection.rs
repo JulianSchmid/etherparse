@@ -25,6 +25,11 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// segments it absorbs like a tombstone would (C1); `None` if it
     /// replaced none.
     replaced: Option<SeqNumbers>,
+    /// Whether the initiator and the responder sent a segment that the
+    /// connection didn't drop: on one path, an endpoint's late segments of
+    /// the connection this one replaced can't arrive after its first
+    /// segment of this one (C1).
+    sent: [bool; 2],
     /// Bytes the streams buffered when the pool last accounted for them.
     accounted: usize,
 }
@@ -57,6 +62,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             packets: 0,
             kept_syn: None,
             replaced: None,
+            sent: [false; 2],
             accounted: 0,
         }
     }
@@ -164,6 +170,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
         let verdict = self.verdict(sender, tcp, config, *available);
+        self.sent[sender.index()] |= Verdict::Dropped != verdict;
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
         if Verdict::Dropped != verdict
@@ -634,50 +641,55 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Returns true if `tcp`, sent by `source`, is a late segment of the
     /// connection this one replaced (C1), which the pool ignores like a
-    /// segment on a tombstone: a duplicate of its handshake, or, while the
-    /// sender's stream has no start in this connection yet, a segment of
-    /// the replaced connection by its sequence numbers (see
-    /// [`SeqNumbers::absorbs_late`]): the ACK of a server in TIME-WAIT to
-    /// a new SYN with a lower ISN, the old close's last ACK captured late,
-    /// bytes still in flight, a FIN retransmission. On one path, a sender's
-    /// old segments can't arrive after its first segment of the new
-    /// connection, so a started stream's segments are all its own; also
-    /// before, a segment at the position the sender's stream expects next,
-    /// or one that ACKs what the other stream sent in this connection, is
-    /// this connection's own whatever the replaced one's numbers say (after
-    /// a reset, the new ISNs can lie within the old numbers). An RST
-    /// without ACK of a side in SYN-SENT (its SYN seen, the other side
-    /// without a start) answers an ACK of the replaced connection (RFC 9293
-    /// 3.10.7.3; no stack sends one otherwise), also when that ACK was not
-    /// captured yet.
+    /// segment on a tombstone: a duplicate of its handshake; an RST without
+    /// ACK of a side in SYN-SENT (its SYN seen, the other side without a
+    /// start), which answers an ACK of the replaced connection (RFC 9293
+    /// 3.10.7.3; no stack sends one otherwise); or, while the sender sent
+    /// nothing the connection took, a segment that the replaced connection's
+    /// sequence numbers show is its (see [`SeqNumbers::absorbs_late`]): the
+    /// ACK of a server in TIME-WAIT to a new SYN with a lower ISN, the old
+    /// close's last ACK captured late, bytes still in flight, a FIN
+    /// retransmission. On one path, an endpoint's segments of the replaced
+    /// connection can't arrive after its first segment of this one. This
+    /// connection's own segments come first, whatever the replaced one's
+    /// numbers say (after a reset, the new ISNs can lie within the old
+    /// numbers): one at the position the sender's stream expects next, or
+    /// one that ACKs what the other stream sent in this connection.
     pub(crate) fn absorbs_late_segment(
         &mut self,
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> bool {
+        if self.replaced.is_none() {
+            return false;
+        }
         let sender = self.role(source);
         let (stream, other) = (self.stream(sender), self.stream(sender.other()));
-        // bytes the capture may have missed before a late segment: k windows
-        // of the receiver of each stream
-        let ahead = [TcpRole::Initiator, TcpRole::Responder].map(|role| {
-            u32::try_from(window_range(self.window(role, config), config)).unwrap_or(u32::MAX)
-        });
-        let no_start = false == stream.has_start();
-        let expected = (stream.isn().is_some() && Some(tcp.sequence_number()) == stream.next_seq())
+        // an RST without ACK from SYN-SENT is never the connection's own,
+        // wherever it lies (an absorbed ACK may have moved the stream's
+        // expected position onto it)
+        let answers_old_ack =
+            tcp.rst() && false == tcp.ack() && stream.isn().is_some() && false == other.has_start();
+        // this connection's own segment: one at the position the sender's
+        // stream expects next, or one that ACKs what the other stream sent
+        // here
+        let own = (stream.isn().is_some() && Some(tcp.sequence_number()) == stream.next_seq())
             || (tcp.ack() && other.sent_range_covers(tcp.acknowledgment_number()));
-        let syn_sent = stream.isn().is_some() && false == other.has_start();
+        // bytes the capture may have missed past the replaced streams' ends:
+        // k windows of the receiver of each stream
+        let ahead = (false == (self.sent[sender.index()] || own)).then(|| {
+            [TcpRole::Initiator, TcpRole::Responder].map(|role| {
+                u32::try_from(window_range(self.window(role, config), config)).unwrap_or(u32::MAX)
+            })
+        });
         let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if tcp.syn() {
             return false == tcp.rst() && replaced.is_own_handshake(source, tcp);
         }
-        // an RST without ACK from SYN-SENT is never the connection's own,
-        // whatever position it has (an absorbed ACK may have moved the
-        // stream's expected position to it)
-        (tcp.rst() && false == tcp.ack() && syn_sent)
-            || (no_start && false == expected && replaced.absorbs_late(source, tcp, ahead))
+        answers_old_ack || ahead.is_some_and(|ahead| replaced.absorbs_late(source, tcp, ahead))
     }
 
     /// What the pool keeps of the connection once it ended.

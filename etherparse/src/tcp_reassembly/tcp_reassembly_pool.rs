@@ -148,9 +148,9 @@ where
     /// [`TcpProcessed::ended`] (see [`TcpConnectionEnd::Reconnect`]). A
     /// retransmission of the connection's own SYN or SYN-ACK repeats its
     /// ISN and starts none, and a late segment of the replaced connection
-    /// that arrives while its sender's stream has no start in the reconnect
-    /// yet is ignored with [`TcpIgnoreReason::AfterEnd`] too, if its
-    /// sequence numbers show it is the replaced connection's.
+    /// that arrives before its sender's first segment of the reconnect is
+    /// ignored with [`TcpIgnoreReason::AfterEnd`] too, if its sequence
+    /// numbers show it is the replaced connection's.
     pub fn process_segment(
         &mut self,
         segment: TcpSegment<'_, CustomChannelId>,
@@ -1756,6 +1756,54 @@ mod test {
             }
             assert_eq!(b"resp".to_vec(), got);
             assert_eq!(0, pool.stats().connections);
+        }
+
+        // a client that aborts with an RST reconnects at once from the same
+        // port, its new ISN 5000 below its old end, and a capture whose
+        // client tap lags shows the new SYN-ACK, the old RST, then the new
+        // SYN: the SYN-ACK starts the client's stream too (A2), but the
+        // client sent nothing in the reconnect yet, so the old RST is the
+        // replaced connection's (C1) and resets nothing, with or without ACK
+        for rst_ack in [true, false] {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake()
+                .send(Initiator, &[b'o'; 10_000])
+                .rst(Initiator);
+            let mut old_rst = old.segments.pop().unwrap();
+            if false == rst_ack {
+                old_rst.header.ack = false;
+                old_rst.ack = None;
+            }
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(6001, 900_000);
+            script
+                .handshake()
+                .send(Initiator, b"new-request")
+                .send(Responder, b"new-response");
+            let processed = script.segments[1].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let processed = old_rst.feed(&mut pool, 8);
+            assert_eq!(
+                Some(TcpIgnoreReason::AfterEnd),
+                processed.ignored,
+                "{rst_ack}"
+            );
+            script.segments[0].feed(&mut pool, 9);
+            let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(None, connection.end());
+            assert_eq!(
+                TcpRead::Data(b"new-request"),
+                connection.stream_mut(Initiator).read_received()
+            );
+            assert_eq!(
+                TcpRead::Data(b"new-response"),
+                connection.stream_mut(Responder).read_received()
+            );
         }
 
         // the tombstone of a reconnect absorbs late duplicates of the replaced

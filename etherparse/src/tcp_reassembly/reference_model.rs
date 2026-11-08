@@ -31,6 +31,9 @@ pub(crate) struct ReferenceModel {
     /// The connection this one replaced (C2), whose late handshake
     /// duplicates it absorbs (C1).
     replaced: Option<Box<ReferenceModel>>,
+    /// Whether the initiator and the responder sent a segment that the
+    /// connection didn't drop (C1).
+    sent: [bool; 2],
     /// Endpoint of the initiator, once the connection was created (the
     /// roles of a segment follow its endpoints, as in the pool, not the
     /// roles of its script).
@@ -1344,6 +1347,7 @@ impl ReferenceModel {
                     bare,
                     same_script,
                 ));
+        self.sent[sender] |= false == dropped;
         // a mid-stream pickup refuses an own late SYN it can't take anymore:
         // it counts and changes nothing else (C4)
         let ignored = false == dropped
@@ -1654,36 +1658,36 @@ impl ReferenceModel {
 
     /// Returns true if `segment` is a late segment of the connection this
     /// one replaced (C1), which the pool ignores: a duplicate of its
-    /// handshake, or, while the sender's stream has no start in this
-    /// connection, a segment of the replaced connection by its offsets (see
-    /// [`ReferenceModel::absorbs_late`]) or an RST without ACK of a side in
-    /// SYN-SENT. A segment at the offset the sender's stream expects next,
-    /// or one that ACKs what the other stream sent here, is this
-    /// connection's own.
+    /// handshake, an RST without ACK of a side in SYN-SENT, or, while the
+    /// sender sent nothing the connection took, a segment of the replaced
+    /// connection by its offsets (see [`ReferenceModel::absorbs_late`]). A
+    /// segment at the offset the sender's stream expects next, or one that
+    /// ACKs what the other stream sent here, is this connection's own.
     pub fn absorbs_late_segment(&mut self, segment: &TestSegment) -> bool {
+        if self.replaced.is_none() {
+            return false;
+        }
         let sender = self.sender_role(segment);
         let stream = &self.streams[role_index(sender)];
         let other = &self.streams[role_index(sender.other())];
-        let no_start = stream.base.is_none();
+        let answers_old_ack =
+            segment.header.rst && segment.ack.is_none() && stream.observed && other.base.is_none();
+        // the position the stream expects next, or an ACK of what the other
+        // stream sent here, is the connection's own
+        let own = (stream.observed && Some(segment.offset) == stream.end_offset())
+            || segment.ack.is_some_and(|ack| other.covers(ack, 0));
+        let may_be_old = false == (self.sent[role_index(sender)] || own);
         let ahead = [
             self.range(TcpRole::Initiator),
             self.range(TcpRole::Responder),
         ];
-        // the position the stream expects next, or an ACK of what the other
-        // stream sent here, is the connection's own
-        let expected = (stream.observed && Some(segment.offset) == stream.end_offset())
-            || segment.ack.is_some_and(|ack| other.covers(ack, 0));
-        let syn_sent = stream.observed && other.base.is_none();
         let Some(replaced) = self.replaced.as_mut() else {
             return false;
         };
         if segment.header.syn {
             return false == segment.header.rst && replaced.is_own_handshake(segment);
         }
-        // an RST without ACK of a side in SYN-SENT answers an ACK of the
-        // replaced connection, whatever position it has
-        (segment.header.rst && segment.ack.is_none() && syn_sent)
-            || (no_start && false == expected && replaced.absorbs_late(segment, ahead))
+        answers_old_ack || (may_be_old && replaced.absorbs_late(segment, ahead))
     }
 
     /// Returns true if `segment`, no SYN, comes from the connection's script

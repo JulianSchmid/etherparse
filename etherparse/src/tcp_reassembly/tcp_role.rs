@@ -18,6 +18,14 @@ impl TcpRole {
             TcpRole::Responder => TcpRole::Initiator,
         }
     }
+
+    /// Index of the role in arrays indexed by role, the initiator first.
+    pub(crate) const fn index(self) -> usize {
+        match self {
+            TcpRole::Initiator => 0,
+            TcpRole::Responder => 1,
+        }
+    }
 }
 
 #[cfg(test)]
