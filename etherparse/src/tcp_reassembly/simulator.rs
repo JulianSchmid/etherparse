@@ -2464,10 +2464,12 @@ mod test {
     /// client's ACKs captured too unless `one_direction`. With `wire_loss`,
     /// the network before the tap loses 10 in 1000 segments as well, the
     /// client's ACKs stay at the hole, and the server retransmits within a
-    /// window of [`pressure_window`]. The `reader` must get every captured
-    /// byte and a gap for each run of lost segments, and no byte may be
-    /// rejected: a reader stalled at a hole gets past it before the buffer
-    /// is full (K4(d)). Returns true if a run of lost segments and the one
+    /// window of [`pressure_window`]. With `pickup`, the capture starts at
+    /// the server's first segment, after the handshake, and the fallback
+    /// window is the window, as its doc advises. The `reader` must get every
+    /// captured byte and a gap for each run of lost segments, and no byte
+    /// may be rejected: a reader stalled at a hole gets past it before the
+    /// buffer is full (K4(d)). Returns true if a run of lost segments and the one
     /// after it fill more than the room above the limit of K4(d) instead,
     /// which can overflow the buffer (a known limit of K4).
     #[allow(clippy::too_many_arguments)]
@@ -2479,6 +2481,7 @@ mod test {
         capture_loss: u64,
         wire_loss: bool,
         reader: PressureReader,
+        pickup: bool,
         rng: &mut Rng,
     ) -> Result<bool, String> {
         let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
@@ -2502,9 +2505,11 @@ mod test {
         let retransmit_within = (window as usize / len).saturating_sub(1).max(1);
         let (mut acked, mut since_ack) = (0, 0);
         for i in 0..segments {
-            let lost = wire_loss && rng.chance(10);
+            // a pickup starts at the first segment, which the capture shows
+            let first_of_pickup = pickup && 0 == i;
+            let lost = wire_loss && rng.chance(10) && false == first_of_pickup;
             script.send(Responder, &data_of(i));
-            if lost || rng.chance(capture_loss) {
+            if lost || (rng.chance(capture_loss) && false == first_of_pickup) {
                 script.segments.pop();
             } else {
                 shown[i] = true;
@@ -2545,14 +2550,22 @@ mod test {
             .ack(Initiator)
             .fin(Initiator)
             .ack(Responder);
+        if pickup {
+            script.segments.drain(..3);
+        }
         let config = TcpReassemblyConfig {
             max_stream_buffer,
+            fallback_window: if pickup {
+                window as u32
+            } else {
+                config().fallback_window
+            },
             ..config()
         };
         let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
         let (mut got, mut gaps, mut rejected) = (Vec::new(), Vec::new(), 0);
-        let mut read = |connection: &mut TcpConnection<u32>| {
-            let stream = connection.stream_mut(Responder);
+        let mut read = |connection: &mut TcpConnection<u32>, server: TcpRole| {
+            let stream = connection.stream_mut(server);
             loop {
                 let read = if PressureReader::Acked == reader {
                     stream.read_acked()
@@ -2584,17 +2597,29 @@ mod test {
             PressureReader::Late => (max_stream_buffer / 4 / len).max(1),
             _ => 1,
         };
+        // the server's stream, as the pool names its role (a pickup guesses
+        // the roles)
+        let mut server = None;
         for (i, segment) in captured.enumerate() {
             let processed = segment.feed(&mut pool, 1);
             if let Some(mut connection) = processed.ended {
-                read(&mut connection);
-            } else if let Some((connection, _)) = processed.active {
-                if 0 == (i + 1) % batch {
-                    read(connection);
+                if let Some(server) = server {
+                    read(&mut connection, server);
+                }
+            } else if let Some((connection, role)) = processed.active {
+                if Responder == segment.sender {
+                    server = Some(role);
+                }
+                if let Some(server) = server.filter(|_| 0 == (i + 1) % batch) {
+                    read(connection, server);
                 }
             }
         }
-        pool.evict_all(|connection| read(connection));
+        pool.evict_all(|connection| {
+            if let Some(server) = server {
+                read(connection, server);
+            }
+        });
         let (mut expected, mut expected_gaps, mut missing) = (Vec::new(), Vec::new(), 0u64);
         for (i, &shown) in shown.iter().enumerate() {
             if shown {
@@ -2664,8 +2689,9 @@ mod test {
     /// A census of buffer pressure: transfers of at least twice the
     /// stream's buffer, with segments up to 60,000 bytes (as captured on a
     /// host with GRO/TSO), captured in one direction or both, lose single
-    /// segments in the capture and on the wire, are read in three ways, and
-    /// no captured byte may be rejected (see [`pressure_world`]).
+    /// segments in the capture and on the wire, are read in three ways, also
+    /// as mid-stream pickups, and no captured byte may be rejected (see
+    /// [`pressure_world`]).
     #[test]
     fn pressure_census() {
         let (mut failures, mut hits) = (Vec::new(), 0);
@@ -2689,6 +2715,7 @@ mod test {
                 1 => PressureReader::Acked,
                 _ => PressureReader::Late,
             };
+            let pickup = rng.chance(333);
             let world = (
                 one_direction,
                 len,
@@ -2697,6 +2724,7 @@ mod test {
                 capture_loss,
                 wire_loss,
                 reader,
+                pickup,
             );
             match pressure_world(
                 one_direction,
@@ -2706,6 +2734,7 @@ mod test {
                 capture_loss,
                 wire_loss,
                 reader,
+                pickup,
                 &mut rng,
             ) {
                 Ok(limit) => hits += u64::from(limit),
