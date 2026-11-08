@@ -64,3 +64,5 @@ pub(crate) use counting_allocator::*;
 
 #[cfg(test)]
 mod reference_model;
+#[cfg(test)]
+mod simulator;
