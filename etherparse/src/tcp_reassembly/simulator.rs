@@ -2206,15 +2206,14 @@ mod test {
         if burst_at_start && bulk.lag_from_start && bulk.lag[1] * bulk.len as u64 > 2 * window {
             return Ok(true);
         }
-        // a known limit (S4): while the client's tap lags past k windows, the
-        // segments the capture shows after a run of missing ones longer than
-        // k windows lie after the window until an ACK moves the stream
-        // forward towards them, and are lost with the run (the lag and two
-        // more at most), a FIN among them too
+        // a known limit (S4): while the client's ACKs the capture shows lag
+        // more than k windows behind the server's bytes (as the client's tap
+        // lags, and its ACK waits at a hole of the wire for the
+        // retransmission), the segments the capture shows after a run of
+        // missing ones longer than k windows lie after the window until an
+        // ACK moves the stream forward towards them, and are lost with the
+        // run (the lag and two more at most), a FIN among them too
         let k_windows = 2 * window.min(u64::from(u16::MAX));
-        if bulk.lag[0] * (bulk.len as u64) <= k_windows {
-            return Err(mismatch);
-        }
         let Some(read) = segments_read(&got, &gaps, bulk.len, &data_of) else {
             return Err(mismatch);
         };
@@ -2225,7 +2224,8 @@ mod test {
         // a client ACK that moves the ACKs forward past a run's start moves
         // the stream forward too: a segment after the run is lost if the
         // capture showed it only before the first such ACK after the first
-        // segment after the run
+        // segment after the run, and if the ACKs it showed before that
+        // segment lag more than k windows behind it
         let (mut first_shown, mut last_shown) = (vec![None; bulk.segments], vec![0; bulk.segments]);
         let (mut acks, mut highest_ack) = (Vec::new(), 0);
         for (index, (_, segment)) in events.iter().enumerate() {
@@ -2247,7 +2247,14 @@ mod test {
                 continue;
             };
             if let Some(start) = run_start.take() {
-                if (i - start) as u64 * bulk.len as u64 > k_windows {
+                let shown_ack = acks
+                    .iter()
+                    .take_while(|(index, _)| *index < first)
+                    .last()
+                    .map_or(0, |(_, ack)| *ack);
+                if (i - start) as u64 * bulk.len as u64 > k_windows
+                    && shown_ack + k_windows < (i * bulk.len) as u64
+                {
                     let start = (start * bulk.len) as u64;
                     lost_before = acks
                         .iter()
@@ -2367,6 +2374,59 @@ mod test {
             if let Err(failure) = bulk_world(&bulk, &mut rng) {
                 panic!("seed {seed}: {failure}");
             }
+        }
+    }
+
+    /// Bulk transfers whose client's ACKs the capture shows lag more than k
+    /// windows behind a burst of capture loss, though the client's tap lags
+    /// less: its ACK also waits at holes of the wire for their
+    /// retransmissions (S4's known limit; two worlds of the census at
+    /// `PROPTEST_RNG_SEED` 77002 and 77011, from before it had window growth
+    /// and reordering).
+    #[test]
+    fn bulk_ack_lag_at_holes() {
+        let worlds = [
+            (
+                0xf6ea_7fc9_fe86_46ea,
+                Bulk {
+                    segments: 1329,
+                    len: 536,
+                    scale: None,
+                    window_field: 30000,
+                    wire_loss: 10,
+                    retransmit_after: 13,
+                    tap_before_loss: true,
+                    capture_loss: 20,
+                    lag: [103, 0],
+                    burst: Some((801, 131)),
+                    lag_from_start: false,
+                    client_closes_first: false,
+                    growth: None,
+                    reorder: None,
+                },
+            ),
+            (
+                0x7b19_8197_d847_be4c,
+                Bulk {
+                    segments: 1506,
+                    len: 536,
+                    scale: Some(2),
+                    window_field: 8192,
+                    wire_loss: 10,
+                    retransmit_after: 19,
+                    tap_before_loss: true,
+                    capture_loss: 5,
+                    lag: [115, 0],
+                    burst: Some((623, 141)),
+                    lag_from_start: false,
+                    client_closes_first: true,
+                    growth: None,
+                    reorder: None,
+                },
+            ),
+        ];
+        for (state, bulk) in worlds {
+            assert_eq!(Ok(true), bulk_world(&bulk, &mut Rng(state)), "{bulk:?}");
         }
     }
 
