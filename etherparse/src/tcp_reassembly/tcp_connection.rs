@@ -844,7 +844,11 @@ impl SeqNumbers {
     fn covers(&self, stream: usize, seq: u32, ahead: u32) -> bool {
         match (self.first[stream], self.next[stream]) {
             (Some(first), Some(next)) => {
-                seq.wrapping_sub(first) <= next.wrapping_add(ahead).wrapping_sub(first)
+                // the length is kept wide: a span plus `ahead` can reach a
+                // whole cycle of the sequence numbers, which then covers
+                // every number
+                let len = u64::from(next.wrapping_sub(first)) + u64::from(ahead);
+                u64::from(seq.wrapping_sub(first)) <= len
             }
             (None, Some(next)) => 0 <= next.wrapping_add(ahead).wrapping_sub(seq) as i32,
             _ => false,
@@ -962,6 +966,35 @@ mod test {
     use super::*;
     use crate::tcp_reassembly::TcpRole::*;
     use std::format;
+
+    #[test]
+    fn seq_numbers_cover_a_whole_cycle() {
+        // a span plus the k windows of slack can reach a whole cycle of the
+        // sequence numbers, which then covers every number, also right at
+        // and past the end (the length is kept wide, not wrapped)
+        let mut seqs = SeqNumbers {
+            initiator: addr("10.0.0.1:50000"),
+            syns: [None, None],
+            first: [Some(1000), Some(2000)],
+            next: [Some(1000u32.wrapping_add(u32::MAX - 32_767)), Some(2005)],
+        };
+        let ahead = 8 * 1024 * 1024;
+        let end = seqs.next[0].unwrap();
+        assert!(seqs.covers(0, end, ahead));
+        assert!(seqs.covers(0, end.wrapping_add(ahead), ahead));
+        assert!(seqs.covers(0, 999, ahead));
+        // a short span doesn't cover a number far before it
+        assert!(seqs.covers(1, 2005 + ahead, ahead));
+        assert!(false == seqs.covers(1, 1999, ahead));
+        assert!(false == seqs.covers(1, 2006 + ahead, ahead));
+        // an unknown stream covers nothing, a stream without a first byte
+        // everything up to the number its peer's ACKs showed plus the slack
+        seqs.first[1] = None;
+        assert!(seqs.covers(1, 1999, ahead));
+        assert!(false == seqs.covers(1, 2006 + ahead, ahead));
+        seqs.next[1] = None;
+        assert!(false == seqs.covers(1, 2000, ahead));
+    }
 
     #[test]
     fn derived_traits() {
