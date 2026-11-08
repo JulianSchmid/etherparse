@@ -2384,38 +2384,85 @@ mod test {
     /// the server, of which the capture loses each with a chance of
     /// `capture_loss` in 1000, through a pool whose streams hold at most
     /// `max_stream_buffer` bytes, with a window of 3 MiB, and with the
-    /// client's ACKs of every second segment captured too unless
-    /// `one_direction`. An eager reader must get every captured byte and a
-    /// gap for each run of lost segments, and no byte may be rejected: a
-    /// reader stalled at a hole gets past it before the buffer is full
-    /// (K4(d)). Returns true if a run of lost segments and the one after it
-    /// fill more than half the buffer instead, which can overflow it (a
-    /// known limit of K4).
+    /// client's ACKs captured too unless `one_direction`. With `wire_loss`,
+    /// the network before the tap loses 10 in 1000 segments as well, the
+    /// client's ACKs stay at the hole, and the server retransmits within a
+    /// window of [`pressure_window`]. The `reader` must get every captured
+    /// byte and a gap for each run of lost segments, and no byte may be
+    /// rejected: a reader stalled at a hole gets past it before the buffer
+    /// is full (K4(d)). Returns true if a run of lost segments and the one
+    /// after it fill more than the room above the limit of K4(d) instead,
+    /// which can overflow the buffer (a known limit of K4).
+    #[allow(clippy::too_many_arguments)]
     fn pressure_world(
         one_direction: bool,
         len: usize,
         segments: usize,
         max_stream_buffer: usize,
         capture_loss: u64,
+        wire_loss: bool,
+        reader: PressureReader,
         rng: &mut Rng,
     ) -> Result<bool, String> {
         let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
-        script.window_scales = [Some(6); 2];
-        script.window_size = 49152;
+        // a window of 3 MiB, or with loss on the wire three quarters of the
+        // buffer, which the sender retransmits within (see
+        // [`pressure_window`])
+        let window = if wire_loss {
+            pressure_window(max_stream_buffer, len)
+        } else {
+            3 << 20
+        };
+        script.window_scales = [Some(7); 2];
+        script.window_size = u16::try_from(window >> 7).unwrap_or(u16::MAX);
         script.handshake();
         let data_of =
             |i: usize| -> Vec<u8> { (0..len).map(|j| ((i * 7 + j) % 251) as u8).collect() };
-        let mut shown = Vec::new();
+        let mut shown = vec![false; segments];
+        let mut received = vec![false; segments];
+        // retransmissions: the position they are due at, the segment
+        let mut retransmissions: Vec<(usize, usize)> = Vec::new();
+        let retransmit_within = (window as usize / len).saturating_sub(1).max(1);
+        let (mut acked, mut since_ack) = (0, 0);
         for i in 0..segments {
+            let lost = wire_loss && rng.chance(10);
             script.send(Responder, &data_of(i));
-            shown.push(false == rng.chance(capture_loss));
-            if false == shown[i] {
+            if lost || rng.chance(capture_loss) {
                 script.segments.pop();
+            } else {
+                shown[i] = true;
             }
-            if 1 == i % 2 {
-                script.ack(Initiator);
+            if lost {
+                let after = 1 + rng.below(retransmit_within as u64) as usize;
+                retransmissions.push((i + after, i));
+            } else {
+                received[i] = true;
+            }
+            // the retransmissions due, which the tap after the loss shows
+            for &(_, j) in retransmissions.iter().filter(|(due, _)| *due == i) {
+                script.send_at(Responder, (j * len) as u64, &data_of(j));
+                if rng.chance(capture_loss) {
+                    script.segments.pop();
+                } else {
+                    shown[j] = true;
+                }
+                received[j] = true;
+            }
+            // the client ACKs every second segment, and each one out of order
+            while acked < segments && received[acked] {
+                acked += 1;
+            }
+            since_ack += 1;
+            if since_ack >= 2 || acked <= i {
+                since_ack = 0;
+                script.ack_to(Initiator, (acked * len) as u64);
             }
         }
+        for &(_, j) in retransmissions.iter().filter(|(due, _)| *due >= segments) {
+            script.send_at(Responder, (j * len) as u64, &data_of(j));
+            shown[j] = true;
+        }
+        script.ack(Initiator);
         script
             .fin(Responder)
             .ack(Initiator)
@@ -2430,7 +2477,12 @@ mod test {
         let mut read = |connection: &mut TcpConnection<u32>| {
             let stream = connection.stream_mut(Responder);
             loop {
-                match stream.read_received() {
+                let read = if PressureReader::Acked == reader {
+                    stream.read_acked()
+                } else {
+                    stream.read_received()
+                };
+                match read {
                     TcpRead::Data(data) => {
                         got.extend_from_slice(data);
                         let len = data.len();
@@ -2449,12 +2501,20 @@ mod test {
             .segments
             .iter()
             .filter(|segment| false == one_direction || Responder == segment.sender);
-        for segment in captured {
+        // a late reader reads after batches of packets that fit a quarter
+        // of the buffer
+        let batch = match reader {
+            PressureReader::Late => (max_stream_buffer / 4 / len).max(1),
+            _ => 1,
+        };
+        for (i, segment) in captured.enumerate() {
             let processed = segment.feed(&mut pool, 1);
             if let Some(mut connection) = processed.ended {
                 read(&mut connection);
             } else if let Some((connection, _)) = processed.active {
-                read(connection);
+                if 0 == (i + 1) % batch {
+                    read(connection);
+                }
             }
         }
         pool.evict_all(|connection| read(connection));
@@ -2477,14 +2537,20 @@ mod test {
             return Ok(false);
         }
         // a known limit (K4): a run of lost segments and the one after it
-        // that fill more than half the buffer arrive in one packet, which
-        // can overflow it before a stalled reader gets past its hole
+        // that fill more than the room above the limit of K4(d) arrive in
+        // one packet, which can overflow the buffer before a stalled reader
+        // gets past its hole; the limit is half the buffer, as the client's
+        // ACK covers a hole from capture loss within two segments, but a
+        // hole from loss on the wire waits for the window (less than the
+        // buffer less 64 KiB, see [`pressure_window`])
         let longest_run = shown
             .split(|shown| *shown)
             .map(<[bool]>::len)
             .max()
             .unwrap_or(0);
-        if (longest_run + 1) * len > max_stream_buffer / 2 {
+        let half = max_stream_buffer as u64 / 2;
+        let limit = if wire_loss { half.max(window) } else { half };
+        if ((longest_run + 1) * len) as u64 > max_stream_buffer as u64 - limit {
             return Ok(true);
         }
         Err(format!(
@@ -2496,11 +2562,33 @@ mod test {
         ))
     }
 
+    /// Window of a [`pressure_world`] with loss on the wire: three quarters
+    /// of the buffer, but so much less that a hole waits for its
+    /// retransmission (K4(d) waits up to the window past the receiver's ACK,
+    /// short of 64 KiB of the buffer), also behind two segments the capture
+    /// lost; worlds where that is at most half the buffer have no loss on
+    /// the wire.
+    fn pressure_window(max_stream_buffer: usize, len: usize) -> u64 {
+        let buffer = max_stream_buffer as u64;
+        (3 * buffer / 4).min(buffer.saturating_sub((64 << 10) + 2 * len as u64))
+    }
+
+    /// How a reader of [`pressure_world`] reads.
+    #[derive(Clone, Copy, Debug, PartialEq)]
+    enum PressureReader {
+        /// The received bytes after every packet.
+        Eager,
+        /// The ACKed bytes after every packet.
+        Acked,
+        /// The received bytes after batches of packets.
+        Late,
+    }
+
     /// A census of buffer pressure: transfers of at least twice the
     /// stream's buffer, with segments up to 60,000 bytes (as captured on a
     /// host with GRO/TSO), captured in one direction or both, lose single
-    /// segments, and no captured byte may be rejected (see
-    /// [`pressure_world`]).
+    /// segments in the capture and on the wire, are read in three ways, and
+    /// no captured byte may be rejected (see [`pressure_world`]).
     #[test]
     fn pressure_census() {
         let (mut failures, mut hits) = (Vec::new(), 0);
@@ -2513,12 +2601,25 @@ mod test {
             // at least twice the buffer, but not too many segments
             let segments = (2 * max_stream_buffer / len + 50).min(3000);
             let capture_loss = [2, 10, 30][rng.below(3) as usize];
+            // loss on the wire needs the receiver's window, and a reader of
+            // the ACKed bytes the ACKs
+            let wire_loss = false == one_direction
+                && rng.chance(333)
+                && pressure_window(max_stream_buffer, len) > max_stream_buffer as u64 / 2;
+            let reader = match rng.below(3) {
+                0 => PressureReader::Eager,
+                1 if one_direction => PressureReader::Eager,
+                1 => PressureReader::Acked,
+                _ => PressureReader::Late,
+            };
             let world = (
                 one_direction,
                 len,
                 segments,
                 max_stream_buffer,
                 capture_loss,
+                wire_loss,
+                reader,
             );
             match pressure_world(
                 one_direction,
@@ -2526,6 +2627,8 @@ mod test {
                 segments,
                 max_stream_buffer,
                 capture_loss,
+                wire_loss,
+                reader,
                 &mut rng,
             ) {
                 Ok(limit) => hits += u64::from(limit),
