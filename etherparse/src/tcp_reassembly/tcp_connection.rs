@@ -155,6 +155,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.last_seen = timestamp;
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
+        // the first bytes of a reconnect's responder, captured between its
+        // SYN-ACK and the SYN, are kept with the SYN-ACK (C2)
+        if let Some(kept) = self.reconnect_syn.as_mut() {
+            kept.add_continuation(source, tcp, config);
+        }
         let verdict = self.verdict(sender, tcp, config);
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
@@ -821,7 +826,8 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     /// ACK number, if the kept segment is a SYN-ACK.
     ack: Option<u32>,
     /// Number of bytes the SYN carries (TCP Fast Open), with the ones its
-    /// retransmissions added.
+    /// retransmissions added, or that a kept SYN-ACK carries with the bytes
+    /// of its sender that continued it.
     payload_len: usize,
     /// Number of retransmissions of the SYN that carried bytes differing
     /// from the ones received first.
@@ -871,6 +877,34 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
             && tcp.syn()
             && false == tcp.ack()
             && tcp.sequence_number() == self.isn
+    }
+
+    /// Keeps the bytes of the segment `tcp`, sent by `source`, with a kept
+    /// SYN-ACK if they continue its bytes right away: they are the first
+    /// bytes of the reconnect's responder, captured before the SYN (C2).
+    /// At most the smaller of the fallback window and the stream buffer
+    /// limit is kept.
+    fn add_continuation(
+        &mut self,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) {
+        let payload = tcp.payload();
+        let next = self
+            .isn
+            .wrapping_add(1)
+            .wrapping_add(self.payload_len as u32);
+        let limit = (config.fallback_window as usize).min(config.max_stream_buffer);
+        if self.ack.is_some()
+            && source == self.source
+            && false == (tcp.syn() || tcp.rst() || payload.is_empty())
+            && tcp.sequence_number() == next
+            && self.payload_len + payload.len() <= limit
+        {
+            self.segment.extend_from_slice(payload);
+            self.payload_len += payload.len();
+        }
     }
 
     /// Takes the TCP Fast Open bytes that the `payload` of a retransmission

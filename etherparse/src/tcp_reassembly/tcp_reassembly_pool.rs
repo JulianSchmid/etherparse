@@ -1181,6 +1181,50 @@ mod test {
             );
         }
 
+        // ... the responder's first bytes, captured between the kept SYN-ACK
+        // and the SYN (the initiator's direction lags), are kept with the
+        // SYN-ACK and reach the reconnect, up to the smaller of the fallback
+        // window and the stream buffer limit
+        for (fallback_window, order, expected) in [
+            (4 * 1024 * 1024, [1, 2, 0, 3, 4], &b"bannernext"[..]),
+            (8, [1, 2, 4, 0, 3], b"banner"),
+        ] {
+            let config = TcpReassemblyConfig {
+                fallback_window,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+            let mut old = ConnectionScript::with_isns(1000, 5000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(2_000_000_000, 3_000_000_000);
+            script
+                .syn()
+                .syn_ack()
+                .send(Responder, b"banner")
+                .ack_to(Initiator, 0)
+                .send(Responder, b"next");
+            let mut ended = None;
+            for (timestamp, index) in order[..4].iter().enumerate() {
+                let processed = script.segments[*index].feed(&mut pool, timestamp as u32);
+                if let Some(connection) = processed.ended {
+                    assert_eq!(0, *index);
+                    ended = Some(connection.end());
+                }
+                // the segments before the SYN go to the old connection
+                let id = TcpConnectionId(u64::from(ended.is_some()));
+                assert_eq!(id, processed.active.unwrap().0.id());
+            }
+            assert_eq!(Some(Some(TcpConnectionEnd::Reconnect)), ended);
+            let (connection, _) = script.segments[order[4]].feed(&mut pool, 4).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(&0, connection.first_seen());
+            assert_eq!(Some(2_000_000_000), connection.stream(Initiator).isn());
+            let stream = connection.stream_mut(Responder);
+            assert_eq!(Some(3_000_000_000), stream.isn());
+            assert_eq!(TcpRead::Data(expected), stream.read_received());
+        }
+
         // a SYN-ACK with a new ISN that confirms no reconnect changes
         // nothing: neither its bytes (they would lie at offset 1 of the
         // responder's stream), nor its ACK or window

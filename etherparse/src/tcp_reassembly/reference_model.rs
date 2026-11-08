@@ -1222,6 +1222,19 @@ impl ReferenceModel {
             replaced.end_unless_finished(TcpConnectionEnd::Reconnect);
             return Some(replaced);
         }
+        // the first bytes of a reconnect's responder, captured between its
+        // SYN-ACK and the SYN, are kept with the SYN-ACK
+        if let Some(syn) = self.reconnect_syn.as_mut().filter(|syn| syn.header.ack) {
+            let limit = (self.config.fallback_window as usize).min(self.config.max_stream_buffer);
+            if syn.incarnation == segment.incarnation
+                && syn.sender == segment.sender
+                && false == (header.syn || header.rst || segment.payload.is_empty())
+                && segment.offset == syn.offset + syn.payload.len() as u64
+                && syn.payload.len() + segment.payload.len() <= limit
+            {
+                syn.payload.extend_from_slice(&segment.payload);
+            }
+        }
         if false == self.created {
             if header.rst
                 || (false == header.syn && (segment.payload.is_empty() || false == header.ack))
