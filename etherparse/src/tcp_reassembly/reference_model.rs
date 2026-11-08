@@ -13,8 +13,8 @@ use std::{boxed::Box, vec::Vec};
 /// expects segments without window scale options, and endpoints whose ports
 /// make guessed roles right.
 ///
-/// A SYN on the tombstone of an ended connection, or a confirmed reconnect,
-/// starts the model again as a new connection, which takes the later
+/// A SYN on the tombstone of an ended connection, or a reconnect, starts
+/// the model again as a new connection, which takes the later
 /// segments. Segments of another script than the connection's (see
 /// [`ConnectionScript::incarnation`]) are assumed to lie far away from its
 /// streams, and the model only predicts what the pool does with some of
@@ -2032,7 +2032,7 @@ mod test {
                 ended = processed.ended;
                 ended.as_mut().unwrap()
             } else {
-                // a confirmed reconnect hands over the connection it replaced
+                // a reconnect hands over the connection it replaced
                 prop_assert_eq!(None, processed.ignored);
                 prop_assert_eq!(replaced.is_some(), processed.ended.is_some());
                 if let (Some(mut expected), Some(mut replaced)) = (replaced, processed.ended) {

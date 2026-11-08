@@ -667,7 +667,7 @@ impl TcpStream {
     }
 
     /// Counts `count` retransmissions with differing bytes that happened
-    /// before the stream existed (of the SYN kept for a reconnect).
+    /// before the stream existed (of a kept SYN, S5).
     pub(crate) fn count_conflicting_retransmissions(&mut self, count: u64) {
         self.status.conflicting_retransmissions += count;
     }
@@ -7261,8 +7261,8 @@ mod test {
             assert_eq!((1, 2), (status.resyncs, status.out_of_window_segments));
         }
 
-        // a SYN with another ISN is kept for a reconnect: it is no jump, and
-        // it doesn't count as out-of-window
+        // a SYN with another ISN is no jump: it starts a reconnect (C2), in
+        // which the old connection's out-of-window count doesn't change
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -7272,11 +7272,13 @@ mod test {
             syn.header.sequence_number = script.seq(Initiator, 999);
             syn.payload = b"GET /".to_vec();
             script.segments.push(syn);
-            script.ack_to(Responder, 1005);
-            let (connection, _) = script.feed_all(&mut pool).active.unwrap();
-            let status = connection.stream(Initiator).status();
+            let processed = script.feed_all(&mut pool);
+            let old = processed.ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Reconnect), old.end());
+            let status = old.stream(Initiator).status();
             assert_eq!(0, status.resyncs);
             assert_eq!(0, status.out_of_window_segments);
+            assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
         }
 
         // nothing follows a FIN, so a stream with a FIN doesn't jump, also
