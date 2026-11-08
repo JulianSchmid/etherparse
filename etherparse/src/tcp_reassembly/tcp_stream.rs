@@ -450,12 +450,14 @@ impl TcpStream {
 
     /// Returns true if the SYN or SYN-ACK `tcp` of the stream's sender can
     /// be the stream's own, where `window` is the receiver's receive window.
-    /// Otherwise it belongs to a reconnect.
+    /// Otherwise it belongs to a reconnect (C2).
     ///
     /// It has to have the ISN of the stream's observed start. Without one,
     /// it has to lie at or before the stream's first byte, at most as far
-    /// before it as earlier bytes can be put in front of it. Without a
-    /// start, the same holds for the receiver's kept ACK, if there is one.
+    /// before it as earlier bytes could be put in front of it (the A5
+    /// range, C4), whether the stream can still take it or not (see
+    /// [`TcpStream::can_take_syn`]). Without a start, the same holds for
+    /// the receiver's kept ACK, if there is one.
     pub(crate) fn is_own_syn(
         &self,
         tcp: &TcpSlice<'_>,
@@ -472,6 +474,20 @@ impl TcpStream {
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
             (None, None) => self.kept_ack_allows_syn(seq, window, config),
         }
+    }
+
+    /// Returns true if the stream takes the SYN or SYN-ACK `tcp` of its
+    /// sender as its own (see [`TcpStream::is_own_syn`]): a mid-stream
+    /// pickup can't once bytes can no longer be put in front of it (A5), so
+    /// such a SYN is kept for a reconnect instead (C4).
+    pub(crate) fn can_take_syn(
+        &self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
+        self.is_own_syn(tcp, window, config)
+            && (self.isn().is_some() || self.start_seq.is_none() || self.can_prepend())
     }
 
     /// Returns true if the receiver's kept ACK, if there is one, allows a
@@ -4416,8 +4432,8 @@ mod test {
         }
 
         // ends putting earlier bytes or a late SYN in front of a mid-stream
-        // pickup: the next bytes are the new start, a late SYN counts as
-        // out-of-window
+        // pickup: the next bytes are the new start, a late SYN is kept for a
+        // reconnect (C4, C2) and counts nothing
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -4437,7 +4453,7 @@ mod test {
                 let (connection, _) = script.feed(&mut pool, 1..2).active.unwrap();
                 let status = connection.stream(Initiator).status();
                 assert_eq!(TcpStreamStart::MidStreamPickup, status.start);
-                assert_eq!(1, status.out_of_window_segments);
+                assert_eq!(0, status.out_of_window_segments);
             }
             let (connection, _) = script.feed(&mut pool, 2..).active.unwrap();
             let stream = connection.stream_mut(Initiator);
@@ -5999,14 +6015,14 @@ mod test {
         }
 
         // other SYNs of a mid-stream pickup change nothing, not even with
-        // bytes (TCP Fast Open): its own late SYN counts as out-of-window
-        // after the read position moved and for a pickup that starts at its
-        // FIN, while SYNs more than k windows before the first byte, after
-        // the first byte or 2^31 away from the highest offset (can't be
-        // mapped) are kept for a reconnect and don't count
+        // bytes (TCP Fast Open): its own late SYN after the read position
+        // moved or for a pickup that starts at its FIN, SYNs more than k
+        // windows before the first byte, after the first byte or 2^31 away
+        // from the highest offset (can't be mapped) are all kept for a
+        // reconnect (C4, C2) and don't count
         for (factor, fallback_window, lost, consumed, syn_offset, fin, counted) in [
-            (None, 3, &b""[..], 1, 0, false, 1),
-            (None, 3, b"", 0, 0, true, 1),
+            (None, 3, &b""[..], 1, 0, false, 0),
+            (None, 3, b"", 0, 0, true, 0),
             (Some(2), 2, b"abcde", 0, 0, false, 0),
             (Some(1), 4, b"abcde", 0, 0, false, 0),
             (None, 2, b"abcde", 0, 0, false, 0),
@@ -6095,7 +6111,7 @@ mod test {
 
         // a late SYN-ACK gives both streams of mid-stream pickups an
         // observed start (the initiator's at its ACK), but not to streams
-        // whose read position moved; a SYN after it changes nothing
+        // whose read position moved; a SYN after it changes nothing either
         for consumed in [false, true] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -6126,14 +6142,11 @@ mod test {
                     assert_eq!(expected, status.start);
                 }
             }
-            // the SYN-ACK counts for the responder's stream, the SYN for
-            // the initiator's
+            // once the read position moved, the SYN-ACK and the SYN are
+            // kept for a reconnect (C4, C2) and count nothing
             let (connection, _) = script.segments[0].feed(&mut pool, ()).active.unwrap();
             for role in [Initiator, Responder] {
-                assert_eq!(
-                    u64::from(consumed),
-                    connection.stream(role).status().out_of_window_segments
-                );
+                assert_eq!(0, connection.stream(role).status().out_of_window_segments);
             }
         }
 

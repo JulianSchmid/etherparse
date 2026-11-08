@@ -1305,7 +1305,7 @@ impl ReferenceModel {
             } else {
                 self.streams[sender].out_of_window_segments += 1;
             }
-        } else if header.syn && (self.maybe_blind_syn(segment) || false == self.is_own_syn(segment))
+        } else if header.syn && (self.maybe_blind_syn(segment) || false == self.takes_syn(segment))
         {
             // the SYNs of a script all have the same ISN; a retransmission
             // adds the Fast Open bytes beyond the kept ones, the first win
@@ -1557,7 +1557,8 @@ impl ReferenceModel {
                 && false == (self.dropped_before_syn_acked(segment) || self.is_own_syn(segment));
         }
         if acks_syn(segment, syn) {
-            return false == self.has_isn_of_sender(segment);
+            // the sender's own SYN-ACK confirms nothing
+            return false == (self.is_own_syn(segment) || self.answers_observed_syn(segment));
         }
         // a SYN kept as possibly blind confirms a reconnect only by being
         // ACKed
@@ -1649,6 +1650,15 @@ impl ReferenceModel {
         Some(segment.incarnation) == self.incarnation
             && self.streams[role_index(self.sender_role(segment))]
                 .is_own_syn(segment, self.range(self.sender_role(segment)))
+    }
+
+    /// Returns true if the sender's stream takes the SYN or SYN-ACK
+    /// `segment` as its own: a pickup that can't put bytes in front anymore
+    /// keeps it for a reconnect instead (C4).
+    fn takes_syn(&self, segment: &TestSegment) -> bool {
+        let stream = &self.streams[role_index(self.sender_role(segment))];
+        self.is_own_syn(segment)
+            && (stream.observed || stream.base.is_none() || stream.can_prepend())
     }
 
     /// Returns true if the model predicts what the pool does with

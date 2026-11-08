@@ -293,8 +293,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             && false == other.acks_unacked_syn(tcp, window, config);
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
         // whatever ACK a blind segment left kept for its stream (S5)
-        let own = stream.is_own_syn(tcp, self.window(sender, config), config)
-            || self.answers_observed_syn(sender, tcp);
+        let answers = self.answers_observed_syn(sender, tcp);
+        let own = answers || stream.is_own_syn(tcp, self.window(sender, config), config);
+        // a mid-stream pickup that can't put bytes in front anymore takes no
+        // late SYN (A5): one in its range is kept, as a reconnect's SYN can
+        // lie there by chance (C4), but confirms no reconnect either
+        let takes = answers || stream.can_take_syn(tcp, self.window(sender, config), config);
         if false == tcp.ack() {
             // a SYN-ACK of the other endpoint captured before the SYN it
             // ACKs was kept for it: the SYN confirms the reconnect (C2)
@@ -304,7 +308,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 .is_some_and(|kept| kept.acks(self.endpoint(sender), tcp));
             return if answered && false == (own || tcp.fin()) {
                 Verdict::ConfirmsReconnect
-            } else if maybe_blind || false == own {
+            } else if maybe_blind || false == takes {
                 Verdict::KeepSyn { maybe_blind }
             } else {
                 Verdict::Applied
@@ -323,17 +327,16 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         let confirms = match kept {
             None => false,
             Some(_) if tcp.fin() => false,
-            // a retransmission of the sender's own SYN-ACK confirms nothing
-            Some(syn) if syn.is_acked_by(self.endpoint(sender), tcp) => {
-                Some(tcp.sequence_number()) != stream.isn()
-            }
+            // the sender's own SYN-ACK (a retransmission, or a late one of
+            // a mid-stream pickup) confirms nothing
+            Some(syn) if syn.is_acked_by(self.endpoint(sender), tcp) => false == own,
             // a SYN kept as possibly blind confirms a reconnect only by being
             // ACKed, as a blind SYN-ACK could have any ISN
             Some(syn) => false == (syn.maybe_blind || stream.awaits_syn_ack() || own),
         };
         if confirms {
             Verdict::ConfirmsReconnect
-        } else if maybe_blind || false == own {
+        } else if maybe_blind || false == takes {
             // a SYN-ACK with a new ISN that confirms no reconnect changes
             // nothing (C3)
             Verdict::ForeignSynAck
