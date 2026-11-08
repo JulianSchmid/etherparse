@@ -183,7 +183,7 @@ impl World {
             let previous = connections.last().map(|old| (old, plans[index - 1].close));
             let isns = match previous {
                 None => isns,
-                Some((old, _)) => pick_isns(old, plan.reuse, index as u32),
+                Some(_) => pick_isns(&connections, plan.reuse, index as u32),
             };
             let mut script = ConnectionScript::new(endpoints[0], endpoints[1], isns[0], isns[1]);
             script.incarnation = index as u32;
@@ -311,17 +311,23 @@ impl World {
     }
 }
 
-/// ISNs of the connection with the number `index` after `old`, chosen by
-/// `reuse`.
-fn pick_isns(old: &ConnectionScript, reuse: Reuse, index: u32) -> [u32; 2] {
+/// ISNs of the connection with the number `index` after the `earlier`
+/// ones, chosen by `reuse` from the last of them.
+fn pick_isns(earlier: &[ConnectionScript], reuse: Reuse, index: u32) -> [u32; 2] {
+    let old = &earlier[earlier.len() - 1];
     let old_isns = [Initiator, Responder].map(|role| old.seq(role, 0).wrapping_sub(1));
     let old_ends = [Initiator, Responder].map(|role| old.seq(role, old.next_offset(role)));
     let far = old_isns.map(|isn| isn.wrapping_add((1 << 30) + 7919 * index));
     let mut isns = pick_isns_by(reuse, old, old_isns, old_ends, far);
-    // a new connection with the very ISN of the old one is a retransmission
-    // to any observer, so stacks' clocks never produce it
-    for (isn, old_isn) in isns.iter_mut().zip(old_isns) {
-        if *isn == old_isn {
+    // a new connection with the very ISN of an earlier one is a
+    // retransmission to an observer that remembers it (a tombstone also
+    // remembers the connection it replaced), so stacks' clocks never
+    // produce it
+    for (isn, role) in isns.iter_mut().zip([Initiator, Responder]) {
+        while earlier
+            .iter()
+            .any(|earlier| earlier.seq(role, 0).wrapping_sub(1) == *isn)
+        {
             *isn = isn.wrapping_add(1);
         }
     }
