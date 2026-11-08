@@ -820,15 +820,23 @@ impl SeqNumbers {
     /// to the handshake: it has the ISN of its sender's stream, or it is a
     /// SYN-ACK that ACKs the SYN of the other stream (up to the end of the
     /// SYN's TCP Fast Open bytes). A retransmitted SYN can carry more TCP
-    /// Fast Open bytes, which a late SYN-ACK can ACK.
+    /// Fast Open bytes, which a late SYN-ACK can ACK. A mid-stream pickup's
+    /// stream knows no ISN, but its late SYN lies right before its first
+    /// byte, which the late SYN-ACK ACKs (as in C4).
     pub fn is_own_handshake(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = self.roles(source);
         if let Some(syn) = self.syns[own].as_mut().filter(|syn| syn.is_syn(tcp)) {
             syn.len = syn.len.max(tcp.payload().len() as u32);
             return true;
         }
-        tcp.ack()
-            && self.syns[other].is_some_and(|syn| syn.is_acked_by(tcp.acknowledgment_number()))
+        let at_pickup_start = |stream: usize, seq: u32| {
+            self.syns[stream].is_none() && Some(seq) == self.first[stream]
+        };
+        let ack = tcp.acknowledgment_number();
+        at_pickup_start(own, tcp.sequence_number().wrapping_add(1))
+            || (tcp.ack()
+                && (self.syns[other].is_some_and(|syn| syn.is_acked_by(ack))
+                    || at_pickup_start(other, ack)))
     }
 
     /// Returns true if `tcp`, sent by `source` and no SYN, is a late segment

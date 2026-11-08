@@ -864,14 +864,21 @@ mod test {
             assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
         }
 
-        // the tombstone of a pickup knows no ISN, so any SYN starts a new
-        // connection there, also a late SYN of the ended connection
+        // the tombstone of a pickup knows no ISN, so a SYN starts a new
+        // connection there, unless it lies right before the stream's first
+        // byte, where only the ended connection's own late SYN lies (C1):
+        // here the capture lost the first bytes too, so the late SYN starts a
+        // new connection (a known limit)
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
-            script.handshake().send(Initiator, b"abc").rst(Responder);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .rst(Responder);
             let syn = script.segments[0].clone();
-            script.segments.drain(..3);
+            script.segments.drain(..4);
             script.feed_all(&mut pool).ended.unwrap();
             let (connection, _) = syn.feed(&mut pool, ()).active.unwrap();
             assert_eq!(TcpConnectionId(1), connection.id());
@@ -1916,6 +1923,35 @@ mod test {
                 Some(TcpConnectionEnd::Reset { by: Initiator }),
                 connection.end()
             );
+        }
+
+        // a capture that lost the SYN sees a mid-stream pickup; once that
+        // ended with an RST, a lagging server tap shows the SYN-ACK, which
+        // ACKs the client stream's first byte, and then the late SYN right
+        // before it: both are the ended pickup's own late handshake (C1, as
+        // C4 on a live pickup), so neither starts a ghost connection
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"request")
+                .rst(Initiator);
+            // the handshake ACK, the request, the RST
+            let processed = script.feed(&mut pool, 2..);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reset { by: Initiator }),
+                processed.ended.unwrap().end()
+            );
+            for index in [1, 0] {
+                let processed = script.segments[index].feed(&mut pool, 9);
+                assert_eq!(
+                    Some(TcpIgnoreReason::AfterEnd),
+                    processed.ignored,
+                    "segment {index}"
+                );
+            }
+            assert_eq!((1, 0), (pool.stats().tombstones, pool.stats().connections));
         }
 
         // the tombstone of a reconnect absorbs late duplicates of the replaced

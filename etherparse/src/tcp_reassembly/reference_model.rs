@@ -1785,16 +1785,26 @@ impl ReferenceModel {
     /// Returns true if the SYN or SYN-ACK `segment` belongs to the handshake
     /// of the connection: it comes from the connection's script, and it has
     /// the ISN of its sender's stream, or it is a SYN-ACK that ACKs the
-    /// observed start of the other stream.
+    /// observed start of the other stream, or it lies right at the first
+    /// byte of a mid-stream pickup's stream.
     fn is_own_handshake(&self, segment: &TestSegment) -> bool {
+        let stream = &self.streams[role_index(self.sender_role(segment))];
         let other = &self.streams[role_index(self.sender_role(segment).other())];
         // the SYN-ACK can ACK the SYN's TCP Fast Open bytes too
         let acks_syn = match (other.base, segment.ack) {
             (Some(base), Some(ack)) => (base..=base + other.syn_len).contains(&ack),
             _ => false,
         };
+        // a pickup's stream knows no ISN, but its late SYN lies right before
+        // its first byte, which the late SYN-ACK ACKs (as in C4)
+        let at_pickup_start = |stream: &ModelStream, offset: u64| {
+            false == stream.observed && Some(offset as i64) == stream.first_offset()
+        };
         self.has_isn_of_sender(segment)
-            || (Some(segment.incarnation) == self.incarnation && other.observed && acks_syn)
+            || (Some(segment.incarnation) == self.incarnation
+                && ((other.observed && acks_syn)
+                    || at_pickup_start(stream, segment.offset)
+                    || segment.ack.is_some_and(|ack| at_pickup_start(other, ack))))
     }
 
     /// Returns true if the SYN or SYN-ACK `segment` comes from the
