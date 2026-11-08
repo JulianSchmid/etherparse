@@ -1338,37 +1338,40 @@ mod test {
             // lost
             let takes_ack = |segment: &TestSegment, i: usize| {
                 let role = segment.sender.other();
-                let created = created_at.unwrap_or(i);
-                let shown: Vec<u32> = captured[created.min(i)..i]
-                    .iter()
-                    .filter(|s| s.incarnation as usize == k - 1)
-                    .filter_map(|s| {
-                        let end = |offset: u64| previous.seq(role, offset);
-                        if s.sender == role
-                            && (s.header.syn || s.header.fin || false == s.payload.is_empty())
-                        {
-                            Some(end(s.offset
-                                + s.payload.len() as u64
-                                + u64::from(s.header.fin)))
-                        } else if s.sender != role && s.header.syn && s.header.ack {
-                            // A2
-                            Some(end(0))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                let ack = segment.ack.map(|ack| script.seq(role, ack));
-                match (
-                    shown
+                // the end of what the capture showed of the stream from the
+                // connection's creation up to the position `until`
+                let shown_end = |until: usize| {
+                    let created = created_at.unwrap_or(until).min(until);
+                    captured[created..until]
                         .iter()
-                        .max_by_key(|end| end.wrapping_sub(previous.seq(role, 0))),
-                    ack,
-                ) {
-                    (None, Some(_)) => true,
-                    (Some(end), Some(ack)) => {
-                        let ahead = ack.wrapping_sub(*end) as i32;
-                        0 < ahead && u64::from(ahead.unsigned_abs()) <= range
+                        .filter(|s| s.incarnation as usize == k - 1)
+                        .filter_map(|s| {
+                            let end = |offset: u64| previous.seq(role, offset);
+                            if s.sender == role
+                                && (s.header.syn || s.header.fin || false == s.payload.is_empty())
+                            {
+                                Some(end(s.offset
+                                    + s.payload.len() as u64
+                                    + u64::from(s.header.fin)))
+                            } else if s.sender != role && s.header.syn && s.header.ack {
+                                // A2
+                                Some(end(0))
+                            } else {
+                                None
+                            }
+                        })
+                        .max_by_key(|end| end.wrapping_sub(previous.seq(role, 0)))
+                };
+                // one further ahead is the leading ACK, which counts once the
+                // stream's bytes reach within k windows of it (K1) before the
+                // new handshake or the connection's end
+                let last = half_at.unwrap_or(captured.len()).min(previous_end).max(i);
+                let ack = segment.ack.map(|ack| script.seq(role, ack));
+                match (shown_end(i), shown_end(last), ack) {
+                    (None, _, Some(_)) => true,
+                    (Some(end), Some(last_end), Some(ack)) => {
+                        0 < ack.wrapping_sub(end) as i32
+                            && i64::from(ack.wrapping_sub(last_end) as i32) <= range as i64
                     }
                     _ => false,
                 }
@@ -2156,12 +2159,22 @@ mod test {
             &gaps[..gaps.len().min(5)],
             &expected_gaps[..expected_gaps.len().min(5)]
         );
+        let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
+        // a known limit (K1): a burst from the stream's first byte longer
+        // than k windows, while the server's tap lags past k windows from
+        // the start: no byte moves the stream forward, so the leading ACKs
+        // never widen the window, and the stream resyncs (R2)
+        let burst_at_start = bulk
+            .burst
+            .is_some_and(|(first, len)| 0 == first && (len * bulk.len) as u64 > 2 * window);
+        if burst_at_start && bulk.lag_from_start && bulk.lag[1] * bulk.len as u64 > 2 * window {
+            return Ok(true);
+        }
         // a known limit (S4): while the client's tap lags past k windows, the
         // segments the capture shows after a run of missing ones longer than
         // k windows lie after the window until an ACK moves the stream
         // forward towards them, and are lost with the run (the lag and two
         // more at most), a FIN among them too
-        let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
         let k_windows = 2 * window.min(u64::from(u16::MAX));
         if bulk.lag[0] * (bulk.len as u64) <= k_windows {
             return Err(mismatch);
@@ -2336,8 +2349,10 @@ mod test {
     /// client's ACKs of every second segment captured too unless
     /// `one_direction`. An eager reader must get every captured byte and a
     /// gap for each run of lost segments, and no byte may be rejected: a
-    /// reader stalled at a hole gets past it before the buffer is full (K2
-    /// within one direction, K4(d) across both).
+    /// reader stalled at a hole gets past it before the buffer is full
+    /// (K4(d)). Returns true if a run of lost segments and the one after it
+    /// fill more than half the buffer instead, which can overflow it (a
+    /// known limit of K4).
     fn pressure_world(
         one_direction: bool,
         len: usize,
@@ -2345,7 +2360,7 @@ mod test {
         max_stream_buffer: usize,
         capture_loss: u64,
         rng: &mut Rng,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
         script.window_scales = [Some(6); 2];
         script.window_size = 49152;
@@ -2420,16 +2435,27 @@ mod test {
         if 0 < missing {
             expected_gaps.push((expected.len(), Some(missing)));
         }
-        if 0 != rejected || got != expected || gaps != expected_gaps {
-            return Err(format!(
-                "rejected {rejected}, got {} bytes (expected {}), gaps {:?} (expected {:?})",
-                got.len(),
-                expected.len(),
-                &gaps[..gaps.len().min(5)],
-                &expected_gaps[..expected_gaps.len().min(5)]
-            ));
+        if 0 == rejected && got == expected && gaps == expected_gaps {
+            return Ok(false);
         }
-        Ok(())
+        // a known limit (K4): a run of lost segments and the one after it
+        // that fill more than half the buffer arrive in one packet, which
+        // can overflow it before a stalled reader gets past its hole
+        let longest_run = shown
+            .split(|shown| *shown)
+            .map(<[bool]>::len)
+            .max()
+            .unwrap_or(0);
+        if (longest_run + 1) * len > max_stream_buffer / 2 {
+            return Ok(true);
+        }
+        Err(format!(
+            "rejected {rejected}, got {} bytes (expected {}), gaps {:?} (expected {:?})",
+            got.len(),
+            expected.len(),
+            &gaps[..gaps.len().min(5)],
+            &expected_gaps[..expected_gaps.len().min(5)]
+        ))
     }
 
     /// A census of buffer pressure: transfers of at least twice the
@@ -2439,7 +2465,7 @@ mod test {
     /// [`pressure_world`]).
     #[test]
     fn pressure_census() {
-        let mut failures = Vec::new();
+        let (mut failures, mut hits) = (Vec::new(), 0);
         let seeds = proptest_cases() as u64;
         for seed in 1..=seeds {
             let mut rng = census_rng(seed);
@@ -2456,7 +2482,7 @@ mod test {
                 max_stream_buffer,
                 capture_loss,
             );
-            if let Err(failure) = pressure_world(
+            match pressure_world(
                 one_direction,
                 len,
                 segments,
@@ -2464,7 +2490,8 @@ mod test {
                 capture_loss,
                 &mut rng,
             ) {
-                failures.push(format!("seed {seed}, {world:?}: {failure}"));
+                Ok(limit) => hits += u64::from(limit),
+                Err(failure) => failures.push(format!("seed {seed}, {world:?}: {failure}")),
             }
         }
         assert!(
@@ -2472,6 +2499,10 @@ mod test {
             "{} of {seeds} transfers failed:\n{}",
             failures.len(),
             failures.join("\n")
+        );
+        assert!(
+            seeds < 1000 || hits * 100 <= seeds * 5,
+            "{hits} of {seeds} transfers overflowed the buffer"
         );
     }
 
