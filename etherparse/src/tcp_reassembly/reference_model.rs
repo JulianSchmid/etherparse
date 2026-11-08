@@ -1033,15 +1033,11 @@ impl ModelStream {
         (start < end).then_some(start..end)
     }
 
-    /// Returns true if `hole` ends at or before the implied ACK, the ACK of
+    /// Returns true if `hole` ends at or before the seen or implied ACK of
     /// `ack_reorder_tolerance` packets ago or the end of the furthest bytes
     /// that didn't fit the memory limits.
     fn is_overdue(&self, hole: &Range<u64>) -> bool {
-        hole.end
-            <= self
-                .implied_ack
-                .max(self.settled_ack)
-                .max(self.rejected_end)
+        hole.end <= self.settled_ack.max(self.rejected_end)
     }
 
     /// Applies the kept ACK, which counts once the stream has a start.
@@ -1099,15 +1095,21 @@ impl ModelStream {
                 .max(self.rejected_end)
                 .max(self.fin_offset.unwrap_or(0));
             let implied_ack = sent.saturating_sub(distance);
+            // it gives holes up after `ack_reorder_tolerance` packets, like
+            // a seen ACK, and like one it counts only after offset 0
+            if implied_ack > self.implied_ack && self.base.is_some_and(|base| implied_ack > base) {
+                self.ack_history.push((packet, implied_ack));
+            }
             self.implied_ack = self.implied_ack.max(implied_ack);
         }
         let tolerance = u64::from(config.ack_reorder_tolerance);
         self.settled_ack = self
             .ack_history
             .iter()
-            .rev()
-            .find(|(ack_packet, _)| ack_packet + tolerance <= packet)
-            .map_or(0, |(_, ack)| *ack);
+            .filter(|(ack_packet, _)| ack_packet + tolerance <= packet)
+            .map(|(_, ack)| *ack)
+            .max()
+            .unwrap_or(0);
         self.give_up_overdue_hole();
     }
 
