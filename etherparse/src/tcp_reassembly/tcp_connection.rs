@@ -653,8 +653,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// connection can't arrive after its first segment of this one. This
     /// connection's own segments come first, whatever the replaced one's
     /// numbers say (after a reset, the new ISNs can lie within the old
-    /// numbers): one at the position the sender's stream expects next, or
-    /// one that ACKs what the other stream sent in this connection.
+    /// numbers): where it knows where the sender's stream begins, one within
+    /// what that stream is known to have sent, else one that ACKs what the
+    /// other stream sent in this connection.
     pub(crate) fn absorbs_late_segment(
         &mut self,
         source: SocketAddr,
@@ -671,11 +672,16 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // expected position onto it)
         let answers_old_ack =
             tcp.rst() && false == tcp.ack() && stream.isn().is_some() && false == other.has_start();
-        // this connection's own segment: one at the position the sender's
-        // stream expects next, or one that ACKs what the other stream sent
-        // here
-        let own = (stream.isn().is_some() && Some(tcp.sequence_number()) == stream.next_seq())
-            || (tcp.ack() && other.sent_range_covers(tcp.acknowledgment_number()));
+        // this connection's own segment: where it knows where the sender's
+        // stream begins (its SYN, or the ACK number of the other side's
+        // SYN-ACK, A2), one within what that stream is known to have sent
+        // (up to the position it expects next), and else one that ACKs what
+        // the other stream sent here
+        let own = if stream.isn().is_some() {
+            stream.sent_range_covers(tcp.sequence_number())
+        } else {
+            tcp.ack() && other.sent_range_covers(tcp.acknowledgment_number())
+        };
         // bytes the capture may have missed past the replaced streams' ends:
         // k windows of the receiver of each stream
         let ahead = (false == (self.sent[sender.index()] || own)).then(|| {

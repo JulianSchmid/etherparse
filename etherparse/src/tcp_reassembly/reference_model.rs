@@ -693,6 +693,16 @@ impl ModelStream {
         true
     }
 
+    /// Returns true if the stream's sender sent the true offset `offset`, as
+    /// far as the stream knows: it lies from the stream's first byte to the
+    /// offset the stream reached (a stream without a start sent nothing).
+    fn sent_covers(&self, offset: u64) -> bool {
+        match (self.first_offset(), self.end_offset()) {
+            (Some(first), Some(end)) => (first..=end as i64).contains(&(offset as i64)),
+            _ => false,
+        }
+    }
+
     /// Returns true if the stream covered the true offset `offset`: from its
     /// first byte to the offset it reached, plus `ahead` for bytes the
     /// capture may have missed (see [`ModelStream::first_offset`] and
@@ -1660,9 +1670,10 @@ impl ReferenceModel {
     /// one replaced (C1), which the pool ignores: a duplicate of its
     /// handshake, an RST without ACK of a side in SYN-SENT, or, while the
     /// sender sent nothing the connection took, a segment of the replaced
-    /// connection by its offsets (see [`ReferenceModel::absorbs_late`]). A
-    /// segment at the offset the sender's stream expects next, or one that
-    /// ACKs what the other stream sent here, is this connection's own.
+    /// connection by its offsets (see [`ReferenceModel::absorbs_late`]). Where
+    /// the sender's stream has a start here, a segment within what it is
+    /// known to have sent is this connection's own, else one that ACKs what
+    /// the other stream sent here.
     pub fn absorbs_late_segment(&mut self, segment: &TestSegment) -> bool {
         if self.replaced.is_none() {
             return false;
@@ -1672,10 +1683,14 @@ impl ReferenceModel {
         let other = &self.streams[role_index(sender.other())];
         let answers_old_ack =
             segment.header.rst && segment.ack.is_none() && stream.observed && other.base.is_none();
-        // the position the stream expects next, or an ACK of what the other
-        // stream sent here, is the connection's own
-        let own = (stream.observed && Some(segment.offset) == stream.end_offset())
-            || segment.ack.is_some_and(|ack| other.covers(ack, 0));
+        // where the sender's stream has a start here, an offset within what
+        // it is known to have sent is the connection's own, else an ACK of
+        // what the other stream sent here
+        let own = if stream.observed {
+            stream.sent_covers(segment.offset)
+        } else {
+            segment.ack.is_some_and(|ack| other.sent_covers(ack))
+        };
         let may_be_old = false == (self.sent[role_index(sender)] || own);
         let ahead = [
             self.range(TcpRole::Initiator),
