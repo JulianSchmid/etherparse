@@ -86,6 +86,9 @@ struct ModelStream {
     /// `max_stream_buffer`, which bounds how long the hole at the read
     /// offset waits (K4(d)).
     max_buffer: u64,
+    /// `fallback_window`, the receiver's window in K2 and K4(d) once its
+    /// ACKs counted while its window is unknown.
+    fallback_window: u64,
     /// Offset of the pool's offset 0 (`None` while the stream has no
     /// start).
     base: Option<u64>,
@@ -1117,11 +1120,11 @@ impl ModelStream {
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));
-            // at most half of the stream's buffer, but never less than a
-            // known window
+            // at most half of the stream's buffer, but never less than the
+            // receiver's window
             let distance = (u64::from(factor) * window)
                 .min(config.max_stream_buffer as u64 / 2)
-                .max(self.largest_window.unwrap_or(0));
+                .max(self.receiver_window().unwrap_or(0));
             // what the capture showed of the sender, not what ACKs showed
             let sent = (self.bytes.len() as u64)
                 .max(self.rejected_end)
@@ -1145,14 +1148,22 @@ impl ModelStream {
         self.give_up_overdue_hole();
     }
 
+    /// The receiver's window that K2 and K4(d) go by: the largest one it
+    /// advertised, or the fallback window once its ACKs counted.
+    fn receiver_window(&self) -> Option<u64> {
+        let acks_counted = self.base.is_some_and(|base| self.ack > base);
+        self.largest_window
+            .or(acks_counted.then_some(self.fallback_window))
+    }
+
     /// Gives up the hole at the read offset if it is overdue, or once the
     /// bytes from it exceed half the buffer, or for a hole the ACK doesn't
-    /// cover while the window is known, a window past the ACK, leaving
-    /// 64 KiB of the buffer (K4(d)).
+    /// cover while the receiver's window is known, a window past the ACK
+    /// where that is longer, leaving 64 KiB of the buffer (K4(d)).
     fn give_up_overdue_hole(&mut self) {
         let limit = |hole: &Range<u64>| {
             let half = self.max_buffer / 2;
-            match self.largest_window {
+            match self.receiver_window() {
                 Some(window) if hole.end > self.ack => {
                     let in_flight = window + self.ack.saturating_sub(hole.start);
                     half.max(in_flight.min(self.max_buffer.saturating_sub(64 << 10)))
@@ -1362,6 +1373,7 @@ impl ReferenceModel {
     pub fn new(config: TcpReassemblyConfig) -> ReferenceModel {
         let stream = ModelStream {
             max_buffer: config.max_stream_buffer as u64,
+            fallback_window: u64::from(config.fallback_window),
             ..Default::default()
         };
         ReferenceModel {

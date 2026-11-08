@@ -21,6 +21,10 @@ pub struct TcpStream {
     /// position waits (K4(d)).
     max_buffer: u64,
 
+    /// `fallback_window`, which stands in for the receiver's window in K2
+    /// and K4(d) once its ACKs counted while its window is unknown.
+    fallback_window: u64,
+
     /// Sequence number of the byte at offset 0 (`None` while the start of
     /// the stream is unknown).
     start_seq: Option<u32>,
@@ -167,6 +171,7 @@ impl TcpStream {
     pub(crate) fn new(free: &mut FreeBuffers, config: &TcpReassemblyConfig) -> TcpStream {
         TcpStream {
             max_buffer: config.max_stream_buffer as u64,
+            fallback_window: u64::from(config.fallback_window),
             start_seq: None,
             syn: None,
             kept_ack: None,
@@ -352,13 +357,14 @@ impl TcpStream {
 
     /// Bytes buffered from `hole`, the hole at the read position, beyond
     /// which it is overdue (K4(d)): half of the buffer. While the receiver's
-    /// window is known and its ACK doesn't cover the hole, the receiver
-    /// lacks its bytes, and the sender retransmits them before it sends more
-    /// than a window past that ACK: such a hole waits for that window past
-    /// the ACK, but leaves 64 KiB of the buffer free.
+    /// window is known (see [`TcpStream::receiver_window`]) and its ACK
+    /// doesn't cover the hole, the receiver lacks its bytes, and the sender
+    /// retransmits them before it sends more than a window past that ACK:
+    /// such a hole waits for that window past the ACK where that is longer,
+    /// but leaves 64 KiB of the buffer free.
     fn pressure_limit(&self, hole: &Range<u64>) -> u64 {
         let half = self.max_buffer / 2;
-        match self.largest_window {
+        match self.receiver_window() {
             Some(window) if hole.end > self.seen_ack => {
                 let acked = self.seen_ack.saturating_sub(hole.start);
                 let in_flight = window.saturating_add(acked);
@@ -366,6 +372,16 @@ impl TcpStream {
             }
             _ => half,
         }
+    }
+
+    /// Receive window of the stream's receiver that K2's distance and K4(d)
+    /// go by: the largest one it advertised, or, while its window is
+    /// unknown (a mid-stream pickup shows no window scale), the fallback
+    /// window once its ACKs counted; `None` without either, as in a capture
+    /// of one direction.
+    fn receiver_window(&self) -> Option<u64> {
+        self.largest_window
+            .or((0 < self.seen_ack).then_some(self.fallback_window))
     }
 
     /// Offset up to which the receiver must have ACKed the bytes (0 while no
@@ -441,10 +457,12 @@ impl TcpStream {
     /// too, and so is the hole at the read position once the bytes from it
     /// fill more than half of [`TcpReassemblyConfig::max_stream_buffer`], so
     /// that the buffer doesn't overflow. If the receiver's window is known
-    /// and its ACK doesn't cover that hole yet, the hole waits for up to a
-    /// window of bytes past that ACK instead, as the sender retransmits
-    /// within a window, but leaves 64 KiB of the buffer free. Late segments
-    /// still fill overdue holes the read position hasn't reached.
+    /// (or, on a mid-stream pickup, its ACKs were captured, see
+    /// [`TcpReassemblyConfig::fallback_window`]) and its ACK doesn't cover
+    /// that hole yet, the hole waits for a window of bytes past that ACK
+    /// where that is longer, as the sender retransmits within a window, but
+    /// leaves 64 KiB of the buffer free. Late segments still fill overdue
+    /// holes the read position hasn't reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
         self.buffer.holes().iter().cloned()
     }
@@ -1538,9 +1556,10 @@ impl TcpStream {
             // allow for several windows, as the window can change, but not
             // more than half of the stream's buffer, so that a reader of the
             // ACKed bytes keeps up before the buffer is full; never less than
-            // a known window though, as the sender can have sent that far
-            // past the ACK
-            let known = self.largest_window.unwrap_or(0);
+            // the receiver's window though (a known one, or the fallback
+            // window once its ACKs counted), as the sender can have sent that
+            // far past the ACK
+            let known = self.receiver_window().unwrap_or(0);
             let window = self
                 .largest_window
                 .unwrap_or(u64::from(config.fallback_window));

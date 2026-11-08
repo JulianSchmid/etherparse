@@ -2231,16 +2231,20 @@ mod test {
         // cover waits up to the receiver's window, short of 64 KiB of the
         // buffer, also where that is more than half the buffer (K4(d);
         // regression test: half the buffer gave the hole up as a gap before
-        // the retransmission came)
+        // the retransmission came); a mid-stream pickup shows no window
+        // scale, so there the fallback window, sized to the window, stands
+        // in for it once the receiver's ACKs counted (regression test: the
+        // pickup gave the hole up at half the buffer)
         for (max_stream_buffer, scale, field, len, ahead) in [
             // a window of 640,000 bytes in a buffer of 1 MiB
             (1 << 20, 4u8, 40000u16, 1460, 600_000),
             // a window of 5 MiB in the default buffer of 8 MiB
             (8 << 20, 7, 40960, 16384, 4_700_000),
         ] {
-            for acked in [false, true] {
+            for (acked, pickup) in [(false, false), (true, false), (false, true), (true, true)] {
                 let config = TcpReassemblyConfig {
                     max_stream_buffer,
+                    fallback_window: u32::from(field) << scale,
                     ..Default::default()
                 };
                 let mut pool = TcpReassemblyPool::<(), ()>::new(config);
@@ -2271,13 +2275,24 @@ mod test {
                 // the retransmission
                 script.send_at(Responder, hole, &data_of(20));
                 script.ack(Initiator);
+                if pickup {
+                    script.segments.drain(..3);
+                }
                 let (mut got, mut gaps) = (Vec::new(), Vec::new());
                 let mut rejected = 0;
+                // the server's stream, as the pool names its role
+                let mut server = None;
                 for segment in &script.segments {
-                    let Some((connection, _)) = segment.feed(&mut pool, ()).active else {
+                    let Some((connection, role)) = segment.feed(&mut pool, ()).active else {
                         continue;
                     };
-                    let stream = connection.stream_mut(Responder);
+                    if Responder == segment.sender {
+                        server = Some(role);
+                    }
+                    let Some(server) = server else {
+                        continue;
+                    };
+                    let stream = connection.stream_mut(server);
                     loop {
                         let read = if acked {
                             stream.read_acked()
@@ -2299,9 +2314,46 @@ mod test {
                     }
                     rejected = stream.status().rejected_bytes;
                 }
-                assert_eq!((0, Vec::<Option<u64>>::new()), (rejected, gaps), "{acked}");
-                assert!(sent == got, "{acked}");
+                assert_eq!(
+                    (0, Vec::<Option<u64>>::new()),
+                    (rejected, gaps),
+                    "{acked} {pickup}"
+                );
+                assert!(sent == got, "{acked} {pickup}");
             }
+        }
+
+        // the implied ACK lies at least the receiver's window behind the
+        // bytes (K2), also on a mid-stream pickup, where the fallback window,
+        // sized to the window, stands in for it once the receiver's ACKs
+        // counted: with the ACKs a window behind the bytes, a reader of the
+        // ACKed bytes reads up to the receiver's ACK (regression test: the
+        // pickup implied an ACK 1 MiB ahead of the receiver's)
+        for pickup in [false, true] {
+            let config = TcpReassemblyConfig {
+                fallback_window: 5 << 20,
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            // a window of 5 MiB
+            script.window_scales = [Some(7); 2];
+            script.window_size = 40960;
+            script.handshake();
+            let window = 5 << 20;
+            for i in 1..=640u64 {
+                script.send(Responder, &[(i % 251) as u8; 16384]);
+                if i * 16384 > window {
+                    script.ack_to(Initiator, i * 16384 - window);
+                }
+            }
+            if pickup {
+                script.segments.drain(..3);
+            }
+            // the last segment is the client's ACK
+            let (connection, client) = script.feed_all(&mut pool).active.unwrap();
+            let stream = connection.stream(client.other());
+            assert_eq!(640 * 16384 - window, stream.acked_offset(), "{pickup}");
         }
 
         // the hole at the read position is overdue once half the buffer is

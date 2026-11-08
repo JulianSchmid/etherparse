@@ -75,12 +75,15 @@ pub struct TcpReassemblyConfig {
     /// captured, and until the receiver's first window after its SYN if the
     /// connection scales its windows (a SYN's window is never scaled, so it
     /// only bounds the later ones from below). It also decides how far from
-    /// the receiver's ACK the first
-    /// segment of a mid-stream pickup may lie (see
+    /// the receiver's ACK the first segment of a mid-stream pickup may lie
+    /// (see
     /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
-    /// For captures that start mid-stream, size it above the bytes a
-    /// connection can have in flight (see
-    /// [`TcpReassemblyConfig::max_stream_buffer`]).
+    /// A pickup never shows the window scale, so once the receiver's ACKs
+    /// counted, this window also decides how far the implied ACK lies
+    /// behind the bytes and how long a hole the receiver lacks waits (see
+    /// [`crate::tcp_reassembly::TcpStream::holes`]). For captures that
+    /// start mid-stream, size it above the bytes a connection can have in
+    /// flight (see [`TcpReassemblyConfig::max_stream_buffer`]).
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an
