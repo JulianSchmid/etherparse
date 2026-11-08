@@ -126,18 +126,18 @@ pub struct TcpStream {
     /// accepts reaches past the ACK (S4).
     leading_ack: Option<LeadingAck>,
 
-    /// Sequence number after the latest data after the receiver's window
-    /// that the stream's ACKs moved it forward towards: the sender sent that
-    /// far, and a lagging tap holds back the ACKs that would let the window
-    /// reach the data, so the window reaches past it (S4).
-    leading_data: Option<u32>,
+    /// Offset after the latest data after the receiver's window that the
+    /// stream's ACKs moved it forward towards: the sender sent that far, and
+    /// a lagging tap holds back the ACKs that would let the window reach the
+    /// data, so the window reaches past it (S4; `None` before such data, and
+    /// after a resync).
+    leading_data: Option<u64>,
 
-    /// Sequence number after the furthest segment of the sender that the
-    /// receiver accepted, with its bytes and FIN: the sender sent the
-    /// numbers before it, also ones the capture lost (the sequence number of
-    /// a pure ACK is where its sender is; `None` before one, and after a
-    /// resync).
-    furthest_seq: Option<u32>,
+    /// Offset after the furthest segment of the sender that the receiver
+    /// accepted, with its bytes and FIN: the sender sent the numbers before
+    /// it, also ones the capture lost (the sequence number of a pure ACK is
+    /// where its sender is; `None` before one, and after a resync).
+    furthest: Option<u64>,
 
     /// Offset at which the stream continued after its last resync (0
     /// without one). Bytes, FINs and ACKs before it were sent before the
@@ -181,7 +181,7 @@ impl TcpStream {
             resync_ack: None,
             leading_ack: None,
             leading_data: None,
-            furthest_seq: None,
+            furthest: None,
             resync_offset: 0,
             resync_forced: false,
             connection_end: None,
@@ -566,22 +566,11 @@ impl TcpStream {
     /// furthest segment the receiver accepted if that lies further (a pure
     /// ACK after a FIN the capture lost); `None` without either.
     pub(crate) fn next_seq(&self) -> Option<u32> {
-        let fin = u32::from(self.fin_offset.is_some());
-        let next = self
-            .start_seq
-            .map(|start_seq| {
-                start_seq
-                    .wrapping_add(self.highest_offset() as u32)
-                    .wrapping_add(fin)
-            })
-            .or(self.kept_ack.map(|kept| kept.seq));
-        match (next, self.furthest_seq) {
-            (Some(next), Some(furthest)) if 0 < furthest.wrapping_sub(next) as i32 => {
-                Some(furthest)
-            }
-            (None, furthest) => furthest,
-            (next, _) => next,
-        }
+        let fin = u64::from(self.fin_offset.is_some());
+        let reached = (self.highest_offset() + fin).max(self.furthest.unwrap_or(0));
+        self.start_seq
+            .map(|start_seq| start_seq.wrapping_add(reached as u32))
+            .or(self.kept_ack.map(|kept| kept.seq))
     }
 
     /// Number of placeholder bytes a mid-stream pickup puts in front of its
@@ -829,7 +818,6 @@ impl TcpStream {
             .unwrap_or(0);
         let leading_data = self
             .leading_data
-            .and_then(offset)
             .filter(|end| {
                 *end <= self
                     .read_offset()
@@ -948,14 +936,11 @@ impl TcpStream {
             if false == tcp.syn() {
                 self.syn_unacked = false;
             }
-            let end = seq
-                .wrapping_add(data.len() as u32)
-                .wrapping_add(u32::from(tcp.fin()));
-            if self
-                .furthest_seq
-                .is_none_or(|furthest| 0 < end.wrapping_sub(furthest) as i32)
-            {
-                self.furthest_seq = Some(end);
+            let end = placed
+                .start
+                .map(|start| start + data.len() as i64 + i64::from(tcp.fin()));
+            if let Some(end) = end.and_then(|end| u64::try_from(end).ok()) {
+                self.furthest = self.furthest.max(Some(end));
             }
         }
         if (false == data.is_empty() || tcp.fin()) && placed.after_window {
@@ -1288,11 +1273,11 @@ impl TcpStream {
     /// [`TcpStream::place`]).
     fn moved_forward(&mut self) {
         if let Some(candidate) = self.resync_candidate.take() {
-            let further = self
-                .leading_data
-                .is_none_or(|end| 0 < candidate.end.wrapping_sub(end) as i32);
-            if further {
-                self.leading_data = Some(candidate.end);
+            let end = self
+                .start_seq
+                .and_then(|start_seq| self.offset(start_seq, candidate.end));
+            if let Some(end) = end.and_then(|end| u64::try_from(end).ok()) {
+                self.leading_data = self.leading_data.max(Some(end));
             }
         }
         self.resync_ack = None;
@@ -1455,6 +1440,8 @@ impl TcpStream {
             *ack += len;
         }
         self.implied_ack = self.implied_ack.map(|ack| ack.saturating_add(len as i64));
+        self.leading_data = self.leading_data.map(|end| end + len);
+        self.furthest = self.furthest.map(|end| end + len);
     }
 
     /// Applies the kept ACK (K1), which counts once the stream has a start
@@ -1739,7 +1726,7 @@ impl TcpStream {
         self.resync_ack = None;
         self.leading_ack = None;
         self.leading_data = None;
-        self.furthest_seq = None;
+        self.furthest = None;
         self.resync_forced = false;
         self.status.resyncs += 1;
         start_seq
