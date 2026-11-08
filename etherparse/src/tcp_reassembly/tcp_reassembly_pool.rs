@@ -1326,6 +1326,28 @@ mod test {
             assert_eq!(conflicting, stream.status().conflicting_retransmissions);
         }
 
+        // in a capture merged from two taps, the responder's segments that
+        // ACK the request arrive up to `ack_reorder_tolerance` packets before
+        // it, and the request is still delivered; one packet more and the
+        // hole it fills was given up as a gap (K4(b))
+        for late_by in [256, 257] {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.handshake().send(Initiator, &[b'r'; 300]);
+            for _ in 0..late_by {
+                script.send(Responder, &[b'x'; 1448]);
+            }
+            let request = script.segments.remove(3);
+            script.feed_all(&mut pool);
+            let (connection, _) = request.feed(&mut pool, ()).active.unwrap();
+            let read = connection.stream_mut(Initiator).read_received();
+            if 256 == late_by {
+                assert_eq!(TcpRead::Data(&[b'r'; 300]), read);
+            } else {
+                assert!(matches!(read, TcpRead::Gap { .. }), "{read:?}");
+            }
+        }
+
         // a retransmission of the kept SYN on the tombstone of its connection
         // starts the reconnect with the kept SYN, so its bytes and timestamp
         // stay (the old connection is reset after the SYN was kept, and the

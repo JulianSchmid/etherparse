@@ -69,12 +69,16 @@ pub struct TcpReassemblyConfig {
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an
-    /// ACK covers is overdue (default 16).
+    /// ACK covers is overdue (default 256).
     ///
     /// This tolerates captures in which the ACK arrives before the bytes it
     /// ACKs, e.g. when both directions were captured separately and merged.
-    /// An overdue hole is given up once the read position reaches it, and
-    /// late segments fill it until then. While a stream has holes, or is a
+    /// Size it above the number of packets (of both directions) that a
+    /// connection can show within the skew between the directions: 256
+    /// packets are a few milliseconds of one connection at 1 Gbit/s. A hole
+    /// from real capture loss stalls a reader for this many packets. An
+    /// overdue hole is given up once the read position reaches it, and late
+    /// segments fill it until then. While a stream has holes, or is a
     /// mid-stream pickup that was not read from yet, it keeps the ACKs of
     /// up to this many packets (16 bytes each).
     pub ack_reorder_tolerance: u32,
@@ -137,7 +141,7 @@ impl Default for TcpReassemblyConfig {
             max_holes_per_stream: 256,
             hole_give_up_window_factor: Some(2),
             fallback_window: 4 * 1024 * 1024,
-            ack_reorder_tolerance: 16,
+            ack_reorder_tolerance: 256,
             resync_after_segments: None,
             max_connections: None,
             max_total_buffered: None,
@@ -209,7 +213,7 @@ mod test {
                 max_holes_per_stream: 256,
                 hole_give_up_window_factor: Some(2),
                 fallback_window: 4 * 1024 * 1024,
-                ack_reorder_tolerance: 16,
+                ack_reorder_tolerance: 256,
                 resync_after_segments: None,
                 max_connections: None,
                 max_total_buffered: None,
