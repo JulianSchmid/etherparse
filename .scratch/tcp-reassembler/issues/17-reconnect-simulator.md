@@ -129,10 +129,11 @@ Coverage: the bulk census lags the client's tap by up to 250 positions and admit
 
 A release sweep of 200 fresh seeds × 3000 random histories found one more: a reuse after TIME-WAIT, then a near reuse below its end, landed exactly on the ISN of the connection two back, which the tombstone still remembers. The generator now avoids every earlier ISN, not only the previous one, as stacks' clocks never repeat one; the seed is kept. The sweep is the gate from now on, with failure persistence off so that each seed runs on its own: 200 seeds × 3000 histories, the model on 32 seeds × 3000, and the censuses at 10,000 and 3000 cases, in release.
 
-The next two sweeps found five more histories that the simulator judged wrong; in each, the pool did what a documented limit says, and the oracle's detectors missed it:
+The next three sweeps found six more histories that the simulator judged wrong; in each, the pool did what a documented limit says, and the oracle's detectors missed it:
 - The detectors of "segments before the handshake" and "unseen stream" counted segments that the capture showed before the connection before existed. An RST, a FIN or a pure ACK for an unknown key creates nothing (A6), so the pool never saw them.
 - The detector of "C4 pickup" took a late SYN-ACK's ACK number for the one the pool kept, but a read pickup refuses that SYN-ACK with its ACK number.
 - Late segments of a connection two reconnects back went through the new connection's rules, as C1 keeps only one connection's numbers. That is now the named limit "C1 two back".
-All five seeds are kept.
+- The detector of "new taken for old" asked that both new streams begin within their old spans, but the pool checks a segment without ACK (a client's RST in SYN-SENT) only against its own stream's span.
+All six seeds are kept. The failures shrank from sweep to sweep, from three to one in 200 seeds; the last sweep (seeds 5001 to 5200) had one, which is fixed, and the model on 32 seeds and both censuses were green.
 
 Understandability: S5, C1, C2 and C4 are rules and tables now, with their reasons in ADR-0003. K1 is shorter, and a table lists what a stream remembers of the ACKs and of the bytes ahead.
