@@ -7,7 +7,7 @@ A passive capture misses packets, and a missing segment that the receiver got wi
 
 Without these rules, a stream stalls forever after capture loss or a missed reconnect, and reading only ACKed bytes stalls on one-direction captures. An earlier implementation hit exactly these stalls on real captures.
 
-Giving up is lazy. An overdue hole (by the implied ACK, or covered by a seen ACK for a configurable number of packets) stays a hole that late segments still fill. It becomes a gap only once the reader reaches it or the connection ends. A rule firing only means the bytes are unlikely to come; giving the hole up right away would drop segments that merely arrive late, e.g. in merged captures, before the reader needs them.
+Giving up is lazy. An overdue hole (covered by the implied or a seen ACK for a configurable number of packets, as a merged capture can show ACKs, and a larger window, late) stays a hole that late segments still fill. It becomes a gap only once the reader reaches it or the connection ends. A rule firing only means the bytes are unlikely to come; giving the hole up right away would drop segments that merely arrive late, e.g. in merged captures, before the reader needs them.
 
 ## Considered Options
 
