@@ -10,8 +10,8 @@
 //! `incarnation`) and the true offsets of its bytes.
 //!
 //! [`Capture::apply`] turns the true sequence into what a capture shows:
-//! loss, reordering with a bounded skew (merged taps), a start in the middle
-//! of the history, one direction only, duplicates.
+//! loss, a delay of either direction against the other (merged taps), a
+//! start in the middle of the history, one direction only, duplicates.
 //!
 //! [`Oracle::check`] feeds the capture to a [`TcpReassemblyPool`] and checks
 //! the result against the truth, not against the rules of the reference
@@ -33,6 +33,12 @@ use TcpRole::{Initiator, Responder};
 /// Sequence numbers per millisecond that Linux's ISN clock advances (RFC
 /// 6528 with a 64 ns tick).
 const ISN_CLOCK_PER_MS: u32 = 15_625;
+
+/// Time between a segment and the next one an endpoint sends after a
+/// retransmission timeout, in units of one segment: more than any delay of
+/// a tap, so that a capture can't show a segment after one its endpoint
+/// sent a timeout later.
+const TIMEOUT: u64 = 1000;
 
 /// How a connection chooses its ISNs relative to the connection before it
 /// on the same four-tuple.
@@ -149,6 +155,9 @@ impl ConnectionPlan {
 pub(crate) struct World {
     pub connections: Vec<ConnectionScript>,
     pub segments: Vec<TestSegment>,
+    /// When each segment was sent, in units of one segment, with a jump of
+    /// [`TIMEOUT`] before a retransmission after a timeout.
+    pub times: Vec<u64>,
 }
 
 impl World {
@@ -159,15 +168,16 @@ impl World {
     pub fn build(isns: [u32; 2], plans: &[ConnectionPlan], late_positions: &[usize]) -> World {
         let endpoints = [addr("10.0.0.1:50000"), addr("10.0.0.2:80")];
         let mut connections: Vec<ConnectionScript> = Vec::new();
-        let mut segments: Vec<TestSegment> = Vec::new();
+        // the segments, each with whether a timeout comes before it
+        let mut segments: Vec<(TestSegment, bool)> = Vec::new();
         // late segments of the connection before, with the position among
         // the next connection's segments they arrive at
-        let mut late: Vec<(TestSegment, usize)> = Vec::new();
+        let mut late: Vec<(TestSegment, usize, bool)> = Vec::new();
         let mut late_position = 0;
-        let mut next_late_position = |late: &mut Vec<(TestSegment, usize)>, segment| {
+        let mut next_late_position = |late: &mut Vec<_>, segment, timeout| {
             let at = late_positions[late_position % late_positions.len()];
             late_position += 1;
-            late.push((segment, at));
+            late.push((segment, at, timeout));
         };
         for (index, plan) in plans.iter().enumerate() {
             let previous = connections.last().map(|old| (old, plans[index - 1].close));
@@ -180,6 +190,8 @@ impl World {
             script.syn();
             // segments of the connection before that this handshake triggers
             let mut triggered: Vec<(TestSegment, usize)> = Vec::new();
+            // the SYN the client retransmits after a timeout
+            let mut retransmitted_at = None;
             // a server that still holds the old connection answers a SYN
             // that doesn't lie after the old client end with an ACK (in
             // TIME-WAIT: of the old FIN; established: a challenge ACK, RFC
@@ -203,6 +215,7 @@ impl World {
                     }
                     let retransmitted = script.segments[0].clone();
                     script.segments.push(retransmitted);
+                    retransmitted_at = Some(script.segments.len() - 1);
                 }
             }
             script.syn_ack().ack(Initiator);
@@ -212,14 +225,16 @@ impl World {
                 &plan.segment_lens,
                 &plan.directions,
             );
-            let mut tail: Vec<TestSegment> = Vec::new();
+            // segments arriving after the connection's end, each with whether
+            // a timeout comes before it
+            let mut tail: Vec<(TestSegment, bool)> = Vec::new();
             match plan.close {
                 Close::None => {}
                 Close::By(first) => {
                     script.fin(first).fin(first.other());
                     if plan.last_ack_lost_on_wire {
                         // the passive closer retransmits its FIN in LAST-ACK
-                        tail.push(script.segments.last().unwrap().clone());
+                        tail.push((script.segments.last().unwrap().clone(), true));
                     } else {
                         script.ack(first);
                     }
@@ -235,7 +250,7 @@ impl World {
                         let offset = script.next_offset(other) + 100 * i as u64;
                         let mut copy = script.clone();
                         copy.send_at(other, offset, &[b'f'; 100]);
-                        tail.push(copy.segments.pop().unwrap());
+                        tail.push((copy.segments.pop().unwrap(), false));
                     }
                     script.rst(by);
                 }
@@ -247,7 +262,7 @@ impl World {
             // before the first segment its sender sends in this connection
             // (what merged taps do is the capture's skew)
             let mut inserts = core::mem::take(&mut late);
-            for (segment, at) in &mut inserts {
+            for (segment, at, _) in &mut inserts {
                 let first_own = script
                     .segments
                     .iter()
@@ -255,25 +270,43 @@ impl World {
                     .unwrap_or(script.segments.len());
                 *at = (*at).min(first_own);
             }
-            inserts.extend(triggered);
-            inserts.sort_by_key(|(_, at)| *at);
+            inserts.extend(
+                triggered
+                    .into_iter()
+                    .map(|(segment, at)| (segment, at, false)),
+            );
+            inserts.sort_by_key(|(_, at, _)| *at);
             let mut inserts = inserts.into_iter().peekable();
             for (at, segment) in script.segments.iter().enumerate() {
-                while let Some((late_segment, _)) = inserts.next_if(|(_, late_at)| *late_at <= at) {
-                    segments.push(late_segment);
+                while let Some((late_segment, _, timeout)) =
+                    inserts.next_if(|(_, late_at, _)| *late_at <= at)
+                {
+                    segments.push((late_segment, timeout));
                 }
-                segments.push(segment.clone());
+                segments.push((segment.clone(), Some(at) == retransmitted_at));
             }
-            segments.extend(inserts.map(|(segment, _)| segment));
-            for segment in tail {
-                next_late_position(&mut late, segment);
+            segments.extend(inserts.map(|(segment, _, timeout)| (segment, timeout)));
+            for (segment, timeout) in tail {
+                next_late_position(&mut late, segment, timeout);
             }
             connections.push(script);
         }
-        segments.extend(late.into_iter().map(|(segment, _)| segment));
+        segments.extend(
+            late.into_iter()
+                .map(|(segment, _, timeout)| (segment, timeout)),
+        );
+        let mut time = 0;
+        let times = segments
+            .iter()
+            .map(|(_, timeout)| {
+                time += if *timeout { TIMEOUT } else { 1 };
+                time
+            })
+            .collect();
         World {
             connections,
-            segments,
+            segments: segments.into_iter().map(|(segment, _)| segment).collect(),
+            times,
         }
     }
 }
@@ -354,11 +387,13 @@ pub(crate) struct Capture {
     /// lost (a reconnect without any half of its handshake continues the
     /// old connection behind a resync, a known limit of C2 and R2).
     pub lost: Vec<bool>,
-    /// How many positions each segment of the responder arrives later than
-    /// in the world (cycled): a capture merged from two taps. The segments
-    /// of one direction keep their order (one tap sees one path; reordering
-    /// within a direction is the reference model's domain).
-    pub skew: Vec<usize>,
+    /// How much later than it was sent each segment of the initiator and of
+    /// the responder arrives, in units of one segment (indexed by role, each
+    /// cycled): a capture merged from two taps, one of which lags. The
+    /// segments of one direction keep their order (one tap sees one path;
+    /// reordering within a direction is the reference model's domain), and
+    /// no delay reaches past a [`TIMEOUT`].
+    pub skew: [Vec<usize>; 2],
     /// Whether each segment is captured twice (cycled).
     pub duplicated: Vec<bool>,
     /// Only the segments of this role are captured.
@@ -369,7 +404,8 @@ pub(crate) struct Capture {
 
 impl Capture {
     /// The captured segments of `world`.
-    pub fn apply(&self, world: &[TestSegment]) -> Vec<TestSegment> {
+    pub fn apply(&self, world: &World) -> Vec<TestSegment> {
+        let (times, world) = (&world.times, &world.segments);
         let cycled = |values: &[bool], i: usize| values.get(i % values.len().max(1)).copied();
         // a segment the capture doesn't show: lost, or of the direction
         // the capture doesn't see
@@ -379,9 +415,9 @@ impl Capture {
                     .one_direction
                     .is_some_and(|role| role != segment.sender)
         };
-        let mut kept: Vec<(usize, TestSegment)> = Vec::new();
-        // the position the last responder segment arrived at
-        let mut last_responder_at = 0;
+        let mut kept: Vec<(u64, TestSegment)> = Vec::new();
+        // when the last segment of each role arrived
+        let mut last_at = [0u64; 2];
         for (i, segment) in world.iter().enumerate() {
             let other_half_lost = segment.header.syn
                 && world.iter().enumerate().any(|(j, other)| {
@@ -394,16 +430,11 @@ impl Capture {
             if lost(i, segment) && false == other_half_lost {
                 continue;
             }
-            let skew = if Responder == segment.sender && false == self.skew.is_empty() {
-                self.skew[i % self.skew.len()]
-            } else {
-                0
-            };
-            let mut at = i + skew;
-            if Responder == segment.sender {
-                at = at.max(last_responder_at);
-                last_responder_at = at;
-            }
+            let role = role_index(segment.sender);
+            let skew = &self.skew[role];
+            let delay = skew.get(i % skew.len().max(1)).copied().unwrap_or(0) as u64;
+            let at = (times[i] + delay.min(TIMEOUT - 1)).max(last_at[role]);
+            last_at[role] = at;
             kept.push((at, segment.clone()));
             if cycled(&self.duplicated, i).unwrap_or(false) {
                 kept.push((at, segment.clone()));
@@ -768,11 +799,12 @@ struct Expectations {
     connections: Vec<ExpectedConnection>,
 }
 
-/// What the capture had shown of a connection at some point: the captured
-/// bytes of each stream, the furthest offsets the other side ACKed and the
-/// FINs.
+/// What the capture had shown of a connection at some point: where each
+/// stream started, the captured bytes of each stream, the furthest offsets
+/// the other side ACKed and the FINs.
 #[derive(Clone, Debug)]
 struct Snapshot {
+    first_offset: [Option<u64>; 2],
     bytes: [std::collections::BTreeMap<u64, u8>; 2],
     acked: [u64; 2],
     fin: [Option<u64>; 2],
@@ -838,6 +870,7 @@ impl Expectations {
                 for earlier in &mut walks[..k] {
                     if earlier.visible && earlier.end.is_none() && earlier.replaced.is_none() {
                         earlier.replaced = Some(Snapshot {
+                            first_offset: earlier.first_offset,
                             bytes: earlier.bytes.clone(),
                             acked: earlier.acked,
                             fin: earlier.fin,
@@ -906,8 +939,8 @@ impl Expectations {
                 // missing between the stream's start and the end the pool
                 // knows (the furthest byte, or what the other side ACKed,
                 // which is no byte beyond a captured FIN)
-                let first_offset = walk.first_offset;
-                let collect = |bytes: [std::collections::BTreeMap<u64, u8>; 2],
+                let collect = |first_offset: [Option<u64>; 2],
+                               bytes: [std::collections::BTreeMap<u64, u8>; 2],
                                acked: [u64; 2],
                                fin: [Option<u64>; 2]| {
                     let mut streams = [Delivered::default(), Delivered::default()];
@@ -945,14 +978,14 @@ impl Expectations {
                 let mut bytes = Vec::new();
                 if let Some(then) = walk.replaced {
                     ends.push(TcpConnectionEnd::Reconnect);
-                    bytes.push(collect(then.bytes, then.acked, then.fin));
+                    bytes.push(collect(then.first_offset, then.bytes, then.acked, then.fin));
                     if let Some(end) = walk.end {
                         ends.push(end);
                     }
                 } else {
                     ends.push(walk.end.unwrap_or(TcpConnectionEnd::Evicted));
                 }
-                bytes.push(collect(walk.bytes, walk.acked, walk.fin));
+                bytes.push(collect(walk.first_offset, walk.bytes, walk.acked, walk.fin));
                 ExpectedConnection {
                     incarnation: walk.incarnation,
                     ends,
@@ -989,70 +1022,89 @@ mod test {
         }
     }
 
-    /// Builds the world and the capture, runs the pool and checks, unless
-    /// the capture hits a known limit of the spec (see [`known_limit`]).
+    /// Builds the world and the capture, runs the pool and checks. Returns
+    /// the known limit of the spec the capture hits instead, if any (see
+    /// [`known_limit`]): the oracle can't judge such a capture.
     fn simulate(
         isns: [u32; 2],
         plans: &[ConnectionPlan],
         late_positions: &[usize],
         capture: &Capture,
         config: TcpReassemblyConfig,
-    ) -> Result<(), String> {
+    ) -> Result<Option<&'static str>, String> {
         let world = World::build(isns, plans, late_positions);
-        let captured = capture.apply(&world.segments);
-        if known_limit(&world, &captured, &config) {
-            return Ok(());
+        let captured = capture.apply(&world);
+        if let Some(limit) = known_limit(&world, &captured, &config) {
+            return Ok(Some(limit));
         }
         let outcome = Oracle::run(&captured, config);
         Oracle::check(&world, &captured, &outcome)?;
-        Oracle::check_bytes(&world, &captured, &outcome)
+        Oracle::check_bytes(&world, &captured, &outcome)?;
+        Ok(None)
     }
 
     /// Every reuse kind after every close kind, with the late segments at
-    /// every position, the close's last ACK lost on the wire or not, bytes
-    /// in flight after a reset, in both capture orders of the TIME-WAIT
-    /// pair and with the new SYN-ACK lost, with and without a wrap of the
-    /// sequence numbers.
+    /// every position and with and without a wrap of the sequence numbers,
+    /// in these variants: a clean capture; the old close's last ACK lost on
+    /// the wire, or bytes in flight after a reset; the responder's or the
+    /// initiator's tap lagging; the new SYN-ACK or SYN lost; and either of
+    /// those with the initiator's tap lagging. No scenario may hit a known
+    /// limit but the one listed (a lagging client tap after a lost SYN-ACK
+    /// when both new streams begin in the old spans, or in the slack past
+    /// them after a close without FINs).
     #[test]
     fn reconnect_matrix() {
         let mut failures = Vec::new();
+        let mut skipped = Vec::new();
         for isns in [[1000, 2000], [u32::MAX - 20, u32::MAX - 5000]] {
             for close in Close::ALL {
                 for reuse in Reuse::ALL {
                     for late_position in [0, 1, 2, 4] {
-                        for variant in 0..4 {
+                        for variant in 0..8 {
                             let mut old = ConnectionPlan::simple(Reuse::Far, close);
                             old.last_ack_lost_on_wire =
                                 matches!(close, Close::By(_)) && 1 == variant;
                             old.in_flight_after_reset =
                                 usize::from(matches!(close, Close::Reset(_)) && 1 == variant);
                             let new = ConnectionPlan::simple(reuse, Close::By(Responder));
-                            let capture = match variant {
-                                2 => Capture {
-                                    // the responder's segments two positions late
-                                    skew: vec![2],
-                                    ..Capture::default()
-                                },
-                                3 => Capture {
-                                    // the new SYN-ACK lost (the 2nd SYN segment)
-                                    lost: lost_syn_ack_of(
-                                        1,
-                                        &World::build(
-                                            isns,
-                                            &[old.clone(), new.clone()],
-                                            &[late_position],
-                                        ),
-                                    ),
-                                    ..Capture::default()
-                                },
-                                _ => Capture::default(),
+                            let plans = [old, new];
+                            let (lost_half, lagging) = match variant {
+                                2 => (None, Some((Responder, 2))),
+                                3 => (None, Some((Initiator, 2))),
+                                4 => (Some(Responder), None),
+                                5 => (Some(Initiator), None),
+                                6 => (Some(Responder), Some((Initiator, 3))),
+                                7 => (Some(Initiator), Some((Initiator, 3))),
+                                _ => (None, None),
                             };
-                            if let Err(failure) =
-                                simulate(isns, &[old, new], &[late_position], &capture, config())
-                            {
-                                failures.push(format!(
-                                    "isns {isns:?}, old close {close:?}, reuse {reuse:?}, late at {late_position}, variant {variant}:\n{failure}"
-                                ));
+                            let mut capture = Capture::default();
+                            if let Some(role) = lost_half {
+                                let world = World::build(isns, &plans, &[late_position]);
+                                capture.lost = lost_half_of(1, role, &world);
+                            }
+                            if let Some((role, delay)) = lagging {
+                                capture.skew[role_index(role)] = vec![delay];
+                            }
+                            let scenario = format!(
+                                "isns {isns:?}, old close {close:?}, reuse {reuse:?}, late at {late_position}, variant {variant}"
+                            );
+                            // both new streams begin in the old spans, or in
+                            // the slack past them (a reuse 1 ms after a close
+                            // without FINs): once the capture lost a half and
+                            // the client's tap lags, the server's first
+                            // segments are the old connection's by their
+                            // numbers
+                            let in_spans = Reuse::InsideSpans == reuse
+                                || (Reuse::ClockAhead(1) == reuse
+                                    && false
+                                        == matches!(close, Close::By(_) | Close::Simultaneous));
+                            let allowed =
+                                (in_spans && 6 == variant).then_some("C1 new taken for old");
+                            match simulate(isns, &plans, &[late_position], &capture, config()) {
+                                Ok(None) => {}
+                                Ok(limit) if limit == allowed => {}
+                                Ok(Some(limit)) => skipped.push(format!("{scenario}: {limit}")),
+                                Err(failure) => failures.push(format!("{scenario}:\n{failure}")),
                             }
                         }
                     }
@@ -1068,49 +1120,74 @@ mod test {
             failures.len(),
             failures[0]
         );
+        assert!(
+            skipped.is_empty(),
+            "{} scenarios hit a known limit:\n{}",
+            skipped.len(),
+            skipped.join("\n")
+        );
     }
 
-    /// Returns true if the capture hits a known limit of the spec that no
-    /// passive observer can resolve:
+    /// Returns the known limit of the spec that the capture hits, if any:
+    /// what no passive observer can resolve, so the oracle can't judge it.
     ///
-    /// - C4: a half of a connection's handshake whose ISN + 1 lies within k
-    ///   windows (of the fallback window, as a pickup knows none) before
-    ///   the first captured byte of the stream of the same role in the
-    ///   connection before (or before the position the other side's ACKs
-    ///   put a stream without bytes at, K1), which the capture picked up
-    ///   without that stream's handshake half and without a FIN before the
-    ///   new half: the pool takes the half for the pickup's own late SYN or
-    ///   SYN-ACK, and the new connection starts at its other half or not at
-    ///   all.
-    /// - C1: late segments of a connection the pool never saw (the capture
-    ///   shows none of its handshake and none of its bytes, e.g. it starts
-    ///   at the connection's close) arrive after the next connection's SYN:
-    ///   the pool has no replaced connection to tell them by, so the ACK of
-    ///   a server that still held the old connection answers the new SYN
-    ///   (S5) and the client's RST to it resets the new connection (F4).
-    /// - C1: the number a stream of the old connection reached is the new
-    ///   ISN + 1 of the same endpoint, so a late segment of the other side
-    ///   that ACKs the old end ACKs the new SYN as well: the numbers can't
-    ///   tell the two apart.
-    /// - C1: the capture lost a connection's SYN and shows bytes of it
-    ///   before its SYN-ACK, while the connection before it is visible: the
-    ///   bytes arrive on that connection's tombstone or in that connection,
-    ///   which can't start a new one from them.
-    /// - C1: both new ISNs lie within the old spans and a half of the new
-    ///   handshake is lost: a segment of the stream that half would have
-    ///   started, whose ACK number lies beyond what the other new stream
-    ///   sent in the capture (bytes it lost), is the old connection's by
-    ///   its numbers.
-    fn known_limit(world: &World, captured: &[TestSegment], config: &TcpReassemblyConfig) -> bool {
+    /// - `C1 unseen connection`: late segments of a connection the pool
+    ///   never saw (the capture shows none of its handshake and none of its
+    ///   bytes, e.g. it starts at the connection's close) arrive after the
+    ///   next connection's first segment: the pool has no replaced
+    ///   connection to tell them by, so the ACK of a server that still held
+    ///   the old connection answers the new SYN (S5) and the client's RST
+    ///   to it resets the new connection (F4).
+    /// - `C1 segments before the handshake`: the capture shows bytes of a
+    ///   connection before either half of its handshake (it lost one half,
+    ///   and the other is late, as a tap lags, or lost too), or another of
+    ///   its segments while the connection before is still open, while the
+    ///   connection before it is visible: the bytes arrive on that
+    ///   connection's tombstone or in that connection, which can't start a
+    ///   new one from them (P3), and the open connection takes the ACK
+    ///   numbers for its own, so it can refuse its own later segments.
+    /// - `C1 new taken for old`: the capture lost a half of the new
+    ///   handshake, both new streams begin within their old spans (or within
+    ///   k windows past the end of one whose FIN the capture lost), and a
+    ///   segment of the lost half's stream ACKs bytes of the other stream
+    ///   the capture doesn't show yet (lost, or late as a tap lags): it is
+    ///   the old connection's by its numbers (see [`inside_spans`]).
+    /// - `C1 old taken for new`: a late segment of the connection before,
+    ///   from a side that sent nothing in the new connection yet, has
+    ///   numbers within what the new connection's streams sent (by
+    ///   position where the new connection knows where the side's stream
+    ///   begins, else by ACK): it is the new connection's own by its
+    ///   numbers (see [`overlapping_numbers`]).
+    /// - `C1 late pickup handshake`: the capture shows a handshake half of a
+    ///   connection after the connection ended or the next one started,
+    ///   while the pool knew it as a pickup without the SYNs that tell the
+    ///   half apart, and the half doesn't lie right at a stream's first byte
+    ///   (see [`late_pickup_handshake`]): it starts a new connection.
+    /// - `C1 coinciding end`: the number a stream of the old connection
+    ///   reached is the new ISN + 1 of the same endpoint, so a late segment
+    ///   of the other side that ACKs the old end ACKs the new SYN as well.
+    /// - `C4 pickup`: the first captured half of a connection's handshake
+    ///   lies where the pool takes it for a late own SYN or SYN-ACK of the
+    ///   connection before: that connection, visible and not reset, is a
+    ///   pickup for the half's role (the capture showed neither the role's
+    ///   SYN nor, for the initiator, the SYN-ACK), and the half's ISN + 1
+    ///   lies within k windows (fallback windows: a pickup knows no window
+    ///   scale) before the stream's first captured byte or FIN while no FIN
+    ///   of the connection was captured, or, for a stream without either, at
+    ///   or before the last ACK of its peer and within k windows of it (K1):
+    ///   the new connection starts at its other half or not at all.
+    fn known_limit(
+        world: &World,
+        captured: &[TestSegment],
+        config: &TcpReassemblyConfig,
+    ) -> Option<&'static str> {
         let range = u64::from(config.fallback_window)
             * u64::from(config.hole_give_up_window_factor.unwrap_or(2).max(1));
+        if late_pickup_handshake(world, captured) {
+            return Some("C1 late pickup handshake");
+        }
         for (k, script) in world.connections.iter().enumerate().skip(1) {
             let previous = &world.connections[k - 1];
-            let of = |incarnation: usize, role: TcpRole| {
-                captured
-                    .iter()
-                    .filter(move |s| s.incarnation as usize == incarnation && s.sender == role)
-            };
             let first_of_k = captured.iter().position(|s| s.incarnation as usize == k);
             // the connection before is visible to the pool if the capture
             // shows a half of its handshake, or bytes of it before the next
@@ -1128,30 +1205,33 @@ mod test {
                     .any(|s| s.incarnation as usize == k - 1 && false == s.header.syn)
             });
             if false == previous_visible && previous_late {
-                return true;
+                return Some("C1 unseen connection");
             }
-            let syn_lost = false == of(k, Initiator).any(|s| s.header.syn && false == s.header.ack);
-            let syn_ack_at = captured
+            let half_at = captured
                 .iter()
-                .position(|s| s.incarnation as usize == k && s.header.syn && s.header.ack);
-            let bytes_before_syn_ack = captured.iter().enumerate().any(|(i, s)| {
+                .position(|s| s.incarnation as usize == k && s.header.syn);
+            // the connection before is open until the capture shows its RST
+            // (one that closed with FINs counts as open, which only widens
+            // the exclusion)
+            let previous_end = captured
+                .iter()
+                .position(|s| s.incarnation as usize == k - 1 && s.header.rst)
+                .unwrap_or(captured.len());
+            let before_handshake = captured.iter().enumerate().any(|(i, s)| {
                 s.incarnation as usize == k
-                    && false == s.payload.is_empty()
-                    && syn_ack_at.is_none_or(|at| i < at)
+                    && half_at.is_none_or(|at| i < at)
+                    && (false == s.payload.is_empty() || (s.header.ack && i < previous_end))
             });
-            if syn_lost && bytes_before_syn_ack && previous_visible {
-                return true;
+            if before_handshake && previous_visible {
+                return Some("C1 segments before the handshake");
             }
-            let inside_spans = [Initiator, Responder].iter().all(|role| {
-                let first = previous.seq(*role, 0);
-                let span = previous.next_offset(*role) + range;
-                u64::from(script.seq(*role, 0).wrapping_sub(first)) <= span
-            });
-            let half_lost = [Initiator, Responder]
-                .iter()
-                .any(|role| false == of(k, *role).any(|s| s.header.syn));
-            if inside_spans && half_lost {
-                return true;
+            for lost in [Initiator, Responder] {
+                if inside_spans(previous, script, captured, k, lost, range) {
+                    return Some("C1 new taken for old");
+                }
+            }
+            if overlapping_numbers(previous, script, captured, k) {
+                return Some("C1 old taken for new");
             }
             for role in [Initiator, Responder] {
                 let old_end = previous.seq(role, previous.next_offset(role));
@@ -1163,47 +1243,265 @@ mod test {
                     })
                 });
                 if old_end == script.seq(role, 0) && late_of_other {
-                    return true;
+                    return Some("C1 coinciding end");
                 }
             }
-            for role in [Initiator, Responder] {
-                let half_captured = of(k, role).any(|s| s.header.syn);
-                let previous_pickup = of(k - 1, role).all(|s| false == s.header.syn);
-                // where the pickup's stream starts: its first captured byte,
-                // or, without bytes, where the other side's ACKs put it (K1)
-                let first_offset = of(k - 1, role)
-                    .filter(|s| false == s.payload.is_empty())
-                    .map(|s| s.offset)
-                    .min()
-                    .or_else(|| of(k - 1, role.other()).filter_map(|s| s.ack).min());
-                // a FIN of the old connection before the half tells the pool
-                // the half is no late SYN of the pickup (C4)
-                let fin_before = first_of_k.is_some_and(|at| {
-                    captured[..at]
-                        .iter()
-                        .any(|s| s.incarnation as usize == k - 1 && s.header.fin)
-                });
-                if let (true, true, Some(first_offset), false) =
-                    (half_captured, previous_pickup, first_offset, fin_before)
-                {
-                    let first_seq = previous.seq(role, first_offset);
-                    let distance = first_seq.wrapping_sub(script.seq(role, 0));
-                    if u64::from(distance) <= range {
-                        return true;
-                    }
+            // the first captured half of the new handshake meets the open
+            // connection before
+            let Some(at) = captured
+                .iter()
+                .position(|s| s.incarnation as usize == k && s.header.syn)
+            else {
+                continue;
+            };
+            let role = captured[at].sender;
+            // what the pool's connection took of the connection before: its
+            // segments from the first one that creates a connection on (a
+            // SYN, or bytes with ACK, A6)
+            let before: Vec<&TestSegment> = captured[..at]
+                .iter()
+                .filter(|s| s.incarnation as usize == k - 1)
+                .skip_while(|s| {
+                    false == (s.header.syn || (false == s.payload.is_empty() && s.header.ack))
+                })
+                .collect();
+            let of_role = |r: TcpRole| before.iter().filter(move |s| s.sender == r);
+            // the role's stream has an observed start if its SYN (or, for
+            // the initiator, the SYN-ACK, A2) came before its first byte or
+            // FIN: after them, the eager reader read the pickup, and A5 can't
+            // take it anymore
+            let started_at = before
+                .iter()
+                .position(|s| s.sender == role && (false == s.payload.is_empty() || s.header.fin))
+                .unwrap_or(before.len());
+            let observed = before[..started_at]
+                .iter()
+                .any(|s| s.header.syn && (s.sender == role || (Initiator == role && s.header.ack)));
+            let reset = before.iter().any(|s| s.header.rst);
+            let fin_seen = before.iter().any(|s| s.header.fin);
+            let half_next = script.seq(role, 0);
+            let start = of_role(role)
+                .find(|s| false == s.payload.is_empty() || s.header.fin)
+                .map(|s| previous.seq(role, s.offset));
+            let own = match start {
+                Some(start) => {
+                    (false == fin_seen || start == half_next)
+                        && u64::from(start.wrapping_sub(half_next)) <= range
+                }
+                // the peer's last ACK is what the pool kept for the stream
+                None => of_role(role.other())
+                    .filter_map(|s| s.ack)
+                    .next_back()
+                    .is_none_or(|ack| {
+                        let kept = previous.seq(role, ack);
+                        u64::try_from(kept.wrapping_sub(half_next) as i32)
+                            .is_ok_and(|distance| distance <= range)
+                    }),
+            };
+            if previous_visible && false == observed && false == reset && own {
+                return Some("C4 pickup");
+            }
+        }
+        None
+    }
+
+    /// Returns true if the capture of the connection `k` (after `previous`)
+    /// lost the handshake half of `lost`, both new streams begin within
+    /// their old spans (or the reach `range` past one whose FIN the capture
+    /// didn't show before `k` started), and a segment of `lost`'s stream
+    /// that the pool checks against the old spans (captured after the kept
+    /// half started the new connection, as the connection before takes the
+    /// ones before it, and before one of its segments is the new
+    /// connection's own by position or ACK) ACKs bytes of the other stream
+    /// the capture doesn't show yet.
+    fn inside_spans(
+        previous: &ConnectionScript,
+        script: &ConnectionScript,
+        captured: &[TestSegment],
+        k: usize,
+        lost: TcpRole,
+        range: u64,
+    ) -> bool {
+        let of_k = |s: &&TestSegment| s.incarnation as usize == k;
+        if captured
+            .iter()
+            .filter(of_k)
+            .any(|s| s.sender == lost && s.header.syn)
+        {
+            return false;
+        }
+        let kept = lost.other();
+        // an old span reaches past its end unless the capture showed the
+        // stream's FIN before the new connection started
+        let started_at = captured
+            .iter()
+            .position(|s| s.incarnation as usize == k && s.header.syn)
+            .unwrap_or(captured.len());
+        let reach = |role: TcpRole| {
+            let fin = captured[..started_at]
+                .iter()
+                .any(|s| s.incarnation as usize + 1 == k && s.sender == role && s.header.fin);
+            if fin {
+                0
+            } else {
+                range
+            }
+        };
+        // the kept half's new stream begins before the end of its old span
+        // or the reach past it
+        let kept_end = previous.seq(kept, previous.next_offset(kept) + reach(kept));
+        if 0 < script.seq(kept, 0).wrapping_sub(kept_end) as i32 {
+            return false;
+        }
+        // the lost half's new stream begins within its old span or the
+        // reach past it
+        let lost_len = u64::from(previous.next_offset(lost) as u32);
+        let distance = u64::from(script.seq(lost, 0).wrapping_sub(previous.seq(lost, 0)));
+        if distance > lost_len + reach(lost) {
+            return false;
+        }
+        // the first segments of the lost half's stream once the kept half
+        // started the new connection (the connection before takes the ones
+        // before it), until one is the new connection's own: by position once
+        // the SYN-ACK gave the initiator's stream its start (A2), within what
+        // the kept stream's ACKs showed it sent, else by ACK (of bytes of the
+        // kept stream captured before it)
+        let (mut kept_sent, mut lost_sent) = (0, 0);
+        let (mut started, mut begin_known) = (false, false);
+        for s in captured.iter().filter(of_k) {
+            started |= s.header.syn;
+            if s.sender == kept {
+                let end = s.offset + s.payload.len() as u64 + u64::from(s.header.fin);
+                kept_sent = kept_sent.max(end);
+                lost_sent = lost_sent.max(s.ack.unwrap_or(0));
+                begin_known |= Initiator == lost && s.header.syn;
+            } else if started {
+                let own = if begin_known {
+                    s.offset <= lost_sent
+                } else {
+                    s.ack.is_some_and(|ack| ack <= kept_sent)
+                };
+                return false == own;
+            }
+        }
+        false
+    }
+
+    /// Returns true if a late segment of the connection before `k` (whose
+    /// script is `previous`), from a side that sent nothing in `k` yet, has
+    /// numbers within what the streams of `k` sent (the precedence of C1):
+    /// by position where `k` knows where the side's stream begins (its SYN,
+    /// or the SYN-ACK's ACK number for the initiator, A2), within what that
+    /// stream is known to have sent; else by ACK, within what the other
+    /// stream sent in `k`.
+    fn overlapping_numbers(
+        previous: &ConnectionScript,
+        script: &ConnectionScript,
+        captured: &[TestSegment],
+        k: usize,
+    ) -> bool {
+        let Some(first_of_k) = captured.iter().position(|s| s.incarnation as usize == k) else {
+            return false;
+        };
+        let mut sent = [false; 2];
+        let mut begin_known = [false; 2];
+        // what each stream of `k` is known to have sent: its bytes, or what
+        // the other side ACKed of it, as offsets in `k`
+        let mut sent_end = [0u64; 2];
+        let mut known_end = [0u64; 2];
+        for s in &captured[first_of_k..] {
+            let (own, other) = (role_index(s.sender), role_index(s.sender.other()));
+            if s.incarnation as usize == k {
+                sent[own] = true;
+                if s.header.syn {
+                    begin_known[own] = true;
+                    begin_known[other] |= s.header.ack;
+                }
+                let end = s.offset + s.payload.len() as u64 + u64::from(s.header.fin);
+                sent_end[own] = sent_end[own].max(end);
+                known_end[own] = known_end[own].max(end);
+                known_end[other] = known_end[other].max(s.ack.unwrap_or(0));
+            } else if s.incarnation as usize + 1 == k && false == sent[own] && false == s.header.syn
+            {
+                let within = |role: TcpRole, offset: u64, end: u64| {
+                    let seq = previous.seq(role, offset);
+                    u64::from(seq.wrapping_sub(script.seq(role, 0))) <= end
+                };
+                let as_new = if begin_known[own] {
+                    within(s.sender, s.offset, known_end[own])
+                } else {
+                    (sent[other] || begin_known[other])
+                        && s.ack
+                            .is_some_and(|ack| within(s.sender.other(), ack, sent_end[other]))
+                };
+                if as_new {
+                    return true;
                 }
             }
         }
         false
     }
 
-    /// A `lost` vector that loses the SYN-ACK of connection `incarnation`.
-    fn lost_syn_ack_of(incarnation: u32, world: &World) -> Vec<bool> {
+    /// Returns true if the capture shows a handshake half of a connection
+    /// after the connection's RST or the next connection's first handshake
+    /// half, while the pool knew none of the SYNs that tell the half apart
+    /// (the half's own, or, for a SYN-ACK, the SYN, captured before the
+    /// stream's first byte or FIN), and the half doesn't lie right at the
+    /// first captured byte of its stream or, for a SYN-ACK, of the stream it
+    /// ACKs.
+    fn late_pickup_handshake(world: &World, captured: &[TestSegment]) -> bool {
+        (0..world.connections.len()).any(|j| {
+            let of_j = |s: &TestSegment| s.incarnation as usize == j;
+            let end_at = captured
+                .iter()
+                .position(|s| {
+                    (of_j(s) && s.header.rst) || (s.incarnation as usize == j + 1 && s.header.syn)
+                })
+                .unwrap_or(captured.len());
+            let before = &captured[..end_at];
+            let observed = |role: TcpRole| {
+                let started_at = before
+                    .iter()
+                    .position(|s| {
+                        of_j(s)
+                            && s.sender == role
+                            && (false == s.payload.is_empty() || s.header.fin)
+                    })
+                    .unwrap_or(before.len());
+                before[..started_at].iter().any(|s| {
+                    of_j(s)
+                        && s.header.syn
+                        && (s.sender == role || (Initiator == role && s.header.ack))
+                })
+            };
+            let first_byte = |role: TcpRole| {
+                before
+                    .iter()
+                    .find(|s| of_j(s) && s.sender == role && false == s.payload.is_empty())
+                    .map(|s| s.offset)
+            };
+            captured[end_at..].iter().any(|s| {
+                let acks = s.header.ack;
+                of_j(s)
+                    && s.header.syn
+                    && false == s.header.rst
+                    && false == observed(s.sender)
+                    && false == (acks && observed(s.sender.other()))
+                    && Some(0) != first_byte(s.sender)
+                    && false == (acks && Some(0) == first_byte(s.sender.other()))
+            })
+        })
+    }
+
+    /// A `lost` vector that loses the handshake half of `role` in the
+    /// connection `incarnation`: its SYNs (with retransmissions) or its
+    /// SYN-ACK.
+    fn lost_half_of(incarnation: u32, role: TcpRole, world: &World) -> Vec<bool> {
         world
             .segments
             .iter()
             .map(|segment| {
-                segment.incarnation == incarnation && segment.header.syn && segment.header.ack
+                segment.incarnation == incarnation && segment.header.syn && segment.sender == role
             })
             .collect()
     }
@@ -1251,10 +1549,18 @@ mod test {
         }
     }
 
+    /// How much one tap lags: not at all, or up to 7 segments, varying.
+    fn skew_any() -> impl Strategy<Value = Vec<usize>> {
+        prop_oneof![Just(vec![0]), prop::collection::vec(0usize..8, 1..16)]
+    }
+
     prop_compose! {
         fn capture_any()(
-            lost in prop::collection::vec(prop::bool::weighted(0.05), 1..64),
-            skew in prop::collection::vec(0usize..4, 1..16),
+            lost in prop_oneof![
+                prop::collection::vec(prop::bool::weighted(0.03), 1..64),
+                prop::collection::vec(prop::bool::weighted(0.15), 1..64),
+            ],
+            skew in [skew_any(), skew_any()],
             duplicated in prop::collection::vec(prop::bool::weighted(0.05), 1..64),
             one_direction in prop_oneof![8 => Just(None), 1 => Just(Some(Initiator)), 1 => Just(Some(Responder))],
             start in prop_oneof![4 => Just(0usize), 1 => 1usize..6],
@@ -1263,16 +1569,52 @@ mod test {
         }
     }
 
+    /// A history of two or three connections on one four-tuple: the first
+    /// connection's ISNs, the plans, the positions of late segments among
+    /// the next connection's, and the capture.
+    fn history_any() -> impl Strategy<Value = ([u32; 2], Vec<ConnectionPlan>, Vec<usize>, Capture)>
+    {
+        (
+            [tcp_isn_any(), tcp_isn_any()],
+            prop::collection::vec(plan_any(), 2..4),
+            prop::collection::vec(0usize..6, 1..4),
+            capture_any(),
+        )
+    }
+
+    /// The known limits are rare coincidences: few histories of a
+    /// deterministic sample hit one, so the oracle judges almost all.
+    #[test]
+    fn known_limits_are_rare() {
+        use proptest::strategy::ValueTree;
+        let mut runner = proptest::test_runner::TestRunner::deterministic();
+        let strategy = history_any();
+        let cases = 2000;
+        let mut hits = std::collections::BTreeMap::new();
+        for _ in 0..cases {
+            let (isns, plans, late_positions, capture) =
+                strategy.new_tree(&mut runner).unwrap().current();
+            let world = World::build(isns, &plans, &late_positions);
+            let captured = capture.apply(&world);
+            if let Some(limit) = known_limit(&world, &captured, &config()) {
+                *hits.entry(limit).or_insert(0usize) += 1;
+            }
+        }
+        let total: usize = hits.values().sum();
+        std::eprintln!("known limits in {cases} histories: {hits:?}");
+        assert!(
+            total * 100 <= cases * 5,
+            "{total} of {cases} histories hit a known limit: {hits:?}"
+        );
+    }
+
     proptest! {
         /// Histories of two or three connections on one four-tuple with
-        /// every reuse and close kind, captured with loss, skew,
-        /// duplicates, a late start or one direction only.
+        /// every reuse and close kind, captured with loss, either tap
+        /// lagging, duplicates, a late start or one direction only.
         #[test]
         fn reconnect_histories(
-            isns in [tcp_isn_any(), tcp_isn_any()],
-            plans in prop::collection::vec(plan_any(), 2..4),
-            late_positions in prop::collection::vec(0usize..6, 1..4),
-            capture in capture_any(),
+            (isns, plans, late_positions, capture) in history_any(),
         ) {
             if let Err(failure) = simulate(isns, &plans, &late_positions, &capture, config()) {
                 let summary: Vec<_> = plans
