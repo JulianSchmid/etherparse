@@ -173,11 +173,11 @@ struct ModelStream {
     /// Data segments after the window since the stream moved forward or
     /// received other bytes. The last one is the candidate of a resync.
     candidates: Vec<ModelCandidate>,
-    /// True offset of the latest ACK more than one window after the bytes
+    /// True offset of the latest ACK more than k windows after the bytes
     /// known to be sent, while the stream didn't move forward.
     resync_ack: Option<u64>,
-    /// True offset of the highest ACK more than one window after the bytes
-    /// known to be sent, which counts once they reach within one window of
+    /// True offset of the highest ACK more than k windows after the bytes
+    /// known to be sent, which counts once they reach within k windows of
     /// it (K1), and whether the stream moved forward since: then the window
     /// the receiver accepts reaches past it (S4).
     leading_ack: Option<(u64, bool)>,
@@ -222,7 +222,7 @@ impl ModelStream {
     ///   ACK moved the stream forward towards, if the buffer can hold it) is
     ///   counted and not stored (k is the hole give up window factor, 2
     ///   without one). If its bytes lie within
-    ///   one window of the last ACK more than one window after the bytes
+    ///   one window of the last ACK more than k windows after the bytes
     ///   sent, or if it is the n-th consecutive such segment that lies within
     ///   one window of the one before (with `resync_after_segments = n`),
     ///   the stream resyncs at them, and that ACK counts after them (and
@@ -939,7 +939,7 @@ impl ModelStream {
 
     /// Applies the ACK of the other side at the true offset `ack` in the
     /// packet with the number `packet`, whose receive window before it was
-    /// `window`: ACKs more than one window after the highest offset (plus
+    /// `window`: ACKs more than k windows after the highest offset (plus
     /// the FIN) resync the stream after the candidate if they lie within one
     /// window of it, and are kept for a resync otherwise. Other ACKs mark
     /// the bytes up to them as sent (but none after the FIN). ACKs of the
@@ -965,7 +965,8 @@ impl ModelStream {
         }
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
         // the sender can have sent into a larger window before it shrank
-        if offset > (sent_end + window.max(self.largest_window.unwrap_or(0))) as i64 {
+        let factor = u64::from(config.hole_give_up_window_factor.unwrap_or(2).max(1));
+        if offset > (sent_end + factor * window.max(self.largest_window.unwrap_or(0))) as i64 {
             match self.candidates.last().cloned() {
                 Some(candidate)
                     if self.fin_offset.is_none()
@@ -1075,7 +1076,8 @@ impl ModelStream {
     ) {
         let window = window.unwrap_or(u64::from(config.fallback_window));
         let sent_end = self.highest + u64::from(self.fin_offset.is_some());
-        let reach = sent_end + window.max(self.largest_window.unwrap_or(0));
+        let factor = u64::from(config.hole_give_up_window_factor.unwrap_or(2).max(1));
+        let reach = sent_end + factor * window.max(self.largest_window.unwrap_or(0));
         let Some((ack, _)) = self.leading_ack else {
             return;
         };

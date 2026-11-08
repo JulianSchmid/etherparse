@@ -114,14 +114,14 @@ pub struct TcpStream {
     /// stream moved forward).
     resync_candidate: Option<ResyncCandidate>,
 
-    /// Last ACK number of the receiver that lay more than one window after
+    /// Last ACK number of the receiver that lay more than k windows after
     /// the bytes the sender is known to have sent, which can confirm a jump
     /// (`None` once the stream moved forward).
     resync_ack: Option<u32>,
 
-    /// Highest ACK of the receiver that lay more than one window after the
+    /// Highest ACK of the receiver that lay more than k windows after the
     /// bytes the sender is known to have sent, which counts once they reach
-    /// within one window of it: a capture merged from two taps can show an
+    /// within k windows of it: a capture merged from two taps can show an
     /// ACK long before the bytes it ACKs (K1). Once the stream moved forward
     /// since, it didn't jump there (R2), and the window the receiver
     /// accepts reaches past the ACK (S4).
@@ -361,8 +361,10 @@ impl TcpStream {
 
     /// Offset up to which the receiver ACKed the stream's bytes.
     ///
-    /// ACKs of bytes more than one receive window after the highest offset
-    /// are ignored, as the sender can't have sent these bytes. Without a
+    /// ACKs of bytes more than
+    /// [`TcpReassemblyConfig::hole_give_up_window_factor`] receive windows
+    /// after the highest offset are ignored, as the sender can't have sent
+    /// these bytes. Without a
     /// higher ACK, it is the implied ACK: the sender sends at most one
     /// window after the ACK, so the receiver must have ACKed the bytes up
     /// to [`TcpReassemblyConfig::hole_give_up_window_factor`] times its
@@ -829,9 +831,9 @@ impl TcpStream {
     ///   RST check (F4);
     /// - the largest window, what the sender can have sent into: k windows
     ///   for which segments and their windows count (S3) and for
-    ///   out-of-window data (S4), one window for the ACK check (K1), and k
-    ///   windows, at most half of the stream's buffer but at least one
-    ///   window, for the implied ACK (K2).
+    ///   out-of-window data (S4) and for the ACK check (K1), and k windows,
+    ///   at most half of the stream's buffer but at least one window, for
+    ///   the implied ACK (K2).
     fn sent_into(&self, window: u64) -> u64 {
         window.max(self.largest_window.unwrap_or(0))
     }
@@ -1431,8 +1433,8 @@ impl TcpStream {
         }
     }
 
-    /// Applies the leading ACK once the sender's bytes reach within one
-    /// window of it, as an ACK of the packet with the number `packet`, where
+    /// Applies the leading ACK once the sender's bytes reach within k
+    /// windows of it, as an ACK of the packet with the number `packet`, where
     /// `window` is the receiver's receive window (`None` while it is
     /// unknown).
     fn apply_leading_ack(
@@ -1444,7 +1446,8 @@ impl TcpStream {
         let window = window.unwrap_or(u64::from(config.fallback_window));
         let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
         let reach =
-            i64::try_from(sent_end.saturating_add(self.sent_into(window))).unwrap_or(i64::MAX);
+            i64::try_from(sent_end.saturating_add(window_range(self.sent_into(window), config)))
+                .unwrap_or(i64::MAX);
         let Some(leading) = self.leading_ack else {
             return;
         };
@@ -1565,9 +1568,14 @@ impl TcpStream {
             return;
         }
         // the sender can't have sent more than one window after the bytes
-        // it is known to have sent (and its FIN), unless the stream jumped
+        // it is known to have sent (and its FIN), unless the stream jumped,
+        // but the capture can have lost the ACKs and the bytes in between:
+        // with one window, the next ACK after a lost one was evidence of a
+        // jump, which the bytes after a burst of capture loss confirmed
         let sent_end = self.highest_offset() + u64::from(self.fin_offset.is_some());
-        if 0 < ack && ack as u64 > sent_end.saturating_add(self.sent_into(window)) {
+        if 0 < ack
+            && ack as u64 > sent_end.saturating_add(window_range(self.sent_into(window), config))
+        {
             self.add_resync_ack(ack_seq, window, packet, config);
             return;
         }
@@ -1629,9 +1637,9 @@ impl TcpStream {
     }
 
     /// Applies the ACK number `ack_seq` of the receiver that lies more than
-    /// the receiver's receive window `window` after the bytes the sender is
-    /// known to have sent (or can't be mapped), in the packet with the
-    /// number `packet` of the connection.
+    /// k times the receiver's receive window `window` after the bytes the
+    /// sender is known to have sent (or can't be mapped), in the packet
+    /// with the number `packet` of the connection.
     ///
     /// If it lies within one window of the latest data after the window,
     /// the stream jumped there and continues after these bytes. Otherwise
@@ -1769,7 +1777,7 @@ struct Placed {
     jump_ack: Option<u32>,
 }
 
-/// ACK of the receiver more than one window after the bytes the sender is
+/// ACK of the receiver more than k windows after the bytes the sender is
 /// known to have sent (see [`TcpStream::add_ack`], K1).
 #[derive(Copy, Clone, Debug)]
 struct LeadingAck {
@@ -5089,11 +5097,11 @@ mod test {
             }
         }
 
-        // ACKs count up to one window after the highest offset, using the
+        // ACKs count up to k windows after the highest offset, using the
         // largest window the receiver advertised before the ACK: the sender
         // can have sent into it before the window shrank (e.g. to 0); one
-        // further ahead counts once the bytes reach within one window of it
-        // (here the ACK of 103 makes the ACK of 104 count), as a capture
+        // further ahead counts once the bytes reach within k windows of it
+        // (here the ACK of 203 makes the ACK of 204 count), as a capture
         // merged from two taps can show an ACK long before the bytes it ACKs
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
@@ -5102,15 +5110,15 @@ mod test {
             script
                 .handshake()
                 .send(Initiator, b"abc")
-                .ack_to(Responder, 104)
-                .ack_to(Responder, 103);
+                .ack_to(Responder, 204)
+                .ack_to(Responder, 203);
             script.window_size = 0;
             script
-                .ack_to(Responder, 203)
-                .ack_to(Responder, 204)
-                .ack_to(Responder, 305);
+                .ack_to(Responder, 403)
+                .ack_to(Responder, 404)
+                .ack_to(Responder, 605);
             script.feed(&mut pool, ..4);
-            for (segment, expected) in script.segments[4..].iter().zip([0, 104, 203, 204, 204]) {
+            for (segment, expected) in script.segments[4..].iter().zip([0, 204, 403, 404, 404]) {
                 let (connection, _) = segment.feed(&mut pool, ()).active.unwrap();
                 assert_eq!(expected, connection.stream(Initiator).acked_offset());
             }
@@ -5187,9 +5195,9 @@ mod test {
             assert_eq!(expected, connection.stream(Initiator).acked_offset());
         }
 
-        // after the FIN, ACKs count up to one window after the FIN (the ACK
+        // after the FIN, ACKs count up to k windows after the FIN (the ACK
         // of the FIN even with a window of 0)
-        for (window, ack, expected) in [(0, 4, 3), (100, 104, 3), (100, 105, 0)] {
+        for (window, ack, expected) in [(0, 4, 3), (100, 204, 3), (100, 205, 0)] {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
             script.window_size = window;
@@ -5391,8 +5399,8 @@ mod test {
                 .handshake()
                 .send(Initiator, b"abc")
                 .ack_to(Responder, 50)
-                // more than one window after it
-                .ack_to(Responder, 151)
+                // more than k windows after it
+                .ack_to(Responder, 251)
                 .fin_at(Initiator, 20, &[]);
             script.feed(&mut pool, ..3);
             for (segment, expected) in script.segments[3..].iter().zip([3, 50, 50, 20]) {

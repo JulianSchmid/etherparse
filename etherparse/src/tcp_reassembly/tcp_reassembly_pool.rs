@@ -2167,6 +2167,65 @@ mod test {
             assert!(captured == got);
         }
 
+        // a capture that lost a burst of more than k windows and an ACK in
+        // it shows the next ACK two windows after the last one: it counts
+        // (K1), so the burst is one gap of its length (regression test:
+        // with one window, the ACK was evidence of a jump, which the bytes
+        // after the burst confirmed, and the gap's length was unknown)
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script.window_size = 4096;
+            script.handshake().send(Initiator, b"request");
+            let mut lost = vec![false; 4];
+            for i in 0..30u32 {
+                script.send(Responder, &[i as u8; 1460]);
+                lost.push((10..18).contains(&i));
+                if 1 == i % 2 {
+                    script.ack(Initiator);
+                    // the ACK of the first 12 segments
+                    lost.push(11 == i);
+                }
+            }
+            script
+                .fin(Responder)
+                .ack(Initiator)
+                .fin(Initiator)
+                .ack(Responder);
+            lost.resize(script.segments.len(), false);
+            let (mut got, mut gaps) = (0, Vec::new());
+            let mut ended = None;
+            for (segment, _) in script.segments.iter().zip(lost).filter(|(_, lost)| !lost) {
+                let processed = segment.feed(&mut pool, 1);
+                let mut connection = processed.ended;
+                let stream = match (connection.as_mut(), processed.active) {
+                    (Some(ended), _) => ended.stream_mut(Responder),
+                    (None, Some((active, _))) => active.stream_mut(Responder),
+                    _ => continue,
+                };
+                loop {
+                    match stream.read_received() {
+                        TcpRead::Data(data) => {
+                            let len = data.len();
+                            got += len;
+                            stream.consume(len);
+                        }
+                        TcpRead::Gap { len } => {
+                            gaps.push(len);
+                            stream.consume_gap();
+                        }
+                        _ => break,
+                    }
+                }
+                if connection.is_some() {
+                    ended = connection;
+                }
+            }
+            assert_eq!(Some(TcpConnectionEnd::Finished), ended.unwrap().end());
+            assert_eq!(vec![Some(8 * 1460)], gaps);
+            assert_eq!(22 * 1460, got);
+        }
+
         // a capture that lost the SYN-ACK, with the client's tap lagging,
         // shows the server's RST before the client's ACK and request: the
         // RST ACKs the request, so the client got past SYN-SENT, and the RST

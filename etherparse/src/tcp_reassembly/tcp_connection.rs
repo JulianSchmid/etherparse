@@ -3109,7 +3109,7 @@ mod test {
             assert_eq!(None, connection.end());
         }
 
-        // an ACK more than one window after the FIN doesn't ACK it
+        // an ACK more than k windows after the FIN doesn't ACK it
         {
             let mut pool = TcpReassemblyPool::<(), ()>::default();
             let mut script = ConnectionScript::with_isns(1000, 2000);
@@ -3120,12 +3120,12 @@ mod test {
                 .fin(Initiator)
                 .fin(Responder)
                 .ack(Initiator);
-            script.segments[5].header.acknowledgment_number = script.seq(Initiator, 105);
+            script.segments[5].header.acknowledgment_number = script.seq(Initiator, 205);
             {
                 let (connection, _) = script.feed_all(&mut pool).active.unwrap();
                 assert_eq!(None, connection.end());
             }
-            script.ack_to(Responder, 104);
+            script.ack_to(Responder, 204);
             let connection = script.feed(&mut pool, 7..).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
         }
