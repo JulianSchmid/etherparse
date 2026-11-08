@@ -84,7 +84,9 @@ pub struct TcpReassemblyConfig {
     /// Size it above the number of packets (of both directions) that a
     /// connection can show within the skew between the directions: 256
     /// packets are a few milliseconds of one connection at 1 Gbit/s. A hole
-    /// from real capture loss stalls a reader for this many packets. An
+    /// from real capture loss stalls a reader for this many packets. The
+    /// segments of a reconnect captured between the halves of its handshake
+    /// are kept for as many packets before they go to the old connection. An
     /// overdue hole is given up once the read position reaches it, and late
     /// segments fill it until then. While a stream has holes, or is a
     /// mid-stream pickup that was not read from yet, it keeps the ACKs of

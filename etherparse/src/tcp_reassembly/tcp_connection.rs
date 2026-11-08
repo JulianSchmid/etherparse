@@ -26,8 +26,20 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// with it. `None` without one. A tombstone keeps the one its
     /// connection kept.
     reconnect_syn: Option<ReconnectSyn<Timestamp>>,
+    /// Whether the initiator and the responder sent a packet of the
+    /// connection: segments are kept with a SYN or SYN-ACK only if the other
+    /// half of its handshake can come, i.e. the capture has that endpoint.
+    heard: [bool; 2],
     /// Bytes the streams buffered when the pool last accounted for them.
     accounted: usize,
+}
+
+/// Index of `role` in per-role arrays.
+fn role_index(role: TcpRole) -> usize {
+    match role {
+        TcpRole::Initiator => 0,
+        TcpRole::Responder => 1,
+    }
 }
 
 impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
@@ -57,6 +69,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             end: None,
             packets: 0,
             reconnect_syn: None,
+            heard: [false; 2],
             accounted: 0,
         }
     }
@@ -156,9 +169,19 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     where
         Timestamp: Clone,
     {
-        self.last_seen = timestamp;
+        self.last_seen = timestamp.clone();
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
+        self.heard[role_index(sender)] = true;
+        // the other half of the handshake of a kept SYN or SYN-ACK didn't
+        // come within the reorder tolerance: the segments kept with it belong
+        // to this connection after all (C2)
+        if self.reconnect_syn.as_ref().is_some_and(|kept| {
+            kept.has_retained()
+                && self.packets > kept.kept_at + u64::from(config.ack_reorder_tolerance)
+        }) {
+            self.flush_retained(timestamp.clone(), config, available, free);
+        }
         let verdict = self.verdict(sender, tcp, config);
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
@@ -183,19 +206,42 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             }
             Verdict::Reset => self.add_reset(sender, tcp, config),
             Verdict::Continuation => {
-                let kept = self
+                let payload = tcp.payload().len();
+                let fits = self
                     .reconnect_syn
-                    .as_mut()
-                    .is_some_and(|kept| kept.retain(tcp));
-                if false == kept {
+                    .as_ref()
+                    .is_some_and(|kept| kept.fits(tcp));
+                if false == fits {
                     self.stream_mut(sender).count_out_of_window();
+                } else if payload > *available {
+                    self.stream_mut(sender).count_rejected(payload);
+                } else {
+                    *available -= payload;
+                    if let Some(kept) = self.reconnect_syn.as_mut() {
+                        kept.retain(tcp);
+                    }
                 }
             }
             Verdict::KeepSyn {
                 maybe_blind,
                 maybe_own,
             } => {
-                self.keep_reconnect_syn(source, tcp, maybe_blind, maybe_own, free);
+                let replaces = self
+                    .reconnect_syn
+                    .as_ref()
+                    .filter(|kept| false == kept.is_retransmitted_by(source, tcp));
+                // a late SYN that its mid-stream pickup can't take doesn't
+                // replace a kept SYN that may be a reconnect's (C4)
+                if maybe_own
+                    && replaces.is_some_and(|kept| false == (kept.maybe_own || kept.maybe_blind))
+                {
+                    self.stream_mut(sender).count_out_of_window();
+                } else {
+                    if replaces.is_some() {
+                        self.count_retained_as_out_of_window();
+                    }
+                    self.keep_reconnect_syn(source, tcp, maybe_blind, maybe_own, free);
+                }
             }
             Verdict::ForeignSynAck { maybe_own } => {
                 // the SYN it answers may follow in a capture merged from two
@@ -205,6 +251,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                     .as_ref()
                     .is_none_or(|kept| kept.ack.is_some())
                 {
+                    if self
+                        .reconnect_syn
+                        .as_ref()
+                        .is_some_and(|kept| false == kept.is_retransmitted_by(source, tcp))
+                    {
+                        self.count_retained_as_out_of_window();
+                    }
                     self.keep_reconnect_syn(source, tcp, false, maybe_own, free);
                 }
                 self.stream_mut(sender.other())
@@ -276,6 +329,10 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// end once nothing more is readable.
     pub(crate) fn end_with(&mut self, end: TcpConnectionEnd) {
         self.end = Some(end);
+        // the segments kept with an unconfirmed SYN or SYN-ACK are lost to
+        // this connection (the tombstone still replays them if the
+        // reconnect is confirmed late)
+        self.count_retained_as_out_of_window();
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
@@ -295,11 +352,15 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
     ) -> Verdict {
-        // the first bytes of a reconnect, captured between the halves of
+        // the first segments of a reconnect, captured between the halves of
         // its handshake, continue the kept SYN or SYN-ACK: they are kept
-        // with it and touch no stream of this connection (C2)
+        // with it and touch no stream of this connection, as long as the
+        // other half of the handshake can still come: within the reorder
+        // tolerance, and only if the capture has the other endpoint (C2)
         if self.reconnect_syn.as_ref().is_some_and(|kept| {
             false == (kept.maybe_blind || kept.maybe_own)
+                && self.heard[role_index(self.role(kept.source).other())]
+                && self.packets <= kept.kept_at + u64::from(config.ack_reorder_tolerance)
                 && kept.continues(self.endpoint(sender), tcp)
         }) {
             return Verdict::Continuation;
@@ -638,7 +699,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             conflicting: 0,
             maybe_blind,
             maybe_own,
+            kept_at: self.packets,
             syn_len: segment.len(),
+            retained_payload: 0,
             segment,
         });
     }
@@ -685,6 +748,46 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 let timestamp = syn.timestamp.clone();
                 self.add_segment(syn.source, &retained, timestamp, config, available, free);
             }
+        }
+    }
+
+    /// Counts the segments kept with the SYN or SYN-ACK as out-of-window in
+    /// their sender's stream, as they are lost to this connection (C2).
+    fn count_retained_as_out_of_window(&mut self) {
+        if let Some(kept) = self.reconnect_syn.as_ref() {
+            let (sender, count) = (self.role(kept.source), kept.retained().count());
+            for _ in 0..count {
+                self.stream_mut(sender).count_out_of_window();
+            }
+        }
+    }
+
+    /// Applies the segments kept with the SYN or SYN-ACK to this connection,
+    /// as the other half of the reconnect's handshake didn't come within the
+    /// reorder tolerance (C2).
+    fn flush_retained(
+        &mut self,
+        timestamp: Timestamp,
+        config: &TcpReassemblyConfig,
+        available: &mut usize,
+        free: &mut FreeBuffers,
+    ) where
+        Timestamp: Clone,
+    {
+        let Some(mut kept) = self.reconnect_syn.take() else {
+            return;
+        };
+        let source = kept.source;
+        let retained = kept.take_retained();
+        // the SYN is taken out meanwhile, so that nothing keeps them again
+        for tcp in ReconnectSyn::<Timestamp>::parse_retained(&retained) {
+            self.add_segment(source, &tcp, timestamp.clone(), config, available, free);
+        }
+        free.bytes.put(retained);
+        if self.reconnect_syn.is_none() {
+            self.reconnect_syn = Some(kept);
+        } else {
+            kept.recycle(free);
         }
     }
 
@@ -742,7 +845,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Number of bytes both streams buffer, each from its read position to
     /// its furthest stored byte, with the placeholders of holes.
     pub(crate) fn buffered(&self) -> usize {
-        self.initiator_stream.buffered() + self.responder_stream.buffered()
+        self.initiator_stream.buffered()
+            + self.responder_stream.buffered()
+            + self
+                .reconnect_syn
+                .as_ref()
+                .map_or(0, |kept| kept.retained_payload)
     }
 
     /// Updates `total`, the bytes buffered by the pool's connections, with
@@ -887,6 +995,12 @@ pub(crate) struct ReconnectSyn<Timestamp> {
     segment: Vec<u8>,
     /// Length of the SYN in `segment`.
     syn_len: usize,
+    /// Number of the connection's packet that kept the SYN: segments are
+    /// kept with it for `ack_reorder_tolerance` more packets.
+    kept_at: u64,
+    /// Bytes of payload in the segments kept with the SYN, counted as
+    /// buffered.
+    retained_payload: usize,
 }
 
 /// Range after the kept bytes of a SYN or SYN-ACK in which the segments of
@@ -951,28 +1065,48 @@ impl<Timestamp> ReconnectSyn<Timestamp> {
             && (tcp.sequence_number().wrapping_sub(next) as usize) < RETAINED_RANGE
     }
 
+    /// Returns true if the segment `tcp` fits the initial window of segments
+    /// kept with the SYN or SYN-ACK.
+    fn fits(&self, tcp: &TcpSlice<'_>) -> bool {
+        self.segment.len() - self.syn_len + tcp.slice().len() + 4 <= RETAINED_RANGE
+    }
+
     /// Keeps the segment `tcp`, which continues the kept SYN or SYN-ACK (see
-    /// [`ReconnectSyn::continues`]), with it, to replay it into the
-    /// reconnect. Returns false if it doesn't fit the initial window kept.
-    fn retain(&mut self, tcp: &TcpSlice<'_>) -> bool {
+    /// [`ReconnectSyn::continues`]) and fits (see [`ReconnectSyn::fits`]),
+    /// with it, to replay it into the reconnect.
+    fn retain(&mut self, tcp: &TcpSlice<'_>) {
         let bytes = tcp.slice();
-        if self.segment.len() - self.syn_len + bytes.len() + 4 > RETAINED_RANGE {
-            return false;
-        }
         self.segment
             .extend_from_slice(&(bytes.len() as u32).to_le_bytes());
         self.segment.extend_from_slice(bytes);
-        true
+        self.retained_payload += tcp.payload().len();
+    }
+
+    /// Returns true if segments are kept with the SYN.
+    fn has_retained(&self) -> bool {
+        self.segment.len() > self.syn_len
+    }
+
+    /// Takes the segments kept with the SYN, as they were stored (see
+    /// [`ReconnectSyn::parse_retained`]).
+    fn take_retained(&mut self) -> Vec<u8> {
+        self.retained_payload = 0;
+        self.segment.split_off(self.syn_len)
     }
 
     /// The segments kept with the SYN, in the order they arrived.
     fn retained(&self) -> impl Iterator<Item = TcpSlice<'_>> {
-        let mut rest = &self.segment[self.syn_len..];
+        Self::parse_retained(&self.segment[self.syn_len..])
+    }
+
+    /// The segments stored in `bytes`, each with its length in front.
+    fn parse_retained(bytes: &[u8]) -> impl Iterator<Item = TcpSlice<'_>> {
+        let mut rest = bytes;
         core::iter::from_fn(move || {
             let len = u32::from_le_bytes(rest.get(..4)?.try_into().ok()?) as usize;
-            let bytes = rest.get(4..4 + len)?;
+            let segment = rest.get(4..4 + len)?;
             rest = &rest[4 + len..];
-            TcpSlice::from_slice(bytes).ok()
+            TcpSlice::from_slice(segment).ok()
         })
     }
 
@@ -3541,6 +3675,28 @@ mod test {
             let connection = script.feed_all(&mut pool).ended.unwrap();
             assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
             assert_eq!(1, connection.stream(Initiator).status().resyncs);
+        }
+
+        // a retransmission between the FIN and its ACK (a single-tap capture
+        // shows it there when the segment was lost before the tap) fills the
+        // hole before the connection finishes
+        {
+            let mut pool = TcpReassemblyPool::<(), ()>::default();
+            let mut script = ConnectionScript::with_isns(1000, 2000);
+            script
+                .handshake()
+                .send(Initiator, b"abc")
+                .send(Initiator, b"def")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let lost = script.segments.remove(4);
+            script.segments.insert(5, lost);
+            let mut connection = script.feed_all(&mut pool).ended.unwrap();
+            assert_eq!(Some(TcpConnectionEnd::Finished), connection.end());
+            let stream = connection.stream_mut(Initiator);
+            assert!(stream.is_complete());
+            assert_eq!(TcpRead::Data(b"abcdef"), stream.read_received());
         }
 
         // several holes before an ACKed FIN all become gaps when the

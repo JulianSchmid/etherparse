@@ -628,6 +628,11 @@ impl TcpStream {
         self.status.out_of_window_segments += 1;
     }
 
+    /// Counts `len` bytes of the stream's sender that the limits rejected.
+    pub(crate) fn count_rejected(&mut self, len: usize) {
+        self.status.rejected_bytes += len as u64;
+    }
+
     /// Puts the stream's buffers into `free` for re-use.
     pub(crate) fn recycle(self, free: &mut FreeBuffers) {
         self.buffer.recycle(free);

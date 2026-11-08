@@ -64,6 +64,10 @@ pub(crate) struct ReferenceModel {
     /// Segments of the reconnect kept with the SYN or SYN-ACK, replayed
     /// after it.
     reconnect_retained: Vec<TestSegment>,
+    /// Number of the packet that kept the SYN or SYN-ACK.
+    reconnect_kept_at: u64,
+    /// Whether the initiator and the responder sent a packet.
+    heard: [bool; 2],
 }
 
 /// What a reader does to a stream besides reading and consuming bytes (see
@@ -1266,8 +1270,23 @@ impl ReferenceModel {
         let sender_role = self.sender_role(segment);
         let sender = role_index(sender_role);
         let other = role_index(sender_role.other());
-        // the streams of the connection are the only ones in the pool
-        let buffered: u64 = self.streams.iter().map(ModelStream::buffered).sum();
+        self.heard[sender] = true;
+        // the other half of the handshake of the kept SYN or SYN-ACK didn't
+        // come within the reorder tolerance: the segments kept with it belong
+        // to this connection (C2)
+        if false == self.reconnect_retained.is_empty()
+            && self.packets > self.reconnect_kept_at + u64::from(self.config.ack_reorder_tolerance)
+        {
+            self.flush_retained();
+        }
+        // the streams of the connection are the only ones in the pool; the
+        // segments kept with a SYN count as buffered
+        let buffered: u64 = self.streams.iter().map(ModelStream::buffered).sum::<u64>()
+            + self
+                .reconnect_retained
+                .iter()
+                .map(|kept| kept.payload.len() as u64)
+                .sum::<u64>();
         let mut available = self
             .config
             .max_total_buffered
@@ -1300,10 +1319,7 @@ impl ReferenceModel {
         // the first bytes of a reconnect, captured between the halves of its
         // handshake, continue the kept SYN or SYN-ACK: they are kept with it
         // and touch no stream (C2)
-        let continuation = self.reconnect_syn.as_ref().is_some_and(|syn| {
-            false == (self.reconnect_syn_maybe_blind || self.reconnect_syn_maybe_own)
-                && continues(syn, segment)
-        });
+        let continuation = self.continues_kept(segment, self.packets);
         if false == (dropped || continuation) {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
@@ -1320,16 +1336,19 @@ impl ReferenceModel {
         }
         if continuation {
             // at most an initial window of bytes is kept, headers included
-            // (the pool counts each header with 20 bytes plus the length)
+            // (the pool counts each header with 20 bytes plus the length),
+            // and only within the pool's budget
             let kept: usize = self
                 .reconnect_retained
                 .iter()
                 .map(|kept| kept.payload.len() + 24)
                 .sum();
-            if kept + segment.payload.len() + 24 <= 64 * 1024 {
-                self.reconnect_retained.push(segment.clone());
-            } else {
+            if kept + segment.payload.len() + 24 > 64 * 1024 {
                 self.streams[sender].out_of_window_segments += 1;
+            } else if segment.payload.len() as u64 > available {
+                self.streams[sender].rejected_bytes += segment.payload.len() as u64;
+            } else {
+                self.reconnect_retained.push(segment.clone());
             }
         } else if dropped {
             self.streams[sender].out_of_window_segments += 1;
@@ -1367,12 +1386,23 @@ impl ReferenceModel {
                 if let Some(added) = segment.payload.get(overlap..) {
                     syn.payload.extend_from_slice(added);
                 }
+            } else if false == header.ack
+                && self.maybe_own_syn(segment)
+                && self.reconnect_syn.as_ref().is_some_and(|_| {
+                    false == (self.reconnect_syn_maybe_own || self.reconnect_syn_maybe_blind)
+                })
+            {
+                // a late SYN that its mid-stream pickup can't take doesn't
+                // replace a kept SYN that may be a reconnect's (C4)
+                self.streams[sender].out_of_window_segments += 1;
             } else if false == header.ack {
                 self.reconnect_syn_maybe_blind = self.maybe_blind_syn(segment);
                 self.reconnect_syn_maybe_own = self.is_own_syn(segment);
+                self.count_retained_as_out_of_window();
+                self.reconnect_retained.clear();
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
-                self.reconnect_retained.clear();
+                self.reconnect_kept_at = self.packets;
             } else if self
                 .reconnect_syn
                 .as_ref()
@@ -1382,9 +1412,11 @@ impl ReferenceModel {
                 // unless a SYN is kept
                 self.reconnect_syn_maybe_blind = false;
                 self.reconnect_syn_maybe_own = self.is_own_syn(segment);
+                self.count_retained_as_out_of_window();
+                self.reconnect_retained.clear();
                 self.reconnect_syn = Some(segment.clone());
                 self.reconnect_syn_conflicting = 0;
-                self.reconnect_retained.clear();
+                self.reconnect_kept_at = self.packets;
             }
         } else {
             self.apply_own_segment(segment, &mut available);
@@ -1416,6 +1448,9 @@ impl ReferenceModel {
     /// Ends the connection with `end`, giving up all holes.
     fn end_with(&mut self, end: TcpConnectionEnd) {
         self.end = Some(end);
+        // the segments kept with an unconfirmed SYN or SYN-ACK are lost to
+        // this connection
+        self.count_retained_as_out_of_window();
         let stream_end = match end {
             TcpConnectionEnd::Finished => TcpStreamEnd::Fin,
             TcpConnectionEnd::Reset { .. } => TcpStreamEnd::Reset,
@@ -1625,6 +1660,49 @@ impl ReferenceModel {
                 || self.answers_observed_syn(segment))
     }
 
+    /// Returns true if `segment` is kept with the kept SYN or SYN-ACK: it
+    /// continues it, the kept one may be a reconnect's, and the other half
+    /// of the handshake can still come (the capture has that endpoint, and
+    /// the reorder tolerance didn't pass) (C2).
+    fn continues_kept(&self, segment: &TestSegment, packets: u64) -> bool {
+        self.reconnect_syn.as_ref().is_some_and(|syn| {
+            false == (self.reconnect_syn_maybe_blind || self.reconnect_syn_maybe_own)
+                && self.heard[role_index(self.sender_role(syn).other())]
+                && packets <= self.reconnect_kept_at + u64::from(self.config.ack_reorder_tolerance)
+                && continues(syn, segment)
+        })
+    }
+
+    /// Returns true if the SYN or SYN-ACK `segment` lies where its stream's
+    /// own late one could (C4): a mid-stream pickup's A5 range.
+    fn maybe_own_syn(&self, segment: &TestSegment) -> bool {
+        self.is_own_syn(segment)
+    }
+
+    /// Counts the segments kept with the SYN or SYN-ACK as out-of-window in
+    /// their sender's stream, as they are lost to this connection (C2).
+    fn count_retained_as_out_of_window(&mut self) {
+        if let Some(syn) = self.reconnect_syn.as_ref() {
+            let sender = role_index(self.sender_role(syn));
+            self.streams[sender].out_of_window_segments += self.reconnect_retained.len() as u64;
+        }
+    }
+
+    /// Applies the segments kept with the SYN or SYN-ACK to this connection,
+    /// as the other half of the reconnect's handshake didn't come within the
+    /// reorder tolerance (C2).
+    fn flush_retained(&mut self) {
+        let retained = core::mem::take(&mut self.reconnect_retained);
+        // the SYN is taken out meanwhile, so that nothing keeps them again
+        let syn = self.reconnect_syn.take();
+        for kept in &retained {
+            self.apply(kept);
+        }
+        if self.reconnect_syn.is_none() {
+            self.reconnect_syn = syn;
+        }
+    }
+
     /// Returns true if the receiver drops `segment` while its SYN is
     /// unanswered (S5).
     fn dropped_before_syn_acked(&self, segment: &TestSegment) -> bool {
@@ -1718,10 +1796,8 @@ impl ReferenceModel {
             .reconnect_syn
             .as_ref()
             .is_some_and(|syn| acks_syn(segment, syn));
-        let continues_kept = self.reconnect_syn.as_ref().is_some_and(|syn| {
-            false == (self.reconnect_syn_maybe_blind || self.reconnect_syn_maybe_own)
-                && continues(syn, segment)
-        });
+        // (`apply` counts the segment as a packet first)
+        let continues_kept = self.continues_kept(segment, self.packets + 1);
         false == self.created
             || self.end.is_some()
             || Some(segment.incarnation) == self.incarnation
@@ -3300,15 +3376,32 @@ mod test {
             let first = first.min(old.segments.len());
             let syn_at = first + syn_position.index(old.segments.len() - first + 1);
             let syn_ack_at = (syn_at + syn_ack_delay.unsigned_abs()).min(old.segments.len());
-            let between = between.min(new.segments.len() - 2);
+            // (only the first half's sender can have segments between the
+            // halves: the other endpoint sends nothing before its own half)
             let [first_half, second_half] = if syn_ack_delay < 0 { [1, 0] } else { [0, 1] };
+            let first_sender = new.segments[first_half].sender;
+            let (early, late): (Vec<_>, Vec<_>) = new.segments[2..]
+                .iter()
+                .enumerate()
+                .partition(|(i, segment)| {
+                    segment.sender == first_sender
+                        && new.segments[2..2 + i].iter().filter(|s| s.sender == first_sender).count()
+                            < between
+                });
             let mut segments = old.segments[..syn_at].to_vec();
+            // where the reconnect's handshake starts: old SYN retransmissions
+            // come before it (on a tombstone the first half starts the
+            // reconnect, and an old SYN kept on it would keep the old
+            // connection's late segments with it, which the model can't
+            // place)
+            let mut handshake_start = segments.len();
             segments.push(new.segments[first_half].clone());
             segments.extend_from_slice(&old.segments[syn_at..syn_ack_at]);
-            segments.extend_from_slice(&new.segments[2..2 + between]);
+            segments.extend(early.into_iter().map(|(_, segment)| segment.clone()));
             segments.push(new.segments[second_half].clone());
             let mut old_rest = old.segments[syn_ack_at..].iter();
-            let mut new_rest = new.segments[2 + between..].iter();
+            let late: Vec<_> = late.into_iter().map(|(_, segment)| segment).collect();
+            let mut new_rest = late.into_iter();
             for take_old in interleaving.iter().cycle() {
                 let next = if *take_old {
                     old_rest.next().or_else(|| new_rest.next())
@@ -3326,7 +3419,17 @@ mod test {
             // endpoint
             for (retransmit_new, position) in &retransmitted_syns {
                 let syn = if *retransmit_new { &new.segments[0] } else { &old_syn };
-                segments.insert(1 + position.index(segments.len()), syn.clone());
+                let at = if *retransmit_new {
+                    1 + position.index(segments.len())
+                } else if 0 == handshake_start {
+                    0
+                } else {
+                    1 + position.index(handshake_start)
+                };
+                segments.insert(at, syn.clone());
+                if at <= handshake_start {
+                    handshake_start += 1;
+                }
             }
             for (i, (role, position, distance)) in spoofed_syns.iter().enumerate() {
                 let sender = endpoints[role_index(*role)];
@@ -3344,8 +3447,12 @@ mod test {
                 segment.header.window_size = *window;
             }
 
+            // (the segments kept with the reconnect's first handshake half
+            // don't expire here: the model can't place segments of another
+            // script in the old connection; unit tests cover the expiry)
             let mut pool = TcpReassemblyPool::<(), ()>::new(TcpReassemblyConfig {
                 fallback_window,
+                ack_reorder_tolerance: config.ack_reorder_tolerance.max(32),
                 ..config
             });
             let (model, _) = feed_and_check(
