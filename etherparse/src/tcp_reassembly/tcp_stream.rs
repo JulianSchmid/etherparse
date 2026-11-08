@@ -526,22 +526,19 @@ impl TcpStream {
         }
     }
 
-    /// Returns true if the stream's sender sent nothing yet, apart from its
-    /// SYN: the stream has no start, or no bytes and no FIN.
-    pub(crate) fn sent_nothing(&self) -> bool {
-        self.start_seq.is_none() || (0 == self.highest_offset() && self.fin_offset.is_none())
-    }
-
     /// Sequence number the stream's sender sends next, as far as the stream
-    /// knows: the one after its highest byte, or after its FIN; `None`
-    /// without a start.
+    /// knows: the one after its highest byte, or after its FIN, or, without
+    /// a start, the one the other side's kept ACK showed (K1); `None`
+    /// without either.
     pub(crate) fn next_seq(&self) -> Option<u32> {
         let fin = u32::from(self.fin_offset.is_some());
-        self.start_seq.map(|start_seq| {
-            start_seq
-                .wrapping_add(self.highest_offset() as u32)
-                .wrapping_add(fin)
-        })
+        self.start_seq
+            .map(|start_seq| {
+                start_seq
+                    .wrapping_add(self.highest_offset() as u32)
+                    .wrapping_add(fin)
+            })
+            .or(self.kept_ack.map(|kept| kept.seq))
     }
 
     /// Number of placeholder bytes a mid-stream pickup puts in front of its
@@ -6085,13 +6082,13 @@ mod test {
 
         // other SYNs of a mid-stream pickup change nothing in it, not even
         // with bytes (TCP Fast Open): its own late SYN after the read
-        // position moved or for a pickup that starts at its FIN counts as
-        // out-of-window (C4), while SYNs more than k windows before the first
-        // byte, after the first byte or 2^31 away from the highest offset
-        // (can't be mapped) have a new ISN and start a reconnect (C2)
+        // position moved counts as out-of-window (C4), while SYNs more than
+        // k windows before the first byte, after the first byte or 2^31 away
+        // from the highest offset (can't be mapped) have a new ISN and start
+        // a reconnect (C2), as does a SYN after the pickup's FIN (C4)
         for (factor, fallback_window, lost, consumed, syn_offset, fin, reconnect) in [
             (None, 3, &b""[..], 1, 0, false, false),
-            (None, 3, b"", 0, 0, true, false),
+            (None, 3, b"", 0, 0, true, true),
             (Some(2), 2, b"abcde", 0, 0, false, true),
             (Some(1), 4, b"abcde", 0, 0, false, true),
             (None, 2, b"abcde", 0, 0, false, true),

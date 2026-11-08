@@ -175,7 +175,7 @@ where
                 let connection = entry.get_mut();
                 // a late segment of the connection this one replaced is
                 // absorbed like on a tombstone (C1)
-                if connection.absorbs_late_segment(source, &tcp) {
+                if connection.absorbs_late_segment(source, &tcp, &self.config) {
                     return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
                 }
                 if connection.starts_reconnect(source, &tcp, &self.config, available) {
@@ -1466,9 +1466,10 @@ mod test {
 
         // in a capture merged from two taps, the old close's last ACK can
         // arrive after the reconnect's SYN with a near ISN: it is a late
-        // segment of the replaced connection (C1) and fakes no hole, also
-        // after the handshake, as long as its sender sent nothing in the
-        // reconnect
+        // segment of the replaced connection (C1) and fakes no hole; once
+        // its sender's stream started in the reconnect (its SYN-ACK came),
+        // it is the reconnect's, which doesn't accept it far before its
+        // bytes
         for complete in [false, true] {
             let mut pool = TcpReassemblyPool::<u32, ()>::default();
             let mut old = ConnectionScript::with_isns(10_000_000, 20_000_000);
@@ -1491,7 +1492,14 @@ mod test {
                 script.feed(&mut pool, 1..fed);
             }
             let processed = last_ack.feed(&mut pool, 8);
-            assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            if complete {
+                assert_eq!(None, processed.ignored);
+                let (connection, _) = processed.active.unwrap();
+                let stream = connection.stream(Initiator);
+                assert_eq!((0, 0), (stream.highest_offset(), stream.acked_offset()));
+            } else {
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
             let (connection, _) = script.feed(&mut pool, fed..).active.unwrap();
             assert_eq!(TcpConnectionId(1), connection.id());
             let stream = connection.stream_mut(Initiator);

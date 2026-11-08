@@ -304,9 +304,17 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             && other
                 .syn()
                 .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
+        // a pickup's own late SYN arrives among its first segments, never
+        // after a FIN of the connection: a SYN in its range after a FIN is a
+        // reconnect's (C4)
+        let closing = self.initiator_stream.fin_offset().is_some()
+            || self.responder_stream.fin_offset().is_some();
+        let own_late_syn_of_pickup = stream.isn().is_none() && closing;
         let window = self.window(sender, config);
         if false == self.answers_observed_syn(sender, tcp)
-            && (answers_other_syn || false == stream.is_own_syn(tcp, window, config))
+            && (answers_other_syn
+                || own_late_syn_of_pickup
+                || false == stream.is_own_syn(tcp, window, config))
         {
             // a SYN or SYN-ACK with a new ISN starts a reconnect (C2)
             Verdict::StartsReconnect
@@ -623,22 +631,35 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
     /// Returns true if `tcp`, sent by `source`, is a late segment of the
     /// connection this one replaced (C1), which the pool ignores like a
     /// segment on a tombstone: a duplicate of its handshake, or, while the
-    /// sender sent nothing after its SYN in this connection, a segment of
+    /// sender's stream has no start in this connection yet, a segment of
     /// the replaced connection by its sequence numbers (see
     /// [`SeqNumbers::absorbs_late`]): the ACK of a server in TIME-WAIT to
-    /// a new SYN with a lower ISN, the client's RST to that ACK, the old
-    /// close's last ACK captured late, or bytes still in flight. A segment
-    /// at the position the sender's stream expects next, or one that ACKs
-    /// what the other stream sent in this connection, is this connection's
-    /// own, whatever the replaced one's numbers say (after a reset, the new
-    /// ISNs can lie within the old numbers), and an RST without ACK of a
-    /// side in SYN-SENT (its SYN seen, the other side without a start)
-    /// answers an ACK of the replaced connection (RFC 9293 3.10.7.3; no
-    /// stack sends one otherwise), also when that ACK was not captured yet.
-    pub(crate) fn absorbs_late_segment(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+    /// a new SYN with a lower ISN, the old close's last ACK captured late,
+    /// bytes still in flight, a FIN retransmission. On one path, a sender's
+    /// old segments can't arrive after its first segment of the new
+    /// connection, so a started stream's segments are all its own; also
+    /// before, a segment at the position the sender's stream expects next,
+    /// or one that ACKs what the other stream sent in this connection, is
+    /// this connection's own whatever the replaced one's numbers say (after
+    /// a reset, the new ISNs can lie within the old numbers). An RST
+    /// without ACK of a side in SYN-SENT (its SYN seen, the other side
+    /// without a start) answers an ACK of the replaced connection (RFC 9293
+    /// 3.10.7.3; no stack sends one otherwise), also when that ACK was not
+    /// captured yet.
+    pub(crate) fn absorbs_late_segment(
+        &mut self,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        config: &TcpReassemblyConfig,
+    ) -> bool {
         let sender = self.role(source);
         let (stream, other) = (self.stream(sender), self.stream(sender.other()));
-        let sent_nothing = stream.sent_nothing();
+        // bytes the capture may have missed before a late segment: k windows
+        // of the receiver of each stream
+        let ahead = [TcpRole::Initiator, TcpRole::Responder].map(|role| {
+            u32::try_from(window_range(self.window(role, config), config)).unwrap_or(u32::MAX)
+        });
+        let no_start = false == stream.has_start();
         let expected = (stream.isn().is_some() && Some(tcp.sequence_number()) == stream.next_seq())
             || (tcp.ack() && other.sent_range_covers(tcp.acknowledgment_number()));
         let syn_sent = stream.isn().is_some() && false == other.has_start();
@@ -648,10 +669,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         if tcp.syn() {
             return false == tcp.rst() && replaced.is_own_handshake(source, tcp);
         }
-        if false == sent_nothing || expected {
-            return false;
-        }
-        (tcp.rst() && false == tcp.ack() && syn_sent) || replaced.absorbs_late(source, tcp)
+        // an RST without ACK from SYN-SENT is never the connection's own,
+        // whatever position it has (an absorbed ACK may have moved the
+        // stream's expected position to it)
+        (tcp.rst() && false == tcp.ack() && syn_sent)
+            || (no_start && false == expected && replaced.absorbs_late(source, tcp, ahead))
     }
 
     /// What the pool keeps of the connection once it ended.
@@ -780,22 +802,26 @@ impl SeqNumbers {
     }
 
     /// Returns true if `tcp`, sent by `source` and no SYN, is a late segment
-    /// of the ended connection by its sequence numbers: it has no bytes and
-    /// lies right at the number its sender's stream reached (a late ACK or
-    /// RST, also when the other stream is unknown), or it lies within the
+    /// of the ended connection by its sequence numbers: it lies within the
     /// numbers its sender's stream covered (from its first byte to the
-    /// number it reached) and its ACK number, if it has one, within the
-    /// other stream's. The ACK number of such an ACK moves the number the
-    /// other stream reached forward: the capture may have missed that
-    /// stream's FIN, and the RST that answers the ACK lies at the ACK number
-    /// (RFC 9293 3.10.7.3).
-    pub fn absorbs_late(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+    /// number it reached, plus `ahead` of that stream for bytes the capture
+    /// may have missed), and its ACK number, if it has one, within the
+    /// other stream's the same way, or that stream is unknown. The ACK
+    /// number of an absorbed ACK moves the number the other stream reached
+    /// forward: the capture may have missed that stream's FIN, and the RST
+    /// that answers the ACK lies at the ACK number (RFC 9293 3.10.7.3).
+    pub fn absorbs_late(
+        &mut self,
+        source: SocketAddr,
+        tcp: &TcpSlice<'_>,
+        ahead: [u32; 2],
+    ) -> bool {
         let [own, other] = self.roles(source);
         let seq = tcp.sequence_number();
-        let at_end = tcp.payload().is_empty() && Some(seq) == self.next[own];
-        let within = self.covers(own, seq)
-            && (false == tcp.ack() || self.covers(other, tcp.acknowledgment_number()));
-        if tcp.syn() || false == (at_end || within) {
+        let ack_covered = false == tcp.ack()
+            || self.next[other].is_none()
+            || self.covers(other, tcp.acknowledgment_number(), ahead[other]);
+        if tcp.syn() || false == (self.covers(own, seq, ahead[own]) && ack_covered) {
             return false;
         }
         if tcp.ack() && false == tcp.rst() {
@@ -808,10 +834,16 @@ impl SeqNumbers {
     }
 
     /// Returns true if the stream with the index `stream` covered the
-    /// sequence number `seq`: from its first byte to the number it reached.
-    fn covers(&self, stream: usize, seq: u32) -> bool {
+    /// sequence number `seq`: from its first byte to the number it reached,
+    /// plus `ahead` for bytes the capture may have missed. A stream the
+    /// capture never saw has no first byte, only the number its peer's ACKs
+    /// showed it reached (K1), so it covers everything up to there.
+    fn covers(&self, stream: usize, seq: u32, ahead: u32) -> bool {
         match (self.first[stream], self.next[stream]) {
-            (Some(first), Some(next)) => seq.wrapping_sub(first) <= next.wrapping_sub(first),
+            (Some(first), Some(next)) => {
+                seq.wrapping_sub(first) <= next.wrapping_add(ahead).wrapping_sub(first)
+            }
+            (None, Some(next)) => 0 <= next.wrapping_add(ahead).wrapping_sub(seq) as i32,
             _ => false,
         }
     }
