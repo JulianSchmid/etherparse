@@ -81,3 +81,15 @@ The simulator then found, at 3000 cases and on fresh seeds:
   - dropped segments counted as sent: the model only, as the simulator produces no dropped old segment before an absorbed one;
   - no first-byte exception in C4: the model and a stream unit test.
 - Limit hits in 2000 random histories (4.2% in all, the bound is 5%): segments before the handshake 53, C4 pickup 15, new taken for old 8, old taken for new 4, unseen connection 2, coinciding end 1.
+
+**2026-11-08 — council round 34 (GPT 8.8: correctness 8.5, performance 9.3, robustness 9.2, understandability 8.7):** two findings, both about evidence order, both taken:
+1. The pickup first-byte rule of round 33 overrode the exact evidence: a pickup's first captured byte is only where the capture started, so a reconnect's ISN + 1 can lie right there without repeating an ISN, and the old connection's observed SYN, which the new SYN-ACK doesn't ACK, was ignored. The reconnect's SYN-ACK and its response were absorbed. The random histories found it.
+2. C4's FIN rule overrode a SYN-ACK that ACKs the client's observed SYN when its own stream was already a pickup: one reordered within its direction behind the server's next bytes and the client's FIN started a ghost reconnect. The simulator kept each direction's order, so it couldn't produce this.
+
+Fixes: one order of evidence for the live connection (`TcpConnection::verdict`) and for tombstones and replaced connections (`SeqNumbers::is_own_handshake`): the sender's observed ISN, then, for a SYN-ACK, the other stream's observed SYN, then the pickup heuristics (first byte, A5 range, FIN). Pool tests for both reproductions; a mutant restoring either old order fails them. The simulator now also holds back a handshake half behind its sender's next segments of the same connection (`Capture::half_delay`, in one history of eight). That needed an oracle fix: a late half of a pickup that the eager reader read changes nothing, its ACK number included. It also gave two named limits: "new taken for old" for a late half too, and "C4 late own half" (no observed SYN, after a FIN). Further runs on fresh seeds found four more gaps in the oracle and its exclusions, none in the pool:
+- A FIN starts a stream without a start (A4), so a late SYN-ACK after it is ignored too.
+- A late SYN-ACK that the pool ignores gives the initiator's stream no start either (A2). One helper, `observed_start`, now decides this for all detectors.
+- The ACK part of "segments before the handshake" now follows the pool's ACK handling. Such an ACK misleads the open connection before in two cases: it becomes the kept ACK of a stream without a start, or it lies within k windows past what the capture showed of the stream, so that stream takes it as an ACK of bytes the capture lost.
+
+Final runs: the matrix, 3000 random histories, and 1500 on each of eight fresh seeds are green, and the model is green at 3000 cases and on four seeds. Limit hits in 2000 random histories: 4.7%.
+
