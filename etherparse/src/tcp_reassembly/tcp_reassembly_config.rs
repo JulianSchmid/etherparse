@@ -24,9 +24,11 @@ pub struct TcpReassemblyConfig {
     /// [`TcpReassemblyConfig::max_pooled_buffer_capacity`]).
     ///
     /// Size it above the bytes a connection can have in flight (bandwidth
-    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB), or a lost
-    /// segment whose retransmission arrives after a full window of bytes
-    /// becomes a gap although the retransmission was captured.
+    /// times round-trip time, e.g. 10 Gbit/s × 20 ms ≈ 25 MB) plus 64 KiB,
+    /// and above twice those bytes for captures without the receiver's
+    /// packets. Otherwise a lost segment whose retransmission arrives after
+    /// a full window of bytes becomes a gap although the retransmission was
+    /// captured (see [`crate::tcp_reassembly::TcpStream::holes`]).
     pub max_stream_buffer: usize,
 
     /// Maximum number of holes before the furthest stored byte of a stream
@@ -76,9 +78,9 @@ pub struct TcpReassemblyConfig {
     /// the receiver's ACK the first
     /// segment of a mid-stream pickup may lie (see
     /// [`crate::tcp_reassembly::TcpStreamStatus::out_of_window_segments`]).
-    /// For captures that start mid-stream, size it like
-    /// [`TcpReassemblyConfig::max_stream_buffer`]: above the bytes a
-    /// connection can have in flight.
+    /// For captures that start mid-stream, size it above the bytes a
+    /// connection can have in flight (see
+    /// [`TcpReassemblyConfig::max_stream_buffer`]).
     pub fallback_window: u32,
 
     /// Number of further packets of a connection after which a hole that an
@@ -91,13 +93,12 @@ pub struct TcpReassemblyConfig {
     /// connection can show within the skew between the directions: 256
     /// packets are a few milliseconds of one connection at 1 Gbit/s. A hole
     /// from real capture loss stalls a reader for this many packets, but
-    /// not past half of [`TcpReassemblyConfig::max_stream_buffer`]: once the
-    /// bytes from the hole at the read position fill that, it is overdue,
-    /// as waiting longer could overflow the buffer. An overdue hole is given
-    /// up once the read position reaches it, and late
-    /// segments fill it until then. While a stream has holes, or is a
-    /// mid-stream pickup that was not read from yet, it keeps the seen and
-    /// implied ACKs of up to this many packets (16 bytes each).
+    /// only while the bytes after it fit the buffer (see
+    /// [`crate::tcp_reassembly::TcpStream::holes`]). An overdue hole is
+    /// given up once the read position reaches it, and late segments fill it
+    /// until then. While a stream has holes, or is a mid-stream pickup that
+    /// was not read from yet, it keeps the seen and implied ACKs of up to
+    /// this many packets (16 bytes each).
     pub ack_reorder_tolerance: u32,
 
     /// Number of consecutive segments after the receiver's window, each

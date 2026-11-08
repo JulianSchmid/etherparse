@@ -2172,6 +2172,85 @@ mod test {
             assert!(captured == got);
         }
 
+        // a segment the network lost before the tap: the receiver's
+        // duplicate ACKs stay at the hole, and the sender sends up to a
+        // window past it before it retransmits, so a hole the ACKs don't
+        // cover waits up to the receiver's window, short of 64 KiB of the
+        // buffer, also where that is more than half the buffer (K4(d);
+        // regression test: half the buffer gave the hole up as a gap before
+        // the retransmission came)
+        for (max_stream_buffer, scale, field, len, ahead) in [
+            // a window of 640,000 bytes in a buffer of 1 MiB
+            (1 << 20, 4u8, 40000u16, 1460, 600_000),
+            // a window of 5 MiB in the default buffer of 8 MiB
+            (8 << 20, 7, 40960, 16384, 4_700_000),
+        ] {
+            for acked in [false, true] {
+                let config = TcpReassemblyConfig {
+                    max_stream_buffer,
+                    ..Default::default()
+                };
+                let mut pool = TcpReassemblyPool::<(), ()>::new(config);
+                let mut script = ConnectionScript::with_isns(1000, 2000);
+                script.window_scales = [Some(scale); 2];
+                script.window_size = field;
+                script.handshake();
+                let data_of =
+                    |i: usize| -> Vec<u8> { (0..len).map(|j| ((i * 7 + j) % 251) as u8).collect() };
+                let mut sent = Vec::new();
+                for i in 0..20 {
+                    script.send(Responder, &data_of(i));
+                    sent.extend_from_slice(&data_of(i));
+                    script.ack(Initiator);
+                }
+                // the lost segment, then the ones after it with duplicate ACKs
+                let hole = script.next_offset(Responder);
+                script.send(Responder, &data_of(20));
+                script.segments.pop();
+                sent.extend_from_slice(&data_of(20));
+                let mut i = 21;
+                while (i - 20) * len <= ahead {
+                    script.send(Responder, &data_of(i));
+                    sent.extend_from_slice(&data_of(i));
+                    script.ack_to(Initiator, hole);
+                    i += 1;
+                }
+                // the retransmission
+                script.send_at(Responder, hole, &data_of(20));
+                script.ack(Initiator);
+                let (mut got, mut gaps) = (Vec::new(), Vec::new());
+                let mut rejected = 0;
+                for segment in &script.segments {
+                    let Some((connection, _)) = segment.feed(&mut pool, ()).active else {
+                        continue;
+                    };
+                    let stream = connection.stream_mut(Responder);
+                    loop {
+                        let read = if acked {
+                            stream.read_acked()
+                        } else {
+                            stream.read_received()
+                        };
+                        match read {
+                            TcpRead::Data(data) => {
+                                got.extend_from_slice(data);
+                                let len = data.len();
+                                stream.consume(len);
+                            }
+                            TcpRead::Gap { len } => {
+                                gaps.push(len);
+                                stream.consume_gap();
+                            }
+                            _ => break,
+                        }
+                    }
+                    rejected = stream.status().rejected_bytes;
+                }
+                assert_eq!((0, Vec::<Option<u64>>::new()), (rejected, gaps), "{acked}");
+                assert!(sent == got, "{acked}");
+            }
+        }
+
         // the hole at the read position is overdue once half the buffer is
         // filled from it, also when the read position reaches it (K4(d)): a
         // reader that reads the received bytes only later, or only the ACKed

@@ -1145,12 +1145,24 @@ impl ModelStream {
         self.give_up_overdue_hole();
     }
 
-    /// Gives up the hole at the read offset if it is overdue, or if the
-    /// bytes from it fill half the buffer (K4(d)).
+    /// Gives up the hole at the read offset if it is overdue, or once the
+    /// bytes from it exceed half the buffer, or for a hole the ACK doesn't
+    /// cover while the window is known, a window past the ACK, leaving
+    /// 64 KiB of the buffer (K4(d)).
     fn give_up_overdue_hole(&mut self) {
+        let limit = |hole: &Range<u64>| {
+            let half = self.max_buffer / 2;
+            match self.largest_window {
+                Some(window) if hole.end > self.ack => {
+                    let in_flight = window + self.ack.saturating_sub(hole.start);
+                    half.max(in_flight.min(self.max_buffer.saturating_sub(64 << 10)))
+                }
+                _ => half,
+            }
+        };
         if self
             .first_hole()
-            .is_some_and(|hole| self.is_overdue(&hole) || self.buffered() >= self.max_buffer / 2)
+            .is_some_and(|hole| self.is_overdue(&hole) || self.buffered() > limit(&hole))
         {
             self.give_up_hole();
         }

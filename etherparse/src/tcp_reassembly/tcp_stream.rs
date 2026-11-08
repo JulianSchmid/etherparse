@@ -338,14 +338,33 @@ impl TcpStream {
     /// Gives up the hole at the read position if it is overdue: the
     /// receiver must have received its bytes, so they will most likely not
     /// be captured anymore (late segments still fill overdue holes the read
-    /// position hasn't reached), or if the bytes from it fill half of the
-    /// buffer, as waiting longer can overflow the buffer and reject bytes
-    /// the capture showed (K4(d)).
+    /// position hasn't reached), or if the bytes from it exceed the limit of
+    /// K4(d), as waiting longer can overflow the buffer and reject bytes the
+    /// capture showed.
     fn give_up_overdue_hole(&mut self) {
         if let Some(hole) = self.buffer.hole_at_read_offset() {
-            if self.is_overdue(&hole) || self.buffer.buffered() as u64 >= self.max_buffer / 2 {
+            if self.is_overdue(&hole) || self.buffer.buffered() as u64 > self.pressure_limit(&hole)
+            {
                 self.give_up_holes_before(hole.end);
             }
+        }
+    }
+
+    /// Bytes buffered from `hole`, the hole at the read position, beyond
+    /// which it is overdue (K4(d)): half of the buffer. While the receiver's
+    /// window is known and its ACK doesn't cover the hole, the receiver
+    /// lacks its bytes, and the sender retransmits them before it sends more
+    /// than a window past that ACK: such a hole waits for that window past
+    /// the ACK, but leaves 64 KiB of the buffer free.
+    fn pressure_limit(&self, hole: &Range<u64>) -> u64 {
+        let half = self.max_buffer / 2;
+        match self.largest_window {
+            Some(window) if hole.end > self.seen_ack => {
+                let acked = self.seen_ack.saturating_sub(hole.start);
+                let in_flight = window.saturating_add(acked);
+                half.max(in_flight.min(self.max_buffer.saturating_sub(64 << 10)))
+            }
+            _ => half,
         }
     }
 
@@ -419,8 +438,13 @@ impl TcpStream {
     /// [`TcpReassemblyConfig::ack_reorder_tolerance`] packets, as the
     /// receiver must have received its bytes. Holes before bytes that the
     /// stream rejected (see [`TcpStreamStatus::rejected_bytes`]) are overdue
-    /// too. Late segments still fill overdue holes the read position hasn't
-    /// reached.
+    /// too, and so is the hole at the read position once the bytes from it
+    /// fill more than half of [`TcpReassemblyConfig::max_stream_buffer`], so
+    /// that the buffer doesn't overflow. If the receiver's window is known
+    /// and its ACK doesn't cover that hole yet, the hole waits for up to a
+    /// window of bytes past that ACK instead, as the sender retransmits
+    /// within a window, but leaves 64 KiB of the buffer free. Late segments
+    /// still fill overdue holes the read position hasn't reached.
     pub fn holes(&self) -> impl Iterator<Item = Range<u64>> + '_ {
         self.buffer.holes().iter().cloned()
     }
