@@ -471,6 +471,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // either, as it would replace that ACK (A4)
         let mut ack_counts = true;
         if tcp.syn() && tcp.ack() {
+            // the bytes the sender's own late SYN puts in front of its stream
+            // were checked against the budget (C4), so the other stream's
+            // start can't spend them first (D4)
+            let reserved = self.stream(sender).syn_front_len(tcp).min(*available);
+            let mut rest = *available - reserved;
             let window = self.window(sender.other(), config);
             let other = self.stream_mut(sender.other());
             let had_start = other.has_start();
@@ -480,8 +485,9 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                 0,
                 window,
                 config,
-                available,
+                &mut rest,
             );
+            *available = rest + reserved;
             ack_counts = observed || had_start;
         }
         // the window the sender advertised before this segment limits what

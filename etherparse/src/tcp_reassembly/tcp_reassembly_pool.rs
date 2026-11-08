@@ -1431,6 +1431,39 @@ mod test {
             assert_eq!(TcpConnectionId(2), processed.active.unwrap().0.id());
         }
 
+        // the bytes a late SYN-ACK puts in front of its own mid-stream pickup
+        // were checked against the pool's budget (C4), so its ACK number
+        // can't spend them on the other pickup's start first (A2, D4): the
+        // sender's stream gets the observed start, the other one stays a
+        // pickup
+        {
+            let config = TcpReassemblyConfig {
+                max_total_buffered: Some(17),
+                ..Default::default()
+            };
+            let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+            let mut script = ConnectionScript::with_isns(1000, 5000);
+            script
+                .handshake()
+                .send(Initiator, b"req")
+                .send(Responder, b"resp");
+            // the capture starts after the handshake, whose SYN-ACK comes
+            // late with a shifted ISN pair: both pickups would put 10 bytes
+            // in front, the budget has 10 left
+            let mut late = script.segments[1].clone();
+            late.header.sequence_number = 4990;
+            late.header.acknowledgment_number = 991;
+            script.segments.push(late);
+            let (connection, _) = script.feed(&mut pool, 3..).active.unwrap();
+            let responder = connection.stream(Responder);
+            assert_eq!(TcpStreamStart::Observed, responder.status().start);
+            assert_eq!(0, responder.status().out_of_window_segments);
+            assert_eq!(14, responder.highest_offset());
+            let initiator = connection.stream(Initiator);
+            assert_eq!(TcpStreamStart::MidStreamPickup, initiator.status().start);
+            assert_eq!(3, initiator.highest_offset());
+        }
+
         // a SYN-ACK that answers another SYN than the unanswered one of the
         // connection starts a reconnect, also while that SYN waits (S5): a
         // failed attempt whose answer was never captured doesn't block the

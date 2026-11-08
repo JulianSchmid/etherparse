@@ -711,6 +711,16 @@ impl ModelStream {
         }
     }
 
+    /// Number of bytes a mid-stream pickup puts in front of its first byte
+    /// to take its own late SYN `segment` (see [`ModelStream::takes_syn`]);
+    /// 0 for other streams.
+    fn syn_front_len(&self, segment: &TestSegment) -> u64 {
+        match self.base {
+            Some(base) if false == self.observed && segment.offset < base => base - segment.offset,
+            _ => 0,
+        }
+    }
+
     /// Returns true if the SYN `segment` of the stream's sender can be the
     /// stream's own SYN: it has the ISN of the stream's observed start (see
     /// [`ModelStream::has_isn_of`]), or without one, the SYN's first byte
@@ -1478,9 +1488,14 @@ impl ReferenceModel {
         // as its start is not kept either
         let mut ack_counts = true;
         if let (true, Some(ack)) = (header.syn, segment.ack) {
+            // the bytes the sender's own late SYN puts in front were checked
+            // against the budget, the other stream's start can't spend them
+            let reserved = self.streams[sender].syn_front_len(segment).min(*available);
+            let mut rest = *available - reserved;
             let range = self.range(sender_role.other());
             let had_base = self.streams[other].base.is_some();
-            let started = self.streams[other].observe_start(ack, 0, range, &self.config, available);
+            let started = self.streams[other].observe_start(ack, 0, range, &self.config, &mut rest);
+            *available = rest + reserved;
             ack_counts = started || had_base;
         }
         if let (true, Some(ack)) = (ack_counts, segment.ack) {

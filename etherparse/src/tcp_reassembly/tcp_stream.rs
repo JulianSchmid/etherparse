@@ -509,6 +509,19 @@ impl TcpStream {
         }
     }
 
+    /// Number of placeholder bytes a mid-stream pickup puts in front of its
+    /// first byte to take its own late SYN or SYN-ACK `tcp` (see
+    /// [`TcpStream::takes_syn`]); 0 for other streams.
+    pub(crate) fn syn_front_len(&self, tcp: &TcpSlice<'_>) -> usize {
+        match (self.isn(), self.start_seq) {
+            (None, Some(start_seq)) => self
+                .offset(start_seq, tcp.sequence_number().wrapping_add(1))
+                .filter(|start| *start < 0)
+                .map_or(0, |start| start.unsigned_abs() as usize),
+            _ => 0,
+        }
+    }
+
     /// Returns true if the receiver's kept ACK, if there is one, allows a
     /// stream without a start to start at `seq` with a SYN: the ACK lies at
     /// or after the first byte, at most k windows after it, as the receiver
