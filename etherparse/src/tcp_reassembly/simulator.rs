@@ -1838,8 +1838,9 @@ mod test {
         /// Server segments the capture misses in a row (a burst), from the
         /// first one on, if any.
         burst: Option<(usize, usize)>,
-        /// Whether the server's tap lags from the start, its SYN-ACK
-        /// included; otherwise the lag starts after the handshake.
+        /// Whether the taps lag from the start, the server's SYN-ACK and
+        /// the client's handshake ACK and request included (but not the
+        /// client's SYN); otherwise the lag starts after the handshake.
         lag_from_start: bool,
         /// Whether the client closes first.
         client_closes_first: bool,
@@ -1903,14 +1904,26 @@ mod test {
         script.window_size = bulk.window_field;
         // what the capture shows, by the time it shows it
         let mut events: Vec<(u64, TestSegment)> = Vec::new();
-        script.syn();
+        script.syn().syn_ack();
+        // a SYN shows the window as far as its field can (it is never
+        // scaled), like the stacks do
+        let window = u64::from(bulk.window_field) << bulk.scale.unwrap_or(0);
+        for syn in &mut script.segments {
+            syn.header.window_size = u16::try_from(window).unwrap_or(u16::MAX);
+        }
+        // the client's SYN comes first either way (a SYN-ACK before it is
+        // a known limit, C4), but its handshake ACK, which shows the scaled
+        // window, can come late
+        let start_lag = if bulk.lag_from_start {
+            bulk.lag
+        } else {
+            [0, 0]
+        };
         events.push((0, script.segments[0].clone()));
-        script.syn_ack();
-        let syn_ack_lag = if bulk.lag_from_start { bulk.lag[1] } else { 0 };
-        events.push((1 + syn_ack_lag, script.segments[1].clone()));
+        events.push((1 + start_lag[1], script.segments[1].clone()));
         script.ack(Initiator).send(Initiator, b"GET /");
-        events.push((2, script.segments[2].clone()));
-        events.push((2, script.segments[3].clone()));
+        events.push((2 + start_lag[0], script.segments[2].clone()));
+        events.push((2 + start_lag[0], script.segments[3].clone()));
         let start = 3;
         // the server's transmissions: when, which segment, a retransmission
         let mut sends: Vec<(u64, usize, bool)> = Vec::new();
