@@ -687,6 +687,30 @@ impl ModelStream {
         true
     }
 
+    /// Returns true if the stream takes its own SYN `segment` (see
+    /// [`ModelStream::is_own_syn`]) as its start: a stream with an observed
+    /// start or without a start always does, a mid-stream pickup only if
+    /// bytes can be prepended and the SYN's fit (see
+    /// [`ModelStream::observe_start`]).
+    fn takes_syn(
+        &self,
+        segment: &TestSegment,
+        range: u64,
+        config: &TcpReassemblyConfig,
+        available: u64,
+    ) -> bool {
+        let start = segment.offset;
+        match self.base {
+            Some(base) if false == self.observed => {
+                self.can_prepend()
+                    && start <= base
+                    && base - start <= range
+                    && self.fits_in_front(start, segment.payload.len(), config, available)
+            }
+            _ => true,
+        }
+    }
+
     /// Returns true if the SYN `segment` of the stream's sender can be the
     /// stream's own SYN: it has the ISN of the stream's observed start (see
     /// [`ModelStream::has_isn_of`]), or without one, the SYN's first byte
@@ -1257,7 +1281,20 @@ impl ReferenceModel {
                     bare,
                     same_script,
                 ));
-        if false == dropped {
+        // a mid-stream pickup refuses an own late SYN it can't take anymore:
+        // it counts and changes nothing else (C4)
+        let ignored = false == dropped
+            && header.syn
+            && false == header.rst
+            && false == self.maybe_blind_syn(segment)
+            && false
+                == self.streams[sender].takes_syn(
+                    segment,
+                    self.range(sender_role),
+                    &self.config,
+                    available,
+                );
+        if false == (dropped || ignored) {
             // a SYN-ACK or RST that ACKs the receiver's SYN outweighs a kept
             // ACK
             if (header.syn || header.rst)
@@ -1271,11 +1308,11 @@ impl ReferenceModel {
                 self.streams[other].answer_syn(segment, range, other_window, same_script);
             }
         }
-        if dropped {
+        if dropped || ignored {
             self.streams[sender].out_of_window_segments += 1;
             // the dropped segments agree within the window of their own
             // stream (R3); a segment without ACK changes nothing else (S6)
-            if false == without_ack {
+            if dropped && false == without_ack {
                 let window = self.window(sender_role);
                 self.streams[other].record_dropped(segment, window, &self.config);
             }

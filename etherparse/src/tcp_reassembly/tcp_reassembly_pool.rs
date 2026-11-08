@@ -164,6 +164,7 @@ where
             .max_connections
             .is_some_and(|max| self.connections.len() + self.tombstones.len() >= max);
 
+        let available = available_bytes(&self.config, self.buffered);
         // the connection replaced by a reconnect
         let mut replaced = None;
         let mut entry = match self.connections.entry(key) {
@@ -174,7 +175,7 @@ where
                 if connection.absorbs_late_handshake(source, &tcp) {
                     return ignore(TcpIgnoreReason::AfterEnd, &mut self.ignored_packets);
                 }
-                if connection.starts_reconnect(source, &tcp, &self.config) {
+                if connection.starts_reconnect(source, &tcp, &self.config, available) {
                     let reconnect = new_connection(
                         &mut self.next_id,
                         &mut self.free,
@@ -238,12 +239,8 @@ where
             }
         };
 
-        // the bytes that would make the pool buffer more than its limit are
-        // rejected
-        let mut available = self
-            .config
-            .max_total_buffered
-            .map_or(usize::MAX, |max| max.saturating_sub(self.buffered));
+        // the reconnect's SYN released the replaced connection's bytes
+        let mut available = available_bytes(&self.config, self.buffered);
         let connection = entry.get_mut();
         let sender = connection.add_segment(
             source,
@@ -460,6 +457,14 @@ enum HandedOut<CustomChannelId> {
     Connection(TcpConnectionKey<CustomChannelId>),
     /// All connections.
     All,
+}
+
+/// Bytes a pool with `buffered` bytes can still buffer before it reaches
+/// its limit: the bytes beyond are rejected.
+fn available_bytes(config: &TcpReassemblyConfig, buffered: usize) -> usize {
+    config
+        .max_total_buffered
+        .map_or(usize::MAX, |max| max.saturating_sub(buffered))
 }
 
 /// Result for a packet that was applied to no connection for `reason`,
@@ -1192,6 +1197,47 @@ mod test {
                 processed.ended.unwrap().end()
             );
             assert_eq!(TcpConnectionId(1), processed.active.unwrap().0.id());
+        }
+
+        // a late SYN-ACK that its mid-stream pickup can't take anymore (it
+        // was read from) changes nothing, its ACK number included (C4): a
+        // reconnect with near ISNs (RFC 6528) captured SYN-ACK first lands
+        // its SYN-ACK in the A5 range of the old responder pickup, and the
+        // old initiator stream gets no fake gap from its ACK number; the
+        // SYN then starts the reconnect
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 5_000_000);
+            old.send(Initiator, b"old").send(Responder, b"resp");
+            let (connection, _) = old.feed_all(&mut pool).active.unwrap();
+            for role in [Initiator, Responder] {
+                let stream = connection.stream_mut(role);
+                stream.read_received();
+                stream.consume(stream.highest_offset() as usize);
+            }
+            let mut script = ConnectionScript::with_isns(1_001_000, 4_000_000);
+            script.syn().syn_ack().send(Initiator, b"new");
+            let processed = script.segments[1].feed(&mut pool, 7);
+            assert!(processed.ended.is_none());
+            let (connection, _) = processed.active.unwrap();
+            assert_eq!(TcpConnectionId(0), connection.id());
+            let status = connection.stream(Responder).status();
+            assert_eq!(1, status.out_of_window_segments);
+            let stream = connection.stream(Initiator);
+            assert_eq!(0, stream.status().gaps);
+            assert_eq!(3, stream.acked_offset());
+            assert_eq!(3, stream.highest_offset());
+            let processed = script.segments[0].feed(&mut pool, 8);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let (connection, _) = script.segments[2].feed(&mut pool, 9).active.unwrap();
+            assert_eq!(TcpConnectionId(1), connection.id());
+            assert_eq!(
+                TcpRead::Data(b"new"),
+                connection.stream_mut(Initiator).read_received()
+            );
         }
 
         // a retransmission of the SYN-ACK that started a reconnect is the

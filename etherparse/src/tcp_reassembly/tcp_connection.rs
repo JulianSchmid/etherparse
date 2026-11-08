@@ -163,7 +163,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         self.last_seen = timestamp;
         self.packets = self.packets.saturating_add(1);
         let sender = self.role(source);
-        let verdict = self.verdict(sender, tcp, config);
+        let verdict = self.verdict(sender, tcp, config, *available);
         // a SYN-ACK or RST that ACKs the receiver's SYN knows its ISN, which
         // outweighs an ACK kept for the sender's stream without a start
         if Verdict::Dropped != verdict
@@ -185,6 +185,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
                         .record_dropped(tcp, window, config);
                 }
             }
+            Verdict::Ignored => self.stream_mut(sender).count_out_of_window(),
             Verdict::Reset => self.add_reset(sender, tcp, config),
             Verdict::KeepSyn => self.keep_syn(source, tcp, free),
             // the pool replaced the connection before the segment got here
@@ -261,12 +262,14 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 
     /// Decides what the connection does with the segment `tcp` sent by
     /// `sender`, by the state of its handshake (S5, S6) and the SYN it
-    /// keeps (C2 to C4); see [`Verdict`]. The decision changes nothing.
+    /// keeps (C2 to C4), with the pool's budget `available`; see
+    /// [`Verdict`]. The decision changes nothing.
     fn verdict(
         &self,
         sender: TcpRole,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
+        available: usize,
     ) -> Verdict {
         // every receiver drops a segment without ACK that is no SYN or RST
         // (RFC 9293 3.10.7.4, S6), and while the receiver's SYN is
@@ -295,21 +298,24 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         // a SYN-ACK that ACKs the other stream's SYN is the own one too,
         // whatever ACK a blind segment left kept for its stream (S5), while a
         // SYN-ACK into a stream without an observed SYN that doesn't ACK the
-        // other stream's observed SYN answers another SYN (C2); the stream
-        // refuses and counts an own late SYN it can't take (A5, C4)
+        // other stream's observed SYN answers another SYN (C2)
         let answers_other_syn = tcp.ack()
             && stream.isn().is_none()
             && other
                 .syn()
                 .is_some_and(|syn| false == syn.is_acked_by(tcp.acknowledgment_number()));
-        if self.answers_observed_syn(sender, tcp)
-            || (false == answers_other_syn
-                && stream.is_own_syn(tcp, self.window(sender, config), config))
+        let window = self.window(sender, config);
+        if false == self.answers_observed_syn(sender, tcp)
+            && (answers_other_syn || false == stream.is_own_syn(tcp, window, config))
         {
-            Verdict::Applied
-        } else {
             // a SYN or SYN-ACK with a new ISN starts a reconnect (C2)
             Verdict::StartsReconnect
+        } else if stream.takes_syn(tcp, window, config, available) {
+            Verdict::Applied
+        } else {
+            // a mid-stream pickup refuses an own late SYN it can't take
+            // anymore (A5, C4)
+            Verdict::Ignored
         }
     }
 
@@ -555,10 +561,12 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         source: SocketAddr,
         tcp: &TcpSlice<'_>,
         config: &TcpReassemblyConfig,
+        available: usize,
     ) -> bool {
         // only a SYN or SYN-ACK can, so the verdict is left to `add_segment`
         // for every other segment
-        tcp.syn() && Verdict::StartsReconnect == self.verdict(self.role(source), tcp, config)
+        tcp.syn()
+            && Verdict::StartsReconnect == self.verdict(self.role(source), tcp, config, available)
     }
 
     /// Applies the ACK number of a segment sent by `sender` (if it has one)
@@ -712,6 +720,11 @@ enum Verdict {
     /// ACK it (S5). It counts as out-of-window and changes nothing else,
     /// apart from ending the wait after enough agreeing dropped segments.
     Dropped,
+    /// An own late SYN or SYN-ACK of a mid-stream pickup that can't take it
+    /// anymore (it was read from, started at a FIN, resynced, or the bytes
+    /// in front of it don't fit): it counts as out-of-window and changes
+    /// nothing else, its ACK number included (A5, C4).
+    Ignored,
     /// An RST, which F4 checks by its sequence number (the ACK of an ignored
     /// one is dropped with it).
     Reset,

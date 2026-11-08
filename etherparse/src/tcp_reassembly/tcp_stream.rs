@@ -457,9 +457,9 @@ impl TcpStream {
     /// that ACKed the SYN's TCP Fast Open bytes, A2). Without an observed
     /// start, it has to lie at or before the stream's first byte, at most
     /// as far before it as earlier bytes could be put in front of it (the
-    /// A5 range, C4), whether the stream can still take it or not (it
-    /// refuses and counts one it can't). Without a start, the same holds
-    /// for the receiver's kept ACK, if there is one.
+    /// A5 range, C4), whether the stream can still take it or not (see
+    /// [`TcpStream::takes_syn`]). Without a start, the same holds for the
+    /// receiver's kept ACK, if there is one.
     pub(crate) fn is_own_syn(
         &self,
         tcp: &TcpSlice<'_>,
@@ -475,6 +475,37 @@ impl TcpStream {
                 .offset(start_seq, seq)
                 .is_some_and(|start| start <= 0 && start.unsigned_abs() <= range),
             (None, None) => self.kept_ack_allows_syn(seq, window, config),
+        }
+    }
+
+    /// Returns true if the stream takes its own SYN or SYN-ACK `tcp` (see
+    /// [`TcpStream::is_own_syn`]) as its start, where `window` is the
+    /// receiver's receive window and `available` the pool's budget: a
+    /// stream with an observed start or without a start always does, a
+    /// mid-stream pickup only while bytes can still be put in front of its
+    /// first byte and the SYN's fit (A5). One it refuses is counted as
+    /// out-of-window and changes nothing else, its ACK number included
+    /// (C4).
+    pub(crate) fn takes_syn(
+        &self,
+        tcp: &TcpSlice<'_>,
+        window: u64,
+        config: &TcpReassemblyConfig,
+        available: usize,
+    ) -> bool {
+        match (self.isn(), self.start_seq) {
+            (None, Some(start_seq)) => self
+                .offset(start_seq, tcp.sequence_number().wrapping_add(1))
+                .is_some_and(|start| {
+                    self.can_move_start_back(start, window, config)
+                        && self.buffer.fits_in_front(
+                            start.unsigned_abs(),
+                            tcp.payload().len(),
+                            config,
+                            available,
+                        )
+                }),
+            _ => true,
         }
     }
 
