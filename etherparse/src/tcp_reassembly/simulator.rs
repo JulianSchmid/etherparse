@@ -2266,7 +2266,7 @@ mod test {
         let (mut worlds, mut hits) = (0, 0);
         let seeds = 2 * proptest_cases() as u64;
         for seed in 1..=seeds {
-            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut rng = census_rng(seed);
             let Some(bulk) = Bulk::any(&mut rng) else {
                 continue;
             };
@@ -2317,6 +2317,162 @@ mod test {
                 panic!("seed {seed}: {failure}");
             }
         }
+    }
+
+    /// The generator of the census world `seed`, which `PROPTEST_RNG_SEED`
+    /// varies like the proptests' cases.
+    fn census_rng(seed: u64) -> Rng {
+        let base = std::env::var("PROPTEST_RNG_SEED")
+            .ok()
+            .and_then(|seed| seed.parse::<u64>().ok())
+            .unwrap_or(0);
+        Rng((seed ^ base.rotate_left(32)).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1)
+    }
+
+    /// Runs a bulk transfer of `segments` segments of `len` bytes each from
+    /// the server, of which the capture loses each with a chance of
+    /// `capture_loss` in 1000, through a pool whose streams hold at most
+    /// `max_stream_buffer` bytes, with a window of 3 MiB, and with the
+    /// client's ACKs of every second segment captured too unless
+    /// `one_direction`. An eager reader must get every captured byte and a
+    /// gap for each run of lost segments, and no byte may be rejected: a
+    /// reader stalled at a hole gets past it before the buffer is full (K2
+    /// within one direction, K4(d) across both).
+    fn pressure_world(
+        one_direction: bool,
+        len: usize,
+        segments: usize,
+        max_stream_buffer: usize,
+        capture_loss: u64,
+        rng: &mut Rng,
+    ) -> Result<(), String> {
+        let mut script = ConnectionScript::with_isns(rng.next() as u32, rng.next() as u32);
+        script.window_scales = [Some(6); 2];
+        script.window_size = 49152;
+        script.handshake();
+        let data_of =
+            |i: usize| -> Vec<u8> { (0..len).map(|j| ((i * 7 + j) % 251) as u8).collect() };
+        let mut shown = Vec::new();
+        for i in 0..segments {
+            script.send(Responder, &data_of(i));
+            shown.push(false == rng.chance(capture_loss));
+            if false == shown[i] {
+                script.segments.pop();
+            }
+            if 1 == i % 2 {
+                script.ack(Initiator);
+            }
+        }
+        script
+            .fin(Responder)
+            .ack(Initiator)
+            .fin(Initiator)
+            .ack(Responder);
+        let config = TcpReassemblyConfig {
+            max_stream_buffer,
+            ..config()
+        };
+        let mut pool = TcpReassemblyPool::<u32, ()>::new(config);
+        let (mut got, mut gaps, mut rejected) = (Vec::new(), Vec::new(), 0);
+        let mut read = |connection: &mut TcpConnection<u32>| {
+            let stream = connection.stream_mut(Responder);
+            loop {
+                match stream.read_received() {
+                    TcpRead::Data(data) => {
+                        got.extend_from_slice(data);
+                        let len = data.len();
+                        stream.consume(len);
+                    }
+                    TcpRead::Gap { len } => {
+                        gaps.push((got.len(), len));
+                        stream.consume_gap();
+                    }
+                    _ => break,
+                }
+            }
+            rejected = stream.status().rejected_bytes;
+        };
+        let captured = script
+            .segments
+            .iter()
+            .filter(|segment| false == one_direction || Responder == segment.sender);
+        for segment in captured {
+            let processed = segment.feed(&mut pool, 1);
+            if let Some(mut connection) = processed.ended {
+                read(&mut connection);
+            } else if let Some((connection, _)) = processed.active {
+                read(connection);
+            }
+        }
+        pool.evict_all(|connection| read(connection));
+        let (mut expected, mut expected_gaps, mut missing) = (Vec::new(), Vec::new(), 0u64);
+        for (i, &shown) in shown.iter().enumerate() {
+            if shown {
+                if 0 < missing {
+                    expected_gaps.push((expected.len(), Some(missing)));
+                    missing = 0;
+                }
+                expected.extend_from_slice(&data_of(i));
+            } else {
+                missing += len as u64;
+            }
+        }
+        if 0 < missing {
+            expected_gaps.push((expected.len(), Some(missing)));
+        }
+        if 0 != rejected || got != expected || gaps != expected_gaps {
+            return Err(format!(
+                "rejected {rejected}, got {} bytes (expected {}), gaps {:?} (expected {:?})",
+                got.len(),
+                expected.len(),
+                &gaps[..gaps.len().min(5)],
+                &expected_gaps[..expected_gaps.len().min(5)]
+            ));
+        }
+        Ok(())
+    }
+
+    /// A census of buffer pressure: transfers of at least twice the
+    /// stream's buffer, with segments up to 60,000 bytes (as captured on a
+    /// host with GRO/TSO), captured in one direction or both, lose single
+    /// segments, and no captured byte may be rejected (see
+    /// [`pressure_world`]).
+    #[test]
+    fn pressure_census() {
+        let mut failures = Vec::new();
+        let seeds = proptest_cases() as u64;
+        for seed in 1..=seeds {
+            let mut rng = census_rng(seed);
+            let one_direction = rng.chance(500);
+            let len = [1460, 9000, 16384, 60_000][rng.below(4) as usize];
+            let max_stream_buffer = [256 << 10, 1 << 20, 8 << 20][rng.below(3) as usize];
+            // at least twice the buffer, but not too many segments
+            let segments = (2 * max_stream_buffer / len + 50).min(3000);
+            let capture_loss = [2, 10, 30][rng.below(3) as usize];
+            let world = (
+                one_direction,
+                len,
+                segments,
+                max_stream_buffer,
+                capture_loss,
+            );
+            if let Err(failure) = pressure_world(
+                one_direction,
+                len,
+                segments,
+                max_stream_buffer,
+                capture_loss,
+                &mut rng,
+            ) {
+                failures.push(format!("seed {seed}, {world:?}: {failure}"));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{} of {seeds} transfers failed:\n{}",
+            failures.len(),
+            failures.join("\n")
+        );
     }
 
     proptest! {
