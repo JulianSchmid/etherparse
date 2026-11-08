@@ -1180,6 +1180,10 @@ mod test {
     ///   connection to tell them by, so the ACK of a server that still held
     ///   the old connection answers the new SYN (S5) and the client's RST
     ///   to it resets the new connection (F4).
+    /// - `C1 unseen stream`: the same for a stream of a connection that the
+    ///   pool saw (the capture shows no SYN, byte or FIN of its sender and no
+    ///   ACK of it by its peer before the next connection's first segment):
+    ///   its late segments have no numbers to be absorbed by (C1).
     /// - `C1 segments before the handshake`: the capture shows bytes of a
     ///   connection before either half of its handshake (it lost one half,
     ///   and the other is late, as a tap lags, or lost too), or another of
@@ -1259,6 +1263,29 @@ mod test {
             });
             if false == previous_visible && previous_late {
                 return Some("C1 unseen connection");
+            }
+            // a stream of the connection before that the pool never saw (no
+            // SYN, bytes or FIN of its sender, no ACK of it by its peer) has
+            // no numbers to tell its late segments by
+            let unseen_stream = first_of_k.is_some_and(|at| {
+                [Initiator, Responder].into_iter().any(|role| {
+                    let of_previous = |s: &&TestSegment| s.incarnation as usize == k - 1;
+                    let seen = captured[..at].iter().filter(of_previous).any(|s| {
+                        if s.sender == role {
+                            s.header.syn || s.header.fin || false == s.payload.is_empty()
+                        } else {
+                            s.header.ack
+                        }
+                    });
+                    let late = captured[at..]
+                        .iter()
+                        .filter(of_previous)
+                        .any(|s| s.sender == role && false == s.header.syn);
+                    false == seen && late
+                })
+            });
+            if unseen_stream {
+                return Some("C1 unseen stream");
             }
             let half_at = captured
                 .iter()
