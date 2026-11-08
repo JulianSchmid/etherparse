@@ -1228,11 +1228,16 @@ impl ReferenceModel {
             let mut replaced = core::mem::replace(self, next);
             self.apply(segment);
             if replaced.end.is_some() {
+                // the handshake the replaced connection remembers in turn is
+                // forgotten
+                replaced.replaced = None;
                 self.replaced = Some(Box::new(replaced));
                 return None;
             }
             replaced.end_unless_finished(TcpConnectionEnd::Reconnect);
-            self.replaced = Some(Box::new(replaced.clone()));
+            let mut remembered = replaced.clone();
+            remembered.replaced = None;
+            self.replaced = Some(Box::new(remembered));
             return Some(replaced);
         }
         if false == self.created {

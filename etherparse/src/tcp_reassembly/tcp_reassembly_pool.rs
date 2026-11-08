@@ -1392,6 +1392,45 @@ mod test {
             );
         }
 
+        // the tombstone of a reconnect absorbs late duplicates of the replaced
+        // connection's handshake as well (C1): one that arrives after the
+        // reconnect finished is ignored, while a SYN with a third ISN starts
+        // a new connection
+        {
+            let mut pool = TcpReassemblyPool::<u32, ()>::default();
+            let mut old = ConnectionScript::with_isns(1000, 2000);
+            old.handshake();
+            old.feed_all(&mut pool);
+            let mut script = ConnectionScript::with_isns(1_000_000_000, 2_000_000_000);
+            script
+                .handshake()
+                .send(Initiator, b"req")
+                .fin(Initiator)
+                .fin(Responder)
+                .ack(Initiator);
+            let processed = script.segments[0].feed(&mut pool, 7);
+            assert_eq!(
+                Some(TcpConnectionEnd::Reconnect),
+                processed.ended.unwrap().end()
+            );
+            let processed = script.feed(&mut pool, 1..);
+            assert_eq!(
+                Some(TcpConnectionEnd::Finished),
+                processed.ended.unwrap().end()
+            );
+            assert_eq!((0, 1), (pool.stats().connections, pool.stats().tombstones));
+            for index in [0, 1] {
+                let processed = old.segments[index].feed(&mut pool, 8);
+                assert_eq!(Some(TcpIgnoreReason::AfterEnd), processed.ignored);
+            }
+            assert_eq!((0, 1), (pool.stats().connections, pool.stats().tombstones));
+            let mut third = ConnectionScript::with_isns(3_000_000_000, 4_000_000_000);
+            third.syn();
+            let processed = third.segments[0].feed(&mut pool, 9);
+            assert!(processed.ended.is_none());
+            assert_eq!(TcpConnectionId(2), processed.active.unwrap().0.id());
+        }
+
         // a SYN-ACK that answers another SYN than the unanswered one of the
         // connection starts a reconnect, also while that SYN waits (S5): a
         // failed attempt whose answer was never captured doesn't block the

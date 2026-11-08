@@ -24,7 +24,7 @@ pub struct TcpConnection<Timestamp = (), CustomChannelId = ()> {
     /// Handshake of the connection this one replaced (C2), whose late
     /// duplicates it absorbs like a tombstone would (C1); `None` if it
     /// replaced none.
-    replaced: Option<Tombstone<Timestamp>>,
+    replaced: Option<Handshake>,
     /// Bytes the streams buffered when the pool last accounted for them.
     accounted: usize,
 }
@@ -606,10 +606,13 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             .unwrap_or(u64::from(config.fallback_window))
     }
 
-    /// Remembers the handshake of the connection `replaced` that this one
-    /// replaced (C2), to absorb its late duplicates (C1).
+    /// Remembers the handshake of the connection whose tombstone is
+    /// `replaced`, which this one replaced (C2), to absorb its late
+    /// duplicates (C1). The handshake that one replaced in turn is
+    /// forgotten: a late duplicate from two reconnects back starts a new
+    /// connection.
     pub(crate) fn remember_replaced(&mut self, replaced: Tombstone<Timestamp>) {
-        self.replaced = Some(replaced);
+        self.replaced = Some(replaced.handshake);
     }
 
     /// Returns true if `tcp`, sent by `source`, is a late duplicate of the
@@ -625,7 +628,7 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
             && self
                 .replaced
                 .as_mut()
-                .is_some_and(|replaced| replaced.is_own_handshake(source, tcp))
+                .is_some_and(|replaced| replaced.is_own(source, tcp))
     }
 
     /// What the pool keeps of the connection once it ended.
@@ -634,8 +637,11 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
         Timestamp: Clone,
     {
         Tombstone {
-            initiator: self.initiator,
-            syns: [self.initiator_stream.syn(), self.responder_stream.syn()],
+            handshake: Handshake {
+                initiator: self.initiator,
+                syns: [self.initiator_stream.syn(), self.responder_stream.syn()],
+            },
+            replaced: self.replaced.clone(),
             last_seen: self.last_seen.clone(),
         }
     }
@@ -676,26 +682,49 @@ impl<Timestamp, CustomChannelId> TcpConnection<Timestamp, CustomChannelId> {
 }
 
 /// What the pool keeps of an ended connection: enough to absorb its late
-/// segments, to tell a late retransmission of its handshake from a
-/// reconnect, and to evict it once no late segment came for long enough.
+/// segments, to tell a late retransmission of its handshake (or of the
+/// handshake of the connection it replaced, C1) from a reconnect, and to
+/// evict it once no late segment came for long enough.
 #[derive(Clone, Debug)]
 pub(crate) struct Tombstone<Timestamp> {
-    /// Endpoint that initiated the connection.
-    initiator: SocketAddr,
-    /// SYNs of the initiator's and the responder's stream, if observed.
-    syns: [Option<ObservedSyn>; 2],
+    /// Handshake of the connection.
+    handshake: Handshake,
+    /// Handshake of the connection it replaced (C2), if any.
+    replaced: Option<Handshake>,
     /// Timestamp of the connection's last packet, also a late one.
     pub last_seen: Timestamp,
 }
 
 impl<Timestamp> Tombstone<Timestamp> {
     /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
-    /// to the handshake of the ended connection: it has the ISN of its
-    /// sender's stream, or it is a SYN-ACK that ACKs the SYN of the other
-    /// stream (up to the end of the SYN's TCP Fast Open bytes). A
-    /// retransmitted SYN can carry more TCP Fast Open bytes, which a late
-    /// SYN-ACK can ACK.
+    /// to the handshake of the ended connection or of the one it replaced
+    /// (see [`Handshake::is_own`]).
     pub fn is_own_handshake(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
+        self.handshake.is_own(source, tcp)
+            || self
+                .replaced
+                .as_mut()
+                .is_some_and(|replaced| replaced.is_own(source, tcp))
+    }
+}
+
+/// The observed SYNs of a connection, to tell a late retransmission of its
+/// handshake from a reconnect (C1).
+#[derive(Clone, Debug)]
+pub(crate) struct Handshake {
+    /// Endpoint that initiated the connection.
+    initiator: SocketAddr,
+    /// SYNs of the initiator's and the responder's stream, if observed.
+    syns: [Option<ObservedSyn>; 2],
+}
+
+impl Handshake {
+    /// Returns true if the SYN or SYN-ACK `tcp`, sent by `source`, belongs
+    /// to the handshake: it has the ISN of its sender's stream, or it is a
+    /// SYN-ACK that ACKs the SYN of the other stream (up to the end of the
+    /// SYN's TCP Fast Open bytes). A retransmitted SYN can carry more TCP
+    /// Fast Open bytes, which a late SYN-ACK can ACK.
+    pub fn is_own(&mut self, source: SocketAddr, tcp: &TcpSlice<'_>) -> bool {
         let [own, other] = if source == self.initiator {
             [0, 1]
         } else {
